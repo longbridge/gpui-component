@@ -88,29 +88,33 @@ impl Panel for TabPanel {
     }
 
     fn title(&self, cx: &WindowContext) -> gpui::AnyElement {
-        self.active_panel()
+        self.active_panel(cx)
             .map(|panel| panel.title(cx))
             .unwrap_or("Empty Tab".into_any_element())
     }
 
-    fn closeable(&self, cx: &WindowContext) -> bool {
+    fn closeable(&self, cx: &AppContext) -> bool {
         if !self.closeable {
             return false;
         }
 
-        self.active_panel()
+        self.active_panel(cx)
             .map(|panel| panel.closeable(cx))
             .unwrap_or(false)
     }
 
-    fn zoomable(&self, cx: &WindowContext) -> bool {
-        self.active_panel()
+    fn zoomable(&self, cx: &AppContext) -> bool {
+        self.active_panel(cx)
             .map(|panel| panel.zoomable(cx))
             .unwrap_or(false)
     }
 
+    fn visible(&self, cx: &AppContext) -> bool {
+        self.visible_panels(cx).next().is_some()
+    }
+
     fn popup_menu(&self, menu: PopupMenu, cx: &WindowContext) -> PopupMenu {
-        if let Some(panel) = self.active_panel() {
+        if let Some(panel) = self.active_panel(cx) {
             panel.popup_menu(menu, cx)
         } else {
             menu
@@ -118,7 +122,7 @@ impl Panel for TabPanel {
     }
 
     fn toolbar_buttons(&self, cx: &WindowContext) -> Vec<Button> {
-        if let Some(panel) = self.active_panel() {
+        if let Some(panel) = self.active_panel(cx) {
             panel.toolbar_buttons(cx)
         } else {
             vec![]
@@ -160,8 +164,19 @@ impl TabPanel {
     }
 
     /// Return current active_panel View
-    pub fn active_panel(&self) -> Option<Arc<dyn PanelView>> {
-        self.panels.get(self.active_ix).cloned()
+    pub fn active_panel(&self, cx: &AppContext) -> Option<Arc<dyn PanelView>> {
+        let panel = self.panels.get(self.active_ix);
+
+        if let Some(panel) = panel {
+            if panel.visible(cx) {
+                Some(panel.clone())
+            } else {
+                // Return the first visible panel
+                self.visible_panels(cx).next()
+            }
+        } else {
+            None
+        }
     }
 
     fn set_active_ix(&mut self, ix: usize, cx: &mut ViewContext<Self>) {
@@ -335,6 +350,20 @@ impl TabPanel {
         self.panels.len() <= 1
     }
 
+    /// Return all visible panels
+    fn visible_panels<'a>(
+        &'a self,
+        cx: &'a AppContext,
+    ) -> impl Iterator<Item = Arc<dyn PanelView>> + 'a {
+        self.panels.iter().filter_map(|panel| {
+            if panel.visible(cx) {
+                Some(panel.clone())
+            } else {
+                None
+            }
+        })
+    }
+
     /// Return true if the tab panel is draggable.
     ///
     /// E.g. if the parent and self only have one panel, it is not draggable.
@@ -496,6 +525,11 @@ impl TabPanel {
 
         if self.panels.len() == 1 && panel_style == PanelStyle::Default {
             let panel = self.panels.get(0).unwrap();
+
+            if !panel.visible(cx) {
+                return div().into_any_element();
+            }
+
             let title_style = panel.title_style(cx);
 
             return h_flex()
@@ -580,47 +614,53 @@ impl TabPanel {
                     )
                 },
             )
-            .children(self.panels.iter().enumerate().map(|(ix, panel)| {
+            .children(self.panels.iter().enumerate().filter_map(|(ix, panel)| {
                 let mut active = ix == self.active_ix;
                 let disabled = self.is_collapsed;
+
+                if !panel.visible(cx) {
+                    return None;
+                }
 
                 // Always not show active tab style, if the panel is collapsed
                 if self.is_collapsed {
                     active = false;
                 }
 
-                Tab::new(("tab", ix), panel.title(cx))
-                    .py_2()
-                    .selected(active)
-                    .disabled(disabled)
-                    .when(!disabled, |this| {
-                        this.on_click(cx.listener(move |view, _, cx| {
-                            view.set_active_ix(ix, cx);
-                        }))
-                        .when(state.draggable, |this| {
-                            this.on_drag(
-                                DragPanel::new(panel.clone(), view.clone()),
-                                |drag, _, cx| {
-                                    cx.stop_propagation();
-                                    cx.new_view(|_| drag.clone())
-                                },
-                            )
-                        })
-                        .when(state.droppable, |this| {
-                            this.drag_over::<DragPanel>(|this, _, cx| {
-                                this.rounded_l_none()
-                                    .border_l_2()
-                                    .border_r_0()
-                                    .border_color(cx.theme().drag_border)
+                Some(
+                    Tab::new(("tab", ix), panel.title(cx))
+                        .py_2()
+                        .selected(active)
+                        .disabled(disabled)
+                        .when(!disabled, |this| {
+                            this.on_click(cx.listener(move |view, _, cx| {
+                                view.set_active_ix(ix, cx);
+                            }))
+                            .when(state.draggable, |this| {
+                                this.on_drag(
+                                    DragPanel::new(panel.clone(), view.clone()),
+                                    |drag, _, cx| {
+                                        cx.stop_propagation();
+                                        cx.new_view(|_| drag.clone())
+                                    },
+                                )
                             })
-                            .on_drop(cx.listener(
-                                move |this, drag: &DragPanel, cx| {
-                                    this.will_split_placement = None;
-                                    this.on_drop(drag, Some(ix), true, cx)
-                                },
-                            ))
-                        })
-                    })
+                            .when(state.droppable, |this| {
+                                this.drag_over::<DragPanel>(|this, _, cx| {
+                                    this.rounded_l_none()
+                                        .border_l_2()
+                                        .border_r_0()
+                                        .border_color(cx.theme().drag_border)
+                                })
+                                .on_drop(cx.listener(
+                                    move |this, drag: &DragPanel, cx| {
+                                        this.will_split_placement = None;
+                                        this.on_drop(drag, Some(ix), true, cx)
+                                    },
+                                ))
+                            })
+                        }),
+                )
             }))
             .child(
                 // empty space to allow move to last tab right
@@ -667,7 +707,7 @@ impl TabPanel {
             return Empty {}.into_any_element();
         }
 
-        self.active_panel()
+        self.active_panel(cx)
             .map(|panel| {
                 div()
                     .id("tab-content")
@@ -885,7 +925,7 @@ impl TabPanel {
     }
 
     fn focus_active_panel(&self, cx: &mut ViewContext<Self>) {
-        if let Some(active_panel) = self.active_panel() {
+        if let Some(active_panel) = self.active_panel(cx) {
             active_panel.focus_handle(cx).focus(cx);
         }
     }
@@ -916,7 +956,7 @@ impl TabPanel {
     }
 
     fn on_action_close_panel(&mut self, _: &ClosePanel, cx: &mut ViewContext<Self>) {
-        if let Some(panel) = self.active_panel() {
+        if let Some(panel) = self.active_panel(cx) {
             self.remove_panel(panel, cx);
         }
     }
@@ -924,7 +964,7 @@ impl TabPanel {
 
 impl FocusableView for TabPanel {
     fn focus_handle(&self, cx: &AppContext) -> gpui::FocusHandle {
-        if let Some(active_panel) = self.active_panel() {
+        if let Some(active_panel) = self.active_panel(cx) {
             active_panel.focus_handle(cx)
         } else {
             self.focus_handle.clone()

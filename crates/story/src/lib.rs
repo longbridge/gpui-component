@@ -285,7 +285,7 @@ impl Panel for StoryContainer {
         self.name.clone().into_any_element()
     }
 
-    fn title_style(&self, cx: &WindowContext) -> Option<TitleStyle> {
+    fn title_style(&self, cx: &AppContext) -> Option<TitleStyle> {
         if let Some(bg) = self.title_bg {
             Some(TitleStyle {
                 background: bg,
@@ -296,12 +296,19 @@ impl Panel for StoryContainer {
         }
     }
 
-    fn closeable(&self, _cx: &WindowContext) -> bool {
+    fn closeable(&self, _cx: &AppContext) -> bool {
         self.closeable
     }
 
-    fn zoomable(&self, _cx: &WindowContext) -> bool {
+    fn zoomable(&self, _cx: &AppContext) -> bool {
         self.zoomable
+    }
+
+    fn visible(&self, _: &AppContext) -> bool {
+        !matches!(
+            self.name.as_ref(),
+            "Scrollable" | "Table" | "Image" | "Sidebar"
+        )
     }
 
     fn set_zoomed(&self, zoomed: bool, _cx: &ViewContext<Self>) {

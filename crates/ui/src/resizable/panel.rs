@@ -285,6 +285,7 @@ pub struct ResizablePanel {
     axis: Axis,
     content_builder: Option<Rc<dyn Fn(&mut WindowContext) -> AnyElement>>,
     content_view: Option<AnyView>,
+    content_visible: Rc<Box<dyn Fn(&WindowContext) -> bool>>,
     /// The bounds of the resizable panel, when render the bounds will be updated.
     bounds: Bounds<Pixels>,
     resize_handle: Option<AnyElement>,
@@ -300,6 +301,7 @@ impl ResizablePanel {
             axis: Axis::Horizontal,
             content_builder: None,
             content_view: None,
+            content_visible: Rc::new(Box::new(|_| true)),
             bounds: Bounds::default(),
             resize_handle: None,
         }
@@ -310,6 +312,14 @@ impl ResizablePanel {
         F: Fn(&mut WindowContext) -> AnyElement + 'static,
     {
         self.content_builder = Some(Rc::new(content));
+        self
+    }
+
+    pub(crate) fn content_visible<F>(mut self, content_visible: F) -> Self
+    where
+        F: Fn(&WindowContext) -> bool + 'static,
+    {
+        self.content_visible = Rc::new(Box::new(content_visible));
         self
     }
 
@@ -350,6 +360,10 @@ impl FluentBuilder for ResizablePanel {}
 
 impl Render for ResizablePanel {
     fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+        if !(self.content_visible)(cx) {
+            return div();
+        }
+
         let view = cx.view().clone();
         let total_size = self
             .group

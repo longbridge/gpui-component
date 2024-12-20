@@ -172,6 +172,7 @@ impl StackPanel {
     fn new_resizable_panel(panel: Arc<dyn PanelView>, size: Option<Pixels>) -> ResizablePanel {
         resizable_panel()
             .content_view(panel.view())
+            .content_visible(move |cx| panel.visible(cx))
             .when_some(size, |this, size| this.size(size))
     }
 

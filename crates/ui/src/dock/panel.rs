@@ -45,17 +45,28 @@ pub trait Panel: EventEmitter<PanelEvent> + FocusableView {
     }
 
     /// The theme of the panel title, default is `None`.
-    fn title_style(&self, cx: &WindowContext) -> Option<TitleStyle> {
+    fn title_style(&self, cx: &AppContext) -> Option<TitleStyle> {
         None
     }
 
     /// Whether the panel can be closed, default is `true`.
-    fn closeable(&self, cx: &WindowContext) -> bool {
+    ///
+    /// This method called in Panel render, we should make sure it is fast.
+    fn closeable(&self, cx: &AppContext) -> bool {
         true
     }
 
     /// Return true if the panel is zoomable, default is `false`.
-    fn zoomable(&self, cx: &WindowContext) -> bool {
+    ///
+    /// This method called in Panel render, we should make sure it is fast.
+    fn zoomable(&self, cx: &AppContext) -> bool {
+        true
+    }
+
+    /// Return false to hide panel, true to show panel, default is `true`.
+    ///
+    /// This method called in Panel render, we should make sure it is fast.
+    fn visible(&self, cx: &AppContext) -> bool {
         true
     }
 
@@ -95,9 +106,10 @@ pub trait Panel: EventEmitter<PanelEvent> + FocusableView {
 pub trait PanelView: 'static + Send + Sync {
     fn panel_name(&self, cx: &AppContext) -> &'static str;
     fn title(&self, cx: &WindowContext) -> AnyElement;
-    fn title_style(&self, cx: &WindowContext) -> Option<TitleStyle>;
-    fn closeable(&self, cx: &WindowContext) -> bool;
-    fn zoomable(&self, cx: &WindowContext) -> bool;
+    fn title_style(&self, cx: &AppContext) -> Option<TitleStyle>;
+    fn closeable(&self, cx: &AppContext) -> bool;
+    fn zoomable(&self, cx: &AppContext) -> bool;
+    fn visible(&self, cx: &AppContext) -> bool;
     fn set_active(&self, active: bool, cx: &mut WindowContext);
     fn set_zoomed(&self, zoomed: bool, cx: &mut WindowContext);
     fn popup_menu(&self, menu: PopupMenu, cx: &WindowContext) -> PopupMenu;
@@ -116,16 +128,20 @@ impl<T: Panel> PanelView for View<T> {
         self.read(cx).title(cx)
     }
 
-    fn title_style(&self, cx: &WindowContext) -> Option<TitleStyle> {
+    fn title_style(&self, cx: &AppContext) -> Option<TitleStyle> {
         self.read(cx).title_style(cx)
     }
 
-    fn closeable(&self, cx: &WindowContext) -> bool {
+    fn closeable(&self, cx: &AppContext) -> bool {
         self.read(cx).closeable(cx)
     }
 
-    fn zoomable(&self, cx: &WindowContext) -> bool {
+    fn zoomable(&self, cx: &AppContext) -> bool {
         self.read(cx).zoomable(cx)
+    }
+
+    fn visible(&self, cx: &AppContext) -> bool {
+        self.read(cx).visible(cx)
     }
 
     fn set_active(&self, active: bool, cx: &mut WindowContext) {
