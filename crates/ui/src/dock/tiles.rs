@@ -43,14 +43,16 @@ pub fn init(cx: &mut AppContext) {
 }
 
 #[derive(Clone, Debug)]
-struct BoundsChange {
+struct TileChange {
     tile_id: EntityId,
-    old_bounds: Bounds<Pixels>,
-    new_bounds: Bounds<Pixels>,
+    old_bounds: Option<Bounds<Pixels>>,
+    new_bounds: Option<Bounds<Pixels>>,
+    old_order: Option<usize>,
+    new_order: Option<usize>,
     version: usize,
 }
 
-impl HistoryItem for BoundsChange {
+impl HistoryItem for TileChange {
     fn version(&self) -> usize {
         self.version
     }
@@ -122,7 +124,7 @@ pub struct Tiles {
     resizing_index: Option<usize>,
     resizing_drag_data: Option<ResizeDrag>,
     bounds: Bounds<Pixels>,
-    history: History<BoundsChange>,
+    history: History<TileChange>,
     scroll_state: Rc<Cell<ScrollbarState>>,
     scroll_handle: ScrollHandle,
 }
@@ -229,10 +231,12 @@ impl Tiles {
         new_origin.y = new_origin.y.max(px(0.0));
         item.bounds.origin = round_point_to_nearest_ten(new_origin);
 
-        self.history.push(BoundsChange {
+        self.history.push(TileChange {
             tile_id: item.panel.view().entity_id(),
-            old_bounds: previous_bounds,
-            new_bounds: item.bounds.clone(),
+            old_bounds: Some(previous_bounds),
+            new_bounds: Some(item.bounds.clone()),
+            old_order: None,
+            new_order: None,
             version: 0,
         });
 
@@ -252,10 +256,12 @@ impl Tiles {
             if let Some(item) = self.panels.get_mut(index) {
                 let previous_bounds = item.bounds.clone();
                 item.bounds.size.width = round_to_nearest_ten(new_width);
-                self.history.push(BoundsChange {
+                self.history.push(TileChange {
                     tile_id: item.panel.view().entity_id(),
-                    old_bounds: previous_bounds,
-                    new_bounds: item.bounds.clone(),
+                    old_bounds: Some(previous_bounds),
+                    new_bounds: Some(item.bounds.clone()),
+                    old_order: None,
+                    new_order: None,
                     version: 0,
                 });
 
@@ -269,10 +275,12 @@ impl Tiles {
             if let Some(item) = self.panels.get_mut(index) {
                 let previous_bounds = item.bounds.clone();
                 item.bounds.size.height = round_to_nearest_ten(new_height);
-                self.history.push(BoundsChange {
+                self.history.push(TileChange {
                     tile_id: item.panel.view().entity_id(),
-                    old_bounds: previous_bounds,
-                    new_bounds: item.bounds.clone(),
+                    old_bounds: Some(previous_bounds),
+                    new_bounds: Some(item.bounds.clone()),
+                    old_order: None,
+                    new_order: None,
                     version: 0,
                 });
 
@@ -342,7 +350,14 @@ impl Tiles {
                 let item = self.panels.remove(old_index);
                 self.panels.push(item);
                 let new_index = self.panels.len() - 1;
-                self.reset_current_index();
+                self.history.push(TileChange {
+                    tile_id: self.panels[new_index].panel.view().entity_id(),
+                    old_bounds: None,
+                    new_bounds: None,
+                    old_order: Some(old_index),
+                    new_order: Some(new_index),
+                    version: 0,
+                });
                 return Some((old_index, new_index));
             }
         }
@@ -357,17 +372,23 @@ impl Tiles {
             for change in changes {
                 if let Some(index) = self
                     .panels
-                    .iter_mut()
+                    .iter()
                     .position(|item| item.panel.view().entity_id() == change.tile_id)
                 {
-                    self.panels[index].bounds = change.old_bounds.clone();
+                    if let Some(old_bounds) = change.old_bounds {
+                        self.panels[index].bounds = old_bounds;
+                    }
+                    if let Some(old_order) = change.old_order {
+                        let item = self.panels.remove(index);
+                        self.panels.insert(old_order, item);
+                    }
                 }
             }
             cx.emit(PanelEvent::LayoutChanged);
-            cx.notify();
         }
 
         self.history.ignore = false;
+        cx.notify();
     }
 
     /// Handle the redo action
@@ -378,17 +399,23 @@ impl Tiles {
             for change in changes {
                 if let Some(index) = self
                     .panels
-                    .iter_mut()
+                    .iter()
                     .position(|item| item.panel.view().entity_id() == change.tile_id)
                 {
-                    self.panels[index].bounds = change.new_bounds.clone();
+                    if let Some(new_bounds) = change.new_bounds {
+                        self.panels[index].bounds = new_bounds;
+                    }
+                    if let Some(new_order) = change.new_order {
+                        let item = self.panels.remove(index);
+                        self.panels.insert(new_order, item);
+                    }
                 }
             }
             cx.emit(PanelEvent::LayoutChanged);
-            cx.notify();
         }
 
         self.history.ignore = false;
+        cx.notify();
     }
 
     /// Produce a vector of AnyElement representing the three possible resize handles
