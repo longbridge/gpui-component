@@ -222,7 +222,7 @@ impl Tiles {
             return;
         };
 
-        let previous_bounds = item.bounds.clone();
+        let previous_bounds = item.bounds;
         let adjusted_position = pos - self.bounds.origin;
         let delta = adjusted_position - self.dragging_initial_mouse;
         let mut new_origin = self.dragging_initial_bounds.origin + delta;
@@ -234,7 +234,7 @@ impl Tiles {
         self.history.push(TileChange {
             tile_id: item.panel.view().entity_id(),
             old_bounds: Some(previous_bounds),
-            new_bounds: Some(item.bounds.clone()),
+            new_bounds: Some(item.bounds),
             old_order: None,
             new_order: None,
             version: 0,
@@ -254,12 +254,12 @@ impl Tiles {
     fn resize_width(&mut self, new_width: Pixels, cx: &mut ViewContext<'_, Self>) {
         if let Some(index) = self.resizing_index {
             if let Some(item) = self.panels.get_mut(index) {
-                let previous_bounds = item.bounds.clone();
+                let previous_bounds = item.bounds;
                 item.bounds.size.width = round_to_nearest_ten(new_width);
                 self.history.push(TileChange {
                     tile_id: item.panel.view().entity_id(),
                     old_bounds: Some(previous_bounds),
-                    new_bounds: Some(item.bounds.clone()),
+                    new_bounds: Some(item.bounds),
                     old_order: None,
                     new_order: None,
                     version: 0,
@@ -273,12 +273,12 @@ impl Tiles {
     fn resize_height(&mut self, new_height: Pixels, cx: &mut ViewContext<'_, Self>) {
         if let Some(index) = self.resizing_index {
             if let Some(item) = self.panels.get_mut(index) {
-                let previous_bounds = item.bounds.clone();
+                let previous_bounds = item.bounds;
                 item.bounds.size.height = round_to_nearest_ten(new_height);
                 self.history.push(TileChange {
                     tile_id: item.panel.view().entity_id(),
                     old_bounds: Some(previous_bounds),
-                    new_bounds: Some(item.bounds.clone()),
+                    new_bounds: Some(item.bounds),
                     old_order: None,
                     new_order: None,
                     version: 0,
