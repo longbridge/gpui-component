@@ -7,6 +7,7 @@ use std::{
 
 use crate::{
     h_flex,
+    history::{History, HistoryItem},
     scroll::{Scrollbar, ScrollbarState},
     theme::ActiveTheme,
     v_flex, Icon, IconName,
@@ -39,6 +40,24 @@ pub fn init(cx: &mut AppContext) {
         #[cfg(not(target_os = "macos"))]
         KeyBinding::new("ctrl-y", Redo, Some(CONTEXT)),
     ]);
+}
+
+#[derive(Clone, Debug)]
+struct BoundsChange {
+    tile_id: EntityId,
+    old_bounds: Bounds<Pixels>,
+    new_bounds: Bounds<Pixels>,
+    version: usize,
+}
+
+impl HistoryItem for BoundsChange {
+    fn version(&self) -> usize {
+        self.version
+    }
+
+    fn set_version(&mut self, version: usize) {
+        self.version = version;
+    }
 }
 
 #[derive(Clone, Render)]
@@ -103,7 +122,7 @@ pub struct Tiles {
     resizing_index: Option<usize>,
     resizing_drag_data: Option<ResizeDrag>,
     bounds: Bounds<Pixels>,
-
+    history: History<BoundsChange>,
     scroll_state: Rc<Cell<ScrollbarState>>,
     scroll_handle: ScrollHandle,
 }
@@ -152,6 +171,7 @@ impl Tiles {
             resizing_index: None,
             resizing_drag_data: None,
             bounds: Bounds::default(),
+            history: History::new().group_interval(std::time::Duration::from_secs(1)),
             scroll_state: Rc::new(Cell::new(ScrollbarState::default())),
             scroll_handle: ScrollHandle::default(),
         }
@@ -200,14 +220,22 @@ impl Tiles {
             return;
         };
 
+        let previous_bounds = item.bounds.clone();
         let adjusted_position = pos - self.bounds.origin;
         let delta = adjusted_position - self.dragging_initial_mouse;
         let mut new_origin = self.dragging_initial_bounds.origin + delta;
 
         new_origin.x = new_origin.x.max(px(0.0));
         new_origin.y = new_origin.y.max(px(0.0));
-
         item.bounds.origin = round_point_to_nearest_ten(new_origin);
+
+        self.history.push(BoundsChange {
+            tile_id: item.panel.view().entity_id(),
+            old_bounds: previous_bounds,
+            new_bounds: item.bounds.clone(),
+            version: 0,
+        });
+
         cx.notify();
     }
 
@@ -222,7 +250,15 @@ impl Tiles {
     fn resize_width(&mut self, new_width: Pixels, cx: &mut ViewContext<'_, Self>) {
         if let Some(index) = self.resizing_index {
             if let Some(item) = self.panels.get_mut(index) {
+                let previous_bounds = item.bounds.clone();
                 item.bounds.size.width = round_to_nearest_ten(new_width);
+                self.history.push(BoundsChange {
+                    tile_id: item.panel.view().entity_id(),
+                    old_bounds: previous_bounds,
+                    new_bounds: item.bounds.clone(),
+                    version: 0,
+                });
+
                 cx.notify();
             }
         }
@@ -231,7 +267,15 @@ impl Tiles {
     fn resize_height(&mut self, new_height: Pixels, cx: &mut ViewContext<'_, Self>) {
         if let Some(index) = self.resizing_index {
             if let Some(item) = self.panels.get_mut(index) {
+                let previous_bounds = item.bounds.clone();
                 item.bounds.size.height = round_to_nearest_ten(new_height);
+                self.history.push(BoundsChange {
+                    tile_id: item.panel.view().entity_id(),
+                    old_bounds: previous_bounds,
+                    new_bounds: item.bounds.clone(),
+                    version: 0,
+                });
+
                 cx.notify();
             }
         }
@@ -305,12 +349,46 @@ impl Tiles {
         None
     }
 
+    /// Handle the undo action
     fn undo(&mut self, _: &Undo, cx: &mut ViewContext<Self>) {
-        eprintln!("tiles undo");
+        self.history.ignore = true;
+
+        if let Some(changes) = self.history.undo() {
+            for change in changes {
+                if let Some(index) = self
+                    .panels
+                    .iter_mut()
+                    .position(|item| item.panel.view().entity_id() == change.tile_id)
+                {
+                    self.panels[index].bounds = change.old_bounds.clone();
+                }
+            }
+            cx.emit(PanelEvent::LayoutChanged);
+            cx.notify();
+        }
+
+        self.history.ignore = false;
     }
 
+    /// Handle the redo action
     fn redo(&mut self, _: &Redo, cx: &mut ViewContext<Self>) {
-        eprintln!("tiles redo");
+        self.history.ignore = true;
+
+        if let Some(changes) = self.history.redo() {
+            for change in changes {
+                if let Some(index) = self
+                    .panels
+                    .iter_mut()
+                    .position(|item| item.panel.view().entity_id() == change.tile_id)
+                {
+                    self.panels[index].bounds = change.new_bounds.clone();
+                }
+            }
+            cx.emit(PanelEvent::LayoutChanged);
+            cx.notify();
+        }
+
+        self.history.ignore = false;
     }
 
     /// Produce a vector of AnyElement representing the three possible resize handles
