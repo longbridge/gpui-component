@@ -1,18 +1,10 @@
 use gpui::{
-    px, relative, AnyView, Bounds, ContentMask, Corners, Edges, Element, ElementId,
+    px, relative, Axis, Bounds, ContentMask, Corners, Edges, Element, ElementId, EntityId,
     GlobalElementId, Hitbox, Hsla, IntoElement, IsZero as _, LayoutId, PaintQuad, Pixels, Point,
     Position, ScrollHandle, ScrollWheelEvent, Style, WindowContext,
 };
 
-/// The scroll axis direction.
-#[allow(dead_code)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ScrollableAxis {
-    /// Horizontal scroll.
-    Horizontal,
-    /// Vertical scroll.
-    Vertical,
-}
+use crate::AxisExt;
 
 /// Make a scrollable mask element to cover the parent view with the mouse wheel event listening.
 ///
@@ -20,21 +12,17 @@ pub enum ScrollableAxis {
 /// You can use this `scroll_handle` to control what you want to scroll.
 /// This is only can handle once axis scrolling.
 pub struct ScrollableMask {
-    view: AnyView,
-    axis: ScrollableAxis,
+    view_id: EntityId,
+    axis: Axis,
     scroll_handle: ScrollHandle,
     debug: Option<Hsla>,
 }
 
 impl ScrollableMask {
     /// Create a new scrollable mask element.
-    pub fn new(
-        view: impl Into<AnyView>,
-        axis: ScrollableAxis,
-        scroll_handle: &ScrollHandle,
-    ) -> Self {
+    pub fn new(view_id: EntityId, axis: Axis, scroll_handle: &ScrollHandle) -> Self {
         Self {
-            view: view.into(),
+            view_id,
             scroll_handle: scroll_handle.clone(),
             axis,
             debug: None,
@@ -123,17 +111,17 @@ impl Element for ScrollableMask {
             }
 
             cx.on_mouse_event({
+                let view_id = self.view_id;
+                let is_horizontal = self.axis.is_horizontal();
+                let scroll_handle = self.scroll_handle.clone();
                 let hitbox = hitbox.clone();
                 let mouse_position = cx.mouse_position();
-                let scroll_handle = self.scroll_handle.clone();
                 let last_offset = scroll_handle.offset();
-                let view_id = self.view.entity_id();
-                let is_horizontal = matches!(self.axis, ScrollableAxis::Horizontal);
 
                 move |event: &ScrollWheelEvent, phase, cx| {
                     if bounds.contains(&mouse_position) && phase.bubble() && hitbox.is_hovered(cx) {
-                        let mut delta = event.delta.pixel_delta(line_height);
                         let mut offset = scroll_handle.offset();
+                        let mut delta = event.delta.pixel_delta(line_height);
 
                         // Limit for only one way scrolling at same time.
                         // When use MacBook touchpad we may get both x and y delta,
@@ -147,13 +135,9 @@ impl Element for ScrollableMask {
                         }
 
                         if is_horizontal {
-                            if !delta.x.is_zero() {
-                                offset.x += delta.x;
-                            }
+                            offset.x += delta.x;
                         } else {
-                            if !delta.y.is_zero() {
-                                offset.y += delta.y;
-                            }
+                            offset.y += delta.y;
                         }
 
                         if last_offset != offset {

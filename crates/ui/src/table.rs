@@ -4,7 +4,7 @@ use crate::{
     context_menu::ContextMenuExt,
     h_flex,
     popup_menu::PopupMenu,
-    scroll::{ScrollableAxis, ScrollableMask, Scrollbar, ScrollbarState},
+    scroll::{ScrollableMask, Scrollbar, ScrollbarState},
     theme::ActiveTheme,
     v_flex,
     virtual_list::virtual_list,
@@ -1240,8 +1240,8 @@ where
             .bg(cx.theme().table)
             .child(inner_table)
             .child(ScrollableMask::new(
-                cx.view().clone(),
-                ScrollableAxis::Horizontal,
+                cx.view().entity_id(),
+                Axis::Horizontal,
                 &horizontal_scroll_handle,
             ))
             .child(canvas(
