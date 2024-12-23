@@ -173,7 +173,7 @@ impl Tiles {
             resizing_index: None,
             resizing_drag_data: None,
             bounds: Bounds::default(),
-            history: History::new().group_interval(std::time::Duration::from_secs(1)),
+            history: History::new().group_interval(std::time::Duration::from_millis(100)),
             scroll_state: Rc::new(Cell::new(ScrollbarState::default())),
             scroll_handle: ScrollHandle::default(),
         }
