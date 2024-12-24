@@ -8,11 +8,11 @@ use crate::{
     theme::ActiveTheme,
     v_flex,
     virtual_list::virtual_list,
-    Icon, IconName, Sizable, Size, StyleSized as _,
+    Icon, IconName, Sizable, Size, StyleSized as _, StyledExt,
 };
 use gpui::{
-    actions, canvas, div, prelude::FluentBuilder, px, uniform_list, AppContext, Axis, Bounds, Div,
-    DragMoveEvent, Edges, Entity, EntityId, EventEmitter, FocusHandle, FocusableView,
+    actions, canvas, deferred, div, prelude::FluentBuilder, px, uniform_list, AppContext, Axis,
+    Bounds, Div, DragMoveEvent, Edges, Entity, EntityId, EventEmitter, FocusHandle, FocusableView,
     InteractiveElement, IntoElement, KeyBinding, ListSizingBehavior, MouseButton, ParentElement,
     Pixels, Point, Render, ScrollHandle, ScrollStrategy, SharedString, Stateful,
     StatefulInteractiveElement as _, Styled, UniformListScrollHandle, ViewContext,
@@ -1248,10 +1248,21 @@ where
                 move |bounds, cx| view.update(cx, |r, _| r.bounds = bounds),
                 |_, _, _| {},
             ))
-            .child(self.render_horizontal_scrollbar(cx))
-            .when(rows_count > 0, |this| {
-                this.children(self.render_scrollbar(cx))
-            })
+            .child(
+                // use deferred to render the scrollbar for
+                // avoid some custome element overflow the scrollbar.
+                deferred(
+                    div()
+                        .absolute()
+                        .top_0()
+                        .size_full()
+                        .child(self.render_horizontal_scrollbar(cx))
+                        .when(rows_count > 0, |this| {
+                            this.children(self.render_scrollbar(cx))
+                        }),
+                )
+                .with_priority(0),
+            )
             // Click out to cancel right clicked row
             .when(self.right_clicked_row.is_some(), |this| {
                 this.on_mouse_down_out(cx.listener(|this, _, cx| {
