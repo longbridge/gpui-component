@@ -8,7 +8,7 @@ use crate::{
     theme::ActiveTheme,
     v_flex,
     virtual_list::virtual_list,
-    Icon, IconName, Sizable, Size, StyleSized as _, StyledExt,
+    Icon, IconName, Sizable, Size, StyleSized as _,
 };
 use gpui::{
     actions, canvas, deferred, div, prelude::FluentBuilder, px, uniform_list, AppContext, Axis,
