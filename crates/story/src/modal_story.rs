@@ -292,9 +292,8 @@ impl ModalStory {
         };
 
         let overlay = self.modal_overlay;
-        cx.open_drawer(move |this, cx| {
-            this.placement(placement)
-                .overlay(overlay)
+        cx.open_drawer_at(placement, move |this, cx| {
+            this.overlay(overlay)
                 .size(px(400.))
                 .title("Drawer Title")
                 .gap_4()
@@ -495,7 +494,7 @@ impl Render for ModalStory {
 
                                             WebView::new(cx, webview)
                                         });
-                                        webview.update(cx, |webview, _| {
+                                        webview.update(cx, |webview, cx| {
                                             webview.load_url("https://github.com/explore");
                                         });
                                         cx.open_drawer(move |drawer, cx| {

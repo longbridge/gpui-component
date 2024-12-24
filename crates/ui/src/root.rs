@@ -3,10 +3,12 @@ use crate::{
     modal::Modal,
     notification::{Notification, NotificationList},
     theme::ActiveTheme,
+    Placement,
 };
 use gpui::{
-    div, AnyView, FocusHandle, InteractiveElement, IntoElement, ParentElement as _, Render, Styled,
-    View, ViewContext, VisualContext as _, WindowContext,
+    canvas, div, px, AnyView, Bounds, FocusHandle, InteractiveElement, IntoElement,
+    ParentElement as _, Pixels, Render, Styled, View, ViewContext, VisualContext as _,
+    WindowContext,
 };
 use std::{
     ops::{Deref, DerefMut},
@@ -15,8 +17,13 @@ use std::{
 
 /// Extension trait for [`WindowContext`] and [`ViewContext`] to add drawer functionality.
 pub trait ContextModal: Sized {
-    /// Opens a Drawer.
+    /// Opens a Drawer at right placement.
     fn open_drawer<F>(&mut self, build: F)
+    where
+        F: Fn(Drawer, &mut WindowContext) -> Drawer + 'static;
+
+    /// Opens a Drawer at the given placement.
+    fn open_drawer_at<F>(&mut self, placement: Placement, build: F)
     where
         F: Fn(Drawer, &mut WindowContext) -> Drawer + 'static;
 
@@ -52,6 +59,13 @@ impl ContextModal for WindowContext<'_> {
     where
         F: Fn(Drawer, &mut WindowContext) -> Drawer + 'static,
     {
+        self.open_drawer_at(Placement::Right, build)
+    }
+
+    fn open_drawer_at<F>(&mut self, placement: Placement, build: F)
+    where
+        F: Fn(Drawer, &mut WindowContext) -> Drawer + 'static,
+    {
         Root::update(self, move |root, cx| {
             if root.active_drawer.is_none() {
                 root.previous_focus_handle = cx.focused();
@@ -62,6 +76,7 @@ impl ContextModal for WindowContext<'_> {
 
             root.active_drawer = Some(ActiveDrawer {
                 focus_handle,
+                placement,
                 builder: Rc::new(build),
             });
             cx.notify();
@@ -156,6 +171,13 @@ impl<V> ContextModal for ViewContext<'_, V> {
         self.deref_mut().open_drawer(build)
     }
 
+    fn open_drawer_at<F>(&mut self, placement: Placement, build: F)
+    where
+        F: Fn(Drawer, &mut WindowContexbuildt) -> Drawer + 'static,
+    {
+        self.deref_mut().open_drawer_at(placement, build)
+    }
+
     fn has_active_modal(&self) -> bool {
         self.deref().has_active_modal()
     }
@@ -208,12 +230,14 @@ pub struct Root {
     active_drawer: Option<ActiveDrawer>,
     active_modals: Vec<ActiveModal>,
     pub notification: View<NotificationList>,
+    drawer_bounds: Bounds<Pixels>,
     view: AnyView,
 }
 
 #[derive(Clone)]
 struct ActiveDrawer {
     focus_handle: FocusHandle,
+    placement: Placement,
     builder: Rc<dyn Fn(Drawer, &mut WindowContext) -> Drawer + 'static>,
 }
 
@@ -230,6 +254,7 @@ impl Root {
             active_drawer: None,
             active_modals: Vec::new(),
             notification: cx.new_view(NotificationList::new),
+            drawer_bounds: Bounds::default(),
             view,
         }
     }
@@ -263,6 +288,14 @@ impl Root {
         }
     }
 
+    fn has_active_right_drawer(&self, cx: &WindowContext) -> bool {
+        if let Some(drawer) = Root::read(cx).active_drawer.as_ref() {
+            drawer.placement == Placement::Right
+        } else {
+            false
+        }
+    }
+
     // Render Notification layer.
     pub fn render_notification_layer(cx: &mut WindowContext) -> Option<impl IntoElement> {
         let root = cx
@@ -271,7 +304,17 @@ impl Root {
             .and_then(|w| w.root_view(cx).ok())
             .expect("The window root view should be of type `ui::Root`.");
 
-        Some(div().child(root.read(cx).notification.clone()))
+        let right_offset = if root.read(cx).has_active_right_drawer(cx) {
+            root.read(cx).drawer_bounds.size.width
+        } else {
+            px(0.)
+        };
+
+        Some(
+            div()
+                .mr(right_offset)
+                .child(root.read(cx).notification.clone()),
+        )
     }
 
     /// Render the Drawer layer.
@@ -286,8 +329,18 @@ impl Root {
             let mut drawer = Drawer::new(cx);
             drawer = (active_drawer.builder)(drawer, cx);
             drawer.focus_handle = active_drawer.focus_handle.clone();
+            drawer.placement = active_drawer.placement;
 
-            return Some(div().child(drawer));
+            return Some(
+                div().relative().child(drawer).child(
+                    canvas(
+                        move |bounds, cx| root.update(cx, |r, _| r.drawer_bounds = bounds),
+                        |_, _, _| {},
+                    )
+                    .absolute()
+                    .size_full(),
+                ),
+            );
         }
 
         None
