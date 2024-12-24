@@ -1250,7 +1250,7 @@ where
             ))
             .child(
                 // use deferred to render the scrollbar for
-                // avoid some custome element overflow the scrollbar.
+                // avoid some custom element overflow the scrollbar.
                 deferred(
                     div()
                         .absolute()
