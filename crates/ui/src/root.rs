@@ -3,7 +3,7 @@ use crate::{
     modal::Modal,
     notification::{Notification, NotificationList},
     theme::ActiveTheme,
-    Placement,
+    window_border, Placement,
 };
 use gpui::{
     canvas, div, prelude::FluentBuilder as _, AnyView, DefiniteLength, FocusHandle,
@@ -402,12 +402,14 @@ impl Render for Root {
         let base_font_size = cx.theme().font_size;
         cx.set_rem_size(base_font_size);
 
-        div()
-            .id("root")
-            .size_full()
-            .font_family(".SystemUIFont")
-            .bg(cx.theme().background)
-            .text_color(cx.theme().foreground)
-            .child(self.view.clone())
+        window_border().child(
+            div()
+                .id("root")
+                .size_full()
+                .font_family(".SystemUIFont")
+                .bg(cx.theme().background)
+                .text_color(cx.theme().foreground)
+                .child(self.view.clone()),
+        )
     }
 }
