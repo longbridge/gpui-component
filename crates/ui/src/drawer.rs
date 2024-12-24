@@ -29,7 +29,7 @@ pub fn init(cx: &mut AppContext) {
 pub struct Drawer {
     pub(crate) focus_handle: FocusHandle,
     pub(crate) placement: Placement,
-    size: DefiniteLength,
+    pub(crate) size: DefiniteLength,
     resizable: bool,
     on_close: Rc<dyn Fn(&ClickEvent, &mut WindowContext) + 'static>,
     title: Option<AnyElement>,

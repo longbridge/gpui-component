@@ -300,6 +300,13 @@ impl ModalStory {
                 .child(input.clone())
                 .child(date_picker.clone())
                 .child(
+                    Button::new("send-notification")
+                        .child("Test Notification")
+                        .on_click(|_, cx| {
+                            cx.push_notification("Hello this is message from Drawer.")
+                        }),
+                )
+                .child(
                     div()
                         .border_1()
                         .border_color(cx.theme().border)
@@ -494,7 +501,7 @@ impl Render for ModalStory {
 
                                             WebView::new(cx, webview)
                                         });
-                                        webview.update(cx, |webview, cx| {
+                                        webview.update(cx, |webview, _| {
                                             webview.load_url("https://github.com/explore");
                                         });
                                         cx.open_drawer(move |drawer, cx| {

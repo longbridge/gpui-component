@@ -6,9 +6,9 @@ use crate::{
     Placement,
 };
 use gpui::{
-    canvas, div, px, AnyView, Bounds, FocusHandle, InteractiveElement, IntoElement,
-    ParentElement as _, Pixels, Render, Styled, View, ViewContext, VisualContext as _,
-    WindowContext,
+    canvas, div, prelude::FluentBuilder as _, AnyView, DefiniteLength, FocusHandle,
+    InteractiveElement, IntoElement, ParentElement as _, Render, Styled, View, ViewContext,
+    VisualContext as _, WindowContext,
 };
 use std::{
     ops::{Deref, DerefMut},
@@ -173,7 +173,7 @@ impl<V> ContextModal for ViewContext<'_, V> {
 
     fn open_drawer_at<F>(&mut self, placement: Placement, build: F)
     where
-        F: Fn(Drawer, &mut WindowContexbuildt) -> Drawer + 'static,
+        F: Fn(Drawer, &mut WindowContext) -> Drawer + 'static,
     {
         self.deref_mut().open_drawer_at(placement, build)
     }
@@ -230,7 +230,7 @@ pub struct Root {
     active_drawer: Option<ActiveDrawer>,
     active_modals: Vec<ActiveModal>,
     pub notification: View<NotificationList>,
-    drawer_bounds: Bounds<Pixels>,
+    drawer_size: Option<DefiniteLength>,
     view: AnyView,
 }
 
@@ -254,7 +254,7 @@ impl Root {
             active_drawer: None,
             active_modals: Vec::new(),
             notification: cx.new_view(NotificationList::new),
-            drawer_bounds: Bounds::default(),
+            drawer_size: None,
             view,
         }
     }
@@ -288,11 +288,11 @@ impl Root {
         }
     }
 
-    fn has_active_right_drawer(&self, cx: &WindowContext) -> bool {
+    fn active_drawer_placement(&self, cx: &WindowContext) -> Option<Placement> {
         if let Some(drawer) = Root::read(cx).active_drawer.as_ref() {
-            drawer.placement == Placement::Right
+            Some(drawer.placement)
         } else {
-            false
+            None
         }
     }
 
@@ -304,15 +304,18 @@ impl Root {
             .and_then(|w| w.root_view(cx).ok())
             .expect("The window root view should be of type `ui::Root`.");
 
-        let right_offset = if root.read(cx).has_active_right_drawer(cx) {
-            root.read(cx).drawer_bounds.size.width
-        } else {
-            px(0.)
+        let active_drawer_placement = root.read(cx).active_drawer_placement(cx);
+
+        let (mt, mr) = match active_drawer_placement {
+            Some(Placement::Right) => (None, root.read(cx).drawer_size),
+            Some(Placement::Top) => (root.read(cx).drawer_size, None),
+            _ => (None, None),
         };
 
         Some(
             div()
-                .mr(right_offset)
+                .when_some(mt, |this, offset| this.mt(offset))
+                .when_some(mr, |this, offset| this.mr(offset))
                 .child(root.read(cx).notification.clone()),
         )
     }
@@ -331,10 +334,12 @@ impl Root {
             drawer.focus_handle = active_drawer.focus_handle.clone();
             drawer.placement = active_drawer.placement;
 
+            let drawer_size = drawer.size;
+
             return Some(
                 div().relative().child(drawer).child(
                     canvas(
-                        move |bounds, cx| root.update(cx, |r, _| r.drawer_bounds = bounds),
+                        move |_, cx| root.update(cx, |r, _| r.drawer_size = Some(drawer_size)),
                         |_, _, _| {},
                     )
                     .absolute()
