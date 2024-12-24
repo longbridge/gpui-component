@@ -405,6 +405,7 @@ impl Render for Root {
         window_border().child(
             div()
                 .id("root")
+                .relative()
                 .size_full()
                 .font_family(".SystemUIFont")
                 .bg(cx.theme().background)
