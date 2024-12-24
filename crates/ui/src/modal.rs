@@ -13,7 +13,7 @@ use crate::{
     theme::ActiveTheme as _,
     v_flex,
     window_border::SHADOW_SIZE,
-    ContextModal, IconName, Sizable as _, StyledExt,
+    ContextModal, IconName, Sizable as _,
 };
 
 actions!(modal, [Escape]);
@@ -179,7 +179,6 @@ impl RenderOnce for Modal {
             .child(
                 div()
                     .occlude()
-                    .debug_green()
                     .w(view_size.width)
                     .h(view_size.height)
                     .when(self.overlay_visible, |this| {

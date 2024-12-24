@@ -8,6 +8,9 @@ use gpui::{
 
 use crate::theme::ActiveTheme;
 
+#[cfg(not(target_os = "linux"))]
+pub(crate) const SHADOW_SIZE: Pixels = Pixels(0.0);
+#[cfg(target_os = "linux")]
 pub(crate) const SHADOW_SIZE: Pixels = Pixels(12.0);
 const BORDER_SIZE: Pixels = Pixels(1.0);
 pub(crate) const BORDER_RADIUS: Pixels = Pixels(0.0);
