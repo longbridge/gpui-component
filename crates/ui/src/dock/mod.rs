@@ -23,7 +23,6 @@ pub use tab_panel::*;
 pub use tiles::*;
 
 pub fn init(cx: &mut AppContext) {
-    tiles::init(cx);
     cx.set_global(PanelRegistry::new());
 }
 

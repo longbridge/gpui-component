@@ -17,9 +17,9 @@ use super::{DockArea, Panel, PanelEvent, PanelInfo, PanelState, PanelView, TabPa
 use gpui::{
     actions, canvas, div, point, px, size, AnyElement, AppContext, Bounds, DismissEvent,
     DragMoveEvent, Entity, EntityId, EventEmitter, FocusHandle, FocusableView, Half,
-    InteractiveElement, IntoElement, KeyBinding, MouseButton, MouseDownEvent, MouseUpEvent,
-    ParentElement, Pixels, Point, Render, ScrollHandle, Size, StatefulInteractiveElement, Styled,
-    ViewContext, VisualContext, WeakView, WindowContext,
+    InteractiveElement, IntoElement, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement,
+    Pixels, Point, Render, ScrollHandle, Size, StatefulInteractiveElement, Styled, ViewContext,
+    VisualContext, WeakView, WindowContext,
 };
 
 actions!(tiles, [Undo, Redo,]);
@@ -27,20 +27,6 @@ actions!(tiles, [Undo, Redo,]);
 const MINIMUM_SIZE: Size<Pixels> = size(px(100.), px(100.));
 const DRAG_BAR_HEIGHT: Pixels = px(30.);
 const HANDLE_SIZE: Pixels = px(20.0);
-const CONTEXT: &str = "Tiles";
-
-pub fn init(cx: &mut AppContext) {
-    cx.bind_keys([
-        #[cfg(target_os = "macos")]
-        KeyBinding::new("cmd-z", Undo, Some(CONTEXT)),
-        #[cfg(target_os = "macos")]
-        KeyBinding::new("cmd-shift-z", Redo, Some(CONTEXT)),
-        #[cfg(not(target_os = "macos"))]
-        KeyBinding::new("ctrl-z", Undo, Some(CONTEXT)),
-        #[cfg(not(target_os = "macos"))]
-        KeyBinding::new("ctrl-y", Redo, Some(CONTEXT)),
-    ]);
-}
 
 #[derive(Clone, Debug)]
 struct TileChange {
@@ -389,7 +375,7 @@ impl Tiles {
     }
 
     /// Handle the undo action
-    fn undo(&mut self, _: &Undo, cx: &mut ViewContext<Self>) {
+    pub fn undo(&mut self, cx: &mut ViewContext<Self>) {
         self.history.ignore = true;
 
         if let Some(changes) = self.history.undo() {
@@ -416,7 +402,7 @@ impl Tiles {
     }
 
     /// Handle the redo action
-    fn redo(&mut self, _: &Redo, cx: &mut ViewContext<Self>) {
+    pub fn redo(&mut self, cx: &mut ViewContext<Self>) {
         self.history.ignore = true;
 
         if let Some(changes) = self.history.redo() {
@@ -854,9 +840,6 @@ impl Render for Tiles {
 
         div()
             .relative()
-            .key_context(CONTEXT)
-            .on_action(cx.listener(Self::undo))
-            .on_action(cx.listener(Self::redo))
             .bg(cx.theme().background)
             .child(
                 div()
