@@ -145,7 +145,7 @@ impl Render for NumberInput {
             .px_1()
             .gap_x_3()
             .bg(cx.theme().background)
-            .border_color(cx.theme().border)
+            .border_color(cx.theme().input)
             .border_1()
             .rounded_md()
             .when(focused, |this| this.outline(cx))
