@@ -275,7 +275,8 @@ where
     }
 
     fn on_action_select_prev(&mut self, _: &SelectPrev, cx: &mut ViewContext<Self>) {
-        if self.delegate.items_count(cx) == 0 {
+        let items_count = self.delegate.items_count(cx);
+        if items_count == 0 {
             return;
         }
 
@@ -283,7 +284,7 @@ where
         if selected_index > 0 {
             self.selected_index = Some(selected_index - 1);
         } else {
-            self.selected_index = Some(self.delegate.items_count(cx) - 1);
+            self.selected_index = Some(items_count - 1);
         }
 
         self.delegate.set_selected_index(self.selected_index, cx);
@@ -292,12 +293,13 @@ where
     }
 
     fn on_action_select_next(&mut self, _: &SelectNext, cx: &mut ViewContext<Self>) {
-        if self.delegate.items_count(cx) == 0 {
+        let items_count = self.delegate.items_count(cx);
+        if items_count == 0 {
             return;
         }
 
         if let Some(selected_index) = self.selected_index {
-            if selected_index < self.delegate.items_count(cx) - 1 {
+            if selected_index < items_count - 1 {
                 self.selected_index = Some(selected_index + 1);
             } else {
                 self.selected_index = Some(0);
@@ -312,27 +314,15 @@ where
     }
 
     fn render_list_item(&mut self, ix: usize, cx: &mut ViewContext<Self>) -> impl IntoElement {
+        let selected = self.selected_index == Some(ix);
+        let right_clicked = self.right_clicked_index == Some(ix);
+
         div()
             .id("list-item")
             .w_full()
             .relative()
             .children(self.delegate.render_item(ix, cx))
-            .when_some(self.selected_index, |this, selected_index| {
-                this.when(ix == selected_index, |this| {
-                    this.child(
-                        div()
-                            .absolute()
-                            .top(px(0.))
-                            .left(px(0.))
-                            .right(px(0.))
-                            .bottom(px(0.))
-                            .bg(cx.theme().list_active)
-                            .border_1()
-                            .border_color(cx.theme().list_active_border),
-                    )
-                })
-            })
-            .when(self.right_clicked_index == Some(ix), |this| {
+            .when(selected || right_clicked, |this| {
                 this.child(
                     div()
                         .absolute()
@@ -340,6 +330,7 @@ where
                         .left(px(0.))
                         .right(px(0.))
                         .bottom(px(0.))
+                        .when(selected, |this| this.bg(cx.theme().list_active))
                         .border_1()
                         .border_color(cx.theme().list_active_border),
                 )

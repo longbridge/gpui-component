@@ -389,9 +389,10 @@ impl PopupMenu {
     fn select_next(&mut self, _: &SelectNext, cx: &mut ViewContext<Self>) {
         let count = self.clickable_menu_items().count();
         if count > 0 {
+            let last_ix = count.saturating_sub(1);
             let ix = self
                 .selected_index
-                .map(|index| if index == count - 1 { 0 } else { index + 1 })
+                .map(|index| if index == last_ix { 0 } else { index + 1 })
                 .unwrap_or(0);
 
             self.selected_index = Some(ix);
@@ -402,10 +403,18 @@ impl PopupMenu {
     fn select_prev(&mut self, _: &SelectPrev, cx: &mut ViewContext<Self>) {
         let count = self.clickable_menu_items().count();
         if count > 0 {
+            let last_ix = count.saturating_sub(1);
+
             let ix = self
                 .selected_index
-                .map(|index| if index == count - 1 { 0 } else { index - 1 })
-                .unwrap_or(count - 1);
+                .map(|index| {
+                    if index == last_ix {
+                        0
+                    } else {
+                        index.saturating_sub(1)
+                    }
+                })
+                .unwrap_or(last_ix);
             self.selected_index = Some(ix);
             cx.notify();
         }
