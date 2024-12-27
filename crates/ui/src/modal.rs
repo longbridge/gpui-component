@@ -11,9 +11,7 @@ use crate::{
     animation::cubic_bezier,
     button::{Button, ButtonVariants as _},
     theme::ActiveTheme as _,
-    v_flex,
-    window_border::SHADOW_SIZE,
-    ContextModal, IconName, Sizable as _,
+    v_flex, ContextModal, IconName, Sizable as _,
 };
 
 actions!(modal, [Escape]);
@@ -164,7 +162,12 @@ impl RenderOnce for Modal {
     fn render(self, cx: &mut WindowContext) -> impl gpui::IntoElement {
         let layer_ix = self.layer_ix;
         let on_close = self.on_close.clone();
-        let view_size = cx.viewport_size() - gpui::size(SHADOW_SIZE * 2, SHADOW_SIZE * 2);
+        let window_paddings = crate::window_border::window_paddings(cx);
+        let view_size = cx.viewport_size()
+            - gpui::size(
+                window_paddings.left + window_paddings.right,
+                window_paddings.top + window_paddings.bottom,
+            );
         let bounds = Bounds {
             origin: Point::default(),
             size: view_size,
@@ -174,7 +177,7 @@ impl RenderOnce for Modal {
         let x = bounds.center().x - self.width / 2.;
 
         anchored()
-            .position(point(SHADOW_SIZE, SHADOW_SIZE))
+            .position(point(window_paddings.left, window_paddings.top))
             .snap_to_window()
             .child(
                 div()

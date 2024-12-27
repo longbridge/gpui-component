@@ -15,9 +15,7 @@ use crate::{
     scroll::ScrollbarAxis,
     theme::ActiveTheme,
     title_bar::TITLE_BAR_HEIGHT,
-    v_flex,
-    window_border::SHADOW_SIZE,
-    IconName, Placement, Sizable, StyledExt as _,
+    v_flex, IconName, Placement, Sizable, StyledExt as _,
 };
 
 actions!(drawer, [Escape]);
@@ -121,11 +119,19 @@ impl RenderOnce for Drawer {
     fn render(self, cx: &mut WindowContext) -> impl IntoElement {
         let placement = self.placement;
         let titlebar_height = self.margin_top;
-        let size = cx.viewport_size() - gpui::size(SHADOW_SIZE * 2, SHADOW_SIZE * 2);
+        let window_paddings = crate::window_border::window_paddings(cx);
+        let size = cx.viewport_size()
+            - gpui::size(
+                window_paddings.left + window_paddings.right,
+                window_paddings.top + window_paddings.bottom,
+            );
         let on_close = self.on_close.clone();
 
         anchored()
-            .position(point(px(0.) + SHADOW_SIZE, titlebar_height + SHADOW_SIZE))
+            .position(point(
+                window_paddings.left,
+                window_paddings.top + titlebar_height - px(1.),
+            ))
             .snap_to_window()
             .child(
                 div()

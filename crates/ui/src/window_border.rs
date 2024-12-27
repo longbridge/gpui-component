@@ -2,16 +2,16 @@
 // https://github.com/zed-industries/zed/blob/a8afc63a91f6b75528540dcffe73dc8ce0c92ad8/crates/gpui/examples/window_shadow.rs
 use gpui::{
     canvas, div, point, prelude::FluentBuilder as _, px, AnyElement, Bounds, CursorStyle,
-    Decorations, Hsla, InteractiveElement as _, IntoElement, MouseButton, ParentElement, Pixels,
-    Point, RenderOnce, ResizeEdge, Size, Styled as _, WindowContext,
+    Decorations, Edges, Hsla, InteractiveElement as _, IntoElement, MouseButton, ParentElement,
+    Pixels, Point, RenderOnce, ResizeEdge, Size, Styled as _, WindowContext,
 };
 
 use crate::theme::ActiveTheme;
 
 #[cfg(not(target_os = "linux"))]
-pub(crate) const SHADOW_SIZE: Pixels = Pixels(0.0);
+const SHADOW_SIZE: Pixels = Pixels(0.0);
 #[cfg(target_os = "linux")]
-pub(crate) const SHADOW_SIZE: Pixels = Pixels(12.0);
+const SHADOW_SIZE: Pixels = Pixels(12.0);
 const BORDER_SIZE: Pixels = Pixels(1.0);
 pub(crate) const BORDER_RADIUS: Pixels = Pixels(0.0);
 
@@ -30,6 +30,29 @@ impl WindowBorder {
     pub fn new() -> Self {
         Self {
             ..Default::default()
+        }
+    }
+}
+
+/// Get the window paddings.
+pub fn window_paddings(cx: &WindowContext) -> Edges<Pixels> {
+    match cx.window_decorations() {
+        Decorations::Server => Edges::all(px(0.0)),
+        Decorations::Client { tiling } => {
+            let mut paddings = Edges::all(SHADOW_SIZE);
+            if tiling.top {
+                paddings.top = px(0.0);
+            }
+            if tiling.bottom {
+                paddings.bottom = px(0.0);
+            }
+            if tiling.left {
+                paddings.left = px(0.0);
+            }
+            if tiling.right {
+                paddings.right = px(0.0);
+            }
+            paddings
         }
     }
 }
