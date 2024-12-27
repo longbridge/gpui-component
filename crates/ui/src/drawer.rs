@@ -15,7 +15,9 @@ use crate::{
     scroll::ScrollbarAxis,
     theme::ActiveTheme,
     title_bar::TITLE_BAR_HEIGHT,
-    v_flex, IconName, Placement, Sizable, StyledExt as _,
+    v_flex,
+    window_border::SHADOW_SIZE,
+    IconName, Placement, Sizable, StyledExt as _,
 };
 
 actions!(drawer, [Escape]);
@@ -28,8 +30,8 @@ pub fn init(cx: &mut AppContext) {
 #[derive(IntoElement)]
 pub struct Drawer {
     pub(crate) focus_handle: FocusHandle,
-    placement: Placement,
-    size: DefiniteLength,
+    pub(crate) placement: Placement,
+    pub(crate) size: DefiniteLength,
     resizable: bool,
     on_close: Rc<dyn Fn(&ClickEvent, &mut WindowContext) + 'static>,
     title: Option<AnyElement>,
@@ -81,17 +83,6 @@ impl Drawer {
         self
     }
 
-    /// Sets the placement of the drawer, default is `Placement::Right`.
-    pub fn placement(mut self, placement: Placement) -> Self {
-        self.placement = placement;
-        self
-    }
-
-    /// Sets the placement of the drawer, default is `Placement::Right`.
-    pub fn set_placement(&mut self, placement: Placement) {
-        self.placement = placement;
-    }
-
     /// Sets whether the drawer is resizable, default is `true`.
     pub fn resizable(mut self, resizable: bool) -> Self {
         self.resizable = resizable;
@@ -130,11 +121,11 @@ impl RenderOnce for Drawer {
     fn render(self, cx: &mut WindowContext) -> impl IntoElement {
         let placement = self.placement;
         let titlebar_height = self.margin_top;
-        let size = cx.viewport_size();
+        let size = cx.viewport_size() - gpui::size(SHADOW_SIZE * 2, SHADOW_SIZE * 2);
         let on_close = self.on_close.clone();
 
         anchored()
-            .position(point(px(0.), titlebar_height))
+            .position(point(px(0.) + SHADOW_SIZE, titlebar_height + SHADOW_SIZE))
             .snap_to_window()
             .child(
                 div()

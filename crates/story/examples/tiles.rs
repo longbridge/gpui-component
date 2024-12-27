@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use gpui::*;
+use prelude::FluentBuilder as _;
 use std::time::Duration;
 use story::{Assets, ButtonStory, IconStory, StoryContainer};
 use ui::{
@@ -179,6 +180,10 @@ impl StoryTiles {
                     height: px(480.),
                 }),
                 kind: WindowKind::Normal,
+                #[cfg(target_os = "linux")]
+                window_background: gpui::WindowBackgroundAppearance::Transparent,
+                #[cfg(target_os = "linux")]
+                window_decorations: Some(gpui::WindowDecorations::Client),
                 ..Default::default()
             };
 

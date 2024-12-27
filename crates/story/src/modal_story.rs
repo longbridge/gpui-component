@@ -292,14 +292,20 @@ impl ModalStory {
         };
 
         let overlay = self.modal_overlay;
-        cx.open_drawer(move |this, cx| {
-            this.placement(placement)
-                .overlay(overlay)
+        cx.open_drawer_at(placement, move |this, cx| {
+            this.overlay(overlay)
                 .size(px(400.))
                 .title("Drawer Title")
                 .gap_4()
                 .child(input.clone())
                 .child(date_picker.clone())
+                .child(
+                    Button::new("send-notification")
+                        .child("Test Notification")
+                        .on_click(|_, cx| {
+                            cx.push_notification("Hello this is message from Drawer.")
+                        }),
+                )
                 .child(
                     div()
                         .border_1()

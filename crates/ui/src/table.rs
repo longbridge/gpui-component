@@ -11,8 +11,8 @@ use crate::{
     Icon, IconName, Sizable, Size, StyleSized as _,
 };
 use gpui::{
-    actions, canvas, div, prelude::FluentBuilder, px, uniform_list, AppContext, Axis, Bounds, Div,
-    DragMoveEvent, Edges, Entity, EntityId, EventEmitter, FocusHandle, FocusableView,
+    actions, canvas, deferred, div, prelude::FluentBuilder, px, uniform_list, AppContext, Axis,
+    Bounds, Div, DragMoveEvent, Edges, Entity, EntityId, EventEmitter, FocusHandle, FocusableView,
     InteractiveElement, IntoElement, KeyBinding, ListSizingBehavior, MouseButton, ParentElement,
     Pixels, Point, Render, ScrollHandle, ScrollStrategy, SharedString, Stateful,
     StatefulInteractiveElement as _, Styled, UniformListScrollHandle, ViewContext,
@@ -275,7 +275,7 @@ pub trait TableDelegate: Sized + 'static {
 
     /// Render the last empty column, default to empty.
     fn render_last_empty_col(&mut self, cx: &mut ViewContext<Table<Self>>) -> Div {
-        h_flex().w(px(100.)).h_full().flex_shrink_0()
+        h_flex().w_5().h_full().flex_shrink_0()
     }
 }
 
@@ -1248,10 +1248,21 @@ where
                 move |bounds, cx| view.update(cx, |r, _| r.bounds = bounds),
                 |_, _, _| {},
             ))
-            .child(self.render_horizontal_scrollbar(cx))
-            .when(rows_count > 0, |this| {
-                this.children(self.render_scrollbar(cx))
-            })
+            .child(
+                // use deferred to render the scrollbar for
+                // avoid some custom element overflow the scrollbar.
+                deferred(
+                    div()
+                        .absolute()
+                        .top_0()
+                        .size_full()
+                        .child(self.render_horizontal_scrollbar(cx))
+                        .when(rows_count > 0, |this| {
+                            this.children(self.render_scrollbar(cx))
+                        }),
+                )
+                .with_priority(0),
+            )
             // Click out to cancel right clicked row
             .when(self.right_clicked_row.is_some(), |this| {
                 this.on_mouse_down_out(cx.listener(|this, _, cx| {

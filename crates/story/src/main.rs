@@ -343,6 +343,7 @@ impl StoryWorkspace {
         cx.spawn(|mut cx| async move {
             let options = WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(window_bounds)),
+                #[cfg(not(target_os = "linux"))]
                 titlebar: Some(TitlebarOptions {
                     title: None,
                     appears_transparent: true,
@@ -352,6 +353,10 @@ impl StoryWorkspace {
                     width: px(640.),
                     height: px(480.),
                 }),
+                #[cfg(target_os = "linux")]
+                window_background: gpui::WindowBackgroundAppearance::Transparent,
+                #[cfg(target_os = "linux")]
+                window_decorations: Some(gpui::WindowDecorations::Client),
                 kind: WindowKind::Normal,
                 ..Default::default()
             };

@@ -7,6 +7,7 @@ mod styled;
 mod svg_img;
 mod time;
 mod title_bar;
+mod window_border;
 
 pub mod accordion;
 pub mod animation;
@@ -60,6 +61,7 @@ pub use styled::*;
 pub use time::*;
 pub use title_bar::*;
 pub use virtual_list::{h_virtual_list, v_virtual_list, VirtualList};
+pub use window_border::{window_border, WindowBorder};
 
 pub use colors::*;
 pub use icon::*;
