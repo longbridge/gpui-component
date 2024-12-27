@@ -755,7 +755,7 @@ impl Tiles {
     }
 
     /// Handle the mouse up event to finalize drag or resize operations
-    fn handle_mouse_up(&mut self, cx: &mut ViewContext<'_, Tiles>) {
+    fn on_mouse_up(&mut self, cx: &mut ViewContext<'_, Tiles>) {
         // Check if a drag or resize was active
         if self.dragging_index.is_some()
             || self.resizing_index.is_some()
@@ -882,7 +882,7 @@ impl Render for Tiles {
             .on_mouse_up(
                 MouseButton::Left,
                 cx.listener(move |this, _event: &MouseUpEvent, cx| {
-                    this.handle_mouse_up(cx);
+                    this.on_mouse_up(cx);
                 }),
             )
             .on_mouse_down(

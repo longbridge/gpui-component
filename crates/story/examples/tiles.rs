@@ -1,6 +1,5 @@
 use anyhow::{Context, Result};
 use gpui::*;
-use prelude::FluentBuilder as _;
 use std::time::Duration;
 use story::{Assets, ButtonStory, IconStory, StoryContainer};
 use ui::{
