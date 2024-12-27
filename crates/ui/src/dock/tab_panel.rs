@@ -24,12 +24,13 @@ use super::{
     StackPanel, ToggleZoom,
 };
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct TabState {
     closable: bool,
     zoomable: bool,
     draggable: bool,
     droppable: bool,
+    active_panel: Option<Arc<dyn PanelView>>,
 }
 
 #[derive(Clone)]
@@ -378,7 +379,7 @@ impl TabPanel {
         !self.is_locked(cx)
     }
 
-    fn render_toolbar(&self, state: TabState, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render_toolbar(&self, state: &TabState, cx: &mut ViewContext<Self>) -> impl IntoElement {
         let is_zoomed = self.is_zoomed && state.zoomable;
         let view = cx.view().clone();
         let build_popup_menu = move |this, cx: &WindowContext| view.read(cx).popup_menu(this, cx);
@@ -411,20 +412,25 @@ impl TabPanel {
                     .icon(IconName::Ellipsis)
                     .xsmall()
                     .ghost()
-                    .popup_menu(move |this, cx| {
-                        build_popup_menu(this, cx)
-                            .when(state.zoomable, |this| {
-                                let name = if is_zoomed {
-                                    t!("Dock.Zoom Out")
-                                } else {
-                                    t!("Dock.Zoom In")
-                                };
-                                this.separator().menu(name, Box::new(ToggleZoom))
-                            })
-                            .when(state.closable, |this| {
-                                this.separator()
-                                    .menu(t!("Dock.Close"), Box::new(ClosePanel))
-                            })
+                    .popup_menu({
+                        let zoomable = state.zoomable;
+                        let closable = state.closable;
+
+                        move |this, cx| {
+                            build_popup_menu(this, cx)
+                                .when(zoomable, |this| {
+                                    let name = if is_zoomed {
+                                        t!("Dock.Zoom Out")
+                                    } else {
+                                        t!("Dock.Zoom In")
+                                    };
+                                    this.separator().menu(name, Box::new(ToggleZoom))
+                                })
+                                .when(closable, |this| {
+                                    this.separator()
+                                        .menu(t!("Dock.Close"), Box::new(ClosePanel))
+                                })
+                        }
                     })
                     .anchor(Corner::TopRight),
             )
@@ -511,7 +517,7 @@ impl TabPanel {
         )
     }
 
-    fn render_title_bar(&self, state: TabState, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render_title_bar(&self, state: &TabState, cx: &mut ViewContext<Self>) -> impl IntoElement {
         let view = cx.view().clone();
 
         let Some(dock_area) = self.dock_area.upgrade() else {
@@ -584,7 +590,7 @@ impl TabPanel {
                         .flex_shrink_0()
                         .ml_1()
                         .gap_1()
-                        .child(self.render_toolbar(state, cx))
+                        .child(self.render_toolbar(&state, cx))
                         .children(right_dock_button),
                 )
                 .into_any_element();
@@ -615,7 +621,7 @@ impl TabPanel {
                 },
             )
             .children(self.panels.iter().enumerate().filter_map(|(ix, panel)| {
-                let mut active = ix == self.active_ix;
+                let mut active = state.active_panel.as_ref() == Some(panel);
                 let disabled = self.is_collapsed;
 
                 if !panel.visible(cx) {
@@ -702,56 +708,56 @@ impl TabPanel {
             .into_any_element()
     }
 
-    fn render_active_panel(&self, state: TabState, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render_active_panel(
+        &self,
+        state: &TabState,
+        cx: &mut ViewContext<Self>,
+    ) -> impl IntoElement {
         if self.is_collapsed {
             return Empty {}.into_any_element();
         }
 
-        self.active_panel(cx)
-            .map(|panel| {
-                div()
-                    .id("tab-content")
-                    .group("")
-                    .overflow_y_scroll()
-                    .overflow_x_hidden()
-                    .flex_1()
-                    .child(panel.view())
-                    .when(state.droppable, |this| {
-                        this.on_drag_move(cx.listener(Self::on_panel_drag_move))
-                            .child(
-                                div()
-                                    .invisible()
-                                    .absolute()
-                                    .bg(cx.theme().drop_target)
-                                    .map(|this| match self.will_split_placement {
-                                        Some(placement) => {
-                                            let size = DefiniteLength::Fraction(0.35);
-                                            match placement {
-                                                Placement::Left => {
-                                                    this.left_0().top_0().bottom_0().w(size)
-                                                }
-                                                Placement::Right => {
-                                                    this.right_0().top_0().bottom_0().w(size)
-                                                }
-                                                Placement::Top => {
-                                                    this.top_0().left_0().right_0().h(size)
-                                                }
-                                                Placement::Bottom => {
-                                                    this.bottom_0().left_0().right_0().h(size)
-                                                }
-                                            }
+        let Some(active_panel) = state.active_panel.as_ref() else {
+            return Empty {}.into_any_element();
+        };
+
+        div()
+            .id("tab-content")
+            .group("")
+            .overflow_y_scroll()
+            .overflow_x_hidden()
+            .flex_1()
+            .child(active_panel.view())
+            .when(state.droppable, |this| {
+                this.on_drag_move(cx.listener(Self::on_panel_drag_move))
+                    .child(
+                        div()
+                            .invisible()
+                            .absolute()
+                            .bg(cx.theme().drop_target)
+                            .map(|this| match self.will_split_placement {
+                                Some(placement) => {
+                                    let size = DefiniteLength::Fraction(0.35);
+                                    match placement {
+                                        Placement::Left => this.left_0().top_0().bottom_0().w(size),
+                                        Placement::Right => {
+                                            this.right_0().top_0().bottom_0().w(size)
                                         }
-                                        None => this.top_0().left_0().size_full(),
-                                    })
-                                    .group_drag_over::<DragPanel>("", |this| this.visible())
-                                    .on_drop(cx.listener(|this, drag: &DragPanel, cx| {
-                                        this.on_drop(drag, None, true, cx)
-                                    })),
-                            )
-                    })
-                    .into_any_element()
+                                        Placement::Top => this.top_0().left_0().right_0().h(size),
+                                        Placement::Bottom => {
+                                            this.bottom_0().left_0().right_0().h(size)
+                                        }
+                                    }
+                                }
+                                None => this.top_0().left_0().size_full(),
+                            })
+                            .group_drag_over::<DragPanel>("", |this| this.visible())
+                            .on_drop(cx.listener(|this, drag: &DragPanel, cx| {
+                                this.on_drop(drag, None, true, cx)
+                            })),
+                    )
             })
-            .unwrap_or(Empty {}.into_any_element())
+            .into_any_element()
     }
 
     /// Calculate the split direction based on the current mouse position
@@ -976,11 +982,13 @@ impl EventEmitter<PanelEvent> for TabPanel {}
 impl Render for TabPanel {
     fn render(&mut self, cx: &mut ViewContext<Self>) -> impl gpui::IntoElement {
         let focus_handle = self.focus_handle(cx);
+        let active_panel = self.active_panel(cx);
         let mut state = TabState {
             closable: self.closable(cx),
             draggable: self.draggable(cx),
             droppable: self.droppable(cx),
             zoomable: self.zoomable(cx),
+            active_panel,
         };
         if !state.draggable {
             state.closable = false;
@@ -994,7 +1002,7 @@ impl Render for TabPanel {
             .size_full()
             .overflow_hidden()
             .bg(cx.theme().background)
-            .child(self.render_title_bar(state, cx))
-            .child(self.render_active_panel(state, cx))
+            .child(self.render_title_bar(&state, cx))
+            .child(self.render_active_panel(&state, cx))
     }
 }
