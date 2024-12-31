@@ -10,6 +10,7 @@ use crate::theme::ActiveTheme as _;
 use super::TextInput;
 
 const RIGHT_MARGIN: Pixels = px(5.);
+const BOTTOM_MARGIN: Pixels = px(20.);
 const CURSOR_INSET: Pixels = px(0.5);
 
 pub(super) struct TextElement {
@@ -103,15 +104,16 @@ impl TextElement {
                     } else {
                         scroll_offset.x
                     };
-                scroll_offset.y = if scroll_offset.y + cursor_pos.y > (bounds.size.height) {
-                    // cursor is out of bottom
-                    bounds.size.height - cursor_pos.y
-                } else if scroll_offset.y + cursor_pos.y < px(0.) {
-                    // cursor is out of top
-                    scroll_offset.y - cursor_pos.y
-                } else {
-                    scroll_offset.y
-                };
+                scroll_offset.y =
+                    if scroll_offset.y + cursor_pos.y > (bounds.size.height - BOTTOM_MARGIN) {
+                        // cursor is out of bottom
+                        bounds.size.height - BOTTOM_MARGIN - cursor_pos.y
+                    } else if scroll_offset.y + cursor_pos.y < px(0.) {
+                        // cursor is out of top
+                        scroll_offset.y - cursor_pos.y
+                    } else {
+                        scroll_offset.y
+                    };
 
                 if input.selection_reversed {
                     if scroll_offset.x + cursor_start.x < px(0.) {
