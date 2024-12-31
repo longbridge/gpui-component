@@ -704,10 +704,15 @@ impl TextInput {
 
     fn enter(&mut self, _: &Enter, cx: &mut ViewContext<Self>) {
         if self.is_multi_line() {
+            let is_eof = self.selected_range.end == self.text.len();
             self.replace_text_in_range(None, "\n", cx);
+
             // Move cursor to the start of the next line
-            // TODO: To be test this line is valid
-            self.move_to(self.next_boundary(self.cursor_offset()) - 1, cx);
+            let mut new_offset = self.next_boundary(self.cursor_offset()) - 1;
+            if is_eof {
+                new_offset += 1;
+            }
+            self.move_to(new_offset, cx);
         }
 
         cx.emit(InputEvent::PressEnter);
