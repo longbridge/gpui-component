@@ -472,6 +472,7 @@ impl Render for StoryWorkspace {
                             .justify_end()
                             .px_2()
                             .gap_2()
+                            .on_mouse_down(MouseButton::Left, |_, cx| cx.stop_propagation())
                             .child(self.theme_color_picker.clone())
                             .child(
                                 Button::new("add-panel")
