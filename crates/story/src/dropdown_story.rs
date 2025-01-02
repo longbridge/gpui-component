@@ -21,6 +21,7 @@ pub fn init(cx: &mut AppContext) {
     ])
 }
 
+#[derive(Clone)]
 struct Country {
     name: SharedString,
     code: SharedString,
@@ -92,9 +93,12 @@ impl DropdownStory {
             Country::new("Venezuela", "VE"),
             Country::new("Ecuador", "EC"),
         ];
-
-        let country_dropdown =
-            cx.new_view(|cx| Dropdown::new("dropdown-country", countries, Some(6), cx).cleanable());
+        let country_dropdown = cx.new_view(|cx| {
+            Dropdown::new("dropdown-country", cx)
+                .set_delegate(countries, cx)
+                .set_selected_index(Some(6), cx)
+                .cleanable()
+        });
 
         let fruits = SearchableVec::new(vec![
             "Apple".into(),
@@ -106,7 +110,8 @@ impl DropdownStory {
             "Avocado".into(),
         ]);
         let fruit_dropdown = cx.new_view(|cx| {
-            Dropdown::new("dropdown-fruits", fruits, None, cx)
+            Dropdown::new("dropdown-fruits", cx)
+                .set_delegate(fruits, cx)
                 .icon(IconName::Search)
                 .width(px(200.))
                 .menu_width(px(320.))
@@ -121,45 +126,40 @@ impl DropdownStory {
                 country_dropdown,
                 fruit_dropdown,
                 simple_dropdown1: cx.new_view(|cx| {
-                    Dropdown::new(
-                        "string-list1",
-                        vec!["QPUI".into(), "Iced".into(), "QT".into(), "Cocoa".into()],
-                        Some(0),
-                        cx,
-                    )
-                    .small()
-                    .placeholder("UI")
-                    .title_prefix("UI: ")
+                    Dropdown::new("string-list1", cx)
+                        .set_delegate(
+                            vec!["QPUI".into(), "Iced".into(), "QT".into(), "Cocoa".into()],
+                            cx,
+                        )
+                        .set_selected_index(Some(0), cx)
+                        .small()
+                        .placeholder("UI")
+                        .title_prefix("UI: ")
                 }),
                 simple_dropdown2: cx.new_view(|cx| {
-                    Dropdown::new(
-                        "string-list2",
-                        SearchableVec::new(vec![
-                            "Rust".into(),
-                            "Go".into(),
-                            "C++".into(),
-                            "JavaScript".into(),
-                        ]),
-                        None,
-                        cx,
-                    )
-                    .small()
-                    .placeholder("Language")
-                    .title_prefix("Language: ")
+                    Dropdown::new("string-list2", cx)
+                        .set_delegate(
+                            SearchableVec::new(vec![
+                                "Rust".into(),
+                                "Go".into(),
+                                "C++".into(),
+                                "JavaScript".into(),
+                            ]),
+                            cx,
+                        )
+                        .set_selected_index(None, cx)
+                        .small()
+                        .placeholder("Language")
+                        .title_prefix("Language: ")
                 }),
                 simple_dropdown3: cx.new_view(|cx| {
-                    Dropdown::new("string-list3", Vec::<SharedString>::new(), None, cx)
+                    Dropdown::new("string-list3", cx)
+                        .set_delegate(Vec::<SharedString>::new(), cx)
                         .small()
-                        .empty(|cx| {
-                            h_flex()
-                                .h_24()
-                                .justify_center()
-                                .text_color(cx.theme().muted_foreground)
-                                .child("No Data")
-                        })
                 }),
                 disabled_dropdown: cx.new_view(|cx| {
-                    Dropdown::new("disabled-dropdown", Vec::<SharedString>::new(), None, cx)
+                    Dropdown::new("disabled-dropdown", cx)
+                        .set_delegate(Vec::<SharedString>::new(), cx)
                         .small()
                         .disabled(true)
                 }),

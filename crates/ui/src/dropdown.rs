@@ -6,6 +6,7 @@ use gpui::{
     VisualContext, WeakView, WindowContext,
 };
 use rust_i18n::t;
+use std::sync::Arc;
 
 use crate::{
     h_flex,
@@ -58,8 +59,10 @@ impl DropdownItem for SharedString {
     }
 }
 
-pub trait DropdownDelegate: Sized {
-    type Item: DropdownItem;
+pub trait DropdownDelegate: Sized + Clone {
+    type Item: DropdownItem + Clone;
+
+    fn empty() -> Self;
 
     fn len(&self) -> usize;
 
@@ -86,8 +89,12 @@ pub trait DropdownDelegate: Sized {
     }
 }
 
-impl<T: DropdownItem> DropdownDelegate for Vec<T> {
+impl<T: DropdownItem + Clone> DropdownDelegate for Vec<T> {
     type Item = T;
+
+    fn empty() -> Self {
+        Vec::new()
+    }
 
     fn len(&self) -> usize {
         self.len()
@@ -106,7 +113,7 @@ impl<T: DropdownItem> DropdownDelegate for Vec<T> {
     }
 }
 
-struct DropdownListDelegate<D: DropdownDelegate + 'static> {
+struct DropdownListDelegate<D: DropdownDelegate + Clone + 'static> {
     delegate: D,
     dropdown: WeakView<Dropdown<D>>,
     selected_index: Option<usize>,
@@ -114,7 +121,7 @@ struct DropdownListDelegate<D: DropdownDelegate + 'static> {
 
 impl<D> ListDelegate for DropdownListDelegate<D>
 where
-    D: DropdownDelegate + 'static,
+    D: DropdownDelegate + Clone + 'static,
 {
     type Item = ListItem;
 
@@ -206,12 +213,13 @@ where
     }
 }
 
-pub enum DropdownEvent<D: DropdownDelegate + 'static> {
+pub enum DropdownEvent<D: DropdownDelegate + Clone + 'static> {
     Confirm(Option<<D::Item as DropdownItem>::Value>),
 }
 
 /// A Dropdown element.
-pub struct Dropdown<D: DropdownDelegate + 'static> {
+#[derive(Clone)]
+pub struct Dropdown<D: DropdownDelegate + Clone + 'static> {
     id: ElementId,
     focus_handle: FocusHandle,
     list: View<List<DropdownListDelegate<D>>>,
@@ -222,7 +230,7 @@ pub struct Dropdown<D: DropdownDelegate + 'static> {
     placeholder: Option<SharedString>,
     title_prefix: Option<SharedString>,
     selected_value: Option<<D::Item as DropdownItem>::Value>,
-    empty: Option<Box<dyn Fn(&WindowContext) -> AnyElement + 'static>>,
+    empty: Option<Arc<dyn Fn(&WindowContext) -> AnyElement + 'static>>,
     width: Length,
     menu_width: Length,
     /// Store the bounds of the input
@@ -230,6 +238,7 @@ pub struct Dropdown<D: DropdownDelegate + 'static> {
     disabled: bool,
 }
 
+#[derive(Clone)]
 pub struct SearchableVec<T> {
     items: Vec<T>,
     matched_items: Vec<T>,
@@ -247,6 +256,13 @@ impl<T: DropdownItem + Clone> SearchableVec<T> {
 
 impl<T: DropdownItem + Clone> DropdownDelegate for SearchableVec<T> {
     type Item = T;
+
+    fn empty() -> Self {
+        Self {
+            items: Vec::new(),
+            matched_items: Vec::new(),
+        }
+    }
 
     fn len(&self) -> usize {
         self.matched_items.len()
@@ -297,19 +313,14 @@ impl From<Vec<SharedString>> for SearchableVec<SharedString> {
 
 impl<D> Dropdown<D>
 where
-    D: DropdownDelegate + 'static,
+    D: DropdownDelegate + Clone + 'static,
 {
-    pub fn new(
-        id: impl Into<ElementId>,
-        delegate: D,
-        selected_index: Option<usize>,
-        cx: &mut ViewContext<Self>,
-    ) -> Self {
+    pub fn new(id: impl Into<ElementId>, cx: &mut ViewContext<Self>) -> Self {
         let focus_handle = cx.focus_handle();
         let delegate = DropdownListDelegate {
-            delegate,
+            delegate: D::empty(),
             dropdown: cx.view().downgrade(),
-            selected_index,
+            selected_index: None,
         };
 
         let searchable = delegate.delegate.can_search();
@@ -342,8 +353,30 @@ where
             bounds: Bounds::default(),
             disabled: false,
         };
-        this.set_selected_index(selected_index, cx);
+        this.set_selected_index(None, cx);
         this
+    }
+
+    pub fn set_delegate(&mut self, delegate: D, cx: &mut ViewContext<Self>) -> Self {
+        self.list.update(cx, |list, _cx| {
+            list.delegate_mut().delegate = delegate;
+        });
+
+        self.set_selected_index(None, cx);
+
+        self.to_owned()
+    }
+
+    pub fn set_selected_index(
+        &mut self,
+        selected_index: Option<usize>,
+        cx: &mut ViewContext<Self>,
+    ) -> Self {
+        self.list.update(cx, |list, cx| {
+            list.set_selected_index(selected_index, cx);
+        });
+        self.update_selected_value(cx);
+        self.clone()
     }
 
     /// Set the width of the dropdown input, default: Length::Auto
@@ -401,19 +434,8 @@ where
         E: IntoElement,
         F: Fn(&WindowContext) -> E + 'static,
     {
-        self.empty = Some(Box::new(move |cx| f(cx).into_any_element()));
+        self.empty = Some(Arc::new(move |cx| f(cx).into_any_element()));
         self
-    }
-
-    pub fn set_selected_index(
-        &mut self,
-        selected_index: Option<usize>,
-        cx: &mut ViewContext<Self>,
-    ) {
-        self.list.update(cx, |list, cx| {
-            list.set_selected_index(selected_index, cx);
-        });
-        self.update_selected_value(cx);
     }
 
     pub fn set_selected_value(
@@ -541,7 +563,7 @@ where
 
 impl<D> Sizable for Dropdown<D>
 where
-    D: DropdownDelegate + 'static,
+    D: DropdownDelegate + Clone + 'static,
 {
     fn with_size(mut self, size: impl Into<Size>) -> Self {
         self.size = size.into();
@@ -549,11 +571,11 @@ where
     }
 }
 
-impl<D> EventEmitter<DropdownEvent<D>> for Dropdown<D> where D: DropdownDelegate + 'static {}
-impl<D> EventEmitter<DismissEvent> for Dropdown<D> where D: DropdownDelegate + 'static {}
+impl<D> EventEmitter<DropdownEvent<D>> for Dropdown<D> where D: DropdownDelegate + Clone + 'static {}
+impl<D> EventEmitter<DismissEvent> for Dropdown<D> where D: DropdownDelegate + Clone + 'static {}
 impl<D> FocusableView for Dropdown<D>
 where
-    D: DropdownDelegate + 'static,
+    D: DropdownDelegate + Clone + 'static,
 {
     fn focus_handle(&self, cx: &AppContext) -> FocusHandle {
         if self.open {
@@ -566,7 +588,7 @@ where
 
 impl<D> Render for Dropdown<D>
 where
-    D: DropdownDelegate + 'static,
+    D: DropdownDelegate + Clone + 'static,
 {
     fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
         let is_focused = self.focus_handle.is_focused(cx);
