@@ -156,6 +156,13 @@ impl DropdownStory {
                     Dropdown::new("string-list3", cx)
                         .set_delegate(Vec::<SharedString>::new(), cx)
                         .small()
+                        .empty(|cx| {
+                            h_flex()
+                                .h_24()
+                                .justify_center()
+                                .text_color(cx.theme().muted_foreground)
+                                .child("No Data")
+                        })
                 }),
                 disabled_dropdown: cx.new_view(|cx| {
                     Dropdown::new("disabled-dropdown", cx)
