@@ -24,6 +24,7 @@ use ui::{
 
 actions!(modal_story, [TestAction]);
 
+#[derive(Clone)]
 pub struct ListItemDeletegate {
     story: WeakView<ModalStory>,
     confirmed_index: Option<usize>,
@@ -254,8 +255,15 @@ impl ModalStory {
             cx.new_view(|cx| DatePicker::new("birthday-picker", cx).placeholder("Date of Birth"));
         let dropdown = cx.new_view(|cx| {
             Dropdown::new("dropdown1", cx)
-                .set_delegate(delegate, cx)
-                .set_selected_index(Some(0), cx)
+                .set_delegate(
+                    vec![
+                        "Option 1".to_string(),
+                        "Option 2".to_string(),
+                        "Option 3".to_string(),
+                    ],
+                    cx,
+                )
+                .set_selected_index(None, cx)
         });
 
         Self {
