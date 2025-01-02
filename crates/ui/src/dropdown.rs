@@ -61,7 +61,7 @@ impl DropdownItem for SharedString {
 
 pub trait DropdownDelegate: Sized + Clone {
     type Item: DropdownItem + Clone;
-
+    /// Returns an empty Vec
     fn empty() -> Self;
 
     fn len(&self) -> usize;
