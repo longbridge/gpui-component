@@ -51,8 +51,8 @@ impl DropdownItem for Country {
 pub struct DropdownStory {
     disabled: bool,
     country_dropdown: View<Dropdown<Vec<Country>>>,
+    country_dropdown_ftl_on: bool,
     fruit_dropdown: View<Dropdown<SearchableVec<SharedString>>>,
-    ftl_on: bool,
     simple_dropdown1: View<Dropdown<Vec<SharedString>>>,
     simple_dropdown2: View<Dropdown<SearchableVec<SharedString>>>,
     simple_dropdown3: View<Dropdown<Vec<SharedString>>>,
@@ -128,7 +128,7 @@ impl DropdownStory {
                 disabled: false,
                 country_dropdown,
                 fruit_dropdown,
-                ftl_on: false,
+                country_dropdown_ftl_on: false,
                 simple_dropdown1: cx.new_view(|cx| {
                     Dropdown::new("string-list1", cx)
                         .set_delegate(
@@ -250,7 +250,7 @@ impl Render for DropdownStory {
             .child(
                 Checkbox::new("mock-ftl-countries")
                     .label("Country ftl")
-                    .checked(self.ftl_on)
+                    .checked(self.country_dropdown_ftl_on)
                     .on_click(cx.listener(|view, _, cx| {
                         let countries = vec![
                             Country::new("United States", "US"),
@@ -279,12 +279,13 @@ impl Render for DropdownStory {
                             Country::new("委内瑞拉", "VE"),
                             Country::new("厄瓜多尔", "EC"),
                         ];
-                        view.ftl_on = !view.ftl_on;
-                        view.country_dropdown
-                            .update(cx, |this, cx| match view.ftl_on {
+                        view.country_dropdown_ftl_on = !view.country_dropdown_ftl_on;
+                        view.country_dropdown.update(cx, |this, cx| {
+                            match view.country_dropdown_ftl_on {
                                 true => this.set_delegate(countries_mock_ftl, cx),
                                 false => this.set_delegate(countries, cx),
-                            });
+                            }
+                        });
                         cx.notify();
                     })),
             )
