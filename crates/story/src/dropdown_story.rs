@@ -52,10 +52,12 @@ pub struct DropdownStory {
     disabled: bool,
     country_dropdown: View<Dropdown<Vec<Country>>>,
     fruit_dropdown: View<Dropdown<SearchableVec<SharedString>>>,
+    ftl_on: bool,
     simple_dropdown1: View<Dropdown<Vec<SharedString>>>,
     simple_dropdown2: View<Dropdown<SearchableVec<SharedString>>>,
     simple_dropdown3: View<Dropdown<Vec<SharedString>>>,
     disabled_dropdown: View<Dropdown<Vec<SharedString>>>,
+    changing_dropdown: View<Dropdown<Vec<SharedString>>>,
 }
 
 impl super::Story for DropdownStory {
@@ -109,6 +111,7 @@ impl DropdownStory {
             "Watermelon & This is a longlonglonglonglonglonglonglonglong title".into(),
             "Avocado".into(),
         ]);
+
         let fruit_dropdown = cx.new_view(|cx| {
             Dropdown::new("dropdown-fruits", cx)
                 .set_delegate(fruits, cx)
@@ -125,6 +128,7 @@ impl DropdownStory {
                 disabled: false,
                 country_dropdown,
                 fruit_dropdown,
+                ftl_on: false,
                 simple_dropdown1: cx.new_view(|cx| {
                     Dropdown::new("string-list1", cx)
                         .set_delegate(
@@ -153,16 +157,13 @@ impl DropdownStory {
                         .title_prefix("Language: ")
                 }),
                 simple_dropdown3: cx.new_view(|cx| {
-                    Dropdown::new("string-list3", cx)
-                        .set_delegate(Vec::<SharedString>::new(), cx)
-                        .small()
-                        .empty(|cx| {
-                            h_flex()
-                                .h_24()
-                                .justify_center()
-                                .text_color(cx.theme().muted_foreground)
-                                .child("No Data")
-                        })
+                    Dropdown::new("string-list3", cx).small().empty(|cx| {
+                        h_flex()
+                            .h_24()
+                            .justify_center()
+                            .text_color(cx.theme().muted_foreground)
+                            .child("No Data")
+                    })
                 }),
                 disabled_dropdown: cx.new_view(|cx| {
                     Dropdown::new("disabled-dropdown", cx)
@@ -170,6 +171,7 @@ impl DropdownStory {
                         .small()
                         .disabled(true)
                 }),
+                changing_dropdown: cx.new_view(|cx| Dropdown::new("string-list4", cx).small()),
             }
         })
     }
@@ -246,6 +248,47 @@ impl Render for DropdownStory {
                     })),
             )
             .child(
+                Checkbox::new("mock-ftl-countries")
+                    .label("Country ftl")
+                    .checked(self.ftl_on)
+                    .on_click(cx.listener(|view, _, cx| {
+                        let countries = vec![
+                            Country::new("United States", "US"),
+                            Country::new("Canada", "CA"),
+                            Country::new("Mexico", "MX"),
+                            Country::new("Brazil", "BR"),
+                            Country::new("Argentina", "AR"),
+                            Country::new("Chile", "CL"),
+                            Country::new("China", "CN"),
+                            Country::new("Peru", "PE"),
+                            Country::new("Colombia", "CO"),
+                            Country::new("Venezuela", "VE"),
+                            Country::new("Ecuador", "EC"),
+                        ];
+                        // sorry, this is ai generated
+                        let countries_mock_ftl = vec![
+                            Country::new("美国", "US"),
+                            Country::new("加拿大", "CA"),
+                            Country::new("墨西哥", "MX"),
+                            Country::new("巴西", "BR"),
+                            Country::new("阿根廷", "AR"),
+                            Country::new("智利", "CL"),
+                            Country::new("中国", "CN"),
+                            Country::new("秘鲁", "PE"),
+                            Country::new("哥伦比亚", "CO"),
+                            Country::new("委内瑞拉", "VE"),
+                            Country::new("厄瓜多尔", "EC"),
+                        ];
+                        view.ftl_on = !view.ftl_on;
+                        view.country_dropdown
+                            .update(cx, |this, cx| match view.ftl_on {
+                                true => this.set_delegate(countries_mock_ftl, cx),
+                                false => this.set_delegate(countries, cx),
+                            });
+                        cx.notify();
+                    })),
+            )
+            .child(
                 h_flex()
                     .w_full()
                     .items_center()
@@ -289,6 +332,7 @@ impl Render for DropdownStory {
                     .child(self.simple_dropdown1.clone())
                     .child(self.simple_dropdown2.clone())
                     .child(self.simple_dropdown3.clone())
+                    .child(self.changing_dropdown.clone())
                     .child(self.disabled_dropdown.clone()),
             )
     }
