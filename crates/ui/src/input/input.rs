@@ -326,6 +326,13 @@ impl TextInput {
 
         new_sub_line += direction;
 
+        // Handle moving above the first line
+        if direction == -1 && new_line_index == 0 && new_sub_line < 0 {
+            // Move cursor to the beginning of the text
+            self.move_to(0, cx);
+            return;
+        }
+
         if new_sub_line < 0 {
             if new_line_index > 0 {
                 new_line_index -= 1;
@@ -345,6 +352,7 @@ impl TextInput {
             }
         }
 
+        // If after adjustment, still at the same position, do not proceed
         if new_line_index == current_line_index && new_sub_line == current_sub_line as i32 {
             return;
         }
