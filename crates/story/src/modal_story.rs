@@ -255,7 +255,7 @@ impl ModalStory {
             cx.new_view(|cx| DatePicker::new("birthday-picker", cx).placeholder("Date of Birth"));
         let dropdown = cx.new_view(|cx| {
             Dropdown::new("dropdown1", cx)
-                .set_delegate(
+                .delegate(
                     vec![
                         "Option 1".to_string(),
                         "Option 2".to_string(),
@@ -263,7 +263,7 @@ impl ModalStory {
                     ],
                     cx,
                 )
-                .set_selected_index(None, cx)
+                .index(None, cx)
         });
 
         Self {

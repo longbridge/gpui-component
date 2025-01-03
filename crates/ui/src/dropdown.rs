@@ -353,11 +353,11 @@ where
             bounds: Bounds::default(),
             disabled: false,
         };
-        this.set_selected_index(None, cx);
+        this.index(None, cx);
         this
     }
 
-    pub fn set_delegate(&mut self, delegate: D, cx: &mut ViewContext<Self>) -> Self {
+    pub fn delegate(&mut self, delegate: D, cx: &mut ViewContext<Self>) -> Self {
         let current_value = self.selected_value.clone();
 
         self.list.update(cx, |list, _cx| {
@@ -369,22 +369,18 @@ where
             let current_index = self.selected_index(cx);
 
             if current_index != new_index {
-                self.set_selected_index(new_index, cx);
+                self.index(new_index, cx);
             }
         } else {
             if self.selected_index(cx).is_some() {
-                self.set_selected_index(None, cx);
+                self.index(None, cx);
             }
         }
 
         self.clone()
     }
 
-    pub fn set_selected_index(
-        &mut self,
-        selected_index: Option<usize>,
-        cx: &mut ViewContext<Self>,
-    ) -> Self {
+    pub fn index(&mut self, selected_index: Option<usize>, cx: &mut ViewContext<Self>) -> Self {
         self.list.update(cx, |list, cx| {
             list.set_selected_index(selected_index, cx);
         });
@@ -460,7 +456,7 @@ where
     {
         let delegate = self.list.read(cx).delegate();
         let selected_index = delegate.delegate.position(selected_value);
-        self.set_selected_index(selected_index, cx);
+        self.index(selected_index, cx);
     }
 
     pub fn selected_index(&self, cx: &WindowContext) -> Option<usize> {
@@ -541,7 +537,7 @@ where
     }
 
     fn clean(&mut self, _: &ClickEvent, cx: &mut ViewContext<Self>) {
-        self.set_selected_index(None, cx);
+        self.index(None, cx);
         cx.emit(DropdownEvent::Confirm(None));
     }
 

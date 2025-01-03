@@ -97,8 +97,8 @@ impl DropdownStory {
         ];
         let country_dropdown = cx.new_view(|cx| {
             Dropdown::new("dropdown-country", cx)
-                .set_delegate(countries, cx)
-                .set_selected_index(Some(6), cx)
+                .delegate(countries, cx)
+                .index(Some(6), cx)
                 .cleanable()
         });
 
@@ -114,7 +114,7 @@ impl DropdownStory {
 
         let fruit_dropdown = cx.new_view(|cx| {
             Dropdown::new("dropdown-fruits", cx)
-                .set_delegate(fruits, cx)
+                .delegate(fruits, cx)
                 .icon(IconName::Search)
                 .width(px(200.))
                 .menu_width(px(320.))
@@ -131,18 +131,18 @@ impl DropdownStory {
                 country_dropdown_ftl_on: false,
                 simple_dropdown1: cx.new_view(|cx| {
                     Dropdown::new("string-list1", cx)
-                        .set_delegate(
+                        .delegate(
                             vec!["QPUI".into(), "Iced".into(), "QT".into(), "Cocoa".into()],
                             cx,
                         )
-                        .set_selected_index(Some(0), cx)
+                        .index(Some(0), cx)
                         .small()
                         .placeholder("UI")
                         .title_prefix("UI: ")
                 }),
                 simple_dropdown2: cx.new_view(|cx| {
                     Dropdown::new("string-list2", cx)
-                        .set_delegate(
+                        .delegate(
                             SearchableVec::new(vec![
                                 "Rust".into(),
                                 "Go".into(),
@@ -151,7 +151,7 @@ impl DropdownStory {
                             ]),
                             cx,
                         )
-                        .set_selected_index(None, cx)
+                        .index(None, cx)
                         .small()
                         .placeholder("Language")
                         .title_prefix("Language: ")
@@ -167,7 +167,7 @@ impl DropdownStory {
                 }),
                 disabled_dropdown: cx.new_view(|cx| {
                     Dropdown::new("disabled-dropdown", cx)
-                        .set_delegate(Vec::<SharedString>::new(), cx)
+                        .delegate(Vec::<SharedString>::new(), cx)
                         .small()
                         .disabled(true)
                 }),
@@ -282,8 +282,8 @@ impl Render for DropdownStory {
                         view.country_dropdown_ftl_on = !view.country_dropdown_ftl_on;
                         view.country_dropdown.update(cx, |this, cx| {
                             match view.country_dropdown_ftl_on {
-                                true => this.set_delegate(countries_mock_ftl, cx),
-                                false => this.set_delegate(countries, cx),
+                                true => this.delegate(countries_mock_ftl, cx),
+                                false => this.delegate(countries, cx),
                             }
                         });
                         cx.notify();
