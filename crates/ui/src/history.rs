@@ -80,6 +80,22 @@ where
         self.undos.push(item);
     }
 
+    /// Get the undo stack.
+    pub fn undos(&self) -> &Vec<I> {
+        &self.undos
+    }
+
+    /// Get the redo stack.
+    pub fn redos(&self) -> &Vec<I> {
+        &self.redos
+    }
+
+    /// Clear the undo and redo stacks.
+    pub fn clear(&mut self) {
+        self.undos.clear();
+        self.redos.clear();
+    }
+
     pub fn undo(&mut self) -> Option<Vec<I>> {
         if let Some(first_change) = self.undos.pop() {
             let mut changes = vec![first_change.clone()];
