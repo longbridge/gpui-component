@@ -365,7 +365,7 @@ impl TextInput {
         let index_res = target_line.index_for_position(approx_pos, line_height);
 
         let new_local_index = match index_res {
-            Ok(i) => i,
+            Ok(i) => i + 1,
             Err(i) => i,
         };
 
