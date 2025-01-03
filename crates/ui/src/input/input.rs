@@ -352,7 +352,6 @@ impl TextInput {
             }
         }
 
-        // If after adjustment, still at the same position, do not proceed
         if new_line_index == current_line_index && new_sub_line == current_sub_line as i32 {
             return;
         }
