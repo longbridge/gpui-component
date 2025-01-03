@@ -24,7 +24,10 @@ use ui::{
 #[derive(Clone, PartialEq, Eq, Deserialize)]
 struct ChangeSize(Size);
 
-impl_actions!(table_story, [ChangeSize]);
+#[derive(Clone, PartialEq, Eq, Deserialize)]
+struct OpenDetail(usize);
+
+impl_actions!(table_story, [ChangeSize, OpenDetail]);
 
 #[derive(Clone, Debug, Default)]
 struct Stock {
@@ -349,11 +352,16 @@ impl TableDelegate for StockTableDelegate {
         }
     }
 
-    fn context_menu(&self, _: usize, menu: PopupMenu, _: &WindowContext) -> PopupMenu {
-        menu.menu("Size Large", Box::new(ChangeSize(Size::Large)))
-            .menu("Size Medium", Box::new(ChangeSize(Size::Medium)))
-            .menu("Size Small", Box::new(ChangeSize(Size::Small)))
-            .menu("Size XSmall", Box::new(ChangeSize(Size::XSmall)))
+    fn context_menu(&self, row_ix: usize, menu: PopupMenu, _: &WindowContext) -> PopupMenu {
+        menu.menu(
+            format!("Selected Row: {}", row_ix),
+            Box::new(OpenDetail(row_ix)),
+        )
+        .separator()
+        .menu("Size Large", Box::new(ChangeSize(Size::Large)))
+        .menu("Size Medium", Box::new(ChangeSize(Size::Medium)))
+        .menu("Size Small", Box::new(ChangeSize(Size::Small)))
+        .menu("Size XSmall", Box::new(ChangeSize(Size::XSmall)))
     }
 
     fn render_td(

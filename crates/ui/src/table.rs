@@ -987,12 +987,6 @@ where
         if row_ix < rows_count {
             self.delegate
                 .render_tr(row_ix, cx)
-                .context_menu({
-                    let view = view.clone();
-                    move |this, cx: &mut ViewContext<PopupMenu>| {
-                        view.read(cx).delegate.context_menu(row_ix, this, cx)
-                    }
-                })
                 .w_full()
                 .h(self.size.table_row_height())
                 .border_b_1()
@@ -1184,6 +1178,16 @@ where
             .size_full()
             .overflow_hidden()
             .child(self.render_table_head(left_cols_count, cx))
+            .context_menu({
+                let view = view.clone();
+                move |this, cx: &mut ViewContext<PopupMenu>| {
+                    if let Some(row_ix) = view.read(cx).right_clicked_row {
+                        view.read(cx).delegate.context_menu(row_ix, this, cx)
+                    } else {
+                        this
+                    }
+                }
+            })
             .map(|this| {
                 if rows_count == 0 {
                     this.child(div().size_full().child(self.delegate.render_empty(cx)))
