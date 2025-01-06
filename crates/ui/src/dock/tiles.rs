@@ -28,7 +28,7 @@ const MINIMUM_SIZE: Size<Pixels> = size(px(100.), px(100.));
 const DRAG_BAR_HEIGHT: Pixels = px(30.);
 const HANDLE_SIZE: Pixels = px(20.0);
 
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 struct TileChange {
     tile_id: EntityId,
     old_bounds: Option<Bounds<Pixels>>,

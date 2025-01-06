@@ -2,7 +2,7 @@ use std::{fmt::Debug, ops::Range};
 
 use crate::history::HistoryItem;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Change {
     pub(crate) old_range: Range<usize>,
     pub(crate) old_text: String,

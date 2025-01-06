@@ -3,7 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-pub trait HistoryItem: Clone {
+pub trait HistoryItem: Clone + PartialEq {
     fn version(&self) -> usize;
     fn set_version(&mut self, version: usize);
 }
@@ -22,6 +22,7 @@ pub struct History<I: HistoryItem> {
     pub(crate) ignore: bool,
     max_undo: usize,
     group_interval: Option<Duration>,
+    unique: bool,
 }
 
 impl<I> History<I>
@@ -37,12 +38,20 @@ where
             version: 0,
             max_undo: 1000,
             group_interval: None,
+            unique: false,
         }
     }
 
     /// Set the maximum number of undo steps to keep, defaults to 1000.
     pub fn max_undo(mut self, max_undo: usize) -> Self {
         self.max_undo = max_undo;
+        self
+    }
+
+    /// Set the hisotry to be unique, defaults to false.
+    /// If set to true, the history will only keep unique changes.
+    pub fn unique(mut self) -> Self {
+        self.unique = true;
         self
     }
 
@@ -73,6 +82,10 @@ where
 
         if self.undos.len() >= self.max_undo {
             self.undos.remove(0);
+        }
+
+        if self.unique {
+            self.undos.retain(|c| *c != item);
         }
 
         let mut item = item;
@@ -150,6 +163,12 @@ mod tests {
         version: usize,
     }
 
+    impl PartialEq for TabIndex {
+        fn eq(&self, other: &Self) -> bool {
+            self.tab_index == other.tab_index
+        }
+    }
+
     impl From<usize> for TabIndex {
         fn from(value: usize) -> Self {
             TabIndex {
@@ -209,5 +228,48 @@ mod tests {
         assert_eq!(changes[0].tab_index, 0);
 
         assert_eq!(history.undo().is_none(), true);
+    }
+
+    #[test]
+    fn test_unique_history() {
+        let mut history: History<TabIndex> = History::new().max_undo(100).unique();
+
+        // Push some items
+        history.push(0.into());
+        history.push(1.into());
+        history.push(1.into()); // Duplicate, should be ignored
+        history.push(2.into());
+        history.push(1.into()); // Duplicate, should be remove old, and add new
+
+        // Check the version and undo stack
+        assert_eq!(history.version(), 5);
+        assert_eq!(history.undos().len(), 3);
+        assert_eq!(history.undos().last().unwrap().tab_index, 1);
+
+        // Undo the last change
+        let changes = history.undo().unwrap();
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0].tab_index, 1);
+
+        // Redo the last undone change
+        let changes = history.redo().unwrap();
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0].tab_index, 1);
+
+        // Push another item
+        history.push(3.into());
+
+        // Check the version and undo stack
+        assert_eq!(history.version(), 6);
+        assert_eq!(history.undos().len(), 4);
+
+        // Undo all changes
+        for _ in 0..4 {
+            history.undo();
+        }
+
+        // Check the undo stack is empty and redo stack has all changes
+        assert_eq!(history.undos().len(), 0);
+        assert_eq!(history.redos().len(), 4);
     }
 }
