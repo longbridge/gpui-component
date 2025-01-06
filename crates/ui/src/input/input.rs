@@ -55,7 +55,9 @@ actions!(
         SelectAll,
         Home,
         End,
-        SelectToHome,
+        SelectToStartOfLine,
+        SelectToEndOfLine,
+        SelectToStart,
         SelectToEnd,
         ShowCharacterPalette,
         Copy,
@@ -100,16 +102,16 @@ pub fn init(cx: &mut AppContext) {
         KeyBinding::new("shift-down", SelectDown, Some(CONTEXT)),
         KeyBinding::new("home", Home, Some(CONTEXT)),
         KeyBinding::new("end", End, Some(CONTEXT)),
-        KeyBinding::new("shift-home", SelectToHome, Some(CONTEXT)),
-        KeyBinding::new("shift-end", SelectToEnd, Some(CONTEXT)),
+        KeyBinding::new("shift-home", SelectToStartOfLine, Some(CONTEXT)),
+        KeyBinding::new("shift-end", SelectToEndOfLine, Some(CONTEXT)),
         #[cfg(target_os = "macos")]
-        KeyBinding::new("ctrl-shift-a", SelectToHome, Some(CONTEXT)),
+        KeyBinding::new("ctrl-shift-a", SelectToStartOfLine, Some(CONTEXT)),
         #[cfg(target_os = "macos")]
-        KeyBinding::new("ctrl-shift-e", SelectToEnd, Some(CONTEXT)),
+        KeyBinding::new("ctrl-shift-e", SelectToEndOfLine, Some(CONTEXT)),
         #[cfg(target_os = "macos")]
-        KeyBinding::new("shift-cmd-left", SelectToHome, Some(CONTEXT)),
+        KeyBinding::new("shift-cmd-left", SelectToStartOfLine, Some(CONTEXT)),
         #[cfg(target_os = "macos")]
-        KeyBinding::new("shift-cmd-right", SelectToEnd, Some(CONTEXT)),
+        KeyBinding::new("shift-cmd-right", SelectToEndOfLine, Some(CONTEXT)),
         #[cfg(target_os = "macos")]
         KeyBinding::new("ctrl-cmd-space", ShowCharacterPalette, Some(CONTEXT)),
         #[cfg(target_os = "macos")]
@@ -144,6 +146,10 @@ pub fn init(cx: &mut AppContext) {
         KeyBinding::new("cmd-up", MoveToStart, Some(CONTEXT)),
         #[cfg(target_os = "macos")]
         KeyBinding::new("cmd-down", MoveToEnd, Some(CONTEXT)),
+        #[cfg(target_os = "macos")]
+        KeyBinding::new("cmd-shift-up", SelectToStart, Some(CONTEXT)),
+        #[cfg(target_os = "macos")]
+        KeyBinding::new("cmd-shift-down", SelectToEnd, Some(CONTEXT)),
         #[cfg(not(target_os = "macos"))]
         KeyBinding::new("ctrl-z", Undo, Some(CONTEXT)),
         #[cfg(not(target_os = "macos"))]
@@ -621,23 +627,30 @@ impl TextInput {
         self.move_to(offset, cx);
     }
 
-    /// Handler for MoveToStart action
     fn move_to_start(&mut self, _: &MoveToStart, cx: &mut ViewContext<Self>) {
         self.move_to(0, cx);
     }
 
-    /// Handler for MoveToEnd action
     fn move_to_end(&mut self, _: &MoveToEnd, cx: &mut ViewContext<Self>) {
         let end = self.text.len();
         self.move_to(end, cx);
     }
 
-    fn select_to_home(&mut self, _: &SelectToHome, cx: &mut ViewContext<Self>) {
+    fn select_to_start(&mut self, _: &SelectToStart, cx: &mut ViewContext<Self>) {
+        self.select_to(0, cx);
+    }
+
+    fn select_to_end(&mut self, _: &SelectToEnd, cx: &mut ViewContext<Self>) {
+        let end = self.text.len();
+        self.select_to(end, cx);
+    }
+
+    fn select_to_start_of_line(&mut self, _: &SelectToStartOfLine, cx: &mut ViewContext<Self>) {
         let offset = self.start_of_line(cx);
         self.select_to(offset, cx);
     }
 
-    fn select_to_end(&mut self, _: &SelectToEnd, cx: &mut ViewContext<Self>) {
+    fn select_to_end_of_line(&mut self, _: &SelectToEndOfLine, cx: &mut ViewContext<Self>) {
         let offset = self.end_of_line(cx);
         self.select_to(offset, cx);
     }
@@ -1340,12 +1353,14 @@ impl Render for TextInput {
                     .on_action(cx.listener(Self::select_down))
             })
             .on_action(cx.listener(Self::select_all))
-            .on_action(cx.listener(Self::select_to_home))
-            .on_action(cx.listener(Self::select_to_end))
+            .on_action(cx.listener(Self::select_to_start_of_line))
+            .on_action(cx.listener(Self::select_to_end_of_line))
             .on_action(cx.listener(Self::home))
             .on_action(cx.listener(Self::end))
             .on_action(cx.listener(Self::move_to_start))
             .on_action(cx.listener(Self::move_to_end))
+            .on_action(cx.listener(Self::select_to_start))
+            .on_action(cx.listener(Self::select_to_end))
             .on_action(cx.listener(Self::show_character_palette))
             .on_action(cx.listener(Self::copy))
             .on_action(cx.listener(Self::paste))
