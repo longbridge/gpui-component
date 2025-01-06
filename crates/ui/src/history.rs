@@ -48,7 +48,7 @@ where
         self
     }
 
-    /// Set the hisotry to be unique, defaults to false.
+    /// Set the history to be unique, defaults to false.
     /// If set to true, the history will only keep unique changes.
     pub fn unique(mut self) -> Self {
         self.unique = true;
