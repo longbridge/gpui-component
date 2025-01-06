@@ -65,6 +65,8 @@ actions!(
         Redo,
         MoveToStartOfLine,
         MoveToEndOfLine,
+        MoveToStart,
+        MoveToEnd,
         TextChanged,
     ]
 );
@@ -138,6 +140,10 @@ pub fn init(cx: &mut AppContext) {
         KeyBinding::new("cmd-z", Undo, Some(CONTEXT)),
         #[cfg(target_os = "macos")]
         KeyBinding::new("cmd-shift-z", Redo, Some(CONTEXT)),
+        #[cfg(target_os = "macos")]
+        KeyBinding::new("cmd-up", MoveToStart, Some(CONTEXT)),
+        #[cfg(target_os = "macos")]
+        KeyBinding::new("cmd-down", MoveToEnd, Some(CONTEXT)),
         #[cfg(not(target_os = "macos"))]
         KeyBinding::new("ctrl-z", Undo, Some(CONTEXT)),
         #[cfg(not(target_os = "macos"))]
@@ -613,6 +619,17 @@ impl TextInput {
         self.pause_blink_cursor(cx);
         let offset = self.end_of_line(cx);
         self.move_to(offset, cx);
+    }
+
+    /// Handler for MoveToStart action
+    fn move_to_start(&mut self, _: &MoveToStart, cx: &mut ViewContext<Self>) {
+        self.move_to(0, cx);
+    }
+
+    /// Handler for MoveToEnd action
+    fn move_to_end(&mut self, _: &MoveToEnd, cx: &mut ViewContext<Self>) {
+        let end = self.text.len();
+        self.move_to(end, cx);
     }
 
     fn select_to_home(&mut self, _: &SelectToHome, cx: &mut ViewContext<Self>) {
@@ -1327,6 +1344,8 @@ impl Render for TextInput {
             .on_action(cx.listener(Self::select_to_end))
             .on_action(cx.listener(Self::home))
             .on_action(cx.listener(Self::end))
+            .on_action(cx.listener(Self::move_to_start))
+            .on_action(cx.listener(Self::move_to_end))
             .on_action(cx.listener(Self::show_character_palette))
             .on_action(cx.listener(Self::copy))
             .on_action(cx.listener(Self::paste))
