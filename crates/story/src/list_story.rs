@@ -1,4 +1,5 @@
 use core::time;
+use std::time::Duration;
 
 use fake::Fake;
 use gpui::{
@@ -135,6 +136,9 @@ struct CompanyListDelegate {
     matched_companies: Vec<Company>,
     selected_index: usize,
     confirmed_index: Option<usize>,
+    query: String,
+    loading: bool,
+    is_eof: bool,
 }
 
 impl ListDelegate for CompanyListDelegate {
@@ -149,6 +153,7 @@ impl ListDelegate for CompanyListDelegate {
     }
 
     fn perform_search(&mut self, query: &str, _: &mut ViewContext<List<Self>>) -> Task<()> {
+        self.query = query.to_string();
         self.matched_companies = self
             .companies
             .iter()
@@ -214,6 +219,38 @@ impl ListDelegate for CompanyListDelegate {
 
         None
     }
+
+    fn can_load_more(&self, _: &AppContext) -> bool {
+        return !self.loading && !self.is_eof;
+    }
+
+    fn load_more_threshold(&self) -> usize {
+        150
+    }
+
+    fn load_more(&mut self, cx: &mut ViewContext<List<Self>>) {
+        self.loading = true;
+
+        cx.spawn(|view, mut cx| async move {
+            dbg!("Load more data");
+            // Simulate network request, delay 1s to load data.
+            Timer::after(Duration::from_secs(1)).await;
+
+            cx.update(|cx| {
+                _ = view.update(cx, move |view, cx| {
+                    let query = view.delegate().query.clone();
+                    view.delegate_mut()
+                        .companies
+                        .extend((0..200).map(|_| random_company()));
+                    view.delegate_mut().perform_search(&query, cx);
+                    view.delegate_mut().loading = false;
+                    dbg!("Loaded more data len: ", view.delegate().companies.len());
+                    view.delegate_mut().is_eof = view.delegate().companies.len() >= 6000;
+                });
+            })
+        })
+        .detach();
+    }
 }
 
 impl CompanyListDelegate {
@@ -259,6 +296,9 @@ impl ListStory {
                     companies,
                     selected_index: 0,
                     confirmed_index: None,
+                    query: "".to_string(),
+                    loading: false,
+                    is_eof: false,
                 },
                 cx,
             )

@@ -583,26 +583,27 @@ where
     }
 
     /// Dispatch delegate's `load_more` method when the visible range is near the end.
-    fn load_more(&mut self, visible_range: Range<usize>, cx: &mut ViewContext<Self>) {
+    fn load_more_if_need(&mut self, visible_range: Range<usize>, cx: &mut ViewContext<Self>) {
         if !self.delegate.can_load_more(cx) {
             return;
         }
 
         let row_count = self.delegate.rows_count(cx);
-        let load_more_count = self.delegate.load_more_threshold();
+        let threshold = self.delegate.load_more_threshold();
+        if row_count < threshold {
+            return;
+        }
 
         // Securely handle subtract logic to prevent attempt to subtract with overflow
-        if row_count >= load_more_count {
-            if visible_range.end >= row_count - load_more_count {
-                cx.spawn(|view, mut cx| async move {
-                    cx.update(|cx| {
-                        view.update(cx, |view, cx| {
-                            view.delegate.load_more(cx);
-                        })
+        if visible_range.end >= row_count - threshold {
+            cx.spawn(|view, mut cx| async move {
+                cx.update(|cx| {
+                    view.update(cx, |view, cx| {
+                        view.delegate.load_more(cx);
                     })
                 })
-                .detach()
-            }
+            })
+            .detach()
         }
     }
 
@@ -1202,7 +1203,7 @@ where
                                 rows_count + extra_rows_needed,
                                 {
                                     move |table, visible_range, cx| {
-                                        table.load_more(visible_range.clone(), cx);
+                                        table.load_more_if_need(visible_range.clone(), cx);
 
                                         if visible_range.end > rows_count {
                                             table.scroll_to_row(

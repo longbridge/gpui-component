@@ -1,3 +1,4 @@
+use std::ops::Range;
 use std::time::Duration;
 use std::{cell::Cell, rc::Rc};
 
@@ -77,6 +78,29 @@ pub trait ListDelegate: Sized + 'static {
 
     /// Cancel the selection, e.g.: Pressed ESC.
     fn cancel(&mut self, cx: &mut ViewContext<List<Self>>) {}
+
+    /// Return true to enable load more data when scrolling to the bottom.
+    ///
+    /// Default: true
+    fn can_load_more(&self, cx: &AppContext) -> bool {
+        true
+    }
+
+    /// Returns a threshold value (n rows), of course, when scrolling to the bottom,
+    /// the remaining number of rows triggers `load_more`.
+    ///
+    /// Default: 50 rows
+    fn load_more_threshold(&self) -> usize {
+        50
+    }
+
+    /// Load more data when the table is scrolled to the bottom.
+    ///
+    /// This will performed in a background task.
+    ///
+    /// This is always called when the table is near the bottom,
+    /// so you must check if there is more data to load or lock the loading state.
+    fn load_more(&mut self, cx: &mut ViewContext<List<Self>>) {}
 }
 
 pub struct List<D: ListDelegate> {
@@ -259,6 +283,31 @@ where
         cx.notify();
     }
 
+    /// Dispatch delegate's `load_more` method when the visible range is near the end.
+    fn load_more_if_need(&mut self, visible_range: Range<usize>, cx: &mut ViewContext<Self>) {
+        if !self.delegate.can_load_more(cx) {
+            return;
+        }
+
+        let items_count = self.delegate.items_count(cx);
+        let threshold = self.delegate.load_more_threshold();
+        if items_count < threshold {
+            return;
+        }
+
+        // Securely handle subtract logic to prevent attempt to subtract with overflow
+        if visible_range.end >= items_count - threshold {
+            cx.spawn(|view, mut cx| async move {
+                cx.update(|cx| {
+                    view.update(cx, |view, cx| {
+                        view.delegate.load_more(cx);
+                    })
+                })
+            })
+            .detach()
+        }
+    }
+
     fn on_action_cancel(&mut self, _: &Cancel, cx: &mut ViewContext<Self>) {
         self.set_selected_index(None, cx);
         self.delegate.cancel(cx);
@@ -430,6 +479,8 @@ where
                                 this.child(
                                     uniform_list(view, "uniform-list", items_count, {
                                         move |list, visible_range, cx| {
+                                            list.load_more_if_need(visible_range.clone(), cx);
+
                                             visible_range
                                                 .map(|ix| list.render_list_item(ix, cx))
                                                 .collect::<Vec<_>>()
