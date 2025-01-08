@@ -469,12 +469,11 @@ impl PopupMenu {
         let icon = h_flex()
             .w_3p5()
             .h_3p5()
-            .items_center()
             .justify_center()
             .text_sm()
             .map(|this| {
                 if let Some(icon) = icon {
-                    this.child(icon.clone().small())
+                    this.child(icon.clone().xsmall())
                 } else {
                     this.children(icon_placeholder.clone())
                 }
@@ -553,7 +552,7 @@ impl Render for PopupMenu {
                                             .relative()
                                             .text_sm()
                                             .py_0()
-                                            .px_2()
+                                            .px_1()
                                             .rounded_md()
                                             .items_center()
                                             .on_mouse_enter(cx.listener(move |this, _, cx| {
@@ -580,7 +579,7 @@ impl Render for PopupMenu {
                                                     h_flex()
                                                         .min_h(ITEM_HEIGHT)
                                                         .items_center()
-                                                        .gap_x_1p5()
+                                                        .gap_x_1()
                                                         .children(Self::render_icon(
                                                             has_icon, None, cx,
                                                         ))
@@ -604,7 +603,7 @@ impl Render for PopupMenu {
                                                     h_flex()
                                                         .h(ITEM_HEIGHT)
                                                         .items_center()
-                                                        .gap_x_1p5()
+                                                        .gap_x_1()
                                                         .children(Self::render_icon(
                                                             has_icon,
                                                             icon.clone(),
@@ -632,7 +631,7 @@ impl Render for PopupMenu {
                                                             h_flex()
                                                                 .size_full()
                                                                 .items_center()
-                                                                .gap_x_1p5()
+                                                                .gap_x_1()
                                                                 .children(Self::render_icon(
                                                                     has_icon,
                                                                     icon.clone(),
