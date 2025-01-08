@@ -410,6 +410,14 @@ where
         cx.notify();
     }
 
+    /// Clear the selection of the table.
+    pub fn clear_selection(&mut self, cx: &mut ViewContext<Self>) {
+        self.selection_state = SelectionState::Row;
+        self.selected_row = None;
+        self.selected_col = None;
+        cx.notify();
+    }
+
     fn on_row_click(&mut self, ev: &MouseDownEvent, row_ix: usize, cx: &mut ViewContext<Self>) {
         if ev.button == MouseButton::Right {
             self.right_clicked_row = Some(row_ix);
@@ -431,10 +439,7 @@ where
     }
 
     fn action_cancel(&mut self, _: &Cancel, cx: &mut ViewContext<Self>) {
-        self.selection_state = SelectionState::Row;
-        self.selected_row = None;
-        self.selected_col = None;
-        cx.notify();
+        self.clear_selection(cx);
     }
 
     fn action_select_prev(&mut self, _: &SelectPrev, cx: &mut ViewContext<Self>) {
