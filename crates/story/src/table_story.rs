@@ -8,7 +8,7 @@ use gpui::{
 };
 use serde::Deserialize;
 use ui::{
-    button::{Button, ButtonVariants},
+    button::Button,
     checkbox::Checkbox,
     h_flex,
     indicator::Indicator,
@@ -18,7 +18,7 @@ use ui::{
     prelude::FluentBuilder as _,
     table::{ColFixed, ColSort, Table, TableDelegate, TableEvent},
     theme::ActiveTheme as _,
-    v_flex, Selectable, Size, StyleSized as _,
+    v_flex, Selectable, Sizable as _, Size, StyleSized as _,
 };
 
 #[derive(Clone, PartialEq, Eq, Deserialize)]
@@ -708,34 +708,6 @@ impl Render for TableStory {
                     .gap_3()
                     .flex_wrap()
                     .child(
-                        Button::new("size")
-                            .compact()
-                            .outline()
-                            .label(format!("size: {:?}", self.size))
-                            .popup_menu(move |menu, _| {
-                                menu.menu_with_check(
-                                    "Large",
-                                    size == Size::Large,
-                                    Box::new(ChangeSize(Size::Large)),
-                                )
-                                .menu_with_check(
-                                    "Medium",
-                                    size == Size::Medium,
-                                    Box::new(ChangeSize(Size::Medium)),
-                                )
-                                .menu_with_check(
-                                    "Small",
-                                    size == Size::Small,
-                                    Box::new(ChangeSize(Size::Small)),
-                                )
-                                .menu_with_check(
-                                    "XSmall",
-                                    size == Size::XSmall,
-                                    Box::new(ChangeSize(Size::XSmall)),
-                                )
-                            }),
-                    )
-                    .child(
                         Checkbox::new("loop-selection")
                             .label("Loop Selection")
                             .selected(delegate.loop_selection)
@@ -783,6 +755,76 @@ impl Render for TableStory {
                             .selected(self.refresh_data)
                             .on_click(cx.listener(Self::toggle_refresh_data)),
                     ),
+            )
+            .child(
+                h_flex()
+                    .gap_2()
+                    .child(
+                        Button::new("size")
+                            .small()
+                            .label(format!("size: {:?}", self.size))
+                            .popup_menu(move |menu, _| {
+                                menu.menu_with_check(
+                                    "Large",
+                                    size == Size::Large,
+                                    Box::new(ChangeSize(Size::Large)),
+                                )
+                                .menu_with_check(
+                                    "Medium",
+                                    size == Size::Medium,
+                                    Box::new(ChangeSize(Size::Medium)),
+                                )
+                                .menu_with_check(
+                                    "Small",
+                                    size == Size::Small,
+                                    Box::new(ChangeSize(Size::Small)),
+                                )
+                                .menu_with_check(
+                                    "XSmall",
+                                    size == Size::XSmall,
+                                    Box::new(ChangeSize(Size::XSmall)),
+                                )
+                            }),
+                    )
+                    .child(
+                        Button::new("scroll-top")
+                            .child("Scroll to Top")
+                            .small()
+                            .on_click(cx.listener(|this, _, cx| {
+                                this.table.update(cx, |table, cx| {
+                                    table.scroll_to_row(0, cx);
+                                })
+                            })),
+                    )
+                    .child(
+                        Button::new("scroll-bottom")
+                            .child("Scroll to Bottom")
+                            .small()
+                            .on_click(cx.listener(|this, _, cx| {
+                                this.table.update(cx, |table, cx| {
+                                    table.scroll_to_row(table.delegate().rows_count(cx) - 1, cx);
+                                })
+                            })),
+                    ), // .child(
+                       //     Button::new("scroll-first-col")
+                       //         .child("Scroll to First Column")
+                       //         .small()
+                       //         .on_click(cx.listener(|this, _, cx| {
+                       //             this.table.update(cx, |table, cx| {
+                       //                 table.scroll_to_col(0, cx);
+                       //             })
+                       //         })),
+                       // )
+                       // .child(
+                       //     Button::new("scroll-last-col")
+                       //         .child("Scroll to Last Column")
+                       //         .small()
+                       //         .on_click(cx.listener(|this, _, cx| {
+                       //             this.table.update(cx, |table, cx| {
+                       //                 table.scroll_to_col(table.delegate().cols_count(cx), cx);
+                       //             })
+                       //         })),
+                       // ),
             )
             .child(
                 h_flex().items_center().gap_2().child(

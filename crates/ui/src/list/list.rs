@@ -231,6 +231,18 @@ where
         ))
     }
 
+    /// Scroll to the item at the given index.
+    pub fn scroll_to_item(&mut self, ix: usize, cx: &mut ViewContext<Self>) {
+        self.vertical_scroll_handle
+            .scroll_to_item(ix, ScrollStrategy::Top);
+        cx.notify();
+    }
+
+    /// Get scroll handle
+    pub fn scroll_handle(&self) -> &UniformListScrollHandle {
+        &self.vertical_scroll_handle
+    }
+
     fn scroll_to_selected_item(&mut self, _cx: &mut ViewContext<Self>) {
         if let Some(ix) = self.selected_index {
             self.vertical_scroll_handle

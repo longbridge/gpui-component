@@ -3,17 +3,18 @@ use std::time::Duration;
 
 use fake::Fake;
 use gpui::{
-    actions, div, px, relative, AnyElement, AppContext, ElementId, FocusHandle, FocusableView,
-    InteractiveElement, IntoElement, ParentElement, Render, RenderOnce, Styled, Task, Timer, View,
-    ViewContext, VisualContext, WindowContext,
+    actions, div, px, AppContext, ElementId, FocusHandle, FocusableView, InteractiveElement,
+    IntoElement, ParentElement, Render, RenderOnce, Styled, Task, Timer, View, ViewContext,
+    VisualContext, WindowContext,
 };
 
 use ui::{
+    button::Button,
     h_flex,
     label::Label,
     list::{List, ListDelegate, ListItem},
     theme::{hsl, ActiveTheme},
-    v_flex,
+    v_flex, Sizable,
 };
 
 actions!(list_story, [SelectedCompany]);
@@ -171,39 +172,6 @@ impl ListDelegate for CompanyListDelegate {
         }
     }
 
-    fn render_initial(&self, cx: &mut ViewContext<List<Self>>) -> Option<AnyElement> {
-        let histories = ["BABA", "BIDU", "GOOGL", "LB", "LP", "LBW"];
-
-        let input_history = histories
-            .into_iter()
-            .map(|name| {
-                div()
-                    .rounded_xl()
-                    .min_w(px(30.))
-                    .border_1()
-                    .rounded_md()
-                    .border_color(cx.theme().muted_foreground.opacity(0.3))
-                    .line_height(relative(1.))
-                    .p_1()
-                    .child(div().whitespace_nowrap().child(name).text_xs())
-            })
-            .collect::<Vec<_>>();
-
-        let element = v_flex()
-            .p_4()
-            .child(
-                v_flex().gap_y_2().child("History").child(
-                    h_flex()
-                        .gap_x_4()
-                        .gap_y_2()
-                        .flex_wrap()
-                        .children(input_history),
-                ),
-            )
-            .into_any_element();
-        Some(element)
-    }
-
     fn set_selected_index(&mut self, ix: Option<usize>, cx: &mut ViewContext<List<Self>>) {
         if let Some(ix) = ix {
             self.selected_index = ix;
@@ -357,14 +325,43 @@ impl FocusableView for ListStory {
 
 impl Render for ListStory {
     fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
-        div()
+        v_flex()
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::selected_company))
             .size_full()
             .gap_4()
-            .border_1()
-            .border_color(cx.theme().border)
-            .rounded_md()
-            .child(self.company_list.clone())
+            .child(
+                h_flex()
+                    .gap_2()
+                    .child(
+                        Button::new("scroll-top")
+                            .child("Scroll to Top")
+                            .small()
+                            .on_click(cx.listener(|this, _, cx| {
+                                this.company_list.update(cx, |list, cx| {
+                                    list.scroll_to_item(0, cx);
+                                })
+                            })),
+                    )
+                    .child(
+                        Button::new("scroll-bottom")
+                            .child("Scroll to Bottom")
+                            .small()
+                            .on_click(cx.listener(|this, _, cx| {
+                                this.company_list.update(cx, |list, cx| {
+                                    list.scroll_to_item(list.delegate().items_count(cx) - 1, cx);
+                                })
+                            })),
+                    ),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .w_full()
+                    .border_1()
+                    .border_color(cx.theme().border)
+                    .rounded_md()
+                    .child(self.company_list.clone()),
+            )
     }
 }

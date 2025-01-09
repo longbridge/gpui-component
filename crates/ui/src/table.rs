@@ -367,10 +367,28 @@ where
         cx.notify();
     }
 
-    fn scroll_to_row(&mut self, row_ix: usize, cx: &mut ViewContext<Self>) {
+    /// Scroll to the row at the given index.
+    pub fn scroll_to_row(&mut self, row_ix: usize, cx: &mut ViewContext<Self>) {
         self.vertical_scroll_handle
             .scroll_to_item(row_ix, ScrollStrategy::Top);
         cx.notify();
+    }
+
+    // Scroll to the column at the given index.
+    // TODO: Fix scroll to selected col, this was not working after fixed col.
+    // pub fn scroll_to_col(&mut self, col_ix: usize, cx: &mut ViewContext<Self>) {
+    //     self.horizontal_scroll_handle.scroll_to_item(col_ix);
+    //     cx.notify();
+    // }
+
+    /// Get scroll handle
+    pub fn scroll_handle(&self) -> &UniformListScrollHandle {
+        &self.vertical_scroll_handle
+    }
+
+    /// Get horizontal scroll handle
+    pub fn horizontal_scroll_handle(&self) -> &ScrollHandle {
+        &self.horizontal_scroll_handle
     }
 
     /// Returns the selected row index.
