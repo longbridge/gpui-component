@@ -6,6 +6,7 @@ use gpui::{
 use ui::{
     button::{Button, ButtonVariant, ButtonVariants},
     checkbox::Checkbox,
+    dock::ToolbarType,
     h_flex,
     label::Label,
     tooltip::Tooltip,
@@ -37,8 +38,8 @@ impl super::Story for TooltipStory {
         Self::view(cx)
     }
 
-    fn zoomable() -> bool {
-        false
+    fn zoomable() -> Option<ToolbarType> {
+        None
     }
 }
 impl gpui::FocusableView for TooltipStory {

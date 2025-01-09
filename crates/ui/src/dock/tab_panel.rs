@@ -21,13 +21,13 @@ use crate::{
 
 use super::{
     ClosePanel, DockArea, DockPlacement, Panel, PanelEvent, PanelState, PanelStyle, PanelView,
-    StackPanel, ToggleZoom,
+    StackPanel, ToggleZoom, ToolbarType,
 };
 
 #[derive(Clone)]
 struct TabState {
     closable: bool,
-    zoomable: bool,
+    zoomable: Option<ToolbarType>,
     draggable: bool,
     droppable: bool,
     active_panel: Option<Arc<dyn PanelView>>,
@@ -104,10 +104,8 @@ impl Panel for TabPanel {
             .unwrap_or(false)
     }
 
-    fn zoomable(&self, cx: &AppContext) -> bool {
-        self.active_panel(cx)
-            .map(|panel| panel.zoomable(cx))
-            .unwrap_or(false)
+    fn zoomable(&self, cx: &AppContext) -> Option<ToolbarType> {
+        self.active_panel(cx).and_then(|panel| panel.zoomable(cx))
     }
 
     fn visible(&self, cx: &AppContext) -> bool {
@@ -377,12 +375,12 @@ impl TabPanel {
     }
 
     fn render_toolbar(&self, state: &TabState, cx: &mut ViewContext<Self>) -> impl IntoElement {
-        let is_zoomed = self.is_zoomed && state.zoomable;
+        let is_zoomed = self.is_zoomed;
         let view = cx.view().clone();
         let build_popup_menu = move |this, cx: &WindowContext| view.read(cx).popup_menu(this, cx);
+        let zoomable_button_visible = state.zoomable.map_or(false, |v| v.button_visible());
 
         // TODO: Do not show MenuButton if there is no menu items
-
         h_flex()
             .gap_2()
             .occlude()
@@ -390,17 +388,29 @@ impl TabPanel {
             .when_some(self.toolbar_buttons(cx), |this, buttons| {
                 this.children(buttons.into_iter().map(|btn| btn.xsmall().ghost()))
             })
-            .when(self.is_zoomed, |this| {
-                this.child(
-                    Button::new("zoom")
-                        .icon(IconName::Minimize)
-                        .xsmall()
-                        .ghost()
-                        .tooltip(t!("Dock.Zoom Out"))
-                        .on_click(
-                            cx.listener(|view, _, cx| view.on_action_toggle_zoom(&ToggleZoom, cx)),
-                        ),
-                )
+            .map(|this| {
+                let value = if is_zoomed {
+                    Some(("zoom-out", IconName::Minimize, t!("Dock.Zoom Out")))
+                } else if zoomable_button_visible {
+                    Some(("zoom-in", IconName::Maximize, t!("Dock.Zoom In")))
+                } else {
+                    None
+                };
+
+                if let Some((id, icon, tooltip)) = value {
+                    this.child(
+                        Button::new(id)
+                            .icon(icon)
+                            .xsmall()
+                            .ghost()
+                            .tooltip(tooltip)
+                            .on_click(cx.listener(|view, _, cx| {
+                                view.on_action_toggle_zoom(&ToggleZoom, cx)
+                            })),
+                    )
+                } else {
+                    this
+                }
             })
             .child(
                 Button::new("menu")
@@ -408,7 +418,7 @@ impl TabPanel {
                     .xsmall()
                     .ghost()
                     .popup_menu({
-                        let zoomable = state.zoomable;
+                        let zoomable = state.zoomable.map_or(false, |v| v.menu_visible());
                         let closable = state.closable;
 
                         move |this, cx| {
@@ -932,7 +942,7 @@ impl TabPanel {
     }
 
     fn on_action_toggle_zoom(&mut self, _: &ToggleZoom, cx: &mut ViewContext<Self>) {
-        if !self.zoomable(cx) {
+        if self.zoomable(cx).is_none() {
             return;
         }
 

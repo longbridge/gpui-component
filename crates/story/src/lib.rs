@@ -52,7 +52,7 @@ use gpui::{
 use ui::{
     button::Button,
     divider::Divider,
-    dock::{register_panel, Panel, PanelEvent, PanelInfo, PanelState, TitleStyle},
+    dock::{register_panel, Panel, PanelEvent, PanelInfo, PanelState, TitleStyle, ToolbarType},
     h_flex,
     label::Label,
     notification::Notification,
@@ -147,7 +147,7 @@ pub struct StoryContainer {
     story: Option<AnyView>,
     story_klass: Option<SharedString>,
     closable: bool,
-    zoomable: bool,
+    zoomable: Option<ToolbarType>,
 }
 
 #[derive(Debug)]
@@ -167,8 +167,8 @@ pub trait Story: FocusableView {
     fn closable() -> bool {
         true
     }
-    fn zoomable() -> bool {
-        true
+    fn zoomable() -> Option<ToolbarType> {
+        Some(ToolbarType::default())
     }
     fn title_bg() -> Option<Hsla> {
         None
@@ -192,7 +192,7 @@ impl StoryContainer {
             story: None,
             story_klass: None,
             closable: true,
-            zoomable: true,
+            zoomable: Some(ToolbarType::default()),
         }
     }
 
@@ -260,7 +260,13 @@ impl StoryState {
     fn to_story(
         &self,
         cx: &mut WindowContext,
-    ) -> (&'static str, &'static str, bool, bool, AnyView) {
+    ) -> (
+        &'static str,
+        &'static str,
+        bool,
+        Option<ToolbarType>,
+        AnyView,
+    ) {
         macro_rules! story {
             ($klass:tt) => {
                 (
@@ -324,7 +330,7 @@ impl Panel for StoryContainer {
         self.closable
     }
 
-    fn zoomable(&self, _cx: &AppContext) -> bool {
+    fn zoomable(&self, _cx: &AppContext) -> Option<ToolbarType> {
         self.zoomable
     }
 

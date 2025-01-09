@@ -3,6 +3,7 @@ use gpui::{
 };
 use ui::{
     button::{Button, ButtonVariant, ButtonVariants},
+    dock::ToolbarType,
     h_flex,
     theme::ActiveTheme as _,
     v_flex, Icon, IconName,
@@ -33,8 +34,8 @@ impl super::Story for IconStory {
         Self::view(cx)
     }
 
-    fn zoomable() -> bool {
-        false
+    fn zoomable() -> Option<ToolbarType> {
+        None
     }
 }
 

@@ -1,5 +1,5 @@
 use gpui::{px, ParentElement as _, Render, Styled, View, VisualContext as _, WindowContext};
-use ui::{h_flex, v_flex, SvgImg};
+use ui::{dock::ToolbarType, h_flex, v_flex, SvgImg};
 
 const GOOGLE_LOGO: &str = include_str!("./fixtures/google.svg");
 const PIE_JSON: &str = include_str!("./fixtures/pie.json");
@@ -18,6 +18,10 @@ impl super::Story for ImageStory {
 
     fn new_view(cx: &mut WindowContext) -> View<impl gpui::FocusableView> {
         Self::view(cx)
+    }
+
+    fn zoomable() -> Option<ToolbarType> {
+        Some(ToolbarType::Button)
     }
 }
 

@@ -172,10 +172,6 @@ impl super::Story for SidebarStory {
     fn new_view(cx: &mut WindowContext) -> View<impl gpui::FocusableView> {
         Self::view(cx)
     }
-
-    fn zoomable() -> bool {
-        true
-    }
 }
 impl gpui::FocusableView for SidebarStory {
     fn focus_handle(&self, _: &gpui::AppContext) -> gpui::FocusHandle {
