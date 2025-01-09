@@ -348,8 +348,8 @@ impl Panel for StoryContainer {
             .menu("Info", Box::new(ShowPanelInfo))
     }
 
-    fn toolbar_buttons(&self, _cx: &WindowContext) -> Vec<Button> {
-        vec![
+    fn toolbar_buttons(&self, _cx: &mut ViewContext<Self>) -> Option<Vec<Button>> {
+        Some(vec![
             Button::new("info").icon(IconName::Info).on_click(|_, cx| {
                 cx.push_notification("You have clicked info button");
             }),
@@ -358,7 +358,7 @@ impl Panel for StoryContainer {
                 .on_click(|_, cx| {
                     cx.push_notification("You have clicked search button");
                 }),
-        ]
+        ])
     }
 
     fn dump(&self, _cx: &AppContext) -> PanelState {
