@@ -122,12 +122,9 @@ impl Panel for TabPanel {
         }
     }
 
-    fn toolbar_buttons(&self, cx: &WindowContext) -> Vec<Button> {
-        if let Some(panel) = self.active_panel(cx) {
-            panel.toolbar_buttons(cx)
-        } else {
-            vec![]
-        }
+    fn toolbar_buttons(&self, cx: &mut ViewContext<Self>) -> Option<Vec<Button>> {
+        self.active_panel(cx)
+            .and_then(|panel| panel.toolbar_buttons(cx))
     }
 
     fn dump(&self, cx: &AppContext) -> PanelState {
@@ -390,11 +387,9 @@ impl TabPanel {
             .gap_2()
             .occlude()
             .items_center()
-            .children(
-                self.toolbar_buttons(cx)
-                    .into_iter()
-                    .map(|btn| btn.xsmall().ghost()),
-            )
+            .when_some(self.toolbar_buttons(cx), |this, buttons| {
+                this.children(buttons.into_iter().map(|btn| btn.xsmall().ghost()))
+            })
             .when(self.is_zoomed, |this| {
                 this.child(
                     Button::new("zoom")

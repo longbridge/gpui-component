@@ -91,8 +91,8 @@ pub trait Panel: EventEmitter<PanelEvent> + FocusableView {
     }
 
     /// The addition toolbar buttons of the panel used to show in the right of the title bar, default is `None`.
-    fn toolbar_buttons(&self, cx: &WindowContext) -> Vec<Button> {
-        vec![]
+    fn toolbar_buttons(&self, cx: &mut ViewContext<Self>) -> Option<Vec<Button>> {
+        None
     }
 
     /// Dump the panel, used to serialize the panel.
@@ -113,7 +113,7 @@ pub trait PanelView: 'static + Send + Sync {
     fn set_active(&self, active: bool, cx: &mut WindowContext);
     fn set_zoomed(&self, zoomed: bool, cx: &mut WindowContext);
     fn popup_menu(&self, menu: PopupMenu, cx: &WindowContext) -> PopupMenu;
-    fn toolbar_buttons(&self, cx: &WindowContext) -> Vec<Button>;
+    fn toolbar_buttons(&self, cx: &mut WindowContext) -> Option<Vec<Button>>;
     fn view(&self) -> AnyView;
     fn focus_handle(&self, cx: &AppContext) -> FocusHandle;
     fn dump(&self, cx: &AppContext) -> PanelState;
@@ -160,8 +160,8 @@ impl<T: Panel> PanelView for View<T> {
         self.read(cx).popup_menu(menu, cx)
     }
 
-    fn toolbar_buttons(&self, cx: &WindowContext) -> Vec<Button> {
-        self.read(cx).toolbar_buttons(cx)
+    fn toolbar_buttons(&self, cx: &mut WindowContext) -> Option<Vec<Button>> {
+        self.update(cx, |this, cx| this.toolbar_buttons(cx))
     }
 
     fn view(&self) -> AnyView {
