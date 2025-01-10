@@ -10,10 +10,10 @@ use story::{
     TooltipStory,
 };
 use ui::{
+    badge::Badge,
     button::{Button, ButtonVariants as _},
     color_picker::{ColorPicker, ColorPickerEvent},
     dock::{DockArea, DockAreaState, DockEvent, DockItem, DockPlacement},
-    h_flex,
     popup_menu::PopupMenuExt,
     scroll::ScrollbarShow,
     theme::{ActiveTheme, Theme},
@@ -553,41 +553,28 @@ impl Render for StoryWorkspace {
                             .child(self.locale_selector.clone())
                             .child(self.font_size_selector.clone())
                             .child(
-                                Button::new("github")
-                                    .icon(IconName::GitHub)
-                                    .small()
-                                    .ghost()
-                                    .on_click(|_, cx| {
-                                        cx.open_url("https://github.com/longbridge/gpui-component")
-                                    }),
+                                Badge::new().dot().count(1).child(
+                                    Button::new("github")
+                                        .icon(IconName::GitHub)
+                                        .small()
+                                        .ghost()
+                                        .on_click(|_, cx| {
+                                            cx.open_url(
+                                                "https://github.com/longbridge/gpui-component",
+                                            )
+                                        }),
+                                ),
                             )
                             .child(
-                                div()
-                                    .relative()
-                                    .child(
+                                div().relative().child(
+                                    Badge::new().count(notifications_count).max(99).child(
                                         Button::new("bell")
                                             .small()
                                             .ghost()
                                             .compact()
                                             .icon(IconName::Bell),
-                                    )
-                                    .when(notifications_count > 0, |this| {
-                                        this.child(
-                                            h_flex()
-                                                .absolute()
-                                                .rounded_full()
-                                                .top(px(-2.))
-                                                .right(px(-2.))
-                                                .p(px(1.))
-                                                .min_w(px(12.))
-                                                .bg(ui::red_500())
-                                                .text_color(ui::white())
-                                                .justify_center()
-                                                .text_size(px(10.))
-                                                .line_height(relative(1.))
-                                                .child(format!("{}", notifications_count.min(99))),
-                                        )
-                                    }),
+                                    ),
+                                ),
                             ),
                     ),
             )
