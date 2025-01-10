@@ -280,6 +280,24 @@ pub trait TableDelegate: Sized + 'static {
     fn render_last_empty_col(&mut self, cx: &mut ViewContext<Table<Self>>) -> Div {
         h_flex().w_5().h_full().flex_shrink_0()
     }
+
+    /// Return the visible range of the rows.
+    fn row_visible_range(
+        &self,
+        visible_range: Range<usize>,
+        cx: &mut ViewContext<Table<Self>>,
+    ) -> Range<usize> {
+        visible_range
+    }
+
+    /// Return the visible range of the columns.
+    fn col_visible_range(
+        &self,
+        visible_range: Range<usize>,
+        cx: &mut ViewContext<Table<Self>>,
+    ) -> Range<usize> {
+        visible_range
+    }
 }
 
 impl<D> Table<D>
@@ -1054,6 +1072,8 @@ where
                         .child(
                             virtual_list(view, row_ix, Axis::Horizontal, col_sizes, {
                                 move |table, visible_range: Range<usize>, _, cx| {
+                                    table.delegate.col_visible_range(visible_range.clone(), cx);
+
                                     visible_range
                                         .map(|col_ix| {
                                             let col_ix = col_ix + left_cols_count;
@@ -1227,6 +1247,7 @@ where
                                 {
                                     move |table, visible_range, cx| {
                                         table.load_more_if_need(visible_range.clone(), cx);
+                                        table.delegate.row_visible_range(visible_range.clone(), cx);
 
                                         if visible_range.end > rows_count {
                                             table.scroll_to_row(
