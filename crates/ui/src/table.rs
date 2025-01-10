@@ -148,6 +148,11 @@ pub struct Table<D: TableDelegate> {
     border: bool,
     /// The cell size of the table.
     size: Size,
+
+    /// The visible range of the rows.
+    row_visible_range: Range<usize>,
+    /// The visible range of the columns.
+    col_visible_range: Range<usize>,
 }
 
 #[allow(unused)]
@@ -325,6 +330,8 @@ where
             stripe: false,
             border: true,
             size: Size::default(),
+            row_visible_range: Range::default(),
+            col_visible_range: Range::default(),
         };
 
         this.prepare_col_groups(cx);
@@ -645,6 +652,36 @@ where
                 })
             })
             .detach()
+        }
+    }
+
+    fn row_visible_range_if_need(
+        &mut self,
+        visible_range: Range<usize>,
+        cx: &mut ViewContext<Self>,
+    ) {
+        // if visible_range is 0..1, do nothing, because it's more and unnecessary from render
+        if visible_range.start == 0 && visible_range.end == 1 {
+            return;
+        }
+        if self.row_visible_range != visible_range {
+            self.delegate.row_visible_range(visible_range.clone(), cx);
+            self.row_visible_range = visible_range;
+        }
+    }
+
+    fn col_visible_range_if_need(
+        &mut self,
+        visible_range: Range<usize>,
+        cx: &mut ViewContext<Self>,
+    ) {
+        // if visible_range is 1..2, do nothing, because it's more and unnecessary from render
+        if visible_range.start == 1 && visible_range.end == 2 {
+            return;
+        }
+        if self.col_visible_range != visible_range {
+            self.delegate.col_visible_range(visible_range.clone(), cx);
+            self.col_visible_range = visible_range;
         }
     }
 
@@ -1072,7 +1109,7 @@ where
                         .child(
                             virtual_list(view, row_ix, Axis::Horizontal, col_sizes, {
                                 move |table, visible_range: Range<usize>, _, cx| {
-                                    table.delegate.col_visible_range(visible_range.clone(), cx);
+                                    table.col_visible_range_if_need(visible_range.clone(), cx);
 
                                     visible_range
                                         .map(|col_ix| {
@@ -1247,7 +1284,7 @@ where
                                 {
                                     move |table, visible_range, cx| {
                                         table.load_more_if_need(visible_range.clone(), cx);
-                                        table.delegate.row_visible_range(visible_range.clone(), cx);
+                                        table.row_visible_range_if_need(visible_range.clone(), cx);
 
                                         if visible_range.end > rows_count {
                                             table.scroll_to_row(
