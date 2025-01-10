@@ -473,7 +473,7 @@ impl ButtonVariant {
         match self {
             ButtonVariant::Primary => cx.theme().primary,
             ButtonVariant::Secondary => cx.theme().secondary,
-            ButtonVariant::Danger => cx.theme().destructive,
+            ButtonVariant::Danger => cx.theme().danger,
             ButtonVariant::Outline
             | ButtonVariant::Ghost
             | ButtonVariant::Link
@@ -488,7 +488,7 @@ impl ButtonVariant {
             ButtonVariant::Secondary | ButtonVariant::Outline | ButtonVariant::Ghost => {
                 cx.theme().secondary_foreground
             }
-            ButtonVariant::Danger => cx.theme().destructive_foreground,
+            ButtonVariant::Danger => cx.theme().danger_foreground,
             ButtonVariant::Link => cx.theme().link,
             ButtonVariant::Text => cx.theme().foreground,
             ButtonVariant::Custom(colors) => colors.foreground,
@@ -499,7 +499,7 @@ impl ButtonVariant {
         match self {
             ButtonVariant::Primary => cx.theme().primary,
             ButtonVariant::Secondary => cx.theme().border,
-            ButtonVariant::Danger => cx.theme().destructive,
+            ButtonVariant::Danger => cx.theme().danger,
             ButtonVariant::Outline => cx.theme().border,
             ButtonVariant::Ghost | ButtonVariant::Link | ButtonVariant::Text => {
                 cx.theme().transparent
@@ -543,7 +543,7 @@ impl ButtonVariant {
         let bg = match self {
             ButtonVariant::Primary => cx.theme().primary_hover,
             ButtonVariant::Secondary | ButtonVariant::Outline => cx.theme().secondary_hover,
-            ButtonVariant::Danger => cx.theme().destructive_hover,
+            ButtonVariant::Danger => cx.theme().danger_hover,
             ButtonVariant::Ghost => {
                 if cx.theme().mode.is_dark() {
                     cx.theme().secondary.lighten(0.1).opacity(0.8)
@@ -583,7 +583,7 @@ impl ButtonVariant {
                     cx.theme().secondary.darken(0.2).opacity(0.8)
                 }
             }
-            ButtonVariant::Danger => cx.theme().destructive_active,
+            ButtonVariant::Danger => cx.theme().danger_active,
             ButtonVariant::Link => cx.theme().transparent,
             ButtonVariant::Text => cx.theme().transparent,
             ButtonVariant::Custom(colors) => colors.active,
@@ -617,7 +617,7 @@ impl ButtonVariant {
                     cx.theme().secondary.darken(0.2).opacity(0.8)
                 }
             }
-            ButtonVariant::Danger => cx.theme().destructive_active,
+            ButtonVariant::Danger => cx.theme().danger_active,
             ButtonVariant::Link => cx.theme().transparent,
             ButtonVariant::Text => cx.theme().transparent,
             ButtonVariant::Custom(colors) => colors.active,
@@ -647,7 +647,7 @@ impl ButtonVariant {
             | ButtonVariant::Outline
             | ButtonVariant::Text => cx.theme().transparent,
             ButtonVariant::Primary => cx.theme().primary.opacity(0.15),
-            ButtonVariant::Danger => cx.theme().destructive.opacity(0.15),
+            ButtonVariant::Danger => cx.theme().danger.opacity(0.15),
             ButtonVariant::Secondary => cx.theme().secondary.opacity(1.5),
             ButtonVariant::Custom(style) => style.color.opacity(0.15),
         };

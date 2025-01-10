@@ -158,10 +158,10 @@ pub struct ThemeColor {
     pub window_border: Hsla,
     pub card: Hsla,
     pub card_foreground: Hsla,
-    pub destructive: Hsla,
-    pub destructive_active: Hsla,
-    pub destructive_foreground: Hsla,
-    pub destructive_hover: Hsla,
+    pub danger: Hsla,
+    pub danger_active: Hsla,
+    pub danger_foreground: Hsla,
+    pub danger_hover: Hsla,
     pub drag_border: Hsla,
     pub drop_target: Hsla,
     pub foreground: Hsla,
@@ -234,10 +234,10 @@ impl ThemeColor {
             window_border: hsl(240.0, 5.9, 78.0),
             card: hsl(0.0, 0.0, 100.0),
             card_foreground: hsl(240.0, 10.0, 3.9),
-            destructive: hsl(0.0, 84.2, 60.2),
-            destructive_active: hsl(0.0, 84.2, 47.0),
-            destructive_foreground: hsl(0.0, 0.0, 98.0),
-            destructive_hover: hsl(0.0, 84.2, 65.0),
+            danger: hsl(0.0, 84.2, 60.2),
+            danger_active: hsl(0.0, 84.2, 47.0),
+            danger_foreground: hsl(0.0, 0.0, 98.0),
+            danger_hover: hsl(0.0, 84.2, 65.0),
             drag_border: crate::blue_500(),
             drop_target: hsl(235.0, 30., 44.0).opacity(0.25),
             foreground: hsl(240.0, 10., 3.9),
@@ -310,10 +310,10 @@ impl ThemeColor {
             window_border: hsl(240.0, 3.7, 28.0),
             card: hsl(0.0, 0.0, 8.0),
             card_foreground: hsl(0.0, 0.0, 78.0),
-            destructive: hsl(0.0, 62.8, 30.6),
-            destructive_active: hsl(0.0, 62.8, 20.6),
-            destructive_foreground: hsl(0.0, 0.0, 78.0),
-            destructive_hover: hsl(0.0, 62.8, 35.6),
+            danger: hsl(0.0, 62.8, 30.6),
+            danger_active: hsl(0.0, 62.8, 20.6),
+            danger_foreground: hsl(0.0, 0.0, 78.0),
+            danger_hover: hsl(0.0, 62.8, 35.6),
             drag_border: crate::blue_500(),
             drop_target: hsl(235.0, 30., 44.0).opacity(0.1),
             foreground: hsl(0., 0., 78.),
@@ -434,10 +434,10 @@ impl Theme {
         self.secondary_hover = self.secondary_hover.apply(mask_color);
         self.secondary_active = self.secondary_active.apply(mask_color);
         self.secondary_foreground = self.secondary_foreground.apply(mask_color);
-        // self.destructive = self.destructive.apply(mask_color);
-        // self.destructive_hover = self.destructive_hover.apply(mask_color);
-        // self.destructive_active = self.destructive_active.apply(mask_color);
-        // self.destructive_foreground = self.destructive_foreground.apply(mask_color);
+        // self.danger = self.danger.apply(mask_color);
+        // self.danger_hover = self.danger_hover.apply(mask_color);
+        // self.danger_active = self.danger_active.apply(mask_color);
+        // self.danger_foreground = self.danger_foreground.apply(mask_color);
         self.muted = self.muted.apply(mask_color);
         self.muted_foreground = self.muted_foreground.apply(mask_color);
         self.accent = self.accent.apply(mask_color);

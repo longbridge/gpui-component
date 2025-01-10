@@ -253,7 +253,7 @@ impl Render for TextStory {
                             .child(Tag::primary().small().child("Tag"))
                             .child(Tag::secondary().small().child("Secondary"))
                             .child(Tag::outline().small().child("Outline"))
-                            .child(Tag::destructive().small().child("Destructive"))
+                            .child(Tag::danger().small().child("danger"))
                             .child(Tag::custom(ui::yellow_500(), ui::yellow_800(), ui::yellow_500()).small().child("Custom"))
                     )
                     .child(
@@ -261,7 +261,7 @@ impl Render for TextStory {
                             .child(Tag::primary().child("Tag"))
                             .child(Tag::secondary().child("Secondary"))
                             .child(Tag::outline().child("Outline"))
-                            .child(Tag::destructive().child("Destructive"))
+                            .child(Tag::danger().child("danger"))
                             .child(Tag::custom(ui::yellow_500(), ui::yellow_800(), ui::yellow_500()).child("Custom"))
                     )
             )

@@ -10,7 +10,7 @@ pub enum TagVariant {
     Primary,
     Secondary,
     Outline,
-    Destructive,
+    Danger,
     Custom {
         color: Hsla,
         foreground: Hsla,
@@ -23,7 +23,7 @@ impl TagVariant {
             Self::Primary => cx.theme().primary,
             Self::Secondary => cx.theme().secondary,
             Self::Outline => transparent_black(),
-            Self::Destructive => cx.theme().destructive,
+            Self::Danger => cx.theme().danger,
             Self::Custom { color, .. } => *color,
         }
     }
@@ -33,7 +33,7 @@ impl TagVariant {
             Self::Primary => cx.theme().primary,
             Self::Secondary => cx.theme().secondary,
             Self::Outline => cx.theme().border,
-            Self::Destructive => cx.theme().destructive,
+            Self::Danger => cx.theme().danger,
             Self::Custom { border, .. } => *border,
         }
     }
@@ -43,7 +43,7 @@ impl TagVariant {
             Self::Primary => cx.theme().primary_foreground,
             Self::Secondary => cx.theme().secondary_foreground,
             Self::Outline => cx.theme().foreground,
-            Self::Destructive => cx.theme().destructive_foreground,
+            Self::Danger => cx.theme().danger_foreground,
             Self::Custom { foreground, .. } => *foreground,
         }
     }
@@ -84,8 +84,8 @@ impl Tag {
         Self::new().with_variant(TagVariant::Outline)
     }
 
-    pub fn destructive() -> Self {
-        Self::new().with_variant(TagVariant::Destructive)
+    pub fn danger() -> Self {
+        Self::new().with_variant(TagVariant::Danger)
     }
 
     pub fn custom(color: Hsla, foreground: Hsla, border: Hsla) -> Self {
