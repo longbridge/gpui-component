@@ -4,7 +4,6 @@ use gpui::{
 };
 
 use ui::{
-    badge::Badge,
     button::{Button, ButtonVariant, ButtonVariants as _},
     checkbox::Checkbox,
     clipboard::Clipboard,
@@ -12,6 +11,7 @@ use ui::{
     label::Label,
     link::Link,
     radio::Radio,
+    tag::Tag,
     v_flex, Disableable as _, IconName, Sizable, StyledExt,
 };
 
@@ -247,22 +247,22 @@ impl Render for TextStory {
                 ),
             )
             .child(
-                section("Badge", cx)
+                section("Tag", cx)
                     .child(
                         h_flex().gap_2()
-                            .child(Badge::primary().small().child("Badge"))
-                            .child(Badge::secondary().small().child("Secondary"))
-                            .child(Badge::outline().small().child("Outline"))
-                            .child(Badge::destructive().small().child("Destructive"))
-                            .child(Badge::custom(ui::yellow_500(), ui::yellow_800(), ui::yellow_500()).small().child("Custom"))
+                            .child(Tag::primary().small().child("Tag"))
+                            .child(Tag::secondary().small().child("Secondary"))
+                            .child(Tag::outline().small().child("Outline"))
+                            .child(Tag::destructive().small().child("Destructive"))
+                            .child(Tag::custom(ui::yellow_500(), ui::yellow_800(), ui::yellow_500()).small().child("Custom"))
                     )
                     .child(
                         h_flex().gap_2()
-                            .child(Badge::primary().child("Badge"))
-                            .child(Badge::secondary().child("Secondary"))
-                            .child(Badge::outline().child("Outline"))
-                            .child(Badge::destructive().child("Destructive"))
-                            .child(Badge::custom(ui::yellow_500(), ui::yellow_800(), ui::yellow_500()).child("Custom"))
+                            .child(Tag::primary().child("Tag"))
+                            .child(Tag::secondary().child("Secondary"))
+                            .child(Tag::outline().child("Outline"))
+                            .child(Tag::destructive().child("Destructive"))
+                            .child(Tag::custom(ui::yellow_500(), ui::yellow_800(), ui::yellow_500()).child("Custom"))
                     )
             )
     }

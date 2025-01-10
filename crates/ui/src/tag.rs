@@ -1,11 +1,11 @@
 use crate::{theme::ActiveTheme as _, Sizable, Size};
 use gpui::{
-    div, prelude::FluentBuilder as _, relative, Div, Hsla, InteractiveElement as _, IntoElement,
-    ParentElement, RenderOnce, Styled,
+    div, prelude::FluentBuilder as _, relative, transparent_black, AnyElement, Div, Hsla,
+    InteractiveElement as _, IntoElement, ParentElement, RenderOnce, Styled, WindowContext,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum BadgeVariant {
+pub enum TagVariant {
     #[default]
     Primary,
     Secondary,
@@ -17,18 +17,18 @@ pub enum BadgeVariant {
         border: Hsla,
     },
 }
-impl BadgeVariant {
-    fn bg(&self, cx: &gpui::WindowContext) -> Hsla {
+impl TagVariant {
+    fn bg(&self, cx: &WindowContext) -> Hsla {
         match self {
             Self::Primary => cx.theme().primary,
             Self::Secondary => cx.theme().secondary,
-            Self::Outline => gpui::transparent_black(),
+            Self::Outline => transparent_black(),
             Self::Destructive => cx.theme().destructive,
             Self::Custom { color, .. } => *color,
         }
     }
 
-    fn border(&self, cx: &gpui::WindowContext) -> Hsla {
+    fn border(&self, cx: &WindowContext) -> Hsla {
         match self {
             Self::Primary => cx.theme().primary,
             Self::Secondary => cx.theme().secondary,
@@ -38,7 +38,7 @@ impl BadgeVariant {
         }
     }
 
-    fn fg(&self, cx: &gpui::WindowContext) -> Hsla {
+    fn fg(&self, cx: &WindowContext) -> Hsla {
         match self {
             Self::Primary => cx.theme().primary_foreground,
             Self::Secondary => cx.theme().secondary_foreground,
@@ -49,75 +49,75 @@ impl BadgeVariant {
     }
 }
 
-/// Badge is a small status indicator for UI elements.
+/// Tag is a small status indicator for UI elements.
 ///
 /// Only support: Medium, Small
 #[derive(IntoElement)]
-pub struct Badge {
+pub struct Tag {
     base: Div,
-    veriant: BadgeVariant,
+    variant: TagVariant,
     size: Size,
 }
-impl Badge {
+impl Tag {
     fn new() -> Self {
         Self {
             base: div().flex().items_center().rounded_md().border_1(),
-            veriant: BadgeVariant::default(),
+            variant: TagVariant::default(),
             size: Size::Medium,
         }
     }
 
-    pub fn with_variant(mut self, variant: BadgeVariant) -> Self {
-        self.veriant = variant;
+    pub fn with_variant(mut self, variant: TagVariant) -> Self {
+        self.variant = variant;
         self
     }
 
     pub fn primary() -> Self {
-        Self::new().with_variant(BadgeVariant::Primary)
+        Self::new().with_variant(TagVariant::Primary)
     }
 
     pub fn secondary() -> Self {
-        Self::new().with_variant(BadgeVariant::Secondary)
+        Self::new().with_variant(TagVariant::Secondary)
     }
 
     pub fn outline() -> Self {
-        Self::new().with_variant(BadgeVariant::Outline)
+        Self::new().with_variant(TagVariant::Outline)
     }
 
     pub fn destructive() -> Self {
-        Self::new().with_variant(BadgeVariant::Destructive)
+        Self::new().with_variant(TagVariant::Destructive)
     }
 
     pub fn custom(color: Hsla, foreground: Hsla, border: Hsla) -> Self {
-        Self::new().with_variant(BadgeVariant::Custom {
+        Self::new().with_variant(TagVariant::Custom {
             color,
             foreground,
             border,
         })
     }
 }
-impl Sizable for Badge {
+impl Sizable for Tag {
     fn with_size(mut self, size: impl Into<Size>) -> Self {
         self.size = size.into();
         self
     }
 }
-impl ParentElement for Badge {
-    fn extend(&mut self, elements: impl IntoIterator<Item = gpui::AnyElement>) {
+impl ParentElement for Tag {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
         self.base.extend(elements);
     }
 }
-impl RenderOnce for Badge {
-    fn render(self, cx: &mut gpui::WindowContext) -> impl IntoElement {
+impl RenderOnce for Tag {
+    fn render(self, cx: &mut WindowContext) -> impl IntoElement {
         self.base
             .line_height(relative(1.3))
             .map(|this| match self.size {
                 Size::XSmall | Size::Small => this.text_xs().px_1p5().py_0(),
                 _ => this.text_xs().px_2p5().py_0p5(),
             })
-            .bg(self.veriant.bg(cx))
-            .text_color(self.veriant.fg(cx))
-            .border_color(self.veriant.border(cx))
+            .bg(self.variant.bg(cx))
+            .text_color(self.variant.fg(cx))
+            .border_color(self.variant.border(cx))
             .hover(|this| this.opacity(0.9))
     }
 }

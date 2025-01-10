@@ -76,7 +76,7 @@ pub trait Panel: EventEmitter<PanelEvent> + FocusableView {
         true
     }
 
-    /// Return `PanelControl` if the panel is zoomable, default is `None`.
+    /// Return `PanelControl` if the panel is zoomable, default is `PanelControl::Menu`.
     ///
     /// This method called in Panel render, we should make sure it is fast.
     fn zoomable(&self, cx: &AppContext) -> Option<PanelControl> {

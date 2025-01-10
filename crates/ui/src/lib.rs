@@ -11,7 +11,6 @@ mod window_border;
 
 pub mod accordion;
 pub mod animation;
-pub mod badge;
 pub mod breadcrumb;
 pub mod button;
 pub mod button_group;
@@ -45,6 +44,7 @@ pub mod slider;
 pub mod switch;
 pub mod tab;
 pub mod table;
+pub mod tag;
 pub mod theme;
 pub mod tooltip;
 pub mod virtual_list;
