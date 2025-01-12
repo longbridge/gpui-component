@@ -11,8 +11,8 @@ use crate::{
     Icon, IconName, Sizable, Size, StyleSized as _,
 };
 use gpui::{
-    actions, canvas, deferred, div, prelude::FluentBuilder, px, uniform_list, AppContext, Axis,
-    Bounds, Div, DragMoveEvent, Edges, Entity, EntityId, EventEmitter, FocusHandle, FocusableView,
+    actions, canvas, div, prelude::FluentBuilder, px, uniform_list, AppContext, Axis, Bounds, Div,
+    DragMoveEvent, Edges, Entity, EntityId, EventEmitter, FocusHandle, FocusableView,
     InteractiveElement, IntoElement, KeyBinding, ListSizingBehavior, MouseButton, MouseDownEvent,
     ParentElement, Pixels, Point, Render, ScrollHandle, ScrollStrategy, SharedString, Stateful,
     StatefulInteractiveElement as _, Styled, UniformListScrollHandle, ViewContext,
@@ -1279,19 +1279,14 @@ where
                 |_, _, _| {},
             ))
             .child(
-                // use deferred to render the scrollbar for
-                // avoid some custom element overflow the scrollbar.
-                deferred(
-                    div()
-                        .absolute()
-                        .top_0()
-                        .size_full()
-                        .child(self.render_horizontal_scrollbar(cx))
-                        .when(rows_count > 0, |this| {
-                            this.children(self.render_scrollbar(cx))
-                        }),
-                )
-                .with_priority(0),
+                div()
+                    .absolute()
+                    .top_0()
+                    .size_full()
+                    .child(self.render_horizontal_scrollbar(cx))
+                    .when(rows_count > 0, |this| {
+                        this.children(self.render_scrollbar(cx))
+                    }),
             )
             // Click out to cancel right clicked row
             .when(self.right_clicked_row.is_some(), |this| {
