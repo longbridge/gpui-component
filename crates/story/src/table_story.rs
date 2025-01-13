@@ -13,7 +13,6 @@ use serde::Deserialize;
 use ui::{
     button::Button,
     checkbox::Checkbox,
-    divider::Divider,
     h_flex,
     indicator::Indicator,
     input::{InputEvent, TextInput},
