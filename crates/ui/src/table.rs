@@ -11,8 +11,8 @@ use crate::{
     Icon, IconName, Sizable, Size, StyleSized as _,
 };
 use gpui::{
-    actions, canvas, div, prelude::FluentBuilder, px, uniform_list, AnyElement, AppContext, Axis,
-    Bounds, Div, DragMoveEvent, Edges, Entity, EntityId, EventEmitter, FocusHandle, FocusableView,
+    actions, canvas, div, prelude::FluentBuilder, px, uniform_list, AppContext, Axis, Bounds, Div,
+    DragMoveEvent, Edges, Entity, EntityId, EventEmitter, FocusHandle, FocusableView,
     InteractiveElement, IntoElement, KeyBinding, ListSizingBehavior, MouseButton, MouseDownEvent,
     ParentElement, Pixels, Point, Render, ScrollHandle, ScrollStrategy, SharedString, Stateful,
     StatefulInteractiveElement as _, Styled, UniformListScrollHandle, ViewContext,
