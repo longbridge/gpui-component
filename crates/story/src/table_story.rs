@@ -1,4 +1,7 @@
-use std::time::{self, Duration};
+use std::{
+    ops::Range,
+    time::{self, Duration},
+};
 
 use fake::{Fake, Faker};
 use gpui::{
@@ -10,6 +13,7 @@ use serde::Deserialize;
 use ui::{
     button::Button,
     checkbox::Checkbox,
+    divider::Divider,
     h_flex,
     indicator::Indicator,
     input::{InputEvent, TextInput},
@@ -181,6 +185,8 @@ struct StockTableDelegate {
     loading: bool,
     fixed_cols: bool,
     is_eof: bool,
+    visible_rows: Range<usize>,
+    visible_cols: Range<usize>,
 }
 
 impl StockTableDelegate {
@@ -250,6 +256,8 @@ impl StockTableDelegate {
             fixed_cols: false,
             loading: false,
             is_eof: false,
+            visible_cols: Range::default(),
+            visible_rows: Range::default(),
         }
     }
 
@@ -489,6 +497,22 @@ impl TableDelegate for StockTableDelegate {
             })
         })
         .detach();
+    }
+
+    fn visible_rows_changed(
+        &mut self,
+        visible_range: Range<usize>,
+        _: &mut ViewContext<Table<Self>>,
+    ) {
+        self.visible_rows = visible_range;
+    }
+
+    fn visible_cols_changed(
+        &mut self,
+        visible_range: Range<usize>,
+        _: &mut ViewContext<Table<Self>>,
+    ) {
+        self.visible_cols = visible_range;
     }
 }
 
@@ -842,6 +866,8 @@ impl Render for TableStory {
                             this.child(h_flex().gap_1().child(Indicator::new()).child("Loading..."))
                         })
                         .child(format!("Total Rows: {}", rows_count))
+                        .child(format!("Visible Rows: {:?}", delegate.visible_rows))
+                        .child(format!("Visible Cols: {:?}", delegate.visible_cols))
                         .when(delegate.is_eof, |this| this.child("All data loaded.")),
                 ),
             )
