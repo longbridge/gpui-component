@@ -155,7 +155,7 @@ pub struct Table<D: TableDelegate> {
     pub horizontal_scroll_handle: ScrollHandle,
     pub horizontal_scrollbar_state: Rc<Cell<ScrollbarState>>,
 
-    scrollbar_visibles: Edges<bool>,
+    scrollbar_visible: Edges<bool>,
     selected_row: Option<usize>,
     selection_state: SelectionState,
     right_clicked_row: Option<usize>,
@@ -357,7 +357,7 @@ where
             stripe: false,
             border: true,
             size: Size::default(),
-            scrollbar_visibles: Edges::all(true),
+            scrollbar_visible: Edges::all(true),
             visible_range: VisibleRangeState::default(),
         };
 
@@ -396,12 +396,13 @@ where
         cx.notify();
     }
 
-    /// Set scrollbar visibility, the `visibles` is a `Edges` struct, only `right` and `bottom` are used.
-    ///
-    /// - `right` that is the vertical scrollbar visibility.
-    /// - `bottom` that is the horizontal scrollbar visibility.
-    pub fn scrollbar_visibles(mut self, visibles: Edges<bool>) -> Self {
-        self.scrollbar_visibles = visibles;
+    /// Set scrollbar visibility.
+    pub fn scrollbar_visible(mut self, vertical: bool, horizontal: bool) -> Self {
+        self.scrollbar_visible = Edges {
+            right: vertical,
+            bottom: horizontal,
+            ..Default::default()
+        };
         self
     }
 
@@ -1378,10 +1379,10 @@ where
                     .absolute()
                     .top_0()
                     .size_full()
-                    .when(self.scrollbar_visibles.right && rows_count > 0, |this| {
+                    .when(self.scrollbar_visible.right && rows_count > 0, |this| {
                         this.children(self.render_vertical_scrollbar(cx))
                     })
-                    .when(self.scrollbar_visibles.bottom, |this| {
+                    .when(self.scrollbar_visible.bottom, |this| {
                         this.child(self.render_horizontal_scrollbar(cx))
                     }),
             )
