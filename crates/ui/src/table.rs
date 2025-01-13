@@ -154,6 +154,7 @@ pub struct Table<D: TableDelegate> {
     pub scrollbar_state: Rc<Cell<ScrollbarState>>,
     pub horizontal_scroll_handle: ScrollHandle,
     pub horizontal_scrollbar_state: Rc<Cell<ScrollbarState>>,
+    scrollbar_visibles: Edges<bool>,
 
     selected_row: Option<usize>,
     selection_state: SelectionState,
@@ -276,13 +277,6 @@ pub trait TableDelegate: Sized + 'static {
             .into_any_element()
     }
 
-    /// Render a element overlay on the table if needed, default to None.
-    ///
-    /// The overlay will be rendered on top of the table, but below the scrollbar.
-    fn render_overlay(&self, cx: &mut ViewContext<Table<Self>>) -> Option<AnyElement> {
-        None
-    }
-
     /// Return true to enable load more data when scrolling to the bottom.
     ///
     /// Default: true
@@ -363,6 +357,7 @@ where
             stripe: false,
             border: true,
             size: Size::default(),
+            scrollbar_visibles: Edges::all(true),
             visible_range: VisibleRangeState::default(),
         };
 
@@ -398,6 +393,15 @@ where
     /// Set the size to the table.
     pub fn set_size(&mut self, size: Size, cx: &mut ViewContext<Self>) {
         self.size = size;
+        cx.notify();
+    }
+
+    /// Set scrollbar visibility, the `visibles` is a `Edges` struct, only `right` and `bottom` are used.
+    ///
+    /// - `right` that is the vertical scrollbar visibility.
+    /// - `bottom` that is the horizontal scrollbar visibility.
+    pub fn set_scrollbar_visibles(&mut self, visibles: Edges<bool>, cx: &mut ViewContext<Self>) {
+        self.scrollbar_visibles = visibles;
         cx.notify();
     }
 
@@ -1379,15 +1383,16 @@ where
                 move |bounds, cx| view.update(cx, |r, _| r.bounds = bounds),
                 |_, _, _| {},
             ))
-            .children(self.delegate().render_overlay(cx))
             .child(
                 div()
                     .absolute()
                     .top_0()
                     .size_full()
-                    .child(self.render_horizontal_scrollbar(cx))
-                    .when(rows_count > 0, |this| {
+                    .when(self.scrollbar_visibles.right && rows_count > 0, |this| {
                         this.children(self.render_scrollbar(cx))
+                    })
+                    .when(self.scrollbar_visibles.bottom, |this| {
+                        this.child(self.render_horizontal_scrollbar(cx))
                     }),
             )
             // Click out to cancel right clicked row
