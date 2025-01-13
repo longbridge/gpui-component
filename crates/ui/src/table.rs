@@ -151,11 +151,11 @@ pub struct Table<D: TableDelegate> {
     fixed_cols: FixedCols,
 
     pub vertical_scroll_handle: UniformListScrollHandle,
-    pub scrollbar_state: Rc<Cell<ScrollbarState>>,
+    pub vertical_scrollbar_state: Rc<Cell<ScrollbarState>>,
     pub horizontal_scroll_handle: ScrollHandle,
     pub horizontal_scrollbar_state: Rc<Cell<ScrollbarState>>,
-    scrollbar_visibles: Edges<bool>,
 
+    scrollbar_visibles: Edges<bool>,
     selected_row: Option<usize>,
     selection_state: SelectionState,
     right_clicked_row: Option<usize>,
@@ -344,7 +344,7 @@ where
             fixed_cols: FixedCols::default(),
             horizontal_scroll_handle: ScrollHandle::new(),
             vertical_scroll_handle: UniformListScrollHandle::new(),
-            scrollbar_state: Rc::new(Cell::new(ScrollbarState::new())),
+            vertical_scrollbar_state: Rc::new(Cell::new(ScrollbarState::new())),
             horizontal_scrollbar_state: Rc::new(Cell::new(ScrollbarState::new())),
             selection_state: SelectionState::Row,
             selected_row: None,
@@ -441,16 +441,6 @@ where
     //     self.horizontal_scroll_handle.scroll_to_item(col_ix);
     //     cx.notify();
     // }
-
-    /// Get scroll handle
-    pub fn scroll_handle(&self) -> &UniformListScrollHandle {
-        &self.vertical_scroll_handle
-    }
-
-    /// Get horizontal scroll handle
-    pub fn horizontal_scroll_handle(&self) -> &ScrollHandle {
-        &self.horizontal_scroll_handle
-    }
 
     /// Returns the selected row index.
     pub fn selected_row(&self) -> Option<usize> {
@@ -776,8 +766,8 @@ where
         }
     }
 
-    fn render_scrollbar(&self, cx: &mut ViewContext<Self>) -> Option<impl IntoElement> {
-        let state = self.scrollbar_state.clone();
+    fn render_vertical_scrollbar(&self, cx: &mut ViewContext<Self>) -> Option<impl IntoElement> {
+        let state = self.vertical_scrollbar_state.clone();
 
         Some(
             div()
@@ -1389,7 +1379,7 @@ where
                     .top_0()
                     .size_full()
                     .when(self.scrollbar_visibles.right && rows_count > 0, |this| {
-                        this.children(self.render_scrollbar(cx))
+                        this.children(self.render_vertical_scrollbar(cx))
                     })
                     .when(self.scrollbar_visibles.bottom, |this| {
                         this.child(self.render_horizontal_scrollbar(cx))
