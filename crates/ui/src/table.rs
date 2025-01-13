@@ -11,8 +11,8 @@ use crate::{
     Icon, IconName, Sizable, Size, StyleSized as _,
 };
 use gpui::{
-    actions, canvas, div, prelude::FluentBuilder, px, uniform_list, AppContext, Axis, Bounds, Div,
-    DragMoveEvent, Edges, Entity, EntityId, EventEmitter, FocusHandle, FocusableView,
+    actions, canvas, div, prelude::FluentBuilder, px, uniform_list, AnyElement, AppContext, Axis,
+    Bounds, Div, DragMoveEvent, Edges, Entity, EntityId, EventEmitter, FocusHandle, FocusableView,
     InteractiveElement, IntoElement, KeyBinding, ListSizingBehavior, MouseButton, MouseDownEvent,
     ParentElement, Pixels, Point, Render, ScrollHandle, ScrollStrategy, SharedString, Stateful,
     StatefulInteractiveElement as _, Styled, UniformListScrollHandle, ViewContext,
@@ -274,6 +274,13 @@ pub trait TableDelegate: Sized + 'static {
             .text_color(cx.theme().muted_foreground.opacity(0.6))
             .child(Icon::new(IconName::Inbox).size_12())
             .into_any_element()
+    }
+
+    /// Render a element overlay on the table if needed, default to None.
+    ///
+    /// The overlay will be rendered on top of the table, but below the scrollbar.
+    fn render_overlay(&self, cx: &mut ViewContext<Table<Self>>) -> Option<AnyElement> {
+        None
     }
 
     /// Return true to enable load more data when scrolling to the bottom.
@@ -1240,7 +1247,6 @@ where
         self.focus_handle.clone()
     }
 }
-
 impl<D> EventEmitter<TableEvent> for Table<D> where D: TableDelegate {}
 
 impl<D> Render for Table<D>
@@ -1373,6 +1379,7 @@ where
                 move |bounds, cx| view.update(cx, |r, _| r.bounds = bounds),
                 |_, _, _| {},
             ))
+            .children(self.delegate().render_overlay(cx))
             .child(
                 div()
                     .absolute()
