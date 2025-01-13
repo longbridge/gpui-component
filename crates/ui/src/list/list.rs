@@ -109,6 +109,8 @@ pub struct List<D: ListDelegate> {
     max_height: Option<Length>,
     query_input: Option<View<TextInput>>,
     last_query: Option<String>,
+    /// Whether the list is selectable.
+    selectable: bool,
     loading: bool,
 
     enable_scrollbar: bool,
@@ -148,6 +150,7 @@ where
             scrollbar_state: Rc::new(Cell::new(ScrollbarState::new())),
             max_height: None,
             enable_scrollbar: true,
+            selectable: true,
             loading: false,
             size: Size::default(),
             _search_task: Task::ready(()),
@@ -176,6 +179,14 @@ where
 
     pub fn no_query(mut self) -> Self {
         self.query_input = None;
+        self
+    }
+
+    /// Set the list to be unselectable, default is true. if false:
+    /// - The list will not show the selected style
+    /// - The list will not trigger the confirm action when clicking the item
+    pub fn unselectable(mut self) -> Self {
+        self.selectable = false;
         self
     }
 
@@ -383,34 +394,36 @@ where
             .w_full()
             .relative()
             .children(self.delegate.render_item(ix, cx))
-            .when(selected || right_clicked, |this| {
-                this.child(
-                    div()
-                        .absolute()
-                        .top(px(0.))
-                        .left(px(0.))
-                        .right(px(0.))
-                        .bottom(px(0.))
-                        .when(selected, |this| this.bg(cx.theme().list_active))
-                        .border_1()
-                        .border_color(cx.theme().list_active_border),
+            .when(self.selectable, |this| {
+                this.when(selected || right_clicked, |this| {
+                    this.child(
+                        div()
+                            .absolute()
+                            .top(px(0.))
+                            .left(px(0.))
+                            .right(px(0.))
+                            .bottom(px(0.))
+                            .when(selected, |this| this.bg(cx.theme().list_active))
+                            .border_1()
+                            .border_color(cx.theme().list_active_border),
+                    )
+                })
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(move |this, _, cx| {
+                        this.right_clicked_index = None;
+                        this.selected_index = Some(ix);
+                        this.on_action_confirm(&Confirm, cx);
+                    }),
+                )
+                .on_mouse_down(
+                    MouseButton::Right,
+                    cx.listener(move |this, _, cx| {
+                        this.right_clicked_index = Some(ix);
+                        cx.notify();
+                    }),
                 )
             })
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(move |this, _, cx| {
-                    this.right_clicked_index = None;
-                    this.selected_index = Some(ix);
-                    this.on_action_confirm(&Confirm, cx);
-                }),
-            )
-            .on_mouse_down(
-                MouseButton::Right,
-                cx.listener(move |this, _, cx| {
-                    this.right_clicked_index = Some(ix);
-                    cx.notify();
-                }),
-            )
     }
 }
 
