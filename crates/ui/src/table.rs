@@ -400,9 +400,9 @@ where
     ///
     /// - `right` that is the vertical scrollbar visibility.
     /// - `bottom` that is the horizontal scrollbar visibility.
-    pub fn set_scrollbar_visibles(&mut self, visibles: Edges<bool>, cx: &mut ViewContext<Self>) {
+    pub fn scrollbar_visibles(mut self, visibles: Edges<bool>) -> Self {
         self.scrollbar_visibles = visibles;
-        cx.notify();
+        self
     }
 
     /// When we update columns or rows, we need to refresh the table.
