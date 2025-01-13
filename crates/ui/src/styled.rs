@@ -157,6 +157,7 @@ impl Size {
             _ => px(32.),
         }
     }
+
     /// Returns the padding for a table cell.
     pub fn table_cell_padding(&self) -> Edges<Pixels> {
         match self {

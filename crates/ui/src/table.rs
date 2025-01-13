@@ -396,6 +396,11 @@ where
         cx.notify();
     }
 
+    /// Get the size of the table.
+    pub fn size(&self) -> Size {
+        self.size
+    }
+
     /// Set scrollbar visibility.
     pub fn scrollbar_visible(mut self, vertical: bool, horizontal: bool) -> Self {
         self.scrollbar_visible = Edges {
