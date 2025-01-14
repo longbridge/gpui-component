@@ -19,6 +19,8 @@ use gpui::{
     VisualContext as _, WindowContext,
 };
 
+mod loading;
+
 actions!(
     table,
     [
@@ -172,6 +174,8 @@ pub struct Table<D: TableDelegate> {
     size: Size,
     /// The visible range of the rows and columns.
     visible_range: VisibleRangeState,
+    /// The loading state of the table.
+    loading: bool,
 }
 
 #[allow(unused)]
@@ -277,6 +281,13 @@ pub trait TableDelegate: Sized + 'static {
             .into_any_element()
     }
 
+    /// Return a Element to show when table is loading, default is built-in Skeleton loading view.
+    ///
+    /// The size is the size of the Table.
+    fn render_loading(&self, size: Size, cx: &mut ViewContext<Table<Self>>) -> impl IntoElement {
+        loading::Loading::new().size(size)
+    }
+
     /// Return true to enable load more data when scrolling to the bottom.
     ///
     /// Default: true
@@ -359,6 +370,7 @@ where
             size: Size::default(),
             scrollbar_visible: Edges::all(true),
             visible_range: VisibleRangeState::default(),
+            loading: false,
         };
 
         this.prepare_col_groups(cx);
@@ -409,6 +421,17 @@ where
             ..Default::default()
         };
         self
+    }
+
+    /// Get the loading state of the list.
+    pub fn loading(&self) -> bool {
+        self.loading
+    }
+
+    /// Sets list loading state.
+    pub fn set_loading(&mut self, loading: bool, cx: &mut ViewContext<Self>) {
+        self.loading = loading;
+        cx.notify();
     }
 
     /// When we update columns or rows, we need to refresh the table.
@@ -1369,12 +1392,23 @@ where
                 this.rounded_md().border_1().border_color(cx.theme().border)
             })
             .bg(cx.theme().table)
-            .child(inner_table)
-            .child(ScrollableMask::new(
-                cx.view().entity_id(),
-                Axis::Horizontal,
-                &horizontal_scroll_handle,
-            ))
+            .when(self.loading, |this| {
+                this.child(self.delegate().render_loading(self.size, cx))
+            })
+            .when(!self.loading, |this| {
+                this.child(inner_table)
+                    .child(ScrollableMask::new(
+                        cx.view().entity_id(),
+                        Axis::Horizontal,
+                        &horizontal_scroll_handle,
+                    ))
+                    .when(self.right_clicked_row.is_some(), |this| {
+                        this.on_mouse_down_out(cx.listener(|this, _, cx| {
+                            this.right_clicked_row = None;
+                            cx.notify();
+                        }))
+                    })
+            })
             .child(canvas(
                 move |bounds, cx| view.update(cx, |r, _| r.bounds = bounds),
                 |_, _, _| {},
@@ -1391,12 +1425,5 @@ where
                         this.child(self.render_horizontal_scrollbar(cx))
                     }),
             )
-            // Click out to cancel right clicked row
-            .when(self.right_clicked_row.is_some(), |this| {
-                this.on_mouse_down_out(cx.listener(|this, _, cx| {
-                    this.right_clicked_row = None;
-                    cx.notify();
-                }))
-            })
     }
 }

@@ -773,6 +773,16 @@ impl Render for TableStory {
                             .on_click(cx.listener(Self::toggle_fixed_cols)),
                     )
                     .child(
+                        Checkbox::new("loading")
+                            .label("Loading")
+                            .checked(self.table.read(cx).loading())
+                            .on_click(cx.listener(|this, check: &bool, cx| {
+                                this.table.update(cx, |this, cx| {
+                                    this.set_loading(*check, cx);
+                                })
+                            })),
+                    )
+                    .child(
                         Checkbox::new("refresh-data")
                             .label("Refresh Data")
                             .selected(self.refresh_data)

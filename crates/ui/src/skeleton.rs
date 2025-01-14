@@ -1,7 +1,6 @@
 use crate::theme::ActiveTheme;
 use gpui::{
-    bounce, div, ease_in_out, Animation, AnimationExt, Div, IntoElement, ParentElement as _,
-    RenderOnce, Styled,
+    bounce, div, ease_in_out, Animation, AnimationExt, Div, IntoElement, RenderOnce, Styled,
 };
 use std::time::Duration;
 
@@ -20,8 +19,8 @@ impl Skeleton {
     }
 
     /// Set use secondary color.
-    pub fn secondary(mut self) -> Self {
-        self.secondary = true;
+    pub fn secondary(mut self, secondary: bool) -> Self {
+        self.secondary = secondary;
         self
     }
 }
@@ -35,22 +34,20 @@ impl Styled for Skeleton {
 impl RenderOnce for Skeleton {
     fn render(self, cx: &mut gpui::WindowContext) -> impl IntoElement {
         let color = if self.secondary {
-            cx.theme().skeleton.opacity(0.8)
+            cx.theme().skeleton.opacity(0.5)
         } else {
             cx.theme().skeleton
         };
 
-        div().child(
-            self.base.bg(color).with_animation(
-                "skeleton",
-                Animation::new(Duration::from_secs(2))
-                    .repeat()
-                    .with_easing(bounce(ease_in_out)),
-                move |this, delta| {
-                    let v = 1.0 - delta * 0.5;
-                    this.opacity(v)
-                },
-            ),
+        self.base.bg(color).with_animation(
+            "skeleton",
+            Animation::new(Duration::from_secs(2))
+                .repeat()
+                .with_easing(bounce(ease_in_out)),
+            move |this, delta| {
+                let v = 1.0 - delta * 0.5;
+                this.opacity(v)
+            },
         )
     }
 }
