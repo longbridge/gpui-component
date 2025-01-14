@@ -1,6 +1,6 @@
 use gpui::{
-    div, impl_actions, relative, ClickEvent, ParentElement, Render, SharedString, Styled, View,
-    ViewContext, VisualContext as _, WindowContext,
+    div, impl_internal_actions, relative, ClickEvent, ParentElement, Render, SharedString, Styled,
+    View, ViewContext, VisualContext as _, WindowContext,
 };
 
 use serde::Deserialize;
@@ -20,7 +20,7 @@ use ui::{
 #[derive(Clone, PartialEq, Eq, Deserialize)]
 pub struct SelectCompany(SharedString);
 
-impl_actions!(sidebar_story, [SelectCompany]);
+impl_internal_actions!(sidebar_story, [SelectCompany]);
 
 pub struct SidebarStory {
     active_item: Item,

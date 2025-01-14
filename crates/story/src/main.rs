@@ -40,7 +40,7 @@ struct AddPanel(DockPlacement);
 #[derive(Clone, PartialEq, Eq, Deserialize)]
 struct TogglePanelVisible(SharedString);
 
-impl_actions!(
+impl_internal_actions!(
     story,
     [
         SelectLocale,

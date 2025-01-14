@@ -5,7 +5,7 @@ use std::{
 
 use fake::{Fake, Faker};
 use gpui::{
-    div, impl_actions, px, AnyElement, AppContext, Edges, InteractiveElement, IntoElement,
+    div, impl_internal_actions, px, AnyElement, AppContext, Edges, InteractiveElement, IntoElement,
     ParentElement, Pixels, Render, SharedString, Styled, Timer, View, ViewContext,
     VisualContext as _, WindowContext,
 };
@@ -30,7 +30,7 @@ struct ChangeSize(Size);
 #[derive(Clone, PartialEq, Eq, Deserialize)]
 struct OpenDetail(usize);
 
-impl_actions!(table_story, [ChangeSize, OpenDetail]);
+impl_internal_actions!(table_story, [ChangeSize, OpenDetail]);
 
 #[derive(Clone, Debug, Default)]
 struct Stock {

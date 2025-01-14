@@ -419,7 +419,7 @@ impl Element for TextElement {
 
         let lines = cx
             .text_system()
-            .shape_text(display_text, font_size, &runs, wrap_width)
+            .shape_text(display_text, font_size, &runs, wrap_width, None)
             .unwrap();
 
         // `position_for_index` for example

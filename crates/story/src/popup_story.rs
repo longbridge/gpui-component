@@ -1,8 +1,8 @@
 use gpui::{
-    actions, div, impl_actions, px, AppContext, Corner, DismissEvent, Element, EventEmitter,
-    FocusHandle, FocusableView, InteractiveElement, IntoElement, KeyBinding, MouseButton,
-    ParentElement as _, Render, SharedString, Styled as _, View, ViewContext, VisualContext,
-    WindowContext,
+    actions, div, impl_internal_actions, px, AppContext, Corner, DismissEvent, Element,
+    EventEmitter, FocusHandle, FocusableView, InteractiveElement, IntoElement, KeyBinding,
+    MouseButton, ParentElement as _, Render, SharedString, Styled as _, View, ViewContext,
+    VisualContext, WindowContext,
 };
 use serde::Deserialize;
 use ui::{
@@ -25,7 +25,7 @@ actions!(
     popover_story,
     [Copy, Paste, Cut, SearchAll, ToggleWindowMode]
 );
-impl_actions!(popover_story, [Info]);
+impl_internal_actions!(popover_story, [Info]);
 
 pub fn init(cx: &mut AppContext) {
     cx.bind_keys([
