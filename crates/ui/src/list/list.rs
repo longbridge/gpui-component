@@ -109,14 +109,11 @@ pub struct List<D: ListDelegate> {
     max_height: Option<Length>,
     query_input: Option<View<TextInput>>,
     last_query: Option<String>,
-    /// Whether the list is selectable.
     selectable: bool,
     loading: bool,
-
-    enable_scrollbar: bool,
+    scrollbar_visible: bool,
     vertical_scroll_handle: UniformListScrollHandle,
     scrollbar_state: Rc<Cell<ScrollbarState>>,
-
     pub(crate) size: Size,
     selected_index: Option<usize>,
     right_clicked_index: Option<usize>,
@@ -149,7 +146,7 @@ where
             vertical_scroll_handle: UniformListScrollHandle::new(),
             scrollbar_state: Rc::new(Cell::new(ScrollbarState::new())),
             max_height: None,
-            enable_scrollbar: true,
+            scrollbar_visible: true,
             selectable: true,
             loading: false,
             size: Size::default(),
@@ -172,8 +169,9 @@ where
         self
     }
 
-    pub fn no_scrollbar(mut self) -> Self {
-        self.enable_scrollbar = false;
+    /// Set the visibility of the scrollbar, default is true.
+    pub fn scrollbar_visible(mut self, visible: bool) -> Self {
+        self.scrollbar_visible = visible;
         self
     }
 
@@ -182,11 +180,9 @@ where
         self
     }
 
-    /// Set the list to be unselectable, default is true. if false:
-    /// - The list will not show the selected style
-    /// - The list will not trigger the confirm action when clicking the item
-    pub fn unselectable(mut self) -> Self {
-        self.selectable = false;
+    /// Sets whether the list is selectable, default is true.
+    pub fn selectable(mut self, selectable: bool) -> Self {
+        self.selectable = selectable;
         self
     }
 
@@ -231,7 +227,7 @@ where
     }
 
     fn render_scrollbar(&self, cx: &mut ViewContext<Self>) -> Option<impl IntoElement> {
-        if !self.enable_scrollbar {
+        if !self.scrollbar_visible {
             return None;
         }
 
