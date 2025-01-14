@@ -18,6 +18,8 @@ use gpui::{
 use gpui::{px, ScrollStrategy};
 use smol::Timer;
 
+use super::loading::Loading;
+
 actions!(list, [Cancel, Confirm, SelectPrev, SelectNext]);
 
 pub fn init(cx: &mut AppContext) {
@@ -65,6 +67,11 @@ pub trait ListDelegate: Sized + 'static {
         None
     }
 
+    /// Returns a Element to show when loading, default is built-in Skeleton loading view.
+    fn render_loading(&self, cx: &mut ViewContext<List<Self>>) -> impl IntoElement {
+        Loading
+    }
+
     /// Return the confirmed index of the selected item.
     fn confirmed_index(&self, cx: &AppContext) -> Option<usize> {
         None
@@ -110,6 +117,7 @@ pub struct List<D: ListDelegate> {
     query_input: Option<View<TextInput>>,
     last_query: Option<String>,
     selectable: bool,
+    querying: bool,
     loading: bool,
     scrollbar_visible: bool,
     vertical_scroll_handle: UniformListScrollHandle,
@@ -148,6 +156,7 @@ where
             max_height: None,
             scrollbar_visible: true,
             selectable: true,
+            querying: false,
             loading: false,
             size: Size::default(),
             _search_task: Task::ready(()),
@@ -184,6 +193,17 @@ where
     pub fn selectable(mut self, selectable: bool) -> Self {
         self.selectable = selectable;
         self
+    }
+
+    /// Get the loading state of the list.
+    pub fn loading(&self) -> bool {
+        self.loading
+    }
+
+    /// Sets list loading state.
+    pub fn set_loading(&mut self, loading: bool, cx: &mut ViewContext<Self>) {
+        self.loading = loading;
+        cx.notify();
     }
 
     pub fn set_query_input(&mut self, query_input: View<TextInput>, cx: &mut ViewContext<Self>) {
@@ -270,7 +290,7 @@ where
                     return;
                 }
 
-                self.set_loading(true, cx);
+                self.set_querying(true, cx);
                 let search = self.delegate.perform_search(&text, cx);
 
                 self._search_task = cx.spawn(|this, mut cx| async move {
@@ -285,7 +305,7 @@ where
                     // Always wait 100ms to avoid flicker
                     Timer::after(Duration::from_millis(100)).await;
                     let _ = this.update(&mut cx, |this, cx| {
-                        this.set_loading(false, cx);
+                        this.set_querying(false, cx);
                     });
                 });
             }
@@ -294,10 +314,10 @@ where
         }
     }
 
-    fn set_loading(&mut self, loading: bool, cx: &mut ViewContext<Self>) {
-        self.loading = loading;
+    fn set_querying(&mut self, querying: bool, cx: &mut ViewContext<Self>) {
+        self.querying = querying;
         if let Some(input) = &self.query_input {
-            input.update(cx, |input, cx| input.set_loading(loading, cx))
+            input.update(cx, |input, cx| input.set_loading(querying, cx))
         }
         cx.notify();
     }
@@ -467,10 +487,6 @@ where
             .size_full()
             .relative()
             .overflow_hidden()
-            .on_action(cx.listener(Self::on_action_cancel))
-            .on_action(cx.listener(Self::on_action_confirm))
-            .on_action(cx.listener(Self::on_action_select_next))
-            .on_action(cx.listener(Self::on_action_select_prev))
             .when_some(self.query_input.clone(), |this, input| {
                 this.child(
                     div()
@@ -483,46 +499,58 @@ where
                         .child(input),
                 )
             })
-            .map(|this| {
-                if let Some(view) = initial_view {
-                    this.child(view)
-                } else {
-                    this.child(
-                        v_flex()
-                            .flex_grow()
-                            .relative()
-                            .when_some(self.max_height, |this, h| this.max_h(h))
-                            .overflow_hidden()
-                            .when(items_count == 0, |this| {
-                                this.child(self.delegate().render_empty(cx))
-                            })
-                            .when(items_count > 0, |this| {
-                                this.child(
-                                    uniform_list(view, "uniform-list", items_count, {
-                                        move |list, visible_range, cx| {
-                                            list.load_more_if_need(visible_range.clone(), cx);
-
-                                            visible_range
-                                                .map(|ix| list.render_list_item(ix, cx))
-                                                .collect::<Vec<_>>()
-                                        }
-                                    })
-                                    .flex_grow()
-                                    .with_sizing_behavior(sizing_behavior)
-                                    .track_scroll(vertical_scroll_handle)
-                                    .into_any_element(),
-                                )
-                            })
-                            .children(self.render_scrollbar(cx)),
-                    )
-                }
+            .when(self.loading, |this| {
+                this.child(self.delegate().render_loading(cx))
             })
-            // Click out to cancel right clicked row
-            .when(self.right_clicked_index.is_some(), |this| {
-                this.on_mouse_down_out(cx.listener(|this, _, cx| {
-                    this.right_clicked_index = None;
-                    cx.notify();
-                }))
+            .when(!self.loading, |this| {
+                this.on_action(cx.listener(Self::on_action_cancel))
+                    .on_action(cx.listener(Self::on_action_confirm))
+                    .on_action(cx.listener(Self::on_action_select_next))
+                    .on_action(cx.listener(Self::on_action_select_prev))
+                    .map(|this| {
+                        if let Some(view) = initial_view {
+                            this.child(view)
+                        } else {
+                            this.child(
+                                v_flex()
+                                    .flex_grow()
+                                    .relative()
+                                    .when_some(self.max_height, |this, h| this.max_h(h))
+                                    .overflow_hidden()
+                                    .when(items_count == 0, |this| {
+                                        this.child(self.delegate().render_empty(cx))
+                                    })
+                                    .when(items_count > 0, |this| {
+                                        this.child(
+                                            uniform_list(view, "uniform-list", items_count, {
+                                                move |list, visible_range, cx| {
+                                                    list.load_more_if_need(
+                                                        visible_range.clone(),
+                                                        cx,
+                                                    );
+
+                                                    visible_range
+                                                        .map(|ix| list.render_list_item(ix, cx))
+                                                        .collect::<Vec<_>>()
+                                                }
+                                            })
+                                            .flex_grow()
+                                            .with_sizing_behavior(sizing_behavior)
+                                            .track_scroll(vertical_scroll_handle)
+                                            .into_any_element(),
+                                        )
+                                    })
+                                    .children(self.render_scrollbar(cx)),
+                            )
+                        }
+                    })
+                    // Click out to cancel right clicked row
+                    .when(self.right_clicked_index.is_some(), |this| {
+                        this.on_mouse_down_out(cx.listener(|this, _, cx| {
+                            this.right_clicked_index = None;
+                            cx.notify();
+                        }))
+                    })
             })
     }
 }

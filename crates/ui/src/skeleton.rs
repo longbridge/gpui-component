@@ -8,13 +8,21 @@ use std::time::Duration;
 #[derive(IntoElement)]
 pub struct Skeleton {
     base: Div,
+    secondary: bool,
 }
 
 impl Skeleton {
     pub fn new() -> Self {
         Self {
             base: div().w_full().h_4().rounded_md(),
+            secondary: false,
         }
+    }
+
+    /// Set use secondary color.
+    pub fn secondary(mut self) -> Self {
+        self.secondary = true;
+        self
     }
 }
 
@@ -26,8 +34,14 @@ impl Styled for Skeleton {
 
 impl RenderOnce for Skeleton {
     fn render(self, cx: &mut gpui::WindowContext) -> impl IntoElement {
+        let color = if self.secondary {
+            cx.theme().skeleton.opacity(0.8)
+        } else {
+            cx.theme().skeleton
+        };
+
         div().child(
-            self.base.bg(cx.theme().skeleton).with_animation(
+            self.base.bg(color).with_animation(
                 "skeleton",
                 Animation::new(Duration::from_secs(2))
                     .repeat()

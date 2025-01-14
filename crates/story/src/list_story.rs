@@ -10,6 +10,7 @@ use gpui::{
 
 use ui::{
     button::Button,
+    checkbox::Checkbox,
     h_flex,
     label::Label,
     list::{List, ListDelegate, ListItem},
@@ -350,6 +351,16 @@ impl Render for ListStory {
                             .on_click(cx.listener(|this, _, cx| {
                                 this.company_list.update(cx, |list, cx| {
                                     list.scroll_to_item(list.delegate().items_count(cx) - 1, cx);
+                                })
+                            })),
+                    )
+                    .child(
+                        Checkbox::new("loading")
+                            .label("Loading")
+                            .checked(self.company_list.read(cx).loading())
+                            .on_click(cx.listener(|this, check: &bool, cx| {
+                                this.company_list.update(cx, |this, cx| {
+                                    this.set_loading(*check, cx);
                                 })
                             })),
                     ),
