@@ -10,7 +10,7 @@ struct LoadingItem;
 
 impl RenderOnce for LoadingItem {
     fn render(self, _: &mut gpui::WindowContext) -> impl IntoElement {
-        ListItem::new("skeleton").disabled(true).py_3().child(
+        ListItem::new("skeleton").disabled(true).child(
             v_flex()
                 .gap_1p5()
                 .overflow_hidden()
@@ -23,6 +23,8 @@ impl RenderOnce for LoadingItem {
 impl RenderOnce for Loading {
     fn render(self, _: &mut gpui::WindowContext) -> impl IntoElement {
         v_flex()
+            .py_2p5()
+            .gap_3()
             .child(LoadingItem)
             .child(LoadingItem)
             .child(LoadingItem)
