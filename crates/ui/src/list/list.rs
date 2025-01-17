@@ -405,12 +405,19 @@ where
             return;
         }
 
-        let mut selected_index = self.selected_index.unwrap_or(0);
-        if selected_index < items_count - 1 {
-            selected_index = selected_index + 1;
+        let selected_index;
+        if let Some(ix) = self.selected_index {
+            if ix < items_count - 1 {
+                selected_index = ix + 1;
+            } else {
+                // When the last item is selected, select the first item.
+                selected_index = 0;
+            }
         } else {
+            // When no selected index, select the first item.
             selected_index = 0;
         }
+
         self.select_item(selected_index, cx);
     }
 

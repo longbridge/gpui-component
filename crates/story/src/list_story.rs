@@ -136,7 +136,7 @@ impl RenderOnce for CompanyListItem {
 struct CompanyListDelegate {
     companies: Vec<Company>,
     matched_companies: Vec<Company>,
-    selected_index: usize,
+    selected_index: Option<usize>,
     confirmed_index: Option<usize>,
     query: String,
     loading: bool,
@@ -168,14 +168,12 @@ impl ListDelegate for CompanyListDelegate {
     }
 
     fn set_selected_index(&mut self, ix: Option<usize>, cx: &mut ViewContext<List<Self>>) {
-        if let Some(ix) = ix {
-            self.selected_index = ix;
-            cx.notify();
-        }
+        self.selected_index = ix;
+        cx.notify();
     }
 
     fn render_item(&self, ix: usize, _cx: &mut ViewContext<List<Self>>) -> Option<Self::Item> {
-        let selected = ix == self.selected_index || Some(ix) == self.confirmed_index;
+        let selected = Some(ix) == self.selected_index || Some(ix) == self.confirmed_index;
         if let Some(company) = self.matched_companies.get(ix) {
             return Some(CompanyListItem::new(ix, company.clone(), ix, selected));
         }
@@ -216,7 +214,11 @@ impl ListDelegate for CompanyListDelegate {
 
 impl CompanyListDelegate {
     fn selected_company(&self) -> Option<Company> {
-        self.companies.get(self.selected_index).cloned()
+        let Some(ix) = self.selected_index else {
+            return None;
+        };
+
+        self.companies.get(ix).cloned()
     }
 }
 
@@ -254,7 +256,7 @@ impl ListStory {
         let delegate = CompanyListDelegate {
             matched_companies: companies.clone(),
             companies,
-            selected_index: 3,
+            selected_index: None,
             confirmed_index: None,
             query: "".to_string(),
             loading: false,
@@ -262,9 +264,9 @@ impl ListStory {
         };
 
         let company_list = cx.new_view(|cx| List::new(delegate, cx));
-        company_list.update(cx, |list, cx| {
-            list.set_selected_index(Some(3), cx);
-        });
+        // company_list.update(cx, |list, cx| {
+        //     list.set_selected_index(Some(3), cx);
+        // });
         let _subscriptions =
             vec![
                 cx.subscribe(&company_list, |_, _, ev: &ListEvent, _| match ev {
