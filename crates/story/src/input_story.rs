@@ -10,8 +10,7 @@ use ui::{
     button::{Button, ButtonVariant, ButtonVariants as _},
     checkbox::Checkbox,
     h_flex,
-    input::{InputEvent, OtpInput, TextInput},
-    number_input::{NumberInput, NumberInputEvent},
+    input::{InputEvent, NumberInput, NumberInputEvent, OtpInput, TextInput},
     prelude::FluentBuilder as _,
     v_flex, FocusableCycle, IconName, Sizable,
 };
@@ -260,13 +259,13 @@ impl InputStory {
                 InputEvent::Blur => println!("Blur"),
             },
             NumberInputEvent::Step(step_action) => match step_action {
-                ui::number_input::StepAction::Decrement => {
+                ui::input::StepAction::Decrement => {
                     self.number_input1_value = self.number_input1_value - 1;
                     self.number_input1.update(cx, |input, cx| {
                         input.set_value(self.number_input1_value.to_string(), cx);
                     });
                 }
-                ui::number_input::StepAction::Increment => {
+                ui::input::StepAction::Increment => {
                     self.number_input1_value = self.number_input1_value + 1;
                     self.number_input1.update(cx, |input, cx| {
                         input.set_value(self.number_input1_value.to_string(), cx);
@@ -290,7 +289,7 @@ impl InputStory {
                 InputEvent::Blur => println!("Blur"),
             },
             NumberInputEvent::Step(step_action) => match step_action {
-                ui::number_input::StepAction::Decrement => {
+                ui::input::StepAction::Decrement => {
                     if self.number_input2_value.le(&0) {
                         return;
                     }
@@ -300,7 +299,7 @@ impl InputStory {
                         input.set_value(self.number_input2_value.to_string(), cx);
                     });
                 }
-                ui::number_input::StepAction::Increment => {
+                ui::input::StepAction::Increment => {
                     self.number_input2_value = self.number_input2_value + 1;
                     self.number_input2.update(cx, |input, cx| {
                         input.set_value(self.number_input2_value.to_string(), cx);

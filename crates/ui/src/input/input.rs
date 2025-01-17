@@ -26,7 +26,7 @@ use gpui::{
 use super::blink_cursor::BlinkCursor;
 use super::change::Change;
 use super::element::TextElement;
-use super::ClearButton;
+use super::{number_input, ClearButton};
 
 use crate::history::History;
 use crate::indicator::Indicator;
@@ -155,6 +155,8 @@ pub fn init(cx: &mut AppContext) {
         #[cfg(not(target_os = "macos"))]
         KeyBinding::new("ctrl-y", Redo, Some(CONTEXT)),
     ]);
+
+    number_input::init(cx);
 }
 
 pub struct TextInput {

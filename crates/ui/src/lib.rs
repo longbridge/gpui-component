@@ -31,7 +31,6 @@ pub mod link;
 pub mod list;
 pub mod modal;
 pub mod notification;
-pub mod number_input;
 pub mod popover;
 pub mod popup_menu;
 pub mod prelude;
@@ -91,7 +90,6 @@ pub fn init(cx: &mut gpui::AppContext) {
     drawer::init(cx);
     dropdown::init(cx);
     input::init(cx);
-    number_input::init(cx);
     list::init(cx);
     modal::init(cx);
     popover::init(cx);
