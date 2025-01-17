@@ -35,7 +35,7 @@ pub fn init(cx: &mut AppContext) {
 pub enum ListEvent {
     /// Move to select item.
     Select(usize),
-    /// Signle click on item or pressed Enter.
+    /// Click on item or pressed Enter.
     Confirm(usize),
     /// Pressed ESC to deselect the item.
     Cancel,
