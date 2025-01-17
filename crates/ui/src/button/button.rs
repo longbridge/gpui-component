@@ -11,6 +11,7 @@ use gpui::{
     RenderOnce, SharedString, StatefulInteractiveElement as _, Styled, WindowContext,
 };
 
+#[derive(Clone, Copy)]
 pub enum ButtonRounded {
     None,
     Small,

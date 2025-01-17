@@ -552,16 +552,28 @@ impl Render for ButtonStory {
                     ),
             )
             .child(
-                section("Dropdown Button", cx).child(
-                    DropdownButton::new("dropdown-button")
-                        .button(Button::new("dropdown-button-button").label("Click Me"))
-                        .popup_menu(move |this, _| {
-                            this.menu("Disabled", Box::new(Disabled))
-                                .menu("Loading", Box::new(Loading))
-                                .menu("Selected", Box::new(Selected))
-                                .menu("Compact", Box::new(Compact))
-                        }),
-                ),
+                section("Dropdown Button", cx)
+                    .child(
+                        DropdownButton::new("dropdown-button1")
+                            .small()
+                            .button(Button::new("dropdown-button-button1").label("Click Me"))
+                            .popup_menu(move |this, _| {
+                                this.menu("Disabled", Box::new(Disabled))
+                                    .menu("Loading", Box::new(Loading))
+                                    .menu("Selected", Box::new(Selected))
+                                    .menu("Compact", Box::new(Compact))
+                            }),
+                    )
+                    .child(
+                        DropdownButton::new("dropdown-button")
+                            .button(Button::new("dropdown-button-button").label("Click Me"))
+                            .popup_menu(move |this, _| {
+                                this.menu("Disabled", Box::new(Disabled))
+                                    .menu("Loading", Box::new(Loading))
+                                    .menu("Selected", Box::new(Selected))
+                                    .menu("Compact", Box::new(Compact))
+                            }),
+                    ),
             )
             .child(
                 section("Icon Button", cx)
