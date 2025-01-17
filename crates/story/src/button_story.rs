@@ -1,11 +1,10 @@
 use gpui::{
-    px, ClickEvent, FocusableView, IntoElement, ParentElement as _, Render, Styled as _, View,
-    ViewContext, VisualContext as _, WindowContext,
+    actions, px, ClickEvent, FocusableView, InteractiveElement, IntoElement, ParentElement as _,
+    Render, Styled as _, View, ViewContext, VisualContext as _, WindowContext,
 };
 
 use ui::{
-    button::{Button, ButtonCustomVariant, ButtonVariants as _},
-    button_group::ButtonGroup,
+    button::{Button, ButtonCustomVariant, ButtonGroup, ButtonVariants as _, DropdownButton},
     checkbox::Checkbox,
     h_flex,
     prelude::FluentBuilder,
@@ -14,6 +13,8 @@ use ui::{
 };
 
 use crate::section;
+
+actions!(button_story, [Disabled, Loading, Selected, Compact]);
 
 pub struct ButtonStory {
     focus_handle: gpui::FocusHandle,
@@ -74,6 +75,10 @@ impl Render for ButtonStory {
         let toggle_multiple = self.toggle_multiple;
 
         v_flex()
+            .on_action(cx.listener(|this, _: &Disabled, _| this.disabled = !this.disabled))
+            .on_action(cx.listener(|this, _: &Loading, _| this.loading = !this.loading))
+            .on_action(cx.listener(|this, _: &Selected, _| this.selected = !this.selected))
+            .on_action(cx.listener(|this, _: &Compact, _| this.compact = !this.compact))
             .gap_6()
             .child(
                 h_flex()
@@ -545,6 +550,18 @@ impl Render for ButtonStory {
                                     })),
                             ),
                     ),
+            )
+            .child(
+                section("Dropdown Button", cx).child(
+                    DropdownButton::new("dropdown-button")
+                        .button(Button::new("dropdown-button-button").label("Click Me"))
+                        .popup_menu(move |this, _| {
+                            this.menu("Disabled", Box::new(Disabled))
+                                .menu("Loading", Box::new(Loading))
+                                .menu("Selected", Box::new(Selected))
+                                .menu("Compact", Box::new(Compact))
+                        }),
+                ),
             )
             .child(
                 section("Icon Button", cx)

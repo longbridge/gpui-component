@@ -14,7 +14,6 @@ pub mod animation;
 pub mod badge;
 pub mod breadcrumb;
 pub mod button;
-pub mod button_group;
 pub mod checkbox;
 pub mod clipboard;
 pub mod color_picker;

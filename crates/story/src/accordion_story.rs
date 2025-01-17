@@ -3,8 +3,12 @@ use gpui::{
     VisualContext as _, WindowContext,
 };
 use ui::{
-    accordion::Accordion, button::Button, button_group::ButtonGroup, checkbox::Checkbox, h_flex,
-    switch::Switch, v_flex, IconName, Selectable, Sizable, Size,
+    accordion::Accordion,
+    button::{Button, ButtonGroup},
+    checkbox::Checkbox,
+    h_flex,
+    switch::Switch,
+    v_flex, IconName, Selectable, Sizable, Size,
 };
 
 pub struct AccordionStory {
