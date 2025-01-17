@@ -297,10 +297,11 @@ pub trait TableDelegate: Sized + 'static {
 
     /// Returns a threshold value (n rows), of course, when scrolling to the bottom,
     /// the remaining number of rows triggers `load_more`.
+    /// This should smaller than the total number of first load rows.
     ///
-    /// Default: 50 rows
+    /// Default: 20 rows
     fn load_more_threshold(&self) -> usize {
-        50
+        20
     }
 
     /// Load more data when the table is scrolled to the bottom.
