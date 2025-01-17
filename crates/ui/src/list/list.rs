@@ -339,7 +339,9 @@ where
 
         // Securely handle subtract logic to prevent attempt to subtract with overflow
         println!(
-            "Load more ............. {} >= {}",
+            "Load more ............. items: {}, threshold: {}, {} >= {}",
+            items_count,
+            threshold,
             visible_end,
             items_count.saturating_sub(threshold)
         );
