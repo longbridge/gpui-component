@@ -15,7 +15,7 @@ use gpui::{
     DragMoveEvent, Edges, Entity, EntityId, EventEmitter, FocusHandle, FocusableView,
     InteractiveElement, IntoElement, KeyBinding, ListSizingBehavior, MouseButton, MouseDownEvent,
     ParentElement, Pixels, Point, Render, ScrollHandle, ScrollStrategy, SharedString, Stateful,
-    StatefulInteractiveElement as _, Styled, UniformListScrollHandle, ViewContext,
+    StatefulInteractiveElement as _, Styled, Task, UniformListScrollHandle, ViewContext,
     VisualContext as _, WindowContext,
 };
 
@@ -176,6 +176,8 @@ pub struct Table<D: TableDelegate> {
     visible_range: VisibleRangeState,
     /// The loading state of the table.
     loading: bool,
+
+    _load_more_task: Task<()>,
 }
 
 #[allow(unused)]
@@ -372,6 +374,7 @@ where
             scrollbar_visible: Edges::all(true),
             visible_range: VisibleRangeState::default(),
             loading: false,
+            _load_more_task: Task::ready(()),
         };
 
         this.prepare_col_groups(cx);
@@ -692,27 +695,26 @@ where
     }
 
     /// Dispatch delegate's `load_more` method when the visible range is near the end.
-    fn load_more_if_need(&mut self, visible_range: Range<usize>, cx: &mut ViewContext<Self>) {
-        if !self.delegate.can_load_more(cx) {
-            return;
-        }
-
-        let row_count = self.delegate.rows_count(cx);
+    fn load_more_if_need(
+        &mut self,
+        rows_count: usize,
+        visible_end: usize,
+        cx: &mut ViewContext<Self>,
+    ) {
         let threshold = self.delegate.load_more_threshold();
-        if row_count < threshold {
-            return;
-        }
-
         // Securely handle subtract logic to prevent attempt to subtract with overflow
-        if visible_range.end >= row_count - threshold {
-            cx.spawn(|view, mut cx| async move {
-                cx.update(|cx| {
+        if visible_end >= rows_count.saturating_sub(threshold) {
+            if !self.delegate.can_load_more(cx) {
+                return;
+            }
+
+            self._load_more_task = cx.spawn(|view, mut cx| async move {
+                _ = cx.update(|cx| {
                     view.update(cx, |view, cx| {
                         view.delegate.load_more(cx);
                     })
-                })
-            })
-            .detach()
+                });
+            });
         }
     }
 
@@ -1346,7 +1348,7 @@ where
                                 rows_count + extra_rows_needed,
                                 {
                                     move |table, visible_range, cx| {
-                                        table.load_more_if_need(visible_range.clone(), cx);
+                                        table.load_more_if_need(rows_count, visible_range.end, cx);
                                         table.update_visible_range_if_need(
                                             visible_range.clone(),
                                             Axis::Vertical,

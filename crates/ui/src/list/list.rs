@@ -1,4 +1,3 @@
-use std::ops::Range;
 use std::time::Duration;
 use std::{cell::Cell, rc::Rc};
 
@@ -333,7 +332,6 @@ where
         cx: &mut ViewContext<Self>,
     ) {
         let threshold = self.delegate.load_more_threshold();
-
         // Securely handle subtract logic to prevent attempt to subtract with overflow
         if visible_end >= items_count.saturating_sub(threshold) {
             if !self.delegate.can_load_more(cx) {
