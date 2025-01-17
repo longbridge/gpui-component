@@ -17,6 +17,16 @@ use crate::{
 
 actions!(dropdown, [Up, Down, Enter, Escape]);
 
+#[derive(Clone)]
+pub enum ListEvent {
+    /// Single click or move to selected row.
+    SelectItem(usize),
+    /// Double click on the row.
+    ConfirmItem(usize),
+    // Cancel the selection.
+    Cancel,
+}
+
 const CONTEXT: &str = "Dropdown";
 pub fn init(cx: &mut AppContext) {
     cx.bind_keys([
@@ -122,10 +132,6 @@ where
         self.delegate.len()
     }
 
-    fn confirmed_index(&self, _: &AppContext) -> Option<usize> {
-        self.selected_index
-    }
-
     fn render_item(&self, ix: usize, cx: &mut gpui::ViewContext<List<Self>>) -> Option<Self::Item> {
         let selected = self
             .selected_index
@@ -159,8 +165,8 @@ where
         });
     }
 
-    fn confirm(&mut self, ix: Option<usize>, cx: &mut ViewContext<List<Self>>) {
-        self.selected_index = ix;
+    fn confirm(&mut self, ix: usize, cx: &mut ViewContext<List<Self>>) {
+        self.selected_index = Some(ix);
 
         let selected_value = self
             .selected_index

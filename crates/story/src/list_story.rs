@@ -4,8 +4,8 @@ use std::time::Duration;
 use fake::Fake;
 use gpui::{
     actions, div, px, AppContext, ElementId, FocusHandle, FocusableView, InteractiveElement,
-    IntoElement, ParentElement, Render, RenderOnce, Styled, Task, Timer, View, ViewContext,
-    VisualContext, WindowContext,
+    IntoElement, ParentElement, Render, RenderOnce, Styled, Subscription, Task, Timer, View,
+    ViewContext, VisualContext, WindowContext,
 };
 
 use ui::{
@@ -13,7 +13,7 @@ use ui::{
     checkbox::Checkbox,
     h_flex,
     label::Label,
-    list::{List, ListDelegate, ListItem},
+    list::{List, ListDelegate, ListEvent, ListItem},
     theme::{hsl, ActiveTheme},
     v_flex, Sizable,
 };
@@ -150,10 +150,6 @@ impl ListDelegate for CompanyListDelegate {
         self.matched_companies.len()
     }
 
-    fn confirmed_index(&self, _: &AppContext) -> Option<usize> {
-        self.confirmed_index
-    }
-
     fn perform_search(&mut self, query: &str, _: &mut ViewContext<List<Self>>) -> Task<()> {
         self.query = query.to_string();
         self.matched_companies = self
@@ -166,11 +162,9 @@ impl ListDelegate for CompanyListDelegate {
         Task::ready(())
     }
 
-    fn confirm(&mut self, ix: Option<usize>, cx: &mut ViewContext<List<Self>>) {
-        self.confirmed_index = ix;
-        if let Some(_) = ix {
-            cx.dispatch_action(Box::new(SelectedCompany));
-        }
+    fn confirm(&mut self, ix: usize, cx: &mut ViewContext<List<Self>>) {
+        self.confirmed_index = Some(ix);
+        cx.dispatch_action(Box::new(SelectedCompany));
     }
 
     fn set_selected_index(&mut self, ix: Option<usize>, cx: &mut ViewContext<List<Self>>) {
@@ -230,6 +224,7 @@ pub struct ListStory {
     focus_handle: FocusHandle,
     company_list: View<List<CompanyListDelegate>>,
     selected_company: Option<Company>,
+    _subscriptions: Vec<Subscription>,
 }
 
 impl super::Story for ListStory {
@@ -256,20 +251,34 @@ impl ListStory {
             .map(|_| random_company())
             .collect::<Vec<Company>>();
 
-        let company_list = cx.new_view(|cx| {
-            List::new(
-                CompanyListDelegate {
-                    matched_companies: companies.clone(),
-                    companies,
-                    selected_index: 0,
-                    confirmed_index: None,
-                    query: "".to_string(),
-                    loading: false,
-                    is_eof: false,
-                },
-                cx,
-            )
+        let delegate = CompanyListDelegate {
+            matched_companies: companies.clone(),
+            companies,
+            selected_index: 3,
+            confirmed_index: None,
+            query: "".to_string(),
+            loading: false,
+            is_eof: false,
+        };
+
+        let company_list = cx.new_view(|cx| List::new(delegate, cx));
+        company_list.update(cx, |list, cx| {
+            list.set_selected_index(Some(3), cx);
         });
+        let _subscriptions =
+            vec![
+                cx.subscribe(&company_list, |_, _, ev: &ListEvent, _| match ev {
+                    ListEvent::Select(ix) => {
+                        println!("List Selected: {:?}", ix);
+                    }
+                    ListEvent::Confirm(ix) => {
+                        println!("List Confirmed: {:?}", ix);
+                    }
+                    ListEvent::Cancel => {
+                        println!("List Cancelled");
+                    }
+                }),
+            ];
 
         // Spawn a background to random refresh the list
         cx.spawn(move |this, mut cx| async move {
@@ -296,6 +305,7 @@ impl ListStory {
             focus_handle: cx.focus_handle(),
             company_list,
             selected_company: None,
+            _subscriptions,
         }
     }
 
@@ -334,6 +344,7 @@ impl Render for ListStory {
             .child(
                 h_flex()
                     .gap_2()
+                    .flex_wrap()
                     .child(
                         Button::new("scroll-top")
                             .child("Scroll to Top")
@@ -351,6 +362,18 @@ impl Render for ListStory {
                             .on_click(cx.listener(|this, _, cx| {
                                 this.company_list.update(cx, |list, cx| {
                                     list.scroll_to_item(list.delegate().items_count(cx) - 1, cx);
+                                })
+                            })),
+                    )
+                    .child(
+                        Button::new("scroll-to-selected")
+                            .child("Scroll to Selected")
+                            .small()
+                            .on_click(cx.listener(|this, _, cx| {
+                                this.company_list.update(cx, |list, cx| {
+                                    if let Some(selected) = list.selected_index() {
+                                        list.scroll_to_item(selected, cx);
+                                    }
                                 })
                             })),
                     )

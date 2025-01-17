@@ -14,7 +14,7 @@ use gpui::{
     ListSizingBehavior, MouseButton, ParentElement, Render, SharedString, Styled, Task,
     UniformListScrollHandle, View, ViewContext, VisualContext, WindowContext,
 };
-use gpui::{px, ScrollStrategy};
+use gpui::{px, EventEmitter, ScrollStrategy};
 use smol::Timer;
 
 use super::loading::Loading;
@@ -29,6 +29,16 @@ pub fn init(cx: &mut AppContext) {
         KeyBinding::new("up", SelectPrev, context),
         KeyBinding::new("down", SelectNext, context),
     ]);
+}
+
+#[derive(Clone)]
+pub enum ListEvent {
+    /// Move to select item.
+    Select(usize),
+    /// Signle click on item or pressed Enter.
+    Confirm(usize),
+    /// Pressed ESC to deselect the item.
+    Cancel,
 }
 
 /// A delegate for the List.
@@ -71,16 +81,11 @@ pub trait ListDelegate: Sized + 'static {
         Loading
     }
 
-    /// Return the confirmed index of the selected item.
-    fn confirmed_index(&self, cx: &AppContext) -> Option<usize> {
-        None
-    }
-
     /// Set the selected index, just store the ix, don't confirm.
     fn set_selected_index(&mut self, ix: Option<usize>, cx: &mut ViewContext<List<Self>>);
 
     /// Set the confirm and give the selected index, this is means user have clicked the item or pressed Enter.
-    fn confirm(&mut self, ix: Option<usize>, cx: &mut ViewContext<List<Self>>) {}
+    fn confirm(&mut self, ix: usize, cx: &mut ViewContext<List<Self>>) {}
 
     /// Cancel the selection, e.g.: Pressed ESC.
     fn cancel(&mut self, cx: &mut ViewContext<List<Self>>) {}
@@ -226,9 +231,11 @@ where
         self.focus_handle(cx).focus(cx);
     }
 
+    /// Set the selected index of the list, this will also scroll to the selected item.
     pub fn set_selected_index(&mut self, ix: Option<usize>, cx: &mut ViewContext<Self>) {
         self.selected_index = ix;
         self.delegate.set_selected_index(ix, cx);
+        self.scroll_to_selected_item(cx);
     }
 
     pub fn selected_index(&self) -> Option<usize> {
@@ -351,6 +358,7 @@ where
     fn on_action_cancel(&mut self, _: &Cancel, cx: &mut ViewContext<Self>) {
         self.set_selected_index(None, cx);
         self.delegate.cancel(cx);
+        cx.emit(ListEvent::Cancel);
         cx.notify();
     }
 
@@ -359,7 +367,20 @@ where
             return;
         }
 
-        self.delegate.confirm(self.selected_index, cx);
+        let Some(ix) = self.selected_index else {
+            return;
+        };
+
+        self.delegate.confirm(ix, cx);
+        cx.emit(ListEvent::Confirm(ix));
+        cx.notify();
+    }
+
+    fn select_item(&mut self, ix: usize, cx: &mut ViewContext<Self>) {
+        self.selected_index = Some(ix);
+        self.delegate.set_selected_index(Some(ix), cx);
+        self.scroll_to_selected_item(cx);
+        cx.emit(ListEvent::Select(ix));
         cx.notify();
     }
 
@@ -369,16 +390,13 @@ where
             return;
         }
 
-        let selected_index = self.selected_index.unwrap_or(0);
+        let mut selected_index = self.selected_index.unwrap_or(0);
         if selected_index > 0 {
-            self.selected_index = Some(selected_index - 1);
+            selected_index = selected_index - 1;
         } else {
-            self.selected_index = Some(items_count - 1);
+            selected_index = items_count - 1;
         }
-
-        self.delegate.set_selected_index(self.selected_index, cx);
-        self.scroll_to_selected_item(cx);
-        cx.notify();
+        self.select_item(selected_index, cx);
     }
 
     fn on_action_select_next(&mut self, _: &SelectNext, cx: &mut ViewContext<Self>) {
@@ -387,19 +405,13 @@ where
             return;
         }
 
-        if let Some(selected_index) = self.selected_index {
-            if selected_index < items_count - 1 {
-                self.selected_index = Some(selected_index + 1);
-            } else {
-                self.selected_index = Some(0);
-            }
+        let mut selected_index = self.selected_index.unwrap_or(0);
+        if selected_index < items_count - 1 {
+            selected_index = selected_index + 1;
         } else {
-            self.selected_index = Some(0);
+            selected_index = 0;
         }
-
-        self.delegate.set_selected_index(self.selected_index, cx);
-        self.scroll_to_selected_item(cx);
-        cx.notify();
+        self.select_item(selected_index, cx);
     }
 
     fn render_list_item(&mut self, ix: usize, cx: &mut ViewContext<Self>) -> impl IntoElement {
@@ -456,7 +468,7 @@ where
         }
     }
 }
-
+impl<D> EventEmitter<ListEvent> for List<D> where D: ListDelegate {}
 impl<D> Render for List<D>
 where
     D: ListDelegate,

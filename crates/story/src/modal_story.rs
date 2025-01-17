@@ -39,10 +39,6 @@ impl ListDelegate for ListItemDeletegate {
         self.matches.len()
     }
 
-    fn confirmed_index(&self, _: &AppContext) -> Option<usize> {
-        self.confirmed_index
-    }
-
     fn perform_search(&mut self, query: &str, cx: &mut ViewContext<List<Self>>) -> Task<()> {
         let query = query.to_string();
         cx.spawn(move |this, mut cx| async move {
@@ -121,15 +117,14 @@ impl ListDelegate for ListItemDeletegate {
         }
     }
 
-    fn confirm(&mut self, ix: Option<usize>, cx: &mut ViewContext<List<Self>>) {
+    fn confirm(&mut self, ix: usize, cx: &mut ViewContext<List<Self>>) {
         if let Some(story) = self.story.upgrade() {
             cx.update_view(&story, |story, cx| {
-                if let Some(ix) = ix {
-                    self.confirmed_index = Some(ix);
-                    if let Some(item) = self.matches.get(ix) {
-                        story.selected_value = Some(SharedString::from(item.to_string()));
-                    }
+                self.confirmed_index = Some(ix);
+                if let Some(item) = self.matches.get(ix) {
+                    story.selected_value = Some(SharedString::from(item.to_string()));
                 }
+
                 cx.close_drawer();
             });
         }
