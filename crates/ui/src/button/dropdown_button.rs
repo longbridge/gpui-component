@@ -57,6 +57,11 @@ impl DropdownButton {
         self.rounded = rounded.into();
         self
     }
+
+    pub fn compact(mut self) -> Self {
+        self.compact = Some(true);
+        self
+    }
 }
 
 impl Styled for DropdownButton {
