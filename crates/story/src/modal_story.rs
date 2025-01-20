@@ -358,47 +358,49 @@ impl ModalStory {
                         .child(dropdown.clone())
                         .child(date_picker.clone()),
                 )
-                .footer(
-                    h_flex()
-                        .gap_6()
-                        .items_center()
-                        .child(Button::new("confirm").primary().label("Confirm").on_click({
-                            let view = view.clone();
-                            let input1 = input1.clone();
-                            let date_picker = date_picker.clone();
-                            move |_, cx| {
-                                cx.close_modal();
+                .footer({
+                    let view = view.clone();
+                    let input1 = input1.clone();
+                    let date_picker = date_picker.clone();
+                    move |_, _, _cx| {
+                        vec![
+                            Button::new("confirm").primary().label("Confirm").on_click({
+                                let view = view.clone();
+                                let input1 = input1.clone();
+                                let date_picker = date_picker.clone();
+                                move |_, cx| {
+                                    cx.close_modal();
 
-                                view.update(cx, |view, cx| {
-                                    view.selected_value = Some(
-                                        format!(
-                                            "Hello, {}, date: {}",
-                                            input1.read(cx).text(),
-                                            date_picker.read(cx).date()
+                                    view.update(cx, |view, cx| {
+                                        view.selected_value = Some(
+                                            format!(
+                                                "Hello, {}, date: {}",
+                                                input1.read(cx).text(),
+                                                date_picker.read(cx).date()
+                                            )
+                                            .into(),
                                         )
-                                        .into(),
-                                    )
-                                });
-                            }
-                        }))
-                        .child(Button::new("new-modal").label("Open Other Modal").on_click(
-                            move |_, cx| {
-                                cx.open_modal(move |modal, _| {
-                                    modal
-                                        .title("Other Modal")
-                                        .child("This is another modal.")
-                                        .min_h(px(300.))
-                                });
-                            },
-                        ))
-                        .child(
+                                    });
+                                }
+                            }),
+                            Button::new("new-modal").label("Open Other Modal").on_click(
+                                move |_, cx| {
+                                    cx.open_modal(move |modal, _| {
+                                        modal
+                                            .title("Other Modal")
+                                            .child("This is another modal.")
+                                            .min_h(px(300.))
+                                    });
+                                },
+                            ),
                             Button::new("cancel")
                                 .label("Cancel")
                                 .on_click(move |_, cx| {
                                     cx.close_modal();
                                 }),
-                        ),
-                )
+                        ]
+                    }
+                })
         });
 
         self.input1.focus_handle(cx).focus(cx);
@@ -553,9 +555,26 @@ impl Render for ModalStory {
                         )
                     })
                     .child(
-                        Button::new("show-modal")
-                            .label("Open Modal...")
-                            .on_click(cx.listener(|this, _, cx| this.show_modal(cx))),
+                        h_flex().gap_3().flex_wrap().child(
+                            Button::new("show-modal")
+                                .label("Open Modal...")
+                                .on_click(cx.listener(|this, _, cx| this.show_modal(cx))),
+                        )
+                        .child(
+                            Button::new("show-confirm-modal")
+                                .label("Confirm Modal...")
+                                .on_click(cx.listener(|_, _, cx| {
+                                    cx.open_modal(|modal, _| {
+                                        modal.title("Confirm Model").confirm().on_ok(|_, cx| {
+                                            cx.push_notification("You have pressed Ok.");
+                                            true
+                                        }).on_cancel(|_, cx| {
+                                            cx.push_notification("You have pressed Cancel.");
+                                            true
+                                        }).child("This is a modal dialog without close button.")
+                                    });
+                                })),
+                        )
                     )
                     .child(
                         h_flex()

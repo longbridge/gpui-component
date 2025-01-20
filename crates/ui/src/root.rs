@@ -37,7 +37,6 @@ pub trait ContextModal: Sized {
     fn open_modal<F>(&mut self, build: F)
     where
         F: Fn(Modal, &mut WindowContext) -> Modal + 'static;
-
     /// Return true, if there is an active Modal.
     fn has_active_modal(&self) -> bool;
 

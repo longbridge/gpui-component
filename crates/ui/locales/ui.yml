@@ -111,3 +111,12 @@ Dock:
     en: Expand
     zh-CN: 展开
     zh-HK: 展開
+Modal:
+  ok:
+    en: OK
+    zh-CN: 确定
+    zh-HK: 確定
+  cancel:
+    en: Cancel
+    zh-CN: 取消
+    zh-HK: 取消

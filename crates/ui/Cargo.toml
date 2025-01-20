@@ -10,7 +10,7 @@ doctest = false
 
 [dependencies]
 gpui.workspace = true
-
+oneshot.workspace = true
 anyhow = "1"
 image = "0.25.1"
 itertools = "0.13.0"

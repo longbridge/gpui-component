@@ -6,34 +6,90 @@ use gpui::{
     InteractiveElement, IntoElement, KeyBinding, MouseButton, ParentElement, Pixels, Point,
     RenderOnce, SharedString, Styled, WindowContext,
 };
+use rust_i18n::t;
 
 use crate::{
     animation::cubic_bezier,
-    button::{Button, ButtonVariants as _},
+    button::{Button, ButtonVariant, ButtonVariants as _},
+    h_flex,
     theme::ActiveTheme as _,
     v_flex, ContextModal, IconName, Sizable as _,
 };
 
-actions!(modal, [Escape]);
+actions!(modal, [Escape, Enter]);
 
 const CONTEXT: &str = "Modal";
 pub fn init(cx: &mut AppContext) {
-    cx.bind_keys([KeyBinding::new("escape", Escape, Some(CONTEXT))])
+    cx.bind_keys([
+        KeyBinding::new("escape", Escape, Some(CONTEXT)),
+        KeyBinding::new("enter", Enter, Some(CONTEXT)),
+    ]);
+}
+
+type RenderButtonFn = Box<dyn FnOnce(&mut WindowContext) -> AnyElement>;
+type FooterFn = Box<dyn Fn(RenderButtonFn, RenderButtonFn, &mut WindowContext) -> Vec<AnyElement>>;
+
+pub struct ModalButtonProps {
+    ok_text: Option<SharedString>,
+    ok_variant: ButtonVariant,
+    cancel_text: Option<SharedString>,
+    cancel_variant: ButtonVariant,
+}
+
+impl Default for ModalButtonProps {
+    fn default() -> Self {
+        Self {
+            ok_text: None,
+            ok_variant: ButtonVariant::Primary,
+            cancel_text: None,
+            cancel_variant: ButtonVariant::default(),
+        }
+    }
+}
+
+impl ModalButtonProps {
+    /// Sets the text of the OK button. Default is `OK`.
+    pub fn ok_text(mut self, ok_text: impl Into<SharedString>) -> Self {
+        self.ok_text = Some(ok_text.into());
+        self
+    }
+
+    /// Sets the variant of the OK button. Default is `ButtonVariant::Primary`.
+    pub fn ok_variant(mut self, ok_variant: ButtonVariant) -> Self {
+        self.ok_variant = ok_variant;
+        self
+    }
+
+    /// Sets the text of the Cancel button. Default is `Cancel`.
+    pub fn cancel_text(mut self, cancel_text: impl Into<SharedString>) -> Self {
+        self.cancel_text = Some(cancel_text.into());
+        self
+    }
+
+    /// Sets the variant of the Cancel button. Default is `ButtonVariant::default()`.
+    pub fn cancel_variant(mut self, cancel_variant: ButtonVariant) -> Self {
+        self.cancel_variant = cancel_variant;
+        self
+    }
 }
 
 #[derive(IntoElement)]
 pub struct Modal {
     base: Div,
     title: Option<AnyElement>,
-    footer: Option<AnyElement>,
+    footer: Option<FooterFn>,
     content: Div,
     width: Pixels,
     max_width: Option<Pixels>,
     margin_top: Option<Pixels>,
 
     on_close: Rc<dyn Fn(&ClickEvent, &mut WindowContext) + 'static>,
+    on_ok: Rc<dyn Fn(&ClickEvent, &mut WindowContext) -> bool + 'static>,
+    on_cancel: Rc<dyn Fn(&ClickEvent, &mut WindowContext) -> bool + 'static>,
+    button_props: ModalButtonProps,
     show_close: bool,
     overlay: bool,
+    overlay_closable: bool,
     keyboard: bool,
 
     /// This will be change when open the modal, the focus handle is create when open the modal.
@@ -62,7 +118,7 @@ impl Modal {
             .border_color(cx.theme().border)
             .rounded_lg()
             .shadow_xl()
-            .min_h_48()
+            .min_h_32()
             .p_4()
             .gap_4();
 
@@ -80,7 +136,11 @@ impl Modal {
             layer_ix: 0,
             overlay_visible: true,
             on_close: Rc::new(|_, _| {}),
+            on_ok: Rc::new(|_, _| true),
+            on_cancel: Rc::new(|_, _| true),
+            button_props: ModalButtonProps::default(),
             show_close: true,
+            overlay_closable: true,
         }
     }
 
@@ -91,9 +151,31 @@ impl Modal {
     }
 
     /// Set the footer of the modal.
-    pub fn footer(mut self, footer: impl IntoElement) -> Self {
-        self.footer = Some(footer.into_any_element());
+    ///
+    /// The `footer` is a function that takes two `RenderButtonFn` and a `WindowContext` and returns a list of `AnyElement`.
+    ///
+    /// - First `RenderButtonFn` is the render function for the OK button.
+    /// - Second `RenderButtonFn` is the render function for the CANCEL button.
+    ///
+    /// When you set the footer, the footer will be placed default footer buttons.
+    pub fn footer<E, F>(mut self, footer: F) -> Self
+    where
+        E: IntoElement,
+        F: Fn(RenderButtonFn, RenderButtonFn, &mut WindowContext) -> Vec<E> + 'static,
+    {
+        self.footer = Some(Box::new(move |ok, cancel, cx| {
+            footer(ok, cancel, cx)
+                .into_iter()
+                .map(|e| e.into_any_element())
+                .collect()
+        }));
         self
+    }
+
+    /// Set to use confirm modal, with OK and CANCEL buttons.
+    pub fn confirm(self) -> Self {
+        self.footer(|ok, cancel, cx| vec![cancel(cx), ok(cx)])
+            .overlay_closable(false)
     }
 
     /// Sets the callback for when the modal is closed.
@@ -102,6 +184,28 @@ impl Modal {
         on_close: impl Fn(&ClickEvent, &mut WindowContext) + 'static,
     ) -> Self {
         self.on_close = Rc::new(on_close);
+        self
+    }
+
+    /// Sets the callback for when the modal is has been confirmed.
+    ///
+    /// The callback should return `true` to close the modal, if return `false` the modal will not be closed.
+    pub fn on_ok(
+        mut self,
+        on_ok: impl Fn(&ClickEvent, &mut WindowContext) -> bool + 'static,
+    ) -> Self {
+        self.on_ok = Rc::new(on_ok);
+        self
+    }
+
+    /// Sets the callback for when the modal is has been canceled.
+    ///
+    /// The callback should return `true` to close the modal, if return `false` the modal will not be closed.
+    pub fn on_cancel(
+        mut self,
+        on_cancel: impl Fn(&ClickEvent, &mut WindowContext) -> bool + 'static,
+    ) -> Self {
+        self.on_cancel = Rc::new(on_cancel);
         self
     }
 
@@ -135,6 +239,14 @@ impl Modal {
         self
     }
 
+    /// Set the overlay closable of the modal, defaults to `true`.
+    ///
+    /// When the overlay is clicked, the modal will be closed.
+    pub fn overlay_closable(mut self, overlay_closable: bool) -> Self {
+        self.overlay_closable = overlay_closable;
+        self
+    }
+
     /// Set whether to support keyboard esc to close the modal, defaults to `true`.
     pub fn keyboard(mut self, keyboard: bool) -> Self {
         self.keyboard = keyboard;
@@ -162,6 +274,61 @@ impl RenderOnce for Modal {
     fn render(self, cx: &mut WindowContext) -> impl gpui::IntoElement {
         let layer_ix = self.layer_ix;
         let on_close = self.on_close.clone();
+        let on_ok = self.on_ok.clone();
+        let on_cancel = self.on_cancel.clone();
+
+        let render_ok: RenderButtonFn = Box::new({
+            let on_ok = on_ok.clone();
+            let on_close = on_close.clone();
+            let ok_text = self
+                .button_props
+                .ok_text
+                .unwrap_or_else(|| t!("Modal.ok").into());
+            let ok_variant = self.button_props.ok_variant;
+            move |_| {
+                Button::new("ok")
+                    .label(ok_text)
+                    .with_variant(ok_variant)
+                    .on_click({
+                        let on_ok = on_ok.clone();
+                        let on_close = on_close.clone();
+
+                        move |_, cx| {
+                            if on_ok(&ClickEvent::default(), cx) {
+                                on_close(&ClickEvent::default(), cx);
+                                cx.close_modal();
+                            }
+                        }
+                    })
+                    .into_any_element()
+            }
+        });
+        let render_cancel: RenderButtonFn = Box::new({
+            let on_cancel = on_cancel.clone();
+            let on_close = on_close.clone();
+            let cancel_text = self
+                .button_props
+                .cancel_text
+                .unwrap_or_else(|| t!("Modal.cancel").into());
+            let cancel_variant = self.button_props.cancel_variant;
+            move |_| {
+                Button::new("cancel")
+                    .label(cancel_text)
+                    .with_variant(cancel_variant)
+                    .on_click({
+                        let on_cancel = on_cancel.clone();
+                        let on_close = on_close.clone();
+                        move |_, cx| {
+                            if on_cancel(&ClickEvent::default(), cx) {
+                                on_close(&ClickEvent::default(), cx);
+                                cx.close_modal();
+                            }
+                        }
+                    })
+                    .into_any_element()
+            }
+        });
+
         let window_paddings = crate::window_border::window_paddings(cx);
         let view_size = cx.viewport_size()
             - gpui::size(
@@ -187,12 +354,16 @@ impl RenderOnce for Modal {
                     .when(self.overlay_visible, |this| {
                         this.bg(overlay_color(self.overlay, cx))
                     })
-                    .on_mouse_down(MouseButton::Left, {
-                        let on_close = self.on_close.clone();
-                        move |_, cx| {
-                            on_close(&ClickEvent::default(), cx);
-                            cx.close_modal();
-                        }
+                    .when(self.overlay_closable, |this| {
+                        this.on_mouse_down(MouseButton::Left, {
+                            let on_cancel = on_cancel.clone();
+                            let on_close = on_close.clone();
+                            move |_, cx| {
+                                on_cancel(&ClickEvent::default(), cx);
+                                on_close(&ClickEvent::default(), cx);
+                                cx.close_modal();
+                            }
+                        })
                     })
                     .child(
                         self.base
@@ -201,14 +372,26 @@ impl RenderOnce for Modal {
                             .track_focus(&self.focus_handle)
                             .when(self.keyboard, |this| {
                                 this.on_action({
-                                    let on_close = self.on_close.clone();
+                                    let on_cancel = on_cancel.clone();
+                                    let on_close = on_close.clone();
                                     move |_: &Escape, cx| {
                                         // FIXME:
                                         //
                                         // Here some Modal have no focus_handle, so it will not work will Escape key.
                                         // But by now, we `cx.close_modal()` going to close the last active model, so the Escape is unexpected to work.
+                                        on_cancel(&ClickEvent::default(), cx);
                                         on_close(&ClickEvent::default(), cx);
                                         cx.close_modal();
+                                    }
+                                })
+                                .on_action({
+                                    let on_ok = on_ok.clone();
+                                    let on_close = on_close.clone();
+                                    move |_: &Enter, cx| {
+                                        if on_ok(&ClickEvent::default(), cx) {
+                                            on_close(&ClickEvent::default(), cx);
+                                            cx.close_modal();
+                                        }
                                     }
                                 })
                             })
@@ -235,14 +418,23 @@ impl RenderOnce for Modal {
                                     .icon(IconName::Close)
                                     .on_click(
                                         move |_, cx| {
+                                            on_cancel(&ClickEvent::default(), cx);
                                             on_close(&ClickEvent::default(), cx);
                                             cx.close_modal();
                                         },
                                     ),
                                 )
                             })
-                            .child(self.content)
-                            .children(self.footer)
+                            .child(div().w_full().flex_1().child(self.content))
+                            .when(self.footer.is_some(), |this| {
+                                let footer = self.footer.unwrap();
+
+                                this.child(h_flex().gap_2().justify_end().children(footer(
+                                    render_ok,
+                                    render_cancel,
+                                    cx,
+                                )))
+                            })
                             .with_animation(
                                 "slide-down",
                                 Animation::new(Duration::from_secs_f64(0.25))
