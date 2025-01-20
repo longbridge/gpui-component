@@ -29,6 +29,7 @@ pub fn init(cx: &mut AppContext) {
 type RenderButtonFn = Box<dyn FnOnce(&mut WindowContext) -> AnyElement>;
 type FooterFn = Box<dyn Fn(RenderButtonFn, RenderButtonFn, &mut WindowContext) -> Vec<AnyElement>>;
 
+/// Modal button props.
 pub struct ModalButtonProps {
     ok_text: Option<SharedString>,
     ok_variant: ButtonVariant,
@@ -118,7 +119,7 @@ impl Modal {
             .border_color(cx.theme().border)
             .rounded_lg()
             .shadow_xl()
-            .min_h_32()
+            .min_h_24()
             .p_4()
             .gap_4();
 
@@ -176,6 +177,13 @@ impl Modal {
     pub fn confirm(self) -> Self {
         self.footer(|ok, cancel, cx| vec![cancel(cx), ok(cx)])
             .overlay_closable(false)
+            .show_close(false)
+    }
+
+    /// Set the button props of the modal.
+    pub fn button_props(mut self, button_props: ModalButtonProps) -> Self {
+        self.button_props = button_props;
+        self
     }
 
     /// Sets the callback for when the modal is closed.
