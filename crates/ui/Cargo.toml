@@ -32,7 +32,7 @@ usvg = { version = "0.44.0", default-features = false, features = [
   "text",
 ] }
 uuid = "1.10"
-wry = "0.48.0"
+wry = "0.48.1"
 
 # Calendar
 chrono = "0.4.38"
