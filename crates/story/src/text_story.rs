@@ -1,5 +1,5 @@
 use gpui::{
-    div, px, rems, IntoElement, ParentElement, Render, Styled, View, ViewContext,
+    div, px, rems, IntoElement, ParentElement, Render, SharedString, Styled, View, ViewContext,
     VisualContext as _, WindowContext,
 };
 
@@ -235,7 +235,12 @@ impl Render for TextStory {
                         .child(
                             Clipboard::new("clipboard1")
                                 .content(|_| Label::new("Click icon to copy"))
-                                .value("Copied!")
+                                .value_fn({
+                                    let view = cx.view().clone();
+                                    move |cx| {
+                                        SharedString::from(format!("Check1 :{}", view.read(cx).check1))
+                                    }
+                                })
                                 .on_copied(|value, _| println!("Copied value: {}", value)),
                         )
                         .child(

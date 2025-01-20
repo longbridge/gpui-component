@@ -13,6 +13,7 @@ use crate::{
 pub struct Clipboard {
     id: ElementId,
     value: SharedString,
+    value_fn: Option<Rc<dyn Fn(&mut WindowContext) -> SharedString>>,
     content_builder: Option<Box<dyn Fn(&mut WindowContext) -> AnyElement>>,
     copied_callback: Option<Rc<dyn Fn(SharedString, &mut WindowContext)>>,
 }
@@ -21,7 +22,8 @@ impl Clipboard {
     pub fn new(id: impl Into<ElementId>) -> Self {
         Self {
             id: id.into(),
-            value: "".into(),
+            value: SharedString::default(),
+            value_fn: None,
             content_builder: None,
             copied_callback: None,
         }
@@ -32,12 +34,14 @@ impl Clipboard {
         self
     }
 
-    pub fn content<E, F>(mut self, element_builder: F) -> Self
-    where
-        E: IntoElement,
-        F: Fn(&mut WindowContext) -> E + 'static,
-    {
-        self.content_builder = Some(Box::new(move |cx| element_builder(cx).into_any_element()));
+    /// Set the value of the clipboard to the result of the given function. Default is None.
+    ///
+    /// When used this, the copy value will use the result of the function.
+    pub fn value_fn(
+        mut self,
+        value: impl Fn(&mut WindowContext) -> SharedString + 'static,
+    ) -> Self {
+        self.value_fn = Some(Rc::new(value));
         self
     }
 
@@ -46,6 +50,15 @@ impl Clipboard {
         F: Fn(SharedString, &mut WindowContext) + 'static,
     {
         self.copied_callback = Some(Rc::new(handler));
+        self
+    }
+
+    pub fn content<E, F>(mut self, builder: F) -> Self
+    where
+        E: IntoElement,
+        F: Fn(&mut WindowContext) -> E + 'static,
+    {
+        self.content_builder = Some(Box::new(move |cx| builder(cx).into_any_element()));
         self
     }
 }
@@ -89,6 +102,7 @@ impl Element for Clipboard {
             let copied_callback = self.copied_callback.as_ref().map(|c| c.clone());
             let copied = state.copied.clone();
             let copide_value = *copied.borrow();
+            let value_fn = self.value_fn.clone();
 
             let mut element = h_flex()
                 .gap_1()
@@ -106,6 +120,10 @@ impl Element for Clipboard {
                         .when(!copide_value, |this| {
                             this.on_click(move |_, cx| {
                                 cx.stop_propagation();
+                                let value = value_fn
+                                    .as_ref()
+                                    .map(|f| f(cx))
+                                    .unwrap_or_else(|| value.clone());
                                 cx.write_to_clipboard(ClipboardItem::new_string(value.to_string()));
                                 *copied.borrow_mut() = true;
 
