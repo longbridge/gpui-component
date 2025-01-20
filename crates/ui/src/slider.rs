@@ -1,4 +1,4 @@
-use crate::{theme::ActiveTheme, tooltip::Tooltip};
+use crate::{h_flex, theme::ActiveTheme, tooltip::Tooltip, StyledExt};
 use gpui::{
     canvas, div, prelude::FluentBuilder as _, px, relative, Axis, Bounds, DragMoveEvent, EntityId,
     EventEmitter, InteractiveElement, IntoElement, MouseButton, MouseDownEvent, ParentElement as _,
@@ -20,6 +20,7 @@ pub struct Slider {
     max: f32,
     step: f32,
     value: f32,
+    thumb_pos: Pixels,
     bounds: Bounds<Pixels>,
 }
 
@@ -31,6 +32,7 @@ impl Slider {
             max: 100.0,
             step: 1.0,
             value: 0.0,
+            thumb_pos: px(0.),
             bounds: Bounds::default(),
         }
     }
@@ -69,20 +71,6 @@ impl Slider {
         cx.notify();
     }
 
-    /// Return percentage value of the slider, range of 0.0..1.0
-    fn relative_value(&self) -> f32 {
-        let step = self.step;
-        let value = self.value;
-        let min = self.min;
-        let max = self.max;
-
-        let relative_value = (value - min) / (max - min);
-        let relative_step = step / (max - min);
-
-        let relative_value = (relative_value / relative_step).round() * relative_step;
-        relative_value.clamp(0.0, 1.0)
-    }
-
     /// Update value by mouse position
     fn update_value_by_position(
         &mut self,
@@ -95,13 +83,22 @@ impl Slider {
         let max = self.max;
         let step = self.step;
 
+        match axis {
+            Axis::Horizontal => {
+                self.thumb_pos = (position.x - bounds.left()).clamp(px(0.), bounds.size.width);
+            }
+            Axis::Vertical => {
+                self.thumb_pos = (position.y - bounds.top()).clamp(px(0.), bounds.size.height);
+            }
+        }
+
         let value = match axis {
             Axis::Horizontal => {
-                let relative = (position.x - bounds.left()) / bounds.size.width;
+                let relative = (self.thumb_pos) / bounds.size.width;
                 min + (max - min) * relative
             }
             Axis::Vertical => {
-                let relative = (position.y - bounds.top()) / bounds.size.height;
+                let relative = (self.thumb_pos) / bounds.size.height;
                 max - (max - min) * relative
             }
         };
@@ -137,7 +134,7 @@ impl Slider {
             ))
             .absolute()
             .top(px(-5.))
-            .left(relative(self.relative_value()))
+            .left(self.thumb_pos)
             .ml(-px(8.))
             .size_4()
             .rounded_full()
@@ -157,16 +154,18 @@ impl EventEmitter<SliderEvent> for Slider {}
 
 impl Render for Slider {
     fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
-        div()
+        h_flex()
             .id("slider")
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
-            .h_5()
+            .w_full()
+            .h_6()
+            .flex_shrink_0()
+            .items_center()
             .child(
                 div()
                     .id("slider-bar")
                     .relative()
                     .w_full()
-                    .my_1p5()
                     .h_1p5()
                     .bg(cx.theme().slider_bar.opacity(0.2))
                     .active(|this| this.bg(cx.theme().slider_bar.opacity(0.4)))
@@ -177,7 +176,7 @@ impl Render for Slider {
                             .top_0()
                             .left_0()
                             .h_full()
-                            .w(relative(self.relative_value()))
+                            .w(self.thumb_pos)
                             .bg(cx.theme().slider_bar)
                             .rounded_l(px(3.)),
                     )

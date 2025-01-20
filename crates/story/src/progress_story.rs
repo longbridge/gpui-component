@@ -1,6 +1,6 @@
 use gpui::{
-    div, px, IntoElement, ParentElement, Render, Styled, View, ViewContext, VisualContext,
-    WindowContext,
+    div, px, IntoElement, ParentElement, Render, Styled, Subscription, View, ViewContext,
+    VisualContext, WindowContext,
 };
 use ui::{
     button::Button,
@@ -20,6 +20,7 @@ pub struct ProgressStory {
     slider1_value: f32,
     slider2: View<Slider>,
     slider2_value: f32,
+    _subscritions: Vec<Subscription>,
 }
 
 impl super::Story for ProgressStory {
@@ -45,22 +46,23 @@ impl ProgressStory {
                 .default_value(15.)
                 .step(15.)
         });
-        cx.subscribe(&slider1, |this, _, event: &SliderEvent, cx| match event {
-            SliderEvent::Change(value) => {
-                this.slider1_value = *value;
-                cx.notify();
-            }
-        })
-        .detach();
 
         let slider2 = cx.new_view(|_| Slider::horizontal().min(0.).max(5.).step(1.0));
-        cx.subscribe(&slider2, |this, _, event: &SliderEvent, cx| match event {
-            SliderEvent::Change(value) => {
-                this.slider2_value = *value;
-                cx.notify();
-            }
-        })
-        .detach();
+
+        let _subscritions = vec![
+            cx.subscribe(&slider1, |this, _, event: &SliderEvent, cx| match event {
+                SliderEvent::Change(value) => {
+                    this.slider1_value = *value;
+                    cx.notify();
+                }
+            }),
+            cx.subscribe(&slider2, |this, _, event: &SliderEvent, cx| match event {
+                SliderEvent::Change(value) => {
+                    this.slider2_value = *value;
+                    cx.notify();
+                }
+            }),
+        ];
 
         Self {
             focus_handle: cx.focus_handle(),
@@ -69,6 +71,7 @@ impl ProgressStory {
             slider2_value: 1.,
             slider1,
             slider2,
+            _subscritions,
         }
     }
 
