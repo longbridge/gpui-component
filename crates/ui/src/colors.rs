@@ -6,8 +6,11 @@ use serde::{de::Error, Deserialize, Deserializer};
 use crate::theme::hsl;
 use anyhow::Result;
 
-pub(crate) trait ColorExt {
+/// Extension methods for Hsla.
+pub trait ColorExt {
+    /// Convert the color to a hex string. For example, "#F8FAFC".
     fn to_hex_string(&self) -> String;
+    /// Parse a hex string to a color.
     fn parse_hex_string(hex: &str) -> Result<Hsla>;
 }
 

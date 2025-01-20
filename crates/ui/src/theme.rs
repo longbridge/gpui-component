@@ -70,19 +70,31 @@ pub fn box_shadow(
     }
 }
 pub trait Colorize {
+    /// Returns a new color with the given opacity.
+    ///
+    /// The opacity is a value between 0.0 and 1.0, where 0.0 is fully transparent and 1.0 is fully opaque.
     fn opacity(&self, opacity: f32) -> Hsla;
+    /// Returns a new color with each channel divided by the given divisor.
+    ///
+    /// The divisor in range of 0.0 .. 1.0
     fn divide(&self, divisor: f32) -> Hsla;
+    /// Return inverted color
     fn invert(&self) -> Hsla;
+    /// Return inverted lightness
     fn invert_l(&self) -> Hsla;
+    /// Return a new color with the lightness increased by the given factor.
+    ///
+    /// factor range: 0.0 .. 1.0
     fn lighten(&self, amount: f32) -> Hsla;
+    /// Return a new color with the darkness increased by the given factor.
+    ///
+    /// factor range: 0.0 .. 1.0
     fn darken(&self, amount: f32) -> Hsla;
+    /// Return a new color with the same lightness and alpha but different hue and saturation.
     fn apply(&self, base_color: Hsla) -> Hsla;
 }
 
 impl Colorize for Hsla {
-    /// Returns a new color with the given opacity.
-    ///
-    /// The opacity is a value between 0.0 and 1.0, where 0.0 is fully transparent and 1.0 is fully opaque.
     fn opacity(&self, factor: f32) -> Hsla {
         Hsla {
             a: self.a * factor.clamp(0.0, 1.0),
@@ -90,9 +102,6 @@ impl Colorize for Hsla {
         }
     }
 
-    /// Returns a new color with each channel divided by the given divisor.
-    ///
-    /// The divisor in range of 0.0 .. 1.0
     fn divide(&self, divisor: f32) -> Hsla {
         Hsla {
             a: divisor,
@@ -100,17 +109,15 @@ impl Colorize for Hsla {
         }
     }
 
-    /// Return inverted color
     fn invert(&self) -> Hsla {
         Hsla {
-            h: (self.h + 1.8) % 3.6,
+            h: 1.0 - self.h,
             s: 1.0 - self.s,
             l: 1.0 - self.l,
             a: self.a,
         }
     }
 
-    /// Return inverted lightness
     fn invert_l(&self) -> Hsla {
         Hsla {
             l: 1.0 - self.l,
@@ -118,25 +125,18 @@ impl Colorize for Hsla {
         }
     }
 
-    /// Return a new color with the lightness increased by the given factor.
-    ///
-    /// factor range: 0.0 .. 1.0
     fn lighten(&self, factor: f32) -> Hsla {
         let l = self.l * (1.0 + factor.clamp(0.0, 1.0));
 
         Hsla { l, ..*self }
     }
 
-    /// Return a new color with the darkness increased by the given factor.
-    ///
-    /// factor range: 0.0 .. 1.0
     fn darken(&self, factor: f32) -> Hsla {
         let l = self.l * (1.0 - factor.clamp(0.0, 1.0));
 
         Hsla { l, ..*self }
     }
 
-    /// Return a new color with the same lightness and alpha but different hue and saturation.
     fn apply(&self, new_color: Hsla) -> Hsla {
         Hsla {
             h: new_color.h,
