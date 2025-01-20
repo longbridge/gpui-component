@@ -21,8 +21,7 @@ pub struct Slider {
     step: f32,
     value: f32,
     reverse: bool,
-    /// Percentage of the thumb position relative to the slider bar.
-    percentage: Option<f32>,
+    percentage: f32,
     bounds: Bounds<Pixels>,
 }
 
@@ -34,7 +33,7 @@ impl Slider {
             max: 100.0,
             step: 1.0,
             value: 0.0,
-            percentage: None,
+            percentage: 0.0,
             reverse: false,
             bounds: Bounds::default(),
         }
@@ -59,12 +58,14 @@ impl Slider {
     /// Set the minimum value of the slider, default: 0.0
     pub fn min(mut self, min: f32) -> Self {
         self.min = min;
+        self.update_thumb_pos();
         self
     }
 
     /// Set the maximum value of the slider, default: 100.0
     pub fn max(mut self, max: f32) -> Self {
         self.max = max;
+        self.update_thumb_pos();
         self
     }
 
@@ -89,7 +90,7 @@ impl Slider {
     }
 
     fn update_thumb_pos(&mut self) {
-        self.percentage = Some(self.value.clamp(self.min, self.max) / self.max);
+        self.percentage = self.value.clamp(self.min, self.max) / self.max;
     }
 
     /// Get the value of the slider.
@@ -137,7 +138,7 @@ impl Slider {
 
         let value = (value / step).round() * step;
 
-        self.percentage = Some(percentage);
+        self.percentage = percentage;
         self.value = value.clamp(self.min, self.max);
         cx.emit(SliderEvent::Change(self.value));
         cx.notify();
@@ -205,8 +206,8 @@ impl EventEmitter<SliderEvent> for Slider {}
 impl Render for Slider {
     fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
         let thumb_bar_size = match self.axis {
-            Axis::Horizontal => self.percentage.unwrap_or(0.) * self.bounds.size.width,
-            Axis::Vertical => self.percentage.unwrap_or(0.) * self.bounds.size.height,
+            Axis::Horizontal => self.percentage * self.bounds.size.width,
+            Axis::Vertical => self.percentage * self.bounds.size.height,
         };
 
         h_flex()
