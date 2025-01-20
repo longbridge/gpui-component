@@ -1,4 +1,4 @@
-use crate::{h_flex, theme::ActiveTheme, tooltip::Tooltip, AxisExt, StyledExt};
+use crate::{h_flex, theme::ActiveTheme, tooltip::Tooltip, AxisExt};
 use gpui::{
     canvas, div, prelude::FluentBuilder as _, px, Axis, Bounds, DragMoveEvent, EntityId,
     EventEmitter, InteractiveElement, IntoElement, MouseButton, MouseDownEvent, ParentElement as _,
