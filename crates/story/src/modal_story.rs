@@ -566,13 +566,20 @@ impl Render for ModalStory {
                                 .label("Confirm Modal...")
                                 .on_click(cx.listener(|_, _, cx| {
                                     cx.open_modal(|modal, _| {
-                                        modal.confirm().button_props(ModalButtonProps::default().cancel_text("Abort").cancel_variant(ButtonVariant::Danger)).on_ok(|_, cx| {
-                                            cx.push_notification("You have pressed Ok.");
-                                            true
-                                        }).on_cancel(|_, cx| {
-                                            cx.push_notification("You have pressed Abort.");
-                                            true
-                                        }).child("Are you sure to delete this item?")
+                                        modal
+                                            .confirm()
+                                            .child("Are you sure to delete this item?")
+                                            .button_props(
+                                                ModalButtonProps::default()
+                                                    .cancel_text("Abort")
+                                                    .cancel_variant(ButtonVariant::Danger))
+                                                    .on_ok(|_, cx| {
+                                                        cx.push_notification("You have pressed Ok.");
+                                                        true
+                                                    }).on_cancel(|_, cx| {
+                                                        cx.push_notification("You have pressed Abort.");
+                                                        true
+                                                    })
                                     });
                                 })),
                         )
