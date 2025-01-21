@@ -169,6 +169,10 @@ pub struct TextInput {
     pub(super) suffix: Option<Box<dyn Fn(&mut ViewContext<Self>) -> AnyElement + 'static>>,
     pub(super) loading: bool,
     pub(super) placeholder: SharedString,
+    /// Range in UTF-8 length for the selected text.
+    ///
+    /// - "Hello 世界💝" = 16
+    /// - "💝" = 4
     pub(super) selected_range: Range<usize>,
     /// Range for save the selected word, use to keep word range when drag move.
     pub(super) selected_word_range: Option<Range<usize>>,
@@ -815,8 +819,7 @@ impl TextInput {
             return;
         }
 
-        let range = self.range_from_utf16(&self.selected_range);
-        let selected_text = self.text[range].to_string();
+        let selected_text = self.text[self.selected_range.clone()].to_string();
         cx.write_to_clipboard(ClipboardItem::new_string(selected_text));
         self.replace_text_in_range(None, "", cx);
     }
