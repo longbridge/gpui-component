@@ -181,6 +181,7 @@ struct StockTableDelegate {
     col_sort: bool,
     col_selection: bool,
     loading: bool,
+    full_loading: bool,
     fixed_cols: bool,
     is_eof: bool,
     visible_rows: Range<usize>,
@@ -253,6 +254,7 @@ impl StockTableDelegate {
             col_selection: true,
             fixed_cols: false,
             loading: false,
+            full_loading: false,
             is_eof: false,
             visible_cols: Range::default(),
             visible_rows: Range::default(),
@@ -263,6 +265,7 @@ impl StockTableDelegate {
         self.stocks = random_stocks(size);
         self.is_eof = false;
         self.loading = false;
+        self.full_loading = false;
     }
 
     fn render_value_cell(&self, val: f64, cx: &mut ViewContext<Table<Self>>) -> AnyElement {
@@ -469,6 +472,10 @@ impl TableDelegate for StockTableDelegate {
                 _ => {}
             }
         }
+    }
+
+    fn loading(&self, _: &AppContext) -> bool {
+        self.full_loading
     }
 
     fn can_load_more(&self, _: &AppContext) -> bool {
@@ -774,10 +781,11 @@ impl Render for TableStory {
                     .child(
                         Checkbox::new("loading")
                             .label("Loading")
-                            .checked(self.table.read(cx).loading())
+                            .checked(self.table.read(cx).delegate().full_loading)
                             .on_click(cx.listener(|this, check: &bool, cx| {
                                 this.table.update(cx, |this, cx| {
-                                    this.set_loading(*check, cx);
+                                    this.delegate_mut().full_loading = *check;
+                                    cx.notify();
                                 })
                             })),
                     )

@@ -180,6 +180,10 @@ impl ListDelegate for CompanyListDelegate {
         None
     }
 
+    fn loading(&self, _: &AppContext) -> bool {
+        self.loading
+    }
+
     fn can_load_more(&self, _: &AppContext) -> bool {
         return !self.loading && !self.is_eof;
     }
@@ -381,10 +385,11 @@ impl Render for ListStory {
                     .child(
                         Checkbox::new("loading")
                             .label("Loading")
-                            .checked(self.company_list.read(cx).loading())
+                            .checked(self.company_list.read(cx).delegate().loading)
                             .on_click(cx.listener(|this, check: &bool, cx| {
                                 this.company_list.update(cx, |this, cx| {
-                                    this.set_loading(*check, cx);
+                                    this.delegate_mut().loading = *check;
+                                    cx.notify();
                                 })
                             })),
                     ),

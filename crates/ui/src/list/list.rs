@@ -75,6 +75,11 @@ pub trait ListDelegate: Sized + 'static {
         None
     }
 
+    /// Returns the loading state to show the loading view.
+    fn loading(&self, cx: &AppContext) -> bool {
+        false
+    }
+
     /// Returns a Element to show when loading, default is built-in Skeleton loading view.
     fn render_loading(&self, cx: &mut ViewContext<List<Self>>) -> impl IntoElement {
         Loading
@@ -122,7 +127,6 @@ pub struct List<D: ListDelegate> {
     last_query: Option<String>,
     selectable: bool,
     querying: bool,
-    loading: bool,
     scrollbar_visible: bool,
     vertical_scroll_handle: UniformListScrollHandle,
     scrollbar_state: Rc<Cell<ScrollbarState>>,
@@ -162,7 +166,6 @@ where
             scrollbar_visible: true,
             selectable: true,
             querying: false,
-            loading: false,
             size: Size::default(),
             _search_task: Task::ready(()),
             _load_more_task: Task::ready(()),
@@ -199,17 +202,6 @@ where
     pub fn selectable(mut self, selectable: bool) -> Self {
         self.selectable = selectable;
         self
-    }
-
-    /// Get the loading state of the list.
-    pub fn loading(&self) -> bool {
-        self.loading
-    }
-
-    /// Sets list loading state.
-    pub fn set_loading(&mut self, loading: bool, cx: &mut ViewContext<Self>) {
-        self.loading = loading;
-        cx.notify();
     }
 
     pub fn set_query_input(&mut self, query_input: View<TextInput>, cx: &mut ViewContext<Self>) {
@@ -483,6 +475,7 @@ where
         let view = cx.view().clone();
         let vertical_scroll_handle = self.vertical_scroll_handle.clone();
         let items_count = self.delegate.items_count(cx);
+        let loading = self.delegate.loading(cx);
         let sizing_behavior = if self.max_height.is_some() {
             ListSizingBehavior::Infer
         } else {
@@ -518,10 +511,10 @@ where
                         .child(input),
                 )
             })
-            .when(self.loading, |this| {
+            .when(loading, |this| {
                 this.child(self.delegate().render_loading(cx))
             })
-            .when(!self.loading, |this| {
+            .when(!loading, |this| {
                 this.on_action(cx.listener(Self::on_action_cancel))
                     .on_action(cx.listener(Self::on_action_confirm))
                     .on_action(cx.listener(Self::on_action_select_next))

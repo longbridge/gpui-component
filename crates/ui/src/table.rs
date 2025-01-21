@@ -171,8 +171,6 @@ pub struct Table<D: TableDelegate> {
     size: Size,
     /// The visible range of the rows and columns.
     visible_range: VisibleRangeState,
-    /// The loading state of the table.
-    loading: bool,
 
     _load_more_task: Task<()>,
 }
@@ -280,6 +278,11 @@ pub trait TableDelegate: Sized + 'static {
             .into_any_element()
     }
 
+    /// Return true to show the loading view.
+    fn loading(&self, cx: &AppContext) -> bool {
+        false
+    }
+
     /// Return a Element to show when table is loading, default is built-in Skeleton loading view.
     ///
     /// The size is the size of the Table.
@@ -370,7 +373,6 @@ where
             size: Size::default(),
             scrollbar_visible: Edges::all(true),
             visible_range: VisibleRangeState::default(),
-            loading: false,
             _load_more_task: Task::ready(()),
         };
 
@@ -422,17 +424,6 @@ where
             ..Default::default()
         };
         self
-    }
-
-    /// Get the loading state of the list.
-    pub fn loading(&self) -> bool {
-        self.loading
-    }
-
-    /// Sets list loading state.
-    pub fn set_loading(&mut self, loading: bool, cx: &mut ViewContext<Self>) {
-        self.loading = loading;
-        cx.notify();
     }
 
     /// When we update columns or rows, we need to refresh the table.
@@ -1291,6 +1282,7 @@ where
         let cols_count: usize = self.delegate.cols_count(cx);
         let left_cols_count = self.fixed_cols.left;
         let rows_count = self.delegate.rows_count(cx);
+        let loading = self.delegate.loading(cx);
 
         let row_height = self
             .vertical_scroll_handle
@@ -1400,10 +1392,10 @@ where
                 this.rounded_md().border_1().border_color(cx.theme().border)
             })
             .bg(cx.theme().table)
-            .when(self.loading, |this| {
+            .when(loading, |this| {
                 this.child(self.delegate().render_loading(self.size, cx))
             })
-            .when(!self.loading, |this| {
+            .when(!loading, |this| {
                 this.child(inner_table)
                     .child(ScrollableMask::new(
                         cx.view().entity_id(),
