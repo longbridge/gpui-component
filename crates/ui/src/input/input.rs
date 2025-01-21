@@ -613,7 +613,7 @@ impl TextInput {
             return;
         }
         let offset = (self.end_of_line(cx) + 1).min(self.text.len());
-        self.select_to(offset, cx);
+        self.select_to(self.next_boundary(offset), cx);
     }
 
     fn select_all(&mut self, _: &SelectAll, cx: &mut ViewContext<Self>) {
@@ -653,12 +653,12 @@ impl TextInput {
 
     fn select_to_start_of_line(&mut self, _: &SelectToStartOfLine, cx: &mut ViewContext<Self>) {
         let offset = self.start_of_line(cx);
-        self.select_to(offset, cx);
+        self.select_to(self.previous_boundary(offset), cx);
     }
 
     fn select_to_end_of_line(&mut self, _: &SelectToEndOfLine, cx: &mut ViewContext<Self>) {
         let offset = self.end_of_line(cx);
-        self.select_to(offset, cx);
+        self.select_to(self.next_boundary(offset), cx);
     }
 
     /// Get start of line
@@ -776,9 +776,9 @@ impl TextInput {
         }
 
         if event.modifiers.shift {
-            self.select_to(offset, cx);
+            self.select_to(self.next_boundary(offset), cx);
         } else {
-            self.move_to(offset, cx)
+            self.move_to(self.next_boundary(offset), cx)
         }
     }
 
@@ -876,6 +876,11 @@ impl TextInput {
         self.history.ignore = false;
     }
 
+    /// Move the cursor to the given offset.
+    ///
+    /// The offset is the UTF-8 offset.
+    ///
+    /// Ensure the offset use self.next_boundary or self.previous_boundary to get the correct offset.
     fn move_to(&mut self, offset: usize, cx: &mut ViewContext<Self>) {
         self.selected_range = offset..offset;
         self.pause_blink_cursor(cx);
@@ -983,6 +988,11 @@ impl TextInput {
         }
     }
 
+    /// Select the text from the current cursor position to the given offset.
+    ///
+    /// The offset is the UTF-8 offset.
+    ///
+    /// Ensure the offset use self.next_boundary or self.previous_boundary to get the correct offset.
     fn select_to(&mut self, offset: usize, cx: &mut ViewContext<Self>) {
         if self.selection_reversed {
             self.selected_range.start = offset
@@ -1011,6 +1021,8 @@ impl TextInput {
     }
 
     /// Select the word at the given offset.
+    ///
+    /// The offset is the UTF-8 offset.
     fn select_word(&mut self, offset: usize, cx: &mut ViewContext<Self>) {
         fn is_word(c: char) -> bool {
             c.is_alphanumeric() || matches!(c, '_')
@@ -1050,7 +1062,8 @@ impl TextInput {
     }
 
     fn unselect(&mut self, cx: &mut ViewContext<Self>) {
-        self.selected_range = self.cursor_offset()..self.cursor_offset();
+        let offset = self.next_boundary(self.cursor_offset());
+        self.selected_range = offset..offset;
         cx.notify()
     }
 
@@ -1155,7 +1168,7 @@ impl TextInput {
         }
 
         let offset = self.index_for_mouse_position(event.position, cx);
-        self.select_to(offset, cx);
+        self.select_to(self.next_boundary(offset), cx);
     }
 
     fn is_valid_input(&self, new_text: &str) -> bool {
