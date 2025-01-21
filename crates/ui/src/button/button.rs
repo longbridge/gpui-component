@@ -1,9 +1,6 @@
 use crate::{
-    h_flex,
-    indicator::Indicator,
-    theme::{ActiveTheme, Colorize as _},
-    tooltip::Tooltip,
-    Disableable, Icon, Selectable, Sizable, Size,
+    h_flex, indicator::Indicator, theme::ActiveTheme, tooltip::Tooltip, Colorize as _, Disableable,
+    Icon, Selectable, Sizable, Size,
 };
 use gpui::{
     div, prelude::FluentBuilder as _, px, relative, AnyElement, ClickEvent, Corners, Div, Edges,

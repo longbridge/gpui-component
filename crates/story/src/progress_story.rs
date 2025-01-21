@@ -11,8 +11,7 @@ use ui::{
     progress::Progress,
     skeleton::Skeleton,
     slider::{Slider, SliderEvent},
-    theme::Colorize,
-    v_flex, ColorExt as _, ContextModal, IconName, Sizable,
+    v_flex, Colorize as _, ContextModal, IconName, Sizable,
 };
 
 pub struct ProgressStory {
@@ -147,7 +146,7 @@ impl gpui::FocusableView for ProgressStory {
 
 impl Render for ProgressStory {
     fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
-        let rgb = SharedString::from(self.slider_hsl_value.to_hex_string());
+        let rgb = SharedString::from(self.slider_hsl_value.to_hex());
 
         v_flex()
             .items_center()

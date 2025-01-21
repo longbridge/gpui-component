@@ -5,7 +5,7 @@ use gpui::{
     ViewContext, WindowAppearance, WindowContext,
 };
 
-use crate::scroll::ScrollbarShow;
+use crate::{scroll::ScrollbarShow, Colorize as _};
 
 pub fn init(cx: &mut AppContext) {
     Theme::sync_system_appearance(cx)
@@ -69,83 +69,7 @@ pub fn box_shadow(
         color,
     }
 }
-pub trait Colorize {
-    /// Returns a new color with the given opacity.
-    ///
-    /// The opacity is a value between 0.0 and 1.0, where 0.0 is fully transparent and 1.0 is fully opaque.
-    fn opacity(&self, opacity: f32) -> Hsla;
-    /// Returns a new color with each channel divided by the given divisor.
-    ///
-    /// The divisor in range of 0.0 .. 1.0
-    fn divide(&self, divisor: f32) -> Hsla;
-    /// Return inverted color
-    fn invert(&self) -> Hsla;
-    /// Return inverted lightness
-    fn invert_l(&self) -> Hsla;
-    /// Return a new color with the lightness increased by the given factor.
-    ///
-    /// factor range: 0.0 .. 1.0
-    fn lighten(&self, amount: f32) -> Hsla;
-    /// Return a new color with the darkness increased by the given factor.
-    ///
-    /// factor range: 0.0 .. 1.0
-    fn darken(&self, amount: f32) -> Hsla;
-    /// Return a new color with the same lightness and alpha but different hue and saturation.
-    fn apply(&self, base_color: Hsla) -> Hsla;
-}
 
-impl Colorize for Hsla {
-    fn opacity(&self, factor: f32) -> Hsla {
-        Hsla {
-            a: self.a * factor.clamp(0.0, 1.0),
-            ..*self
-        }
-    }
-
-    fn divide(&self, divisor: f32) -> Hsla {
-        Hsla {
-            a: divisor,
-            ..*self
-        }
-    }
-
-    fn invert(&self) -> Hsla {
-        Hsla {
-            h: 1.0 - self.h,
-            s: 1.0 - self.s,
-            l: 1.0 - self.l,
-            a: self.a,
-        }
-    }
-
-    fn invert_l(&self) -> Hsla {
-        Hsla {
-            l: 1.0 - self.l,
-            ..*self
-        }
-    }
-
-    fn lighten(&self, factor: f32) -> Hsla {
-        let l = self.l * (1.0 + factor.clamp(0.0, 1.0));
-
-        Hsla { l, ..*self }
-    }
-
-    fn darken(&self, factor: f32) -> Hsla {
-        let l = self.l * (1.0 - factor.clamp(0.0, 1.0));
-
-        Hsla { l, ..*self }
-    }
-
-    fn apply(&self, new_color: Hsla) -> Hsla {
-        Hsla {
-            h: new_color.h,
-            s: new_color.s,
-            l: self.l,
-            a: self.a,
-        }
-    }
-}
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ThemeColor {
     pub accent: Hsla,
@@ -549,30 +473,5 @@ pub enum ThemeMode {
 impl ThemeMode {
     pub fn is_dark(&self) -> bool {
         matches!(self, Self::Dark)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::theme::Colorize as _;
-
-    #[test]
-    fn test_lighten() {
-        let color = super::hsl(240.0, 5.0, 30.0);
-        let color = color.lighten(0.5);
-        assert_eq!(color.l, 0.45000002);
-        let color = color.lighten(0.5);
-        assert_eq!(color.l, 0.675);
-        let color = color.lighten(0.1);
-        assert_eq!(color.l, 0.7425);
-    }
-
-    #[test]
-    fn test_darken() {
-        let color = super::hsl(240.0, 5.0, 96.0);
-        let color = color.darken(0.5);
-        assert_eq!(color.l, 0.48);
-        let color = color.darken(0.5);
-        assert_eq!(color.l, 0.24);
     }
 }

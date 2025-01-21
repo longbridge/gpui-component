@@ -10,9 +10,9 @@ use crate::{
     h_flex,
     input::{InputEvent, TextInput},
     popover::Escape,
-    theme::{ActiveTheme as _, Colorize},
+    theme::ActiveTheme as _,
     tooltip::Tooltip,
-    v_flex, ColorExt as _, Sizable, Size, StyleSized,
+    v_flex, Colorize as _, Sizable, Size, StyleSized,
 };
 
 const KEY_CONTEXT: &'static str = "ColorPicker";
@@ -75,14 +75,14 @@ impl ColorPicker {
 
         cx.subscribe(&color_input, |this, _, ev: &InputEvent, cx| match ev {
             InputEvent::Change(value) => {
-                if let Ok(color) = Hsla::parse_hex_string(value) {
+                if let Ok(color) = Hsla::parse_hex(value) {
                     this.value = Some(color);
                     this.hovered_color = Some(color);
                 }
             }
             InputEvent::PressEnter => {
                 let val = this.color_input.read(cx).text();
-                if let Ok(color) = Hsla::parse_hex_string(&val) {
+                if let Ok(color) = Hsla::parse_hex(&val) {
                     this.open = false;
                     this.update_value(Some(color), true, cx);
                 }
@@ -171,7 +171,7 @@ impl ColorPicker {
         self.hovered_color = value;
         self.color_input.update(cx, |view, cx| {
             if let Some(value) = value {
-                view.set_text(value.to_hex_string(), cx);
+                view.set_text(value.to_hex(), cx);
             } else {
                 view.set_text("", cx);
             }
@@ -189,10 +189,7 @@ impl ColorPicker {
         cx: &mut ViewContext<Self>,
     ) -> impl IntoElement {
         div()
-            .id(SharedString::from(format!(
-                "color-{}",
-                color.to_hex_string()
-            )))
+            .id(SharedString::from(format!("color-{}", color.to_hex())))
             .h_5()
             .w_5()
             .bg(color)
@@ -286,7 +283,7 @@ impl FocusableView for ColorPicker {
 impl Render for ColorPicker {
     fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
         let display_title: SharedString = if let Some(value) = self.value {
-            value.to_hex_string()
+            value.to_hex()
         } else {
             "".to_string()
         }
