@@ -10,9 +10,8 @@ use crate::{
     h_flex,
     input::{InputEvent, TextInput},
     popover::Escape,
-    theme::ActiveTheme as _,
     tooltip::Tooltip,
-    v_flex, Colorize as _, Sizable, Size, StyleSized,
+    v_flex, ActiveTheme as _, Colorize as _, Sizable, Size, StyleSized,
 };
 
 const KEY_CONTEXT: &'static str = "ColorPicker";

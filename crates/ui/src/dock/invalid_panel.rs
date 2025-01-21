@@ -3,7 +3,7 @@ use gpui::{
     Styled as _, WindowContext,
 };
 
-use crate::theme::ActiveTheme as _;
+use crate::ActiveTheme as _;
 
 use super::{Panel, PanelEvent, PanelState};
 

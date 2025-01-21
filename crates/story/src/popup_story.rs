@@ -14,8 +14,7 @@ use ui::{
     popover::{Popover, PopoverContent},
     popup_menu::PopupMenuExt,
     switch::Switch,
-    theme::ActiveTheme as _,
-    v_flex, ContextModal, IconName, Sizable,
+    v_flex, ActiveTheme as _, ContextModal, IconName, Sizable,
 };
 
 #[derive(Clone, PartialEq, Deserialize)]

@@ -4,7 +4,7 @@ use gpui::{
     ParentElement as _, Render, SharedString, Styled as _, ViewContext,
 };
 
-use crate::{h_flex, theme::ActiveTheme, v_flex, Icon, IconName, Sizable, Size};
+use crate::{h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable, Size};
 
 use super::{blink_cursor::BlinkCursor, InputEvent};
 

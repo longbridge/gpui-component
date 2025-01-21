@@ -1,4 +1,4 @@
-use crate::{theme::ActiveTheme, v_flex, Collapsible};
+use crate::{v_flex, ActiveTheme, Collapsible};
 use gpui::{
     div, prelude::FluentBuilder as _, Div, IntoElement, ParentElement, RenderOnce, SharedString,
     Styled as _, WindowContext,

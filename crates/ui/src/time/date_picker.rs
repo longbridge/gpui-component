@@ -12,8 +12,7 @@ use crate::{
     dropdown::Escape,
     h_flex,
     input::ClearButton,
-    theme::ActiveTheme,
-    v_flex, Icon, IconName, Sizable, Size, StyleSized as _, StyledExt as _,
+    v_flex, ActiveTheme, Icon, IconName, Sizable, Size, StyleSized as _, StyledExt as _,
 };
 
 use super::calendar::{Calendar, CalendarEvent, Date};

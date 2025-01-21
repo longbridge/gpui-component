@@ -1,4 +1,4 @@
-use crate::{h_flex, theme::ActiveTheme as _, v_flex, Collapsible, Icon, IconName, StyledExt};
+use crate::{h_flex, v_flex, ActiveTheme as _, Collapsible, Icon, IconName, StyledExt};
 use gpui::{
     div, percentage, prelude::FluentBuilder as _, ClickEvent, InteractiveElement as _, IntoElement,
     ParentElement as _, RenderOnce, SharedString, StatefulInteractiveElement as _, Styled as _,

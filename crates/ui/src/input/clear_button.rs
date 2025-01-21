@@ -2,8 +2,7 @@ use gpui::{Styled, WindowContext};
 
 use crate::{
     button::{Button, ButtonVariants as _},
-    theme::ActiveTheme as _,
-    Icon, IconName, Sizable as _,
+    ActiveTheme as _, Icon, IconName, Sizable as _,
 };
 
 pub(crate) struct ClearButton {}

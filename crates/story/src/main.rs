@@ -16,8 +16,7 @@ use ui::{
     dock::{DockArea, DockAreaState, DockEvent, DockItem, DockPlacement},
     popup_menu::PopupMenuExt,
     scroll::ScrollbarShow,
-    theme::{ActiveTheme, Theme},
-    ContextModal, IconName, Root, Sizable, TitleBar,
+    ActiveTheme, ContextModal, IconName, Root, Sizable, Theme, TitleBar,
 };
 
 const MAIN_DOCK_AREA: DockAreaTab = DockAreaTab {
@@ -162,8 +161,8 @@ impl StoryWorkspace {
 
     fn change_color_mode(&mut self, _: &ClickEvent, cx: &mut ViewContext<Self>) {
         let mode = match cx.theme().mode.is_dark() {
-            true => ui::theme::ThemeMode::Light,
-            false => ui::theme::ThemeMode::Dark,
+            true => ui::ThemeMode::Light,
+            false => ui::ThemeMode::Dark,
         };
 
         Theme::change(mode, cx);

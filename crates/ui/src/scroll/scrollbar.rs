@@ -1,6 +1,6 @@
 use std::{cell::Cell, rc::Rc, time::Instant};
 
-use crate::theme::ActiveTheme;
+use crate::ActiveTheme;
 use gpui::{
     fill, point, px, relative, AppContext, Bounds, ContentMask, CursorStyle, Edges, Element,
     EntityId, Hitbox, Hsla, IntoElement, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PaintQuad,

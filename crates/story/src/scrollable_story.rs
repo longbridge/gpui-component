@@ -9,7 +9,7 @@ use ui::button::Button;
 use ui::divider::Divider;
 use ui::label::Label;
 use ui::scroll::{Scrollbar, ScrollbarAxis, ScrollbarState};
-use ui::theme::ActiveTheme;
+use ui::ActiveTheme;
 use ui::{h_flex, v_flex, v_virtual_list, StyledExt as _};
 
 pub struct ScrollableStory {

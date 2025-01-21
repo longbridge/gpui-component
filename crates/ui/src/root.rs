@@ -2,8 +2,7 @@ use crate::{
     drawer::Drawer,
     modal::Modal,
     notification::{Notification, NotificationList},
-    theme::ActiveTheme,
-    window_border, Placement,
+    window_border, ActiveTheme, Placement,
 };
 use gpui::{
     canvas, div, prelude::FluentBuilder as _, AnyView, DefiniteLength, FocusHandle,

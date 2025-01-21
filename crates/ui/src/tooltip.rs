@@ -3,7 +3,7 @@ use gpui::{
     VisualContext, WindowContext,
 };
 
-use crate::theme::ActiveTheme;
+use crate::ActiveTheme;
 
 pub struct Tooltip {
     text: SharedString,

@@ -5,7 +5,7 @@ use gpui::{
     ParentElement, RenderOnce, SharedString, StatefulInteractiveElement, Styled, WindowContext,
 };
 
-use crate::{h_flex, theme::ActiveTheme, Icon, IconName};
+use crate::{h_flex, ActiveTheme, Icon, IconName};
 
 #[derive(IntoElement)]
 pub struct Breadcrumb {

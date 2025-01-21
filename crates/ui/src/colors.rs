@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use gpui::Hsla;
 use serde::{de::Error, Deserialize, Deserializer};
 
-use crate::theme::hsl;
+use crate::hsl;
 use anyhow::Result;
 
 pub trait Colorize: Sized {

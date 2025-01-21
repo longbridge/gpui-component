@@ -6,7 +6,7 @@ use gpui::{
     Pixels, Point, RenderOnce, ResizeEdge, Size, Styled as _, WindowContext,
 };
 
-use crate::theme::ActiveTheme;
+use crate::ActiveTheme;
 
 #[cfg(not(target_os = "linux"))]
 const SHADOW_SIZE: Pixels = Pixels(0.0);

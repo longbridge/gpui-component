@@ -1,4 +1,4 @@
-use crate::{h_flex, skeleton::Skeleton, theme::ActiveTheme, v_flex, Size};
+use crate::{h_flex, skeleton::Skeleton, v_flex, ActiveTheme, Size};
 use gpui::{prelude::FluentBuilder as _, IntoElement, ParentElement as _, RenderOnce, Styled};
 
 #[derive(IntoElement)]

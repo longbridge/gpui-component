@@ -57,8 +57,7 @@ use ui::{
     label::Label,
     notification::Notification,
     popup_menu::PopupMenu,
-    theme::ActiveTheme,
-    v_flex, ContextModal, IconName,
+    v_flex, ActiveTheme, ContextModal, IconName,
 };
 
 const PANEL_NAME: &str = "StoryContainer";
@@ -121,7 +120,7 @@ pub fn init(cx: &mut AppContext) {
 actions!(story, [ShowPanelInfo]);
 
 pub fn section(title: impl IntoElement, cx: &WindowContext) -> Div {
-    use ui::theme::ActiveTheme;
+    use ui::ActiveTheme;
     let theme = cx.theme();
 
     h_flex()

@@ -13,8 +13,7 @@ use ui::{
     sidebar::{
         Sidebar, SidebarFooter, SidebarGroup, SidebarHeader, SidebarMenu, SidebarToggleButton,
     },
-    theme::ActiveTheme,
-    v_flex, Collapsible, Icon, IconName,
+    v_flex, ActiveTheme, Collapsible, Icon, IconName,
 };
 
 #[derive(Clone, PartialEq, Eq, Deserialize)]

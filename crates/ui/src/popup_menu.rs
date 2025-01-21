@@ -15,8 +15,8 @@ use gpui::{
 use crate::scroll::{Scrollbar, ScrollbarState};
 use crate::StyledExt;
 use crate::{
-    button::Button, h_flex, list::ListItem, popover::Popover, theme::ActiveTheme, v_flex, Icon,
-    IconName, Selectable, Sizable as _,
+    button::Button, h_flex, list::ListItem, popover::Popover, v_flex, ActiveTheme, Icon, IconName,
+    Selectable, Sizable as _,
 };
 
 actions!(menu, [Confirm, Dismiss, SelectNext, SelectPrev]);

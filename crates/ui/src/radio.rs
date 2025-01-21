@@ -1,4 +1,4 @@
-use crate::{h_flex, theme::ActiveTheme, IconName};
+use crate::{h_flex, ActiveTheme, IconName};
 use gpui::{
     div, prelude::FluentBuilder, relative, svg, ElementId, InteractiveElement, IntoElement,
     ParentElement, RenderOnce, SharedString, StatefulInteractiveElement, Styled, WindowContext,

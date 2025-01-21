@@ -4,8 +4,8 @@ use gpui::{
 };
 
 use ui::{
-    checkbox::Checkbox, h_flex, label::Label, radio::Radio, switch::Switch, theme::ActiveTheme,
-    v_flex, Disableable as _, Side, Sizable, StyledExt,
+    checkbox::Checkbox, h_flex, label::Label, radio::Radio, switch::Switch, v_flex, ActiveTheme,
+    Disableable as _, Side, Sizable, StyledExt,
 };
 
 use crate::section;

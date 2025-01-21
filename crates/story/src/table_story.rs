@@ -20,8 +20,7 @@ use ui::{
     popup_menu::{PopupMenu, PopupMenuExt},
     prelude::FluentBuilder as _,
     table::{ColFixed, ColSort, Table, TableDelegate, TableEvent},
-    theme::ActiveTheme as _,
-    v_flex, Selectable, Sizable as _, Size, StyleSized as _,
+    v_flex, ActiveTheme as _, Selectable, Sizable as _, Size, StyleSized as _,
 };
 
 #[derive(Clone, PartialEq, Eq, Deserialize)]

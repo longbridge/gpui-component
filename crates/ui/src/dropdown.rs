@@ -11,8 +11,7 @@ use crate::{
     h_flex,
     input::ClearButton,
     list::{self, List, ListDelegate, ListItem},
-    theme::ActiveTheme,
-    v_flex, Disableable, Icon, IconName, Sizable, Size, StyleSized, StyledExt,
+    v_flex, ActiveTheme, Disableable, Icon, IconName, Sizable, Size, StyleSized, StyledExt,
 };
 
 actions!(dropdown, [Up, Down, Enter, Escape]);

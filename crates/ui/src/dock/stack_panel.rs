@@ -7,8 +7,7 @@ use crate::{
         h_resizable, resizable_panel, v_resizable, ResizablePanel, ResizablePanelEvent,
         ResizablePanelGroup,
     },
-    theme::ActiveTheme,
-    AxisExt as _, Placement,
+    ActiveTheme, AxisExt as _, Placement,
 };
 
 use super::{DockArea, Panel, PanelEvent, PanelState, PanelView, TabPanel};

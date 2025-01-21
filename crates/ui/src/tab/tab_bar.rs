@@ -1,5 +1,4 @@
-use crate::h_flex;
-use crate::theme::ActiveTheme;
+use crate::{h_flex, ActiveTheme};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     div, AnyElement, Div, ElementId, IntoElement, ParentElement, RenderOnce, ScrollHandle,

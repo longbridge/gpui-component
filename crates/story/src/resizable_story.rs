@@ -2,7 +2,7 @@ use gpui::{
     div, px, AnyElement, IntoElement, ParentElement as _, Render, SharedString, Styled, View,
     ViewContext, VisualContext, WindowContext,
 };
-use ui::theme::ActiveTheme;
+use ui::ActiveTheme;
 use ui::{
     resizable::{h_resizable, resizable_panel, v_resizable, ResizablePanelGroup},
     v_flex,

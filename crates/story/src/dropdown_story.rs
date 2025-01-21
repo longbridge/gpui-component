@@ -6,9 +6,7 @@ use gpui::{
 use ui::{
     checkbox::Checkbox,
     dropdown::{Dropdown, DropdownEvent, DropdownItem, SearchableVec},
-    h_flex,
-    theme::ActiveTheme,
-    v_flex, FocusableCycle, IconName, Sizable,
+    h_flex, v_flex, ActiveTheme, FocusableCycle, IconName, Sizable,
 };
 
 actions!(dropdown_story, [Tab, TabPrev]);

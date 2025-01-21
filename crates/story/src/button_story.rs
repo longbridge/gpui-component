@@ -8,8 +8,7 @@ use ui::{
     checkbox::Checkbox,
     h_flex,
     prelude::FluentBuilder,
-    theme::{ActiveTheme, Theme},
-    v_flex, Disableable as _, Icon, IconName, Selectable as _, Sizable as _,
+    v_flex, ActiveTheme, Disableable as _, Icon, IconName, Selectable as _, Sizable as _, Theme,
 };
 
 use crate::section;

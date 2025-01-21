@@ -12,8 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     resizable::{HANDLE_PADDING, HANDLE_SIZE, PANEL_MIN_SIZE},
-    theme::ActiveTheme as _,
-    AxisExt as _, StyledExt,
+    ActiveTheme as _, AxisExt as _, StyledExt,
 };
 
 use super::{DockArea, DockItem, PanelView, TabPanel};

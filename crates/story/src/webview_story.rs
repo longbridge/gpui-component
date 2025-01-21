@@ -5,9 +5,9 @@ use gpui::{
 use ui::{
     h_flex,
     input::{InputEvent, TextInput},
-    theme::ActiveTheme,
     v_flex,
     webview::WebView,
+    ActiveTheme,
 };
 
 pub struct WebViewStory {

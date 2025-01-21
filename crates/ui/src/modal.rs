@@ -11,9 +11,7 @@ use rust_i18n::t;
 use crate::{
     animation::cubic_bezier,
     button::{Button, ButtonVariant, ButtonVariants as _},
-    h_flex,
-    theme::ActiveTheme as _,
-    v_flex, ContextModal, IconName, Sizable as _,
+    h_flex, v_flex, ActiveTheme as _, ContextModal, IconName, Sizable as _,
 };
 
 actions!(modal, [Escape, Enter]);

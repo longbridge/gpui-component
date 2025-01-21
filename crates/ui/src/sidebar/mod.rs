@@ -2,8 +2,7 @@ use crate::{
     button::{Button, ButtonVariants},
     h_flex,
     scroll::ScrollbarAxis,
-    theme::ActiveTheme,
-    v_flex, Collapsible, Icon, IconName, Side, Sizable, StyledExt,
+    v_flex, ActiveTheme, Collapsible, Icon, IconName, Side, Sizable, StyledExt,
 };
 use gpui::{
     div, prelude::FluentBuilder, px, AnyElement, ClickEvent, Entity, EntityId,

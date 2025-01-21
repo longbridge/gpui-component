@@ -6,7 +6,7 @@ use gpui::{
     WindowContext,
 };
 
-use crate::{h_flex, theme::ActiveTheme as _, v_flex, Icon, IconName, Sizable, Size};
+use crate::{h_flex, v_flex, ActiveTheme as _, Icon, IconName, Sizable, Size};
 
 /// An AccordionGroup is a container for multiple Accordion elements.
 #[derive(IntoElement)]

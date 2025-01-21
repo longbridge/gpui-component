@@ -7,6 +7,7 @@ mod styled;
 mod svg_img;
 mod time;
 mod title_bar;
+mod virtual_list;
 mod window_border;
 
 pub mod accordion;
@@ -46,7 +47,6 @@ pub mod table;
 pub mod tag;
 pub mod theme;
 pub mod tooltip;
-pub mod virtual_list;
 pub mod webview;
 
 // re-export
@@ -65,6 +65,7 @@ pub use window_border::{window_border, WindowBorder};
 pub use colors::*;
 pub use icon::*;
 pub use svg_img::*;
+pub use theme::*;
 
 use std::ops::Deref;
 

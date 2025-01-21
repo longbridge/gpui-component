@@ -31,7 +31,7 @@ use super::{number_input, ClearButton};
 use crate::history::History;
 use crate::indicator::Indicator;
 use crate::scroll::{Scrollbar, ScrollbarAxis, ScrollbarState};
-use crate::theme::ActiveTheme;
+use crate::ActiveTheme;
 use crate::Size;
 use crate::StyledExt;
 use crate::{Sizable, StyleSized};

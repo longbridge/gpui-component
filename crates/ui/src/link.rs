@@ -3,7 +3,7 @@ use gpui::{
     RenderOnce, SharedString, Stateful, StatefulInteractiveElement, Styled,
 };
 
-use crate::theme::ActiveTheme as _;
+use crate::ActiveTheme as _;
 
 /// A Link element like a `<a>` tag in HTML.
 #[derive(IntoElement)]

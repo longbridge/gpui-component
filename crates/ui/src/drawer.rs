@@ -13,9 +13,8 @@ use crate::{
     modal::overlay_color,
     root::ContextModal as _,
     scroll::ScrollbarAxis,
-    theme::ActiveTheme,
     title_bar::TITLE_BAR_HEIGHT,
-    v_flex, IconName, Placement, Sizable, StyledExt as _,
+    v_flex, ActiveTheme, IconName, Placement, Sizable, StyledExt as _,
 };
 
 actions!(drawer, [Escape]);

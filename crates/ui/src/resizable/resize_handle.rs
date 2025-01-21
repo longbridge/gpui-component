@@ -4,7 +4,7 @@ use gpui::{
     WindowContext,
 };
 
-use crate::{theme::ActiveTheme as _, AxisExt as _};
+use crate::{ActiveTheme as _, AxisExt as _};
 
 pub(crate) const HANDLE_PADDING: Pixels = px(4.);
 pub(crate) const HANDLE_SIZE: Pixels = px(1.);

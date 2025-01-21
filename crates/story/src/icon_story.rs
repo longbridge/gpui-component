@@ -4,9 +4,7 @@ use gpui::{
 use ui::{
     button::{Button, ButtonVariant, ButtonVariants},
     dock::PanelControl,
-    h_flex,
-    theme::ActiveTheme as _,
-    v_flex, Icon, IconName,
+    h_flex, v_flex, ActiveTheme as _, Icon, IconName,
 };
 
 pub struct IconStory {

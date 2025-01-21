@@ -9,8 +9,7 @@ use crate::{
     h_flex,
     history::{History, HistoryItem},
     scroll::{Scrollbar, ScrollbarState},
-    theme::ActiveTheme,
-    v_flex, Icon, IconName,
+    v_flex, ActiveTheme, Icon, IconName,
 };
 
 use super::{DockArea, Panel, PanelEvent, PanelInfo, PanelState, PanelView, TabPanel, TileMeta};

@@ -3,7 +3,7 @@ use gpui::{
     RenderOnce, SharedString, Styled,
 };
 
-use crate::{h_flex, popup_menu::PopupMenuExt, theme::ActiveTheme as _, Collapsible, Selectable};
+use crate::{h_flex, popup_menu::PopupMenuExt, ActiveTheme as _, Collapsible, Selectable};
 
 #[derive(IntoElement)]
 pub struct SidebarHeader {

@@ -1,5 +1,4 @@
-use crate::theme::ActiveTheme;
-use crate::Selectable;
+use crate::{ActiveTheme, Selectable};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     div, px, AnyElement, Div, ElementId, InteractiveElement, IntoElement, ParentElement as _,

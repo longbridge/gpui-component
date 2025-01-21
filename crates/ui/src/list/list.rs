@@ -5,8 +5,7 @@ use crate::Icon;
 use crate::{
     input::{InputEvent, TextInput},
     scroll::{Scrollbar, ScrollbarState},
-    theme::ActiveTheme,
-    v_flex, IconName, Size,
+    v_flex, ActiveTheme, IconName, Size,
 };
 use gpui::{
     actions, div, prelude::FluentBuilder, uniform_list, AnyElement, AppContext, Entity,

@@ -10,9 +10,7 @@ use rust_i18n::t;
 
 use crate::{
     button::{Button, ButtonVariants as _},
-    h_flex,
-    theme::ActiveTheme,
-    v_flex, Disableable as _, IconName, Selectable, Sizable, Size,
+    h_flex, v_flex, ActiveTheme, Disableable as _, IconName, Selectable, Sizable, Size,
 };
 
 use super::utils::days_in_month;

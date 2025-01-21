@@ -11,11 +11,10 @@ use gpui::{
 use ui::{
     button::Button,
     checkbox::Checkbox,
-    h_flex,
+    h_flex, hsl,
     label::Label,
     list::{List, ListDelegate, ListEvent, ListItem},
-    theme::{hsl, ActiveTheme},
-    v_flex, Sizable,
+    v_flex, ActiveTheme, Sizable,
 };
 
 actions!(list_story, [SelectedCompany]);

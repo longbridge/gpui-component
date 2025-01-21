@@ -3,7 +3,7 @@ use gpui::{
     SharedString, Styled,
 };
 
-use crate::theme::ActiveTheme;
+use crate::ActiveTheme;
 
 /// A divider that can be either vertical or horizontal.
 #[derive(IntoElement)]

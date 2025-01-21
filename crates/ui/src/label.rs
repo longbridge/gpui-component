@@ -3,7 +3,7 @@ use gpui::{
     Styled, WindowContext,
 };
 
-use crate::{h_flex, theme::ActiveTheme};
+use crate::{h_flex, ActiveTheme};
 
 const MASKED: &'static str = "•";
 

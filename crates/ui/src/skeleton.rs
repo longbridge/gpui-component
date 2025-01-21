@@ -1,4 +1,4 @@
-use crate::theme::ActiveTheme;
+use crate::ActiveTheme;
 use gpui::{
     bounce, div, ease_in_out, Animation, AnimationExt, Div, IntoElement, RenderOnce, Styled,
 };

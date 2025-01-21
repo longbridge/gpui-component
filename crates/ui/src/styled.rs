@@ -2,7 +2,7 @@ use std::fmt::{self, Display, Formatter};
 
 use crate::{
     scroll::{Scrollable, ScrollbarAxis},
-    theme::ActiveTheme,
+    ActiveTheme,
 };
 use gpui::{
     div, px, Axis, Div, Edges, Element, ElementId, EntityId, FocusHandle, Pixels, Styled,

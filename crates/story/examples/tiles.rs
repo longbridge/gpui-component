@@ -4,8 +4,7 @@ use std::time::Duration;
 use story::{Assets, ButtonStory, IconStory, StoryContainer};
 use ui::{
     dock::{DockArea, DockAreaState, DockEvent, DockItem},
-    theme::ActiveTheme,
-    Root, TitleBar,
+    ActiveTheme, Root, TitleBar,
 };
 
 actions!(main_menu, [Quit]);

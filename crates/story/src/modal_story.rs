@@ -17,10 +17,9 @@ use ui::{
     list::{List, ListDelegate, ListItem},
     modal::ModalButtonProps,
     notification::{Notification, NotificationType},
-    theme::ActiveTheme as _,
     v_flex,
     webview::WebView,
-    ContextModal as _, Icon, IconName, Placement,
+    ActiveTheme as _, ContextModal as _, Icon, IconName, Placement,
 };
 
 actions!(modal_story, [TestAction]);

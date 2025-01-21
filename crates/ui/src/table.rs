@@ -5,10 +5,7 @@ use crate::{
     h_flex,
     popup_menu::PopupMenu,
     scroll::{ScrollableMask, Scrollbar, ScrollbarState},
-    theme::ActiveTheme,
-    v_flex,
-    virtual_list::virtual_list,
-    Icon, IconName, Sizable, Size, StyleSized as _,
+    v_flex, ActiveTheme, Icon, IconName, Sizable, Size, StyleSized as _,
 };
 use gpui::{
     actions, canvas, div, prelude::FluentBuilder, px, uniform_list, AppContext, Axis, Bounds, Div,
@@ -1169,26 +1166,34 @@ where
                         .overflow_hidden()
                         .relative()
                         .child(
-                            virtual_list(view, row_ix, Axis::Horizontal, col_sizes, {
-                                move |table, visible_range: Range<usize>, _, cx| {
-                                    table.update_visible_range_if_need(
-                                        visible_range.clone(),
-                                        Axis::Horizontal,
-                                        cx,
-                                    );
+                            crate::virtual_list::virtual_list(
+                                view,
+                                row_ix,
+                                Axis::Horizontal,
+                                col_sizes,
+                                {
+                                    move |table, visible_range: Range<usize>, _, cx| {
+                                        table.update_visible_range_if_need(
+                                            visible_range.clone(),
+                                            Axis::Horizontal,
+                                            cx,
+                                        );
 
-                                    visible_range
-                                        .map(|col_ix| {
-                                            let col_ix = col_ix + left_cols_count;
-                                            table.render_col_wrap(col_ix, cx).child(
-                                                table.render_cell(col_ix, cx).child(
-                                                    table.delegate.render_td(row_ix, col_ix, cx),
-                                                ),
-                                            )
-                                        })
-                                        .collect::<Vec<_>>()
-                                }
-                            })
+                                        visible_range
+                                            .map(|col_ix| {
+                                                let col_ix = col_ix + left_cols_count;
+                                                table.render_col_wrap(col_ix, cx).child(
+                                                    table.render_cell(col_ix, cx).child(
+                                                        table
+                                                            .delegate
+                                                            .render_td(row_ix, col_ix, cx),
+                                                    ),
+                                                )
+                                            })
+                                            .collect::<Vec<_>>()
+                                    }
+                                },
+                            )
                             .with_scroll_handle(&self.horizontal_scroll_handle),
                         )
                         .child(self.delegate.render_last_empty_col(cx)),

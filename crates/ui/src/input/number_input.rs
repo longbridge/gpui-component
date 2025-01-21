@@ -10,8 +10,7 @@ use crate::{
     h_flex,
     input::{InputEvent, TextInput},
     prelude::FluentBuilder,
-    theme::ActiveTheme,
-    IconName, Sizable, Size, StyledExt,
+    ActiveTheme, IconName, Sizable, Size, StyledExt,
 };
 
 actions!(number_input, [Increment, Decrement]);
