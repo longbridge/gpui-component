@@ -4,10 +4,10 @@ use prelude::FluentBuilder as _;
 use serde::Deserialize;
 use std::{sync::Arc, time::Duration};
 use story::{
-    AccordionStory, AppState, Assets, ButtonStory, CalendarStory, DropdownStory, IconStory,
-    ImageStory, InputStory, ListStory, ModalStory, PopupStory, ProgressStory, ResizableStory,
-    ScrollableStory, SidebarStory, StoryContainer, SwitchStory, TableStory, TextStory,
-    TooltipStory,
+    AccordionStory, AppState, Assets, ButtonStory, CalendarStory, DropdownStory, FormStory,
+    IconStory, ImageStory, InputStory, ListStory, ModalStory, PopupStory, ProgressStory,
+    ResizableStory, ScrollableStory, SidebarStory, StoryContainer, SwitchStory, TableStory,
+    TextStory, TooltipStory,
 };
 use ui::{
     badge::Badge,
@@ -318,6 +318,7 @@ impl StoryWorkspace {
                     Arc::new(StoryContainer::panel::<ScrollableStory>(cx)),
                     Arc::new(StoryContainer::panel::<AccordionStory>(cx)),
                     Arc::new(StoryContainer::panel::<SidebarStory>(cx)),
+                    Arc::new(StoryContainer::panel::<FormStory>(cx)),
                     // Arc::new(StoryContainer::panel::<WebViewStory>(cx)),
                 ],
                 None,

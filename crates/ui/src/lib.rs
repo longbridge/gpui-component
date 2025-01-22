@@ -23,6 +23,7 @@ pub mod divider;
 pub mod dock;
 pub mod drawer;
 pub mod dropdown;
+pub mod form;
 pub mod history;
 pub mod indicator;
 pub mod input;

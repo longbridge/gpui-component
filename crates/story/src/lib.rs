@@ -3,6 +3,7 @@ mod assets;
 mod button_story;
 mod calendar_story;
 mod dropdown_story;
+mod form_stroy;
 mod icon_story;
 mod image_story;
 mod input_story;
@@ -25,6 +26,14 @@ pub use accordion_story::AccordionStory;
 pub use button_story::ButtonStory;
 pub use calendar_story::CalendarStory;
 pub use dropdown_story::DropdownStory;
+pub use form_stroy::FormStory;
+
+use gpui::{
+    actions, div, prelude::FluentBuilder as _, px, AnyElement, AnyView, AppContext, Context as _,
+    Div, EventEmitter, FocusableView, Global, Hsla, InteractiveElement, IntoElement, Model,
+    ParentElement, Render, SharedString, StatefulInteractiveElement, Styled as _, View,
+    ViewContext, VisualContext, WindowContext,
+};
 pub use icon_story::IconStory;
 pub use image_story::ImageStory;
 pub use input_story::InputStory;
@@ -41,13 +50,6 @@ pub use table_story::TableStory;
 pub use text_story::TextStory;
 pub use tooltip_story::TooltipStory;
 pub use webview_story::WebViewStory;
-
-use gpui::{
-    actions, div, prelude::FluentBuilder as _, px, AnyElement, AnyView, AppContext, Context as _,
-    Div, EventEmitter, FocusableView, Global, Hsla, InteractiveElement, IntoElement, Model,
-    ParentElement, Render, SharedString, StatefulInteractiveElement, Styled as _, View,
-    ViewContext, VisualContext, WindowContext,
-};
 
 use ui::{
     button::Button,
@@ -298,6 +300,7 @@ impl StoryState {
             "WebViewStory" => story!(WebViewStory),
             "AccordionStory" => story!(AccordionStory),
             "SidebarStory" => story!(SidebarStory),
+            "FormStory" => story!(FormStory),
             _ => {
                 unreachable!("Invalid story klass: {}", self.story_klass)
             }

@@ -323,7 +323,7 @@ impl InputStory {
 }
 
 impl FocusableCycle for InputStory {
-    fn cycle_focus_handles(&self, cx: &mut ViewContext<Self>) -> Vec<FocusHandle> {
+    fn cycle_focus_handles(&self, cx: &mut WindowContext) -> Vec<FocusHandle> {
         [
             self.input1.focus_handle(cx),
             self.input2.focus_handle(cx),
