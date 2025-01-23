@@ -4,6 +4,7 @@ use gpui::{
 };
 use ui::{
     button::{Button, ButtonGroup},
+    checkbox::Checkbox,
     date_picker::DatePicker,
     divider::Divider,
     form::{form_field, v_form},
@@ -193,6 +194,21 @@ impl Render for FormStory {
                                 .checked(self.subscribe_email)
                                 .on_click(cx.listener(|this, checked: &bool, cx| {
                                     this.subscribe_email = *checked;
+                                    cx.notify();
+                                })),
+                        ),
+                    )
+                    .child(
+                        form_field().child(
+                            Checkbox::new("use-vertical-layout")
+                                .label("Vertical layout")
+                                .checked(self.layout.is_vertical())
+                                .on_click(cx.listener(|this, checked: &bool, cx| {
+                                    this.layout = if *checked {
+                                        Axis::Vertical
+                                    } else {
+                                        Axis::Horizontal
+                                    };
                                     cx.notify();
                                 })),
                         ),

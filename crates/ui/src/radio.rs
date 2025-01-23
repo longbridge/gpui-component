@@ -56,54 +56,57 @@ impl RenderOnce for Radio {
             cx.theme().primary
         };
 
-        h_flex()
-            .id(self.id)
-            .gap_x_2()
-            .text_color(cx.theme().foreground)
-            .items_center()
-            .line_height(relative(1.))
-            .child(
-                div()
-                    .relative()
-                    .size_4()
-                    .flex_shrink_0()
-                    .rounded_full()
-                    .border_1()
-                    .border_color(color)
-                    .when(self.checked, |this| this.bg(color))
-                    .child(
-                        svg()
-                            .absolute()
-                            .top_px()
-                            .left_px()
-                            .size_3()
-                            .text_color(color)
-                            .when(self.checked, |this| {
-                                this.text_color(cx.theme().primary_foreground)
-                            })
-                            .map(|this| match self.checked {
-                                true => this.path(IconName::Check.path()),
-                                false => this,
-                            }),
-                    ),
-            )
-            .when_some(self.label, |this, label| {
-                this.child(
+        // wrap a flex to patch for let Radio display inline
+        div().flex().child(
+            h_flex()
+                .id(self.id)
+                .gap_x_2()
+                .text_color(cx.theme().foreground)
+                .items_center()
+                .line_height(relative(1.))
+                .child(
                     div()
-                        .size_full()
-                        .overflow_x_hidden()
-                        .text_ellipsis()
-                        .line_height(relative(1.))
-                        .child(label),
+                        .relative()
+                        .size_4()
+                        .flex_shrink_0()
+                        .rounded_full()
+                        .border_1()
+                        .border_color(color)
+                        .when(self.checked, |this| this.bg(color))
+                        .child(
+                            svg()
+                                .absolute()
+                                .top_px()
+                                .left_px()
+                                .size_3()
+                                .text_color(color)
+                                .when(self.checked, |this| {
+                                    this.text_color(cx.theme().primary_foreground)
+                                })
+                                .map(|this| match self.checked {
+                                    true => this.path(IconName::Check.path()),
+                                    false => this,
+                                }),
+                        ),
                 )
-            })
-            .when_some(
-                self.on_click.filter(|_| !self.disabled),
-                |this, on_click| {
-                    this.on_click(move |_event, cx| {
-                        on_click(&!self.checked, cx);
-                    })
-                },
-            )
+                .when_some(self.label, |this, label| {
+                    this.child(
+                        div()
+                            .size_full()
+                            .overflow_x_hidden()
+                            .text_ellipsis()
+                            .line_height(relative(1.))
+                            .child(label),
+                    )
+                })
+                .when_some(
+                    self.on_click.filter(|_| !self.disabled),
+                    |this, on_click| {
+                        this.on_click(move |_event, cx| {
+                            on_click(&!self.checked, cx);
+                        })
+                    },
+                ),
+        )
     }
 }
