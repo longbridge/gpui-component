@@ -281,6 +281,7 @@ impl ParentElement for FormField {
         self.child.extend(elements);
     }
 }
+
 impl RenderOnce for FormField {
     fn render(self, cx: &mut WindowContext) -> impl IntoElement {
         let layout = self.props.layout;
@@ -300,6 +301,7 @@ impl RenderOnce for FormField {
             }
         }
 
+        #[inline]
         fn wrap_label(label_width: Option<Pixels>) -> Div {
             h_flex().when_some(label_width, |this, width| this.w(width).flex_shrink_0())
         }
