@@ -185,7 +185,17 @@ impl DatePicker {
 
     fn escape(&mut self, _: &Escape, cx: &mut ViewContext<Self>) {
         self.open = false;
-        self.focus_handle.focus(cx);
+        if let Some(focused) = cx.focused() {
+            // To focus the Picker Input, if current focus in is on the container.
+            //
+            // This is because mouse down out the Calendar, GPUI will move focus to the container.
+            // So we need to move focus back to the Picker Input.
+            //
+            // But if mouse down target is some other element, we should not move focus.
+            if focused.contains(&self.focus_handle, cx) {
+                self.focus_handle.focus(cx);
+            }
+        }
         cx.notify();
     }
 
@@ -304,7 +314,6 @@ impl Render for DatePicker {
                     deferred(
                         anchored().snap_to_window_with_margin(px(8.)).child(
                             div()
-                                .track_focus(&self.focus_handle)
                                 .occlude()
                                 .mt_1p5()
                                 .rounded_lg()
@@ -316,7 +325,9 @@ impl Render for DatePicker {
                                 .bg(cx.theme().background)
                                 .on_mouse_up_out(
                                     MouseButton::Left,
-                                    cx.listener(|view, _, cx| view.escape(&Escape, cx)),
+                                    cx.listener(|view, _, cx| {
+                                        view.escape(&Escape, cx);
+                                    }),
                                 )
                                 .child(
                                     h_flex()
