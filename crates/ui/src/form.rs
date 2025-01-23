@@ -329,11 +329,15 @@ impl RenderOnce for FormField {
                 _ => px(4.),
             },
         };
-        let inner_gap = gap / 2.;
+        let inner_gap = if layout.is_horizontal() {
+            gap
+        } else {
+            gap / 2.
+        };
 
         v_flex()
             .flex_1()
-            .gap(inner_gap)
+            .gap(gap / 2.)
             .child(
                 // This warp for aligning the Label + Input
                 wrap_div(layout)
