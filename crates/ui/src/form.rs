@@ -258,12 +258,17 @@ impl RenderOnce for FormField {
             (h_flex(), self.props.label_width)
         };
 
+        let gap = match self.props.size {
+            Size::XSmall | Size::Small => px(4.),
+            _ => px(8.),
+        };
+
         v_flex()
             .flex_1()
-            .gap_2()
+            .gap(gap)
             .child(
                 el.id(self.id)
-                    .gap_2()
+                    .gap(gap)
                     .when_some(self.align_items, |this, align| {
                         this.map(|this| match align {
                             AlignItems::Start => this.items_start(),
@@ -309,7 +314,13 @@ impl RenderOnce for Form {
     fn render(self, _: &mut WindowContext) -> impl IntoElement {
         let props = self.props;
 
-        v_flex().w_full().gap_3().children(
+        let gap = match props.size {
+            Size::XSmall | Size::Small => px(8.),
+            Size::Large => px(16.),
+            _ => px(12.),
+        };
+
+        v_flex().w_full().gap(gap).children(
             self.fields
                 .into_iter()
                 .enumerate()

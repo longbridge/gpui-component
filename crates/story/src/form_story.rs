@@ -3,12 +3,15 @@ use gpui::{
     ViewContext, VisualContext, WindowContext,
 };
 use ui::{
+    button::{Button, ButtonGroup},
     date_picker::DatePicker,
+    divider::Divider,
     form::{form_field, v_form},
+    h_flex,
     input::TextInput,
     prelude::FluentBuilder as _,
     switch::Switch,
-    v_flex, AxisExt, FocusableCycle,
+    v_flex, AxisExt, FocusableCycle, Selectable, Sizable, Size,
 };
 
 actions!(input_story, [Tab, TabPrev]);
@@ -20,6 +23,7 @@ pub struct FormStory {
     subscribe_email: bool,
     date_picker: View<DatePicker>,
     layout: Axis,
+    size: Size,
 }
 
 impl super::Story for FormStory {
@@ -66,6 +70,7 @@ impl FormStory {
             date_picker,
             subscribe_email: false,
             layout: Axis::Vertical,
+            size: Size::default(),
         }
     }
 }
@@ -98,21 +103,58 @@ impl Render for FormStory {
             .justify_start()
             .gap_3()
             .child(
-                Switch::new("layout")
-                    .checked(self.layout.is_horizontal())
-                    .label("Horizontal")
-                    .on_click(cx.listener(|this, checked: &bool, cx| {
-                        if *checked {
-                            this.layout = Axis::Horizontal;
-                        } else {
-                            this.layout = Axis::Vertical;
-                        }
-                        cx.notify();
-                    })),
+                h_flex()
+                    .gap_3()
+                    .flex_wrap()
+                    .justify_between()
+                    .child(
+                        Switch::new("layout")
+                            .checked(self.layout.is_horizontal())
+                            .label("Horizontal")
+                            .on_click(cx.listener(|this, checked: &bool, cx| {
+                                if *checked {
+                                    this.layout = Axis::Horizontal;
+                                } else {
+                                    this.layout = Axis::Vertical;
+                                }
+                                cx.notify();
+                            })),
+                    )
+                    .child(
+                        ButtonGroup::new("size")
+                            .small()
+                            .child(
+                                Button::new("large")
+                                    .selected(self.size == Size::Large)
+                                    .child("Large"),
+                            )
+                            .child(
+                                Button::new("medium")
+                                    .child("Medium")
+                                    .selected(self.size == Size::Medium),
+                            )
+                            .child(
+                                Button::new("small")
+                                    .child("Small")
+                                    .selected(self.size == Size::Small),
+                            )
+                            .on_click(cx.listener(|this, selecteds: &Vec<usize>, cx| {
+                                if selecteds.contains(&0) {
+                                    this.size = Size::Large;
+                                } else if selecteds.contains(&1) {
+                                    this.size = Size::Medium;
+                                } else if selecteds.contains(&2) {
+                                    this.size = Size::Small;
+                                }
+                                cx.notify();
+                            })),
+                    ),
             )
+            .child(Divider::horizontal())
             .child(
                 v_form()
                     .layout(self.layout)
+                    .with_size(self.size)
                     .child(form_field().label("Name").child(self.name_input.clone()))
                     .child(
                         form_field()
