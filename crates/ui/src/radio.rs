@@ -1,6 +1,8 @@
-use crate::{h_flex, ActiveTheme, IconName};
+use std::rc::Rc;
+
+use crate::{h_flex, v_flex, ActiveTheme, AxisExt, IconName};
 use gpui::{
-    div, prelude::FluentBuilder, relative, svg, ElementId, InteractiveElement, IntoElement,
+    div, prelude::FluentBuilder, relative, svg, Axis, ElementId, InteractiveElement, IntoElement,
     ParentElement, RenderOnce, SharedString, StatefulInteractiveElement, Styled, WindowContext,
 };
 
@@ -57,7 +59,7 @@ impl RenderOnce for Radio {
         };
 
         // wrap a flex to patch for let Radio display inline
-        div().flex().child(
+        h_flex().child(
             h_flex()
                 .id(self.id)
                 .gap_x_2()
@@ -107,6 +109,118 @@ impl RenderOnce for Radio {
                         })
                     },
                 ),
+        )
+    }
+}
+
+impl From<&'static str> for Radio {
+    fn from(label: &'static str) -> Self {
+        Self::new(label).label(label)
+    }
+}
+
+impl From<SharedString> for Radio {
+    fn from(label: SharedString) -> Self {
+        Self::new(label.clone()).label(label)
+    }
+}
+
+impl From<String> for Radio {
+    fn from(label: String) -> Self {
+        Self::new(SharedString::from(label.clone())).label(SharedString::from(label))
+    }
+}
+
+/// A Radio group element.
+#[derive(IntoElement)]
+pub struct RadioGroup {
+    radios: Vec<Radio>,
+    layout: Axis,
+    selected_index: Option<usize>,
+    disabled: bool,
+    on_change: Option<Rc<dyn Fn(&usize, &mut WindowContext) + 'static>>,
+}
+
+impl RadioGroup {
+    /// Create a new Radio group with default Vertical layout.
+    pub fn new() -> Self {
+        Self {
+            on_change: None,
+            layout: Axis::Vertical,
+            selected_index: None,
+            disabled: false,
+            radios: vec![],
+        }
+    }
+
+    /// Create a new Radio group with Horizontal layout.
+    pub fn horizontal() -> Self {
+        Self::new().layout(Axis::Horizontal)
+    }
+
+    /// Set the layout of the Radio group. Default is `Axis::Vertical`.
+    pub fn layout(mut self, layout: Axis) -> Self {
+        self.layout = layout;
+        self
+    }
+
+    /// Listen to the change event.
+    pub fn on_change(mut self, handler: impl Fn(&usize, &mut WindowContext) + 'static) -> Self {
+        self.on_change = Some(Rc::new(handler));
+        self
+    }
+
+    /// Set the selected index.
+    pub fn selected_index(mut self, index: Option<usize>) -> Self {
+        self.selected_index = index;
+        self
+    }
+
+    /// Set the disabled state.
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+
+    /// Add a child Radio element.
+    pub fn child(mut self, child: impl Into<Radio>) -> Self {
+        self.radios.push(child.into());
+        self
+    }
+
+    /// Add multiple child Radio elements.
+    pub fn children(mut self, children: impl IntoIterator<Item = impl Into<Radio>>) -> Self {
+        self.radios.extend(children.into_iter().map(Into::into));
+        self
+    }
+}
+
+impl RenderOnce for RadioGroup {
+    fn render(self, _: &mut WindowContext) -> impl IntoElement {
+        let on_change = self.on_change;
+        let disabled = self.disabled;
+        let selected_ix = self.selected_index;
+
+        let base = if self.layout.is_vertical() {
+            v_flex()
+        } else {
+            h_flex().flex_wrap()
+        };
+
+        div().flex().child(
+            base.gap_3()
+                .children(self.radios.into_iter().enumerate().map(|(ix, radio)| {
+                    let checked = selected_ix == Some(ix);
+
+                    radio.disabled(disabled).checked(checked).when_some(
+                        on_change.clone(),
+                        |this, on_change| {
+                            this.on_click(move |_, cx| {
+                                on_change(&ix, cx);
+                            })
+                        },
+                    )
+                })),
         )
     }
 }

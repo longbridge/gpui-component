@@ -4,8 +4,12 @@ use gpui::{
 };
 
 use ui::{
-    checkbox::Checkbox, h_flex, label::Label, radio::Radio, switch::Switch, v_flex, ActiveTheme,
-    Disableable as _, Side, Sizable, StyledExt,
+    checkbox::Checkbox,
+    h_flex,
+    label::Label,
+    radio::{Radio, RadioGroup},
+    switch::Switch,
+    v_flex, ActiveTheme, Disableable as _, Side, Sizable, StyledExt,
 };
 
 use crate::section;
@@ -20,6 +24,7 @@ pub struct SwitchStory {
     check3: bool,
     radio_check1: bool,
     radio_check2: bool,
+    radio_group_checked: Option<usize>,
 }
 
 impl super::Story for SwitchStory {
@@ -52,6 +57,7 @@ impl SwitchStory {
             check3: true,
             radio_check1: false,
             radio_check2: true,
+            radio_group_checked: None,
         }
     }
 }
@@ -259,6 +265,35 @@ impl Render for SwitchStory {
                                 ),
                             ),
                     ),
+                )
+                .child(
+                    h_flex()
+                        .items_start()
+                        .gap_4()
+                        .w_full()
+                        .child(
+                            section("Radio Group", cx).flex_1().child(
+                                RadioGroup::horizontal()
+                                    .children(["One", "Two", "Three"])
+                                    .selected_index(self.radio_group_checked)
+                                    .on_change(cx.listener(|this, selected_ix: &usize, _cx| {
+                                        this.radio_group_checked = Some(*selected_ix);
+                                    })),
+                            ),
+                        )
+                        .child(
+                            section("Radio Group Vertical", cx).flex_1().child(
+                                RadioGroup::new()
+                                    .disabled(true)
+                                    .child(Radio::new("one1").label("United States"))
+                                    .child(Radio::new("one2").label("Canada"))
+                                    .child(Radio::new("one3").label("Mexico"))
+                                    .selected_index(self.radio_group_checked)
+                                    .on_change(cx.listener(|this, selected_ix: &usize, _cx| {
+                                        this.radio_group_checked = Some(*selected_ix);
+                                    })),
+                            ),
+                        ),
                 ),
         )
     }
