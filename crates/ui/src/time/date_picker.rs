@@ -191,7 +191,7 @@ impl DatePicker {
             // This is because mouse down out the Calendar, GPUI will move focus to the container.
             // So we need to move focus back to the Picker Input.
             //
-            // But if mouse down target is some other element, we should not move focus.
+            // But if mouse down target is some other focusable element (e.g.: TextInput), we should not move focus.
             if focused.contains(&self.focus_handle, cx) {
                 self.focus_handle.focus(cx);
             }
