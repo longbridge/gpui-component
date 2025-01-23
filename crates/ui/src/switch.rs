@@ -1,4 +1,4 @@
-use crate::{h_flex, ActiveTheme, Disableable, Side, Sizable, Size, StyledExt};
+use crate::{h_flex, ActiveTheme, Disableable, Side, Sizable, Size};
 use gpui::{
     div, prelude::FluentBuilder as _, px, Animation, AnimationExt as _, AnyElement, Element,
     ElementId, GlobalElementId, InteractiveElement, IntoElement, LayoutId, ParentElement as _,
