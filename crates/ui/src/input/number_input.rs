@@ -110,6 +110,10 @@ impl NumberInput {
     }
 
     fn on_step(&mut self, action: StepAction, cx: &mut ViewContext<Self>) {
+        if self.input.read(cx).disabled {
+            return;
+        }
+
         cx.emit(NumberInputEvent::Step(action));
     }
 }
