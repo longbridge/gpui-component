@@ -154,7 +154,6 @@ impl Render for FormStory {
             .child(
                 v_form()
                     .layout(self.layout)
-                    .label_width(gpui::px(50.))
                     .with_size(self.size)
                     .child(
                         form_field()
