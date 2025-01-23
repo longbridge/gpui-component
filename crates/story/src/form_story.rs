@@ -1,5 +1,5 @@
 use gpui::{
-    actions, Axis, InteractiveElement, IntoElement, ParentElement as _, Render, Styled, View,
+    actions, div, Axis, InteractiveElement, IntoElement, ParentElement as _, Render, Styled, View,
     ViewContext, VisualContext, WindowContext,
 };
 use ui::{
@@ -155,7 +155,11 @@ impl Render for FormStory {
                 v_form()
                     .layout(self.layout)
                     .with_size(self.size)
-                    .child(form_field().label("Name").child(self.name_input.clone()))
+                    .child(
+                        form_field()
+                            .label_fn(|_| "Name")
+                            .child(self.name_input.clone()),
+                    )
                     .child(
                         form_field()
                             .label("Email")
@@ -167,7 +171,9 @@ impl Render for FormStory {
                             .label("Bio")
                             .when(self.layout.is_vertical(), |this| this.items_start())
                             .child(self.bio_input.clone())
-                            .description("Use at most 100 words to describe yourself."),
+                            .description_fn(|_| {
+                                div().child("Use at most 100 words to describe yourself.")
+                            }),
                     )
                     .child(
                         form_field()

@@ -86,7 +86,7 @@ impl FocusableCycle for Form {
 
 pub enum FieldBuilder {
     String(SharedString),
-    Element(Rc<dyn Fn(&mut WindowContext) -> AnyElement + 'static>),
+    Element(Rc<dyn Fn(&mut WindowContext) -> AnyElement>),
     View(AnyView),
 }
 
@@ -185,9 +185,33 @@ impl FormField {
         self
     }
 
+    /// Sets the label for the form field using a function.
+    pub fn label_fn<F, E>(mut self, label: F) -> Self
+    where
+        E: IntoElement,
+        F: Fn(&mut WindowContext) -> E + 'static,
+    {
+        self.label = Some(FieldBuilder::Element(Rc::new(move |cx| {
+            label(cx).into_any_element()
+        })));
+        self
+    }
+
     /// Sets the description for the form field.
     pub fn description(mut self, description: impl Into<FieldBuilder>) -> Self {
         self.description = Some(description.into());
+        self
+    }
+
+    /// Sets the description for the form field using a function.
+    pub fn description_fn<F, E>(mut self, description: F) -> Self
+    where
+        E: IntoElement,
+        F: Fn(&mut WindowContext) -> E + 'static,
+    {
+        self.description = Some(FieldBuilder::Element(Rc::new(move |cx| {
+            description(cx).into_any_element()
+        })));
         self
     }
 
