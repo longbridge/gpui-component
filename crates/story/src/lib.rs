@@ -3,7 +3,7 @@ mod assets;
 mod button_story;
 mod calendar_story;
 mod dropdown_story;
-mod form_stroy;
+mod form_story;
 mod icon_story;
 mod image_story;
 mod input_story;
@@ -26,7 +26,7 @@ pub use accordion_story::AccordionStory;
 pub use button_story::ButtonStory;
 pub use calendar_story::CalendarStory;
 pub use dropdown_story::DropdownStory;
-pub use form_stroy::FormStory;
+pub use form_story::FormStory;
 
 use gpui::{
     actions, div, prelude::FluentBuilder as _, px, AnyElement, AnyView, AppContext, Context as _,
