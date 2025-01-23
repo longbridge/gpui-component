@@ -85,8 +85,15 @@ impl Form {
         self
     }
 
+    /// Add a child to the form.
     pub fn child(mut self, field: impl Into<FormField>) -> Self {
         self.fields.push(field.into());
+        self
+    }
+
+    /// Add multiple children to the form.
+    pub fn children(mut self, fields: impl IntoIterator<Item = FormField>) -> Self {
+        self.fields.extend(fields);
         self
     }
 }
