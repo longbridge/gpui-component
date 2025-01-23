@@ -29,6 +29,26 @@ pub struct Form {
     props: FieldProps,
 }
 
+#[derive(Clone, Copy)]
+struct FieldProps {
+    size: Size,
+    label_width: Option<Pixels>,
+    layout: Axis,
+    /// Field gap
+    gap: Option<Pixels>,
+}
+
+impl Default for FieldProps {
+    fn default() -> Self {
+        Self {
+            label_width: Some(px(100.)),
+            layout: Axis::Vertical,
+            size: Size::default(),
+            gap: None,
+        }
+    }
+}
+
 impl Form {
     fn new() -> Self {
         Self {
@@ -56,6 +76,12 @@ impl Form {
     /// Set the width of the labels in the form. Default is `px(100.)`.
     pub fn label_width(mut self, width: Pixels) -> Self {
         self.props.label_width = Some(width);
+        self
+    }
+
+    /// Set the gap between the form fields.
+    pub fn gap(mut self, gap: Pixels) -> Self {
+        self.props.gap = Some(gap);
         self
     }
 
@@ -127,23 +153,6 @@ impl From<String> for FieldBuilder {
 impl From<SharedString> for FieldBuilder {
     fn from(value: SharedString) -> Self {
         Self::String(value)
-    }
-}
-
-#[derive(Clone, Copy)]
-struct FieldProps {
-    size: Size,
-    label_width: Option<Pixels>,
-    layout: Axis,
-}
-
-impl Default for FieldProps {
-    fn default() -> Self {
-        Self {
-            label_width: Some(px(100.)),
-            layout: Axis::Vertical,
-            size: Size::default(),
-        }
     }
 }
 
@@ -295,19 +304,24 @@ impl RenderOnce for FormField {
             h_flex().when_some(label_width, |this, width| this.w(width).flex_shrink_0())
         }
 
-        let gap = match self.props.size {
-            Size::XSmall | Size::Small => px(4.),
-            _ => px(8.),
+        let gap = match self.props.gap {
+            Some(v) => v,
+            None => match self.props.size {
+                Size::Large => px(8.),
+                Size::XSmall | Size::Small => px(4.),
+                _ => px(4.),
+            },
         };
+        let inner_gap = gap / 2.;
 
         v_flex()
             .flex_1()
-            .gap(gap)
+            .gap(inner_gap)
             .child(
                 // This warp for aligning the Label + Input
                 wrap_div(layout)
                     .id(self.id)
-                    .gap(gap)
+                    .gap(inner_gap)
                     .when_some(self.align_items, |this, align| {
                         this.map(|this| match align {
                             AlignItems::Start => this.items_start(),
@@ -359,9 +373,9 @@ impl RenderOnce for Form {
         let props = self.props;
 
         let gap = match props.size {
-            Size::XSmall | Size::Small => px(8.),
-            Size::Large => px(16.),
-            _ => px(12.),
+            Size::XSmall | Size::Small => px(6.),
+            Size::Large => px(12.),
+            _ => px(8.),
         };
 
         v_flex().w_full().gap(gap).children(
