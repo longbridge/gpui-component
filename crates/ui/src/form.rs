@@ -176,6 +176,7 @@ pub struct FormField {
     id: ElementId,
     form: Weak<Form>,
     label: Option<FieldBuilder>,
+    no_label_indent: bool,
     focus_handle: Option<FocusHandle>,
     description: Option<FieldBuilder>,
     /// Used to render the actual form field, e.g.: TextInput, Switch...
@@ -197,6 +198,7 @@ impl FormField {
             child: div(),
             visible: true,
             required: false,
+            no_label_indent: false,
             focus_handle: None,
             align_items: None,
             props: FieldProps::default(),
@@ -206,6 +208,16 @@ impl FormField {
     /// Sets the label for the form field.
     pub fn label(mut self, label: impl Into<FieldBuilder>) -> Self {
         self.label = Some(label.into());
+        self
+    }
+
+    /// Sets not indent with the label width (in Horizontal layout).
+    ///
+    /// Sometimes you want to align the input form left (Default is align after the label width in Horizontal layout).
+    ///
+    /// This is only work when the `label` is not set.
+    pub fn no_label_indent(mut self) -> Self {
+        self.no_label_indent = true;
         self
     }
 
@@ -306,6 +318,7 @@ impl RenderOnce for FormField {
         } else {
             self.props.label_width
         };
+        let has_label = !self.no_label_indent;
 
         #[inline]
         fn wrap_div(layout: Axis) -> Div {
@@ -354,29 +367,31 @@ impl RenderOnce for FormField {
                             _ => this,
                         })
                     })
-                    // Label
-                    .child(
-                        wrap_label(label_width)
-                            .text_sm()
-                            .when_some(self.props.label_text_size, |this, size| {
-                                this.text_size(size)
-                            })
-                            .font_medium()
-                            .gap_1()
-                            .items_center()
-                            .when_some(self.label, |this, builder| {
-                                this.child(builder.render(cx)).when(self.required, |this| {
-                                    this.child(div().text_color(cx.theme().danger).child("*"))
+                    .when(has_label, |this| {
+                        // Label
+                        this.child(
+                            wrap_label(label_width)
+                                .text_sm()
+                                .when_some(self.props.label_text_size, |this, size| {
+                                    this.text_size(size)
                                 })
-                            }),
-                    )
+                                .font_medium()
+                                .gap_1()
+                                .items_center()
+                                .when_some(self.label, |this, builder| {
+                                    this.child(builder.render(cx)).when(self.required, |this| {
+                                        this.child(div().text_color(cx.theme().danger).child("*"))
+                                    })
+                                }),
+                        )
+                    })
                     .child(div().w_full().child(self.child)),
             )
             .child(
                 // Other
                 wrap_div(layout)
                     .gap(inner_gap)
-                    .when(layout.is_horizontal(), |this| {
+                    .when(has_label && layout.is_horizontal(), |this| {
                         this.child(
                             // Empty for spacing to align with the input
                             wrap_label(label_width),

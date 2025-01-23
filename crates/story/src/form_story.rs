@@ -178,6 +178,11 @@ impl Render for FormStory {
                     )
                     .child(
                         form_field()
+                            .no_label_indent()
+                            .child("This is a full width form field."),
+                    )
+                    .child(
+                        form_field()
                             .label("Birthday")
                             .child(self.date_picker.clone())
                             .description("Select your birthday, we will send you a gift."),
