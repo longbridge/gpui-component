@@ -252,11 +252,24 @@ impl RenderOnce for FormField {
     fn render(self, cx: &mut WindowContext) -> impl IntoElement {
         let layout = self.props.layout;
 
-        let (el, label_width) = if layout.is_vertical() {
-            (v_flex(), None)
+        let label_width = if layout.is_vertical() {
+            None
         } else {
-            (h_flex(), self.props.label_width)
+            self.props.label_width
         };
+
+        #[inline]
+        fn wrap_div(layout: Axis) -> Div {
+            if layout.is_vertical() {
+                v_flex()
+            } else {
+                h_flex()
+            }
+        }
+
+        fn wrap_label(label_width: Option<Pixels>) -> Div {
+            h_flex().when_some(label_width, |this, width| this.w(width).flex_shrink_0())
+        }
 
         let gap = match self.props.size {
             Size::XSmall | Size::Small => px(4.),
@@ -267,7 +280,9 @@ impl RenderOnce for FormField {
             .flex_1()
             .gap(gap)
             .child(
-                el.id(self.id)
+                // This warp for aligning the Label + Input
+                wrap_div(layout)
+                    .id(self.id)
                     .gap(gap)
                     .when_some(self.align_items, |this, align| {
                         this.map(|this| match align {
@@ -280,12 +295,11 @@ impl RenderOnce for FormField {
                     })
                     // Label
                     .child(
-                        h_flex()
+                        wrap_label(label_width)
                             .text_sm()
                             .font_medium()
                             .gap_1()
                             .items_center()
-                            .when_some(label_width, |this, width| this.w(width))
                             .when_some(self.label, |this, label| {
                                 this.child(label.render(cx)).when(self.required, |this| {
                                     this.child(div().text_color(cx.theme().danger).child("*"))
@@ -296,8 +310,14 @@ impl RenderOnce for FormField {
             )
             .child(
                 // Other
-                div()
-                    .when_some(label_width, |this, width| this.ml(width))
+                wrap_div(layout)
+                    .gap(gap)
+                    .when(layout.is_horizontal(), |this| {
+                        this.child(
+                            // Empty for spacing to align with the input
+                            wrap_label(label_width),
+                        )
+                    })
                     .when(self.description.is_some(), |this| {
                         this.child(
                             div()
