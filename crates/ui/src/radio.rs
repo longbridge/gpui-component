@@ -142,8 +142,7 @@ pub struct RadioGroup {
 }
 
 impl RadioGroup {
-    /// Create a new Radio group with default Vertical layout.
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self {
             on_change: None,
             layout: Axis::Vertical,
@@ -151,6 +150,11 @@ impl RadioGroup {
             disabled: false,
             radios: vec![],
         }
+    }
+
+    /// Create a new Radio group with default Vertical layout.
+    pub fn vertical() -> Self {
+        Self::new()
     }
 
     /// Create a new Radio group with Horizontal layout.

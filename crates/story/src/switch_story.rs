@@ -283,7 +283,7 @@ impl Render for SwitchStory {
                         )
                         .child(
                             section("Radio Group Vertical", cx).flex_1().child(
-                                RadioGroup::new()
+                                RadioGroup::vertical()
                                     .disabled(true)
                                     .child(Radio::new("one1").label("United States"))
                                     .child(Radio::new("one2").label("Canada"))
