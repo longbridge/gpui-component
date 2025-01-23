@@ -776,9 +776,9 @@ impl TextInput {
         }
 
         if event.modifiers.shift {
-            self.select_to(self.next_boundary(offset), cx);
+            self.select_to(self.previous_boundary(offset), cx);
         } else {
-            self.move_to(self.next_boundary(offset), cx)
+            self.move_to(self.previous_boundary(offset), cx)
         }
     }
 
@@ -1168,7 +1168,7 @@ impl TextInput {
         }
 
         let offset = self.index_for_mouse_position(event.position, cx);
-        self.select_to(self.next_boundary(offset), cx);
+        self.select_to(self.previous_boundary(offset), cx);
     }
 
     fn is_valid_input(&self, new_text: &str) -> bool {
