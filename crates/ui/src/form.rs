@@ -2,8 +2,8 @@ use std::rc::{Rc, Weak};
 
 use gpui::{
     div, prelude::FluentBuilder as _, px, AlignItems, AnyElement, AnyView, Axis, Div, Element,
-    ElementId, FocusHandle, InteractiveElement as _, IntoElement, ParentElement, Pixels,
-    RenderOnce, SharedString, Styled, WindowContext,
+    ElementId, FocusHandle, InteractiveElement as _, IntoElement, ParentElement, Pixels, Rems,
+    RenderOnce, SharedString, Styled, TextStyle, WindowContext,
 };
 
 use crate::{h_flex, v_flex, ActiveTheme as _, AxisExt, FocusableCycle, Sizable, Size, StyledExt};
@@ -33,6 +33,7 @@ pub struct Form {
 struct FieldProps {
     size: Size,
     label_width: Option<Pixels>,
+    label_text_size: Option<Rems>,
     layout: Axis,
     /// Field gap
     gap: Option<Pixels>,
@@ -42,6 +43,7 @@ impl Default for FieldProps {
     fn default() -> Self {
         Self {
             label_width: Some(px(100.)),
+            label_text_size: None,
             layout: Axis::Vertical,
             size: Size::default(),
             gap: None,
@@ -76,6 +78,12 @@ impl Form {
     /// Set the width of the labels in the form. Default is `px(100.)`.
     pub fn label_width(mut self, width: Pixels) -> Self {
         self.props.label_width = Some(width);
+        self
+    }
+
+    /// Set the text size of the labels in the form. Default is `None`.
+    pub fn label_text_size(mut self, size: Rems) -> Self {
+        self.props.label_text_size = Some(size);
         self
     }
 
@@ -344,6 +352,9 @@ impl RenderOnce for FormField {
                     .child(
                         wrap_label(label_width)
                             .text_sm()
+                            .when_some(self.props.label_text_size, |this, size| {
+                                this.text_size(size)
+                            })
                             .font_medium()
                             .gap_1()
                             .items_center()
@@ -376,7 +387,6 @@ impl RenderOnce for FormField {
             )
     }
 }
-
 impl RenderOnce for Form {
     fn render(self, _: &mut WindowContext) -> impl IntoElement {
         let props = self.props;
