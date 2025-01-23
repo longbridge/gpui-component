@@ -42,7 +42,7 @@ struct FieldProps {
 impl Default for FieldProps {
     fn default() -> Self {
         Self {
-            label_width: Some(px(100.)),
+            label_width: Some(px(140.)),
             label_text_size: None,
             layout: Axis::Vertical,
             size: Size::default(),
@@ -318,7 +318,9 @@ impl RenderOnce for FormField {
 
         #[inline]
         fn wrap_label(label_width: Option<Pixels>) -> Div {
-            h_flex().when_some(label_width, |this, width| this.w(width).flex_shrink_0())
+            h_flex()
+                .truncate()
+                .when_some(label_width, |this, width| this.w(width).flex_shrink_0())
         }
 
         let gap = match self.props.gap {
@@ -362,8 +364,8 @@ impl RenderOnce for FormField {
                             .font_medium()
                             .gap_1()
                             .items_center()
-                            .when_some(self.label, |this, label| {
-                                this.child(label.render(cx)).when(self.required, |this| {
+                            .when_some(self.label, |this, builder| {
+                                this.child(builder.render(cx)).when(self.required, |this| {
                                     this.child(div().text_color(cx.theme().danger).child("*"))
                                 })
                             }),
@@ -373,19 +375,19 @@ impl RenderOnce for FormField {
             .child(
                 // Other
                 wrap_div(layout)
-                    .gap(gap)
+                    .gap(inner_gap)
                     .when(layout.is_horizontal(), |this| {
                         this.child(
                             // Empty for spacing to align with the input
                             wrap_label(label_width),
                         )
                     })
-                    .when(self.description.is_some(), |this| {
+                    .when_some(self.description, |this, builder| {
                         this.child(
                             div()
                                 .text_xs()
                                 .text_color(cx.theme().muted_foreground)
-                                .child(self.description.unwrap().render(cx)),
+                                .child(builder.render(cx)),
                         )
                     }),
             )
