@@ -1,31 +1,24 @@
 use std::rc::{Rc, Weak};
 
 use gpui::{
-    actions, div, prelude::FluentBuilder as _, px, AnyElement, AnyView, AppContext, Axis, Div,
-    Element, ElementId, FocusHandle, InteractiveElement as _, IntoElement, KeyBinding,
-    ParentElement, Pixels, RenderOnce, SharedString, Styled, WindowContext,
+    div, prelude::FluentBuilder as _, px, AlignItems, AnyElement, AnyView, Axis, Div, Element,
+    ElementId, FocusHandle, InteractiveElement as _, IntoElement, ParentElement, Pixels,
+    RenderOnce, SharedString, Styled, WindowContext,
 };
 
-use crate::{h_flex, v_flex, ActiveTheme as _, AxisExt, FocusableCycle, Sizable, Size};
+use crate::{h_flex, v_flex, ActiveTheme as _, AxisExt, FocusableCycle, Sizable, Size, StyledExt};
 
-const KEY_CONTEXT: &str = "Form";
-actions!(form, [Tab, TabPrev]);
-
-pub fn init(cx: &mut AppContext) {
-    cx.bind_keys([
-        KeyBinding::new("tab", Tab, Some(KEY_CONTEXT)),
-        KeyBinding::new("shift-tab", TabPrev, Some(KEY_CONTEXT)),
-    ]);
-}
-
+/// Create a new form with a vertical layout.
 pub fn v_form() -> Form {
     Form::vertical()
 }
 
+/// Create a new form with a horizontal layout.
 pub fn h_form() -> Form {
     Form::horizontal()
 }
 
+/// Create a new form field.
 pub fn form_field() -> FormField {
     FormField::new()
 }
@@ -165,6 +158,8 @@ pub struct FormField {
     child: Div,
     visible: bool,
     required: bool,
+    /// Alignment of the form field.
+    align_items: Option<AlignItems>,
     props: FieldProps,
 }
 
@@ -179,6 +174,7 @@ impl FormField {
             visible: true,
             required: false,
             focus_handle: None,
+            align_items: None,
             props: FieldProps::default(),
         }
     }
@@ -228,6 +224,24 @@ impl FormField {
         self.props = props;
         self
     }
+
+    /// Align the form field items to the start, this is the default.
+    pub fn items_start(mut self) -> Self {
+        self.align_items = Some(AlignItems::Start);
+        self
+    }
+
+    /// Align the form field items to the end.
+    pub fn items_end(mut self) -> Self {
+        self.align_items = Some(AlignItems::End);
+        self
+    }
+
+    /// Align the form field items to the center.
+    pub fn items_center(mut self) -> Self {
+        self.align_items = Some(AlignItems::Center);
+        self
+    }
 }
 impl ParentElement for FormField {
     fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
@@ -236,45 +250,57 @@ impl ParentElement for FormField {
 }
 impl RenderOnce for FormField {
     fn render(self, cx: &mut WindowContext) -> impl IntoElement {
-        let label_width = self.props.label_width;
         let layout = self.props.layout;
 
-        let el = if layout.is_vertical() {
-            v_flex()
+        let (el, label_width) = if layout.is_vertical() {
+            (v_flex(), None)
         } else {
-            h_flex()
+            (h_flex(), self.props.label_width)
         };
 
-        el.id(self.id)
-            .gap_1()
-            .when_some(self.label, |this, label| {
-                // Label
-                this.child(
-                    h_flex()
-                        .text_sm()
-                        .gap_1()
-                        .items_center()
-                        .text_color(cx.theme().secondary_foreground)
-                        .when_some(label_width, |this, width| this.w(width))
-                        .child(label.render(cx))
-                        .when(self.required, |this| {
-                            this.child(div().text_color(cx.theme().danger).child("*"))
-                        }),
-                )
-            })
+        v_flex()
+            .flex_1()
+            .gap_2()
             .child(
-                // Child and Description
-                v_flex().flex_1().gap_1().child(self.child).when(
-                    self.description.is_some(),
-                    |this| {
+                el.id(self.id)
+                    .gap_2()
+                    .when_some(self.align_items, |this, align| {
+                        this.map(|this| match align {
+                            AlignItems::Start => this.items_start(),
+                            AlignItems::End => this.items_end(),
+                            AlignItems::Center => this.items_center(),
+                            AlignItems::Baseline => this.items_baseline(),
+                            _ => this,
+                        })
+                    })
+                    // Label
+                    .child(
+                        h_flex()
+                            .text_sm()
+                            .font_medium()
+                            .gap_1()
+                            .items_center()
+                            .when_some(label_width, |this, width| this.w(width))
+                            .when_some(self.label, |this, label| {
+                                this.child(label.render(cx)).when(self.required, |this| {
+                                    this.child(div().text_color(cx.theme().danger).child("*"))
+                                })
+                            }),
+                    )
+                    .child(div().w_full().child(self.child)),
+            )
+            .child(
+                // Other
+                div()
+                    .when_some(label_width, |this, width| this.ml(width))
+                    .when(self.description.is_some(), |this| {
                         this.child(
                             div()
                                 .text_xs()
                                 .text_color(cx.theme().muted_foreground)
                                 .child(self.description.unwrap().render(cx)),
                         )
-                    },
-                ),
+                    }),
             )
     }
 }
@@ -283,17 +309,11 @@ impl RenderOnce for Form {
     fn render(self, _: &mut WindowContext) -> impl IntoElement {
         let props = self.props;
 
-        v_flex()
-            // .key_context(KEY_CONTEXT)
-            // .on_action(Self::on_action_tab)
-            // .on_action(Self::on_action_shift_tab)
-            .w_full()
-            .gap_3()
-            .children(
-                self.fields
-                    .into_iter()
-                    .enumerate()
-                    .map(|(ix, field)| field.props(ix, props)),
-            )
+        v_flex().w_full().gap_3().children(
+            self.fields
+                .into_iter()
+                .enumerate()
+                .map(|(ix, field)| field.props(ix, props)),
+        )
     }
 }

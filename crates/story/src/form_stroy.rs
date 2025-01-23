@@ -3,8 +3,10 @@ use gpui::{
     ViewContext, VisualContext, WindowContext,
 };
 use ui::{
+    date_picker::DatePicker,
     form::{form_field, v_form},
     input::TextInput,
+    prelude::FluentBuilder as _,
     switch::Switch,
     v_flex, AxisExt, FocusableCycle,
 };
@@ -15,6 +17,8 @@ pub struct FormStory {
     name_input: View<TextInput>,
     email_input: View<TextInput>,
     bio_input: View<TextInput>,
+    subscribe_email: bool,
+    date_picker: View<DatePicker>,
     layout: Axis,
 }
 
@@ -45,7 +49,6 @@ impl FormStory {
         });
 
         let email_input = cx.new_view(|cx| TextInput::new(cx).placeholder("Enter text here..."));
-
         let bio_input = cx.new_view(|cx| {
             let mut input = TextInput::new(cx)
                 .multi_line()
@@ -54,11 +57,14 @@ impl FormStory {
             input.set_text("Hello 世界，this is GPUI component.", cx);
             input
         });
+        let date_picker = cx.new_view(|cx| DatePicker::new("birthday", cx));
 
         Self {
             name_input,
             email_input,
             bio_input,
+            date_picker,
+            subscribe_email: false,
             layout: Axis::Vertical,
         }
     }
@@ -117,8 +123,26 @@ impl Render for FormStory {
                     .child(
                         form_field()
                             .label("Bio")
+                            .when(self.layout.is_vertical(), |this| this.items_start())
                             .child(self.bio_input.clone())
                             .description("Use at most 100 words to describe yourself."),
+                    )
+                    .child(
+                        form_field()
+                            .label("Birthday")
+                            .child(self.date_picker.clone())
+                            .description("Select your birthday, we will send you a gift."),
+                    )
+                    .child(
+                        form_field().child(
+                            Switch::new("subscribe-newsletter")
+                                .label("Subscribe our newsletter")
+                                .checked(self.subscribe_email)
+                                .on_click(cx.listener(|this, checked: &bool, cx| {
+                                    this.subscribe_email = *checked;
+                                    cx.notify();
+                                })),
+                        ),
                     ),
             )
     }
