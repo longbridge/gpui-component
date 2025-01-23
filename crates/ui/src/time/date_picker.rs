@@ -184,19 +184,28 @@ impl DatePicker {
     }
 
     fn escape(&mut self, _: &Escape, cx: &mut ViewContext<Self>) {
+        self.focus_back_if_need(cx);
         self.open = false;
+
+        cx.notify();
+    }
+
+    // To focus the Picker Input, if current focus in is on the container.
+    //
+    // This is because mouse down out the Calendar, GPUI will move focus to the container.
+    // So we need to move focus back to the Picker Input.
+    //
+    // But if mouse down target is some other focusable element (e.g.: TextInput), we should not move focus.
+    fn focus_back_if_need(&mut self, cx: &mut ViewContext<Self>) {
+        if !self.open {
+            return;
+        }
+
         if let Some(focused) = cx.focused() {
-            // To focus the Picker Input, if current focus in is on the container.
-            //
-            // This is because mouse down out the Calendar, GPUI will move focus to the container.
-            // So we need to move focus back to the Picker Input.
-            //
-            // But if mouse down target is some other focusable element (e.g.: TextInput), we should not move focus.
             if focused.contains(&self.focus_handle, cx) {
                 self.focus_handle.focus(cx);
             }
         }
-        cx.notify();
     }
 
     fn clean(&mut self, _: &gpui::ClickEvent, cx: &mut ViewContext<Self>) {
@@ -242,7 +251,8 @@ impl FocusableView for DatePicker {
 
 impl Render for DatePicker {
     fn render(&mut self, cx: &mut ViewContext<Self>) -> impl gpui::IntoElement {
-        let is_focused = self.focus_handle.is_focused(cx);
+        // This for keep focus border style, when click on the popup.
+        let is_focused = self.focus_handle.contains_focused(cx);
         let show_clean = self.cleanable && self.date.is_some();
         let placeholder = self
             .placeholder
