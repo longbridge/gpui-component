@@ -101,6 +101,7 @@ pub struct PopupMenu {
     selected_index: Option<usize>,
     min_width: Pixels,
     max_width: Pixels,
+    max_height: Option<Pixels>,
     hovered_menu_ix: Option<usize>,
     bounds: Bounds<Pixels>,
 
@@ -131,6 +132,7 @@ impl PopupMenu {
                 selected_index: None,
                 min_width: px(120.),
                 max_width: px(500.),
+                max_height: None,
                 has_icon: false,
                 hovered_menu_ix: None,
                 bounds: Bounds::default(),
@@ -159,6 +161,12 @@ impl PopupMenu {
     /// Set max width of the popup menu, default is 500px
     pub fn max_w(mut self, width: impl Into<Pixels>) -> Self {
         self.max_width = width.into();
+        self
+    }
+
+    /// Set max height of the popup menu, default is half of the window height
+    pub fn max_h(mut self, height: impl Into<Pixels>) -> Self {
+        self.max_height = Some(height.into());
         self
     }
 
@@ -498,9 +506,13 @@ impl Render for PopupMenu {
         let items_count = self.menu_items.len();
         let max_width = self.max_width;
         let bounds = self.bounds;
-
-        let window_haft_height = cx.window_bounds().get_bounds().size.height * 0.5;
-        let max_height = window_haft_height.min(px(450.));
+        let max_height = self.max_height.map_or_else(
+            || {
+                let window_half_height = cx.window_bounds().get_bounds().size.height * 0.5;
+                window_half_height.min(px(450.))
+            },
+            |height| height,
+        );
 
         const ITEM_HEIGHT: Pixels = px(26.);
 
