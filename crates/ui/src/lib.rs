@@ -107,3 +107,8 @@ pub fn locale() -> impl Deref<Target = str> {
 pub fn set_locale(locale: &str) {
     rust_i18n::set_locale(locale)
 }
+
+#[inline]
+pub(crate) fn measure_enable() -> bool {
+    std::env::var("ZED_MEASUREMENTS").is_ok()
+}

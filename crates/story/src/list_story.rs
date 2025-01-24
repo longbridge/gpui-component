@@ -4,8 +4,8 @@ use std::time::Duration;
 use fake::Fake;
 use gpui::{
     actions, div, px, AppContext, ElementId, FocusHandle, FocusableView, InteractiveElement,
-    IntoElement, ParentElement, Render, RenderOnce, Styled, Subscription, Task, Timer, View,
-    ViewContext, VisualContext, WindowContext,
+    IntoElement, ParentElement, Render, RenderOnce, SharedString, Styled, Subscription, Task,
+    Timer, View, ViewContext, VisualContext, WindowContext,
 };
 
 use ui::{
@@ -19,22 +19,31 @@ use ui::{
 
 actions!(list_story, [SelectedCompany]);
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 struct Company {
-    name: String,
-    industry: String,
+    name: SharedString,
+    industry: SharedString,
     last_done: f64,
     prev_close: f64,
+
+    change_percent: f64,
+    change_percent_str: SharedString,
+    last_done_str: SharedString,
+    prev_close_str: SharedString,
     // description: String,
 }
 
 impl Company {
-    fn random_update(&mut self) {
-        self.last_done = self.prev_close * (1.0 + (-0.2..0.2).fake::<f64>());
+    fn prepare(mut self) -> Self {
+        self.change_percent = (self.last_done - self.prev_close) / self.prev_close;
+        self.change_percent_str = format!("{:.2}%", self.change_percent).into();
+        self.last_done_str = format!("{:.2}", self.last_done).into();
+        self.prev_close_str = format!("{:.2}", self.prev_close).into();
+        self
     }
 
-    fn change_percent(&self) -> f64 {
-        (self.last_done - self.prev_close) / self.prev_close
+    fn random_update(&mut self) {
+        self.last_done = self.prev_close * (1.0 + (-0.2..0.2).fake::<f64>());
     }
 }
 
@@ -65,7 +74,7 @@ impl RenderOnce for CompanyListItem {
             cx.theme().foreground
         };
 
-        let trend_color = match self.company.change_percent() {
+        let trend_color = match self.company.change_percent {
             change if change > 0.0 => hsl(0.0, 79.0, 53.0),
             change if change < 0.0 => hsl(100.0, 79.0, 53.0),
             _ => cx.theme().foreground,
@@ -114,7 +123,7 @@ impl RenderOnce for CompanyListItem {
                                 div()
                                     .w(px(65.))
                                     .text_color(text_color)
-                                    .child(format!("{:.2}", self.company.last_done)),
+                                    .child(self.company.last_done_str.clone()),
                             )
                             .child(
                                 h_flex().w(px(65.)).justify_end().child(
@@ -124,7 +133,7 @@ impl RenderOnce for CompanyListItem {
                                         .text_size(px(12.))
                                         .px_1()
                                         .text_color(trend_color)
-                                        .child(format!("{:.2}%", self.company.change_percent())),
+                                        .child(self.company.change_percent_str.clone()),
                                 ),
                             ),
                     ),
@@ -193,8 +202,6 @@ impl ListDelegate for CompanyListDelegate {
     }
 
     fn load_more(&mut self, cx: &mut ViewContext<List<Self>>) {
-        self.loading = true;
-
         cx.spawn(|view, mut cx| async move {
             // Simulate network request, delay 1s to load data.
             Timer::after(Duration::from_secs(1)).await;
@@ -206,7 +213,6 @@ impl ListDelegate for CompanyListDelegate {
                         .companies
                         .extend((0..200).map(|_| random_company()));
                     _ = view.delegate_mut().perform_search(&query, cx);
-                    view.delegate_mut().loading = false;
                     view.delegate_mut().is_eof = view.delegate().companies.len() >= 6000;
                 });
             })
@@ -325,12 +331,17 @@ impl ListStory {
 fn random_company() -> Company {
     let last_done = (0.0..999.0).fake::<f64>();
     let prev_close = last_done * (-0.1..0.1).fake::<f64>();
+
     Company {
-        name: fake::faker::company::en::CompanyName().fake(),
-        industry: fake::faker::company::en::Industry().fake(),
+        name: fake::faker::company::en::CompanyName()
+            .fake::<String>()
+            .into(),
+        industry: fake::faker::company::en::Industry().fake::<String>().into(),
         last_done,
         prev_close,
+        ..Default::default()
     }
+    .prepare()
 }
 
 impl FocusableView for ListStory {
