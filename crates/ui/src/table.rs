@@ -172,7 +172,7 @@ pub struct Table<D: TableDelegate> {
     /// The visible range of the rows and columns.
     visible_range: VisibleRangeState,
 
-    _meansure: Vec<Duration>,
+    _measure: Vec<Duration>,
     _load_more_task: Task<()>,
 }
 
@@ -375,7 +375,7 @@ where
             scrollbar_visible: Edges::all(true),
             visible_range: VisibleRangeState::default(),
             _load_more_task: Task::ready(()),
-            _meansure: Vec::new(),
+            _measure: Vec::new(),
         };
 
         this.prepare_col_groups(cx);
@@ -1281,7 +1281,7 @@ where
 
         let start = std::time::Instant::now();
         let el = self.delegate.render_td(row_ix, col_ix, cx);
-        self._meansure.push(start.elapsed());
+        self._measure.push(start.elapsed());
         el.into_any_element()
     }
 
@@ -1290,21 +1290,21 @@ where
             return;
         }
 
-        // Print avg meansure time of each td
-        if self._meansure.len() > 0 {
+        // Print avg measure time of each td
+        if self._measure.len() > 0 {
             let total = self
-                ._meansure
+                ._measure
                 .iter()
                 .fold(Duration::default(), |acc, d| acc + *d);
-            let avg = total / self._meansure.len() as u32;
+            let avg = total / self._measure.len() as u32;
             eprintln!(
                 "last render {} cells total: {:?}, avg: {:?}",
-                self._meansure.len(),
+                self._measure.len(),
                 total,
                 avg,
             );
         }
-        self._meansure.clear();
+        self._measure.clear();
     }
 }
 

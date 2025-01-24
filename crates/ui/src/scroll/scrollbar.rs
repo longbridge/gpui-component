@@ -760,8 +760,12 @@ impl Element for Scrollbar {
                             )
                         };
 
-                        scroll_handle.set_offset(offset);
-                        cx.notify(Some(view_id));
+                        if (scroll_handle.offset().y - offset.y).abs() > px(1.)
+                            || (scroll_handle.offset().x - offset.x).abs() > px(1.)
+                        {
+                            scroll_handle.set_offset(offset);
+                            cx.notify(Some(view_id));
+                        }
                     }
                 }
             });
