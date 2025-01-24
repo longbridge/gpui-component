@@ -586,8 +586,7 @@ impl TableStory {
         // Spawn a background to random refresh the list
         cx.spawn(move |this, mut cx| async move {
             loop {
-                let delay = (80..150).fake::<u64>();
-                Timer::after(time::Duration::from_millis(delay)).await;
+                Timer::after(time::Duration::from_millis(33)).await;
 
                 this.update(&mut cx, |this, cx| {
                     if !this.refresh_data {

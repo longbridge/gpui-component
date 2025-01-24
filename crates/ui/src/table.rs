@@ -1407,19 +1407,23 @@ where
                                             );
                                         }
 
+                                        let mut items = Vec::with_capacity(
+                                            visible_range.end - visible_range.start,
+                                        );
+
                                         // Render fake rows to fill the table
-                                        visible_range
-                                            .map(|row_ix| {
-                                                // Render real rows for available data
-                                                table.render_table_row(
-                                                    row_ix,
-                                                    rows_count,
-                                                    left_cols_count,
-                                                    cols_count,
-                                                    cx,
-                                                )
-                                            })
-                                            .collect::<Vec<_>>()
+                                        visible_range.for_each(|row_ix| {
+                                            // Render real rows for available data
+                                            items.push(table.render_table_row(
+                                                row_ix,
+                                                rows_count,
+                                                left_cols_count,
+                                                cols_count,
+                                                cx,
+                                            ));
+                                        });
+
+                                        items
                                     }
                                 },
                             )
