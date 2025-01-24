@@ -373,6 +373,14 @@ impl TableDelegate for StockTableDelegate {
         .menu("Size XSmall", Box::new(ChangeSize(Size::XSmall)))
     }
 
+    /// NOTE: Performance metrics
+    ///
+    /// last render 561 cells total: 232.745µs, avg: 414ns
+    /// frame duration: 8.825083ms
+    ///
+    /// This is means render the full table cells takes 232.745µs. Then 232.745µs / 8.82ms = 2.6% of the frame duration.
+    ///
+    /// If we improve the td rendering, we can reduce the time to render the full table cells.
     fn render_td(
         &self,
         row_ix: usize,

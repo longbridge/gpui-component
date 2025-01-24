@@ -1145,7 +1145,7 @@ where
                             .children((0..left_cols_count).map(|col_ix| {
                                 self.render_col_wrap(col_ix, cx).child(
                                     self.render_cell(col_ix, cx)
-                                        .child(self.render_td(row_ix, col_ix, cx)),
+                                        .child(self.measure_render_td(row_ix, col_ix, cx)),
                                 )
                             })),
                     )
@@ -1175,14 +1175,11 @@ where
                                         visible_range
                                             .map(|col_ix| {
                                                 let col_ix = col_ix + left_cols_count;
-                                                let start = std::time::Instant::now();
                                                 let el = table.render_col_wrap(col_ix, cx).child(
-                                                    table
-                                                        .render_cell(col_ix, cx)
-                                                        .child(table.render_td(row_ix, col_ix, cx)),
+                                                    table.render_cell(col_ix, cx).child(
+                                                        table.measure_render_td(row_ix, col_ix, cx),
+                                                    ),
                                                 );
-
-                                                table._meansure.push(start.elapsed());
 
                                                 el
                                             })
@@ -1256,7 +1253,8 @@ where
         }
     }
 
-    fn render_td(
+    #[inline]
+    fn measure_render_td(
         &mut self,
         row_ix: usize,
         col_ix: usize,
@@ -1288,7 +1286,7 @@ where
                 .fold(Duration::default(), |acc, d| acc + *d);
             let avg = total / self._meansure.len() as u32;
             eprintln!(
-                "last render {} cells meansure time Total: {:?} AVG: {:?}",
+                "last render {} cells total: {:?}, avg: {:?}",
                 self._meansure.len(),
                 total,
                 avg,
