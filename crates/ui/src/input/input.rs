@@ -12,7 +12,7 @@ use unicode_segmentation::*;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     actions, div, point, px, AnyElement, AppContext, Bounds, ClickEvent, ClipboardItem,
-    Context as _, Entity, EventEmitter, FocusHandle, FocusableView, Half, InteractiveElement as _,
+    Context as _, Entity, EventEmitter, FocusHandle, FocusableView, InteractiveElement as _,
     IntoElement, KeyBinding, KeyDownEvent, Model, MouseButton, MouseDownEvent, MouseMoveEvent,
     MouseUpEvent, ParentElement as _, Pixels, Point, Rems, Render, ScrollHandle, ScrollWheelEvent,
     SharedString, Styled as _, UTF16Selection, ViewContext, ViewInputHandler, WindowContext,
@@ -960,7 +960,6 @@ impl TextInput {
         for line in lines.iter() {
             let line_origin = self.line_origin_with_y_offset(&mut y_offset, &line, line_height);
             let pos = inner_position - line_origin;
-            // FIXME: If there only 1 char, the closest_index_for_x is always 1. This is GPUI bug.
             let closest_index = self.closest_index_for_x(line, pos.x);
 
             // Return offset by use closest_index_for_x if is single line mode.
@@ -970,7 +969,15 @@ impl TextInput {
 
             let index_result = line.index_for_position(pos, line_height);
             if let Ok(v) = index_result {
-                index += closest_index;
+                // FIXME: If the line have soft wrap, only first line can get correct position (closest_index is correct).
+                // The second line or more, the position is always at offset +1,
+                // but if we mouse down on left half or character, we expect the cursor is at offset.
+                // We need find a way to improve.
+                if pos.y > line_height / 2. {
+                    index += v + 1;
+                } else {
+                    index += closest_index;
+                }
                 break;
             } else if let Ok(_) = line.index_for_position(point(px(0.), pos.y), line_height) {
                 // Click in the this line but not in the text, move cursor to the end of the line.
