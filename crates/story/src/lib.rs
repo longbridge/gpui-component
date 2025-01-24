@@ -29,10 +29,10 @@ pub use dropdown_story::DropdownStory;
 pub use form_story::FormStory;
 
 use gpui::{
-    actions, div, prelude::FluentBuilder as _, px, AnyElement, AnyView, AppContext, Context as _,
-    Div, EventEmitter, FocusableView, Global, Hsla, InteractiveElement, IntoElement, Model,
-    ParentElement, Render, SharedString, StatefulInteractiveElement, Styled as _, View,
-    ViewContext, VisualContext, WindowContext,
+    actions, div, prelude::FluentBuilder as _, px, size, AnyElement, AnyView, AppContext, Bounds,
+    Context as _, Div, EventEmitter, FocusableView, Global, Hsla, InteractiveElement, IntoElement,
+    Model, ParentElement, Render, SharedString, StatefulInteractiveElement, Styled as _, View,
+    ViewContext, VisualContext, WindowBounds, WindowContext, WindowKind, WindowOptions,
 };
 pub use icon_story::IconStory;
 pub use image_story::ImageStory;
@@ -59,7 +59,7 @@ use ui::{
     label::Label,
     notification::Notification,
     popup_menu::PopupMenu,
-    v_flex, ActiveTheme, ContextModal, IconName,
+    v_flex, ActiveTheme, ContextModal, IconName, Root,
 };
 
 const PANEL_NAME: &str = "StoryContainer";
@@ -84,9 +84,63 @@ impl AppState {
     }
 }
 
+pub fn create_new_window<F, E>(title: &str, crate_view_fn: F, cx: &mut AppContext)
+where
+    E: Into<AnyView>,
+    F: FnOnce(&mut WindowContext) -> E + Send + 'static,
+{
+    let mut window_size = size(px(1600.0), px(1200.0));
+    if let Some(display) = cx.primary_display() {
+        let display_size = display.bounds().size;
+        window_size.width = window_size.width.min(display_size.width * 0.85);
+        window_size.height = window_size.height.min(display_size.height * 0.85);
+    }
+    let window_bounds = Bounds::centered(None, window_size, cx);
+    let title = SharedString::from(title.to_string());
+
+    cx.spawn(|mut cx| async move {
+        let options = WindowOptions {
+            window_bounds: Some(WindowBounds::Windowed(window_bounds)),
+            // titlebar: Some(TitlebarOptions {
+            //     title: Some(title.clone()),
+            //     appears_transparent: true,
+            //     traffic_light_position: Some(point(px(9.0), px(9.0))),
+            // }),
+            window_min_size: Some(gpui::Size {
+                width: px(640.),
+                height: px(480.),
+            }),
+            kind: WindowKind::Normal,
+            #[cfg(target_os = "linux")]
+            window_background: gpui::WindowBackgroundAppearance::Transparent,
+            #[cfg(target_os = "linux")]
+            window_decorations: Some(gpui::WindowDecorations::Client),
+            ..Default::default()
+        };
+
+        let window = cx
+            .open_window(options, |cx| {
+                let view = crate_view_fn(cx);
+                cx.new_view(|cx| Root::new(view.into(), cx))
+            })
+            .expect("failed to open window");
+
+        window
+            .update(&mut cx, |_, cx| {
+                cx.activate_window();
+                cx.set_window_title(&title);
+            })
+            .expect("failed to update window");
+
+        Ok::<_, anyhow::Error>(())
+    })
+    .detach();
+}
+
 impl Global for AppState {}
 
 pub fn init(cx: &mut AppContext) {
+    ui::init(cx);
     AppState::init(cx);
     input_story::init(cx);
     dropdown_story::init(cx);
