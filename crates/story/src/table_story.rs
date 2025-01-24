@@ -263,7 +263,7 @@ impl StockTableDelegate {
 
     fn update_stocks(&mut self, size: usize) {
         self.stocks = random_stocks(size);
-        self.is_eof = false;
+        self.is_eof = size <= 50;
         self.loading = false;
         self.full_loading = false;
     }
