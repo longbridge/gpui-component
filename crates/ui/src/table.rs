@@ -1142,12 +1142,20 @@ where
                             .h_full()
                             .border_r_1()
                             .border_color(cx.theme().table_row_border)
-                            .children((0..left_cols_count).map(|col_ix| {
-                                self.render_col_wrap(col_ix, cx).child(
-                                    self.render_cell(col_ix, cx)
-                                        .child(self.measure_render_td(row_ix, col_ix, cx)),
-                                )
-                            })),
+                            .children({
+                                let mut items = Vec::with_capacity(left_cols_count);
+
+                                (0..left_cols_count).for_each(|col_ix| {
+                                    items.push(
+                                        self.render_col_wrap(col_ix, cx).child(
+                                            self.render_cell(col_ix, cx)
+                                                .child(self.measure_render_td(row_ix, col_ix, cx)),
+                                        ),
+                                    );
+                                });
+
+                                items
+                            }),
                     )
                 } else {
                     None
@@ -1172,18 +1180,22 @@ where
                                             cx,
                                         );
 
-                                        visible_range
-                                            .map(|col_ix| {
-                                                let col_ix = col_ix + left_cols_count;
-                                                let el = table.render_col_wrap(col_ix, cx).child(
-                                                    table.render_cell(col_ix, cx).child(
-                                                        table.measure_render_td(row_ix, col_ix, cx),
-                                                    ),
-                                                );
+                                        let mut items = Vec::with_capacity(
+                                            visible_range.end - visible_range.start,
+                                        );
 
-                                                el
-                                            })
-                                            .collect::<Vec<_>>()
+                                        visible_range.for_each(|col_ix| {
+                                            let col_ix = col_ix + left_cols_count;
+                                            let el = table.render_col_wrap(col_ix, cx).child(
+                                                table.render_cell(col_ix, cx).child(
+                                                    table.measure_render_td(row_ix, col_ix, cx),
+                                                ),
+                                            );
+
+                                            items.push(el);
+                                        });
+
+                                        items
                                     }
                                 },
                             )
