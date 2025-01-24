@@ -25,6 +25,7 @@ use smallvec::SmallVec;
 /// This is like `uniform_list` in GPUI, but support two axis.
 ///
 /// The `item_sizes` is the size of each column.
+#[inline]
 pub fn v_virtual_list<R, V>(
     view: View<V>,
     id: impl Into<ElementId>,
@@ -39,6 +40,7 @@ where
 }
 
 /// Create a virtual list in Horizontal direction.
+#[inline]
 pub fn h_virtual_list<R, V>(
     view: View<V>,
     id: impl Into<ElementId>,

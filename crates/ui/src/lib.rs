@@ -98,10 +98,12 @@ pub fn init(cx: &mut gpui::AppContext) {
     table::init(cx);
 }
 
+#[inline]
 pub fn locale() -> impl Deref<Target = str> {
     rust_i18n::locale()
 }
 
+#[inline]
 pub fn set_locale(locale: &str) {
     rust_i18n::set_locale(locale)
 }
