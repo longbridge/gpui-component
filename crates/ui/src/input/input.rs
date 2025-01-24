@@ -776,9 +776,9 @@ impl TextInput {
         }
 
         if event.modifiers.shift {
-            self.select_to(self.previous_boundary(offset), cx);
+            self.select_to(offset, cx);
         } else {
-            self.move_to(self.previous_boundary(offset), cx)
+            self.move_to(offset, cx)
         }
     }
 
@@ -896,6 +896,38 @@ impl TextInput {
         }
     }
 
+    // Fork of `closest_index_for_x` method from `gpui::text::Layout`
+    // https://github.com/zed-industries/zed/blob/d1be419fff415329b38f26aff90488700702c82a/crates/gpui/src/text_system/line_layout.rs#L74
+    fn closest_index_for_x(&self, line: &WrappedLine, x: Pixels) -> usize {
+        let mut prev_index = 0;
+        let mut prev_x = px(0.);
+
+        for run in line.unwrapped_layout.runs.iter() {
+            for glyph in run.glyphs.iter() {
+                if glyph.position.x >= x {
+                    if glyph.position.x - x < x - prev_x {
+                        return glyph.index;
+                    } else {
+                        return prev_index;
+                    }
+                }
+                prev_index = glyph.index;
+                prev_x = glyph.position.x;
+            }
+        }
+
+        // To fix when line only have 1 char, the closest_index_for_x will always 1.
+        if line.unwrapped_layout.len == 1 {
+            // Hardcoded if x > 4px (4px about half chat in most case), return 1
+            if x > px(4.) {
+                return 1;
+            }
+            return 0;
+        }
+
+        line.unwrapped_layout.len
+    }
+
     fn index_for_mouse_position(&self, position: Point<Pixels>, _: &WindowContext) -> usize {
         // If the text is empty, always return 0
         if self.text.is_empty() {
@@ -926,16 +958,18 @@ impl TextInput {
 
         for line in lines.iter() {
             let line_origin = self.line_origin_with_y_offset(&mut y_offset, &line, line_height);
-            let mut pos = inner_position - line_origin;
-            // Ignore the y position in single line mode, only check x position.
+            let pos = inner_position - line_origin;
+            // FIXME: If there only 1 char, the closest_index_for_x is always 1. This is GPUI bug.
+            let closest_index = self.closest_index_for_x(line, pos.x);
+
+            // Return offset by use closest_index_for_x if is single line mode.
             if self.is_single_line() {
-                pos.y = line_height.half();
+                return closest_index;
             }
 
             let index_result = line.index_for_position(pos, line_height);
             if let Ok(v) = index_result {
-                // Add 1 for place cursor after the character.
-                index += v + 1;
+                index += closest_index;
                 break;
             } else if let Ok(_) = line.index_for_position(point(px(0.), pos.y), line_height) {
                 // Click in the this line but not in the text, move cursor to the end of the line.
@@ -1168,7 +1202,7 @@ impl TextInput {
         }
 
         let offset = self.index_for_mouse_position(event.position, cx);
-        self.select_to(self.previous_boundary(offset), cx);
+        self.select_to(offset, cx);
     }
 
     fn is_valid_input(&self, new_text: &str) -> bool {
