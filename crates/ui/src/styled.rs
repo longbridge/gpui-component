@@ -11,11 +11,13 @@ use gpui::{
 use serde::{Deserialize, Serialize};
 
 /// Returns a `Div` as horizontal flex layout.
+#[inline]
 pub fn h_flex() -> Div {
     div().h_flex()
 }
 
 /// Returns a `Div` as vertical flex layout.
+#[inline]
 pub fn v_flex() -> Div {
     div().v_flex()
 }
@@ -23,6 +25,7 @@ pub fn v_flex() -> Div {
 macro_rules! font_weight {
     ($fn:ident, $const:ident) => {
         /// [docs](https://tailwindcss.com/docs/font-weight)
+        #[inline]
         fn $fn(self) -> Self {
             self.font_weight(gpui::FontWeight::$const)
         }
@@ -32,11 +35,13 @@ macro_rules! font_weight {
 /// Extends [`gpui::Styled`] with specific styling methods.
 pub trait StyledExt: Styled + Sized {
     /// Apply self into a horizontal flex layout.
+    #[inline]
     fn h_flex(self) -> Self {
         self.flex().flex_row().items_center()
     }
 
     /// Apply self into a vertical flex layout.
+    #[inline]
     fn v_flex(self) -> Self {
         self.flex().flex_col()
     }
@@ -100,6 +105,7 @@ pub trait StyledExt: Styled + Sized {
     }
 
     /// Render a border with a width of 1px, color ring color
+    #[inline]
     fn outline(self, cx: &WindowContext) -> Self {
         self.border_color(cx.theme().ring)
     }
@@ -107,6 +113,7 @@ pub trait StyledExt: Styled + Sized {
     /// Wraps the element in a ScrollView.
     ///
     /// Current this is only have a vertical scrollbar.
+    #[inline]
     fn scrollable(self, view_id: EntityId, axis: ScrollbarAxis) -> Scrollable<Self>
     where
         Self: Element,
@@ -125,6 +132,7 @@ pub trait StyledExt: Styled + Sized {
     font_weight!(font_black, BLACK);
 
     /// Set as Popover style
+    #[inline]
     fn popover_style(self, cx: &mut WindowContext) -> Self {
         self.bg(cx.theme().popover)
             .border_1()
@@ -149,6 +157,7 @@ pub enum Size {
 
 impl Size {
     /// Returns the height for table row.
+    #[inline]
     pub fn table_row_height(&self) -> Pixels {
         match self {
             Size::XSmall => px(26.),
@@ -159,6 +168,7 @@ impl Size {
     }
 
     /// Returns the padding for a table cell.
+    #[inline]
     pub fn table_cell_padding(&self) -> Edges<Pixels> {
         match self {
             Size::XSmall => Edges {
@@ -252,6 +262,7 @@ pub trait StyleSized<T: Styled> {
 }
 
 impl<T: Styled> StyleSized<T> for T {
+    #[inline]
     fn input_text_size(self, size: Size) -> Self {
         match size {
             Size::XSmall => self.text_xs(),
@@ -262,10 +273,12 @@ impl<T: Styled> StyleSized<T> for T {
         }
     }
 
+    #[inline]
     fn input_size(self, size: Size) -> Self {
         self.input_px(size).input_py(size).input_h(size)
     }
 
+    #[inline]
     fn input_pl(self, size: Size) -> Self {
         match size {
             Size::Large => self.pl_5(),
@@ -274,6 +287,7 @@ impl<T: Styled> StyleSized<T> for T {
         }
     }
 
+    #[inline]
     fn input_pr(self, size: Size) -> Self {
         match size {
             Size::Large => self.pr_5(),
@@ -282,6 +296,7 @@ impl<T: Styled> StyleSized<T> for T {
         }
     }
 
+    #[inline]
     fn input_px(self, size: Size) -> Self {
         match size {
             Size::Large => self.px_5(),
@@ -290,6 +305,7 @@ impl<T: Styled> StyleSized<T> for T {
         }
     }
 
+    #[inline]
     fn input_py(self, size: Size) -> Self {
         match size {
             Size::Large => self.py_5(),
@@ -298,6 +314,7 @@ impl<T: Styled> StyleSized<T> for T {
         }
     }
 
+    #[inline]
     fn input_h(self, size: Size) -> Self {
         match size {
             Size::Large => self.h_11(),
@@ -307,10 +324,12 @@ impl<T: Styled> StyleSized<T> for T {
         .input_text_size(size)
     }
 
+    #[inline]
     fn list_size(self, size: Size) -> Self {
         self.list_px(size).list_py(size).input_text_size(size)
     }
 
+    #[inline]
     fn list_px(self, size: Size) -> Self {
         match size {
             Size::Small => self.px_2(),
@@ -318,6 +337,7 @@ impl<T: Styled> StyleSized<T> for T {
         }
     }
 
+    #[inline]
     fn list_py(self, size: Size) -> Self {
         match size {
             Size::Large => self.py_2(),
@@ -327,6 +347,7 @@ impl<T: Styled> StyleSized<T> for T {
         }
     }
 
+    #[inline]
     fn size_with(self, size: Size) -> Self {
         match size {
             Size::Large => self.size_11(),
@@ -337,6 +358,7 @@ impl<T: Styled> StyleSized<T> for T {
         }
     }
 
+    #[inline]
     fn table_cell_size(self, size: Size) -> Self {
         let padding = size.table_cell_padding();
         match size {
@@ -357,10 +379,12 @@ pub trait AxisExt {
 }
 
 impl AxisExt for Axis {
+    #[inline]
     fn is_horizontal(self) -> bool {
         self == Axis::Horizontal
     }
 
+    #[inline]
     fn is_vertical(self) -> bool {
         self == Axis::Vertical
     }
@@ -386,6 +410,7 @@ impl Display for Placement {
 }
 
 impl Placement {
+    #[inline]
     pub fn is_horizontal(&self) -> bool {
         match self {
             Placement::Left | Placement::Right => true,
@@ -393,6 +418,7 @@ impl Placement {
         }
     }
 
+    #[inline]
     pub fn is_vertical(&self) -> bool {
         match self {
             Placement::Top | Placement::Bottom => true,
@@ -400,6 +426,7 @@ impl Placement {
         }
     }
 
+    #[inline]
     pub fn axis(&self) -> Axis {
         match self {
             Placement::Top | Placement::Bottom => Axis::Vertical,
@@ -416,6 +443,7 @@ pub enum Side {
 }
 
 impl Side {
+    #[inline]
     pub(crate) fn is_left(&self) -> bool {
         matches!(self, Self::Left)
     }

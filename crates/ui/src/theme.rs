@@ -16,24 +16,28 @@ pub trait ActiveTheme {
 }
 
 impl ActiveTheme for AppContext {
+    #[inline]
     fn theme(&self) -> &Theme {
         Theme::global(self)
     }
 }
 
 impl<V> ActiveTheme for ViewContext<'_, V> {
+    #[inline]
     fn theme(&self) -> &Theme {
         self.deref().theme()
     }
 }
 
 impl<V> ActiveTheme for ModelContext<'_, V> {
+    #[inline]
     fn theme(&self) -> &Theme {
         self.deref().theme()
     }
 }
 
 impl ActiveTheme for WindowContext<'_> {
+    #[inline]
     fn theme(&self) -> &Theme {
         self.deref().theme()
     }
@@ -44,6 +48,7 @@ impl ActiveTheme for WindowContext<'_> {
 /// - h: 0..360.0
 /// - s: 0.0..100.0
 /// - l: 0.0..100.0
+#[inline]
 pub fn hsl(h: f32, s: f32, l: f32) -> Hsla {
     hsla(h / 360., s / 100.0, l / 100.0, 1.0)
 }
@@ -55,6 +60,7 @@ pub fn hsl(h: f32, s: f32, l: f32) -> Hsla {
 /// If CSS is `box-shadow: 0 0 10px 0 rgba(0, 0, 0, 0.1);`
 ///
 /// Then the equivalent in Rust is `box_shadow(0., 0., 10., 0., hsla(0., 0., 0., 0.1))`
+#[inline]
 pub fn box_shadow(
     x: impl Into<Pixels>,
     y: impl Into<Pixels>,
@@ -471,6 +477,7 @@ pub enum ThemeMode {
 }
 
 impl ThemeMode {
+    #[inline]
     pub fn is_dark(&self) -> bool {
         matches!(self, Self::Dark)
     }
