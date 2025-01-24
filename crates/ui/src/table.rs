@@ -753,9 +753,14 @@ where
         }
     }
 
+    #[inline]
     fn render_cell(&self, col_ix: usize, _cx: &mut ViewContext<Self>) -> Div {
-        let col_width = self.col_groups[col_ix].width;
-        let col_padding = self.col_groups[col_ix].padding;
+        let Some(col_group) = self.col_groups.get(col_ix) else {
+            return div();
+        };
+
+        let col_width = col_group.width;
+        let col_padding = col_group.padding;
 
         div()
             .w(col_width)
@@ -1102,6 +1107,7 @@ where
         row_ix: usize,
         rows_count: usize,
         left_cols_count: usize,
+        col_sizes: Rc<Vec<gpui::Size<Pixels>>>,
         cols_count: usize,
         cx: &mut ViewContext<Self>,
     ) -> impl IntoElement {
@@ -1109,147 +1115,11 @@ where
         let is_stripe_row = self.stripe && row_ix % 2 != 0;
         let is_selected = self.selected_row == Some(row_ix);
         let view = cx.view().clone();
-        let col_sizes: Rc<Vec<gpui::Size<Pixels>>> = Rc::new(
-            self.col_groups
-                .iter()
-                .skip(left_cols_count)
-                .map(|col| col.bounds.size)
-                .collect(),
-        );
 
-        if row_ix < rows_count {
-            self.delegate
-                .render_tr(row_ix, cx)
-                .w_full()
-                .h(self.size.table_row_height())
-                .border_b_1()
-                .when(row_ix == rows_count, |this| {
-                    this.border_color(gpui::transparent_white())
-                })
-                .border_color(cx.theme().table_row_border)
-                .when(is_stripe_row, |this| this.bg(cx.theme().table_even))
-                .hover(|this| {
-                    if is_selected || self.right_clicked_row == Some(row_ix) {
-                        this
-                    } else {
-                        this.bg(cx.theme().table_hover)
-                    }
-                })
-                .children(if left_cols_count > 0 {
-                    // Left fixed columns
-                    Some(
-                        h_flex()
-                            .h_full()
-                            .border_r_1()
-                            .border_color(cx.theme().table_row_border)
-                            .children({
-                                let mut items = Vec::with_capacity(left_cols_count);
-
-                                (0..left_cols_count).for_each(|col_ix| {
-                                    items.push(
-                                        self.render_col_wrap(col_ix, cx).child(
-                                            self.render_cell(col_ix, cx)
-                                                .child(self.measure_render_td(row_ix, col_ix, cx)),
-                                        ),
-                                    );
-                                });
-
-                                items
-                            }),
-                    )
-                } else {
-                    None
-                })
-                .child(
-                    h_flex()
-                        .flex_1()
-                        .h_full()
-                        .overflow_hidden()
-                        .relative()
-                        .child(
-                            crate::virtual_list::virtual_list(
-                                view,
-                                row_ix,
-                                Axis::Horizontal,
-                                col_sizes,
-                                {
-                                    move |table, visible_range: Range<usize>, _, cx| {
-                                        table.update_visible_range_if_need(
-                                            visible_range.clone(),
-                                            Axis::Horizontal,
-                                            cx,
-                                        );
-
-                                        let mut items = Vec::with_capacity(
-                                            visible_range.end - visible_range.start,
-                                        );
-
-                                        visible_range.for_each(|col_ix| {
-                                            let col_ix = col_ix + left_cols_count;
-                                            let el = table.render_col_wrap(col_ix, cx).child(
-                                                table.render_cell(col_ix, cx).child(
-                                                    table.measure_render_td(row_ix, col_ix, cx),
-                                                ),
-                                            );
-
-                                            items.push(el);
-                                        });
-
-                                        items
-                                    }
-                                },
-                            )
-                            .with_scroll_handle(&self.horizontal_scroll_handle),
-                        )
-                        .child(self.delegate.render_last_empty_col(cx)),
-                )
-                // Row selected style
-                .when_some(self.selected_row, |this, _| {
-                    this.when(
-                        is_selected && self.selection_state == SelectionState::Row,
-                        |this| {
-                            this.border_color(gpui::transparent_white()).child(
-                                div()
-                                    .top(if row_ix == 0 { px(0.) } else { px(-1.) })
-                                    .left(px(0.))
-                                    .right(px(0.))
-                                    .bottom_0()
-                                    .absolute()
-                                    .bg(cx.theme().table_active)
-                                    .border_1()
-                                    .border_color(cx.theme().table_active_border),
-                            )
-                        },
-                    )
-                })
-                // Row right click row style
-                .when(self.right_clicked_row == Some(row_ix), |this| {
-                    this.border_color(gpui::transparent_white()).child(
-                        div()
-                            .top(if row_ix == 0 { px(0.) } else { px(-1.) })
-                            .left(px(0.))
-                            .right(px(0.))
-                            .bottom_0()
-                            .absolute()
-                            .border_1()
-                            .border_color(cx.theme().selection),
-                    )
-                })
-                .on_mouse_down(
-                    MouseButton::Left,
-                    cx.listener(move |this, ev, cx| {
-                        this.on_row_click(ev, row_ix, cx);
-                    }),
-                )
-                .on_mouse_down(
-                    MouseButton::Right,
-                    cx.listener(move |this, ev, cx| {
-                        this.on_row_click(ev, row_ix, cx);
-                    }),
-                )
-        } else {
+        if row_ix >= rows_count {
             // Render fake rows to fill the rest table space
-            self.delegate
+            return self
+                .delegate
                 .render_tr(row_ix, cx)
                 .w_full()
                 .h_full()
@@ -1261,8 +1131,135 @@ where
                         .left(horizontal_scroll_handle.offset().x)
                         .child(self.render_cell(col_ix, cx))
                 }))
-                .child(self.delegate.render_last_empty_col(cx))
+                .child(self.delegate.render_last_empty_col(cx));
         }
+
+        self.delegate
+            .render_tr(row_ix, cx)
+            .w_full()
+            .h(self.size.table_row_height())
+            .border_b_1()
+            .when(row_ix == rows_count, |this| {
+                this.border_color(gpui::transparent_white())
+            })
+            .border_color(cx.theme().table_row_border)
+            .when(is_stripe_row, |this| this.bg(cx.theme().table_even))
+            .hover(|this| {
+                if is_selected || self.right_clicked_row == Some(row_ix) {
+                    this
+                } else {
+                    this.bg(cx.theme().table_hover)
+                }
+            })
+            .when(left_cols_count > 0, |this| {
+                // Left fixed columns
+                this.child(
+                    h_flex()
+                        .h_full()
+                        .border_r_1()
+                        .border_color(cx.theme().table_row_border)
+                        .children({
+                            let mut items = Vec::with_capacity(left_cols_count);
+
+                            (0..left_cols_count).for_each(|col_ix| {
+                                items.push(
+                                    self.render_col_wrap(col_ix, cx).child(
+                                        self.render_cell(col_ix, cx)
+                                            .child(self.measure_render_td(row_ix, col_ix, cx)),
+                                    ),
+                                );
+                            });
+
+                            items
+                        }),
+                )
+            })
+            .child(
+                h_flex()
+                    .flex_1()
+                    .h_full()
+                    .overflow_hidden()
+                    .relative()
+                    .child(
+                        crate::virtual_list::virtual_list(
+                            view,
+                            row_ix,
+                            Axis::Horizontal,
+                            col_sizes,
+                            {
+                                move |table, visible_range: Range<usize>, _, cx| {
+                                    table.update_visible_range_if_need(
+                                        visible_range.clone(),
+                                        Axis::Horizontal,
+                                        cx,
+                                    );
+
+                                    let mut items =
+                                        Vec::with_capacity(visible_range.end - visible_range.start);
+
+                                    visible_range.for_each(|col_ix| {
+                                        let col_ix = col_ix + left_cols_count;
+                                        let el = table.render_col_wrap(col_ix, cx).child(
+                                            table
+                                                .render_cell(col_ix, cx)
+                                                .child(table.measure_render_td(row_ix, col_ix, cx)),
+                                        );
+
+                                        items.push(el);
+                                    });
+
+                                    items
+                                }
+                            },
+                        )
+                        .with_scroll_handle(&self.horizontal_scroll_handle),
+                    )
+                    .child(self.delegate.render_last_empty_col(cx)),
+            )
+            // Row selected style
+            .when_some(self.selected_row, |this, _| {
+                this.when(
+                    is_selected && self.selection_state == SelectionState::Row,
+                    |this| {
+                        this.border_color(gpui::transparent_white()).child(
+                            div()
+                                .top(if row_ix == 0 { px(0.) } else { px(-1.) })
+                                .left(px(0.))
+                                .right(px(0.))
+                                .bottom_0()
+                                .absolute()
+                                .bg(cx.theme().table_active)
+                                .border_1()
+                                .border_color(cx.theme().table_active_border),
+                        )
+                    },
+                )
+            })
+            // Row right click row style
+            .when(self.right_clicked_row == Some(row_ix), |this| {
+                this.border_color(gpui::transparent_white()).child(
+                    div()
+                        .top(if row_ix == 0 { px(0.) } else { px(-1.) })
+                        .left(px(0.))
+                        .right(px(0.))
+                        .bottom_0()
+                        .absolute()
+                        .border_1()
+                        .border_color(cx.theme().selection),
+                )
+            })
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |this, ev, cx| {
+                    this.on_row_click(ev, row_ix, cx);
+                }),
+            )
+            .on_mouse_down(
+                MouseButton::Right,
+                cx.listener(move |this, ev, cx| {
+                    this.on_row_click(ev, row_ix, cx);
+                }),
+            )
     }
 
     #[inline]
@@ -1341,6 +1338,13 @@ where
         let left_cols_count = self.fixed_cols.left;
         let rows_count = self.delegate.rows_count(cx);
         let loading = self.delegate.loading(cx);
+        let col_sizes: Rc<Vec<gpui::Size<Pixels>>> = Rc::new(
+            self.col_groups
+                .iter()
+                .skip(left_cols_count)
+                .map(|col| col.bounds.size)
+                .collect(),
+        );
 
         let row_height = self
             .vertical_scroll_handle
@@ -1430,6 +1434,7 @@ where
                                                 row_ix,
                                                 rows_count,
                                                 left_cols_count,
+                                                col_sizes.clone(),
                                                 cols_count,
                                                 cx,
                                             ));
