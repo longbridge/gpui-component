@@ -1347,12 +1347,14 @@ where
 
         // Calculate the extra rows needed to fill the table for stripe style.
         let mut extra_rows_needed = 0;
-        if let Some(row_height) = row_height {
-            if row_height > px(0.) {
-                let actual_height = row_height * rows_count as f32;
-                let remaining_height = total_height - actual_height;
-                if remaining_height > px(0.) {
-                    extra_rows_needed = (remaining_height / row_height).ceil() as usize;
+        if self.stripe {
+            if let Some(row_height) = row_height {
+                if row_height > px(0.) {
+                    let actual_height = row_height * rows_count as f32;
+                    let remaining_height = total_height - actual_height;
+                    if remaining_height > px(0.) {
+                        extra_rows_needed = (remaining_height / row_height).ceil() as usize;
+                    }
                 }
             }
         }
