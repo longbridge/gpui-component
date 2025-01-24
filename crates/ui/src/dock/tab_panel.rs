@@ -725,7 +725,7 @@ impl TabPanel {
             return Empty {}.into_any_element();
         };
 
-        div()
+        v_flex()
             .id("tab-content")
             .group("")
             .overflow_y_scroll()
