@@ -916,10 +916,11 @@ impl TextInput {
             }
         }
 
-        // To fix when line only have 1 char, the closest_index_for_x will always 1.
+        // HOTFIX:
+        //
+        // Wait https://github.com/zed-industries/zed/pull/23603
         if line.unwrapped_layout.len == 1 {
-            // Hardcoded if x > 4px (4px about half chat in most case), return 1
-            if x > px(4.) {
+            if x > line.width() / 2.0 {
                 return 1;
             }
             return 0;
