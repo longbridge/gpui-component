@@ -127,7 +127,7 @@ impl InputStory {
             NumberInput::new(cx)
                 .placeholder("Unsized Integer Number Input", cx)
                 .pattern(Regex::new(r"^\d+$").unwrap(), cx)
-                .small(cx)
+                .small()
         });
 
         cx.subscribe(&number_input2, Self::on_number_input2_event)
