@@ -17,6 +17,7 @@ mod sidebar_story;
 mod switch_story;
 mod table_story;
 mod text_story;
+mod title_bar;
 mod tooltip_story;
 mod webview_story;
 
@@ -29,10 +30,11 @@ pub use dropdown_story::DropdownStory;
 pub use form_story::FormStory;
 
 use gpui::{
-    actions, div, prelude::FluentBuilder as _, px, size, AnyElement, AnyView, AppContext, Bounds,
-    Context as _, Div, EventEmitter, FocusableView, Global, Hsla, InteractiveElement, IntoElement,
-    Model, ParentElement, Render, SharedString, StatefulInteractiveElement, Styled as _, View,
-    ViewContext, VisualContext, WindowBounds, WindowContext, WindowKind, WindowOptions,
+    actions, div, impl_internal_actions, prelude::FluentBuilder as _, px, size, AnyElement,
+    AnyView, AppContext, Bounds, Context as _, Div, EventEmitter, FocusableView, Global, Hsla,
+    InteractiveElement, IntoElement, Model, ParentElement, Render, SharedString,
+    StatefulInteractiveElement, Styled as _, View, ViewContext, VisualContext, WindowBounds,
+    WindowContext, WindowKind, WindowOptions,
 };
 pub use icon_story::IconStory;
 pub use image_story::ImageStory;
@@ -48,6 +50,7 @@ pub use sidebar_story::SidebarStory;
 pub use switch_story::SwitchStory;
 pub use table_story::TableStory;
 pub use text_story::TextStory;
+pub use title_bar::AppTitleBar;
 pub use tooltip_story::TooltipStory;
 pub use webview_story::WebViewStory;
 
@@ -59,8 +62,22 @@ use ui::{
     label::Label,
     notification::Notification,
     popup_menu::PopupMenu,
-    v_flex, ActiveTheme, ContextModal, IconName, Root,
+    scroll::ScrollbarShow,
+    v_flex, ActiveTheme, ContextModal, IconName, Root, TitleBar,
 };
+
+#[derive(Clone, PartialEq, Eq, Deserialize)]
+pub struct SelectScrollbarShow(ScrollbarShow);
+
+#[derive(Clone, PartialEq, Eq, Deserialize)]
+pub struct SelectLocale(SharedString);
+
+#[derive(Clone, PartialEq, Eq, Deserialize)]
+pub struct SelectFont(usize);
+
+impl_internal_actions!(story, [SelectLocale, SelectFont, SelectScrollbarShow,]);
+
+actions!(story, [Quit, Open, CloseWindow]);
 
 const PANEL_NAME: &str = "StoryContainer";
 
@@ -101,11 +118,7 @@ where
     cx.spawn(|mut cx| async move {
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(window_bounds)),
-            // titlebar: Some(TitlebarOptions {
-            //     title: Some(title.clone()),
-            //     appears_transparent: true,
-            //     traffic_light_position: Some(point(px(9.0), px(9.0))),
-            // }),
+            titlebar: Some(TitleBar::title_bar_options()),
             window_min_size: Some(gpui::Size {
                 width: px(640.),
                 height: px(480.),
@@ -121,7 +134,8 @@ where
         let window = cx
             .open_window(options, |cx| {
                 let view = crate_view_fn(cx);
-                cx.new_view(|cx| Root::new(view.into(), cx))
+                let root = cx.new_view(|cx| StoryRoot::new(title.clone(), view, cx));
+                cx.new_view(|cx| Root::new(root.into(), cx))
             })
             .expect("failed to open window");
 
@@ -135,6 +149,34 @@ where
         Ok::<_, anyhow::Error>(())
     })
     .detach();
+}
+
+struct StoryRoot {
+    title_bar: View<AppTitleBar>,
+    view: AnyView,
+}
+
+impl StoryRoot {
+    pub fn new(
+        title: impl Into<SharedString>,
+        view: impl Into<AnyView>,
+        cx: &mut ViewContext<Self>,
+    ) -> Self {
+        let title_bar = cx.new_view(|cx| AppTitleBar::new(title, cx));
+        Self {
+            title_bar,
+            view: view.into(),
+        }
+    }
+}
+
+impl Render for StoryRoot {
+    fn render(&mut self, _: &mut ViewContext<Self>) -> impl IntoElement {
+        v_flex()
+            .size_full()
+            .child(self.title_bar.clone())
+            .child(self.view.clone())
+    }
 }
 
 impl Global for AppState {}

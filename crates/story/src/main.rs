@@ -1,57 +1,32 @@
 use anyhow::{Context, Result};
 use gpui::*;
-use prelude::FluentBuilder as _;
 use serde::Deserialize;
 use std::{sync::Arc, time::Duration};
 use story::{
-    AccordionStory, AppState, Assets, ButtonStory, CalendarStory, DropdownStory, FormStory,
-    IconStory, ImageStory, InputStory, ListStory, ModalStory, PopupStory, ProgressStory,
-    ResizableStory, ScrollableStory, SidebarStory, StoryContainer, SwitchStory, TableStory,
-    TextStory, TooltipStory,
+    AccordionStory, AppState, AppTitleBar, Assets, ButtonStory, CalendarStory, DropdownStory,
+    FormStory, IconStory, ImageStory, InputStory, ListStory, ModalStory, Open, PopupStory,
+    ProgressStory, Quit, ResizableStory, ScrollableStory, SidebarStory, StoryContainer,
+    SwitchStory, TableStory, TextStory, TooltipStory,
 };
 use ui::{
-    badge::Badge,
     button::{Button, ButtonVariants as _},
-    color_picker::{ColorPicker, ColorPickerEvent},
     dock::{DockArea, DockAreaState, DockEvent, DockItem, DockPlacement},
     popup_menu::PopupMenuExt,
-    scroll::ScrollbarShow,
-    ActiveTheme, ContextModal, IconName, Root, Sizable, Theme, TitleBar,
+    IconName, Root, Sizable, Theme, TitleBar,
 };
+
+#[derive(Clone, PartialEq, Eq, Deserialize)]
+pub struct AddPanel(DockPlacement);
+
+#[derive(Clone, PartialEq, Eq, Deserialize)]
+pub struct TogglePanelVisible(SharedString);
+
+impl_internal_actions!(story, [AddPanel, TogglePanelVisible]);
 
 const MAIN_DOCK_AREA: DockAreaTab = DockAreaTab {
     id: "main-dock",
     version: 5,
 };
-
-#[derive(Clone, PartialEq, Eq, Deserialize)]
-struct SelectScrollbarShow(ScrollbarShow);
-
-#[derive(Clone, PartialEq, Eq, Deserialize)]
-struct SelectLocale(SharedString);
-
-#[derive(Clone, PartialEq, Eq, Deserialize)]
-struct SelectFont(usize);
-
-#[derive(Clone, PartialEq, Eq, Deserialize)]
-struct AddPanel(DockPlacement);
-
-#[derive(Clone, PartialEq, Eq, Deserialize)]
-struct TogglePanelVisible(SharedString);
-
-impl_internal_actions!(
-    story,
-    [
-        SelectLocale,
-        SelectFont,
-        AddPanel,
-        SelectScrollbarShow,
-        TogglePanelVisible
-    ]
-);
-
-actions!(main_menu, [Quit]);
-actions!(workspace, [Open, CloseWindow]);
 
 pub fn init(cx: &mut AppContext) {
     cx.bind_keys([KeyBinding::new("cmd-q", Quit, None)]);
@@ -63,11 +38,8 @@ pub fn init(cx: &mut AppContext) {
 }
 
 pub struct StoryWorkspace {
-    theme_color: Option<Hsla>,
+    title_bar: View<AppTitleBar>,
     dock_area: View<DockArea>,
-    locale_selector: View<LocaleSelector>,
-    font_size_selector: View<FontSizeSelector>,
-    theme_color_picker: View<ColorPicker>,
     last_layout_state: Option<DockAreaState>,
     _save_layout_task: Option<Task<()>>,
 }
@@ -118,55 +90,73 @@ impl StoryWorkspace {
         })
         .detach();
 
-        let locale_selector = cx.new_view(LocaleSelector::new);
-        let font_size_selector = cx.new_view(FontSizeSelector::new);
+        let title_bar = cx.new_view(|cx| {
+            AppTitleBar::new("Examples", cx).child({
+                move |cx| {
+                    Button::new("add-panel")
+                        .icon(IconName::LayoutDashboard)
+                        .small()
+                        .ghost()
+                        .popup_menu({
+                            let invisible_panels = AppState::global(cx).invisible_panels.clone();
 
-        let theme_color_picker = cx.new_view(|cx| {
-            let mut picker = ColorPicker::new("theme-color-picker", cx)
-                .xsmall()
-                .anchor(Corner::TopRight)
-                .label("Theme Color");
-            picker.set_value(cx.theme().primary, cx);
-            picker
-        });
-        cx.subscribe(
-            &theme_color_picker,
-            |this, _, ev: &ColorPickerEvent, cx| match ev {
-                ColorPickerEvent::Change(color) => {
-                    this.set_theme_color(*color, cx);
+                            move |menu, cx| {
+                                menu.menu(
+                                    "Add Panel to Center",
+                                    Box::new(AddPanel(DockPlacement::Center)),
+                                )
+                                .separator()
+                                .menu("Add Panel to Left", Box::new(AddPanel(DockPlacement::Left)))
+                                .menu(
+                                    "Add Panel to Right",
+                                    Box::new(AddPanel(DockPlacement::Right)),
+                                )
+                                .menu(
+                                    "Add Panel to Bottom",
+                                    Box::new(AddPanel(DockPlacement::Bottom)),
+                                )
+                                .separator()
+                                .menu_with_check(
+                                    "Sidebar",
+                                    !invisible_panels
+                                        .read(cx)
+                                        .contains(&SharedString::from("Sidebar")),
+                                    Box::new(TogglePanelVisible(SharedString::from("Sidebar"))),
+                                )
+                                .menu_with_check(
+                                    "Modal",
+                                    !invisible_panels
+                                        .read(cx)
+                                        .contains(&SharedString::from("SidebModalar")),
+                                    Box::new(TogglePanelVisible(SharedString::from("Modal"))),
+                                )
+                                .menu_with_check(
+                                    "Accordion",
+                                    !invisible_panels
+                                        .read(cx)
+                                        .contains(&SharedString::from("Accordion")),
+                                    Box::new(TogglePanelVisible(SharedString::from("Accordion"))),
+                                )
+                                .menu_with_check(
+                                    "List",
+                                    !invisible_panels
+                                        .read(cx)
+                                        .contains(&SharedString::from("List")),
+                                    Box::new(TogglePanelVisible(SharedString::from("List"))),
+                                )
+                            }
+                        })
+                        .anchor(Corner::TopRight)
                 }
-            },
-        )
-        .detach();
+            })
+        });
 
         Self {
-            theme_color: None,
             dock_area,
-            locale_selector,
-            font_size_selector,
-            theme_color_picker,
+            title_bar,
             last_layout_state: None,
             _save_layout_task: None,
         }
-    }
-
-    fn set_theme_color(&mut self, color: Option<Hsla>, cx: &mut ViewContext<Self>) {
-        self.theme_color = color;
-        if let Some(color) = self.theme_color {
-            let theme = cx.global_mut::<Theme>();
-            theme.apply_color(color);
-            cx.refresh();
-        }
-    }
-
-    fn change_color_mode(&mut self, _: &ClickEvent, cx: &mut ViewContext<Self>) {
-        let mode = match cx.theme().mode.is_dark() {
-            true => ui::ThemeMode::Light,
-            false => ui::ThemeMode::Dark,
-        };
-
-        Theme::change(mode, cx);
-        self.set_theme_color(self.theme_color, cx);
     }
 
     fn save_layout(&mut self, dock_area: View<DockArea>, cx: &mut ViewContext<Self>) {
@@ -345,11 +335,7 @@ impl StoryWorkspace {
             let options = WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(window_bounds)),
                 #[cfg(not(target_os = "linux"))]
-                titlebar: Some(TitlebarOptions {
-                    title: None,
-                    appears_transparent: true,
-                    traffic_light_position: Some(point(px(9.0), px(9.0))),
-                }),
+                titlebar: Some(TitleBar::title_bar_options()),
                 window_min_size: Some(gpui::Size {
                     width: px(640.),
                     height: px(480.),
@@ -450,8 +436,6 @@ impl Render for StoryWorkspace {
         let drawer_layer = Root::render_drawer_layer(cx);
         let modal_layer = Root::render_modal_layer(cx);
         let notification_layer = Root::render_notification_layer(cx);
-        let notifications_count = cx.notifications().len();
-        let invisible_panels = AppState::global(cx).invisible_panels.clone();
 
         div()
             .id("story-workspace")
@@ -461,238 +445,11 @@ impl Render for StoryWorkspace {
             .size_full()
             .flex()
             .flex_col()
-            .child(
-                TitleBar::new()
-                    // left side
-                    .child(div().flex().items_center().child("GPUI App"))
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .justify_end()
-                            .px_2()
-                            .gap_2()
-                            .on_mouse_down(MouseButton::Left, |_, cx| cx.stop_propagation())
-                            .child(self.theme_color_picker.clone())
-                            .child(
-                                Button::new("add-panel")
-                                    .icon(IconName::LayoutDashboard)
-                                    .small()
-                                    .ghost()
-                                    .popup_menu(move |menu, cx| {
-                                        menu.menu(
-                                            "Add Panel to Center",
-                                            Box::new(AddPanel(DockPlacement::Center)),
-                                        )
-                                        .separator()
-                                        .menu(
-                                            "Add Panel to Left",
-                                            Box::new(AddPanel(DockPlacement::Left)),
-                                        )
-                                        .menu(
-                                            "Add Panel to Right",
-                                            Box::new(AddPanel(DockPlacement::Right)),
-                                        )
-                                        .menu(
-                                            "Add Panel to Bottom",
-                                            Box::new(AddPanel(DockPlacement::Bottom)),
-                                        )
-                                        .separator()
-                                        .menu_with_check(
-                                            "Sidebar",
-                                            !invisible_panels
-                                                .read(cx)
-                                                .contains(&SharedString::from("Sidebar")),
-                                            Box::new(TogglePanelVisible(SharedString::from(
-                                                "Sidebar",
-                                            ))),
-                                        )
-                                        .menu_with_check(
-                                            "Modal",
-                                            !invisible_panels
-                                                .read(cx)
-                                                .contains(&SharedString::from("SidebModalar")),
-                                            Box::new(TogglePanelVisible(SharedString::from(
-                                                "Modal",
-                                            ))),
-                                        )
-                                        .menu_with_check(
-                                            "Accordion",
-                                            !invisible_panels
-                                                .read(cx)
-                                                .contains(&SharedString::from("Accordion")),
-                                            Box::new(TogglePanelVisible(SharedString::from(
-                                                "Accordion",
-                                            ))),
-                                        )
-                                        .menu_with_check(
-                                            "List",
-                                            !invisible_panels
-                                                .read(cx)
-                                                .contains(&SharedString::from("List")),
-                                            Box::new(TogglePanelVisible(SharedString::from(
-                                                "List",
-                                            ))),
-                                        )
-                                    })
-                                    .anchor(Corner::TopRight),
-                            )
-                            .child(
-                                Button::new("theme-mode")
-                                    .map(|this| {
-                                        if cx.theme().mode.is_dark() {
-                                            this.icon(IconName::Sun)
-                                        } else {
-                                            this.icon(IconName::Moon)
-                                        }
-                                    })
-                                    .small()
-                                    .ghost()
-                                    .on_click(cx.listener(Self::change_color_mode)),
-                            )
-                            .child(self.locale_selector.clone())
-                            .child(self.font_size_selector.clone())
-                            .child(
-                                Badge::new().dot().count(1).child(
-                                    Button::new("github")
-                                        .icon(IconName::GitHub)
-                                        .small()
-                                        .ghost()
-                                        .on_click(|_, cx| {
-                                            cx.open_url(
-                                                "https://github.com/longbridge/gpui-component",
-                                            )
-                                        }),
-                                ),
-                            )
-                            .child(
-                                div().relative().child(
-                                    Badge::new().count(notifications_count).max(99).child(
-                                        Button::new("bell")
-                                            .small()
-                                            .ghost()
-                                            .compact()
-                                            .icon(IconName::Bell),
-                                    ),
-                                ),
-                            ),
-                    ),
-            )
+            .child(self.title_bar.clone())
             .child(self.dock_area.clone())
             .children(drawer_layer)
             .children(modal_layer)
             .child(div().absolute().top_8().children(notification_layer))
-    }
-}
-
-struct LocaleSelector {
-    focus_handle: FocusHandle,
-}
-
-impl LocaleSelector {
-    pub fn new(cx: &mut ViewContext<Self>) -> Self {
-        Self {
-            focus_handle: cx.focus_handle(),
-        }
-    }
-
-    fn on_select_locale(&mut self, locale: &SelectLocale, cx: &mut ViewContext<Self>) {
-        ui::set_locale(&locale.0);
-        cx.refresh();
-    }
-}
-
-impl Render for LocaleSelector {
-    fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
-        let focus_handle = self.focus_handle.clone();
-        let locale = ui::locale().to_string();
-
-        div()
-            .id("locale-selector")
-            .track_focus(&focus_handle)
-            .on_action(cx.listener(Self::on_select_locale))
-            .child(
-                Button::new("btn")
-                    .small()
-                    .ghost()
-                    .icon(IconName::Globe)
-                    .popup_menu(move |this, _| {
-                        this.menu_with_check(
-                            "English",
-                            locale == "en",
-                            Box::new(SelectLocale("en".into())),
-                        )
-                        .menu_with_check(
-                            "简体中文",
-                            locale == "zh-CN",
-                            Box::new(SelectLocale("zh-CN".into())),
-                        )
-                    })
-                    .anchor(Corner::TopRight),
-            )
-    }
-}
-
-struct FontSizeSelector {
-    focus_handle: FocusHandle,
-}
-
-impl FontSizeSelector {
-    pub fn new(cx: &mut ViewContext<Self>) -> Self {
-        Self {
-            focus_handle: cx.focus_handle(),
-        }
-    }
-
-    fn on_select_font(&mut self, font_size: &SelectFont, cx: &mut ViewContext<Self>) {
-        Theme::global_mut(cx).font_size = font_size.0 as f32;
-        cx.refresh();
-    }
-
-    fn on_select_scrollbar_show(&mut self, show: &SelectScrollbarShow, cx: &mut ViewContext<Self>) {
-        Theme::global_mut(cx).scrollbar_show = show.0;
-        cx.refresh();
-    }
-}
-
-impl Render for FontSizeSelector {
-    fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
-        let focus_handle = self.focus_handle.clone();
-        let font_size = cx.theme().font_size as i32;
-        let scroll_show = cx.theme().scrollbar_show;
-
-        div()
-            .id("font-size-selector")
-            .track_focus(&focus_handle)
-            .on_action(cx.listener(Self::on_select_font))
-            .on_action(cx.listener(Self::on_select_scrollbar_show))
-            .child(
-                Button::new("btn")
-                    .small()
-                    .ghost()
-                    .icon(IconName::Settings2)
-                    .popup_menu(move |this, _| {
-                        this.menu_with_check(
-                            "Font Large",
-                            font_size == 18,
-                            Box::new(SelectFont(18)),
-                        )
-                        .menu_with_check("Font Default", font_size == 16, Box::new(SelectFont(16)))
-                        .menu_with_check("Font Small", font_size == 14, Box::new(SelectFont(14)))
-                        .separator()
-                        .menu_with_check(
-                            "Scrolling to show Scrollbar",
-                            scroll_show == ScrollbarShow::Scrolling,
-                            Box::new(SelectScrollbarShow(ScrollbarShow::Scrolling)),
-                        )
-                        .menu_with_check(
-                            "Hover to show Scrollbar",
-                            scroll_show == ScrollbarShow::Hover,
-                            Box::new(SelectScrollbarShow(ScrollbarShow::Hover)),
-                        )
-                    })
-                    .anchor(Corner::TopRight),
-            )
     }
 }
 

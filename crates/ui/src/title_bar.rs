@@ -4,7 +4,7 @@ use crate::{h_flex, ActiveTheme, Icon, IconName, InteractiveElementExt as _, Siz
 use gpui::{
     div, prelude::FluentBuilder as _, px, relative, AnyElement, ClickEvent, Div, Element, Hsla,
     InteractiveElement as _, IntoElement, MouseButton, ParentElement, Pixels, RenderOnce, Stateful,
-    StatefulInteractiveElement as _, Style, Styled, WindowContext,
+    StatefulInteractiveElement as _, Style, Styled, TitlebarOptions, WindowContext,
 };
 
 pub const TITLE_BAR_HEIGHT: Pixels = px(35.);
@@ -29,6 +29,15 @@ impl TitleBar {
             base: div().id("title-bar").pl(TITLE_BAR_LEFT_PADDING),
             children: Vec::new(),
             on_close_window: None,
+        }
+    }
+
+    /// Returns the default title bar options for compitable with the TitleBar.
+    pub fn title_bar_options() -> TitlebarOptions {
+        TitlebarOptions {
+            title: None,
+            appears_transparent: true,
+            traffic_light_position: Some(gpui::point(px(9.0), px(9.0))),
         }
     }
 

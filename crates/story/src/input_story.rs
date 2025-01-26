@@ -353,7 +353,6 @@ impl Render for InputStory {
             .on_action(cx.listener(Self::tab))
             .on_action(cx.listener(Self::tab_prev))
             .size_full()
-            .p_4()
             .justify_start()
             .gap_3()
             .child(
@@ -429,14 +428,14 @@ impl Render for InputStory {
                     .gap_3()
                     .child(
                         Button::new("btn-submit")
-                            .w_full()
+                            .flex_1()
                             .with_variant(ButtonVariant::Primary)
                             .label("Submit")
                             .on_click(cx.listener(|_, _, cx| cx.dispatch_action(Box::new(Tab)))),
                     )
                     .child(
                         Button::new("btn-cancel")
-                            .w_full()
+                            .flex_1()
                             .label("Cancel")
                             .into_element(),
                     ),
