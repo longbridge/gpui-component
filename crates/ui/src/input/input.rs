@@ -933,6 +933,8 @@ impl TextInput {
     ///
     /// Fork:
     /// https://github.com/zed-industries/zed/blob/1c322c0f2daa50f46644832a6a1cdf15bcf921ea/crates/gpui/src/text_system/line_layout.rs#L272
+    ///
+    /// Wait PR https://github.com/zed-industries/zed/pull/23668
     pub fn closest_index_for_position(
         &self,
         line: &WrappedLine,
@@ -1023,8 +1025,7 @@ impl TextInput {
             let index_result = self.closest_index_for_position(line, pos, line_height);
             if let Ok(v) = index_result {
                 index += v;
-                // If index is the newline, move offset
-
+                // TODO: If index is the newline, move offset
                 break;
             } else if let Ok(_) = line.index_for_position(point(px(0.), pos.y), line_height) {
                 // Click in the this line but not in the text, move cursor to the end of the line.
