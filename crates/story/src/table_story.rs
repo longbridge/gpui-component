@@ -652,6 +652,7 @@ impl TableStory {
     fn toggle_col_resize(&mut self, checked: &bool, cx: &mut ViewContext<Self>) {
         self.table.update(cx, |table, cx| {
             table.delegate_mut().col_resize = *checked;
+            table.refresh(cx);
             cx.notify();
         });
     }
@@ -659,6 +660,7 @@ impl TableStory {
     fn toggle_col_order(&mut self, checked: &bool, cx: &mut ViewContext<Self>) {
         self.table.update(cx, |table, cx| {
             table.delegate_mut().col_order = *checked;
+            table.refresh(cx);
             cx.notify();
         });
     }
@@ -666,6 +668,7 @@ impl TableStory {
     fn toggle_col_sort(&mut self, checked: &bool, cx: &mut ViewContext<Self>) {
         self.table.update(cx, |table, cx| {
             table.delegate_mut().col_sort = *checked;
+            table.refresh(cx);
             cx.notify();
         });
     }
@@ -673,6 +676,7 @@ impl TableStory {
     fn toggle_col_selection(&mut self, checked: &bool, cx: &mut ViewContext<Self>) {
         self.table.update(cx, |table, cx| {
             table.delegate_mut().col_selection = *checked;
+            table.refresh(cx);
             cx.notify();
         });
     }

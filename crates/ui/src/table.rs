@@ -1270,12 +1270,7 @@ where
 
         let mut extra_rows_needed = 0;
 
-        let row_height = self
-            .vertical_scroll_handle
-            .0
-            .borrow()
-            .last_item_size
-            .map(|size| size.item.height);
+        let row_height = self.size.table_row_height();
         let total_height = self
             .vertical_scroll_handle
             .0
@@ -1285,14 +1280,11 @@ where
             .size
             .height;
 
-        if let Some(row_height) = row_height {
-            if row_height > px(0.) {
-                let actual_height = row_height * rows_count as f32;
-                let remaining_height = total_height - actual_height;
-                if remaining_height > px(0.) {
-                    extra_rows_needed = (remaining_height / row_height).ceil() as usize;
-                }
-            }
+        let actual_height = row_height * rows_count as f32;
+        let remaining_height = total_height - actual_height;
+
+        if remaining_height > px(0.) {
+            extra_rows_needed = (remaining_height / row_height).ceil() as usize;
         }
 
         extra_rows_needed
