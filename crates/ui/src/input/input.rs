@@ -1025,12 +1025,12 @@ impl TextInput {
             let index_result = self.closest_index_for_position(line, pos, line_height);
             if let Ok(v) = index_result {
                 index += v;
-                // TODO: If index is the newline, move offset
                 break;
             } else if let Ok(_) = line.index_for_position(point(px(0.), pos.y), line_height) {
                 // Click in the this line but not in the text, move cursor to the end of the line.
                 // The fallback index is saved in Err from `index_for_position` method.
                 index += index_result.unwrap_err();
+                println!("------------------ 2");
                 break;
             } else if line.len() == 0 {
                 // empty line
@@ -1043,6 +1043,7 @@ impl TextInput {
                     break;
                 }
             } else {
+                println!("------------------ 3 {}", line.len());
                 index += line.len();
             }
 
