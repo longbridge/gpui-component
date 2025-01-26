@@ -61,7 +61,7 @@ gpui = { git = "https://github.com/huacnlee/zed.git", branch = "export-platform-
 ui = { git = "https://github.com/longbridge/gpui-component.git" }
 ```
 
-More usage can be found in [stroy](https://github.com/longbridge/gpui-component/tree/main/crates/story) directory.
+More usage can be found in [story](https://github.com/longbridge/gpui-component/tree/main/crates/story) directory.
 
 ## Demo
 

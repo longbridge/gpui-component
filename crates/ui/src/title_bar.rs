@@ -32,7 +32,7 @@ impl TitleBar {
         }
     }
 
-    /// Returns the default title bar options for compitable with the TitleBar.
+    /// Returns the default title bar options for compatible with the [`crate::TitleBar`].
     pub fn title_bar_options() -> TitlebarOptions {
         TitlebarOptions {
             title: None,
