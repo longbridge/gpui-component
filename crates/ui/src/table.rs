@@ -1387,13 +1387,6 @@ where
         let left_cols_count = self.fixed_cols.left;
         let rows_count = self.delegate.rows_count(cx);
         let loading = self.delegate.loading(cx);
-        let col_sizes: Rc<Vec<gpui::Size<Pixels>>> = Rc::new(
-            self.col_groups
-                .iter()
-                .skip(left_cols_count)
-                .map(|col| col.bounds.size)
-                .collect(),
-        );
         let extra_rows_needed = self.calculate_extra_rows_needed(rows_count);
 
         let inner_table = v_flex()
@@ -1430,6 +1423,17 @@ where
                                 rows_count + extra_rows_needed,
                                 {
                                     move |table, visible_range, cx| {
+                                        // We must calculate the col sizes here, because the col sizes
+                                        // need render_th first, then that method will set the bounds of each col.
+                                        let col_sizes: Rc<Vec<gpui::Size<Pixels>>> = Rc::new(
+                                            table
+                                                .col_groups
+                                                .iter()
+                                                .skip(left_cols_count)
+                                                .map(|col| col.bounds.size)
+                                                .collect(),
+                                        );
+
                                         table.load_more_if_need(rows_count, visible_range.end, cx);
                                         table.update_visible_range_if_need(
                                             visible_range.clone(),
