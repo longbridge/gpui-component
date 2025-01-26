@@ -149,7 +149,7 @@ impl Element for WebViewElement {
         style.size = Size::full();
         // If the parent view is no longer visible, we don't need to layout the webview
 
-        let id = window.request_layout(cx, style, []);
+        let id = window.request_layout(style, [], cx);
         (id, ())
     }
 
