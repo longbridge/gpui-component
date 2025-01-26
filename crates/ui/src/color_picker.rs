@@ -1,8 +1,8 @@
-use gpui::{Window, ModelContext, Model, 
-    anchored, canvas, deferred, div, prelude::FluentBuilder as _, px, relative, AppContext, Bounds,
-    Corner, ElementId, EventEmitter, FocusHandle, Focusable, Hsla, InteractiveElement as _,
-    IntoElement, KeyBinding, MouseButton, ParentElement, Pixels, Point, Render, SharedString,
-    StatefulInteractiveElement as _, Styled,   VisualContext,
+use gpui::{
+    anchored, canvas, deferred, div, prelude::FluentBuilder as _, px, relative, App, AppContext,
+    Bounds, Context, Corner, ElementId, Entity, EventEmitter, FocusHandle, Focusable, Hsla,
+    InteractiveElement as _, IntoElement, KeyBinding, MouseButton, ParentElement, Pixels, Point,
+    Render, SharedString, StatefulInteractiveElement as _, Styled, Window,
 };
 
 use crate::{
@@ -70,7 +70,7 @@ pub struct ColorPicker {
 
 impl ColorPicker {
     pub fn new(id: impl Into<ElementId>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let color_input = cx.new(|cx| TextInput::new(cx).xsmall());
+        let color_input = cx.new(|cx| TextInput::new(window, cx).xsmall());
 
         cx.subscribe(&color_input, |this, _, ev: &InputEvent, cx| match ev {
             InputEvent::Change(value) => {
@@ -83,7 +83,7 @@ impl ColorPicker {
                 let val = this.color_input.read(cx).text();
                 if let Ok(color) = Hsla::parse_hex(&val) {
                     this.open = false;
-                    this.update_value(Some(color), true, cx);
+                    this.update_value(Some(color), true, window, cx);
                 }
             }
             _ => {}
@@ -128,7 +128,7 @@ impl ColorPicker {
 
     /// Set current color value.
     pub fn set_value(&mut self, value: Hsla, window: &mut Window, cx: &mut Context<Self>) {
-        self.update_value(Some(value), false, cx)
+        self.update_value(Some(value), false, window, cx)
     }
 
     /// Set the size of the color picker, default is `Size::Medium`.
@@ -165,14 +165,20 @@ impl ColorPicker {
         cx.notify();
     }
 
-    fn update_value(&mut self, value: Option<Hsla>, emit: bool, window: &mut Window, cx: &mut Context<Self>) {
+    fn update_value(
+        &mut self,
+        value: Option<Hsla>,
+        emit: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.value = value;
         self.hovered_color = value;
         self.color_input.update(cx, |view, cx| {
             if let Some(value) = value {
-                view.set_text(value.to_hex(), cx);
+                view.set_text(value.to_hex(), window, cx);
             } else {
-                view.set_text("", cx);
+                view.set_text("", window, cx);
             }
         });
         if emit {
@@ -185,7 +191,8 @@ impl ColorPicker {
         &self,
         color: Hsla,
         clickable: bool,
-        window: &mut Window, cx: &mut Context<Self>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
     ) -> impl IntoElement {
         div()
             .id(SharedString::from(format!("color-{}", color.to_hex())))

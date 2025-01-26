@@ -1,7 +1,7 @@
-use gpui::{Window, ModelContext, 
-    div, prelude::FluentBuilder, px, AnyElement, Context, EventEmitter, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, KeyDownEvent, Model, MouseButton, MouseDownEvent,
-    ParentElement as _, Render, SharedString, Styled as _, 
+use gpui::{
+    div, prelude::FluentBuilder, px, AnyElement, AppContext as _, Context, Entity, EventEmitter,
+    FocusHandle, Focusable, InteractiveElement, IntoElement, KeyDownEvent, MouseButton,
+    MouseDownEvent, ParentElement as _, Render, SharedString, Styled as _, Window,
 };
 
 use crate::{h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable, Size};
@@ -48,10 +48,10 @@ impl OtpInput {
         // Observe the blink cursor to repaint the view when it changes.
         cx.observe(&blink_cursor, |_, _, cx| cx.notify()).detach();
         // Blink the cursor when the window is active, pause when it's not.
-        cx.observe_window_activation(|this, cx| {
-            if cx.is_window_active() {
+        cx.observe_window_activation(window, |this, window, cx| {
+            if window.is_window_active() {
                 let focus_handle = this.focus_handle.clone();
-                if focus_handle.is_focused(cx) {
+                if focus_handle.is_focused(window) {
                     this.blink_cursor.update(cx, |blink_cursor, cx| {
                         blink_cursor.start(cx);
                     });
@@ -60,8 +60,8 @@ impl OtpInput {
         })
         .detach();
 
-        cx.on_focus(&focus_handle, Self::on_focus).detach();
-        cx.on_blur(&focus_handle, Self::on_blur).detach();
+        cx.on_focus(&focus_handle, window, Self::on_focus).detach();
+        cx.on_blur(&focus_handle, window, Self::on_blur).detach();
 
         input
     }
@@ -79,7 +79,12 @@ impl OtpInput {
     }
 
     /// Set value of the OTP Input.
-    pub fn set_value(&mut self, value: impl Into<SharedString>, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn set_value(
+        &mut self,
+        value: impl Into<SharedString>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.value = value.into();
         cx.notify();
     }
@@ -105,8 +110,13 @@ impl OtpInput {
         self.focus_handle.focus(window);
     }
 
-    fn on_input_mouse_down(&mut self, _: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
-        cx.focus(&self.focus_handle);
+    fn on_input_mouse_down(
+        &mut self,
+        _: &MouseDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        window.focus(&self.focus_handle);
     }
 
     fn on_key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
@@ -164,7 +174,7 @@ impl OtpInput {
         cx.emit(InputEvent::Blur);
     }
 
-    fn pause_blink_cursor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    fn pause_blink_cursor(&mut self, cx: &mut Context<Self>) {
         self.blink_cursor.update(cx, |cursor, cx| {
             cursor.pause(cx);
         });

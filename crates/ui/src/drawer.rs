@@ -1,10 +1,10 @@
 use std::{rc::Rc, time::Duration};
 
-use gpui::{Window, 
+use gpui::{
     actions, anchored, div, point, prelude::FluentBuilder as _, px, Animation, AnimationExt as _,
-    AnyElement, AppContext, ClickEvent, DefiniteLength, DismissEvent, Div, EventEmitter,
+    AnyElement, App, AppContext, ClickEvent, DefiniteLength, DismissEvent, Div, EventEmitter,
     FocusHandle, InteractiveElement as _, IntoElement, KeyBinding, MouseButton, ParentElement,
-    Pixels, RenderOnce, Styled, 
+    Pixels, RenderOnce, Styled, Window,
 };
 
 use crate::{
@@ -118,8 +118,8 @@ impl RenderOnce for Drawer {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let placement = self.placement;
         let titlebar_height = self.margin_top;
-        let window_paddings = crate::window_border::window_paddings(cx);
-        let size = cx.viewport_size()
+        let window_paddings = crate::window_border::window_paddings(window);
+        let size = window.viewport_size()
             - gpui::size(
                 window_paddings.left + window_paddings.right,
                 window_paddings.top + window_paddings.bottom,
@@ -137,13 +137,13 @@ impl RenderOnce for Drawer {
                     .occlude()
                     .w(size.width)
                     .h(size.height - titlebar_height)
-                    .bg(overlay_color(self.overlay, cx))
+                    .bg(overlay_color(self.overlay, window, cx))
                     .when(self.overlay, |this| {
                         this.on_mouse_down(MouseButton::Left, {
                             let on_close = self.on_close.clone();
-                            move |_, cx| {
-                                on_close(&ClickEvent::default(), cx);
-                                cx.close_drawer();
+                            move |_, window, cx| {
+                                on_close(&ClickEvent::default(), window, cx);
+                                window.close_drawer();
                             }
                         })
                     })
@@ -154,9 +154,9 @@ impl RenderOnce for Drawer {
                             .track_focus(&self.focus_handle)
                             .on_action({
                                 let on_close = self.on_close.clone();
-                                move |_: &Escape, cx| {
-                                    on_close(&ClickEvent::default(), cx);
-                                    cx.close_drawer();
+                                move |_: &Escape, window, cx| {
+                                    on_close(&ClickEvent::default(), window, cx);
+                                    window.close_drawer();
                                 }
                             })
                             .absolute()
@@ -194,8 +194,8 @@ impl RenderOnce for Drawer {
                                             .ghost()
                                             .icon(IconName::Close)
                                             .on_click(move |_, window, cx| {
-                                                on_close(&ClickEvent::default(), cx);
-                                                cx.close_drawer();
+                                                on_close(&ClickEvent::default(), window, cx);
+                                                window.close_drawer();
                                             }),
                                     ),
                             )
@@ -204,7 +204,7 @@ impl RenderOnce for Drawer {
                                 div().flex_1().overflow_hidden().child(
                                     v_flex()
                                         .scrollable(
-                                            cx.parent_view_id().unwrap_or_default(),
+                                            window.parent_view_id().unwrap_or_default(),
                                             ScrollbarAxis::Vertical,
                                         )
                                         .child(self.content),

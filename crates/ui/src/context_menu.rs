@@ -1,10 +1,10 @@
 use std::{cell::RefCell, rc::Rc};
 
-use gpui::{Window, ModelContext, AppContext, Model, 
-    anchored, deferred, div, prelude::FluentBuilder, px, relative, AnyElement, Corner,
-    DismissEvent, DispatchPhase, Element, ElementId, Focusable, GlobalElementId,
-    InteractiveElement, IntoElement, MouseButton, MouseDownEvent, ParentElement, Pixels, Point,
-    Position, Stateful, Style,   
+use gpui::{
+    anchored, deferred, div, prelude::FluentBuilder, px, relative, AnyElement, App, AppContext,
+    Context, Corner, DismissEvent, DispatchPhase, Element, ElementId, Entity, Focusable,
+    FocusableWrapper, GlobalElementId, InteractiveElement, IntoElement, MouseButton,
+    MouseDownEvent, ParentElement, Pixels, Point, Position, Stateful, Style, Window,
 };
 
 use crate::popup_menu::PopupMenu;
@@ -19,12 +19,13 @@ pub trait ContextMenuExt: ParentElement + Sized {
 }
 
 impl<E> ContextMenuExt for Stateful<E> where E: ParentElement {}
-impl<E> ContextMenuExt for Focusable<E> where E: ParentElement {}
+impl<E> ContextMenuExt for FocusableWrapper<E> where E: ParentElement {}
 
 /// A context menu that can be shown on right-click.
 pub struct ContextMenu {
     id: ElementId,
-    menu: Option<Box<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static>>,
+    menu:
+        Option<Box<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static>>,
     anchor: Corner,
 }
 
@@ -49,14 +50,18 @@ impl ContextMenu {
     fn with_element_state<R>(
         &mut self,
         id: &GlobalElementId,
-        window: &mut Window, cx: &mut App,
+        window: &mut Window,
+        cx: &mut App,
         f: impl FnOnce(&mut Self, &mut ContextMenuState, &mut Window, &mut App) -> R,
     ) -> R {
-        cx.with_optional_element_state::<ContextMenuState, _>(Some(id), |element_state, cx| {
-            let mut element_state = element_state.unwrap().unwrap_or_default();
-            let result = f(self, &mut element_state, cx);
-            (result, Some(element_state))
-        })
+        window.with_optional_element_state::<ContextMenuState, _>(
+            Some(id),
+            |element_state, window| {
+                let mut element_state = element_state.unwrap().unwrap_or_default();
+                let result = f(self, &mut element_state, window, cx);
+                (result, Some(element_state))
+            },
+        )
     }
 }
 
@@ -97,7 +102,8 @@ impl Element for ContextMenu {
     fn request_layout(
         &mut self,
         id: Option<&gpui::GlobalElementId>,
-        window: &mut Window, cx: &mut App,
+        window: &mut Window,
+        cx: &mut App,
     ) -> (gpui::LayoutId, Self::RequestLayoutState) {
         let mut style = Style::default();
         // Set the layout style relative to the table view to get same size.
@@ -109,59 +115,64 @@ impl Element for ContextMenu {
 
         let anchor = self.anchor;
 
-        self.with_element_state(id.unwrap(), cx, |_, state: &mut ContextMenuState, cx| {
-            let position = state.position.clone();
-            let position = position.borrow();
-            let open = state.open.clone();
-            let menu_view = state.menu_view.borrow().clone();
+        self.with_element_state(
+            id.unwrap(),
+            window,
+            cx,
+            |_, state: &mut ContextMenuState, window, cx| {
+                let position = state.position.clone();
+                let position = position.borrow();
+                let open = state.open.clone();
+                let menu_view = state.menu_view.borrow().clone();
 
-            let (menu_element, menu_layout_id) = if *open.borrow() {
-                let has_menu_item = menu_view
-                    .as_ref()
-                    .map(|menu| !menu.read(cx).is_empty())
-                    .unwrap_or(false);
+                let (menu_element, menu_layout_id) = if *open.borrow() {
+                    let has_menu_item = menu_view
+                        .as_ref()
+                        .map(|menu| !menu.read(cx).is_empty())
+                        .unwrap_or(false);
 
-                if has_menu_item {
-                    let mut menu_element = deferred(
-                        anchored()
-                            .position(*position)
-                            .snap_to_window_with_margin(px(8.))
-                            .anchor(anchor)
-                            .when_some(menu_view, |this, menu| {
-                                // Focus the menu, so that can be handle the action.
-                                menu.focus_handle(cx).focus(cx);
+                    if has_menu_item {
+                        let mut menu_element = deferred(
+                            anchored()
+                                .position(*position)
+                                .snap_to_window_with_margin(px(8.))
+                                .anchor(anchor)
+                                .when_some(menu_view, |this, menu| {
+                                    // Focus the menu, so that can be handle the action.
+                                    menu.focus_handle(cx).focus(cx);
 
-                                this.child(div().occlude().child(menu.clone()))
-                            }),
-                    )
-                    .with_priority(1)
-                    .into_any();
+                                    this.child(div().occlude().child(menu.clone()))
+                                }),
+                        )
+                        .with_priority(1)
+                        .into_any();
 
-                    let menu_layout_id = menu_element.request_layout(cx);
-                    (Some(menu_element), Some(menu_layout_id))
+                        let menu_layout_id = menu_element.request_layout(window, cx);
+                        (Some(menu_element), Some(menu_layout_id))
+                    } else {
+                        (None, None)
+                    }
                 } else {
                     (None, None)
+                };
+
+                let mut layout_ids = vec![];
+                if let Some(menu_layout_id) = menu_layout_id {
+                    layout_ids.push(menu_layout_id);
                 }
-            } else {
-                (None, None)
-            };
 
-            let mut layout_ids = vec![];
-            if let Some(menu_layout_id) = menu_layout_id {
-                layout_ids.push(menu_layout_id);
-            }
+                let layout_id = window.request_layout(style, layout_ids, cx);
 
-            let layout_id = window.request_layout(cx, style, layout_ids);
+                (
+                    layout_id,
+                    ContextMenuState {
+                        menu_element,
 
-            (
-                layout_id,
-                ContextMenuState {
-                    menu_element,
-
-                    ..Default::default()
-                },
-            )
-        })
+                        ..Default::default()
+                    },
+                )
+            },
+        )
     }
 
     fn prepaint(
@@ -169,10 +180,11 @@ impl Element for ContextMenu {
         _: Option<&gpui::GlobalElementId>,
         _: gpui::Bounds<gpui::Pixels>,
         request_layout: &mut Self::RequestLayoutState,
-        window: &mut Window, cx: &mut App,
+        window: &mut Window,
+        cx: &mut App,
     ) -> Self::PrepaintState {
         if let Some(menu_element) = &mut request_layout.menu_element {
-            menu_element.prepaint(cx);
+            menu_element.prepaint(window, cx);
         }
     }
 
@@ -182,10 +194,11 @@ impl Element for ContextMenu {
         bounds: gpui::Bounds<gpui::Pixels>,
         request_layout: &mut Self::RequestLayoutState,
         _: &mut Self::PrepaintState,
-        window: &mut Window, cx: &mut App,
+        window: &mut Window,
+        cx: &mut App,
     ) {
         if let Some(menu_element) = &mut request_layout.menu_element {
-            menu_element.paint(cx);
+            menu_element.paint(window, cx);
         }
 
         let Some(builder) = self.menu.take() else {
@@ -194,14 +207,15 @@ impl Element for ContextMenu {
 
         self.with_element_state(
             id.unwrap(),
+            window,
             cx,
-            |_view, state: &mut ContextMenuState, cx| {
+            |_view, state: &mut ContextMenuState, window, cx| {
                 let position = state.position.clone();
                 let open = state.open.clone();
                 let menu_view = state.menu_view.clone();
 
                 // When right mouse click, to build content menu, and show it at the mouse position.
-                window.on_mouse_event(move |event: &MouseDownEvent, phase, cx| {
+                window.on_mouse_event(move |event: &MouseDownEvent, phase, window, cx| {
                     if phase == DispatchPhase::Bubble
                         && event.button == MouseButton::Right
                         && bounds.contains(&event.position)
@@ -209,15 +223,18 @@ impl Element for ContextMenu {
                         *position.borrow_mut() = event.position;
                         *open.borrow_mut() = true;
 
-                        let menu =
-                            PopupMenu::build(cx, |menu, cx| (builder)(menu, cx)).into_element();
+                        let menu = PopupMenu::build(window, cx, |menu, window, cx| {
+                            (builder)(menu, window, cx)
+                        })
+                        .into_element();
 
                         let open = open.clone();
-                        cx.subscribe(&menu, move |_, _: &DismissEvent, cx| {
-                            *open.borrow_mut() = false;
-                            window.refresh();
-                        })
-                        .detach();
+                        window
+                            .subscribe(&menu, cx, move |_, _: &DismissEvent, window, cx| {
+                                *open.borrow_mut() = false;
+                                window.refresh();
+                            })
+                            .detach();
 
                         *menu_view.borrow_mut() = Some(menu);
 
