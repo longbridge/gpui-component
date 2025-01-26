@@ -106,7 +106,7 @@ where
     where
         T: Selectable + IntoElement + 'static,
     {
-        self.trigger = Some(Box::new(|is_open, _| {
+        self.trigger = Some(Box::new(|is_open, window, _| {
             trigger.selected(is_open).into_any_element()
         }));
         self
@@ -144,7 +144,7 @@ where
             return div().into_any_element();
         };
 
-        (trigger)(is_open, cx)
+        (trigger)(is_open, window, cx)
     }
 
     fn resolved_corner(&self, bounds: Bounds<Pixels>) -> Point<Pixels> {
@@ -300,9 +300,10 @@ impl<M: ManagedView> Element for Popover<M> {
                 let mut trigger_element = view.render_trigger(is_open, window, cx);
                 let trigger_layout_id = trigger_element.request_layout(window, cx);
 
-                let layout_id = window.request_layout(cx, 
+                let layout_id = window.request_layout(
                     style,
                     Some(trigger_layout_id).into_iter().chain(popover_layout_id),
+                    cx,
                 );
 
                 (
@@ -386,34 +387,36 @@ impl<M: ManagedView> Element for Popover<M> {
                 window.on_mouse_event(move |event: &MouseDownEvent, phase, window, cx| {
                     if phase == DispatchPhase::Bubble
                         && event.button == mouse_button
-                        && hitbox_id.is_hovered(cx)
+                        && hitbox_id.is_hovered(window)
                     {
-                        window.stop_propagation();
+                        cx.stop_propagation();
                         window.prevent_default();
 
-                        let new_content_view = (content_build)(cx);
+                        let new_content_view = (content_build)(window, cx);
                         let old_content_view1 = old_content_view.clone();
 
                         let previous_focus_handle = window.focused(cx);
 
-                        cx.subscribe(
-                            &new_content_view,
-                            move |modal, _: &DismissEvent, window, cx| {
-                                if modal.focus_handle(cx).contains_focused(cx) {
-                                    if let Some(previous_focus_handle) =
-                                        previous_focus_handle.as_ref()
-                                    {
-                                        cx.focus(previous_focus_handle);
+                        window
+                            .subscribe(
+                                &new_content_view,
+                                cx,
+                                move |modal, _: &DismissEvent, window, cx| {
+                                    if modal.focus_handle(cx).contains_focused(window, cx) {
+                                        if let Some(previous_focus_handle) =
+                                            previous_focus_handle.as_ref()
+                                        {
+                                            window.focus(previous_focus_handle);
+                                        }
                                     }
-                                }
-                                *old_content_view1.borrow_mut() = None;
+                                    *old_content_view1.borrow_mut() = None;
 
-                                window.refresh();
-                            },
-                        )
-                        .detach();
+                                    window.refresh();
+                                },
+                            )
+                            .detach();
 
-                        window.focus_view(cx, &new_content_view);
+                        window.focus(&new_content_view.focus_handle(cx));
                         *old_content_view.borrow_mut() = Some(new_content_view);
                         window.refresh();
                     }
