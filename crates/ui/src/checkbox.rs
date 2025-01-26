@@ -1,8 +1,8 @@
 use crate::{h_flex, v_flex, ActiveTheme, Disableable, IconName, Selectable};
 use gpui::{
-    div, prelude::FluentBuilder as _, relative, svg, App, AppContext, ElementId,
-    InteractiveElement, IntoElement, ParentElement, RenderOnce, SharedString,
-    StatefulInteractiveElement as _, Styled as _, Window,
+    div, prelude::FluentBuilder as _, relative, svg, App, ElementId, InteractiveElement,
+    IntoElement, ParentElement, RenderOnce, SharedString, StatefulInteractiveElement as _,
+    Styled as _, Window,
 };
 
 /// A Checkbox element.
@@ -60,7 +60,7 @@ impl Selectable for Checkbox {
 }
 
 impl RenderOnce for Checkbox {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let (color, icon_color) = if self.disabled {
             (
                 cx.theme().primary.opacity(0.5),

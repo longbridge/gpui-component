@@ -28,7 +28,7 @@ impl super::Story for ImageStory {
 }
 
 impl ImageStory {
-    pub fn new(window: &mut Window, cx: &mut App) -> Self {
+    pub fn new(_: &mut Window, cx: &mut App) -> Self {
         let chart = charts_rs::PieChart::from_json(PIE_JSON).unwrap();
 
         Self {

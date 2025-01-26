@@ -41,7 +41,7 @@ impl ProgressStory {
         cx.new(|cx| Self::new(window, cx))
     }
 
-    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+    fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
         let slider1 = cx.new(|_| {
             Slider::horizontal()
                 .min(-255.)
@@ -145,7 +145,7 @@ impl Focusable for ProgressStory {
 }
 
 impl Render for ProgressStory {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let rgb = SharedString::from(self.slider_hsl_value.to_hex());
 
         v_flex()

@@ -1,6 +1,6 @@
 use gpui::{
     px, rems, App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement,
-    Render, Styled, VisualContext as _, Window,
+    Render, Styled, Window,
 };
 use ui::{
     button::{Button, ButtonVariant, ButtonVariants},

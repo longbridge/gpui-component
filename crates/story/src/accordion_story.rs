@@ -44,17 +44,12 @@ impl AccordionStory {
         }
     }
 
-    fn toggle_accordion(
-        &mut self,
-        open_ixs: Vec<usize>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    fn toggle_accordion(&mut self, open_ixs: Vec<usize>, _: &mut Window, cx: &mut Context<Self>) {
         self.open_ixs = open_ixs;
         cx.notify();
     }
 
-    fn set_size(&mut self, size: Size, window: &mut Window, cx: &mut Context<Self>) {
+    fn set_size(&mut self, size: Size, _: &mut Window, cx: &mut Context<Self>) {
         self.size = size;
         cx.notify();
     }
@@ -112,7 +107,7 @@ impl Render for AccordionStory {
                         Checkbox::new("disabled")
                             .label("Disabled")
                             .checked(self.disabled)
-                            .on_click(cx.listener(|this, checked, window, cx| {
+                            .on_click(cx.listener(|this, checked, _, cx| {
                                 this.disabled = *checked;
                                 cx.notify();
                             })),
@@ -121,7 +116,7 @@ impl Render for AccordionStory {
                         Checkbox::new("bordered")
                             .label("Bordered")
                             .checked(self.bordered)
-                            .on_click(cx.listener(|this, checked, window, cx| {
+                            .on_click(cx.listener(|this, checked, _, cx| {
                                 this.bordered = *checked;
                                 cx.notify();
                             })),

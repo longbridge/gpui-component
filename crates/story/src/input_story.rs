@@ -339,7 +339,7 @@ impl InputStory {
 }
 
 impl FocusableCycle for InputStory {
-    fn cycle_focus_handles(&self, window: &mut Window, cx: &mut App) -> Vec<FocusHandle> {
+    fn cycle_focus_handles(&self, _: &mut Window, cx: &mut App) -> Vec<FocusHandle> {
         [
             self.input1.focus_handle(cx),
             self.input2.focus_handle(cx),
@@ -362,7 +362,7 @@ impl Focusable for InputStory {
 }
 
 impl Render for InputStory {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .key_context(CONTEXT)
             .id("input-story")

@@ -216,7 +216,7 @@ impl DropdownStory {
 }
 
 impl FocusableCycle for DropdownStory {
-    fn cycle_focus_handles(&self, window: &mut Window, cx: &mut App) -> Vec<gpui::FocusHandle>
+    fn cycle_focus_handles(&self, _: &mut Window, cx: &mut App) -> Vec<gpui::FocusHandle>
     where
         Self: Sized,
     {
@@ -231,7 +231,7 @@ impl FocusableCycle for DropdownStory {
 }
 
 impl Render for DropdownStory {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .key_context(CONTEXT)
             .on_action(cx.listener(Self::on_key_tab))

@@ -1,6 +1,6 @@
 use gpui::{
     div, App, AppContext, ClickEvent, Context, Entity, FocusHandle, Focusable, IntoElement,
-    ParentElement as _, Render, Styled as _, VisualContext as _, Window,
+    ParentElement as _, Render, Styled as _, Window,
 };
 use ui::{
     h_flex,

@@ -1,6 +1,6 @@
 use gpui::{
     div, px, rems, App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render,
-    SharedString, Styled, VisualContext as _, Window,
+    SharedString, Styled, Window,
 };
 
 use ui::{
@@ -57,7 +57,7 @@ impl Focusable for TextStory {
     }
 }
 impl Render for TextStory {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .gap_6()
             .child(
@@ -116,7 +116,7 @@ impl Render for TextStory {
                                                 .child(IconName::GitHub)
                                                 .child("GitHub"),
                                         )
-                                        .on_click(cx.listener(|_, _, window, cx| {
+                                        .on_click(cx.listener(|_, _, _, cx| {
                                             cx.open_url("https://google.com")
                                         })),
                                 )

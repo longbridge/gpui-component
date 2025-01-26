@@ -5,7 +5,7 @@ use fake::Fake;
 use gpui::{
     actions, div, px, App, AppContext, Context, ElementId, Entity, FocusHandle, Focusable,
     InteractiveElement, IntoElement, ParentElement, Render, RenderOnce, SharedString, Styled,
-    Subscription, Task, Timer, VisualContext, Window,
+    Subscription, Task, Timer, Window,
 };
 
 use ui::{
@@ -67,7 +67,7 @@ impl CompanyListItem {
 }
 
 impl RenderOnce for CompanyListItem {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let text_color = if self.selected {
             cx.theme().accent_foreground
         } else {
@@ -193,8 +193,8 @@ impl ListDelegate for CompanyListDelegate {
     fn render_item(
         &self,
         ix: usize,
-        _window: &mut Window,
-        cx: &mut Context<List<Self>>,
+        _: &mut Window,
+        _: &mut Context<List<Self>>,
     ) -> Option<Self::Item> {
         let selected = Some(ix) == self.selected_index || Some(ix) == self.confirmed_index;
         if let Some(company) = self.matched_companies.get(ix) {
@@ -333,12 +333,7 @@ impl ListStory {
         }
     }
 
-    fn selected_company(
-        &mut self,
-        _: &SelectedCompany,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    fn selected_company(&mut self, _: &SelectedCompany, _: &mut Window, cx: &mut Context<Self>) {
         let picker = self.company_list.read(cx);
         if let Some(company) = picker.delegate().selected_company() {
             self.selected_company = Some(company);
@@ -369,7 +364,7 @@ impl Focusable for ListStory {
 }
 
 impl Render for ListStory {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::selected_company))
@@ -419,7 +414,7 @@ impl Render for ListStory {
                         Checkbox::new("loading")
                             .label("Loading")
                             .checked(self.company_list.read(cx).delegate().loading)
-                            .on_click(cx.listener(|this, check: &bool, window, cx| {
+                            .on_click(cx.listener(|this, check: &bool, _, cx| {
                                 this.company_list.update(cx, |this, cx| {
                                     this.delegate_mut().loading = *check;
                                     cx.notify();

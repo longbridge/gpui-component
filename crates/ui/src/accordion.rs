@@ -1,7 +1,7 @@
 use std::{cell::Cell, rc::Rc, sync::Arc};
 
 use gpui::{
-    div, prelude::FluentBuilder as _, rems, AnyElement, App, AppContext, Div, ElementId,
+    div, prelude::FluentBuilder as _, rems, AnyElement, App, Div, ElementId,
     InteractiveElement as _, IntoElement, ParentElement, RenderOnce, SharedString,
     StatefulInteractiveElement as _, Styled, Window,
 };
@@ -212,7 +212,7 @@ impl Sizable for AccordionItem {
 }
 
 impl RenderOnce for AccordionItem {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let text_size = match self.size {
             Size::XSmall => rems(0.875),
             Size::Small => rems(0.875),

@@ -1,6 +1,6 @@
 use gpui::{
     div, App, AppContext, Context, CursorStyle, Entity, Focusable, InteractiveElement,
-    ParentElement, Render, StatefulInteractiveElement, Styled, VisualContext as _, Window,
+    ParentElement, Render, StatefulInteractiveElement, Styled, Window,
 };
 
 use ui::{

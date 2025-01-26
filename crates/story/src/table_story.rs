@@ -7,7 +7,7 @@ use fake::{Fake, Faker};
 use gpui::{
     div, impl_internal_actions, px, AnyElement, App, AppContext, Context, Edges, Entity, Focusable,
     InteractiveElement, IntoElement, ParentElement, Pixels, Render, SharedString, Styled, Timer,
-    VisualContext as _, Window,
+    Window,
 };
 use serde::Deserialize;
 use ui::{
@@ -346,7 +346,7 @@ impl TableDelegate for StockTableDelegate {
     fn render_th(
         &self,
         col_ix: usize,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Table<Self>>,
     ) -> impl IntoElement {
         let th = div().child(self.col_name(col_ix, cx));
@@ -388,7 +388,7 @@ impl TableDelegate for StockTableDelegate {
         &self,
         row_ix: usize,
         col_ix: usize,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Table<Self>>,
     ) -> impl IntoElement {
         let stock = self.stocks.get(row_ix).unwrap();
@@ -521,10 +521,10 @@ impl TableDelegate for StockTableDelegate {
         150
     }
 
-    fn load_more(&mut self, window: &mut Window, cx: &mut Context<Table<Self>>) {
+    fn load_more(&mut self, _: &mut Window, cx: &mut Context<Table<Self>>) {
         self.loading = true;
 
-        cx.spawn(|view, mut cx| async move {
+        cx.spawn(|view, cx| async move {
             // Simulate network request, delay 1s to load data.
             Timer::after(Duration::from_secs(1)).await;
 
@@ -655,7 +655,7 @@ impl TableStory {
         &mut self,
         _: &Entity<TextInput>,
         event: &InputEvent,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) {
         match event {
@@ -764,7 +764,7 @@ impl TableStory {
 }
 
 impl Render for TableStory {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
         let delegate = self.table.read(cx).delegate();
         let rows_count = delegate.rows_count(cx);
         let size = self.size;
@@ -873,7 +873,7 @@ impl Render for TableStory {
                         Button::new("scroll-top")
                             .child("Scroll to Top")
                             .small()
-                            .on_click(cx.listener(|this, _, window, cx| {
+                            .on_click(cx.listener(|this, _, _, cx| {
                                 this.table.update(cx, |table, cx| {
                                     table.scroll_to_row(0, cx);
                                 })
@@ -883,7 +883,7 @@ impl Render for TableStory {
                         Button::new("scroll-bottom")
                             .child("Scroll to Bottom")
                             .small()
-                            .on_click(cx.listener(|this, _, window, cx| {
+                            .on_click(cx.listener(|this, _, _, cx| {
                                 this.table.update(cx, |table, cx| {
                                     table.scroll_to_row(table.delegate().rows_count(cx) - 1, cx);
                                 })

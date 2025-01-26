@@ -1,8 +1,8 @@
 use std::{cell::RefCell, rc::Rc, time::Duration};
 
 use gpui::{
-    prelude::FluentBuilder, AnyElement, App, AppContext, ClipboardItem, Element, ElementId,
-    GlobalElementId, IntoElement, LayoutId, ParentElement, SharedString, Styled, Window,
+    prelude::FluentBuilder, AnyElement, App, ClipboardItem, Element, ElementId, GlobalElementId,
+    IntoElement, LayoutId, ParentElement, SharedString, Styled, Window,
 };
 
 use crate::{

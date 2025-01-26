@@ -1,6 +1,6 @@
 use gpui::{
     div, px, App, AppContext, Context, Div, Entity, Focusable, IntoElement, ParentElement, Render,
-    SharedString, Styled, VisualContext as _, Window,
+    SharedString, Styled, Window,
 };
 
 use ui::{
@@ -46,7 +46,7 @@ impl SwitchStory {
         cx.new(|cx| Self::new(window, cx))
     }
 
-    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+    fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
             switch1: true,
@@ -69,7 +69,7 @@ impl Focusable for SwitchStory {
 }
 
 impl Render for SwitchStory {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
 
         fn title(title: impl Into<SharedString>) -> Div {

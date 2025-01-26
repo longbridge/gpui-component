@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use gpui::{
     div, px, size, App, AppContext, Context, Entity, Focusable, InteractiveElement, IntoElement,
-    ParentElement, Pixels, Render, ScrollHandle, SharedString, Size, Styled, VisualContext, Window,
+    ParentElement, Pixels, Render, ScrollHandle, SharedString, Size, Styled, Window,
 };
 use ui::button::Button;
 use ui::divider::Divider;
@@ -27,7 +27,7 @@ pub struct ScrollableStory {
 const ITEM_HEIGHT: Pixels = px(30.);
 
 impl ScrollableStory {
-    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+    fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
         let items = (0..5000).map(|i| format!("Item {}", i)).collect::<Vec<_>>();
         let test_width = px(3000.);
         let item_sizes = items
@@ -167,7 +167,7 @@ impl Focusable for ScrollableStory {
 impl Render for ScrollableStory {
     fn render(
         &mut self,
-        window: &mut gpui::Window,
+        _: &mut gpui::Window,
         cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
         let view = cx.model().clone();

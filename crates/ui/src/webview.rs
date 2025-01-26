@@ -6,9 +6,9 @@ use wry::{
 };
 
 use gpui::{
-    canvas, div, App, AppContext, Bounds, ContentMask, DismissEvent, Element, ElementId, Entity,
-    EventEmitter, FocusHandle, Focusable, GlobalElementId, Hitbox, InteractiveElement, IntoElement,
-    LayoutId, MouseDownEvent, ParentElement as _, Pixels, Render, Size, Style, Styled as _, Window,
+    canvas, div, App, Bounds, ContentMask, DismissEvent, Element, ElementId, Entity, EventEmitter,
+    FocusHandle, Focusable, GlobalElementId, Hitbox, InteractiveElement, IntoElement, LayoutId,
+    MouseDownEvent, ParentElement as _, Pixels, Render, Size, Style, Styled as _, Window,
 };
 
 pub struct WebView {

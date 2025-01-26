@@ -1,7 +1,7 @@
 use chrono::{Days, Duration, Utc};
 use gpui::{
     px, App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement as _, Render,
-    Styled as _, VisualContext as _, Window,
+    Styled as _, Window,
 };
 use ui::{
     button::Button,
@@ -172,7 +172,7 @@ impl Focusable for CalendarStory {
 }
 
 impl Render for CalendarStory {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .gap_3()
             .child(

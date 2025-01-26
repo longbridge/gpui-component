@@ -3,7 +3,7 @@ use std::rc::Rc;
 use gpui::{
     div, AnyElement, App, AppContext, ClickEvent, Context, Corner, Entity, FocusHandle, Hsla,
     InteractiveElement as _, IntoElement, MouseButton, ParentElement as _, Render, SharedString,
-    Styled as _, VisualContext as _, Window,
+    Styled as _, Window,
 };
 use ui::{
     badge::Badge,
@@ -112,7 +112,7 @@ impl Render for AppTitleBar {
                     .justify_end()
                     .px_2()
                     .gap_2()
-                    .on_mouse_down(MouseButton::Left, |_, window, cx| cx.stop_propagation())
+                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                     .child(self.theme_color_picker.clone())
                     .child((self.child.clone())(window, cx))
                     .child(
@@ -161,7 +161,7 @@ struct LocaleSelector {
 }
 
 impl LocaleSelector {
-    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
         }
@@ -171,7 +171,7 @@ impl LocaleSelector {
         &mut self,
         locale: &SelectLocale,
         window: &mut Window,
-        cx: &mut Context<Self>,
+        _: &mut Context<Self>,
     ) {
         ui::set_locale(&locale.0);
         window.refresh();
@@ -179,7 +179,7 @@ impl LocaleSelector {
 }
 
 impl Render for LocaleSelector {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let focus_handle = self.focus_handle.clone();
         let locale = ui::locale().to_string();
 
@@ -214,7 +214,7 @@ struct FontSizeSelector {
 }
 
 impl FontSizeSelector {
-    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
         }
@@ -242,7 +242,7 @@ impl FontSizeSelector {
 }
 
 impl Render for FontSizeSelector {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let focus_handle = self.focus_handle.clone();
         let font_size = cx.theme().font_size as i32;
         let scroll_show = cx.theme().scrollbar_show;

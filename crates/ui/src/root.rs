@@ -265,8 +265,9 @@ impl Root {
         let root = window
             .window_handle()
             .downcast::<Root>()
-            .and_then(|w| w.root(cx).ok())
-            .expect("The window root view should be of type `ui::Root`.");
+            .expect("The window root view should be of type `ui::Root`.")
+            .root(cx)
+            .unwrap();
 
         root.update(cx, |root, cx| f(root, window, cx))
     }
@@ -275,8 +276,9 @@ impl Root {
         let root = window
             .window_handle()
             .downcast::<Root>()
-            .and_then(|w| w.root(cx).ok())
-            .expect("The window root view should be of type `ui::Root`.");
+            .expect("The window root view should be of type `ui::Root`.")
+            .root(cx)
+            .unwrap();
 
         root.read(cx)
     }
@@ -284,14 +286,6 @@ impl Root {
     fn focus_back(&mut self, window: &mut Window, cx: &mut App) {
         if let Some(handle) = self.previous_focus_handle.clone() {
             window.focus(&handle);
-        }
-    }
-
-    fn active_drawer_placement(&self, window: &Window, cx: &mut App) -> Option<Placement> {
-        if let Some(drawer) = Root::read(window, cx).active_drawer.as_ref() {
-            Some(drawer.placement)
-        } else {
-            None
         }
     }
 
@@ -303,8 +297,9 @@ impl Root {
         let root = window
             .window_handle()
             .downcast::<Root>()
-            .and_then(|w| w.root(cx).ok())
-            .expect("The window root view should be of type `ui::Root`.");
+            .expect("The window root view should be of type `ui::Root`.")
+            .root(cx)
+            .ok()?;
 
         let active_drawer_placement = root.read(cx).active_drawer.clone().map(|d| d.placement);
 
@@ -327,8 +322,9 @@ impl Root {
         let root = window
             .window_handle()
             .downcast::<Root>()
-            .and_then(|w| w.root(cx).ok())
-            .expect("The window root view should be of type `ui::Root`.");
+            .expect("The window root view should be of type `ui::Root`.")
+            .root(cx)
+            .ok()?;
 
         if let Some(active_drawer) = root.read(cx).active_drawer.clone() {
             let mut drawer = Drawer::new(window, cx);
@@ -360,8 +356,9 @@ impl Root {
         let root = window
             .window_handle()
             .downcast::<Root>()
-            .and_then(|w| w.root(cx).ok())
-            .expect("The window root view should be of type `ui::Root`.");
+            .expect("The window root view should be of type `ui::Root`.")
+            .root(cx)
+            .ok()?;
 
         let active_modals = root.read(cx).active_modals.clone();
         let mut has_overlay = false;

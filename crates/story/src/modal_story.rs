@@ -42,7 +42,7 @@ impl ListDelegate for ListItemDeletegate {
     fn perform_search(
         &mut self,
         query: &str,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<List<Self>>,
     ) -> Task<()> {
         let query = query.to_string();
@@ -68,7 +68,7 @@ impl ListDelegate for ListItemDeletegate {
     fn render_item(
         &self,
         ix: usize,
-        window: &mut Window,
+        _: &mut Window,
         _: &mut Context<List<Self>>,
     ) -> Option<Self::Item> {
         let confirmed = Some(ix) == self.confirmed_index;
@@ -105,7 +105,7 @@ impl ListDelegate for ListItemDeletegate {
         }
     }
 
-    fn render_empty(&self, window: &mut Window, cx: &mut Context<List<Self>>) -> impl IntoElement {
+    fn render_empty(&self, _: &mut Window, cx: &mut Context<List<Self>>) -> impl IntoElement {
         v_flex()
             .size_full()
             .child(
@@ -122,13 +122,13 @@ impl ListDelegate for ListItemDeletegate {
     }
 
     fn cancel(&mut self, window: &mut Window, cx: &mut Context<List<Self>>) {
-        self.story.update(cx, |this, cx| {
+        _ = self.story.update(cx, |this, cx| {
             this.close_drawer(window, cx);
         });
     }
 
     fn confirm(&mut self, ix: usize, window: &mut Window, cx: &mut Context<List<Self>>) {
-        self.story.update(cx, |this, cx| {
+        _ = self.story.update(cx, |this, cx| {
             self.confirmed_index = Some(ix);
             if let Some(item) = self.matches.get(ix) {
                 this.selected_value = Some(SharedString::from(item.to_string()));
@@ -306,7 +306,7 @@ impl ModalStory {
         };
 
         let overlay = self.modal_overlay;
-        window.open_drawer_at(placement, cx, move |this, window, cx| {
+        window.open_drawer_at(placement, cx, move |this, _, cx| {
             this.overlay(overlay)
                 .size(px(400.))
                 .title("Drawer Title")
@@ -350,7 +350,7 @@ impl ModalStory {
         });
     }
 
-    fn close_drawer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    fn close_drawer(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         self.drawer_placement = None;
         cx.notify();
     }
@@ -365,7 +365,7 @@ impl ModalStory {
         let view = cx.model().clone();
         let keyboard = self.model_keyboard;
 
-        window.open_modal(cx, move |modal, window, _| {
+        window.open_modal(cx, move |modal, _, _| {
             modal
                 .title("Form Modal")
                 .overlay(overlay)
@@ -385,7 +385,7 @@ impl ModalStory {
                     let view = view.clone();
                     let input1 = input1.clone();
                     let date_picker = date_picker.clone();
-                    move |_, _, window, _cx| {
+                    move |_, _, _, _cx| {
                         vec![
                             Button::new("confirm").primary().label("Confirm").on_click({
                                 let view = view.clone();
@@ -408,7 +408,7 @@ impl ModalStory {
                             }),
                             Button::new("new-modal").label("Open Other Modal").on_click(
                                 move |_, window, cx| {
-                                    window.open_modal(cx, move |modal, window, _| {
+                                    window.open_modal(cx, move |modal, _, _| {
                                         modal
                                             .title("Other Modal")
                                             .child("This is another modal.")
@@ -446,7 +446,7 @@ impl Focusable for ModalStory {
 }
 
 impl Render for ModalStory {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .id("modal-story")
             .track_focus(&self.focus_handle)

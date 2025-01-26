@@ -1,7 +1,6 @@
 use gpui::{
-    div, prelude::FluentBuilder as _, App, AppContext, Corners, Div, Edges, ElementId,
-    InteractiveElement, IntoElement, ParentElement, RenderOnce, StatefulInteractiveElement as _,
-    Styled, Window,
+    div, prelude::FluentBuilder as _, App, Corners, Div, Edges, ElementId, InteractiveElement,
+    IntoElement, ParentElement, RenderOnce, StatefulInteractiveElement as _, Styled, Window,
 };
 use std::{cell::Cell, rc::Rc};
 
@@ -101,7 +100,7 @@ impl ButtonVariants for ButtonGroup {
 }
 
 impl RenderOnce for ButtonGroup {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         let children_len = self.children.len();
         let mut selected_ixs: Vec<usize> = Vec::new();
         let state = Rc::new(Cell::new(None));

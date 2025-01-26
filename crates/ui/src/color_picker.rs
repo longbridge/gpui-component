@@ -157,7 +157,7 @@ impl ColorPicker {
         self
     }
 
-    fn on_escape(&mut self, _: &Escape, window: &mut Window, cx: &mut Context<Self>) {
+    fn on_escape(&mut self, _: &Escape, _: &mut Window, cx: &mut Context<Self>) {
         cx.propagate();
 
         self.open = false;

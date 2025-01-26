@@ -1,6 +1,6 @@
 use gpui::{
     div, impl_internal_actions, relative, App, AppContext, ClickEvent, Context, Entity, Focusable,
-    ParentElement, Render, SharedString, Styled, VisualContext as _, Window,
+    ParentElement, Render, SharedString, Styled, Window,
 };
 
 use serde::Deserialize;
@@ -182,7 +182,7 @@ impl Focusable for SidebarStory {
 impl Render for SidebarStory {
     fn render(
         &mut self,
-        window: &mut gpui::Window,
+        _: &mut gpui::Window,
         cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
         let groups: [Vec<Item>; 2] = [
@@ -294,7 +294,7 @@ impl Render for SidebarStory {
                                         }
                                         submenu
                                     },
-                                    cx.listener(move |this, _, window, cx| {
+                                    cx.listener(move |this, _, _, cx| {
                                         this.active_item = item;
                                         cx.notify();
                                     }),
@@ -329,7 +329,7 @@ impl Render for SidebarStory {
                             .child(
                                 SidebarToggleButton::left()
                                     .collapsed(self.is_collapsed)
-                                    .on_click(cx.listener(|this, _, window, cx| {
+                                    .on_click(cx.listener(|this, _, _, cx| {
                                         this.is_collapsed = !this.is_collapsed;
                                         cx.notify();
                                     })),
@@ -345,7 +345,7 @@ impl Render for SidebarStory {
                                     )))
                                     .item(
                                         BreadcrumbItem::new("1", self.active_item.label())
-                                            .on_click(cx.listener(|this, _, window, cx| {
+                                            .on_click(cx.listener(|this, _, _, cx| {
                                                 this.active_subitem = None;
                                                 cx.notify();
                                             })),

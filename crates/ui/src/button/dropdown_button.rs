@@ -1,6 +1,6 @@
 use gpui::{
-    prelude::FluentBuilder, App, AppContext, Context, Corner, Corners, Div, Edges, ElementId,
-    IntoElement, ParentElement, RenderOnce, Styled, Window,
+    prelude::FluentBuilder, App, Context, Corner, Corners, Div, Edges, ElementId, IntoElement,
+    ParentElement, RenderOnce, Styled, Window,
 };
 
 use crate::{

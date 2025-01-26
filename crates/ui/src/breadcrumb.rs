@@ -1,9 +1,9 @@
 use std::rc::Rc;
 
 use gpui::{
-    div, prelude::FluentBuilder as _, App, AppContext, ClickEvent, ElementId,
-    InteractiveElement as _, IntoElement, ParentElement, RenderOnce, SharedString,
-    StatefulInteractiveElement, Styled, Window,
+    div, prelude::FluentBuilder as _, App, ClickEvent, ElementId, InteractiveElement as _,
+    IntoElement, ParentElement, RenderOnce, SharedString, StatefulInteractiveElement, Styled,
+    Window,
 };
 
 use crate::{h_flex, ActiveTheme, Icon, IconName};
@@ -54,7 +54,7 @@ impl BreadcrumbItem {
 }
 
 impl RenderOnce for BreadcrumbItem {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         div()
             .id(self.id)
             .child(self.text)
@@ -88,7 +88,7 @@ impl Breadcrumb {
 #[derive(IntoElement)]
 struct BreadcrumbSeparator;
 impl RenderOnce for BreadcrumbSeparator {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         Icon::new(IconName::ChevronRight)
             .text_color(cx.theme().muted_foreground)
             .size_3p5()
@@ -97,7 +97,7 @@ impl RenderOnce for BreadcrumbSeparator {
 }
 
 impl RenderOnce for Breadcrumb {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let items_count = self.items.len();
 
         let mut children = vec![];

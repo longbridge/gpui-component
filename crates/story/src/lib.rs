@@ -139,7 +139,7 @@ where
             .expect("failed to open window");
 
         window
-            .update(&mut cx, |_, window, cx| {
+            .update(&mut cx, |_, window, _| {
                 window.activate_window();
                 window.set_window_title(&title);
             })
@@ -495,7 +495,7 @@ impl Focusable for StoryContainer {
     }
 }
 impl Render for StoryContainer {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .id("story-container")
             .size_full()

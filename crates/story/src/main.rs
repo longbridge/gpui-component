@@ -452,7 +452,7 @@ impl StoryWorkspace {
     fn on_action_toggle_panel_visible(
         &mut self,
         action: &TogglePanelVisible,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let panel_name = action.0.clone();

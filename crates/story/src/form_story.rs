@@ -1,6 +1,6 @@
 use gpui::{
     actions, div, App, AppContext, Axis, Context, Entity, Focusable, InteractiveElement,
-    IntoElement, ParentElement as _, Render, Styled, VisualContext, Window,
+    IntoElement, ParentElement as _, Render, Styled, Window,
 };
 use ui::{
     button::{Button, ButtonGroup},
@@ -77,7 +77,7 @@ impl FormStory {
 }
 
 impl FocusableCycle for FormStory {
-    fn cycle_focus_handles(&self, window: &mut Window, cx: &mut App) -> Vec<gpui::FocusHandle>
+    fn cycle_focus_handles(&self, _: &mut Window, cx: &mut App) -> Vec<gpui::FocusHandle>
     where
         Self: Sized,
     {
@@ -96,7 +96,7 @@ impl Focusable for FormStory {
 }
 
 impl Render for FormStory {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .id("form-story")
             .size_full()
@@ -112,7 +112,7 @@ impl Render for FormStory {
                         Switch::new("layout")
                             .checked(self.layout.is_horizontal())
                             .label("Horizontal")
-                            .on_click(cx.listener(|this, checked: &bool, window, cx| {
+                            .on_click(cx.listener(|this, checked: &bool, _, cx| {
                                 if *checked {
                                     this.layout = Axis::Horizontal;
                                 } else {
@@ -139,7 +139,7 @@ impl Render for FormStory {
                                     .child("Small")
                                     .selected(self.size == Size::Small),
                             )
-                            .on_click(cx.listener(|this, selecteds: &Vec<usize>, window, cx| {
+                            .on_click(cx.listener(|this, selecteds: &Vec<usize>, _, cx| {
                                 if selecteds.contains(&0) {
                                     this.size = Size::Large;
                                 } else if selecteds.contains(&1) {

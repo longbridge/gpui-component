@@ -25,7 +25,7 @@ pub struct ButtonStory {
 }
 
 impl ButtonStory {
-    pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
+    pub fn view(_: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| Self {
             focus_handle: cx.focus_handle(),
             disabled: false,
@@ -66,7 +66,7 @@ impl Focusable for ButtonStory {
 }
 
 impl Render for ButtonStory {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let disabled = self.disabled;
         let loading = self.loading;
         let selected = self.selected;

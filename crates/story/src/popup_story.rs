@@ -1,8 +1,7 @@
 use gpui::{
     actions, div, impl_internal_actions, px, App, AppContext, Context, Corner, DismissEvent,
     Element, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement,
-    KeyBinding, MouseButton, ParentElement as _, Render, SharedString, Styled as _, VisualContext,
-    Window,
+    KeyBinding, MouseButton, ParentElement as _, Render, SharedString, Styled as _, Window,
 };
 use serde::Deserialize;
 use ui::{
@@ -68,7 +67,7 @@ impl Focusable for Form {
 impl EventEmitter<DismissEvent> for Form {}
 
 impl Render for Form {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .gap_4()
             .p_4()
@@ -79,7 +78,7 @@ impl Render for Form {
                 Button::new("submit")
                     .label("Submit")
                     .primary()
-                    .on_click(cx.listener(|_, _, window, cx| cx.emit(DismissEvent))),
+                    .on_click(cx.listener(|_, _, _, cx| cx.emit(DismissEvent))),
             )
     }
 }
@@ -120,32 +119,32 @@ impl PopupStory {
         }
     }
 
-    fn on_copy(&mut self, _: &Copy, window: &mut Window, cx: &mut Context<Self>) {
+    fn on_copy(&mut self, _: &Copy, _: &mut Window, cx: &mut Context<Self>) {
         self.message = "You have clicked copy".to_string();
         cx.notify()
     }
-    fn on_cut(&mut self, _: &Cut, window: &mut Window, cx: &mut Context<Self>) {
+    fn on_cut(&mut self, _: &Cut, _: &mut Window, cx: &mut Context<Self>) {
         self.message = "You have clicked cut".to_string();
         cx.notify()
     }
-    fn on_paste(&mut self, _: &Paste, window: &mut Window, cx: &mut Context<Self>) {
+    fn on_paste(&mut self, _: &Paste, _: &mut Window, cx: &mut Context<Self>) {
         self.message = "You have clicked paste".to_string();
         cx.notify()
     }
-    fn on_search_all(&mut self, _: &SearchAll, window: &mut Window, cx: &mut Context<Self>) {
+    fn on_search_all(&mut self, _: &SearchAll, _: &mut Window, cx: &mut Context<Self>) {
         self.message = "You have clicked search all".to_string();
         cx.notify()
     }
     fn on_toggle_window_mode(
         &mut self,
         _: &ToggleWindowMode,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) {
         self.window_mode = !self.window_mode;
         cx.notify()
     }
-    fn on_action_info(&mut self, info: &Info, window: &mut Window, cx: &mut Context<Self>) {
+    fn on_action_info(&mut self, info: &Info, _: &mut Window, cx: &mut Context<Self>) {
         self.message = format!("You have clicked info: {}", info.0);
         cx.notify()
     }
@@ -158,7 +157,7 @@ impl Focusable for PopupStory {
 }
 
 impl Render for PopupStory {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let form = self.form.clone();
         let window_mode = self.window_mode;
 
@@ -182,7 +181,7 @@ impl Render for PopupStory {
                         .menu("Paste", Box::new(Paste))
                         .separator()
                         .separator()
-                        .submenu("Settings", window, cx, move |menu, window, _| {
+                        .submenu("Settings", window, cx, move |menu, _, _| {
                             menu.menu_with_check(
                                 "Toggle Window Mode",
                                 window_mode,
@@ -203,7 +202,7 @@ impl Render for PopupStory {
                 Switch::new("switch-window-mode")
                     .checked(window_mode)
                     .label("Use Window Popover")
-                    .on_click(cx.listener(|this, checked, window, _| {
+                    .on_click(cx.listener(|this, checked, _, _| {
                         this.window_mode = *checked;
                     })),
             )
@@ -280,7 +279,7 @@ impl Render for PopupStory {
                                     )
                                     .separator()
                                     .menu_with_element(
-                                        |window, cx| {
+                                        |_, cx| {
                                             v_flex().gap_1().child("Custom Element").child(
                                                 div()
                                                     .text_sm()
@@ -338,7 +337,7 @@ impl Render for PopupStory {
                                 .trigger(Button::new("pop").label("Mouse Right Click").w(px(300.)))
                                 .content(|window, cx| {
                                     cx.new(|cx| {
-                                        PopoverContent::new(window, cx, |window, cx| {
+                                        PopoverContent::new(window, cx, |_, cx| {
                                             v_flex()
                                                 .gap_2()
                                                 .child(
@@ -368,7 +367,7 @@ impl Render for PopupStory {
                                                                 .label("Cancel")
                                                                 .small()
                                                                 .on_click(cx.listener(
-                                                                    |_, _, window, cx| {
+                                                                    |_, _, _, cx| {
                                                                         cx.emit(DismissEvent);
                                                                     },
                                                                 )),

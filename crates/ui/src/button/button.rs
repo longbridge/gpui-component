@@ -3,10 +3,9 @@ use crate::{
     Selectable, Sizable, Size,
 };
 use gpui::{
-    div, prelude::FluentBuilder as _, px, relative, AnyElement, App, AppContext, ClickEvent,
-    Context, Corners, Div, Edges, ElementId, Hsla, InteractiveElement, IntoElement, MouseButton,
-    ParentElement, Pixels, RenderOnce, SharedString, StatefulInteractiveElement as _, Styled,
-    Window,
+    div, prelude::FluentBuilder as _, px, relative, AnyElement, App, ClickEvent, Corners, Div,
+    Edges, ElementId, Hsla, InteractiveElement, IntoElement, MouseButton, ParentElement, Pixels,
+    RenderOnce, SharedString, StatefulInteractiveElement as _, Styled, Window,
 };
 
 #[derive(Clone, Copy)]
