@@ -50,7 +50,7 @@ impl Drawer {
             content: v_flex().px_4().py_3(),
             margin_top: TITLE_BAR_HEIGHT,
             overlay: true,
-            on_close: Rc::new(|_, _| {}),
+            on_close: Rc::new(|_, _, _| {}),
         }
     }
 

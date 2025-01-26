@@ -1,9 +1,9 @@
 use std::{cell::Cell, rc::Rc, sync::Arc};
 
-use gpui::{Window, AppContext, 
-    div, prelude::FluentBuilder as _, rems, AnyElement, Div, ElementId, InteractiveElement as _,
-    IntoElement, ParentElement, RenderOnce, SharedString, StatefulInteractiveElement as _, Styled,
-    
+use gpui::{
+    div, prelude::FluentBuilder as _, rems, AnyElement, App, AppContext, Div, ElementId,
+    InteractiveElement as _, IntoElement, ParentElement, RenderOnce, SharedString,
+    StatefulInteractiveElement as _, Styled, Window,
 };
 
 use crate::{h_flex, v_flex, ActiveTheme as _, Icon, IconName, Sizable, Size};
@@ -105,7 +105,7 @@ impl RenderOnce for Accordion {
                             .with_size(self.size)
                             .bordered(self.bordered)
                             .when(self.disabled, |this| this.disabled(true))
-                            .on_toggle_click(move |_, _| {
+                            .on_toggle_click(move |_, _, _| {
                                 state.set(Some(ix));
                             })
                     }),
@@ -131,7 +131,7 @@ impl RenderOnce for Accordion {
                             }
                         }
 
-                        on_toggle_click(&open_ixs, cx);
+                        on_toggle_click(&open_ixs, window, cx);
                     })
                 },
             )
@@ -277,8 +277,8 @@ impl RenderOnce for AccordionItem {
                         self.on_toggle_click.filter(|_| !self.disabled),
                         |this, on_toggle_click| {
                             this.on_click({
-                                move |_, cx| {
-                                    on_toggle_click(&!self.open, cx);
+                                move |_, window, cx| {
+                                    on_toggle_click(&!self.open, window, cx);
                                 }
                             })
                         },

@@ -209,12 +209,12 @@ impl ColorPicker {
                             .shadow_sm()
                     })
                     .active(|this| this.border_color(color.darken(0.5)).bg(color.darken(0.2)))
-                    .on_mouse_move(cx.listener(move |view, _, cx| {
+                    .on_mouse_move(cx.listener(move |view, _, window, cx| {
                         view.hovered_color = Some(color);
                         cx.notify();
                     }))
-                    .on_click(cx.listener(move |view, _, cx| {
-                        view.update_value(Some(color), true, cx);
+                    .on_click(cx.listener(move |view, _, window, cx| {
+                        view.update_value(Some(color), true, window, cx);
                         view.open = false;
                         cx.notify();
                     }))
@@ -228,7 +228,7 @@ impl ColorPicker {
                 h_flex().gap_1().children(
                     self.featured_colors
                         .iter()
-                        .map(|color| self.render_item(*color, true, cx)),
+                        .map(|color| self.render_item(*color, true, window, cx)),
                 ),
             )
             .child(Divider::horizontal())
@@ -240,7 +240,7 @@ impl ColorPicker {
                             sub_colors
                                 .iter()
                                 .rev()
-                                .map(|color| self.render_item(*color, true, cx)),
+                                .map(|color| self.render_item(*color, true, window, cx)),
                         )
                     })),
             )
@@ -324,7 +324,9 @@ impl Render for ColorPicker {
                             .when_some(self.value, |this, value| {
                                 this.bg(value).border_color(value.darken(0.3))
                             })
-                            .tooltip(move |cx| Tooltip::new(display_title.clone(), cx)),
+                            .tooltip(move |window, cx| {
+                                Tooltip::new(display_title.clone(), window, cx)
+                            }),
                     )
                     .when_some(self.label.clone(), |this, label| this.child(label))
                     .on_click(cx.listener(Self::toggle_picker))
@@ -362,9 +364,11 @@ impl Render for ColorPicker {
                                     .bg(cx.theme().background)
                                     .on_mouse_up_out(
                                         MouseButton::Left,
-                                        cx.listener(|view, _, cx| view.on_escape(&Escape, cx)),
+                                        cx.listener(|view, _, window, cx| {
+                                            view.on_escape(&Escape, window, cx)
+                                        }),
                                     )
-                                    .child(self.render_colors(cx)),
+                                    .child(self.render_colors(window, cx)),
                             ),
                     )
                     .with_priority(1),

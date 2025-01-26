@@ -1,8 +1,8 @@
 use crate::{h_flex, v_flex, ActiveTheme, Disableable, IconName, Selectable};
-use gpui::{Window, AppContext, 
-    div, prelude::FluentBuilder as _, relative, svg, ElementId, InteractiveElement, IntoElement,
-    ParentElement, RenderOnce, SharedString, StatefulInteractiveElement as _, Styled as _,
-    
+use gpui::{
+    div, prelude::FluentBuilder as _, relative, svg, App, AppContext, ElementId,
+    InteractiveElement, IntoElement, ParentElement, RenderOnce, SharedString,
+    StatefulInteractiveElement as _, Styled as _, Window,
 };
 
 /// A Checkbox element.
@@ -125,7 +125,7 @@ impl RenderOnce for Checkbox {
                     |this, on_click| {
                         this.on_click(move |_, window, cx| {
                             let checked = !self.checked;
-                            on_click(&checked, cx);
+                            on_click(&checked, window, cx);
                         })
                     },
                 ),
