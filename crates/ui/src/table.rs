@@ -1126,7 +1126,146 @@ where
         let is_selected = self.selected_row == Some(row_ix);
         let view = cx.view().clone();
 
-        if row_ix >= rows_count {
+        if row_ix < rows_count {
+            self.delegate
+                .render_tr(row_ix, cx)
+                .w_full()
+                .h(self.size.table_row_height())
+                .border_b_1()
+                .when(row_ix == rows_count, |this| {
+                    this.border_color(gpui::transparent_white())
+                })
+                .border_color(cx.theme().table_row_border)
+                .when(is_stripe_row, |this| this.bg(cx.theme().table_even))
+                .hover(|this| {
+                    if is_selected || self.right_clicked_row == Some(row_ix) {
+                        this
+                    } else {
+                        this.bg(cx.theme().table_hover)
+                    }
+                })
+                .when(left_cols_count > 0, |this| {
+                    // Left fixed columns
+                    this.child(
+                        h_flex()
+                            .relative()
+                            .h_full()
+                            .children({
+                                let mut items = Vec::with_capacity(left_cols_count);
+
+                                (0..left_cols_count).for_each(|col_ix| {
+                                    items.push(
+                                        self.render_col_wrap(col_ix, cx).child(
+                                            self.render_cell(col_ix, cx)
+                                                .child(self.measure_render_td(row_ix, col_ix, cx)),
+                                        ),
+                                    );
+                                });
+
+                                items
+                            })
+                            .child(
+                                // Fixed columns border
+                                div()
+                                    .absolute()
+                                    .top_0()
+                                    .right_0()
+                                    .bottom_0()
+                                    .w_0()
+                                    .flex_shrink_0()
+                                    .border_r_1()
+                                    .border_color(cx.theme().border),
+                            ),
+                    )
+                })
+                .child(
+                    h_flex()
+                        .flex_1()
+                        .h_full()
+                        .overflow_hidden()
+                        .relative()
+                        .child(
+                            crate::virtual_list::virtual_list(
+                                view,
+                                row_ix,
+                                Axis::Horizontal,
+                                col_sizes,
+                                {
+                                    move |table, visible_range: Range<usize>, _, cx| {
+                                        table.update_visible_range_if_need(
+                                            visible_range.clone(),
+                                            Axis::Horizontal,
+                                            cx,
+                                        );
+
+                                        let mut items = Vec::with_capacity(
+                                            visible_range.end - visible_range.start,
+                                        );
+
+                                        visible_range.for_each(|col_ix| {
+                                            let col_ix = col_ix + left_cols_count;
+                                            let el = table.render_col_wrap(col_ix, cx).child(
+                                                table.render_cell(col_ix, cx).child(
+                                                    table.measure_render_td(row_ix, col_ix, cx),
+                                                ),
+                                            );
+
+                                            items.push(el);
+                                        });
+
+                                        items
+                                    }
+                                },
+                            )
+                            .with_scroll_handle(&self.horizontal_scroll_handle),
+                        )
+                        .child(self.delegate.render_last_empty_col(cx)),
+                )
+                // Row selected style
+                .when_some(self.selected_row, |this, _| {
+                    this.when(
+                        is_selected && self.selection_state == SelectionState::Row,
+                        |this| {
+                            this.border_color(gpui::transparent_white()).child(
+                                div()
+                                    .top(if row_ix == 0 { px(0.) } else { px(-1.) })
+                                    .left(px(0.))
+                                    .right(px(0.))
+                                    .bottom_0()
+                                    .absolute()
+                                    .bg(cx.theme().table_active)
+                                    .border_1()
+                                    .border_color(cx.theme().table_active_border),
+                            )
+                        },
+                    )
+                })
+                // Row right click row style
+                .when(self.right_clicked_row == Some(row_ix), |this| {
+                    this.border_color(gpui::transparent_white()).child(
+                        div()
+                            .top(if row_ix == 0 { px(0.) } else { px(-1.) })
+                            .left(px(0.))
+                            .right(px(0.))
+                            .bottom_0()
+                            .absolute()
+                            .border_1()
+                            .border_color(cx.theme().selection),
+                    )
+                })
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(move |this, ev, cx| {
+                        this.on_row_click(ev, row_ix, cx);
+                    }),
+                )
+                .on_mouse_down(
+                    MouseButton::Right,
+                    cx.listener(move |this, ev, cx| {
+                        this.on_row_click(ev, row_ix, cx);
+                    }),
+                )
+        } else {
             // Render fake rows to fill the rest table space
             return self
                 .delegate
@@ -1143,144 +1282,6 @@ where
                 }))
                 .child(self.delegate.render_last_empty_col(cx));
         }
-
-        self.delegate
-            .render_tr(row_ix, cx)
-            .w_full()
-            .h(self.size.table_row_height())
-            .border_b_1()
-            .when(row_ix == rows_count, |this| {
-                this.border_color(gpui::transparent_white())
-            })
-            .border_color(cx.theme().table_row_border)
-            .when(is_stripe_row, |this| this.bg(cx.theme().table_even))
-            .hover(|this| {
-                if is_selected || self.right_clicked_row == Some(row_ix) {
-                    this
-                } else {
-                    this.bg(cx.theme().table_hover)
-                }
-            })
-            .when(left_cols_count > 0, |this| {
-                // Left fixed columns
-                this.child(
-                    h_flex()
-                        .relative()
-                        .h_full()
-                        .children({
-                            let mut items = Vec::with_capacity(left_cols_count);
-
-                            (0..left_cols_count).for_each(|col_ix| {
-                                items.push(
-                                    self.render_col_wrap(col_ix, cx).child(
-                                        self.render_cell(col_ix, cx)
-                                            .child(self.measure_render_td(row_ix, col_ix, cx)),
-                                    ),
-                                );
-                            });
-
-                            items
-                        })
-                        .child(
-                            // Fixed columns border
-                            div()
-                                .absolute()
-                                .top_0()
-                                .right_0()
-                                .bottom_0()
-                                .w_0()
-                                .flex_shrink_0()
-                                .border_r_1()
-                                .border_color(cx.theme().border),
-                        ),
-                )
-            })
-            .child(
-                h_flex()
-                    .flex_1()
-                    .h_full()
-                    .overflow_hidden()
-                    .relative()
-                    .child(
-                        crate::virtual_list::virtual_list(
-                            view,
-                            row_ix,
-                            Axis::Horizontal,
-                            col_sizes,
-                            {
-                                move |table, visible_range: Range<usize>, _, cx| {
-                                    table.update_visible_range_if_need(
-                                        visible_range.clone(),
-                                        Axis::Horizontal,
-                                        cx,
-                                    );
-
-                                    let mut items =
-                                        Vec::with_capacity(visible_range.end - visible_range.start);
-
-                                    visible_range.for_each(|col_ix| {
-                                        let col_ix = col_ix + left_cols_count;
-                                        let el = table.render_col_wrap(col_ix, cx).child(
-                                            table
-                                                .render_cell(col_ix, cx)
-                                                .child(table.measure_render_td(row_ix, col_ix, cx)),
-                                        );
-
-                                        items.push(el);
-                                    });
-
-                                    items
-                                }
-                            },
-                        )
-                        .with_scroll_handle(&self.horizontal_scroll_handle),
-                    )
-                    .child(self.delegate.render_last_empty_col(cx)),
-            )
-            // Row selected style
-            .when_some(self.selected_row, |this, _| {
-                this.when(
-                    is_selected && self.selection_state == SelectionState::Row,
-                    |this| {
-                        this.border_color(gpui::transparent_white()).child(
-                            div()
-                                .top(if row_ix == 0 { px(0.) } else { px(-1.) })
-                                .left(px(0.))
-                                .right(px(0.))
-                                .bottom_0()
-                                .absolute()
-                                .bg(cx.theme().table_active)
-                                .border_1()
-                                .border_color(cx.theme().table_active_border),
-                        )
-                    },
-                )
-            })
-            // Row right click row style
-            .when(self.right_clicked_row == Some(row_ix), |this| {
-                this.border_color(gpui::transparent_white()).child(
-                    div()
-                        .top(if row_ix == 0 { px(0.) } else { px(-1.) })
-                        .left(px(0.))
-                        .right(px(0.))
-                        .bottom_0()
-                        .absolute()
-                        .border_1()
-                        .border_color(cx.theme().selection),
-                )
-            })
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(move |this, ev, cx| {
-                    this.on_row_click(ev, row_ix, cx);
-                }),
-            )
-            .on_mouse_down(
-                MouseButton::Right,
-                cx.listener(move |this, ev, cx| {
-                    this.on_row_click(ev, row_ix, cx);
-                }),
-            )
     }
 
     /// Calculate the extra rows needed to fill the table empty space when `stripe` is true.
