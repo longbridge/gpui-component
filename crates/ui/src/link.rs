@@ -79,12 +79,12 @@ impl RenderOnce for Link {
                         cx.stop_propagation();
                     })
                     .on_click({
-                        move |e, cx| {
+                        move |e, window, cx| {
                             if let Some(href) = &href {
                                 cx.open_url(&href.clone());
                             }
                             if let Some(on_click) = &on_click {
-                                on_click(e, cx);
+                                on_click(e, window, cx);
                             }
                         }
                     }),

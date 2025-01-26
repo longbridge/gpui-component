@@ -1,6 +1,6 @@
-use gpui::{Window, AppContext, 
-    div, prelude::FluentBuilder, rems, Div, IntoElement, ParentElement, RenderOnce, SharedString,
-    Styled, 
+use gpui::{
+    div, prelude::FluentBuilder, rems, App, AppContext, Div, IntoElement, ParentElement,
+    RenderOnce, SharedString, Styled, Window,
 };
 
 use crate::{h_flex, ActiveTheme};

@@ -1,9 +1,9 @@
 use std::rc::{Rc, Weak};
 
-use gpui::{Window, AppContext, 
-    div, prelude::FluentBuilder as _, px, AlignItems, AnyElement, AnyView, Axis, Div, Element,
-    ElementId, FocusHandle, InteractiveElement as _, IntoElement, ParentElement, Pixels, Rems,
-    RenderOnce, SharedString, Styled, 
+use gpui::{
+    div, prelude::FluentBuilder as _, px, AlignItems, AnyElement, AnyView, App, AppContext, Axis,
+    Div, Element, ElementId, FocusHandle, InteractiveElement as _, IntoElement, ParentElement,
+    Pixels, Rems, RenderOnce, SharedString, Styled, Window,
 };
 
 use crate::{h_flex, v_flex, ActiveTheme as _, AxisExt, FocusableCycle, Sizable, Size, StyledExt};
@@ -147,7 +147,7 @@ impl RenderOnce for FieldBuilder {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         match self {
             FieldBuilder::String(value) => value.into_any_element(),
-            FieldBuilder::Element(builder) => builder(cx),
+            FieldBuilder::Element(builder) => builder(window, cx),
             FieldBuilder::View(view) => view.into_any(),
         }
     }
@@ -227,8 +227,8 @@ impl FormField {
         E: IntoElement,
         F: Fn(&mut Window, &mut App) -> E + 'static,
     {
-        self.label = Some(FieldBuilder::Element(Rc::new(move |cx| {
-            label(cx).into_any_element()
+        self.label = Some(FieldBuilder::Element(Rc::new(move |window, cx| {
+            label(window, cx).into_any_element()
         })));
         self
     }
@@ -245,8 +245,8 @@ impl FormField {
         E: IntoElement,
         F: Fn(&mut Window, &mut App) -> E + 'static,
     {
-        self.description = Some(FieldBuilder::Element(Rc::new(move |cx| {
-            description(cx).into_any_element()
+        self.description = Some(FieldBuilder::Element(Rc::new(move |window, cx| {
+            description(window, cx).into_any_element()
         })));
         self
     }
@@ -379,9 +379,14 @@ impl RenderOnce for FormField {
                                 .gap_1()
                                 .items_center()
                                 .when_some(self.label, |this, builder| {
-                                    this.child(builder.render(cx)).when(self.required, |this| {
-                                        this.child(div().text_color(cx.theme().danger).child("*"))
-                                    })
+                                    this.child(builder.render(window, cx)).when(
+                                        self.required,
+                                        |this| {
+                                            this.child(
+                                                div().text_color(cx.theme().danger).child("*"),
+                                            )
+                                        },
+                                    )
                                 }),
                         )
                     })
@@ -402,7 +407,7 @@ impl RenderOnce for FormField {
                             div()
                                 .text_xs()
                                 .text_color(cx.theme().muted_foreground)
-                                .child(builder.render(cx)),
+                                .child(builder.render(window, cx)),
                         )
                     }),
             )

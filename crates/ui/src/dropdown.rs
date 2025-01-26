@@ -1,9 +1,9 @@
 use gpui::{
-    actions, anchored, canvas, deferred, div, prelude::FluentBuilder, px, rems, AnyElement,
-    AppContext, Bounds, ClickEvent, DismissEvent, ElementId, EventEmitter, FocusHandle,
-    Focusable, InteractiveElement, IntoElement, KeyBinding, Length, Model, ModelContext,
-    ParentElement, Pixels, Render, SharedString, StatefulInteractiveElement, Styled, Task,
-    VisualContext, Window,
+    actions, anchored, canvas, deferred, div, prelude::FluentBuilder, px, rems, AnyElement, App,
+    AppContext, Bounds, ClickEvent, Context, DismissEvent, ElementId, Entity, EventEmitter,
+    FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding, Length, ParentElement,
+    Pixels, Render, SharedString, StatefulInteractiveElement, Styled, Task, VisualContext,
+    WeakEntity, Window,
 };
 use rust_i18n::t;
 
@@ -90,7 +90,12 @@ pub trait DropdownDelegate: Sized {
         false
     }
 
-    fn perform_search(&mut self, _query: &str, _window: &mut Window, cx: &mut Context<Dropdown<Self>>) -> Task<()> {
+    fn perform_search(
+        &mut self,
+        _query: &str,
+        _window: &mut Window,
+        cx: &mut Context<Dropdown<Self>>,
+    ) -> Task<()> {
         Task::ready(())
     }
 }
@@ -131,7 +136,12 @@ where
         self.delegate.len()
     }
 
-    fn render_item(&self, ix: usize, window: &mut gpui::Window, &mut gpui::Context<List<Self>>) -> Option<Self::Item> {
+    fn render_item(
+        &self,
+        ix: usize,
+        window: &mut gpui::Window,
+        cx: &mut gpui::Context<List<Self>>,
+    ) -> Option<Self::Item> {
         let selected = self
             .selected_index
             .map_or(false, |selected_index| selected_index == ix);
@@ -156,10 +166,10 @@ where
 
     fn cancel(&mut self, window: &mut Window, cx: &mut Context<List<Self>>) {
         let dropdown = self.dropdown.clone();
-        cx.defer(move |_, cx| {
+        cx.defer_in(window, move |_, window, cx| {
             _ = dropdown.update(cx, |this, cx| {
                 this.open = false;
-                this.focus(cx);
+                this.focus(window, cx);
             });
         });
     }
@@ -173,23 +183,33 @@ where
             .map(|item| item.value().clone());
         let dropdown = self.dropdown.clone();
 
-        cx.defer(move |_, cx| {
+        cx.defer_in(window, move |_, window, cx| {
             _ = dropdown.update(cx, |this, cx| {
                 cx.emit(DropdownEvent::Confirm(selected_value.clone()));
                 this.selected_value = selected_value;
                 this.open = false;
-                this.focus(cx);
+                this.focus(window, cx);
             });
         });
     }
 
-    fn perform_search(&mut self, query: &str, window: &mut Window, cx: &mut Context<List<Self>>) -> Task<()> {
+    fn perform_search(
+        &mut self,
+        query: &str,
+        window: &mut Window,
+        cx: &mut Context<List<Self>>,
+    ) -> Task<()> {
         self.dropdown.upgrade().map_or(Task::ready(()), |dropdown| {
-            dropdown.update(cx, |_, cx| self.delegate.perform_search(query, cx))
+            dropdown.update(cx, |_, cx| self.delegate.perform_search(query, window, cx))
         })
     }
 
-    fn set_selected_index(&mut self, ix: Option<usize>, _: &mut ViewContext<List<Self>>) {
+    fn set_selected_index(
+        &mut self,
+        ix: Option<usize>,
+        window: &mut Window,
+        _: &mut Context<List<Self>>,
+    ) {
         self.selected_index = ix;
     }
 
@@ -199,7 +219,7 @@ where
             .upgrade()
             .and_then(|dropdown| dropdown.read(cx).empty.as_ref())
         {
-            empty(cx).into_any_element()
+            empty(window, cx).into_any_element()
         } else {
             h_flex()
                 .justify_center()
@@ -227,7 +247,7 @@ pub struct Dropdown<D: DropdownDelegate + 'static> {
     placeholder: Option<SharedString>,
     title_prefix: Option<SharedString>,
     selected_value: Option<<D::Item as DropdownItem>::Value>,
-    empty: Option<Box<dyn Fn(&WindowContext) -> AnyElement + 'static>>,
+    empty: Option<Box<dyn Fn(&Window, &App) -> AnyElement + 'static>>,
     width: Length,
     menu_width: Length,
     /// Store the bounds of the input
@@ -279,7 +299,12 @@ impl<T: DropdownItem + Clone> DropdownDelegate for SearchableVec<T> {
         true
     }
 
-    fn perform_search(&mut self, query: &str, _window: &mut Window, cx: &mut Context<Dropdown<Self>>) -> Task<()> {
+    fn perform_search(
+        &mut self,
+        query: &str,
+        _window: &mut Window,
+        cx: &mut Context<Dropdown<Self>>,
+    ) -> Task<()> {
         self.matched_items = self
             .items
             .iter()
@@ -308,7 +333,8 @@ where
         id: impl Into<ElementId>,
         delegate: D,
         selected_index: Option<usize>,
-        window: &mut Window, cx: &mut Context<Self>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
     ) -> Self {
         let focus_handle = cx.focus_handle();
         let delegate = DropdownListDelegate {
@@ -320,15 +346,16 @@ where
         let searchable = delegate.delegate.can_search();
 
         let list = cx.new(|cx| {
-            let mut list = List::new(delegate, cx).max_h(rems(20.));
+            let mut list = List::new(delegate, window, cx).max_h(rems(20.));
             if !searchable {
                 list = list.no_query();
             }
             list
         });
 
-        cx.on_blur(&list.focus_handle(cx), Self::on_blur).detach();
-        cx.on_blur(&focus_handle, Self::on_blur).detach();
+        cx.on_blur(&list.focus_handle(cx), window, Self::on_blur)
+            .detach();
+        cx.on_blur(&focus_handle, window, Self::on_blur).detach();
 
         let mut this = Self {
             id: id.into(),
@@ -347,7 +374,7 @@ where
             bounds: Bounds::default(),
             disabled: false,
         };
-        this.set_selected_index(selected_index, cx);
+        this.set_selected_index(selected_index, window, cx);
         this
     }
 
@@ -404,36 +431,38 @@ where
     pub fn empty<E, F>(mut self, f: F) -> Self
     where
         E: IntoElement,
-        F: Fn(&WindowContext) -> E + 'static,
+        F: Fn(&Window, &App) -> E + 'static,
     {
-        self.empty = Some(Box::new(move |cx| f(cx).into_any_element()));
+        self.empty = Some(Box::new(move |window, cx| f(window, cx).into_any_element()));
         self
     }
 
     pub fn set_selected_index(
         &mut self,
         selected_index: Option<usize>,
-        window: &mut Window, cx: &mut Context<Self>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
     ) {
         self.list.update(cx, |list, cx| {
-            list.set_selected_index(selected_index, cx);
+            list.set_selected_index(selected_index, window, cx);
         });
-        self.update_selected_value(cx);
+        self.update_selected_value(window, cx);
     }
 
     pub fn set_selected_value(
         &mut self,
         selected_value: &<D::Item as DropdownItem>::Value,
-        window: &mut Window, cx: &mut Context<Self>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
     ) where
         <<D as DropdownDelegate>::Item as DropdownItem>::Value: PartialEq,
     {
         let delegate = self.list.read(cx).delegate();
         let selected_index = delegate.delegate.position(selected_value);
-        self.set_selected_index(selected_index, cx);
+        self.set_selected_index(selected_index, window, cx);
     }
 
-    pub fn selected_index(&self, window: &Window, cx: &App) -> Option<usize> {
+    pub fn selected_index(&self, cx: &App) -> Option<usize> {
         self.list.read(cx).selected_index()
     }
 
@@ -454,7 +483,7 @@ where
 
     fn on_blur(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         // When the dropdown and dropdown menu are both not focused, close the dropdown menu.
-        if self.list.focus_handle(cx).is_focused(cx) || self.focus_handle.is_focused(window) {
+        if self.list.focus_handle(cx).is_focused(window) || self.focus_handle.is_focused(window) {
             return;
         }
 
@@ -466,8 +495,8 @@ where
         if !self.open {
             return;
         }
-        self.list.focus_handle(cx).focus(cx);
-        cx.dispatch_action(Box::new(list::SelectPrev));
+        self.list.focus_handle(cx).focus(window);
+        cx.dispatch_action(&list::SelectPrev);
     }
 
     fn down(&mut self, _: &Down, window: &mut Window, cx: &mut Context<Self>) {
@@ -475,8 +504,8 @@ where
             self.open = true;
         }
 
-        self.list.focus_handle(cx).focus(cx);
-        cx.dispatch_action(Box::new(list::SelectNext));
+        self.list.focus_handle(cx).focus(window);
+        cx.dispatch_action(&list::SelectNext);
     }
 
     fn enter(&mut self, _: &Enter, window: &mut Window, cx: &mut Context<Self>) {
@@ -487,8 +516,8 @@ where
             self.open = true;
             cx.notify();
         } else {
-            self.list.focus_handle(cx).focus(cx);
-            cx.dispatch_action(Box::new(list::Confirm));
+            self.list.focus_handle(cx).focus(window);
+            cx.dispatch_action(&list::Confirm);
         }
     }
 
@@ -497,7 +526,7 @@ where
 
         self.open = !self.open;
         if self.open {
-            self.list.focus_handle(cx).focus(cx);
+            self.list.focus_handle(cx).focus(window);
         }
         cx.notify();
     }
@@ -511,7 +540,7 @@ where
     }
 
     fn clean(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
-        self.set_selected_index(None, cx);
+        self.set_selected_index(None, window, cx);
         cx.emit(DropdownEvent::Confirm(None));
     }
 
@@ -584,7 +613,7 @@ where
         // If the size has change, set size to self.list, to change the QueryInput size.
         if self.list.read(cx).size != self.size {
             self.list
-                .update(cx, |this, cx| this.set_size(self.size, cx))
+                .update(cx, |this, cx| this.set_size(self.size, window, cx))
         }
 
         div()
@@ -638,10 +667,10 @@ where
                                 div()
                                     .w_full()
                                     .overflow_hidden()
-                                    .child(self.display_title(cx)),
+                                    .child(self.display_title(window, cx)),
                             )
                             .when(show_clean, |this| {
-                                this.child(ClearButton::new(cx).map(|this| {
+                                this.child(ClearButton::new(window, cx).map(|this| {
                                     if self.disabled {
                                         this.disabled(true)
                                     } else {
@@ -701,12 +730,12 @@ where
                                         .rounded(px(cx.theme().radius))
                                         .shadow_md()
                                         .on_mouse_down_out(|_, window, cx| {
-                                            cx.dispatch_action(Box::new(Escape));
+                                            cx.dispatch_action(&Escape);
                                         })
                                         .child(self.list.clone()),
                                 )
                                 .on_mouse_down_out(cx.listener(|this, _, window, cx| {
-                                    this.escape(&Escape, cx);
+                                    this.escape(&Escape, window, cx);
                                 })),
                         ),
                     )

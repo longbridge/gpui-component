@@ -1,4 +1,4 @@
-use gpui::{Window, AppContext, FocusHandle, };
+use gpui::{App, AppContext, FocusHandle, Window};
 
 /// A trait for views that can cycle focus between its children.
 ///
@@ -19,7 +19,7 @@ pub trait FocusableCycle {
         Self: Sized,
     {
         let focused_handle = window.focused(cx);
-        let handles = self.cycle_focus_handles(cx);
+        let handles = self.cycle_focus_handles(window, cx);
         let handles = if is_next {
             handles
         } else {
