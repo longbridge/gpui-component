@@ -12,7 +12,7 @@ pub struct Checkbox {
     label: Option<SharedString>,
     checked: bool,
     disabled: bool,
-    on_click: Option<Box<dyn Fn(&bool, &mut WindowContext) + 'static>>,
+    on_click: Option<Box<dyn Fn(&bool, &mut Window, &mut App) + 'static>>,
 }
 
 impl Checkbox {
@@ -36,7 +36,7 @@ impl Checkbox {
         self
     }
 
-    pub fn on_click(mut self, handler: impl Fn(&bool, &mut WindowContext) + 'static) -> Self {
+    pub fn on_click(mut self, handler: impl Fn(&bool, &mut Window, &mut App) + 'static) -> Self {
         self.on_click = Some(Box::new(handler));
         self
     }
@@ -60,7 +60,7 @@ impl Selectable for Checkbox {
 }
 
 impl RenderOnce for Checkbox {
-    fn render(self, cx: &mut WindowContext) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let (color, icon_color) = if self.disabled {
             (
                 cx.theme().primary.opacity(0.5),

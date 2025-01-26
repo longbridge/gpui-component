@@ -6,19 +6,19 @@ pub struct Example {
 }
 
 impl Example {
-    pub fn new(cx: &mut ViewContext<Self>) -> Self {
+    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let table = TableStory::view(cx);
 
         Self { table }
     }
 
-    fn view(cx: &mut WindowContext) -> Entity<Self> {
-        cx.new_view(Self::new)
+    fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
+        cx.new(Self::new)
     }
 }
 
 impl Render for Example {
-    fn render(&mut self, _: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         div().p_4().size_full().child(self.table.clone())
     }
 }

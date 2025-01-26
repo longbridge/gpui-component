@@ -28,18 +28,18 @@ const MAIN_DOCK_AREA: DockAreaTab = DockAreaTab {
     version: 5,
 };
 
-pub fn init(cx: &mut AppContext) {
+pub fn init(cx: &mut App) {
     cx.bind_keys([KeyBinding::new("cmd-q", Quit, None)]);
 
-    cx.on_action(|_action: &Open, _cx: &mut AppContext| {});
+    cx.on_action(|_action: &Open, _cx: &mut App| {});
 
     ui::init(cx);
     story::init(cx);
 }
 
 pub struct StoryWorkspace {
-    title_bar: View<AppTitleBar>,
-    dock_area: View<DockArea>,
+    title_bar: Entity<AppTitleBar>,
+    dock_area: Entity<DockArea>,
     last_layout_state: Option<DockAreaState>,
     _save_layout_task: Option<Task<()>>,
 }
@@ -50,7 +50,7 @@ struct DockAreaTab {
 }
 
 impl StoryWorkspace {
-    pub fn new(cx: &mut ViewContext<Self>) -> Self {
+    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         // There will crash on Linux.
         // https://github.com/longbridge/gpui-component/issues/104
         #[cfg(not(target_os = "linux"))]
@@ -60,7 +60,7 @@ impl StoryWorkspace {
         .detach();
 
         let dock_area =
-            cx.new_view(|cx| DockArea::new(MAIN_DOCK_AREA.id, Some(MAIN_DOCK_AREA.version), cx));
+            cx.new(|cx| DockArea::new(MAIN_DOCK_AREA.id, Some(MAIN_DOCK_AREA.version), cx));
         let weak_dock_area = dock_area.downgrade();
 
         match Self::load_layout(dock_area.clone(), cx) {
@@ -90,7 +90,7 @@ impl StoryWorkspace {
         })
         .detach();
 
-        let title_bar = cx.new_view(|cx| {
+        let title_bar = cx.new(|cx| {
             AppTitleBar::new("Examples", cx).child({
                 move |cx| {
                     Button::new("add-panel")
@@ -159,7 +159,7 @@ impl StoryWorkspace {
         }
     }
 
-    fn save_layout(&mut self, dock_area: View<DockArea>, cx: &mut ViewContext<Self>) {
+    fn save_layout(&mut self, dock_area: Entity<DockArea>, window: &mut Window, cx: &mut Context<Self>) {
         self._save_layout_task = Some(cx.spawn(|this, mut cx| async move {
             Timer::after(Duration::from_secs(10)).await;
 
@@ -187,7 +187,7 @@ impl StoryWorkspace {
         Ok(())
     }
 
-    fn load_layout(dock_area: View<DockArea>, cx: &mut WindowContext) -> Result<()> {
+    fn load_layout(dock_area: Entity<DockArea>, window: &mut Window, cx: &mut App) -> Result<()> {
         let fname = "target/layout.json";
         let json = std::fs::read_to_string(fname)?;
         let state = serde_json::from_str::<DockAreaState>(&json)?;
@@ -225,7 +225,7 @@ impl StoryWorkspace {
         })
     }
 
-    fn reset_default_layout(dock_area: WeakEntity<DockArea>, cx: &mut WindowContext) {
+    fn reset_default_layout(dock_area: WeakEntity<DockArea>, window: &mut Window, cx: &mut App) {
         let dock_item = Self::init_default_layout(&dock_area, cx);
 
         let left_panels = DockItem::split_with_sizes(
@@ -285,7 +285,7 @@ impl StoryWorkspace {
         });
     }
 
-    fn init_default_layout(dock_area: &WeakEntity<DockArea>, cx: &mut WindowContext) -> DockItem {
+    fn init_default_layout(dock_area: &WeakEntity<DockArea>, window: &mut Window, cx: &mut App) -> DockItem {
         DockItem::split_with_sizes(
             Axis::Vertical,
             vec![DockItem::tabs(
@@ -321,7 +321,7 @@ impl StoryWorkspace {
         )
     }
 
-    pub fn new_local(cx: &mut AppContext) -> Task<anyhow::Result<WindowHandle<Root>>> {
+    pub fn new_local(cx: &mut App) -> Task<anyhow::Result<WindowHandle<Root>>> {
         let mut window_size = size(px(1600.0), px(1200.0));
         if let Some(display) = cx.primary_display() {
             let display_size = display.bounds().size;
@@ -349,8 +349,8 @@ impl StoryWorkspace {
             };
 
             let window = cx.open_window(options, |cx| {
-                let story_view = cx.new_view(|cx| Self::new(cx));
-                cx.new_view(|cx| Root::new(story_view.into(), cx))
+                let story_view = cx.new(|cx| Self::new(cx));
+                cx.new(|cx| Root::new(story_view.into(), cx))
             })?;
 
             window
@@ -369,7 +369,7 @@ impl StoryWorkspace {
         })
     }
 
-    fn on_action_add_panel(&mut self, action: &AddPanel, cx: &mut ViewContext<Self>) {
+    fn on_action_add_panel(&mut self, action: &AddPanel, window: &mut Window, cx: &mut Context<Self>) {
         // Random pick up a panel to add
         let panel = match rand::random::<usize>() % 18 {
             0 => Arc::new(StoryContainer::panel::<ButtonStory>(cx)),
@@ -401,7 +401,7 @@ impl StoryWorkspace {
     fn on_action_toggle_panel_visible(
         &mut self,
         action: &TogglePanelVisible,
-        cx: &mut ViewContext<Self>,
+        window: &mut Window, cx: &mut Context<Self>,
     ) {
         let panel_name = action.0.clone();
         let invisible_panels = AppState::global(cx).invisible_panels.clone();
@@ -418,8 +418,8 @@ impl StoryWorkspace {
 }
 
 pub fn open_new(
-    cx: &mut AppContext,
-    init: impl FnOnce(&mut Root, &mut ViewContext<Root>) + 'static + Send,
+    cx: &mut App,
+    init: impl FnOnce(&mut Root, &mut Window, &mut Context<Root>) + 'static + Send,
 ) -> Task<()> {
     let task: Task<std::result::Result<WindowHandle<Root>, anyhow::Error>> =
         StoryWorkspace::new_local(cx);
@@ -432,7 +432,7 @@ pub fn open_new(
 }
 
 impl Render for StoryWorkspace {
-    fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let drawer_layer = Root::render_drawer_layer(cx);
         let modal_layer = Root::render_modal_layer(cx);
         let notification_layer = Root::render_notification_layer(cx);
@@ -492,6 +492,6 @@ fn main() {
     });
 }
 
-fn quit(_: &Quit, cx: &mut AppContext) {
+fn quit(_: &Quit, cx: &mut App) {
     cx.quit();
 }

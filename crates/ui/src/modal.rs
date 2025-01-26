@@ -17,15 +17,15 @@ use crate::{
 actions!(modal, [Escape, Enter]);
 
 const CONTEXT: &str = "Modal";
-pub fn init(cx: &mut AppContext) {
+pub fn init(cx: &mut App) {
     cx.bind_keys([
         KeyBinding::new("escape", Escape, Some(CONTEXT)),
         KeyBinding::new("enter", Enter, Some(CONTEXT)),
     ]);
 }
 
-type RenderButtonFn = Box<dyn FnOnce(&mut WindowContext) -> AnyElement>;
-type FooterFn = Box<dyn Fn(RenderButtonFn, RenderButtonFn, &mut WindowContext) -> Vec<AnyElement>>;
+type RenderButtonFn = Box<dyn FnOnce(&mut Window, &mut App) -> AnyElement>;
+type FooterFn = Box<dyn Fn(RenderButtonFn, RenderButtonFn, &mut Window, &mut App) -> Vec<AnyElement>>;
 
 /// Modal button props.
 pub struct ModalButtonProps {
@@ -82,9 +82,9 @@ pub struct Modal {
     max_width: Option<Pixels>,
     margin_top: Option<Pixels>,
 
-    on_close: Rc<dyn Fn(&ClickEvent, &mut WindowContext) + 'static>,
-    on_ok: Rc<dyn Fn(&ClickEvent, &mut WindowContext) -> bool + 'static>,
-    on_cancel: Rc<dyn Fn(&ClickEvent, &mut WindowContext) -> bool + 'static>,
+    on_close: Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>,
+    on_ok: Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) -> bool + 'static>,
+    on_cancel: Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) -> bool + 'static>,
     button_props: ModalButtonProps,
     show_close: bool,
     overlay: bool,
@@ -97,7 +97,7 @@ pub struct Modal {
     pub(crate) overlay_visible: bool,
 }
 
-pub(crate) fn overlay_color(overlay: bool, cx: &WindowContext) -> Hsla {
+pub(crate) fn overlay_color(overlay: bool, window: &Window, cx: &App) -> Hsla {
     if !overlay {
         return hsla(0., 0., 0., 0.);
     }
@@ -110,7 +110,7 @@ pub(crate) fn overlay_color(overlay: bool, cx: &WindowContext) -> Hsla {
 }
 
 impl Modal {
-    pub fn new(cx: &mut WindowContext) -> Self {
+    pub fn new(window: &mut Window, cx: &mut App) -> Self {
         let base = v_flex()
             .bg(cx.theme().background)
             .border_1()
@@ -160,7 +160,7 @@ impl Modal {
     pub fn footer<E, F>(mut self, footer: F) -> Self
     where
         E: IntoElement,
-        F: Fn(RenderButtonFn, RenderButtonFn, &mut WindowContext) -> Vec<E> + 'static,
+        F: Fn(RenderButtonFn, RenderButtonFn, &mut Window, &mut App) -> Vec<E> + 'static,
     {
         self.footer = Some(Box::new(move |ok, cancel, cx| {
             footer(ok, cancel, cx)
@@ -187,7 +187,7 @@ impl Modal {
     /// Sets the callback for when the modal is closed.
     pub fn on_close(
         mut self,
-        on_close: impl Fn(&ClickEvent, &mut WindowContext) + 'static,
+        on_close: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
     ) -> Self {
         self.on_close = Rc::new(on_close);
         self
@@ -198,7 +198,7 @@ impl Modal {
     /// The callback should return `true` to close the modal, if return `false` the modal will not be closed.
     pub fn on_ok(
         mut self,
-        on_ok: impl Fn(&ClickEvent, &mut WindowContext) -> bool + 'static,
+        on_ok: impl Fn(&ClickEvent, &mut Window, &mut App) -> bool + 'static,
     ) -> Self {
         self.on_ok = Rc::new(on_ok);
         self
@@ -209,7 +209,7 @@ impl Modal {
     /// The callback should return `true` to close the modal, if return `false` the modal will not be closed.
     pub fn on_cancel(
         mut self,
-        on_cancel: impl Fn(&ClickEvent, &mut WindowContext) -> bool + 'static,
+        on_cancel: impl Fn(&ClickEvent, &mut Window, &mut App) -> bool + 'static,
     ) -> Self {
         self.on_cancel = Rc::new(on_cancel);
         self
@@ -277,7 +277,7 @@ impl Styled for Modal {
 }
 
 impl RenderOnce for Modal {
-    fn render(self, cx: &mut WindowContext) -> impl gpui::IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl gpui::IntoElement {
         let layer_ix = self.layer_ix;
         let on_close = self.on_close.clone();
         let on_ok = self.on_ok.clone();

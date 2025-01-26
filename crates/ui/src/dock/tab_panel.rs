@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use gpui::{
     div, prelude::FluentBuilder, px, rems, AppContext, Corner, DefiniteLength, DismissEvent,
-    DragMoveEvent, Empty, Entity, EventEmitter, FocusHandle, FocusableView,
+    DragMoveEvent, Empty, Entity, EventEmitter, FocusHandle, Focusable,
     InteractiveElement as _, IntoElement, Model, ModelContext, ParentElement, Pixels, Render,
-    ScrollHandle, SharedString, StatefulInteractiveElement, Styled, VisualContext as _, WeakView,
+    ScrollHandle, SharedString, StatefulInteractiveElement, Styled, VisualContext as _,
     Window,
 };
 use rust_i18n::t;
@@ -35,17 +35,17 @@ struct TabState {
 #[derive(Clone)]
 pub(crate) struct DragPanel {
     pub(crate) panel: Arc<dyn PanelView>,
-    pub(crate) tab_panel: View<TabPanel>,
+    pub(crate) tab_panel: Entity<TabPanel>,
 }
 
 impl DragPanel {
-    pub(crate) fn new(panel: Arc<dyn PanelView>, tab_panel: View<TabPanel>) -> Self {
+    pub(crate) fn new(panel: Arc<dyn PanelView>, tab_panel: Entity<TabPanel>) -> Self {
         Self { panel, tab_panel }
     }
 }
 
 impl Render for DragPanel {
-    fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .id("drag-panel")
             .cursor_grab()
@@ -87,13 +87,13 @@ impl Panel for TabPanel {
         "TabPanel"
     }
 
-    fn title(&self, cx: &WindowContext) -> gpui::AnyElement {
+    fn title(&self, window: &Window, cx: &App) -> gpui::AnyElement {
         self.active_panel(cx)
             .map(|panel| panel.title(cx))
             .unwrap_or("Empty Tab".into_any_element())
     }
 
-    fn closable(&self, cx: &AppContext) -> bool {
+    fn closable(&self, cx: &App) -> bool {
         if !self.closable {
             return false;
         }
@@ -103,15 +103,15 @@ impl Panel for TabPanel {
             .unwrap_or(false)
     }
 
-    fn zoomable(&self, cx: &AppContext) -> Option<PanelControl> {
+    fn zoomable(&self, cx: &App) -> Option<PanelControl> {
         self.active_panel(cx).and_then(|panel| panel.zoomable(cx))
     }
 
-    fn visible(&self, cx: &AppContext) -> bool {
+    fn visible(&self, cx: &App) -> bool {
         self.visible_panels(cx).next().is_some()
     }
 
-    fn popup_menu(&self, menu: PopupMenu, cx: &WindowContext) -> PopupMenu {
+    fn popup_menu(&self, menu: PopupMenu, window: &Window, cx: &App) -> PopupMenu {
         if let Some(panel) = self.active_panel(cx) {
             panel.popup_menu(menu, cx)
         } else {
@@ -119,12 +119,12 @@ impl Panel for TabPanel {
         }
     }
 
-    fn toolbar_buttons(&self, cx: &mut ViewContext<Self>) -> Option<Vec<Button>> {
+    fn toolbar_buttons(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<Vec<Button>> {
         self.active_panel(cx)
             .and_then(|panel| panel.toolbar_buttons(cx))
     }
 
-    fn dump(&self, cx: &AppContext) -> PanelState {
+    fn dump(&self, cx: &App) -> PanelState {
         let mut state = PanelState::new(self);
         for panel in self.panels.iter() {
             state.add_child(panel.dump(cx));
@@ -138,7 +138,7 @@ impl TabPanel {
     pub fn new(
         stack_panel: Option<WeakEntity<StackPanel>>,
         dock_area: WeakEntity<DockArea>,
-        cx: &mut ViewContext<Self>,
+        window: &mut Window, cx: &mut Context<Self>,
     ) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
@@ -159,7 +159,7 @@ impl TabPanel {
     }
 
     /// Return current active_panel View
-    pub fn active_panel(&self, cx: &AppContext) -> Option<Arc<dyn PanelView>> {
+    pub fn active_panel(&self, cx: &App) -> Option<Arc<dyn PanelView>> {
         let panel = self.panels.get(self.active_ix);
 
         if let Some(panel) = panel {
@@ -174,7 +174,7 @@ impl TabPanel {
         }
     }
 
-    fn set_active_ix(&mut self, ix: usize, cx: &mut ViewContext<Self>) {
+    fn set_active_ix(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
         if ix == self.active_ix {
             return;
         }
@@ -205,7 +205,7 @@ impl TabPanel {
     }
 
     /// Add a panel to the end of the tabs
-    pub fn add_panel(&mut self, panel: Arc<dyn PanelView>, cx: &mut ViewContext<Self>) {
+    pub fn add_panel(&mut self, panel: Arc<dyn PanelView>, window: &mut Window, cx: &mut Context<Self>) {
         self.add_panel_with_active(panel, true, cx);
     }
 
@@ -213,7 +213,7 @@ impl TabPanel {
         &mut self,
         panel: Arc<dyn PanelView>,
         active: bool,
-        cx: &mut ViewContext<Self>,
+        window: &mut Window, cx: &mut Context<Self>,
     ) {
         assert_ne!(
             panel.panel_name(cx),
@@ -244,7 +244,7 @@ impl TabPanel {
         panel: Arc<dyn PanelView>,
         placement: Placement,
         size: Option<Pixels>,
-        cx: &mut ViewContext<Self>,
+        window: &mut Window, cx: &mut Context<Self>,
     ) {
         cx.spawn(|view, mut cx| async move {
             cx.update(|cx| {
@@ -265,7 +265,7 @@ impl TabPanel {
         &mut self,
         panel: Arc<dyn PanelView>,
         ix: usize,
-        cx: &mut ViewContext<Self>,
+        window: &mut Window, cx: &mut Context<Self>,
     ) {
         if self
             .panels
@@ -282,14 +282,14 @@ impl TabPanel {
     }
 
     /// Remove a panel from the tab panel
-    pub fn remove_panel(&mut self, panel: Arc<dyn PanelView>, cx: &mut ViewContext<Self>) {
+    pub fn remove_panel(&mut self, panel: Arc<dyn PanelView>, window: &mut Window, cx: &mut Context<Self>) {
         self.detach_panel(panel, cx);
         self.remove_self_if_empty(cx);
         cx.emit(PanelEvent::ZoomOut);
         cx.emit(PanelEvent::LayoutChanged);
     }
 
-    fn detach_panel(&mut self, panel: Arc<dyn PanelView>, cx: &mut ViewContext<Self>) {
+    fn detach_panel(&mut self, panel: Arc<dyn PanelView>, window: &mut Window, cx: &mut Context<Self>) {
         let panel_view = panel.view();
         self.panels.retain(|p| p.view() != panel_view);
         if self.active_ix >= self.panels.len() {
@@ -298,12 +298,12 @@ impl TabPanel {
     }
 
     /// Check to remove self from the parent StackPanel, if there is no panel left
-    fn remove_self_if_empty(&self, cx: &mut ViewContext<Self>) {
+    fn remove_self_if_empty(&self, window: &mut Window, cx: &mut Context<Self>) {
         if !self.panels.is_empty() {
             return;
         }
 
-        let tab_view = cx.view().clone();
+        let tab_view = cx.model().clone();
         if let Some(stack_panel) = self.stack_panel.as_ref() {
             _ = stack_panel.update(cx, |view, cx| {
                 view.remove_panel(Arc::new(tab_view), cx);
@@ -311,12 +311,12 @@ impl TabPanel {
         }
     }
 
-    pub(super) fn set_collapsed(&mut self, collapsed: bool, cx: &mut ViewContext<Self>) {
+    pub(super) fn set_collapsed(&mut self, collapsed: bool, window: &mut Window, cx: &mut Context<Self>) {
         self.is_collapsed = collapsed;
         cx.notify();
     }
 
-    fn is_locked(&self, cx: &AppContext) -> bool {
+    fn is_locked(&self, cx: &App) -> bool {
         let Some(dock_area) = self.dock_area.upgrade() else {
             return true;
         };
@@ -333,7 +333,7 @@ impl TabPanel {
     }
 
     /// Return true if self or parent only have last panel.
-    fn is_last_panel(&self, cx: &AppContext) -> bool {
+    fn is_last_panel(&self, cx: &App) -> bool {
         if let Some(parent) = &self.stack_panel {
             if let Some(stack_panel) = parent.upgrade() {
                 if !stack_panel.read(cx).is_last_panel(cx) {
@@ -362,20 +362,20 @@ impl TabPanel {
     /// Return true if the tab panel is draggable.
     ///
     /// E.g. if the parent and self only have one panel, it is not draggable.
-    fn draggable(&self, cx: &AppContext) -> bool {
+    fn draggable(&self, cx: &App) -> bool {
         !self.is_locked(cx) && !self.is_last_panel(cx)
     }
 
     /// Return true if the tab panel is droppable.
     ///
     /// E.g. if the tab panel is locked, it is not droppable.
-    fn droppable(&self, cx: &AppContext) -> bool {
+    fn droppable(&self, cx: &App) -> bool {
         !self.is_locked(cx)
     }
 
-    fn render_toolbar(&self, state: &TabState, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render_toolbar(&self, state: &TabState, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let is_zoomed = self.is_zoomed;
-        let view = cx.view().clone();
+        let view = cx.model().clone();
         let build_popup_menu = move |this, cx: &WindowContext| view.read(cx).popup_menu(this, cx);
         let zoomable_toolbar_visible = state.zoomable.map_or(false, |v| v.toolbar_visible());
 
@@ -443,7 +443,7 @@ impl TabPanel {
     fn render_dock_toggle_button(
         &self,
         placement: DockPlacement,
-        cx: &mut ViewContext<Self>,
+        window: &mut Window, cx: &mut Context<Self>,
     ) -> Option<impl IntoElement> {
         if self.is_zoomed {
             return None;
@@ -454,7 +454,7 @@ impl TabPanel {
             return None;
         }
 
-        let view_entity_id = cx.view().entity_id();
+        let view_entity_id = cx.model().entity_id();
         let toggle_button_panels = dock_area.toggle_button_panels;
 
         // Check if current TabPanel's entity_id matches the one stored in DockArea for this placement
@@ -521,8 +521,8 @@ impl TabPanel {
         )
     }
 
-    fn render_title_bar(&self, state: &TabState, cx: &mut ViewContext<Self>) -> impl IntoElement {
-        let view = cx.view().clone();
+    fn render_title_bar(&self, state: &TabState, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let view = cx.model().clone();
 
         let Some(dock_area) = self.dock_area.upgrade() else {
             return div().into_any_element();
@@ -584,7 +584,7 @@ impl TabPanel {
                                 },
                                 |drag, _, window, cx| {
                                     cx.stop_propagation();
-                                    cx.new_view(|_| drag.clone())
+                                    cx.new(|_| drag.clone())
                                 },
                             )
                         }),
@@ -651,7 +651,7 @@ impl TabPanel {
                                     DragPanel::new(panel.clone(), view.clone()),
                                     |drag, _, window, cx| {
                                         cx.stop_propagation();
-                                        cx.new_view(|_| drag.clone())
+                                        cx.new(|_| drag.clone())
                                     },
                                 )
                             })
@@ -719,7 +719,7 @@ impl TabPanel {
     fn render_active_panel(
         &self,
         state: &TabState,
-        cx: &mut ViewContext<Self>,
+        window: &mut Window, cx: &mut Context<Self>,
     ) -> impl IntoElement {
         if self.is_collapsed {
             return Empty {}.into_any_element();
@@ -769,7 +769,7 @@ impl TabPanel {
     }
 
     /// Calculate the split direction based on the current mouse position
-    fn on_panel_drag_move(&mut self, drag: &DragMoveEvent<DragPanel>, cx: &mut ViewContext<Self>) {
+    fn on_panel_drag_move(&mut self, drag: &DragMoveEvent<DragPanel>, window: &mut Window, cx: &mut Context<Self>) {
         let bounds = drag.bounds;
         let position = drag.event.position;
 
@@ -797,10 +797,10 @@ impl TabPanel {
         drag: &DragPanel,
         ix: Option<usize>,
         active: bool,
-        cx: &mut ViewContext<Self>,
+        window: &mut Window, cx: &mut Context<Self>,
     ) {
         let panel = drag.panel.clone();
-        let is_same_tab = drag.tab_panel == *cx.view();
+        let is_same_tab = drag.tab_panel == *cx.model();
 
         // If target is same tab, and it is only one panel, do nothing.
         if is_same_tab && ix.is_none() {
@@ -847,11 +847,11 @@ impl TabPanel {
         panel: Arc<dyn PanelView>,
         placement: Placement,
         size: Option<Pixels>,
-        cx: &mut ViewContext<Self>,
+        window: &mut Window, cx: &mut Context<Self>,
     ) {
         let dock_area = self.dock_area.clone();
         // wrap the panel in a TabPanel
-        let new_tab_panel = cx.new_view(|cx| Self::new(None, dock_area.clone(), cx));
+        let new_tab_panel = cx.new(|cx| Self::new(None, dock_area.clone(), cx));
         new_tab_panel.update(cx, |view, cx| {
             view.add_panel(panel, cx);
         });
@@ -865,7 +865,7 @@ impl TabPanel {
 
         let ix = stack_panel
             .read(cx)
-            .index_of_panel(Arc::new(cx.view().clone()))
+            .index_of_panel(Arc::new(cx.model().clone()))
             .unwrap_or_default();
 
         if parent_axis.is_vertical() && placement.is_vertical() {
@@ -892,10 +892,10 @@ impl TabPanel {
             });
         } else {
             // 1. Create new StackPanel with new axis
-            // 2. Move cx.view() from parent StackPanel to the new StackPanel
+            // 2. Move cx.model() from parent StackPanel to the new StackPanel
             // 3. Add the new TabPanel to the new StackPanel at the correct index
             // 4. Add new StackPanel to the parent StackPanel at the correct index
-            let tab_panel = cx.view().clone();
+            let tab_panel = cx.model().clone();
 
             // Try to use the old stack panel, not just create a new one, to avoid too many nested stack panels
             let new_stack_panel = if stack_panel.read(cx).panels_len() <= 1 {
@@ -905,7 +905,7 @@ impl TabPanel {
                 });
                 stack_panel.clone()
             } else {
-                cx.new_view(|cx| {
+                cx.new(|cx| {
                     let mut panel = StackPanel::new(placement.axis(), cx);
                     panel.parent = Some(stack_panel.downgrade());
                     panel
@@ -938,13 +938,13 @@ impl TabPanel {
         cx.emit(PanelEvent::LayoutChanged);
     }
 
-    fn focus_active_panel(&self, cx: &mut ViewContext<Self>) {
+    fn focus_active_panel(&self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(active_panel) = self.active_panel(cx) {
             active_panel.focus_handle(cx).focus(window);
         }
     }
 
-    fn on_action_toggle_zoom(&mut self, _: &ToggleZoom, cx: &mut ViewContext<Self>) {
+    fn on_action_toggle_zoom(&mut self, _: &ToggleZoom, window: &mut Window, cx: &mut Context<Self>) {
         if self.zoomable(cx).is_none() {
             return;
         }
@@ -969,15 +969,15 @@ impl TabPanel {
         .detach();
     }
 
-    fn on_action_close_panel(&mut self, _: &ClosePanel, cx: &mut ViewContext<Self>) {
+    fn on_action_close_panel(&mut self, _: &ClosePanel, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(panel) = self.active_panel(cx) {
             self.remove_panel(panel, cx);
         }
     }
 }
 
-impl FocusableView for TabPanel {
-    fn focus_handle(&self, cx: &AppContext) -> gpui::FocusHandle {
+impl Focusable for TabPanel {
+    fn focus_handle(&self, cx: &App) -> gpui::FocusHandle {
         if let Some(active_panel) = self.active_panel(cx) {
             active_panel.focus_handle(cx)
         } else {
@@ -988,7 +988,7 @@ impl FocusableView for TabPanel {
 impl EventEmitter<DismissEvent> for TabPanel {}
 impl EventEmitter<PanelEvent> for TabPanel {}
 impl Render for TabPanel {
-    fn render(&mut self, cx: &mut ViewContext<Self>) -> impl gpui::IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
         let focus_handle = self.focus_handle(cx);
         let active_panel = self.active_panel(cx);
         let mut state = TabState {

@@ -20,18 +20,18 @@ use crate::{SelectFont, SelectLocale, SelectScrollbarShow};
 pub struct AppTitleBar {
     title: SharedString,
     theme_color: Option<Hsla>,
-    locale_selector: View<LocaleSelector>,
-    font_size_selector: View<FontSizeSelector>,
-    theme_color_picker: View<ColorPicker>,
-    child: Rc<dyn Fn(&mut WindowContext) -> AnyElement>,
+    locale_selector: Entity<LocaleSelector>,
+    font_size_selector: Entity<FontSizeSelector>,
+    theme_color_picker: Entity<ColorPicker>,
+    child: Rc<dyn Fn(&mut Window, &mut App) -> AnyElement>,
 }
 
 impl AppTitleBar {
-    pub fn new(title: impl Into<SharedString>, cx: &mut ViewContext<Self>) -> Self {
-        let locale_selector = cx.new_view(LocaleSelector::new);
-        let font_size_selector = cx.new_view(FontSizeSelector::new);
+    pub fn new(title: impl Into<SharedString>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let locale_selector = cx.new(LocaleSelector::new);
+        let font_size_selector = cx.new(FontSizeSelector::new);
 
-        let theme_color_picker = cx.new_view(|cx| {
+        let theme_color_picker = cx.new(|cx| {
             let mut picker = ColorPicker::new("theme-color-picker", cx)
                 .xsmall()
                 .anchor(Corner::TopRight)
@@ -62,22 +62,22 @@ impl AppTitleBar {
     pub fn child<F, E>(mut self, f: F) -> Self
     where
         E: IntoElement,
-        F: Fn(&mut WindowContext) -> E + 'static,
+        F: Fn(&mut Window, &mut App) -> E + 'static,
     {
         self.child = Rc::new(move |cx| f(cx).into_any_element());
         self
     }
 
-    fn set_theme_color(&mut self, color: Option<Hsla>, cx: &mut ViewContext<Self>) {
+    fn set_theme_color(&mut self, color: Option<Hsla>, window: &mut Window, cx: &mut Context<Self>) {
         self.theme_color = color;
         if let Some(color) = self.theme_color {
             let theme = cx.global_mut::<Theme>();
             theme.apply_color(color);
-            cx.refresh();
+            window.refresh();
         }
     }
 
-    fn change_color_mode(&mut self, _: &ClickEvent, cx: &mut ViewContext<Self>) {
+    fn change_color_mode(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
         let mode = match cx.theme().mode.is_dark() {
             true => ui::ThemeMode::Light,
             false => ui::ThemeMode::Dark,
@@ -89,7 +89,7 @@ impl AppTitleBar {
 }
 
 impl Render for AppTitleBar {
-    fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let notifications_count = cx.notifications().len();
 
         TitleBar::new()
@@ -151,20 +151,20 @@ struct LocaleSelector {
 }
 
 impl LocaleSelector {
-    pub fn new(cx: &mut ViewContext<Self>) -> Self {
+    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
         }
     }
 
-    fn on_select_locale(&mut self, locale: &SelectLocale, cx: &mut ViewContext<Self>) {
+    fn on_select_locale(&mut self, locale: &SelectLocale, window: &mut Window, cx: &mut Context<Self>) {
         ui::set_locale(&locale.0);
-        cx.refresh();
+        window.refresh();
     }
 }
 
 impl Render for LocaleSelector {
-    fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let focus_handle = self.focus_handle.clone();
         let locale = ui::locale().to_string();
 
@@ -199,25 +199,25 @@ struct FontSizeSelector {
 }
 
 impl FontSizeSelector {
-    pub fn new(cx: &mut ViewContext<Self>) -> Self {
+    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
         }
     }
 
-    fn on_select_font(&mut self, font_size: &SelectFont, cx: &mut ViewContext<Self>) {
+    fn on_select_font(&mut self, font_size: &SelectFont, window: &mut Window, cx: &mut Context<Self>) {
         Theme::global_mut(cx).font_size = font_size.0 as f32;
-        cx.refresh();
+        window.refresh();
     }
 
-    fn on_select_scrollbar_show(&mut self, show: &SelectScrollbarShow, cx: &mut ViewContext<Self>) {
+    fn on_select_scrollbar_show(&mut self, show: &SelectScrollbarShow, window: &mut Window, cx: &mut Context<Self>) {
         Theme::global_mut(cx).scrollbar_show = show.0;
-        cx.refresh();
+        window.refresh();
     }
 }
 
 impl Render for FontSizeSelector {
-    fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let focus_handle = self.focus_handle.clone();
         let font_size = cx.theme().font_size as i32;
         let scroll_show = cx.theme().scrollbar_show;

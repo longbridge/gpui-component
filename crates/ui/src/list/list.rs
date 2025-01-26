@@ -9,7 +9,7 @@ use crate::{
 };
 use gpui::{Window, ModelContext, Model, 
     actions, div, prelude::FluentBuilder, uniform_list, AnyElement, AppContext, Entity,
-    FocusHandle, FocusableView, InteractiveElement, IntoElement, KeyBinding, Length,
+    FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding, Length,
     ListSizingBehavior, MouseButton, ParentElement, Render, SharedString, Styled, Task,
     UniformListScrollHandle,   VisualContext, 
 };
@@ -20,7 +20,7 @@ use super::loading::Loading;
 
 actions!(list, [Cancel, Confirm, SelectPrev, SelectNext]);
 
-pub fn init(cx: &mut AppContext) {
+pub fn init(cx: &mut App) {
     let context: Option<&str> = Some("List");
     cx.bind_keys([
         KeyBinding::new("escape", Cancel, context),
@@ -52,7 +52,7 @@ pub trait ListDelegate: Sized + 'static {
     }
 
     /// Return the number of items in the list.
-    fn items_count(&self, cx: &AppContext) -> usize;
+    fn items_count(&self, cx: &App) -> usize;
 
     /// Render the item at the given index.
     ///
@@ -76,7 +76,7 @@ pub trait ListDelegate: Sized + 'static {
     }
 
     /// Returns the loading state to show the loading view.
-    fn loading(&self, cx: &AppContext) -> bool {
+    fn loading(&self, cx: &App) -> bool {
         false
     }
 
@@ -97,7 +97,7 @@ pub trait ListDelegate: Sized + 'static {
     /// Return true to enable load more data when scrolling to the bottom.
     ///
     /// Default: true
-    fn can_load_more(&self, cx: &AppContext) -> bool {
+    fn can_load_more(&self, cx: &App) -> bool {
         true
     }
 
@@ -123,7 +123,7 @@ pub struct List<D: ListDelegate> {
     focus_handle: FocusHandle,
     delegate: D,
     max_height: Option<Length>,
-    query_input: Option<View<TextInput>>,
+    query_input: Option<Entity<TextInput>>,
     last_query: Option<String>,
     selectable: bool,
     querying: bool,
@@ -141,8 +141,8 @@ impl<D> List<D>
 where
     D: ListDelegate,
 {
-    pub fn new(delegate: D, cx: &mut ViewContext<Self>) -> Self {
-        let query_input = cx.new_view(|cx| {
+    pub fn new(delegate: D, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let query_input = cx.new(|cx| {
             TextInput::new(cx)
                 .appearance(false)
                 .prefix(|cx| Icon::new(IconName::Search).text_color(cx.theme().muted_foreground))
@@ -173,7 +173,7 @@ where
     }
 
     /// Set the size
-    pub fn set_size(&mut self, size: Size, cx: &mut ViewContext<Self>) {
+    pub fn set_size(&mut self, size: Size, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(input) = &self.query_input {
             input.update(cx, |input, cx| {
                 input.set_size(size, cx);
@@ -204,7 +204,7 @@ where
         self
     }
 
-    pub fn set_query_input(&mut self, query_input: View<TextInput>, cx: &mut ViewContext<Self>) {
+    pub fn set_query_input(&mut self, query_input: Entity<TextInput>, window: &mut Window, cx: &mut Context<Self>) {
         cx.subscribe(&query_input, Self::on_query_input_event)
             .detach();
         self.query_input = Some(query_input);
@@ -218,12 +218,12 @@ where
         &mut self.delegate
     }
 
-    pub fn focus(&mut self, cx: &mut WindowContext) {
+    pub fn focus(&mut self, window: &mut Window, cx: &mut App) {
         self.focus_handle(cx).focus(cx);
     }
 
     /// Set the selected index of the list, this will also scroll to the selected item.
-    pub fn set_selected_index(&mut self, ix: Option<usize>, cx: &mut ViewContext<Self>) {
+    pub fn set_selected_index(&mut self, ix: Option<usize>, window: &mut Window, cx: &mut Context<Self>) {
         self.selected_index = ix;
         self.delegate.set_selected_index(ix, cx);
         self.scroll_to_selected_item(cx);
@@ -234,7 +234,7 @@ where
     }
 
     /// Set the query_input text
-    pub fn set_query(&mut self, query: &str, cx: &mut ViewContext<Self>) {
+    pub fn set_query(&mut self, query: &str, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(query_input) = &self.query_input {
             let query = query.to_owned();
             query_input.update(cx, |input, cx| input.set_text(query, cx))
@@ -242,24 +242,24 @@ where
     }
 
     /// Get the query_input text
-    pub fn query(&self, cx: &mut ViewContext<Self>) -> Option<SharedString> {
+    pub fn query(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<SharedString> {
         self.query_input.as_ref().map(|input| input.read(cx).text())
     }
 
-    fn render_scrollbar(&self, cx: &mut ViewContext<Self>) -> Option<impl IntoElement> {
+    fn render_scrollbar(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<impl IntoElement> {
         if !self.scrollbar_visible {
             return None;
         }
 
         Some(Scrollbar::uniform_scroll(
-            cx.view().entity_id(),
+            cx.model().entity_id(),
             self.scrollbar_state.clone(),
             self.vertical_scroll_handle.clone(),
         ))
     }
 
     /// Scroll to the item at the given index.
-    pub fn scroll_to_item(&mut self, ix: usize, cx: &mut ViewContext<Self>) {
+    pub fn scroll_to_item(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
         self.vertical_scroll_handle
             .scroll_to_item(ix, ScrollStrategy::Top);
         cx.notify();
@@ -270,7 +270,7 @@ where
         &self.vertical_scroll_handle
     }
 
-    fn scroll_to_selected_item(&mut self, _cx: &mut ViewContext<Self>) {
+    fn scroll_to_selected_item(&mut self, _window: &mut Window, _cx: &mut Context<Self>) {
         if let Some(ix) = self.selected_index {
             self.vertical_scroll_handle
                 .scroll_to_item(ix, ScrollStrategy::Top);
@@ -279,9 +279,9 @@ where
 
     fn on_query_input_event(
         &mut self,
-        _: View<TextInput>,
+        _: Entity<TextInput>,
         event: &InputEvent,
-        cx: &mut ViewContext<Self>,
+        window: &mut Window, cx: &mut Context<Self>,
     ) {
         match event {
             InputEvent::Change(text) => {
@@ -314,7 +314,7 @@ where
         }
     }
 
-    fn set_querying(&mut self, querying: bool, cx: &mut ViewContext<Self>) {
+    fn set_querying(&mut self, querying: bool, window: &mut Window, cx: &mut Context<Self>) {
         self.querying = querying;
         if let Some(input) = &self.query_input {
             input.update(cx, |input, cx| input.set_loading(querying, cx))
@@ -327,7 +327,7 @@ where
         &mut self,
         items_count: usize,
         visible_end: usize,
-        cx: &mut ViewContext<Self>,
+        window: &mut Window, cx: &mut Context<Self>,
     ) {
         let threshold = self.delegate.load_more_threshold();
         // Securely handle subtract logic to prevent attempt to subtract with overflow
@@ -346,14 +346,14 @@ where
         }
     }
 
-    fn on_action_cancel(&mut self, _: &Cancel, cx: &mut ViewContext<Self>) {
+    fn on_action_cancel(&mut self, _: &Cancel, window: &mut Window, cx: &mut Context<Self>) {
         self.set_selected_index(None, cx);
         self.delegate.cancel(cx);
         cx.emit(ListEvent::Cancel);
         cx.notify();
     }
 
-    fn on_action_confirm(&mut self, _: &Confirm, cx: &mut ViewContext<Self>) {
+    fn on_action_confirm(&mut self, _: &Confirm, window: &mut Window, cx: &mut Context<Self>) {
         if self.delegate.items_count(cx) == 0 {
             return;
         }
@@ -367,7 +367,7 @@ where
         cx.notify();
     }
 
-    fn select_item(&mut self, ix: usize, cx: &mut ViewContext<Self>) {
+    fn select_item(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
         self.selected_index = Some(ix);
         self.delegate.set_selected_index(Some(ix), cx);
         self.scroll_to_selected_item(cx);
@@ -375,7 +375,7 @@ where
         cx.notify();
     }
 
-    fn on_action_select_prev(&mut self, _: &SelectPrev, cx: &mut ViewContext<Self>) {
+    fn on_action_select_prev(&mut self, _: &SelectPrev, window: &mut Window, cx: &mut Context<Self>) {
         let items_count = self.delegate.items_count(cx);
         if items_count == 0 {
             return;
@@ -390,7 +390,7 @@ where
         self.select_item(selected_index, cx);
     }
 
-    fn on_action_select_next(&mut self, _: &SelectNext, cx: &mut ViewContext<Self>) {
+    fn on_action_select_next(&mut self, _: &SelectNext, window: &mut Window, cx: &mut Context<Self>) {
         let items_count = self.delegate.items_count(cx);
         if items_count == 0 {
             return;
@@ -412,7 +412,7 @@ where
         self.select_item(selected_index, cx);
     }
 
-    fn render_list_item(&mut self, ix: usize, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render_list_item(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let selected = self.selected_index == Some(ix);
         let right_clicked = self.right_clicked_index == Some(ix);
 
@@ -437,7 +437,7 @@ where
                 })
                 .on_mouse_down(
                     MouseButton::Left,
-                    cx.listener(move |this, _, cx| {
+                    cx.listener(move |this, _, window, cx| {
                         this.right_clicked_index = None;
                         this.selected_index = Some(ix);
                         this.on_action_confirm(&Confirm, cx);
@@ -445,7 +445,7 @@ where
                 )
                 .on_mouse_down(
                     MouseButton::Right,
-                    cx.listener(move |this, _, cx| {
+                    cx.listener(move |this, _, window, cx| {
                         this.right_clicked_index = Some(ix);
                         cx.notify();
                     }),
@@ -454,11 +454,11 @@ where
     }
 }
 
-impl<D> FocusableView for List<D>
+impl<D> Focusable for List<D>
 where
     D: ListDelegate,
 {
-    fn focus_handle(&self, cx: &AppContext) -> FocusHandle {
+    fn focus_handle(&self, cx: &App) -> FocusHandle {
         if let Some(query_input) = &self.query_input {
             query_input.focus_handle(cx)
         } else {
@@ -471,8 +471,8 @@ impl<D> Render for List<D>
 where
     D: ListDelegate,
 {
-    fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
-        let view = cx.view().clone();
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let view = cx.model().clone();
         let vertical_scroll_handle = self.vertical_scroll_handle.clone();
         let items_count = self.delegate.items_count(cx);
         let loading = self.delegate.loading(cx);
@@ -559,7 +559,7 @@ where
                     })
                     // Click out to cancel right clicked row
                     .when(self.right_clicked_index.is_some(), |this| {
-                        this.on_mouse_down_out(cx.listener(|this, _, cx| {
+                        this.on_mouse_down_out(cx.listener(|this, _, window, cx| {
                             this.right_clicked_index = None;
                             cx.notify();
                         }))

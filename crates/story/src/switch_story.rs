@@ -36,17 +36,17 @@ impl super::Story for SwitchStory {
         "Switch, Radio, Checkbox components testing and examples"
     }
 
-    fn new_view(cx: &mut WindowContext) -> View<impl gpui::FocusableView> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl gpui::Focusable> {
         Self::view(cx)
     }
 }
 
 impl SwitchStory {
-    pub fn view(cx: &mut WindowContext) -> View<Self> {
-        cx.new_view(Self::new)
+    pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
+        cx.new(Self::new)
     }
 
-    fn new(cx: &mut ViewContext<Self>) -> Self {
+    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
             switch1: true,
@@ -62,21 +62,21 @@ impl SwitchStory {
     }
 }
 
-impl gpui::FocusableView for SwitchStory {
-    fn focus_handle(&self, _: &gpui::AppContext) -> gpui::FocusHandle {
+impl gpui::Focusable for SwitchStory {
+    fn focus_handle(&self, _: &gpui::App) -> gpui::FocusHandle {
         self.focus_handle.clone()
     }
 }
 
 impl Render for SwitchStory {
-    fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
 
         fn title(title: impl Into<SharedString>) -> Div {
             v_flex().flex_1().gap_2().child(Label::new(title).text_xl())
         }
 
-        fn card(cx: &ViewContext<SwitchStory>) -> Div {
+        fn card(window: &Window, cx: &Context<SwitchStory>) -> Div {
             let theme = cx.theme();
 
             h_flex()

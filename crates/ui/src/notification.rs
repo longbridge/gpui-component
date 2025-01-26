@@ -50,7 +50,7 @@ pub struct Notification {
     message: SharedString,
     icon: Option<Icon>,
     autohide: bool,
-    on_click: Option<Arc<dyn Fn(&ClickEvent, &mut WindowContext)>>,
+    on_click: Option<Arc<dyn Fn(&ClickEvent, &mut Window, &mut App)>>,
     closing: bool,
 }
 
@@ -169,13 +169,13 @@ impl Notification {
     /// Set the click callback of the notification.
     pub fn on_click(
         mut self,
-        on_click: impl Fn(&ClickEvent, &mut WindowContext) + 'static,
+        on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
     ) -> Self {
         self.on_click = Some(Arc::new(on_click));
         self
     }
 
-    fn dismiss(&mut self, _: &ClickEvent, cx: &mut ViewContext<Self>) {
+    fn dismiss(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
         self.closing = true;
         cx.notify();
 
@@ -197,7 +197,7 @@ impl Notification {
 impl EventEmitter<DismissEvent> for Notification {}
 impl FluentBuilder for Notification {}
 impl Render for Notification {
-    fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let closing = self.closing;
         let icon = match self.icon.clone() {
             Some(icon) => icon,
@@ -284,19 +284,19 @@ impl Render for Notification {
 /// A list of notifications.
 pub struct NotificationList {
     /// Notifications that will be auto hidden.
-    pub(crate) notifications: VecDeque<View<Notification>>,
+    pub(crate) notifications: VecDeque<Entity<Notification>>,
     expanded: bool,
 }
 
 impl NotificationList {
-    pub fn new(_cx: &mut ViewContext<Self>) -> Self {
+    pub fn new(_window: &mut Window, _cx: &mut Context<Self>) -> Self {
         Self {
             notifications: VecDeque::new(),
             expanded: false,
         }
     }
 
-    pub fn push(&mut self, notification: impl Into<Notification>, cx: &mut ViewContext<Self>) {
+    pub fn push(&mut self, notification: impl Into<Notification>, window: &mut Window, cx: &mut Context<Self>) {
         let notification = notification.into();
         let id = notification.id.clone();
         let autohide = notification.autohide;
@@ -304,7 +304,7 @@ impl NotificationList {
         // Remove the notification by id, for keep unique.
         self.notifications.retain(|note| note.read(cx).id != id);
 
-        let notification = cx.new_view(|_| notification);
+        let notification = cx.new(|_| notification);
         cx.subscribe(&notification, move |view, _, _: &DismissEvent, cx| {
             view.notifications.retain(|note| id != note.read(cx).id);
         })
@@ -327,18 +327,18 @@ impl NotificationList {
         cx.notify();
     }
 
-    pub fn clear(&mut self, cx: &mut ViewContext<Self>) {
+    pub fn clear(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.notifications.clear();
         cx.notify();
     }
 
-    pub fn notifications(&self) -> Vec<View<Notification>> {
+    pub fn notifications(&self) -> Vec<Entity<Notification>> {
         self.notifications.iter().cloned().collect()
     }
 }
 
 impl Render for NotificationList {
-    fn render(&mut self, cx: &mut gpui::ViewContext<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut gpui::Window, cx: &mut gpui::Context<Self>) -> impl IntoElement {
         let size = cx.viewport_size();
         let items = self.notifications.iter().rev().take(10).rev().cloned();
 

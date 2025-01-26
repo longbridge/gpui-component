@@ -53,7 +53,7 @@ impl ParentElement for Badge {
 }
 
 impl RenderOnce for Badge {
-    fn render(self, _: &mut WindowContext) -> impl IntoElement {
+    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
         self.base.relative().when(self.count > 0, |this| {
             this.child(
                 h_flex()

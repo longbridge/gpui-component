@@ -2,9 +2,9 @@ use std::{sync::Arc, time::Duration};
 
 use fake::Fake;
 use gpui::{
-    actions, div, prelude::FluentBuilder as _, px, AppContext, FocusHandle, FocusableView,
+    actions, div, prelude::FluentBuilder as _, px, AppContext, FocusHandle, Focusable,
     InteractiveElement as _, IntoElement, Model, ModelContext, ParentElement, Render, SharedString,
-    Styled, Task, Timer, VisualContext as _, WeakView, Window,
+    Styled, Task, Timer, VisualContext as _, Window,
 };
 
 use ui::{
@@ -35,7 +35,7 @@ pub struct ListItemDeletegate {
 impl ListDelegate for ListItemDeletegate {
     type Item = ListItem;
 
-    fn items_count(&self, _: &AppContext) -> usize {
+    fn items_count(&self, _: &App) -> usize {
         self.matches.len()
     }
 
@@ -82,9 +82,9 @@ impl ListDelegate for ListItemDeletegate {
                         .icon(IconName::Heart)
                         .with_variant(ButtonVariant::Ghost)
                         .size(px(18.))
-                        .on_click(move |_, cx| {
+                        .on_click(move |_, window, cx| {
                             cx.stop_propagation();
-                            cx.prevent_default();
+                            window.prevent_default();
 
                             println!("You have clicked like.");
                         })
@@ -143,11 +143,11 @@ pub struct ModalStory {
     focus_handle: FocusHandle,
     drawer_placement: Option<Placement>,
     selected_value: Option<SharedString>,
-    list: View<List<ListItemDeletegate>>,
-    input1: View<TextInput>,
-    input2: View<TextInput>,
-    date_picker: View<DatePicker>,
-    dropdown: View<Dropdown<Vec<String>>>,
+    list: Entity<List<ListItemDeletegate>>,
+    input1: Entity<TextInput>,
+    input2: Entity<TextInput>,
+    date_picker: Entity<DatePicker>,
+    dropdown: Entity<Dropdown<Vec<String>>>,
     modal_overlay: bool,
     model_show_close: bool,
     model_padding: bool,
@@ -163,17 +163,17 @@ impl super::Story for ModalStory {
         "Modal & Drawer use examples"
     }
 
-    fn new_view(cx: &mut WindowContext) -> View<impl gpui::FocusableView> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl gpui::Focusable> {
         Self::view(cx)
     }
 }
 
 impl ModalStory {
-    pub fn view(cx: &mut WindowContext) -> View<Self> {
-        cx.new_view(Self::new)
+    pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
+        cx.new(Self::new)
     }
 
-    fn new(cx: &mut ViewContext<Self>) -> Self {
+    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let items: Vec<Arc<String>> = [
             "Baguette (France)",
             "Baklava (Turkey)",
@@ -229,7 +229,7 @@ impl ModalStory {
         .map(|s| Arc::new(s.to_string()))
         .collect();
 
-        let story = cx.view().downgrade();
+        let story = cx.model().downgrade();
         let delegate = ListItemDeletegate {
             story,
             selected_index: None,
@@ -237,17 +237,17 @@ impl ModalStory {
             items: items.clone(),
             matches: items.clone(),
         };
-        let list = cx.new_view(|cx| {
+        let list = cx.new(|cx| {
             let mut list = List::new(delegate, cx);
             list.focus(cx);
             list
         });
 
-        let input1 = cx.new_view(|cx| TextInput::new(cx).placeholder("Your Name"));
-        let input2 = cx.new_view(|cx| TextInput::new(cx).placeholder("Input on the Window"));
+        let input1 = cx.new(|cx| TextInput::new(cx).placeholder("Your Name"));
+        let input2 = cx.new(|cx| TextInput::new(cx).placeholder("Input on the Window"));
         let date_picker =
-            cx.new_view(|cx| DatePicker::new("birthday-picker", cx).placeholder("Date of Birth"));
-        let dropdown = cx.new_view(|cx| {
+            cx.new(|cx| DatePicker::new("birthday-picker", cx).placeholder("Date of Birth"));
+        let dropdown = cx.new(|cx| {
             Dropdown::new(
                 "dropdown1",
                 vec![
@@ -276,7 +276,7 @@ impl ModalStory {
         }
     }
 
-    fn open_drawer_at(&mut self, placement: Placement, cx: &mut ViewContext<Self>) {
+    fn open_drawer_at(&mut self, placement: Placement, window: &mut Window, cx: &mut Context<Self>) {
         let input = self.input1.clone();
         let date_picker = self.date_picker.clone();
         let list = self.list.clone();
@@ -327,19 +327,19 @@ impl ModalStory {
         });
     }
 
-    fn close_drawer(&mut self, cx: &mut ViewContext<Self>) {
+    fn close_drawer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.drawer_placement = None;
         cx.notify();
     }
 
-    fn show_modal(&mut self, cx: &mut ViewContext<Self>) {
+    fn show_modal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let overlay = self.modal_overlay;
         let modal_show_close = self.model_show_close;
         let modal_padding = self.model_padding;
         let input1 = self.input1.clone();
         let date_picker = self.date_picker.clone();
         let dropdown = self.dropdown.clone();
-        let view = cx.view().clone();
+        let view = cx.model().clone();
         let keyboard = self.model_keyboard;
 
         cx.open_modal(move |modal, _| {
@@ -395,7 +395,7 @@ impl ModalStory {
                             ),
                             Button::new("cancel")
                                 .label("Cancel")
-                                .on_click(move |_, cx| {
+                                .on_click(move |_, window, cx| {
                                     cx.close_modal();
                                 }),
                         ]
@@ -406,19 +406,19 @@ impl ModalStory {
         self.input1.focus_handle(cx).focus(cx);
     }
 
-    fn on_action_test_action(&mut self, _: &TestAction, cx: &mut ViewContext<Self>) {
+    fn on_action_test_action(&mut self, _: &TestAction, window: &mut Window, cx: &mut Context<Self>) {
         cx.push_notification("You have clicked the TestAction.");
     }
 }
 
-impl FocusableView for ModalStory {
-    fn focus_handle(&self, _cx: &gpui::AppContext) -> FocusHandle {
+impl Focusable for ModalStory {
+    fn focus_handle(&self, _cx: &gpui::App) -> FocusHandle {
         self.focus_handle.clone()
     }
 }
 
 impl Render for ModalStory {
-    fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .id("modal-story")
             .track_focus(&self.focus_handle)
@@ -490,8 +490,8 @@ impl Render for ModalStory {
                             .child(
                                 Button::new("webview")
                                     .label("Open WebView")
-                                    .on_click(cx.listener(|_, _, cx| {
-                                        let webview = cx.new_view(|cx| {
+                                    .on_click(cx.listener(|_, _, window, cx| {
+                                        let webview = cx.new(|cx| {
                                             let webview = ui::wry::WebViewBuilder::new()
                                                 .build_as_child(&cx.raw_window_handle())
                                                 .unwrap();
@@ -502,7 +502,7 @@ impl Render for ModalStory {
                                             webview.load_url("https://github.com/explore");
                                         });
                                         cx.open_drawer(move |drawer, cx| {
-                                            let height = cx.window_bounds().get_bounds().size.height;
+                                            let height = window.window_bounds().get_bounds().size.height;
                                             let webview_bounds = webview.read(cx).bounds();
 
                                             drawer
@@ -519,28 +519,28 @@ impl Render for ModalStory {
                             .child(
                                 Button::new("show-drawer-left")
                                     .label("Left Drawer...")
-                                    .on_click(cx.listener(|this, _, cx| {
+                                    .on_click(cx.listener(|this, _, window, cx| {
                                         this.open_drawer_at(Placement::Left, cx)
                                     })),
                             )
                             .child(
                                 Button::new("show-drawer-top")
                                     .label("Top Drawer...")
-                                    .on_click(cx.listener(|this, _, cx| {
+                                    .on_click(cx.listener(|this, _, window, cx| {
                                         this.open_drawer_at(Placement::Top, cx)
                                     })),
                             )
                             .child(
                                 Button::new("show-drawer")
                                     .label("Right Drawer...")
-                                    .on_click(cx.listener(|this, _, cx| {
+                                    .on_click(cx.listener(|this, _, window, cx| {
                                         this.open_drawer_at(Placement::Right, cx)
                                     })),
                             )
                             .child(
                                 Button::new("show-drawer")
                                     .label("Bottom Drawer...")
-                                    .on_click(cx.listener(|this, _, cx| {
+                                    .on_click(cx.listener(|this, _, window, cx| {
                                         this.open_drawer_at(Placement::Bottom, cx)
                                     })),
                             ),
@@ -558,12 +558,12 @@ impl Render for ModalStory {
                         h_flex().gap_3().flex_wrap().child(
                             Button::new("show-modal")
                                 .label("Open Modal...")
-                                .on_click(cx.listener(|this, _, cx| this.show_modal(cx))),
+                                .on_click(cx.listener(|this, _, window, cx| this.show_modal(cx))),
                         )
                         .child(
                             Button::new("show-confirm-modal")
                                 .label("Confirm Modal...")
-                                .on_click(cx.listener(|_, _, cx| {
+                                .on_click(cx.listener(|_, _, window, cx| {
                                     cx.open_modal(|modal, _| {
                                         modal
                                             .confirm()
@@ -590,7 +590,7 @@ impl Render for ModalStory {
                             .child(
                                 Button::new("show-notify-info")
                                     .label("Info Notify...")
-                                    .on_click(cx.listener(|_, _, cx| {
+                                    .on_click(cx.listener(|_, _, window, cx| {
                                         cx.push_notification(
                                             "You have been saved file successfully.",
                                         )
@@ -599,7 +599,7 @@ impl Render for ModalStory {
                             .child(
                                 Button::new("show-notify-error")
                                     .label("Error Notify...")
-                                    .on_click(cx.listener(|_, _, cx| {
+                                    .on_click(cx.listener(|_, _, window, cx| {
                                         cx.push_notification((
                                         NotificationType::Error,
                                         "There have some error occurred. Please try again later.",
@@ -609,7 +609,7 @@ impl Render for ModalStory {
                             .child(
                                 Button::new("show-notify-success")
                                     .label("Success Notify...")
-                                    .on_click(cx.listener(|_, _, cx| {
+                                    .on_click(cx.listener(|_, _, window, cx| {
                                         cx.push_notification((
                                             NotificationType::Success,
                                             "We have received your payment successfully.",
@@ -619,7 +619,7 @@ impl Render for ModalStory {
                             .child(
                                 Button::new("show-notify-warning")
                                     .label("Warning Notify...")
-                                    .on_click(cx.listener(|_, _, cx| {
+                                    .on_click(cx.listener(|_, _, window, cx| {
                                         struct WarningNotification;
                                         cx.push_notification(Notification::warning(
                                         "The network is not stable, please check your connection.",
@@ -629,7 +629,7 @@ impl Render for ModalStory {
                             .child(
                                 Button::new("show-notify-warning")
                                     .label("Notification with Title")
-                                    .on_click(cx.listener(|_, _, cx| {
+                                    .on_click(cx.listener(|_, _, window, cx| {
                                         struct TestNotification;
 
                                         cx.push_notification(

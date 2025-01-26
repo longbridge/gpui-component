@@ -66,7 +66,7 @@ impl Styled for Label {
 }
 
 impl RenderOnce for Label {
-    fn render(self, cx: &mut WindowContext) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let text = self.label;
 
         let text_display = if self.marked {

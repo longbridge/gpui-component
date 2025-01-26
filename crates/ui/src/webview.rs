@@ -5,11 +5,10 @@ use wry::{
     Rect,
 };
 
-use gpui::{Window, AppContext, Model, 
-    canvas, div, Bounds, ContentMask, DismissEvent, Element, ElementId, EventEmitter, FocusHandle,
-    FocusableView, GlobalElementId, Hitbox, InteractiveElement, IntoElement, LayoutId,
-    MouseDownEvent, ParentElement as _, Pixels, Render, Size, Style, Styled as _, 
-    
+use gpui::{
+    canvas, div, App, AppContext, Bounds, ContentMask, DismissEvent, Element, ElementId, Entity,
+    EventEmitter, FocusHandle, Focusable, GlobalElementId, Hitbox, InteractiveElement, IntoElement,
+    LayoutId, MouseDownEvent, ParentElement as _, Pixels, Render, Size, Style, Styled as _, Window,
 };
 
 pub struct WebView {
@@ -26,7 +25,7 @@ impl Drop for WebView {
 }
 
 impl WebView {
-    pub fn new(cx: &mut WindowContext, webview: wry::WebView) -> Self {
+    pub fn new(window: &mut Window, cx: &mut App, webview: wry::WebView) -> Self {
         let _ = webview.set_bounds(Rect::default());
 
         Self {
@@ -72,8 +71,8 @@ impl Deref for WebView {
     }
 }
 
-impl FocusableView for WebView {
-    fn focus_handle(&self, _cx: &gpui::AppContext) -> FocusHandle {
+impl Focusable for WebView {
+    fn focus_handle(&self, _cx: &gpui::App) -> FocusHandle {
         self.focus_handle.clone()
     }
 }
@@ -81,14 +80,18 @@ impl FocusableView for WebView {
 impl EventEmitter<DismissEvent> for WebView {}
 
 impl Render for WebView {
-    fn render(&mut self, cx: &mut gpui::ViewContext<Self>) -> impl IntoElement {
-        let view = cx.view().clone();
+    fn render(
+        &mut self,
+        window: &mut gpui::Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> impl IntoElement {
+        let view = cx.model().clone();
 
         div()
             .track_focus(&self.focus_handle)
             .size_full()
             .child({
-                let view = cx.view().clone();
+                let view = cx.model().clone();
                 canvas(
                     move |bounds, window, cx| view.update(cx, |r, _| r.bounds = bounds),
                     |_, _, _, _| {},
@@ -96,19 +99,24 @@ impl Render for WebView {
                 .absolute()
                 .size_full()
             })
-            .child(WebViewElement::new(self.webview.clone(), view, cx))
+            .child(WebViewElement::new(self.webview.clone(), view, window, cx))
     }
 }
 
 /// A webview element can display a wry webview.
 pub struct WebViewElement {
-    parent: View<WebView>,
+    parent: Entity<WebView>,
     view: Rc<wry::WebView>,
 }
 
 impl WebViewElement {
     /// Create a new webview element from a wry WebView.
-    pub fn new(view: Rc<wry::WebView>, parent: View<WebView>, _: &mut WindowContext) -> Self {
+    pub fn new(
+        view: Rc<wry::WebView>,
+        parent: Entity<WebView>,
+        _window: &mut Window,
+        _cx: &mut App,
+    ) -> Self {
         Self { view, parent }
     }
 }
@@ -132,7 +140,8 @@ impl Element for WebViewElement {
     fn request_layout(
         &mut self,
         _: Option<&GlobalElementId>,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut App,
     ) -> (LayoutId, Self::RequestLayoutState) {
         let mut style = Style::default();
         style.flex_grow = 0.0;
@@ -140,7 +149,7 @@ impl Element for WebViewElement {
         style.size = Size::full();
         // If the parent view is no longer visible, we don't need to layout the webview
 
-        let id = cx.request_layout(style, []);
+        let id = window.request_layout(cx, style, []);
         (id, ())
     }
 
@@ -149,7 +158,8 @@ impl Element for WebViewElement {
         _: Option<&GlobalElementId>,
         bounds: Bounds<Pixels>,
         _: &mut Self::RequestLayoutState,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut App,
     ) -> Self::PrepaintState {
         if !self.parent.read(cx).visible() {
             return None;
@@ -169,7 +179,7 @@ impl Element for WebViewElement {
             .unwrap();
 
         // Create a hitbox to handle mouse event
-        Some(cx.insert_hitbox(bounds, false))
+        Some(window.insert_hitbox(bounds, false))
     }
 
     fn paint(
@@ -178,12 +188,13 @@ impl Element for WebViewElement {
         bounds: Bounds<Pixels>,
         _: &mut Self::RequestLayoutState,
         hitbox: &mut Self::PrepaintState,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut App,
     ) {
         let bounds = hitbox.clone().map(|h| h.bounds).unwrap_or(bounds);
-        cx.with_content_mask(Some(ContentMask { bounds }), |cx| {
+        window.with_content_mask(Some(ContentMask { bounds }), |cx| {
             let webview = self.view.clone();
-            cx.on_mouse_event(move |event: &MouseDownEvent, _, _| {
+            window.on_mouse_event(move |event: &MouseDownEvent, _, _, _| {
                 if !bounds.contains(&event.position) {
                     // Click white space to blur the input focus
                     let _ = webview.focus_parent();

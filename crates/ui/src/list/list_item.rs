@@ -14,9 +14,9 @@ pub struct ListItem {
     selected: bool,
     confirmed: bool,
     check_icon: Option<Icon>,
-    on_click: Option<Box<dyn Fn(&ClickEvent, &mut WindowContext) + 'static>>,
-    on_mouse_enter: Option<Box<dyn Fn(&MouseMoveEvent, &mut WindowContext) + 'static>>,
-    suffix: Option<Box<dyn Fn(&mut WindowContext) -> AnyElement + 'static>>,
+    on_click: Option<Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>>,
+    on_mouse_enter: Option<Box<dyn Fn(&MouseMoveEvent, &mut Window, &mut App) + 'static>>,
+    suffix: Option<Box<dyn Fn(&mut Window, &mut App) -> AnyElement + 'static>>,
     children: SmallVec<[AnyElement; 2]>,
 }
 
@@ -63,21 +63,21 @@ impl ListItem {
     /// Set the suffix element of the input field, for example a clear button.
     pub fn suffix<F, E>(mut self, builder: F) -> Self
     where
-        F: Fn(&mut WindowContext) -> E + 'static,
+        F: Fn(&mut Window, &mut App) -> E + 'static,
         E: IntoElement,
     {
         self.suffix = Some(Box::new(move |cx| builder(cx).into_any_element()));
         self
     }
 
-    pub fn on_click(mut self, handler: impl Fn(&ClickEvent, &mut WindowContext) + 'static) -> Self {
+    pub fn on_click(mut self, handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static) -> Self {
         self.on_click = Some(Box::new(handler));
         self
     }
 
     pub fn on_mouse_enter(
         mut self,
-        handler: impl Fn(&MouseMoveEvent, &mut WindowContext) + 'static,
+        handler: impl Fn(&MouseMoveEvent, &mut Window, &mut App) + 'static,
     ) -> Self {
         self.on_mouse_enter = Some(Box::new(handler));
         self
@@ -115,7 +115,7 @@ impl ParentElement for ListItem {
 }
 
 impl RenderOnce for ListItem {
-    fn render(self, cx: &mut WindowContext) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let is_active = self.confirmed || self.selected;
 
         self.base

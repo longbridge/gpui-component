@@ -56,7 +56,7 @@ impl Element for ScrollableMask {
     fn request_layout(
         &mut self,
         _: Option<&GlobalElementId>,
-        cx: &mut WindowContext,
+        window: &mut Window, cx: &mut App,
     ) -> (LayoutId, Self::RequestLayoutState) {
         let mut style = Style::default();
         // Set the layout style relative to the table view to get same size.
@@ -66,7 +66,7 @@ impl Element for ScrollableMask {
         style.size.width = relative(1.).into();
         style.size.height = relative(1.).into();
 
-        (cx.request_layout(style, None), ())
+        (window.request_layout(cx, style, None), ())
     }
 
     fn prepaint(
@@ -74,7 +74,7 @@ impl Element for ScrollableMask {
         _: Option<&GlobalElementId>,
         bounds: Bounds<Pixels>,
         _: &mut Self::RequestLayoutState,
-        cx: &mut WindowContext,
+        window: &mut Window, cx: &mut App,
     ) -> Self::PrepaintState {
         // Move y to bounds height to cover the parent view.
         let cover_bounds = Bounds {
@@ -85,7 +85,7 @@ impl Element for ScrollableMask {
             size: bounds.size,
         };
 
-        cx.insert_hitbox(cover_bounds, false)
+        window.insert_hitbox(cover_bounds, false)
     }
 
     fn paint(
@@ -94,12 +94,12 @@ impl Element for ScrollableMask {
         _: Bounds<Pixels>,
         _: &mut Self::RequestLayoutState,
         hitbox: &mut Self::PrepaintState,
-        cx: &mut WindowContext,
+        window: &mut Window, cx: &mut App,
     ) {
-        let line_height = cx.line_height();
+        let line_height = window.line_height();
         let bounds = hitbox.bounds;
 
-        cx.with_content_mask(Some(ContentMask { bounds }), |cx| {
+        window.with_content_mask(Some(ContentMask { bounds }), |cx| {
             if let Some(color) = self.debug {
                 cx.paint_quad(PaintQuad {
                     bounds,
@@ -110,12 +110,12 @@ impl Element for ScrollableMask {
                 });
             }
 
-            cx.on_mouse_event({
+            window.on_mouse_event({
                 let view_id = self.view_id;
                 let is_horizontal = self.axis.is_horizontal();
                 let scroll_handle = self.scroll_handle.clone();
                 let hitbox = hitbox.clone();
-                let mouse_position = cx.mouse_position();
+                let mouse_position = window.mouse_position();
                 let last_offset = scroll_handle.offset();
 
                 move |event: &ScrollWheelEvent, phase, cx| {

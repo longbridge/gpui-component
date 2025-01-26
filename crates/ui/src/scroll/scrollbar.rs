@@ -294,7 +294,7 @@ impl Scrollbar {
         self
     }
 
-    fn style_for_active(cx: &AppContext) -> (Hsla, Hsla, Hsla, Pixels, Pixels) {
+    fn style_for_active(cx: &App) -> (Hsla, Hsla, Hsla, Pixels, Pixels) {
         (
             cx.theme().scrollbar_thumb_hover,
             cx.theme().scrollbar,
@@ -304,7 +304,7 @@ impl Scrollbar {
         )
     }
 
-    fn style_for_hovered_thumb(cx: &AppContext) -> (Hsla, Hsla, Hsla, Pixels, Pixels) {
+    fn style_for_hovered_thumb(cx: &App) -> (Hsla, Hsla, Hsla, Pixels, Pixels) {
         (
             cx.theme().scrollbar_thumb_hover,
             cx.theme().scrollbar,
@@ -314,7 +314,7 @@ impl Scrollbar {
         )
     }
 
-    fn style_for_hovered_bar(cx: &AppContext) -> (Hsla, Hsla, Hsla, Pixels, Pixels) {
+    fn style_for_hovered_bar(cx: &App) -> (Hsla, Hsla, Hsla, Pixels, Pixels) {
         let (inset, radius) = if cx.theme().scrollbar_show.is_hover() {
             (THUMB_INSET, THUMB_RADIUS - px(1.))
         } else {
@@ -330,7 +330,7 @@ impl Scrollbar {
         )
     }
 
-    fn style_for_idle(_: &AppContext) -> (Hsla, Hsla, Hsla, Pixels, Pixels) {
+    fn style_for_idle(_: &App) -> (Hsla, Hsla, Hsla, Pixels, Pixels) {
         (
             gpui::transparent_black(),
             gpui::transparent_black(),
@@ -383,7 +383,7 @@ impl Element for Scrollbar {
     fn request_layout(
         &mut self,
         _: Option<&gpui::GlobalElementId>,
-        cx: &mut gpui::WindowContext,
+        window: &mut gpui::Window, cx: &mut gpui::Context,
     ) -> (gpui::LayoutId, Self::RequestLayoutState) {
         let mut style = Style::default();
         style.position = Position::Absolute;
@@ -392,7 +392,7 @@ impl Element for Scrollbar {
         style.size.width = relative(1.).into();
         style.size.height = relative(1.).into();
 
-        (cx.request_layout(style, None), ())
+        (window.request_layout(cx, style, None), ())
     }
 
     fn prepaint(
@@ -400,10 +400,10 @@ impl Element for Scrollbar {
         _: Option<&gpui::GlobalElementId>,
         bounds: Bounds<Pixels>,
         _: &mut Self::RequestLayoutState,
-        cx: &mut gpui::WindowContext,
+        window: &mut gpui::Window, cx: &mut gpui::Context,
     ) -> Self::PrepaintState {
-        let hitbox = cx.with_content_mask(Some(ContentMask { bounds }), |cx| {
-            cx.insert_hitbox(bounds, false)
+        let hitbox = window.with_content_mask(Some(ContentMask { bounds }), |cx| {
+            window.insert_hitbox(bounds, false)
         });
 
         let mut states = vec![];
@@ -550,8 +550,8 @@ impl Element for Scrollbar {
                 )
             };
 
-            let bar_hitbox = cx.with_content_mask(Some(ContentMask { bounds }), |cx| {
-                cx.insert_hitbox(bounds, false)
+            let bar_hitbox = window.with_content_mask(Some(ContentMask { bounds }), |cx| {
+                window.insert_hitbox(bounds, false)
             });
 
             states.push(AxisPrepaintState {
@@ -580,7 +580,7 @@ impl Element for Scrollbar {
         _: Bounds<Pixels>,
         _: &mut Self::RequestLayoutState,
         prepaint: &mut Self::PrepaintState,
-        cx: &mut gpui::WindowContext,
+        window: &mut gpui::Window, cx: &mut gpui::Context,
     ) {
         let hitbox_bounds = prepaint.hitbox.bounds;
         let is_visible = self.state.get().is_scrollbar_visible();
@@ -597,7 +597,7 @@ impl Element for Scrollbar {
             let margin_end = state.margin_end;
             let is_vertical = axis.is_vertical();
 
-            cx.set_cursor_style(CursorStyle::default(), &state.bar_hitbox);
+            window.set_cursor_style(CursorStyle::default(), &state.bar_hitbox);
 
             cx.paint_layer(hitbox_bounds, |cx| {
                 cx.paint_quad(fill(state.bounds, state.bg));
@@ -627,7 +627,7 @@ impl Element for Scrollbar {
                 cx.paint_quad(fill(state.thumb_fill_bounds, state.thumb_bg).corner_radii(radius));
             });
 
-            cx.on_mouse_event({
+            window.on_mouse_event({
                 let state = self.state.clone();
                 let view_id = self.view_id;
                 let scroll_handle = self.scroll_handle.clone();
@@ -649,7 +649,7 @@ impl Element for Scrollbar {
             let safe_range = (-scroll_area_size + container_size)..px(0.);
 
             if is_hover_to_show || is_visible {
-                cx.on_mouse_event({
+                window.on_mouse_event({
                     let state = self.state.clone();
                     let view_id = self.view_id;
                     let scroll_handle = self.scroll_handle.clone();
@@ -697,7 +697,7 @@ impl Element for Scrollbar {
                 });
             }
 
-            cx.on_mouse_event({
+            window.on_mouse_event({
                 let scroll_handle = self.scroll_handle.clone();
                 let state = self.state.clone();
                 let view_id = self.view_id;
@@ -770,7 +770,7 @@ impl Element for Scrollbar {
                 }
             });
 
-            cx.on_mouse_event({
+            window.on_mouse_event({
                 let view_id = self.view_id;
                 let state = self.state.clone();
 

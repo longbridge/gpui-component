@@ -51,7 +51,7 @@ impl Styled for Divider {
 }
 
 impl RenderOnce for Divider {
-    fn render(self, cx: &mut gpui::WindowContext) -> impl IntoElement {
+    fn render(self, window: &mut gpui::Window, cx: &mut gpui::App) -> impl IntoElement {
         let theme = cx.theme();
 
         self.base

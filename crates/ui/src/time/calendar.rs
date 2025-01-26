@@ -162,7 +162,7 @@ pub struct Calendar {
 }
 
 impl Calendar {
-    pub fn new(cx: &mut ViewContext<Self>) -> Self {
+    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let today = Local::now().naive_local().date();
         Self {
             focus_handle: cx.focus_handle(),
@@ -182,7 +182,7 @@ impl Calendar {
     /// Set the date of the calendar.
     ///
     /// When you set a range date, the mode will be automatically set to `Mode::Range`.
-    pub fn set_date(&mut self, date: impl Into<Date>, cx: &mut ViewContext<Self>) {
+    pub fn set_date(&mut self, date: impl Into<Date>, window: &mut Window, cx: &mut Context<Self>) {
         self.date = date.into();
 
         match self.date {
@@ -211,12 +211,12 @@ impl Calendar {
         self
     }
 
-    pub fn set_size(&mut self, size: Size, cx: &mut ViewContext<Self>) {
+    pub fn set_size(&mut self, size: Size, window: &mut Window, cx: &mut Context<Self>) {
         self.size = size;
         cx.notify();
     }
 
-    pub fn set_number_of_months(&mut self, number_of_months: usize, cx: &mut ViewContext<Self>) {
+    pub fn set_number_of_months(&mut self, number_of_months: usize, window: &mut Window, cx: &mut Context<Self>) {
         self.number_of_months = number_of_months;
         cx.notify();
     }
@@ -271,7 +271,7 @@ impl Calendar {
         self.year_page < self.years.len() as i32 - 1
     }
 
-    fn prev_year_page(&mut self, _: &ClickEvent, cx: &mut ViewContext<Self>) {
+    fn prev_year_page(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
         if !self.has_prev_year_page() {
             return;
         }
@@ -280,7 +280,7 @@ impl Calendar {
         cx.notify()
     }
 
-    fn next_year_page(&mut self, _: &ClickEvent, cx: &mut ViewContext<Self>) {
+    fn next_year_page(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
         if !self.has_next_year_page() {
             return;
         }
@@ -289,7 +289,7 @@ impl Calendar {
         cx.notify()
     }
 
-    fn prev_month(&mut self, _: &ClickEvent, cx: &mut ViewContext<Self>) {
+    fn prev_month(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
         self.current_month = if self.current_month == 1 {
             12
         } else {
@@ -303,7 +303,7 @@ impl Calendar {
         cx.notify()
     }
 
-    fn next_month(&mut self, _: &ClickEvent, cx: &mut ViewContext<Self>) {
+    fn next_month(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
         self.current_month = if self.current_month == 12 {
             1
         } else {
@@ -340,7 +340,7 @@ impl Calendar {
     fn render_week(
         &self,
         week: impl Into<SharedString>,
-        cx: &mut ViewContext<Self>,
+        window: &mut Window, cx: &mut Context<Self>,
     ) -> impl IntoElement {
         h_flex()
             .map(|this| match self.size {
@@ -361,7 +361,7 @@ impl Calendar {
         active: bool,
         secondary_active: bool,
         muted: bool,
-        cx: &mut ViewContext<Self>,
+        window: &mut Window, cx: &mut Context<Self>,
     ) -> impl IntoElement + Styled + StatefulInteractiveElement {
         h_flex()
             .id(id.into())
@@ -401,7 +401,7 @@ impl Calendar {
         ix: usize,
         d: &NaiveDate,
         offset_month: usize,
-        cx: &mut ViewContext<Self>,
+        window: &mut Window, cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let (_, month) = self.offset_year_month(offset_month);
         let day = d.day();
@@ -450,7 +450,7 @@ impl Calendar {
         }))
     }
 
-    fn set_view_mode(&mut self, mode: ViewMode, cx: &mut ViewContext<Self>) {
+    fn set_view_mode(&mut self, mode: ViewMode, window: &mut Window, cx: &mut Context<Self>) {
         self.view_mode = mode;
         cx.notify();
     }
@@ -475,7 +475,7 @@ impl Calendar {
         .collect()
     }
 
-    fn render_header(&self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render_header(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let current_year = self.current_year;
         let disabled = self.view_mode.is_month();
         let multiple_months = self.number_of_months > 1;
@@ -573,7 +573,7 @@ impl Calendar {
             )
     }
 
-    fn render_days(&self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render_days(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let weeks = [
             t!("Calendar.week.0"),
             t!("Calendar.week.1"),
@@ -612,7 +612,7 @@ impl Calendar {
             )
     }
 
-    fn render_months(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render_months(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let months = self.months();
 
         h_flex()
@@ -646,7 +646,7 @@ impl Calendar {
             )
     }
 
-    fn render_years(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render_years(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let current_page_years = &self.years[self.year_page as usize];
 
         h_flex()
@@ -689,7 +689,7 @@ impl Sizable for Calendar {
 impl EventEmitter<CalendarEvent> for Calendar {}
 
 impl Render for Calendar {
-    fn render(&mut self, cx: &mut ViewContext<Self>) -> impl gpui::IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
         v_flex()
             .track_focus(&self.focus_handle)
             .gap_0p5()

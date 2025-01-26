@@ -83,7 +83,7 @@ impl Slider {
     }
 
     /// Set the value of the slider.
-    pub fn set_value(&mut self, value: f32, cx: &mut gpui::ViewContext<Self>) {
+    pub fn set_value(&mut self, value: f32, window: &mut gpui::Window, cx: &mut gpui::Context<Self>) {
         self.value = value;
         self.update_thumb_pos();
         cx.notify();
@@ -102,7 +102,7 @@ impl Slider {
     fn update_value_by_position(
         &mut self,
         position: Point<Pixels>,
-        cx: &mut gpui::ViewContext<Self>,
+        window: &mut gpui::Window, cx: &mut gpui::Context<Self>,
     ) {
         let bounds = self.bounds;
         let axis = self.axis;
@@ -147,7 +147,7 @@ impl Slider {
     fn render_thumb(
         &self,
         thumb_bar_size: Pixels,
-        cx: &mut ViewContext<Self>,
+        window: &mut Window, cx: &mut Context<Self>,
     ) -> impl gpui::IntoElement {
         let value = self.value;
         let entity_id = cx.entity_id();
@@ -156,7 +156,7 @@ impl Slider {
             .id("slider-thumb")
             .on_drag(DragThumb(entity_id), |drag, _, window, cx| {
                 cx.stop_propagation();
-                cx.new_view(|_| drag.clone())
+                cx.new(|_| drag.clone())
             })
             .on_drag_move(cx.listener(
                 move |view, e: &DragMoveEvent<DragThumb>, cx| match e.drag(cx) {
@@ -196,7 +196,7 @@ impl Slider {
             .tooltip(move |cx| Tooltip::new(format!("{}", value), cx))
     }
 
-    fn on_mouse_down(&mut self, event: &MouseDownEvent, cx: &mut gpui::ViewContext<Self>) {
+    fn on_mouse_down(&mut self, event: &MouseDownEvent, window: &mut gpui::Window, cx: &mut gpui::Context<Self>) {
         self.update_value_by_position(event.position, cx);
     }
 }
@@ -204,7 +204,7 @@ impl Slider {
 impl EventEmitter<SliderEvent> for Slider {}
 
 impl Render for Slider {
-    fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let thumb_bar_size = match self.axis {
             Axis::Horizontal => self.percentage * self.bounds.size.width,
             Axis::Vertical => self.percentage * self.bounds.size.height,
@@ -245,7 +245,7 @@ impl Render for Slider {
                     )
                     .child(self.render_thumb(thumb_bar_size, cx))
                     .child({
-                        let view = cx.view().clone();
+                        let view = cx.model().clone();
                         canvas(
                             move |bounds, window, cx| view.update(cx, |r, _| r.bounds = bounds),
                             |_, _, _, _| {},

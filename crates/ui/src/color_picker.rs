@@ -1,6 +1,6 @@
 use gpui::{Window, ModelContext, Model, 
     anchored, canvas, deferred, div, prelude::FluentBuilder as _, px, relative, AppContext, Bounds,
-    Corner, ElementId, EventEmitter, FocusHandle, FocusableView, Hsla, InteractiveElement as _,
+    Corner, ElementId, EventEmitter, FocusHandle, Focusable, Hsla, InteractiveElement as _,
     IntoElement, KeyBinding, MouseButton, ParentElement, Pixels, Point, Render, SharedString,
     StatefulInteractiveElement as _, Styled,   VisualContext,
 };
@@ -16,7 +16,7 @@ use crate::{
 
 const KEY_CONTEXT: &'static str = "ColorPicker";
 
-pub fn init(cx: &mut AppContext) {
+pub fn init(cx: &mut App) {
     cx.bind_keys([KeyBinding::new("escape", Escape, Some(KEY_CONTEXT))])
 }
 
@@ -62,15 +62,15 @@ pub struct ColorPicker {
     label: Option<SharedString>,
     size: Size,
     anchor: Corner,
-    color_input: View<TextInput>,
+    color_input: Entity<TextInput>,
 
     open: bool,
     bounds: Bounds<Pixels>,
 }
 
 impl ColorPicker {
-    pub fn new(id: impl Into<ElementId>, cx: &mut ViewContext<Self>) -> Self {
-        let color_input = cx.new_view(|cx| TextInput::new(cx).xsmall());
+    pub fn new(id: impl Into<ElementId>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let color_input = cx.new(|cx| TextInput::new(cx).xsmall());
 
         cx.subscribe(&color_input, |this, _, ev: &InputEvent, cx| match ev {
             InputEvent::Change(value) => {
@@ -127,7 +127,7 @@ impl ColorPicker {
     }
 
     /// Set current color value.
-    pub fn set_value(&mut self, value: Hsla, cx: &mut ViewContext<Self>) {
+    pub fn set_value(&mut self, value: Hsla, window: &mut Window, cx: &mut Context<Self>) {
         self.update_value(Some(value), false, cx)
     }
 
@@ -153,19 +153,19 @@ impl ColorPicker {
         self
     }
 
-    fn on_escape(&mut self, _: &Escape, cx: &mut ViewContext<Self>) {
+    fn on_escape(&mut self, _: &Escape, window: &mut Window, cx: &mut Context<Self>) {
         cx.propagate();
 
         self.open = false;
         cx.notify();
     }
 
-    fn toggle_picker(&mut self, _: &gpui::ClickEvent, cx: &mut ViewContext<Self>) {
+    fn toggle_picker(&mut self, _: &gpui::ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
         self.open = !self.open;
         cx.notify();
     }
 
-    fn update_value(&mut self, value: Option<Hsla>, emit: bool, cx: &mut ViewContext<Self>) {
+    fn update_value(&mut self, value: Option<Hsla>, emit: bool, window: &mut Window, cx: &mut Context<Self>) {
         self.value = value;
         self.hovered_color = value;
         self.color_input.update(cx, |view, cx| {
@@ -185,7 +185,7 @@ impl ColorPicker {
         &self,
         color: Hsla,
         clickable: bool,
-        cx: &mut ViewContext<Self>,
+        window: &mut Window, cx: &mut Context<Self>,
     ) -> impl IntoElement {
         div()
             .id(SharedString::from(format!("color-{}", color.to_hex())))
@@ -214,7 +214,7 @@ impl ColorPicker {
             })
     }
 
-    fn render_colors(&self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render_colors(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .gap_3()
             .child(
@@ -273,14 +273,14 @@ impl Sizable for ColorPicker {
     }
 }
 impl EventEmitter<ColorPickerEvent> for ColorPicker {}
-impl FocusableView for ColorPicker {
-    fn focus_handle(&self, _: &AppContext) -> FocusHandle {
+impl Focusable for ColorPicker {
+    fn focus_handle(&self, _: &App) -> FocusHandle {
         self.focus_handle.clone()
     }
 }
 
 impl Render for ColorPicker {
-    fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let display_title: SharedString = if let Some(value) = self.value {
             value.to_hex()
         } else {
@@ -288,7 +288,7 @@ impl Render for ColorPicker {
         }
         .into();
 
-        let view = cx.view().clone();
+        let view = cx.model().clone();
 
         div()
             .id(self.id.clone())

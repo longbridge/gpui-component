@@ -19,12 +19,12 @@ pub trait ContextModal: Sized {
     /// Opens a Drawer at right placement.
     fn open_drawer<F>(&mut self, build: F)
     where
-        F: Fn(Drawer, &mut WindowContext) -> Drawer + 'static;
+        F: Fn(Drawer, &mut Window, &mut App) -> Drawer + 'static;
 
     /// Opens a Drawer at the given placement.
     fn open_drawer_at<F>(&mut self, placement: Placement, build: F)
     where
-        F: Fn(Drawer, &mut WindowContext) -> Drawer + 'static;
+        F: Fn(Drawer, &mut Window, &mut App) -> Drawer + 'static;
 
     /// Return true, if there is an active Drawer.
     fn has_active_drawer(&self) -> bool;
@@ -35,7 +35,7 @@ pub trait ContextModal: Sized {
     /// Opens a Modal.
     fn open_modal<F>(&mut self, build: F)
     where
-        F: Fn(Modal, &mut WindowContext) -> Modal + 'static;
+        F: Fn(Modal, &mut Window, &mut App) -> Modal + 'static;
     /// Return true, if there is an active Modal.
     fn has_active_modal(&self) -> bool;
 
@@ -49,24 +49,24 @@ pub trait ContextModal: Sized {
     fn push_notification(&mut self, note: impl Into<Notification>);
     fn clear_notifications(&mut self);
     /// Returns number of notifications.
-    fn notifications(&self) -> Rc<Vec<View<Notification>>>;
+    fn notifications(&self) -> Rc<Vec<Entity<Notification>>>;
 }
 
 impl ContextModal for WindowContext<'_> {
     fn open_drawer<F>(&mut self, build: F)
     where
-        F: Fn(Drawer, &mut WindowContext) -> Drawer + 'static,
+        F: Fn(Drawer, &mut Window, &mut App) -> Drawer + 'static,
     {
         self.open_drawer_at(Placement::Right, build)
     }
 
     fn open_drawer_at<F>(&mut self, placement: Placement, build: F)
     where
-        F: Fn(Drawer, &mut WindowContext) -> Drawer + 'static,
+        F: Fn(Drawer, &mut Window, &mut App) -> Drawer + 'static,
     {
         Root::update(self, move |root, cx| {
             if root.active_drawer.is_none() {
-                root.previous_focus_handle = cx.focused();
+                root.previous_focus_handle = window.focused(cx);
             }
 
             let focus_handle = cx.focus_handle();
@@ -95,13 +95,13 @@ impl ContextModal for WindowContext<'_> {
 
     fn open_modal<F>(&mut self, build: F)
     where
-        F: Fn(Modal, &mut WindowContext) -> Modal + 'static,
+        F: Fn(Modal, &mut Window, &mut App) -> Modal + 'static,
     {
         Root::update(self, move |root, cx| {
             // Only save focus handle if there are no active modals.
             // This is used to restore focus when all modals are closed.
             if root.active_modals.len() == 0 {
-                root.previous_focus_handle = cx.focused();
+                root.previous_focus_handle = window.focused(cx);
             }
 
             let focus_handle = cx.focus_handle();
@@ -157,21 +157,21 @@ impl ContextModal for WindowContext<'_> {
         })
     }
 
-    fn notifications(&self) -> Rc<Vec<View<Notification>>> {
+    fn notifications(&self) -> Rc<Vec<Entity<Notification>>> {
         Rc::new(Root::read(&self).notification.read(&self).notifications())
     }
 }
 impl<V> ContextModal for ViewContext<'_, V> {
     fn open_drawer<F>(&mut self, build: F)
     where
-        F: Fn(Drawer, &mut WindowContext) -> Drawer + 'static,
+        F: Fn(Drawer, &mut Window, &mut App) -> Drawer + 'static,
     {
         self.deref_mut().open_drawer(build)
     }
 
     fn open_drawer_at<F>(&mut self, placement: Placement, build: F)
     where
-        F: Fn(Drawer, &mut WindowContext) -> Drawer + 'static,
+        F: Fn(Drawer, &mut Window, &mut App) -> Drawer + 'static,
     {
         self.deref_mut().open_drawer_at(placement, build)
     }
@@ -186,7 +186,7 @@ impl<V> ContextModal for ViewContext<'_, V> {
 
     fn open_modal<F>(&mut self, build: F)
     where
-        F: Fn(Modal, &mut WindowContext) -> Modal + 'static,
+        F: Fn(Modal, &mut Window, &mut App) -> Modal + 'static,
     {
         self.deref_mut().open_modal(build)
     }
@@ -213,7 +213,7 @@ impl<V> ContextModal for ViewContext<'_, V> {
         self.deref_mut().clear_notifications()
     }
 
-    fn notifications(&self) -> Rc<Vec<View<Notification>>> {
+    fn notifications(&self) -> Rc<Vec<Entity<Notification>>> {
         self.deref().notifications()
     }
 }
@@ -227,7 +227,7 @@ pub struct Root {
     previous_focus_handle: Option<FocusHandle>,
     active_drawer: Option<ActiveDrawer>,
     active_modals: Vec<ActiveModal>,
-    pub notification: View<NotificationList>,
+    pub notification: Entity<NotificationList>,
     drawer_size: Option<DefiniteLength>,
     view: AnyView,
 }
@@ -236,30 +236,30 @@ pub struct Root {
 struct ActiveDrawer {
     focus_handle: FocusHandle,
     placement: Placement,
-    builder: Rc<dyn Fn(Drawer, &mut WindowContext) -> Drawer + 'static>,
+    builder: Rc<dyn Fn(Drawer, &mut Window, &mut App) -> Drawer + 'static>,
 }
 
 #[derive(Clone)]
 struct ActiveModal {
     focus_handle: FocusHandle,
-    builder: Rc<dyn Fn(Modal, &mut WindowContext) -> Modal + 'static>,
+    builder: Rc<dyn Fn(Modal, &mut Window, &mut App) -> Modal + 'static>,
 }
 
 impl Root {
-    pub fn new(view: AnyView, cx: &mut ViewContext<Self>) -> Self {
+    pub fn new(view: AnyView, window: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
             previous_focus_handle: None,
             active_drawer: None,
             active_modals: Vec::new(),
-            notification: cx.new_view(NotificationList::new),
+            notification: cx.new(NotificationList::new),
             drawer_size: None,
             view,
         }
     }
 
-    pub fn update<F>(cx: &mut WindowContext, f: F)
+    pub fn update<F>(window: &mut Window, cx: &mut App, f: F)
     where
-        F: FnOnce(&mut Self, &mut ViewContext<Self>) + 'static,
+        F: FnOnce(&mut Self, &mut Window, &mut Context<Self>) + 'static,
     {
         let root = cx
             .window_handle()
@@ -280,13 +280,13 @@ impl Root {
         root.read(cx)
     }
 
-    fn focus_back(&mut self, cx: &mut WindowContext) {
+    fn focus_back(&mut self, window: &mut Window, cx: &mut App) {
         if let Some(handle) = self.previous_focus_handle.clone() {
             cx.focus(&handle);
         }
     }
 
-    fn active_drawer_placement(&self, cx: &WindowContext) -> Option<Placement> {
+    fn active_drawer_placement(&self, window: &Window, cx: &App) -> Option<Placement> {
         if let Some(drawer) = Root::read(cx).active_drawer.as_ref() {
             Some(drawer.placement)
         } else {
@@ -295,7 +295,7 @@ impl Root {
     }
 
     // Render Notification layer.
-    pub fn render_notification_layer(cx: &mut WindowContext) -> Option<impl IntoElement> {
+    pub fn render_notification_layer(window: &mut Window, cx: &mut App) -> Option<impl IntoElement> {
         let root = cx
             .window_handle()
             .downcast::<Root>()
@@ -319,7 +319,7 @@ impl Root {
     }
 
     /// Render the Drawer layer.
-    pub fn render_drawer_layer(cx: &mut WindowContext) -> Option<impl IntoElement> {
+    pub fn render_drawer_layer(window: &mut Window, cx: &mut App) -> Option<impl IntoElement> {
         let root = cx
             .window_handle()
             .downcast::<Root>()
@@ -350,7 +350,7 @@ impl Root {
     }
 
     /// Render the Modal layer.
-    pub fn render_modal_layer(cx: &mut WindowContext) -> Option<impl IntoElement> {
+    pub fn render_modal_layer(window: &mut Window, cx: &mut App) -> Option<impl IntoElement> {
         let root = cx
             .window_handle()
             .downcast::<Root>()
@@ -396,7 +396,7 @@ impl Root {
 }
 
 impl Render for Root {
-    fn render(&mut self, cx: &mut gpui::ViewContext<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut gpui::Window, cx: &mut gpui::Context<Self>) -> impl IntoElement {
         let base_font_size = cx.theme().font_size;
         cx.set_rem_size(base_font_size);
 

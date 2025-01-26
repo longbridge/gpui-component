@@ -1,11 +1,13 @@
 use std::ops::{Deref, DerefMut};
 
-use gpui::{hsla, point, App, BoxShadow, Global, Hsla, Pixels, SharedString, WindowAppearance};
+use gpui::{
+    hsla, point, App, BoxShadow, Global, Hsla, Pixels, SharedString, Window, WindowAppearance,
+};
 
 use crate::{scroll::ScrollbarShow, Colorize as _};
 
 pub fn init(cx: &mut App) {
-    Theme::sync_system_appearance(cx)
+    Theme::sync_system_appearance(None, cx)
 }
 
 pub trait ActiveTheme {
@@ -403,18 +405,18 @@ impl Theme {
     }
 
     /// Sync the theme with the system appearance
-    pub fn sync_system_appearance(cx: &mut App) {
+    pub fn sync_system_appearance(window: Option<&mut Window>, cx: &mut App) {
         match cx.window_appearance() {
             WindowAppearance::Dark | WindowAppearance::VibrantDark => {
-                Self::change(ThemeMode::Dark, cx)
+                Self::change(ThemeMode::Dark, window, cx)
             }
             WindowAppearance::Light | WindowAppearance::VibrantLight => {
-                Self::change(ThemeMode::Light, cx)
+                Self::change(ThemeMode::Light, window, cx)
             }
         }
     }
 
-    pub fn change(mode: ThemeMode, cx: &mut App) {
+    pub fn change(mode: ThemeMode, window: Option<&mut Window>, cx: &mut App) {
         let colors = match mode {
             ThemeMode::Light => ThemeColor::light(),
             ThemeMode::Dark => ThemeColor::dark(),
@@ -424,7 +426,9 @@ impl Theme {
         theme.mode = mode;
 
         cx.set_global(theme);
-        cx.refresh();
+        if let Some(window) = window {
+            window.refresh();
+        }
     }
 }
 

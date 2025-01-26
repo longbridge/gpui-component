@@ -183,14 +183,14 @@ impl Element for VirtualList {
             .base
             .interactivity()
             .compute_style(global_id, None, window, cx);
-        let font_size = cx.text_style().font_size.to_pixels(cx.rem_size());
+        let font_size = window.text_style().font_size.to_pixels(window.rem_size());
 
         // Including the gap between items for calculate the item size
         let gap = match self.axis {
             Axis::Horizontal => style.gap.width,
             Axis::Vertical => style.gap.height,
         }
-        .to_pixels(font_size.into(), cx.rem_size());
+        .to_pixels(font_size.into(), window.rem_size());
 
         // TODO: To cache the item_sizes, item_origins
         // If there have 500,000 items, this method will speed about 500~600µs
@@ -268,8 +268,10 @@ impl Element for VirtualList {
             .base
             .interactivity()
             .compute_style(global_id, None, window, cx);
-        let border = style.border_widths.to_pixels(cx.rem_size());
-        let padding = style.padding.to_pixels(bounds.size.into(), cx.rem_size());
+        let border = style.border_widths.to_pixels(window.rem_size());
+        let padding = style
+            .padding
+            .to_pixels(bounds.size.into(), window.rem_size());
 
         let first_item_size = self.measure_item(window, cx);
 
@@ -307,8 +309,10 @@ impl Element for VirtualList {
             cx,
             |style, _, hitbox, window, cx| {
                 let mut scroll_offset = self.scroll_handle.offset();
-                let border = style.border_widths.to_pixels(cx.rem_size());
-                let padding = style.padding.to_pixels(bounds.size.into(), cx.rem_size());
+                let border = style.border_widths.to_pixels(window.rem_size());
+                let padding = style
+                    .padding
+                    .to_pixels(bounds.size.into(), window.rem_size());
 
                 let padded_bounds = Bounds::from_corners(
                     bounds.origin + point(border.left + padding.left, border.top),
@@ -399,10 +403,11 @@ impl Element for VirtualList {
                     let visible_range = first_visible_element_ix
                         ..cmp::min(last_visible_element_ix, self.items_count);
 
-                    let items = (self.render_items)(visible_range.clone(), content_size, cx);
+                    let items =
+                        (self.render_items)(visible_range.clone(), content_size, window, cx);
 
                     let content_mask = ContentMask { bounds };
-                    cx.with_content_mask(Some(content_mask), |cx| {
+                    window.with_content_mask(Some(content_mask), |window| {
                         for (mut item, ix) in items.into_iter().zip(visible_range.clone()) {
                             let item_origin = match self.axis {
                                 Axis::Horizontal => {
@@ -432,8 +437,8 @@ impl Element for VirtualList {
                                 ),
                             };
 
-                            item.layout_as_root(available_space, cx);
-                            item.prepaint_at(item_origin, cx);
+                            item.layout_as_root(available_space, window, cx);
+                            item.prepaint_at(item_origin, window, cx);
                             layout.items.push(item);
                         }
                     });

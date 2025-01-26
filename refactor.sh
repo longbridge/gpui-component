@@ -12,6 +12,13 @@
 #
 # * Run this script.
 
+# Check if `ruplacer` is installed
+if ! command -v ruplacer &> /dev/null
+then
+    echo "Please install it with `cargo install ruplacer`"
+    exit
+fi
+
 dry=true
 if [ "$1" = "apply" ]; then
     dry=false
@@ -29,21 +36,27 @@ re() {
 re '\.new_view\('                    '.new_model('
 re 'cx.view\('                       'cx.model('
 re '\.observe_new_views\('           '.observe_new_models('
-re 'View<'                           'Model<'
+re ': AppContext'                     ': App'
+re 'View<'                           'Entity<'
+re 'WeakView<'                        'WeakEntity<'
+re 'Model<'                          'Entity<'
+re 'WeakModel<'                       'WeakEntity<'
 re 'FocusableView'                   'Focusable'
 
 # closure parameters
-re '&mut AppContext'          '&mut App'
-re ', &mut WindowContext\)'          ', &mut Window, &mut App)'
-re ', &mut gpui::WindowContext\)'          ', &mut gpui::Window, &mut gpui::App)'
-re ', &mut WindowContext\)'          ', &mut Window, &mut App)'
-re ', &mut gpui::WindowContext\)'          ', &mut gpui::Window, &mut gpui::App)'
-re ', &mut ViewContext<([^>]+)>\)'   ', &mut Window, &mut Context<$1>)'
-re ', &mut gpui::ViewContext<([^>]+)>\)'   ', &mut gpui::Window, &mut gpui::Context<$1>)'
-re '\(&mut WindowContext\)'          '(&mut Window, &mut App)'
-re '\(&mut gpui::WindowContext\)'          '(&mut gpui::Window, &mut gpui::App)'
-re '\(&mut ViewContext<([^>]+)>\)'   '(&mut Window, &mut Context<$1>)'
-re '\(&mut gpui::ViewContext<([^>]+)>\)'   '(&mut gpui::Window, &mut gpui::Context<$1>)'
+re '&AppContext'          '&App'
+re '&gpui::AppContext'          '&gpui::App'
+re '&mut gpui::AppContext'          '&mut gpui::App'
+re ', &mut WindowContext'          ', &mut Window, &mut App'
+re ', &mut gpui::WindowContext'          ', &mut gpui::Window, &mut gpui::App'
+re ', &mut WindowContext'          ', &mut Window, &mut App'
+re ', &mut gpui::WindowContext'          ', &mut gpui::Window, &mut gpui::App'
+re ', &mut ViewContext<([^>]+)>'   ', &mut Window, &mut Context<$1>'
+re ', &mut gpui::ViewContext<([^>]+)>'   ', &mut gpui::Window, &mut gpui::Context<$1>'
+re '\(&mut WindowContext'          '(&mut Window, &mut App'
+re '\(&mut gpui::WindowContext'          '(&mut gpui::Window, &mut gpui::App'
+re '\(&mut ViewContext<([^>]+)>'   '(&mut Window, &mut Context<$1>'
+re '\(&mut gpui::ViewContext<([^>]+)>'   '(&mut gpui::Window, &mut gpui::Context<$1>'
 
 # function parameters
 re '_: &mut WindowContext\)'          '_window: &mut Window, _cx: &mut App)'
@@ -95,11 +108,13 @@ re 'cx: &WindowContext,'              'window: &Window, cx: &App,'
 re 'cx: &gpui::WindowContext,'              'window: &gpui::Window, cx: &gpui::App,'
 re 'cx: &ViewContext<([^>]+)>,'       'window: &Window, cx: &Context<$1>,'
 re 'cx: &gpui::ViewContext<([^>]+)>,'       'window: &gpui::Window, cx: &gpui::Context<$1>,'
+re 'cx: &mut WindowContext\|'         'window: &mut Window, cx: &mut App|'
 
 # VisualContext methods moved to window, that take context
 re 'cx.dismiss_view\(' 'window.dismiss_view(cx, '
 re 'cx.focus_view\(' 'window.focus_view(cx, '
-re 'cx.new_view\(' 'window.new_view(cx, '
+re 'cx.new_view\(' 'cx.new('
+re 'cx.new_model\(' 'cx.new('
 re 'cx.replace_root_view\(' 'window.replace_root_view(cx, '
 
 # AppContext methods moved to window, that take context
@@ -148,3 +163,9 @@ re 'cx.rem_size\(' 'window.rem_size('
 re 'cx.with_content_mask\(' 'window.with_content_mask('
 re 'cx.prevent_default\(' 'window.prevent_default('
 re 'cx.remove_window\(' 'window.remove_window('
+re 'cx.insert_hitbox\(' 'window.insert_hitbox('
+re 'cx.window_decorations\(' 'window.window_decorations('
+re 'cx.set_client_inset\(' 'window.set_client_inset('
+re 'cx.start_window_move\(' 'window.start_window_move('
+re 'cx.on_mouse_event\(' 'window.on_mouse_event('
+re 'cx.show_window_menu\(' 'window.show_window_menu('

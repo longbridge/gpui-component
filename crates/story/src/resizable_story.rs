@@ -10,8 +10,8 @@ use ui::{
 
 pub struct ResizableStory {
     focus_handle: gpui::FocusHandle,
-    group1: View<ResizablePanelGroup>,
-    group2: View<ResizablePanelGroup>,
+    group1: Entity<ResizablePanelGroup>,
+    group2: Entity<ResizablePanelGroup>,
 }
 
 impl super::Story for ResizableStory {
@@ -23,24 +23,24 @@ impl super::Story for ResizableStory {
         "The resizable panels."
     }
 
-    fn new_view(cx: &mut WindowContext) -> View<impl gpui::FocusableView> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl gpui::Focusable> {
         Self::view(cx)
     }
 }
 
-impl gpui::FocusableView for ResizableStory {
-    fn focus_handle(&self, _: &gpui::AppContext) -> gpui::FocusHandle {
+impl gpui::Focusable for ResizableStory {
+    fn focus_handle(&self, _: &gpui::App) -> gpui::FocusHandle {
         self.focus_handle.clone()
     }
 }
 
 impl ResizableStory {
-    pub fn view(cx: &mut WindowContext) -> View<Self> {
-        cx.new_view(|cx| Self::new(cx))
+    pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
+        cx.new(|cx| Self::new(cx))
     }
 
-    fn new(cx: &mut WindowContext) -> Self {
-        fn panel_box(content: impl Into<SharedString>, cx: &WindowContext) -> AnyElement {
+    fn new(window: &mut Window, cx: &mut App) -> Self {
+        fn panel_box(content: impl Into<SharedString>, window: &Window, cx: &App) -> AnyElement {
             div()
                 .p_4()
                 .border_1()
@@ -50,7 +50,7 @@ impl ResizableStory {
                 .into_any_element()
         }
 
-        let group1 = cx.new_view(|cx| {
+        let group1 = cx.new(|cx| {
             v_resizable(cx)
                 .group(
                     h_resizable(cx)
@@ -89,7 +89,7 @@ impl ResizableStory {
                 )
         });
 
-        let group2 = cx.new_view(|cx| {
+        let group2 = cx.new(|cx| {
             h_resizable(cx)
                 .child(
                     resizable_panel()
@@ -113,7 +113,7 @@ impl ResizableStory {
 }
 
 impl Render for ResizableStory {
-    fn render(&mut self, _: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .gap_6()
             .child(self.group1.clone())

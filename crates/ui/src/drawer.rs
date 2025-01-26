@@ -20,7 +20,7 @@ use crate::{
 actions!(drawer, [Escape]);
 
 const CONTEXT: &str = "Drawer";
-pub fn init(cx: &mut AppContext) {
+pub fn init(cx: &mut App) {
     cx.bind_keys([KeyBinding::new("escape", Escape, Some(CONTEXT))])
 }
 
@@ -30,7 +30,7 @@ pub struct Drawer {
     pub(crate) placement: Placement,
     pub(crate) size: DefiniteLength,
     resizable: bool,
-    on_close: Rc<dyn Fn(&ClickEvent, &mut WindowContext) + 'static>,
+    on_close: Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>,
     title: Option<AnyElement>,
     footer: Option<AnyElement>,
     content: Div,
@@ -39,7 +39,7 @@ pub struct Drawer {
 }
 
 impl Drawer {
-    pub fn new(cx: &mut WindowContext) -> Self {
+    pub fn new(window: &mut Window, cx: &mut App) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
             placement: Placement::Right,
@@ -95,7 +95,7 @@ impl Drawer {
     /// Listen to the close event of the drawer.
     pub fn on_close(
         mut self,
-        on_close: impl Fn(&ClickEvent, &mut WindowContext) + 'static,
+        on_close: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
     ) -> Self {
         self.on_close = Rc::new(on_close);
         self
@@ -115,7 +115,7 @@ impl Styled for Drawer {
 }
 
 impl RenderOnce for Drawer {
-    fn render(self, cx: &mut WindowContext) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let placement = self.placement;
         let titlebar_height = self.margin_top;
         let window_paddings = crate::window_border::window_paddings(cx);
@@ -193,7 +193,7 @@ impl RenderOnce for Drawer {
                                             .small()
                                             .ghost()
                                             .icon(IconName::Close)
-                                            .on_click(move |_, cx| {
+                                            .on_click(move |_, window, cx| {
                                                 on_close(&ClickEvent::default(), cx);
                                                 cx.close_drawer();
                                             }),

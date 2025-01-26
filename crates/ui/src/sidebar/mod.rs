@@ -54,11 +54,11 @@ impl<E: Collapsible + IntoElement> Sidebar<E> {
         }
     }
 
-    pub fn left<V: Render + 'static>(view: &View<V>) -> Self {
+    pub fn left<V: Render + 'static>(view: &Entity<V>) -> Self {
         Self::new(view.entity_id(), Side::Left)
     }
 
-    pub fn right<V: Render + 'static>(view: &View<V>) -> Self {
+    pub fn right<V: Render + 'static>(view: &Entity<V>) -> Self {
         Self::new(view.entity_id(), Side::Right)
     }
 
@@ -111,7 +111,7 @@ pub struct SidebarToggleButton {
     btn: Button,
     is_collapsed: bool,
     side: Side,
-    on_click: Option<Rc<dyn Fn(&ClickEvent, &mut WindowContext)>>,
+    on_click: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>>,
 }
 
 impl SidebarToggleButton {
@@ -139,7 +139,7 @@ impl SidebarToggleButton {
 
     pub fn on_click(
         mut self,
-        on_click: impl Fn(&ClickEvent, &mut WindowContext) + 'static,
+        on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
     ) -> Self {
         self.on_click = Some(Rc::new(on_click));
         self
@@ -147,7 +147,7 @@ impl SidebarToggleButton {
 }
 
 impl RenderOnce for SidebarToggleButton {
-    fn render(self, _: &mut WindowContext) -> impl IntoElement {
+    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
         let is_collapsed = self.is_collapsed;
         let on_click = self.on_click.clone();
 
@@ -176,7 +176,7 @@ impl RenderOnce for SidebarToggleButton {
 }
 
 impl<E: Collapsible + IntoElement> RenderOnce for Sidebar<E> {
-    fn render(mut self, cx: &mut WindowContext) -> impl IntoElement {
+    fn render(mut self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let is_collapsed = self.is_collapsed;
         v_flex()
             .id("sidebar")

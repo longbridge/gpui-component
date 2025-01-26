@@ -300,7 +300,7 @@ impl<M: ManagedView> Element for Popover<M> {
                 let mut trigger_element = view.render_trigger(is_open, window, cx);
                 let trigger_layout_id = trigger_element.request_layout(window, cx);
 
-                let layout_id = cx.request_layout(
+                let layout_id = window.request_layout(cx, 
                     style,
                     Some(trigger_layout_id).into_iter().chain(popover_layout_id),
                 );
@@ -408,14 +408,14 @@ impl<M: ManagedView> Element for Popover<M> {
                                 }
                                 *old_content_view1.borrow_mut() = None;
 
-                                cx.refresh();
+                                window.refresh();
                             },
                         )
                         .detach();
 
-                        cx.focus_view(&new_content_view);
+                        window.focus_view(cx, &new_content_view);
                         *old_content_view.borrow_mut() = Some(new_content_view);
-                        cx.refresh();
+                        window.refresh();
                     }
                 });
             },

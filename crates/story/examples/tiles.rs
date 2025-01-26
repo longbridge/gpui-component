@@ -16,8 +16,8 @@ const TILES_DOCK_AREA: DockAreaTab = DockAreaTab {
 
 actions!(workspace, [Open, CloseWindow]);
 
-pub fn init(cx: &mut AppContext) {
-    cx.on_action(|_action: &Open, _cx: &mut AppContext| {});
+pub fn init(cx: &mut App) {
+    cx.on_action(|_action: &Open, _cx: &mut App| {});
 
     ui::init(cx);
     story::init(cx);
@@ -35,9 +35,9 @@ struct DockAreaTab {
 }
 
 impl StoryTiles {
-    pub fn new(cx: &mut ViewContext<Self>) -> Self {
+    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let dock_area =
-            cx.new_view(|cx| DockArea::new(TILES_DOCK_AREA.id, Some(TILES_DOCK_AREA.version), cx));
+            cx.new(|cx| DockArea::new(TILES_DOCK_AREA.id, Some(TILES_DOCK_AREA.version), cx));
         let weak_dock_area = dock_area.downgrade();
 
         match Self::load_tiles(dock_area.clone(), cx) {
@@ -74,7 +74,7 @@ impl StoryTiles {
         }
     }
 
-    fn save_layout(&mut self, dock_area: Entity<DockArea>, cx: &mut ViewContext<Self>) {
+    fn save_layout(&mut self, dock_area: Entity<DockArea>, window: &mut Window, cx: &mut Context<Self>) {
         self._save_layout_task = Some(cx.spawn(|this, mut cx| async move {
             Timer::after(Duration::from_secs(10)).await;
 
@@ -102,7 +102,7 @@ impl StoryTiles {
         Ok(())
     }
 
-    fn load_tiles(dock_area: Entity<DockArea>, cx: &mut WindowContext) -> Result<()> {
+    fn load_tiles(dock_area: Entity<DockArea>, window: &mut Window, cx: &mut App) -> Result<()> {
         let fname = "target/tiles.json";
         let json = std::fs::read_to_string(fname)?;
         let state = serde_json::from_str::<DockAreaState>(&json)?;
@@ -131,7 +131,7 @@ impl StoryTiles {
         })
     }
 
-    fn reset_default_layout(dock_area: WeakEntity<DockArea>, cx: &mut WindowContext) {
+    fn reset_default_layout(dock_area: WeakEntity<DockArea>, window: &mut Window, cx: &mut App) {
         let dock_item = Self::init_default_layout(&dock_area, cx);
         _ = dock_area.update(cx, |view, cx| {
             view.set_version(TILES_DOCK_AREA.version, cx);
@@ -141,7 +141,7 @@ impl StoryTiles {
         });
     }
 
-    fn init_default_layout(dock_area: &WeakEntity<DockArea>, cx: &mut WindowContext) -> DockItem {
+    fn init_default_layout(dock_area: &WeakEntity<DockArea>, window: &mut Window, cx: &mut App) -> DockItem {
         DockItem::tiles(
             vec![
                 DockItem::tab(StoryContainer::panel::<ButtonStory>(cx), dock_area, cx),
@@ -156,7 +156,7 @@ impl StoryTiles {
         )
     }
 
-    pub fn new_local(cx: &mut AppContext) -> Task<anyhow::Result<WindowHandle<Root>>> {
+    pub fn new_local(cx: &mut App) -> Task<anyhow::Result<WindowHandle<Root>>> {
         let mut window_size = size(px(1600.0), px(1200.0));
         if let Some(display) = cx.primary_display() {
             let display_size = display.bounds().size;
@@ -186,8 +186,8 @@ impl StoryTiles {
             };
 
             let window = cx.open_window(options, |cx| {
-                let tiles_view = cx.new_view(|cx| Self::new(cx));
-                cx.new_view(|cx| Root::new(tiles_view.into(), cx))
+                let tiles_view = cx.new(|cx| Self::new(cx));
+                cx.new(|cx| Root::new(tiles_view.into(), cx))
             })?;
 
             window
@@ -203,8 +203,8 @@ impl StoryTiles {
 }
 
 pub fn open_new(
-    cx: &mut AppContext,
-    init: impl FnOnce(&mut Root, &mut ViewContext<Root>) + 'static + Send,
+    cx: &mut App,
+    init: impl FnOnce(&mut Root, &mut Window, &mut Context<Root>) + 'static + Send,
 ) -> Task<()> {
     let task: Task<std::result::Result<WindowHandle<Root>, anyhow::Error>> =
         StoryTiles::new_local(cx);
@@ -217,7 +217,7 @@ pub fn open_new(
 }
 
 impl Render for StoryTiles {
-    fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let drawer_layer = Root::render_drawer_layer(cx);
         let modal_layer = Root::render_modal_layer(cx);
         let notification_layer = Root::render_notification_layer(cx);
@@ -260,6 +260,6 @@ fn main() {
     });
 }
 
-fn quit(_: &Quit, cx: &mut AppContext) {
+fn quit(_: &Quit, cx: &mut App) {
     cx.quit();
 }

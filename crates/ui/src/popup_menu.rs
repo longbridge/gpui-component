@@ -119,7 +119,7 @@ impl PopupMenu {
         cx: &mut App,
         f: impl FnOnce(Self, &mut Window, &mut Context<PopupMenu>) -> Self,
     ) -> Entity<Self> {
-        cx.new_view(|cx| {
+        cx.new(|cx| {
             let focus_handle = cx.focus_handle();
             let _on_blur_subscription = cx.on_blur(&focus_handle, |this: &mut PopupMenu, cx| {
                 this.dismiss(&Dismiss, window, cx)
@@ -142,7 +142,7 @@ impl PopupMenu {
                 scroll_state: Rc::new(Cell::new(ScrollbarState::default())),
                 _subscriptions: [_on_blur_subscription],
             };
-            cx.refresh();
+            window.refresh();
             f(menu, cx)
         })
     }
@@ -333,7 +333,7 @@ impl PopupMenu {
         f: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
     ) -> Self {
         let submenu = PopupMenu::build(cx, window, f);
-        let parent_menu = cx.view().downgrade();
+        let parent_menu = cx.model().downgrade();
         submenu.update(cx, |view, _| {
             view.parent_menu = Some(parent_menu);
         });
@@ -372,7 +372,7 @@ impl PopupMenu {
 
     fn on_click(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
         cx.stop_propagation();
-        cx.prevent_default();
+        window.prevent_default();
         self.selected_index = Some(ix);
         self.confirm(&Confirm, window, cx);
     }
@@ -506,14 +506,14 @@ impl Focusable for PopupMenu {
 
 impl Render for PopupMenu {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let view = cx.view().clone();
+        let view = cx.model().clone();
         let has_icon = self.menu_items.iter().any(|item| item.has_icon());
         let items_count = self.menu_items.len();
         let max_width = self.max_width;
         let bounds = self.bounds;
         let max_height = self.max_height.map_or_else(
             || {
-                let window_half_height = cx.window_bounds().get_bounds().size.height * 0.5;
+                let window_half_height = window.window_bounds().get_bounds().size.height * 0.5;
                 window_half_height.min(px(450.))
             },
             |height| height,
@@ -529,7 +529,7 @@ impl Render for PopupMenu {
             .on_action(cx.listener(Self::select_prev))
             .on_action(cx.listener(Self::confirm))
             .on_action(cx.listener(Self::dismiss))
-            .on_mouse_down_out(cx.listener(|this, _, cx| this.dismiss(&Dismiss, cx)))
+            .on_mouse_down_out(cx.listener(|this, _, window, cx| this.dismiss(&Dismiss, cx)))
             .popover_style(cx)
             .text_color(cx.theme().popover_foreground)
             .relative()
@@ -574,7 +574,7 @@ impl Render for PopupMenu {
                                             .px_1()
                                             .rounded_md()
                                             .items_center()
-                                            .on_mouse_enter(cx.listener(move |this, _, cx| {
+                                            .on_mouse_enter(cx.listener(move |this, _, window, cx| {
                                                 this.hovered_menu_ix = Some(ix);
                                                 cx.notify();
                                             }));

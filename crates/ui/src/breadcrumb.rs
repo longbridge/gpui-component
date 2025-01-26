@@ -16,7 +16,7 @@ pub struct Breadcrumb {
 pub struct BreadcrumbItem {
     id: ElementId,
     text: SharedString,
-    on_click: Option<Rc<dyn Fn(&ClickEvent, &mut WindowContext)>>,
+    on_click: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>>,
     disabled: bool,
     is_last: bool,
 }
@@ -39,7 +39,7 @@ impl BreadcrumbItem {
 
     pub fn on_click(
         mut self,
-        on_click: impl Fn(&ClickEvent, &mut WindowContext) + 'static,
+        on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
     ) -> Self {
         self.on_click = Some(Rc::new(on_click));
         self
@@ -53,7 +53,7 @@ impl BreadcrumbItem {
 }
 
 impl RenderOnce for BreadcrumbItem {
-    fn render(self, cx: &mut WindowContext) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         div()
             .id(self.id)
             .child(self.text)
@@ -87,7 +87,7 @@ impl Breadcrumb {
 #[derive(IntoElement)]
 struct BreadcrumbSeparator;
 impl RenderOnce for BreadcrumbSeparator {
-    fn render(self, cx: &mut WindowContext) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         Icon::new(IconName::ChevronRight)
             .text_color(cx.theme().muted_foreground)
             .size_3p5()
@@ -96,7 +96,7 @@ impl RenderOnce for BreadcrumbSeparator {
 }
 
 impl RenderOnce for Breadcrumb {
-    fn render(self, cx: &mut WindowContext) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let items_count = self.items.len();
 
         let mut children = vec![];

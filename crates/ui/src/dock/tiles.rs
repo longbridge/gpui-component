@@ -15,10 +15,10 @@ use crate::{
 use super::{DockArea, Panel, PanelEvent, PanelInfo, PanelState, PanelView, TabPanel, TileMeta};
 use gpui::{
     actions, canvas, div, point, px, size, AnyElement, App, AppContext, Bounds, DismissEvent,
-    DragMoveEvent, Entity, EntityId, EventEmitter, FocusHandle, FocusableView, Half,
+    DragMoveEvent, Entity, EntityId, EventEmitter, FocusHandle, Focusable, Half,
     InteractiveElement, IntoElement, ModelContext, MouseButton, MouseDownEvent, MouseUpEvent,
     ParentElement, Pixels, Point, Render, ScrollHandle, Size, StatefulInteractiveElement, Styled,
-    VisualContext, WeakView, Window,
+    VisualContext, Window,
 };
 
 actions!(tiles, [Undo, Redo,]);
@@ -123,7 +123,7 @@ impl Panel for Tiles {
         "Tiles".into_any_element()
     }
 
-    fn dump(&self, cx: &AppContext) -> PanelState {
+    fn dump(&self, cx: &App) -> PanelState {
         let panels = self
             .panels
             .iter()
@@ -148,7 +148,7 @@ impl Panel for Tiles {
 }
 
 impl Tiles {
-    pub fn new(cx: &mut ViewContext<Self>) -> Self {
+    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
             panels: vec![],
@@ -177,7 +177,7 @@ impl Tiles {
     }
 
     /// Remove panel from the children.
-    pub fn remove(&mut self, panel: Arc<dyn PanelView>, cx: &mut ViewContext<Self>) {
+    pub fn remove(&mut self, panel: Arc<dyn PanelView>, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(ix) = self.index_of(panel.clone()) {
             self.panels.remove(ix);
 
@@ -185,7 +185,7 @@ impl Tiles {
         }
     }
 
-    fn update_initial_position(&mut self, position: Point<Pixels>, cx: &mut ViewContext<'_, Self>) {
+    fn update_initial_position(&mut self, position: Point<Pixels>, window: &mut Window, cx: &mut Context<'_, Self>) {
         let Some((index, item)) = self.find_at_position(position) else {
             return;
         };
@@ -198,7 +198,7 @@ impl Tiles {
         cx.notify();
     }
 
-    fn update_position(&mut self, pos: Point<Pixels>, cx: &mut ViewContext<'_, Self>) {
+    fn update_position(&mut self, pos: Point<Pixels>, window: &mut Window, cx: &mut Context<'_, Self>) {
         let Some(index) = self.dragging_index else {
             return;
         };
@@ -234,7 +234,7 @@ impl Tiles {
         cx.notify();
     }
 
-    fn update_resizing_drag(&mut self, drag_data: ResizeDrag, cx: &mut ViewContext<'_, Self>) {
+    fn update_resizing_drag(&mut self, drag_data: ResizeDrag, window: &mut Window, cx: &mut Context<'_, Self>) {
         if let Some((index, _item)) = self.find_at_position(drag_data.last_position) {
             self.resizing_index = Some(index);
             self.resizing_drag_data = Some(drag_data);
@@ -242,7 +242,7 @@ impl Tiles {
         }
     }
 
-    fn resize_width(&mut self, new_width: Pixels, cx: &mut ViewContext<'_, Self>) {
+    fn resize_width(&mut self, new_width: Pixels, window: &mut Window, cx: &mut Context<'_, Self>) {
         if let Some(index) = self.resizing_index {
             if let Some(item) = self.panels.get_mut(index) {
                 let previous_bounds = item.bounds;
@@ -270,7 +270,7 @@ impl Tiles {
         }
     }
 
-    fn resize_height(&mut self, new_height: Pixels, cx: &mut ViewContext<'_, Self>) {
+    fn resize_height(&mut self, new_height: Pixels, window: &mut Window, cx: &mut Context<'_, Self>) {
         if let Some(index) = self.resizing_index {
             if let Some(item) = self.panels.get_mut(index) {
                 let previous_bounds = item.bounds;
@@ -302,7 +302,7 @@ impl Tiles {
         &mut self,
         item: TileItem,
         dock_area: &WeakEntity<DockArea>,
-        cx: &mut ViewContext<Self>,
+        window: &mut Window, cx: &mut Context<Self>,
     ) {
         self.panels.push(item.clone());
 
@@ -374,7 +374,7 @@ impl Tiles {
     }
 
     /// Handle the undo action
-    pub fn undo(&mut self, cx: &mut ViewContext<Self>) {
+    pub fn undo(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.history.ignore = true;
 
         if let Some(changes) = self.history.undo() {
@@ -401,7 +401,7 @@ impl Tiles {
     }
 
     /// Handle the redo action
-    pub fn redo(&mut self, cx: &mut ViewContext<Self>) {
+    pub fn redo(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.history.ignore = true;
 
         if let Some(changes) = self.history.redo() {
@@ -430,7 +430,7 @@ impl Tiles {
     /// Produce a vector of AnyElement representing the three possible resize handles
     fn render_resize_handles(
         &mut self,
-        cx: &mut ViewContext<Self>,
+        window: &mut Window, cx: &mut Context<Self>,
         entity_id: EntityId,
         item: &TileItem,
         is_occluded: impl Fn(&Bounds<Pixels>) -> bool,
@@ -486,7 +486,7 @@ impl Tiles {
                 )
                 .on_drag(DragResizing(entity_id), |drag, _, window, cx| {
                     cx.stop_propagation();
-                    cx.new_view(|_| drag.clone())
+                    cx.new(|_| drag.clone())
                 })
                 .on_drag_move(
                     cx.listener(move |this, e: &DragMoveEvent<DragResizing>, cx| {
@@ -544,7 +544,7 @@ impl Tiles {
                 )
                 .on_drag(DragResizing(entity_id), |drag, _, window, cx| {
                     cx.stop_propagation();
-                    cx.new_view(|_| drag.clone())
+                    cx.new(|_| drag.clone())
                 })
                 .on_drag_move(
                     cx.listener(move |this, e: &DragMoveEvent<DragResizing>, cx| {
@@ -604,7 +604,7 @@ impl Tiles {
                 )
                 .on_drag(DragResizing(entity_id), |drag, _, window, cx| {
                     cx.stop_propagation();
-                    cx.new_view(|_| drag.clone())
+                    cx.new(|_| drag.clone())
                 })
                 .on_drag_move(
                     cx.listener(move |this, e: &DragMoveEvent<DragResizing>, cx| {
@@ -643,7 +643,7 @@ impl Tiles {
     /// Produce the drag-bar element for the given panel item
     fn render_drag_bar(
         &mut self,
-        cx: &mut ViewContext<Self>,
+        window: &mut Window, cx: &mut Context<Self>,
         entity_id: EntityId,
         item: &TileItem,
         is_occluded: &impl Fn(&Bounds<Pixels>) -> bool,
@@ -676,7 +676,7 @@ impl Tiles {
                 )
                 .on_drag(DragMoving(entity_id), |drag, _, window, cx| {
                     cx.stop_propagation();
-                    cx.new_view(|_| drag.clone())
+                    cx.new(|_| drag.clone())
                 })
                 .on_drag_move(cx.listener(move |this, e: &DragMoveEvent<DragMoving>, cx| {
                     match e.drag(cx) {
@@ -698,7 +698,7 @@ impl Tiles {
         &mut self,
         item: &TileItem,
         ix: usize,
-        cx: &mut ViewContext<Self>,
+        window: &mut Window, cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let entity_id = cx.entity_id();
         let panel_view = item.panel.view();
@@ -740,7 +740,7 @@ impl Tiles {
     }
 
     /// Handle the mouse up event to finalize drag or resize operations
-    fn on_mouse_up(&mut self, cx: &mut ViewContext<'_, Tiles>) {
+    fn on_mouse_up(&mut self, window: &mut Window, cx: &mut Context<'_, Tiles>) {
         // Check if a drag or resize was active
         if self.dragging_index.is_some()
             || self.resizing_index.is_some()
@@ -810,16 +810,16 @@ fn round_point_to_nearest_ten(point: Point<Pixels>) -> Point<Pixels> {
     Point::new(round_to_nearest_ten(point.x), round_to_nearest_ten(point.y))
 }
 
-impl FocusableView for Tiles {
-    fn focus_handle(&self, _cx: &AppContext) -> FocusHandle {
+impl Focusable for Tiles {
+    fn focus_handle(&self, _cx: &App) -> FocusHandle {
         self.focus_handle.clone()
     }
 }
 impl EventEmitter<PanelEvent> for Tiles {}
 impl EventEmitter<DismissEvent> for Tiles {}
 impl Render for Tiles {
-    fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
-        let view = cx.view().clone();
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let view = cx.model().clone();
         let view_id = view.entity_id();
         let panels = self.sorted_panels();
         let scroll_bounds =

@@ -18,11 +18,11 @@ use ui::{
 actions!(input_story, [Tab, TabPrev]);
 
 pub struct FormStory {
-    name_input: View<TextInput>,
-    email_input: View<TextInput>,
-    bio_input: View<TextInput>,
+    name_input: Entity<TextInput>,
+    email_input: Entity<TextInput>,
+    bio_input: Entity<TextInput>,
     subscribe_email: bool,
-    date_picker: View<DatePicker>,
+    date_picker: Entity<DatePicker>,
     layout: Axis,
     size: Size,
 }
@@ -36,25 +36,25 @@ impl super::Story for FormStory {
         false
     }
 
-    fn new_view(cx: &mut WindowContext) -> View<impl gpui::FocusableView> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl gpui::Focusable> {
         Self::view(cx)
     }
 }
 
 impl FormStory {
-    pub fn view(cx: &mut WindowContext) -> View<Self> {
-        cx.new_view(Self::new)
+    pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
+        cx.new(Self::new)
     }
 
-    fn new(cx: &mut ViewContext<Self>) -> Self {
-        let name_input = cx.new_view(|cx| {
+    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let name_input = cx.new(|cx| {
             let mut input = TextInput::new(cx).cleanable();
             input.set_text("Jason Lee", cx);
             input
         });
 
-        let email_input = cx.new_view(|cx| TextInput::new(cx).placeholder("Enter text here..."));
-        let bio_input = cx.new_view(|cx| {
+        let email_input = cx.new(|cx| TextInput::new(cx).placeholder("Enter text here..."));
+        let bio_input = cx.new(|cx| {
             let mut input = TextInput::new(cx)
                 .multi_line()
                 .rows(10)
@@ -62,7 +62,7 @@ impl FormStory {
             input.set_text("Hello 世界，this is GPUI component.", cx);
             input
         });
-        let date_picker = cx.new_view(|cx| DatePicker::new("birthday", cx));
+        let date_picker = cx.new(|cx| DatePicker::new("birthday", cx));
 
         Self {
             name_input,
@@ -77,7 +77,7 @@ impl FormStory {
 }
 
 impl FocusableCycle for FormStory {
-    fn cycle_focus_handles(&self, cx: &mut WindowContext) -> Vec<gpui::FocusHandle>
+    fn cycle_focus_handles(&self, window: &mut Window, cx: &mut App) -> Vec<gpui::FocusHandle>
     where
         Self: Sized,
     {
@@ -89,14 +89,14 @@ impl FocusableCycle for FormStory {
     }
 }
 
-impl gpui::FocusableView for FormStory {
-    fn focus_handle(&self, cx: &gpui::AppContext) -> gpui::FocusHandle {
+impl gpui::Focusable for FormStory {
+    fn focus_handle(&self, cx: &gpui::App) -> gpui::FocusHandle {
         self.name_input.focus_handle(cx)
     }
 }
 
 impl Render for FormStory {
-    fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .id("form-story")
             .size_full()

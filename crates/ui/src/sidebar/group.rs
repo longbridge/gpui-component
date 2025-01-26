@@ -44,7 +44,7 @@ impl<E: Collapsible + IntoElement> Collapsible for SidebarGroup<E> {
     }
 }
 impl<E: Collapsible + IntoElement> RenderOnce for SidebarGroup<E> {
-    fn render(self, cx: &mut WindowContext) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         v_flex()
             .relative()
             .p_2()

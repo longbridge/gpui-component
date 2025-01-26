@@ -58,8 +58,8 @@ where
     fn with_element_state<R>(
         &mut self,
         id: &GlobalElementId,
-        cx: &mut WindowContext,
-        f: impl FnOnce(&mut Self, &mut ScrollViewState, &mut WindowContext) -> R,
+        window: &mut Window, cx: &mut App,
+        f: impl FnOnce(&mut Self, &mut ScrollViewState, &mut Window, &mut App) -> R,
     ) -> R {
         cx.with_optional_element_state::<ScrollViewState, _>(Some(id), |element_state, cx| {
             let mut element_state = element_state.unwrap().unwrap_or_default();
@@ -148,7 +148,7 @@ where
     fn request_layout(
         &mut self,
         id: Option<&gpui::GlobalElementId>,
-        cx: &mut gpui::WindowContext,
+        window: &mut gpui::Window, cx: &mut gpui::Context,
     ) -> (gpui::LayoutId, Self::RequestLayoutState) {
         let mut style = Style::default();
         style.flex_grow = 1.0;
@@ -200,7 +200,7 @@ where
                 .into_any_element();
             let element_id = element.request_layout(cx);
 
-            let layout_id = cx.request_layout(style, vec![element_id]);
+            let layout_id = window.request_layout(cx, style, vec![element_id]);
 
             (layout_id, element)
         })
@@ -211,7 +211,7 @@ where
         _: Option<&gpui::GlobalElementId>,
         _: gpui::Bounds<Pixels>,
         element: &mut Self::RequestLayoutState,
-        cx: &mut gpui::WindowContext,
+        window: &mut gpui::Window, cx: &mut gpui::Context,
     ) -> Self::PrepaintState {
         element.prepaint(cx);
         // do nothing
@@ -224,7 +224,7 @@ where
         _: gpui::Bounds<Pixels>,
         element: &mut Self::RequestLayoutState,
         _: &mut Self::PrepaintState,
-        cx: &mut gpui::WindowContext,
+        window: &mut gpui::Window, cx: &mut gpui::Context,
     ) {
         element.paint(cx)
     }

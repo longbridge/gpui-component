@@ -1,6 +1,6 @@
 use gpui::{
-    div, px, AnyView, App, Context, IntoElement, ParentElement, Render, SharedString, Styled,
-    Window,
+    div, px, AnyView, App, AppContext, Context, IntoElement, ParentElement, Render, SharedString,
+    Styled, Window,
 };
 
 use crate::ActiveTheme;
@@ -11,7 +11,7 @@ pub struct Tooltip {
 
 impl Tooltip {
     pub fn new(text: impl Into<SharedString>, window: &mut Window, cx: &mut App) -> AnyView {
-        cx.new_view(|_| Self { text: text.into() }).into()
+        cx.new(|_| Self { text: text.into() }).into()
     }
 }
 

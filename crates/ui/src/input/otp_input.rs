@@ -1,5 +1,5 @@
 use gpui::{Window, ModelContext, 
-    div, prelude::FluentBuilder, px, AnyElement, Context, EventEmitter, FocusHandle, FocusableView,
+    div, prelude::FluentBuilder, px, AnyElement, Context, EventEmitter, FocusHandle, Focusable,
     InteractiveElement, IntoElement, KeyDownEvent, Model, MouseButton, MouseDownEvent,
     ParentElement as _, Render, SharedString, Styled as _, 
 };
@@ -27,14 +27,14 @@ pub struct OtpInput {
     number_of_groups: usize,
     masked: bool,
     value: SharedString,
-    blink_cursor: Model<BlinkCursor>,
+    blink_cursor: Entity<BlinkCursor>,
     size: Size,
 }
 
 impl OtpInput {
-    pub fn new(length: usize, cx: &mut ViewContext<Self>) -> Self {
+    pub fn new(length: usize, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
-        let blink_cursor = cx.new_model(|_| BlinkCursor::new());
+        let blink_cursor = cx.new(|_| BlinkCursor::new());
         let input = Self {
             focus_handle: focus_handle.clone(),
             length,
@@ -79,7 +79,7 @@ impl OtpInput {
     }
 
     /// Set value of the OTP Input.
-    pub fn set_value(&mut self, value: impl Into<SharedString>, cx: &mut ViewContext<Self>) {
+    pub fn set_value(&mut self, value: impl Into<SharedString>, window: &mut Window, cx: &mut Context<Self>) {
         self.value = value.into();
         cx.notify();
     }
@@ -96,20 +96,20 @@ impl OtpInput {
     }
 
     /// Set masked to true use masked input.
-    pub fn set_masked(&mut self, masked: bool, cx: &mut ViewContext<Self>) {
+    pub fn set_masked(&mut self, masked: bool, window: &mut Window, cx: &mut Context<Self>) {
         self.masked = masked;
         cx.notify();
     }
 
-    pub fn focus(&self, cx: &mut ViewContext<Self>) {
+    pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
         self.focus_handle.focus(window);
     }
 
-    fn on_input_mouse_down(&mut self, _: &MouseDownEvent, cx: &mut ViewContext<Self>) {
+    fn on_input_mouse_down(&mut self, _: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         cx.focus(&self.focus_handle);
     }
 
-    fn on_key_down(&mut self, event: &KeyDownEvent, cx: &mut ViewContext<Self>) {
+    fn on_key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let mut chars: Vec<char> = self.value.chars().collect();
         let ix = chars.len();
 
@@ -122,7 +122,7 @@ impl OtpInput {
                     chars.remove(ix);
                 }
 
-                cx.prevent_default();
+                window.prevent_default();
                 cx.stop_propagation();
             }
             _ => {
@@ -136,7 +136,7 @@ impl OtpInput {
 
                 chars.push(c);
 
-                cx.prevent_default();
+                window.prevent_default();
                 cx.stop_propagation();
             }
         }
@@ -150,21 +150,21 @@ impl OtpInput {
         cx.notify()
     }
 
-    fn on_focus(&mut self, cx: &mut ViewContext<Self>) {
+    fn on_focus(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.blink_cursor.update(cx, |cursor, cx| {
             cursor.start(cx);
         });
         cx.emit(InputEvent::Focus);
     }
 
-    fn on_blur(&mut self, cx: &mut ViewContext<Self>) {
+    fn on_blur(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.blink_cursor.update(cx, |cursor, cx| {
             cursor.stop(cx);
         });
         cx.emit(InputEvent::Blur);
     }
 
-    fn pause_blink_cursor(&mut self, cx: &mut ViewContext<Self>) {
+    fn pause_blink_cursor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.blink_cursor.update(cx, |cursor, cx| {
             cursor.pause(cx);
         });
@@ -178,15 +178,15 @@ impl Sizable for OtpInput {
     }
 }
 
-impl FocusableView for OtpInput {
-    fn focus_handle(&self, _: &gpui::AppContext) -> FocusHandle {
+impl Focusable for OtpInput {
+    fn focus_handle(&self, _: &gpui::App) -> FocusHandle {
         self.focus_handle.clone()
     }
 }
 impl EventEmitter<InputEvent> for OtpInput {}
 
 impl Render for OtpInput {
-    fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let blink_show = self.blink_cursor.read(cx).visible();
         let is_focused = self.focus_handle.is_focused(window);
 

@@ -13,16 +13,16 @@ const RIGHT_MARGIN: Pixels = px(5.);
 const BOTTOM_MARGIN: Pixels = px(20.);
 
 pub(super) struct TextElement {
-    input: View<TextInput>,
+    input: Entity<TextInput>,
 }
 
 impl TextElement {
-    pub(super) fn new(input: View<TextInput>) -> Self {
+    pub(super) fn new(input: Entity<TextInput>) -> Self {
         Self { input }
     }
 
-    fn paint_mouse_listeners(&mut self, cx: &mut WindowContext) {
-        cx.on_mouse_event({
+    fn paint_mouse_listeners(&mut self, window: &mut Window, cx: &mut App) {
+        window.on_mouse_event({
             let input = self.input.clone();
 
             move |event: &MouseMoveEvent, _, cx| {
@@ -40,7 +40,7 @@ impl TextElement {
         lines: &[WrappedLine],
         line_height: Pixels,
         bounds: &mut Bounds<Pixels>,
-        cx: &mut WindowContext,
+        window: &mut Window, cx: &mut App,
     ) -> (Option<PaintQuad>, Point<Pixels>) {
         let input = self.input.read(cx);
         let selected_range = &input.selected_range;
@@ -139,7 +139,7 @@ impl TextElement {
 
             if input.show_cursor(cx) {
                 // cursor blink
-                let cursor_height = cx.text_style().font_size.to_pixels(cx.rem_size()) + px(2.);
+                let cursor_height = window.text_style().font_size.to_pixels(window.rem_size()) + px(2.);
                 cursor = Some(fill(
                     Bounds::new(
                         point(
@@ -161,7 +161,7 @@ impl TextElement {
         lines: &[WrappedLine],
         line_height: Pixels,
         bounds: &mut Bounds<Pixels>,
-        cx: &mut WindowContext,
+        window: &mut Window, cx: &mut App,
     ) -> Option<Path<Pixels>> {
         let input = self.input.read(cx);
         let selected_range = &input.selected_range;
@@ -336,18 +336,18 @@ impl Element for TextElement {
     fn request_layout(
         &mut self,
         _id: Option<&GlobalElementId>,
-        cx: &mut WindowContext,
+        window: &mut Window, cx: &mut App,
     ) -> (LayoutId, Self::RequestLayoutState) {
         let input = self.input.read(cx);
         let mut style = Style::default();
         style.size.width = relative(1.).into();
         if self.input.read(cx).is_multi_line() {
             style.size.height = relative(1.).into();
-            style.min_size.height = (input.rows.max(1) as f32 * cx.line_height()).into();
+            style.min_size.height = (input.rows.max(1) as f32 * window.line_height()).into();
         } else {
-            style.size.height = cx.line_height().into();
+            style.size.height = window.line_height().into();
         };
-        (cx.request_layout(style, []), ())
+        (window.request_layout(cx, style, []), ())
     }
 
     fn prepaint(
@@ -355,14 +355,14 @@ impl Element for TextElement {
         _id: Option<&GlobalElementId>,
         bounds: Bounds<Pixels>,
         _request_layout: &mut Self::RequestLayoutState,
-        cx: &mut WindowContext,
+        window: &mut Window, cx: &mut App,
     ) -> Self::PrepaintState {
         let multi_line = self.input.read(cx).is_multi_line();
-        let line_height = cx.line_height();
+        let line_height = window.line_height();
         let input = self.input.read(cx);
         let text = input.text.clone();
         let placeholder = input.placeholder.clone();
-        let style = cx.text_style();
+        let style = window.text_style();
         let mut bounds = bounds;
 
         let (display_text, text_color) = if text.is_empty() {
@@ -412,7 +412,7 @@ impl Element for TextElement {
             vec![run]
         };
 
-        let font_size = style.font_size.to_pixels(cx.rem_size());
+        let font_size = style.font_size.to_pixels(window.rem_size());
         let wrap_width = if multi_line {
             Some(bounds.size.width - RIGHT_MARGIN)
         } else {
@@ -475,14 +475,14 @@ impl Element for TextElement {
         input_bounds: Bounds<Pixels>,
         _request_layout: &mut Self::RequestLayoutState,
         prepaint: &mut Self::PrepaintState,
-        cx: &mut WindowContext,
+        window: &mut Window, cx: &mut App,
     ) {
         let focus_handle = self.input.read(cx).focus_handle.clone();
         let focused = focus_handle.is_focused(cx);
         let bounds = prepaint.bounds;
         let selected_range = self.input.read(cx).selected_range.clone();
 
-        cx.handle_input(
+        window.handle_input(cx, 
             &focus_handle,
             ElementInputHandler::new(bounds, self.input.clone()),
         );
@@ -493,7 +493,7 @@ impl Element for TextElement {
         }
 
         // Paint multi line text
-        let line_height = cx.line_height();
+        let line_height = window.line_height();
         let origin = bounds.origin;
 
         let mut offset_y = px(0.);

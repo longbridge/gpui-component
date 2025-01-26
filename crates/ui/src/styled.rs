@@ -92,7 +92,7 @@ pub trait StyledExt: Styled + Sized {
     }
 
     /// Render a 1px blue border, when if the element is focused
-    fn debug_focused(self, focus_handle: &FocusHandle, cx: &WindowContext) -> Self {
+    fn debug_focused(self, focus_handle: &FocusHandle, window: &Window, cx: &App) -> Self {
         if cfg!(debug_assertions) {
             if focus_handle.contains_focused(window, cx) {
                 self.debug_blue()
@@ -106,7 +106,7 @@ pub trait StyledExt: Styled + Sized {
 
     /// Render a border with a width of 1px, color ring color
     #[inline]
-    fn outline(self, cx: &WindowContext) -> Self {
+    fn outline(self, window: &Window, cx: &App) -> Self {
         self.border_color(cx.theme().ring)
     }
 
@@ -133,7 +133,7 @@ pub trait StyledExt: Styled + Sized {
 
     /// Set as Popover style
     #[inline]
-    fn popover_style(self, cx: &mut WindowContext) -> Self {
+    fn popover_style(self, window: &mut Window, cx: &mut App) -> Self {
         self.bg(cx.theme().popover)
             .border_1()
             .border_color(cx.theme().border)

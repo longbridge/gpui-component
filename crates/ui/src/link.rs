@@ -11,7 +11,7 @@ pub struct Link {
     base: Stateful<Div>,
     href: Option<SharedString>,
     disabled: bool,
-    on_click: Option<Box<dyn Fn(&ClickEvent, &mut gpui::WindowContext) + 'static>>,
+    on_click: Option<Box<dyn Fn(&ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static>>,
 }
 
 impl Link {
@@ -31,7 +31,7 @@ impl Link {
 
     pub fn on_click(
         mut self,
-        handler: impl Fn(&ClickEvent, &mut gpui::WindowContext) + 'static,
+        handler: impl Fn(&ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,
     ) -> Self {
         self.on_click = Some(Box::new(handler));
         self
@@ -56,7 +56,7 @@ impl ParentElement for Link {
 }
 
 impl RenderOnce for Link {
-    fn render(self, cx: &mut gpui::WindowContext) -> impl IntoElement {
+    fn render(self, window: &mut gpui::Window, cx: &mut gpui::App) -> impl IntoElement {
         let href = self.href.clone();
         let on_click = self.on_click;
 

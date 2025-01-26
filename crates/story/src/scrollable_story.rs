@@ -27,7 +27,7 @@ pub struct ScrollableStory {
 const ITEM_HEIGHT: Pixels = px(30.);
 
 impl ScrollableStory {
-    fn new(cx: &mut ViewContext<Self>) -> Self {
+    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let items = (0..5000).map(|i| format!("Item {}", i)).collect::<Vec<_>>();
         let test_width = px(3000.);
         let item_sizes = items
@@ -48,11 +48,11 @@ impl ScrollableStory {
         }
     }
 
-    pub fn view(cx: &mut WindowContext) -> View<Self> {
-        cx.new_view(Self::new)
+    pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
+        cx.new(Self::new)
     }
 
-    pub fn change_test_cases(&mut self, n: usize, cx: &mut ViewContext<Self>) {
+    pub fn change_test_cases(&mut self, n: usize, window: &mut Window, cx: &mut Context<Self>) {
         if n == 0 {
             self.items = (0..5000).map(|i| format!("Item {}", i)).collect::<Vec<_>>();
             self.test_width = px(3000.);
@@ -79,17 +79,17 @@ impl ScrollableStory {
         cx.notify();
     }
 
-    pub fn change_axis(&mut self, axis: ScrollbarAxis, cx: &mut ViewContext<Self>) {
+    pub fn change_axis(&mut self, axis: ScrollbarAxis, window: &mut Window, cx: &mut Context<Self>) {
         self.axis = axis;
         cx.notify();
     }
 
-    fn set_message(&mut self, msg: &str, cx: &mut ViewContext<Self>) {
+    fn set_message(&mut self, msg: &str, window: &mut Window, cx: &mut Context<Self>) {
         self.message = SharedString::from(msg.to_string());
         cx.notify();
     }
 
-    fn render_buttons(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render_buttons(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         h_flex()
             .gap_2()
             .justify_between()
@@ -155,20 +155,20 @@ impl super::Story for ScrollableStory {
         and use `virtual_list` to render a large number of items."
     }
 
-    fn new_view(cx: &mut WindowContext) -> View<impl gpui::FocusableView> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl gpui::Focusable> {
         Self::view(cx)
     }
 }
 
-impl gpui::FocusableView for ScrollableStory {
-    fn focus_handle(&self, _: &gpui::AppContext) -> gpui::FocusHandle {
+impl gpui::Focusable for ScrollableStory {
+    fn focus_handle(&self, _: &gpui::App) -> gpui::FocusHandle {
         self.focus_handle.clone()
     }
 }
 
 impl Render for ScrollableStory {
-    fn render(&mut self, cx: &mut gpui::ViewContext<Self>) -> impl gpui::IntoElement {
-        let view = cx.view().clone();
+    fn render(&mut self, window: &mut gpui::Window, cx: &mut gpui::Context<Self>) -> impl gpui::IntoElement {
+        let view = cx.model().clone();
 
         v_flex()
             .size_full()
@@ -183,7 +183,7 @@ impl Render for ScrollableStory {
                             .size_full()
                             .child(
                                 v_virtual_list(
-                                    cx.view().clone(),
+                                    cx.model().clone(),
                                     "items",
                                     self.item_sizes.clone(),
                                     move |story, visible_range, content_size, cx| {
@@ -268,7 +268,7 @@ impl Render for ScrollableStory {
                             .p_3()
                             .w(self.test_width)
                             .id("test-1")
-                            .scrollable(cx.view().entity_id(), ScrollbarAxis::Vertical)
+                            .scrollable(cx.model().entity_id(), ScrollbarAxis::Vertical)
                             .gap_1()
                             .child("Scrollable Example")
                             .children(self.items.iter().take(500).map(|item| {

@@ -12,7 +12,7 @@ use ui::{
 actions!(dropdown_story, [Tab, TabPrev]);
 
 const CONTEXT: &str = "DropdownStory";
-pub fn init(cx: &mut AppContext) {
+pub fn init(cx: &mut App) {
     cx.bind_keys([
         KeyBinding::new("shift-tab", TabPrev, Some(CONTEXT)),
         KeyBinding::new("tab", Tab, Some(CONTEXT)),
@@ -52,7 +52,7 @@ pub struct DropdownStory {
     simple_dropdown1: Entity<Dropdown<Vec<SharedString>>>,
     simple_dropdown2: Entity<Dropdown<SearchableVec<SharedString>>>,
     simple_dropdown3: Entity<Dropdown<Vec<SharedString>>>,
-    disabled_dropdown: View<Dropdown<Vec<SharedString>>>,
+    disabled_dropdown: Entity<Dropdown<Vec<SharedString>>>,
 }
 
 impl super::Story for DropdownStory {
@@ -64,19 +64,19 @@ impl super::Story for DropdownStory {
         "Displays a list of options for the user to pick from—triggered by a button."
     }
 
-    fn new_view(cx: &mut WindowContext) -> View<impl gpui::FocusableView> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl gpui::Focusable> {
         Self::view(cx)
     }
 }
 
-impl gpui::FocusableView for DropdownStory {
-    fn focus_handle(&self, cx: &gpui::AppContext) -> gpui::FocusHandle {
+impl gpui::Focusable for DropdownStory {
+    fn focus_handle(&self, cx: &gpui::App) -> gpui::FocusHandle {
         self.fruit_dropdown.focus_handle(cx)
     }
 }
 
 impl DropdownStory {
-    fn new(cx: &mut WindowContext) -> View<Self> {
+    fn new(window: &mut Window, cx: &mut App) -> Entity<Self> {
         let countries = vec![
             Country::new("United States", "US"),
             Country::new("Canada", "CA"),
@@ -92,7 +92,7 @@ impl DropdownStory {
         ];
 
         let country_dropdown =
-            cx.new_view(|cx| Dropdown::new("dropdown-country", countries, Some(6), cx).cleanable());
+            cx.new(|cx| Dropdown::new("dropdown-country", countries, Some(6), cx).cleanable());
 
         let fruits = SearchableVec::new(vec![
             "Apple".into(),
@@ -103,14 +103,14 @@ impl DropdownStory {
             "Watermelon & This is a longlonglonglonglonglonglonglonglong title".into(),
             "Avocado".into(),
         ]);
-        let fruit_dropdown = cx.new_view(|cx| {
+        let fruit_dropdown = cx.new(|cx| {
             Dropdown::new("dropdown-fruits", fruits, None, cx)
                 .icon(IconName::Search)
                 .width(px(200.))
                 .menu_width(px(320.))
         });
 
-        cx.new_view(|cx| {
+        cx.new(|cx| {
             cx.subscribe(&country_dropdown, Self::on_dropdown_event)
                 .detach();
 
@@ -118,7 +118,7 @@ impl DropdownStory {
                 disabled: false,
                 country_dropdown,
                 fruit_dropdown,
-                simple_dropdown1: cx.new_view(|cx| {
+                simple_dropdown1: cx.new(|cx| {
                     Dropdown::new(
                         "string-list1",
                         vec!["QPUI".into(), "Iced".into(), "QT".into(), "Cocoa".into()],
@@ -129,7 +129,7 @@ impl DropdownStory {
                     .placeholder("UI")
                     .title_prefix("UI: ")
                 }),
-                simple_dropdown2: cx.new_view(|cx| {
+                simple_dropdown2: cx.new(|cx| {
                     Dropdown::new(
                         "string-list2",
                         SearchableVec::new(vec![
@@ -145,7 +145,7 @@ impl DropdownStory {
                     .placeholder("Language")
                     .title_prefix("Language: ")
                 }),
-                simple_dropdown3: cx.new_view(|cx| {
+                simple_dropdown3: cx.new(|cx| {
                     Dropdown::new("string-list3", Vec::<SharedString>::new(), None, cx)
                         .small()
                         .empty(|cx| {
@@ -156,7 +156,7 @@ impl DropdownStory {
                                 .child("No Data")
                         })
                 }),
-                disabled_dropdown: cx.new_view(|cx| {
+                disabled_dropdown: cx.new(|cx| {
                     Dropdown::new("disabled-dropdown", Vec::<SharedString>::new(), None, cx)
                         .small()
                         .disabled(true)
@@ -165,32 +165,32 @@ impl DropdownStory {
         })
     }
 
-    pub fn view(cx: &mut WindowContext) -> View<Self> {
+    pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
         Self::new(cx)
     }
 
     fn on_dropdown_event(
         &mut self,
-        _: View<Dropdown<Vec<Country>>>,
+        _: Entity<Dropdown<Vec<Country>>>,
         event: &DropdownEvent<Vec<Country>>,
-        _cx: &mut ViewContext<Self>,
+        _window: &mut Window, _cx: &mut Context<Self>,
     ) {
         match event {
             DropdownEvent::Confirm(value) => println!("Selected country: {:?}", value),
         }
     }
 
-    fn on_key_tab(&mut self, _: &Tab, cx: &mut ViewContext<Self>) {
+    fn on_key_tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
         self.cycle_focus(true, cx);
         cx.notify();
     }
 
-    fn on_key_shift_tab(&mut self, _: &TabPrev, cx: &mut ViewContext<Self>) {
+    fn on_key_shift_tab(&mut self, _: &TabPrev, window: &mut Window, cx: &mut Context<Self>) {
         self.cycle_focus(false, cx);
         cx.notify();
     }
 
-    fn toggle_disabled(&mut self, disabled: bool, cx: &mut ViewContext<Self>) {
+    fn toggle_disabled(&mut self, disabled: bool, window: &mut Window, cx: &mut Context<Self>) {
         self.disabled = disabled;
         self.country_dropdown
             .update(cx, |this, _| this.set_disabled(disabled));
@@ -206,7 +206,7 @@ impl DropdownStory {
 }
 
 impl FocusableCycle for DropdownStory {
-    fn cycle_focus_handles(&self, cx: &mut WindowContext) -> Vec<gpui::FocusHandle>
+    fn cycle_focus_handles(&self, window: &mut Window, cx: &mut App) -> Vec<gpui::FocusHandle>
     where
         Self: Sized,
     {
@@ -221,7 +221,7 @@ impl FocusableCycle for DropdownStory {
 }
 
 impl Render for DropdownStory {
-    fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .key_context(CONTEXT)
             .on_action(cx.listener(Self::on_key_tab))

@@ -114,7 +114,7 @@ impl Sizable for Form {
 }
 
 impl FocusableCycle for Form {
-    fn cycle_focus_handles(&self, _: &mut WindowContext) -> Vec<FocusHandle>
+    fn cycle_focus_handles(&self, _window: &mut Window, _cx: &mut App) -> Vec<FocusHandle>
     where
         Self: Sized,
     {
@@ -127,7 +127,7 @@ impl FocusableCycle for Form {
 
 pub enum FieldBuilder {
     String(SharedString),
-    Element(Rc<dyn Fn(&mut WindowContext) -> AnyElement>),
+    Element(Rc<dyn Fn(&mut Window, &mut App) -> AnyElement>),
     View(AnyView),
 }
 
@@ -144,7 +144,7 @@ impl From<AnyView> for FieldBuilder {
 }
 
 impl RenderOnce for FieldBuilder {
-    fn render(self, cx: &mut WindowContext) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         match self {
             FieldBuilder::String(value) => value.into_any_element(),
             FieldBuilder::Element(builder) => builder(cx),
@@ -225,7 +225,7 @@ impl FormField {
     pub fn label_fn<F, E>(mut self, label: F) -> Self
     where
         E: IntoElement,
-        F: Fn(&mut WindowContext) -> E + 'static,
+        F: Fn(&mut Window, &mut App) -> E + 'static,
     {
         self.label = Some(FieldBuilder::Element(Rc::new(move |cx| {
             label(cx).into_any_element()
@@ -243,7 +243,7 @@ impl FormField {
     pub fn description_fn<F, E>(mut self, description: F) -> Self
     where
         E: IntoElement,
-        F: Fn(&mut WindowContext) -> E + 'static,
+        F: Fn(&mut Window, &mut App) -> E + 'static,
     {
         self.description = Some(FieldBuilder::Element(Rc::new(move |cx| {
             description(cx).into_any_element()
@@ -310,7 +310,7 @@ impl ParentElement for FormField {
 }
 
 impl RenderOnce for FormField {
-    fn render(self, cx: &mut WindowContext) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let layout = self.props.layout;
 
         let label_width = if layout.is_vertical() {
@@ -409,7 +409,7 @@ impl RenderOnce for FormField {
     }
 }
 impl RenderOnce for Form {
-    fn render(self, _: &mut WindowContext) -> impl IntoElement {
+    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
         let props = self.props;
 
         let gap = match props.size {

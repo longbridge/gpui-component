@@ -9,7 +9,7 @@ pub struct Loading;
 struct LoadingItem;
 
 impl RenderOnce for LoadingItem {
-    fn render(self, _: &mut gpui::WindowContext) -> impl IntoElement {
+    fn render(self, _window: &mut gpui::Window, _cx: &mut gpui::App) -> impl IntoElement {
         ListItem::new("skeleton").disabled(true).child(
             v_flex()
                 .gap_1p5()
@@ -21,7 +21,7 @@ impl RenderOnce for LoadingItem {
 }
 
 impl RenderOnce for Loading {
-    fn render(self, _: &mut gpui::WindowContext) -> impl IntoElement {
+    fn render(self, _window: &mut gpui::Window, _cx: &mut gpui::App) -> impl IntoElement {
         v_flex()
             .py_2p5()
             .gap_3()

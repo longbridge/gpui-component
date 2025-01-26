@@ -17,11 +17,11 @@ use ui::{
 pub struct ProgressStory {
     focus_handle: gpui::FocusHandle,
     value: f32,
-    slider1: View<Slider>,
+    slider1: Entity<Slider>,
     slider1_value: f32,
-    slider2: View<Slider>,
+    slider2: Entity<Slider>,
     slider2_value: f32,
-    slider_hsl: [View<Slider>; 4],
+    slider_hsl: [Entity<Slider>; 4],
     slider_hsl_value: Hsla,
     _subscritions: Vec<Subscription>,
 }
@@ -31,18 +31,18 @@ impl super::Story for ProgressStory {
         "Progress"
     }
 
-    fn new_view(cx: &mut WindowContext) -> View<impl gpui::FocusableView> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl gpui::Focusable> {
         Self::view(cx)
     }
 }
 
 impl ProgressStory {
-    pub fn view(cx: &mut WindowContext) -> View<Self> {
-        cx.new_view(Self::new)
+    pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
+        cx.new(Self::new)
     }
 
-    fn new(cx: &mut ViewContext<Self>) -> Self {
-        let slider1 = cx.new_view(|_| {
+    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let slider1 = cx.new(|_| {
             Slider::horizontal()
                 .min(-255.)
                 .max(255.)
@@ -50,9 +50,9 @@ impl ProgressStory {
                 .step(15.)
         });
 
-        let slider2 = cx.new_view(|_| Slider::horizontal().min(0.).max(5.).step(1.0));
+        let slider2 = cx.new(|_| Slider::horizontal().min(0.).max(5.).step(1.0));
         let slider_hsl = [
-            cx.new_view(|_| {
+            cx.new(|_| {
                 Slider::vertical()
                     .reverse()
                     .min(0.)
@@ -60,7 +60,7 @@ impl ProgressStory {
                     .step(0.01)
                     .default_value(0.)
             }),
-            cx.new_view(|_| {
+            cx.new(|_| {
                 Slider::vertical()
                     .reverse()
                     .min(0.)
@@ -68,7 +68,7 @@ impl ProgressStory {
                     .step(0.01)
                     .default_value(0.5)
             }),
-            cx.new_view(|_| {
+            cx.new(|_| {
                 Slider::vertical()
                     .reverse()
                     .min(0.)
@@ -76,7 +76,7 @@ impl ProgressStory {
                     .step(0.01)
                     .default_value(0.5)
             }),
-            cx.new_view(|_| {
+            cx.new(|_| {
                 Slider::vertical()
                     .reverse()
                     .min(0.)
@@ -138,14 +138,14 @@ impl ProgressStory {
     }
 }
 
-impl gpui::FocusableView for ProgressStory {
-    fn focus_handle(&self, _: &gpui::AppContext) -> gpui::FocusHandle {
+impl gpui::Focusable for ProgressStory {
+    fn focus_handle(&self, _: &gpui::App) -> gpui::FocusHandle {
         self.focus_handle.clone()
     }
 }
 
 impl Render for ProgressStory {
-    fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let rgb = SharedString::from(self.slider_hsl_value.to_hex());
 
         v_flex()

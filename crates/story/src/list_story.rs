@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use fake::Fake;
 use gpui::{Window, ModelContext, Model, 
-    actions, div, px, AppContext, ElementId, FocusHandle, FocusableView, InteractiveElement,
+    actions, div, px, AppContext, ElementId, FocusHandle, Focusable, InteractiveElement,
     IntoElement, ParentElement, Render, RenderOnce, SharedString, Styled, Subscription, Task,
     Timer,   VisualContext, 
 };
@@ -67,7 +67,7 @@ impl CompanyListItem {
 }
 
 impl RenderOnce for CompanyListItem {
-    fn render(self, cx: &mut WindowContext) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let text_color = if self.selected {
             cx.theme().accent_foreground
         } else {
@@ -154,7 +154,7 @@ struct CompanyListDelegate {
 impl ListDelegate for CompanyListDelegate {
     type Item = CompanyListItem;
 
-    fn items_count(&self, _: &AppContext) -> usize {
+    fn items_count(&self, _: &App) -> usize {
         self.matched_companies.len()
     }
 
@@ -189,11 +189,11 @@ impl ListDelegate for CompanyListDelegate {
         None
     }
 
-    fn loading(&self, _: &AppContext) -> bool {
+    fn loading(&self, _: &App) -> bool {
         self.loading
     }
 
-    fn can_load_more(&self, _: &AppContext) -> bool {
+    fn can_load_more(&self, _: &App) -> bool {
         return !self.loading && !self.is_eof;
     }
 
@@ -233,7 +233,7 @@ impl CompanyListDelegate {
 
 pub struct ListStory {
     focus_handle: FocusHandle,
-    company_list: View<List<CompanyListDelegate>>,
+    company_list: Entity<List<CompanyListDelegate>>,
     selected_company: Option<Company>,
     _subscriptions: Vec<Subscription>,
 }
@@ -247,17 +247,17 @@ impl super::Story for ListStory {
         "A list displays a series of items."
     }
 
-    fn new_view(cx: &mut WindowContext) -> View<impl gpui::FocusableView> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl gpui::Focusable> {
         Self::view(cx)
     }
 }
 
 impl ListStory {
-    pub fn view(cx: &mut WindowContext) -> View<Self> {
-        cx.new_view(Self::new)
+    pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
+        cx.new(Self::new)
     }
 
-    fn new(cx: &mut ViewContext<Self>) -> Self {
+    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let companies = (0..1_000)
             .map(|_| random_company())
             .collect::<Vec<Company>>();
@@ -272,7 +272,7 @@ impl ListStory {
             is_eof: false,
         };
 
-        let company_list = cx.new_view(|cx| List::new(delegate, cx));
+        let company_list = cx.new(|cx| List::new(delegate, cx));
         // company_list.update(cx, |list, cx| {
         //     list.set_selected_index(Some(3), cx);
         // });
@@ -320,7 +320,7 @@ impl ListStory {
         }
     }
 
-    fn selected_company(&mut self, _: &SelectedCompany, cx: &mut ViewContext<Self>) {
+    fn selected_company(&mut self, _: &SelectedCompany, window: &mut Window, cx: &mut Context<Self>) {
         let picker = self.company_list.read(cx);
         if let Some(company) = picker.delegate().selected_company() {
             self.selected_company = Some(company);
@@ -344,14 +344,14 @@ fn random_company() -> Company {
     .prepare()
 }
 
-impl FocusableView for ListStory {
-    fn focus_handle(&self, _cx: &gpui::AppContext) -> FocusHandle {
+impl Focusable for ListStory {
+    fn focus_handle(&self, _cx: &gpui::App) -> FocusHandle {
         self.focus_handle.clone()
     }
 }
 
 impl Render for ListStory {
-    fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::selected_company))
@@ -365,7 +365,7 @@ impl Render for ListStory {
                         Button::new("scroll-top")
                             .child("Scroll to Top")
                             .small()
-                            .on_click(cx.listener(|this, _, cx| {
+                            .on_click(cx.listener(|this, _, window, cx| {
                                 this.company_list.update(cx, |list, cx| {
                                     list.scroll_to_item(0, cx);
                                 })
@@ -375,7 +375,7 @@ impl Render for ListStory {
                         Button::new("scroll-bottom")
                             .child("Scroll to Bottom")
                             .small()
-                            .on_click(cx.listener(|this, _, cx| {
+                            .on_click(cx.listener(|this, _, window, cx| {
                                 this.company_list.update(cx, |list, cx| {
                                     list.scroll_to_item(list.delegate().items_count(cx) - 1, cx);
                                 })
@@ -385,7 +385,7 @@ impl Render for ListStory {
                         Button::new("scroll-to-selected")
                             .child("Scroll to Selected")
                             .small()
-                            .on_click(cx.listener(|this, _, cx| {
+                            .on_click(cx.listener(|this, _, window, cx| {
                                 this.company_list.update(cx, |list, cx| {
                                     if let Some(selected) = list.selected_index() {
                                         list.scroll_to_item(selected, cx);

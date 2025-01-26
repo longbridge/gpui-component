@@ -1,6 +1,6 @@
 use gpui::{Window, ModelContext, Model, 
     actions, div, impl_internal_actions, px, AppContext, Corner, DismissEvent, Element,
-    EventEmitter, FocusHandle, FocusableView, InteractiveElement, IntoElement, KeyBinding,
+    EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding,
     MouseButton, ParentElement as _, Render, SharedString, Styled as _,  
     VisualContext, 
 };
@@ -26,7 +26,7 @@ actions!(
 );
 impl_internal_actions!(popover_story, [Info]);
 
-pub fn init(cx: &mut AppContext) {
+pub fn init(cx: &mut App) {
     cx.bind_keys([
         #[cfg(target_os = "macos")]
         KeyBinding::new("cmd-c", Copy, None),
@@ -48,19 +48,19 @@ pub fn init(cx: &mut AppContext) {
 }
 
 struct Form {
-    input1: View<TextInput>,
+    input1: Entity<TextInput>,
 }
 
 impl Form {
-    fn new(cx: &mut WindowContext) -> View<Self> {
-        cx.new_view(|cx| Self {
-            input1: cx.new_view(TextInput::new),
+    fn new(window: &mut Window, cx: &mut App) -> Entity<Self> {
+        cx.new(|cx| Self {
+            input1: cx.new(TextInput::new),
         })
     }
 }
 
-impl FocusableView for Form {
-    fn focus_handle(&self, cx: &AppContext) -> FocusHandle {
+impl Focusable for Form {
+    fn focus_handle(&self, cx: &App) -> FocusHandle {
         self.input1.focus_handle(cx)
     }
 }
@@ -68,7 +68,7 @@ impl FocusableView for Form {
 impl EventEmitter<DismissEvent> for Form {}
 
 impl Render for Form {
-    fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .gap_4()
             .p_4()
@@ -79,14 +79,14 @@ impl Render for Form {
                 Button::new("submit")
                     .label("Submit")
                     .primary()
-                    .on_click(cx.listener(|_, _, cx| cx.emit(DismissEvent))),
+                    .on_click(cx.listener(|_, _, window, cx| cx.emit(DismissEvent))),
             )
     }
 }
 
 pub struct PopupStory {
     focus_handle: FocusHandle,
-    form: View<Form>,
+    form: Entity<Form>,
     message: String,
     window_mode: bool,
 }
@@ -100,17 +100,17 @@ impl super::Story for PopupStory {
         "A popup displays content on top of the main page."
     }
 
-    fn new_view(cx: &mut WindowContext) -> View<impl gpui::FocusableView> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl gpui::Focusable> {
         Self::view(cx)
     }
 }
 
 impl PopupStory {
-    pub fn view(cx: &mut WindowContext) -> View<Self> {
-        cx.new_view(Self::new)
+    pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
+        cx.new(Self::new)
     }
 
-    fn new(cx: &mut ViewContext<Self>) -> Self {
+    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let form = Form::new(cx);
         Self {
             form,
@@ -120,40 +120,40 @@ impl PopupStory {
         }
     }
 
-    fn on_copy(&mut self, _: &Copy, cx: &mut ViewContext<Self>) {
+    fn on_copy(&mut self, _: &Copy, window: &mut Window, cx: &mut Context<Self>) {
         self.message = "You have clicked copy".to_string();
         cx.notify()
     }
-    fn on_cut(&mut self, _: &Cut, cx: &mut ViewContext<Self>) {
+    fn on_cut(&mut self, _: &Cut, window: &mut Window, cx: &mut Context<Self>) {
         self.message = "You have clicked cut".to_string();
         cx.notify()
     }
-    fn on_paste(&mut self, _: &Paste, cx: &mut ViewContext<Self>) {
+    fn on_paste(&mut self, _: &Paste, window: &mut Window, cx: &mut Context<Self>) {
         self.message = "You have clicked paste".to_string();
         cx.notify()
     }
-    fn on_search_all(&mut self, _: &SearchAll, cx: &mut ViewContext<Self>) {
+    fn on_search_all(&mut self, _: &SearchAll, window: &mut Window, cx: &mut Context<Self>) {
         self.message = "You have clicked search all".to_string();
         cx.notify()
     }
-    fn on_toggle_window_mode(&mut self, _: &ToggleWindowMode, cx: &mut ViewContext<Self>) {
+    fn on_toggle_window_mode(&mut self, _: &ToggleWindowMode, window: &mut Window, cx: &mut Context<Self>) {
         self.window_mode = !self.window_mode;
         cx.notify()
     }
-    fn on_action_info(&mut self, info: &Info, cx: &mut ViewContext<Self>) {
+    fn on_action_info(&mut self, info: &Info, window: &mut Window, cx: &mut Context<Self>) {
         self.message = format!("You have clicked info: {}", info.0);
         cx.notify()
     }
 }
 
-impl FocusableView for PopupStory {
-    fn focus_handle(&self, _cx: &AppContext) -> FocusHandle {
+impl Focusable for PopupStory {
+    fn focus_handle(&self, _cx: &App) -> FocusHandle {
         self.focus_handle.clone()
     }
 }
 
 impl Render for PopupStory {
-    fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let form = self.form.clone();
         let window_mode = self.window_mode;
 
@@ -211,7 +211,7 @@ impl Render for PopupStory {
                             Popover::new("info-top-left")
                                 .trigger(Button::new("info-top-left").label("Top Left"))
                                 .content(|cx| {
-                                    cx.new_view(|cx| {
+                                    cx.new(|cx| {
                                         PopoverContent::new(cx, |_| {
                                             v_flex()
                                                 .gap_4()
@@ -236,7 +236,7 @@ impl Render for PopupStory {
                             .anchor(Corner::TopRight)
                             .trigger(Button::new("info-top-right").label("Top Right"))
                             .content(|cx| {
-                                cx.new_view(|cx| {
+                                cx.new(|cx| {
                                     PopoverContent::new(cx, |_| {
                                         v_flex()
                                             .gap_4()
@@ -332,7 +332,7 @@ impl Render for PopupStory {
                                 .mouse_button(MouseButton::Right)
                                 .trigger(Button::new("pop").label("Mouse Right Click").w(px(300.)))
                                 .content(|cx| {
-                                    cx.new_view(|cx| {
+                                    cx.new(|cx| {
                                         PopoverContent::new(cx, |cx| {
                                             v_flex()
                                                 .gap_2()

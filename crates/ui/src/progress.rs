@@ -26,7 +26,7 @@ impl Progress {
 }
 
 impl RenderOnce for Progress {
-    fn render(self, cx: &mut WindowContext) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let rounded = px(self.height / 2.);
         let relative_w = relative(match self.value {
             v if v < 0. => 0.,

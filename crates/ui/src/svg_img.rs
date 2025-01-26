@@ -89,7 +89,7 @@ impl Asset for Image {
 
     fn load(
         source: Self::Source,
-        cx: &mut AppContext,
+        cx: &mut App,
     ) -> impl std::future::Future<Output = Self::Output> + Send + 'static {
         let asset_source = cx.asset_source().clone();
 
@@ -203,11 +203,11 @@ impl Element for SvgImg {
     fn request_layout(
         &mut self,
         global_id: Option<&gpui::GlobalElementId>,
-        cx: &mut WindowContext,
+        window: &mut Window, cx: &mut App,
     ) -> (gpui::LayoutId, Self::RequestLayoutState) {
         let layout_id = self
             .interactivity
-            .request_layout(global_id, cx, |style, cx| cx.request_layout(style, None));
+            .request_layout(global_id, cx, |style, cx| window.request_layout(cx, style, None));
 
         (layout_id, ())
     }
@@ -217,7 +217,7 @@ impl Element for SvgImg {
         global_id: Option<&gpui::GlobalElementId>,
         bounds: gpui::Bounds<gpui::Pixels>,
         _: &mut Self::RequestLayoutState,
-        cx: &mut WindowContext,
+        window: &mut Window, cx: &mut App,
     ) -> Self::PrepaintState {
         self.interactivity
             .prepaint(global_id, bounds, bounds.size, cx, |_, _, hitbox, _| hitbox)
@@ -229,7 +229,7 @@ impl Element for SvgImg {
         bounds: gpui::Bounds<gpui::Pixels>,
         _: &mut Self::RequestLayoutState,
         hitbox: &mut Self::PrepaintState,
-        cx: &mut WindowContext,
+        window: &mut Window, cx: &mut App,
     ) {
         let source = self.source.clone();
 

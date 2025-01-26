@@ -4,7 +4,7 @@ pub trait InteractiveElementExt: InteractiveElement {
     /// Set the listener for a double click event.
     fn on_double_click(
         mut self,
-        listener: impl Fn(&ClickEvent, &mut WindowContext) + 'static,
+        listener: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
     ) -> Self
     where
         Self: Sized,

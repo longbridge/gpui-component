@@ -160,7 +160,7 @@ impl IconName {
         .into()
     }
 
-    /// Return the icon as a View<Icon>
+    /// Return the icon as a Entity<Icon>
     pub fn view(self, cx: &mut App) -> Entity<Icon> {
         Icon::build(self).view(cx)
     }
@@ -238,7 +238,7 @@ impl Icon {
 
     /// Create a new view for the icon
     pub fn view(self, cx: &mut App) -> Entity<Icon> {
-        cx.new_view(|_| self)
+        cx.new(|_| self)
     }
 
     pub fn transform(mut self, transformation: gpui::Transformation) -> Self {

@@ -9,7 +9,7 @@ use crate::{
 };
 use gpui::{Window, ModelContext, 
     actions, canvas, div, prelude::FluentBuilder, px, uniform_list, AppContext, Axis, Bounds, Div,
-    DragMoveEvent, Edges, Entity, EntityId, EventEmitter, FocusHandle, FocusableView,
+    DragMoveEvent, Edges, Entity, EntityId, EventEmitter, FocusHandle, Focusable,
     InteractiveElement, IntoElement, KeyBinding, ListSizingBehavior, MouseButton, MouseDownEvent,
     ParentElement, Pixels, Point, Render, ScrollHandle, ScrollStrategy, SharedString, Stateful,
     StatefulInteractiveElement as _, Styled, Task, UniformListScrollHandle, 
@@ -29,7 +29,7 @@ actions!(
     ]
 );
 
-pub fn init(cx: &mut AppContext) {
+pub fn init(cx: &mut App) {
     let context = Some("Table");
     cx.bind_keys([
         KeyBinding::new("escape", Cancel, context),
@@ -73,7 +73,7 @@ pub enum ColSort {
 }
 
 impl Render for DragCol {
-    fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .px_4()
             .py_1()
@@ -179,20 +179,20 @@ pub struct Table<D: TableDelegate> {
 #[allow(unused)]
 pub trait TableDelegate: Sized + 'static {
     /// Return the number of columns in the table.
-    fn cols_count(&self, cx: &AppContext) -> usize;
+    fn cols_count(&self, cx: &App) -> usize;
     /// Return the number of rows in the table.
-    fn rows_count(&self, cx: &AppContext) -> usize;
+    fn rows_count(&self, cx: &App) -> usize;
 
     /// Returns the name of the column at the given index.
-    fn col_name(&self, col_ix: usize, cx: &AppContext) -> SharedString;
+    fn col_name(&self, col_ix: usize, cx: &App) -> SharedString;
 
     /// Returns whether the column at the given index can be resized. Default: true
-    fn can_resize_col(&self, col_ix: usize, cx: &AppContext) -> bool {
+    fn can_resize_col(&self, col_ix: usize, cx: &App) -> bool {
         true
     }
 
     /// Returns whether the column at the given index can be selected. Default: false
-    fn can_select_col(&self, col_ix: usize, cx: &AppContext) -> bool {
+    fn can_select_col(&self, col_ix: usize, cx: &App) -> bool {
         false
     }
 
@@ -202,26 +202,26 @@ pub trait TableDelegate: Sized + 'static {
     /// This is only called when the table initializes.
     ///
     /// Default: 100px
-    fn col_width(&self, col_ix: usize, cx: &AppContext) -> Pixels {
+    fn col_width(&self, col_ix: usize, cx: &App) -> Pixels {
         px(100.)
     }
 
     /// Return the sort state of the column at the given index.
     ///
     /// This is only called when the table initializes.
-    fn col_sort(&self, col_ix: usize, cx: &AppContext) -> Option<ColSort> {
+    fn col_sort(&self, col_ix: usize, cx: &App) -> Option<ColSort> {
         None
     }
 
     /// Return the fixed side of the column at the given index.
-    fn col_fixed(&self, col_ix: usize, cx: &AppContext) -> Option<ColFixed> {
+    fn col_fixed(&self, col_ix: usize, cx: &App) -> Option<ColFixed> {
         None
     }
 
     /// Return the padding of the column at the given index to override the default padding.
     ///
     /// Return None, use the default padding.
-    fn col_padding(&self, col_ix: usize, cx: &AppContext) -> Option<Edges<Pixels>> {
+    fn col_padding(&self, col_ix: usize, cx: &App) -> Option<Edges<Pixels>> {
         None
     }
 
@@ -239,7 +239,7 @@ pub trait TableDelegate: Sized + 'static {
     }
 
     /// Render the context menu for the row at the given row index.
-    fn context_menu(&self, row_ix: usize, menu: PopupMenu, cx: &WindowContext) -> PopupMenu {
+    fn context_menu(&self, row_ix: usize, menu: PopupMenu, window: &Window, cx: &App) -> PopupMenu {
         menu
     }
 
@@ -256,12 +256,12 @@ pub trait TableDelegate: Sized + 'static {
     /// When the prev/next selection is out of the table bounds, the selection will loop to the other side.
     ///
     /// Default: true
-    fn can_loop_select(&self, _: &AppContext) -> bool {
+    fn can_loop_select(&self, _: &App) -> bool {
         true
     }
 
     /// Return true to enable column order change.
-    fn can_move_col(&self, col_ix: usize, cx: &AppContext) -> bool {
+    fn can_move_col(&self, col_ix: usize, cx: &App) -> bool {
         false
     }
 
@@ -280,7 +280,7 @@ pub trait TableDelegate: Sized + 'static {
     }
 
     /// Return true to show the loading view.
-    fn loading(&self, cx: &AppContext) -> bool {
+    fn loading(&self, cx: &App) -> bool {
         false
     }
 
@@ -294,7 +294,7 @@ pub trait TableDelegate: Sized + 'static {
     /// Return true to enable load more data when scrolling to the bottom.
     ///
     /// Default: true
-    fn can_load_more(&self, cx: &AppContext) -> bool {
+    fn can_load_more(&self, cx: &App) -> bool {
         true
     }
 
@@ -351,7 +351,7 @@ impl<D> Table<D>
 where
     D: TableDelegate,
 {
-    pub fn new(delegate: D, cx: &mut ViewContext<Self>) -> Self {
+    pub fn new(delegate: D, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let mut this = Self {
             focus_handle: cx.focus_handle(),
             delegate,
@@ -396,7 +396,7 @@ where
         self
     }
 
-    pub fn set_stripe(&mut self, stripe: bool, cx: &mut ViewContext<Self>) {
+    pub fn set_stripe(&mut self, stripe: bool, window: &mut Window, cx: &mut Context<Self>) {
         self.stripe = stripe;
         cx.notify();
     }
@@ -408,7 +408,7 @@ where
     }
 
     /// Set the size to the table.
-    pub fn set_size(&mut self, size: Size, cx: &mut ViewContext<Self>) {
+    pub fn set_size(&mut self, size: Size, window: &mut Window, cx: &mut Context<Self>) {
         self.size = size;
         cx.notify();
     }
@@ -429,11 +429,11 @@ where
     }
 
     /// When we update columns or rows, we need to refresh the table.
-    pub fn refresh(&mut self, cx: &mut ViewContext<Self>) {
+    pub fn refresh(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.prepare_col_groups(cx);
     }
 
-    fn prepare_col_groups(&mut self, cx: &mut ViewContext<Self>) {
+    fn prepare_col_groups(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.col_groups = (0..self.delegate.cols_count(cx))
             .map(|col_ix| ColGroup {
                 width: self.delegate.col_width(col_ix, cx),
@@ -452,7 +452,7 @@ where
     }
 
     /// Scroll to the row at the given index.
-    pub fn scroll_to_row(&mut self, row_ix: usize, cx: &mut ViewContext<Self>) {
+    pub fn scroll_to_row(&mut self, row_ix: usize, window: &mut Window, cx: &mut Context<Self>) {
         self.vertical_scroll_handle
             .scroll_to_item(row_ix, ScrollStrategy::Top);
         cx.notify();
@@ -460,7 +460,7 @@ where
 
     // Scroll to the column at the given index.
     // TODO: Fix scroll to selected col, this was not working after fixed col.
-    // pub fn scroll_to_col(&mut self, col_ix: usize, cx: &mut ViewContext<Self>) {
+    // pub fn scroll_to_col(&mut self, col_ix: usize, window: &mut Window, cx: &mut Context<Self>) {
     //     self.horizontal_scroll_handle.scroll_to_item(col_ix);
     //     cx.notify();
     // }
@@ -471,7 +471,7 @@ where
     }
 
     /// Sets the selected row to the given index.
-    pub fn set_selected_row(&mut self, row_ix: usize, cx: &mut ViewContext<Self>) {
+    pub fn set_selected_row(&mut self, row_ix: usize, window: &mut Window, cx: &mut Context<Self>) {
         self.selection_state = SelectionState::Row;
         self.right_clicked_row = None;
         self.selected_row = Some(row_ix);
@@ -489,7 +489,7 @@ where
     }
 
     /// Sets the selected col to the given index.
-    pub fn set_selected_col(&mut self, col_ix: usize, cx: &mut ViewContext<Self>) {
+    pub fn set_selected_col(&mut self, col_ix: usize, window: &mut Window, cx: &mut Context<Self>) {
         self.selection_state = SelectionState::Column;
         self.selected_col = Some(col_ix);
         if let Some(_col_ix) = self.selected_col {
@@ -503,7 +503,7 @@ where
     }
 
     /// Clear the selection of the table.
-    pub fn clear_selection(&mut self, cx: &mut ViewContext<Self>) {
+    pub fn clear_selection(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.selection_state = SelectionState::Row;
         self.selected_row = None;
         self.selected_col = None;
@@ -515,7 +515,7 @@ where
         &self.visible_range
     }
 
-    fn on_row_click(&mut self, ev: &MouseDownEvent, row_ix: usize, cx: &mut ViewContext<Self>) {
+    fn on_row_click(&mut self, ev: &MouseDownEvent, row_ix: usize, window: &mut Window, cx: &mut Context<Self>) {
         if ev.button == MouseButton::Right {
             self.right_clicked_row = Some(row_ix);
         } else {
@@ -527,7 +527,7 @@ where
         }
     }
 
-    fn on_col_head_click(&mut self, col_ix: usize, cx: &mut ViewContext<Self>) {
+    fn on_col_head_click(&mut self, col_ix: usize, window: &mut Window, cx: &mut Context<Self>) {
         if !self.delegate.can_select_col(col_ix, cx) {
             return;
         }
@@ -535,11 +535,11 @@ where
         self.set_selected_col(col_ix, cx)
     }
 
-    fn action_cancel(&mut self, _: &Cancel, cx: &mut ViewContext<Self>) {
+    fn action_cancel(&mut self, _: &Cancel, window: &mut Window, cx: &mut Context<Self>) {
         self.clear_selection(cx);
     }
 
-    fn action_select_prev(&mut self, _: &SelectPrev, cx: &mut ViewContext<Self>) {
+    fn action_select_prev(&mut self, _: &SelectPrev, window: &mut Window, cx: &mut Context<Self>) {
         let mut selected_row = self.selected_row.unwrap_or(0);
         let rows_count = self.delegate.rows_count(cx);
         if selected_row > 0 {
@@ -553,7 +553,7 @@ where
         self.set_selected_row(selected_row, cx);
     }
 
-    fn action_select_next(&mut self, _: &SelectNext, cx: &mut ViewContext<Self>) {
+    fn action_select_next(&mut self, _: &SelectNext, window: &mut Window, cx: &mut Context<Self>) {
         let mut selected_row = self.selected_row.unwrap_or(0);
         if selected_row < self.delegate.rows_count(cx) - 1 {
             selected_row += 1;
@@ -566,7 +566,7 @@ where
         self.set_selected_row(selected_row, cx);
     }
 
-    fn action_select_prev_col(&mut self, _: &SelectPrevColumn, cx: &mut ViewContext<Self>) {
+    fn action_select_prev_col(&mut self, _: &SelectPrevColumn, window: &mut Window, cx: &mut Context<Self>) {
         let mut selected_col = self.selected_col.unwrap_or(0);
         let cols_count = self.delegate.cols_count(cx);
         if selected_col > 0 {
@@ -579,7 +579,7 @@ where
         self.set_selected_col(selected_col, cx);
     }
 
-    fn action_select_next_col(&mut self, _: &SelectNextColumn, cx: &mut ViewContext<Self>) {
+    fn action_select_next_col(&mut self, _: &SelectNextColumn, window: &mut Window, cx: &mut Context<Self>) {
         let mut selected_col = self.selected_col.unwrap_or(0);
         if selected_col < self.delegate.cols_count(cx) - 1 {
             selected_col += 1;
@@ -597,7 +597,7 @@ where
         &mut self,
         pos: Point<Pixels>,
         col_group: ColGroup,
-        _: &mut ViewContext<Self>,
+        _window: &mut Window, _cx: &mut Context<Self>,
     ) {
         let mut offset = self.horizontal_scroll_handle.offset();
         let col_bounds = col_group.bounds;
@@ -614,7 +614,7 @@ where
 
     /// The `ix`` is the index of the col to resize,
     /// and the `size` is the new size for the col.
-    fn resize_cols(&mut self, ix: usize, size: Pixels, cx: &mut ViewContext<Self>) {
+    fn resize_cols(&mut self, ix: usize, size: Pixels, window: &mut Window, cx: &mut Context<Self>) {
         const MIN_WIDTH: Pixels = px(10.0);
         const MAX_WIDTH: Pixels = px(1200.0);
 
@@ -643,7 +643,7 @@ where
         cx.notify();
     }
 
-    fn perform_sort(&mut self, col_ix: usize, cx: &mut ViewContext<Self>) {
+    fn perform_sort(&mut self, col_ix: usize, window: &mut Window, cx: &mut Context<Self>) {
         let sort = self.col_groups.get(col_ix).and_then(|g| g.sort);
         if sort.is_none() {
             return;
@@ -671,7 +671,7 @@ where
         cx.notify();
     }
 
-    fn move_col(&mut self, col_ix: usize, to_ix: usize, cx: &mut ViewContext<Self>) {
+    fn move_col(&mut self, col_ix: usize, to_ix: usize, window: &mut Window, cx: &mut Context<Self>) {
         if col_ix == to_ix {
             return;
         }
@@ -689,7 +689,7 @@ where
         &mut self,
         rows_count: usize,
         visible_end: usize,
-        cx: &mut ViewContext<Self>,
+        window: &mut Window, cx: &mut Context<Self>,
     ) {
         let threshold = self.delegate.load_more_threshold();
         // Securely handle subtract logic to prevent attempt to subtract with overflow
@@ -712,7 +712,7 @@ where
         &mut self,
         visible_range: Range<usize>,
         axis: Axis,
-        cx: &mut ViewContext<Self>,
+        window: &mut Window, cx: &mut Context<Self>,
     ) {
         // Skip when visible range is only 1 item.
         // The visual_list will use first item to measure.
@@ -754,7 +754,7 @@ where
     }
 
     #[inline]
-    fn render_cell(&self, col_ix: usize, _cx: &mut ViewContext<Self>) -> Div {
+    fn render_cell(&self, col_ix: usize, _window: &mut Window, _cx: &mut Context<Self>) -> Div {
         let Some(col_group) = self.col_groups.get(col_ix) else {
             return div();
         };
@@ -780,7 +780,7 @@ where
     }
 
     /// Show Column selection style, when the column is selected and the selection state is Column.
-    fn render_col_wrap(&self, col_ix: usize, cx: &mut ViewContext<Self>) -> Div {
+    fn render_col_wrap(&self, col_ix: usize, window: &mut Window, cx: &mut Context<Self>) -> Div {
         let el = h_flex().h_full();
 
         if self.delegate().can_select_col(col_ix, cx)
@@ -793,7 +793,7 @@ where
         }
     }
 
-    fn render_vertical_scrollbar(&self, cx: &mut ViewContext<Self>) -> Option<impl IntoElement> {
+    fn render_vertical_scrollbar(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<impl IntoElement> {
         let state = self.vertical_scrollbar_state.clone();
 
         Some(
@@ -804,14 +804,14 @@ where
                 .right_0()
                 .bottom_0()
                 .child(Scrollbar::uniform_scroll(
-                    cx.view().entity_id(),
+                    cx.model().entity_id(),
                     state,
                     self.vertical_scroll_handle.clone(),
                 )),
         )
     }
 
-    fn render_horizontal_scrollbar(&self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render_horizontal_scrollbar(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let state = self.horizontal_scrollbar_state.clone();
 
         div()
@@ -822,14 +822,14 @@ where
             .bottom_0()
             .size_full()
             .child(Scrollbar::horizontal(
-                cx.view().entity_id(),
+                cx.model().entity_id(),
                 state,
                 self.horizontal_scroll_handle.clone(),
                 self.head_content_bounds().size,
             ))
     }
 
-    fn render_resize_handle(&self, ix: usize, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render_resize_handle(&self, ix: usize, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         const HANDLE_SIZE: Pixels = px(2.);
 
         if !self.delegate.can_resize_col(ix, cx) {
@@ -886,7 +886,7 @@ where
             }))
             .on_drag(ResizeCol((cx.entity_id(), ix)), |drag, _, window, cx| {
                 cx.stop_propagation();
-                cx.new_view(|_| drag.clone())
+                cx.new(|_| drag.clone())
             })
             .on_mouse_up_out(
                 MouseButton::Left,
@@ -909,7 +909,7 @@ where
         &self,
         col_ix: usize,
         col_group: &ColGroup,
-        cx: &mut ViewContext<Self>,
+        window: &mut Window, cx: &mut Context<Self>,
     ) -> Option<impl IntoElement> {
         let Some(sort) = col_group.sort else {
             return None;
@@ -946,7 +946,7 @@ where
     /// The children must be one by one items.
     /// Because the horizontal scroll handle will use the child_item_bounds to
     /// calculate the item position for itself's `scroll_to_item` method.
-    fn render_th(&self, col_ix: usize, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render_th(&self, col_ix: usize, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let entity_id = cx.entity_id();
         let col_group = self.col_groups.get(col_ix).expect("BUG: invalid col index");
         let moveable = self.delegate.can_move_col(col_ix, cx);
@@ -959,7 +959,7 @@ where
                     .id(("col-header", col_ix))
                     .on_mouse_down(
                         MouseButton::Left,
-                        cx.listener(move |this, _, cx| {
+                        cx.listener(move |this, _, window, cx| {
                             this.on_col_head_click(col_ix, cx);
                         }),
                     )
@@ -987,7 +987,7 @@ where
                             },
                             |drag, _, window, cx| {
                                 cx.stop_propagation();
-                                cx.new_view(|_| drag.clone())
+                                cx.new(|_| drag.clone())
                             },
                         )
                         .drag_over::<DragCol>(|this, _, window, cx| {
@@ -1012,7 +1012,7 @@ where
             .child(self.render_resize_handle(col_ix, cx))
             // to save the bounds of this col.
             .child({
-                let view = cx.view().clone();
+                let view = cx.model().clone();
                 canvas(
                     move |bounds, window, cx| view.update(cx, |r, _| r.col_groups[col_ix].bounds = bounds),
                     |_, _, _, _| {},
@@ -1025,9 +1025,9 @@ where
     fn render_table_head(
         &mut self,
         left_cols_count: usize,
-        cx: &mut ViewContext<Self>,
+        window: &mut Window, cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let view = cx.view().clone();
+        let view = cx.model().clone();
         let horizontal_scroll_handle = self.horizontal_scroll_handle.clone();
 
         h_flex()
@@ -1119,12 +1119,12 @@ where
         left_cols_count: usize,
         col_sizes: Rc<Vec<gpui::Size<Pixels>>>,
         cols_count: usize,
-        cx: &mut ViewContext<Self>,
+        window: &mut Window, cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let horizontal_scroll_handle = self.horizontal_scroll_handle.clone();
         let is_stripe_row = self.stripe && row_ix % 2 != 0;
         let is_selected = self.selected_row == Some(row_ix);
-        let view = cx.view().clone();
+        let view = cx.model().clone();
 
         if row_ix < rows_count {
             self.delegate
@@ -1316,7 +1316,7 @@ where
         &mut self,
         row_ix: usize,
         col_ix: usize,
-        cx: &mut ViewContext<Self>,
+        window: &mut Window, cx: &mut Context<Self>,
     ) -> impl IntoElement {
         if !crate::measure_enable() {
             return self
@@ -1331,7 +1331,7 @@ where
         el.into_any_element()
     }
 
-    fn measure(&mut self, _: &mut ViewContext<Self>) {
+    fn measure(&mut self, _window: &mut Window, _cx: &mut Context<Self>) {
         if !crate::measure_enable() {
             return;
         }
@@ -1363,11 +1363,11 @@ where
         self
     }
 }
-impl<D> FocusableView for Table<D>
+impl<D> Focusable for Table<D>
 where
     D: TableDelegate,
 {
-    fn focus_handle(&self, _cx: &gpui::AppContext) -> FocusHandle {
+    fn focus_handle(&self, _cx: &gpui::App) -> FocusHandle {
         self.focus_handle.clone()
     }
 }
@@ -1377,10 +1377,10 @@ impl<D> Render for Table<D>
 where
     D: TableDelegate,
 {
-    fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.measure(cx);
 
-        let view = cx.view().clone();
+        let view = cx.model().clone();
         let vertical_scroll_handle = self.vertical_scroll_handle.clone();
         let horizontal_scroll_handle = self.horizontal_scroll_handle.clone();
         let cols_count: usize = self.delegate.cols_count(cx);
@@ -1479,7 +1479,7 @@ where
                 }
             });
 
-        let view = cx.view().clone();
+        let view = cx.model().clone();
         div()
             .size_full()
             .when(self.border, |this| {
@@ -1492,12 +1492,12 @@ where
             .when(!loading, |this| {
                 this.child(inner_table)
                     .child(ScrollableMask::new(
-                        cx.view().entity_id(),
+                        cx.model().entity_id(),
                         Axis::Horizontal,
                         &horizontal_scroll_handle,
                     ))
                     .when(self.right_clicked_row.is_some(), |this| {
-                        this.on_mouse_down_out(cx.listener(|this, _, cx| {
+                        this.on_mouse_down_out(cx.listener(|this, _, window, cx| {
                             this.right_clicked_row = None;
                             cx.notify();
                         }))

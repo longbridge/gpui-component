@@ -18,7 +18,7 @@ pub struct Accordion {
     bordered: bool,
     disabled: bool,
     children: Vec<AccordionItem>,
-    on_toggle_click: Option<Arc<dyn Fn(&[usize], &mut WindowContext) + Send + Sync>>,
+    on_toggle_click: Option<Arc<dyn Fn(&[usize], &mut Window, &mut App) + Send + Sync>>,
 }
 
 impl Accordion {
@@ -64,7 +64,7 @@ impl Accordion {
     /// The first argument `Vec<usize>` is the indices of the open accordions.
     pub fn on_toggle_click(
         mut self,
-        on_toggle_click: impl Fn(&[usize], &mut WindowContext) + Send + Sync + 'static,
+        on_toggle_click: impl Fn(&[usize], &mut Window, &mut App) + Send + Sync + 'static,
     ) -> Self {
         self.on_toggle_click = Some(Arc::new(on_toggle_click));
         self
@@ -79,7 +79,7 @@ impl Sizable for Accordion {
 }
 
 impl RenderOnce for Accordion {
-    fn render(self, _: &mut WindowContext) -> impl IntoElement {
+    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
         let mut open_ixs: Vec<usize> = Vec::new();
         let multiple = self.multiple;
         let state = Rc::new(Cell::new(None));
@@ -148,7 +148,7 @@ pub struct AccordionItem {
     size: Size,
     bordered: bool,
     disabled: bool,
-    on_toggle_click: Option<Arc<dyn Fn(&bool, &mut WindowContext)>>,
+    on_toggle_click: Option<Arc<dyn Fn(&bool, &mut Window, &mut App)>>,
 }
 
 impl AccordionItem {
@@ -197,7 +197,7 @@ impl AccordionItem {
 
     fn on_toggle_click(
         mut self,
-        on_toggle_click: impl Fn(&bool, &mut WindowContext) + 'static,
+        on_toggle_click: impl Fn(&bool, &mut Window, &mut App) + 'static,
     ) -> Self {
         self.on_toggle_click = Some(Arc::new(on_toggle_click));
         self
@@ -212,7 +212,7 @@ impl Sizable for AccordionItem {
 }
 
 impl RenderOnce for AccordionItem {
-    fn render(self, cx: &mut WindowContext) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let text_size = match self.size {
             Size::XSmall => rems(0.875),
             Size::Small => rems(0.875),

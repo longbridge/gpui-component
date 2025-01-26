@@ -29,35 +29,35 @@ impl super::Story for TextStory {
         "The text render testing and examples"
     }
 
-    fn new_view(cx: &mut WindowContext) -> View<impl gpui::FocusableView> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl gpui::Focusable> {
         Self::view(cx)
     }
 }
 
 impl TextStory {
-    pub(crate) fn new(cx: &mut WindowContext) -> Self {
+    pub(crate) fn new(window: &mut Window, cx: &mut App) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
             masked: false,
         }
     }
 
-    pub fn view(cx: &mut WindowContext) -> View<Self> {
-        cx.new_view(|cx| Self::new(cx))
+    pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
+        cx.new(|cx| Self::new(cx))
     }
 
     #[allow(unused)]
-    fn on_click(checked: &bool, cx: &mut WindowContext) {
+    fn on_click(checked: &bool, window: &mut Window, cx: &mut App) {
         println!("Check value changed: {}", checked);
     }
 }
-impl gpui::FocusableView for TextStory {
-    fn focus_handle(&self, _: &gpui::AppContext) -> gpui::FocusHandle {
+impl gpui::Focusable for TextStory {
+    fn focus_handle(&self, _: &gpui::App) -> gpui::FocusHandle {
         self.focus_handle.clone()
     }
 }
 impl Render for TextStory {
-    fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .gap_6()
             .child(
@@ -99,7 +99,7 @@ impl Render for TextStory {
                                 .child(
                                     Link::new("link3")
                                         .child(h_flex().gap_1().child(IconName::GitHub).child("GitHub"))
-                                        .on_click(cx.listener(|_, _, cx| cx.open_url("https://google.com"))),
+                                        .on_click(cx.listener(|_, _, window, cx| cx.open_url("https://google.com"))),
                                 )
                                 .child(
                                     div().w(px(250.)).child(
@@ -119,7 +119,7 @@ impl Render for TextStory {
                                     Clipboard::new("clipboard1")
                                         .content(|_| Label::new("Click icon to copy"))
                                         .value_fn({
-                                            let view = cx.view().clone();
+                                            let view = cx.model().clone();
                                             move |cx| SharedString::from(format!("masked :{}", view.read(cx).masked))
                                         })
                                         .on_copied(|value, _| println!("Copied value: {}", value)),

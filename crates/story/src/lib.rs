@@ -31,7 +31,7 @@ pub use form_story::FormStory;
 
 use gpui::{
     actions, div, impl_internal_actions, prelude::FluentBuilder as _, px, size, AnyElement,
-    AnyView, App, AppContext, Bounds, Context as _, Div, EventEmitter, FocusableView, Global, Hsla,
+    AnyView, App, AppContext, Bounds, Context as _, Div, EventEmitter, Focusable, Global, Hsla,
     InteractiveElement, IntoElement, Model, ModelContext, ParentElement, Render, SharedString,
     StatefulInteractiveElement, Styled as _, VisualContext, Window, WindowBounds, WindowKind,
     WindowOptions,
@@ -82,29 +82,29 @@ actions!(story, [Quit, Open, CloseWindow]);
 const PANEL_NAME: &str = "StoryContainer";
 
 pub struct AppState {
-    pub invisible_panels: Model<Vec<SharedString>>,
+    pub invisible_panels: Entity<Vec<SharedString>>,
 }
 impl AppState {
-    fn init(cx: &mut AppContext) {
+    fn init(cx: &mut App) {
         let state = Self {
-            invisible_panels: cx.new_model(|_| Vec::new()),
+            invisible_panels: cx.new(|_| Vec::new()),
         };
         cx.set_global::<AppState>(state);
     }
 
-    pub fn global(cx: &AppContext) -> &Self {
+    pub fn global(cx: &App) -> &Self {
         cx.global::<Self>()
     }
 
-    pub fn global_mut(cx: &mut AppContext) -> &mut Self {
+    pub fn global_mut(cx: &mut App) -> &mut Self {
         cx.global_mut::<Self>()
     }
 }
 
-pub fn create_new_window<F, E>(title: &str, crate_view_fn: F, cx: &mut AppContext)
+pub fn create_new_window<F, E>(title: &str, crate_view_fn: F, cx: &mut App)
 where
     E: Into<AnyView>,
-    F: FnOnce(&mut WindowContext) -> E + Send + 'static,
+    F: FnOnce(&mut Window, &mut App) -> E + Send + 'static,
 {
     let mut window_size = size(px(1600.0), px(1200.0));
     if let Some(display) = cx.primary_display() {
@@ -134,8 +134,8 @@ where
         let window = cx
             .open_window(options, |cx| {
                 let view = crate_view_fn(cx);
-                let root = cx.new_view(|cx| StoryRoot::new(title.clone(), view, cx));
-                cx.new_view(|cx| Root::new(root.into(), cx))
+                let root = cx.new(|cx| StoryRoot::new(title.clone(), view, cx));
+                cx.new(|cx| Root::new(root.into(), cx))
             })
             .expect("failed to open window");
 
@@ -152,7 +152,7 @@ where
 }
 
 struct StoryRoot {
-    title_bar: View<AppTitleBar>,
+    title_bar: Entity<AppTitleBar>,
     view: AnyView,
 }
 
@@ -160,9 +160,9 @@ impl StoryRoot {
     pub fn new(
         title: impl Into<SharedString>,
         view: impl Into<AnyView>,
-        cx: &mut ViewContext<Self>,
+        window: &mut Window, cx: &mut Context<Self>,
     ) -> Self {
-        let title_bar = cx.new_view(|cx| AppTitleBar::new(title, cx));
+        let title_bar = cx.new(|cx| AppTitleBar::new(title, cx));
         Self {
             title_bar,
             view: view.into(),
@@ -171,7 +171,7 @@ impl StoryRoot {
 }
 
 impl Render for StoryRoot {
-    fn render(&mut self, _: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .size_full()
             .child(self.title_bar.clone())
@@ -181,7 +181,7 @@ impl Render for StoryRoot {
 
 impl Global for AppState {}
 
-pub fn init(cx: &mut AppContext) {
+pub fn init(cx: &mut App) {
     ui::init(cx);
     AppState::init(cx);
     input_story::init(cx);
@@ -196,7 +196,7 @@ pub fn init(cx: &mut AppContext) {
             }
         };
 
-        let view = cx.new_view(|cx| {
+        let view = cx.new(|cx| {
             let (title, description, closable, zoomable, story) = story_state.to_story(cx);
             let mut container = StoryContainer::new(cx).story(story, story_state.story_klass);
 
@@ -217,7 +217,7 @@ pub fn init(cx: &mut AppContext) {
 
 actions!(story, [ShowPanelInfo]);
 
-pub fn section(title: impl IntoElement, cx: &WindowContext) -> Div {
+pub fn section(title: impl IntoElement, window: &Window, cx: &App) -> Div {
     use ui::ActiveTheme;
     let theme = cx.theme();
 
@@ -252,7 +252,7 @@ pub enum ContainerEvent {
     Close,
 }
 
-pub trait Story: FocusableView {
+pub trait Story: Focusable {
     fn klass() -> &'static str {
         std::any::type_name::<Self>().split("::").last().unwrap()
     }
@@ -270,13 +270,13 @@ pub trait Story: FocusableView {
     fn title_bg() -> Option<Hsla> {
         None
     }
-    fn new_view(cx: &mut WindowContext) -> View<impl FocusableView>;
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Focusable>;
 }
 
 impl EventEmitter<ContainerEvent> for StoryContainer {}
 
 impl StoryContainer {
-    pub fn new(cx: &mut WindowContext) -> Self {
+    pub fn new(window: &mut Window, cx: &mut App) -> Self {
         let focus_handle = cx.focus_handle();
 
         Self {
@@ -293,14 +293,14 @@ impl StoryContainer {
         }
     }
 
-    pub fn panel<S: Story>(cx: &mut WindowContext) -> View<Self> {
+    pub fn panel<S: Story>(window: &mut Window, cx: &mut App) -> Entity<Self> {
         let name = S::title();
         let description = S::description();
         let story = S::new_view(cx);
         let story_klass = S::klass();
         let focus_handle = story.focus_handle(cx);
 
-        let view = cx.new_view(|cx| {
+        let view = cx.new(|cx| {
             let mut story = Self::new(cx).story(story.into(), story_klass);
             story.focus_handle = focus_handle;
             story.closable = S::closable();
@@ -330,7 +330,7 @@ impl StoryContainer {
         self
     }
 
-    fn on_action_panel_info(&mut self, _: &ShowPanelInfo, cx: &mut ViewContext<Self>) {
+    fn on_action_panel_info(&mut self, _: &ShowPanelInfo, window: &mut Window, cx: &mut Context<Self>) {
         struct Info;
         let note = Notification::new(format!("You have clicked panel info on: {}", self.name))
             .id::<Info>();
@@ -356,7 +356,7 @@ impl StoryState {
 
     fn to_story(
         &self,
-        cx: &mut WindowContext,
+        window: &mut Window, cx: &mut App,
     ) -> (
         &'static str,
         &'static str,
@@ -413,7 +413,7 @@ impl Panel for StoryContainer {
         self.name.clone().into_any_element()
     }
 
-    fn title_style(&self, cx: &AppContext) -> Option<TitleStyle> {
+    fn title_style(&self, cx: &App) -> Option<TitleStyle> {
         if let Some(bg) = self.title_bg {
             Some(TitleStyle {
                 background: bg,
@@ -424,26 +424,26 @@ impl Panel for StoryContainer {
         }
     }
 
-    fn closable(&self, _cx: &AppContext) -> bool {
+    fn closable(&self, _cx: &App) -> bool {
         self.closable
     }
 
-    fn zoomable(&self, _cx: &AppContext) -> Option<PanelControl> {
+    fn zoomable(&self, _cx: &App) -> Option<PanelControl> {
         self.zoomable
     }
 
-    fn visible(&self, cx: &AppContext) -> bool {
+    fn visible(&self, cx: &App) -> bool {
         !AppState::global(cx)
             .invisible_panels
             .read(cx)
             .contains(&self.name)
     }
 
-    fn set_zoomed(&self, zoomed: bool, _cx: &ViewContext<Self>) {
+    fn set_zoomed(&self, zoomed: bool, _window: &Window, _cx: &Context<Self>) {
         println!("panel: {} zoomed: {}", self.name, zoomed);
     }
 
-    fn set_active(&self, active: bool, _cx: &ViewContext<Self>) {
+    fn set_active(&self, active: bool, _window: &Window, _cx: &Context<Self>) {
         println!("panel: {} active: {}", self.name, active);
     }
 
@@ -452,7 +452,7 @@ impl Panel for StoryContainer {
             .menu("Info", Box::new(ShowPanelInfo))
     }
 
-    fn toolbar_buttons(&self, _cx: &mut ViewContext<Self>) -> Option<Vec<Button>> {
+    fn toolbar_buttons(&self, _window: &mut Window, _cx: &mut Context<Self>) -> Option<Vec<Button>> {
         Some(vec![
             Button::new("info").icon(IconName::Info).on_click(|_, cx| {
                 cx.push_notification("You have clicked info button");
@@ -465,7 +465,7 @@ impl Panel for StoryContainer {
         ])
     }
 
-    fn dump(&self, _cx: &AppContext) -> PanelState {
+    fn dump(&self, _cx: &App) -> PanelState {
         let mut state = PanelState::new(self);
         let story_state = StoryState {
             story_klass: self.story_klass.clone().unwrap(),
@@ -476,13 +476,13 @@ impl Panel for StoryContainer {
 }
 
 impl EventEmitter<PanelEvent> for StoryContainer {}
-impl FocusableView for StoryContainer {
-    fn focus_handle(&self, _: &AppContext) -> gpui::FocusHandle {
+impl Focusable for StoryContainer {
+    fn focus_handle(&self, _: &App) -> gpui::FocusHandle {
         self.focus_handle.clone()
     }
 }
 impl Render for StoryContainer {
-    fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .id("story-container")
             .size_full()

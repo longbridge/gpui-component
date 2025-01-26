@@ -55,7 +55,7 @@ impl Styled for SidebarHeader {
 }
 impl PopupMenuExt for SidebarHeader {}
 impl RenderOnce for SidebarHeader {
-    fn render(self, cx: &mut gpui::WindowContext) -> impl gpui::IntoElement {
+    fn render(self, window: &mut gpui::Window, cx: &mut gpui::App) -> impl gpui::IntoElement {
         h_flex()
             .id(self.id)
             .gap_2()

@@ -37,7 +37,7 @@ impl InteractiveElement for ResizeHandle {
 impl StatefulInteractiveElement for ResizeHandle {}
 
 impl RenderOnce for ResizeHandle {
-    fn render(self, cx: &mut WindowContext) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let neg_offset = -HANDLE_PADDING;
 
         self.base

@@ -25,7 +25,7 @@ impl SidebarMenu {
         label: impl Into<SharedString>,
         icon: Option<Icon>,
         active: bool,
-        handler: impl Fn(&ClickEvent, &mut WindowContext) + 'static,
+        handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
     ) -> Self {
         self.items.push(SidebarMenuItem::Item {
             icon,
@@ -43,7 +43,7 @@ impl SidebarMenu {
         icon: Option<Icon>,
         open: bool,
         items: impl FnOnce(SidebarMenu) -> Self,
-        handler: impl Fn(&ClickEvent, &mut WindowContext) + 'static,
+        handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
     ) -> Self {
         let menu = SidebarMenu::new();
         let menu = items(menu);
@@ -69,7 +69,7 @@ impl Collapsible for SidebarMenu {
     }
 }
 impl RenderOnce for SidebarMenu {
-    fn render(self, _: &mut WindowContext) -> impl IntoElement {
+    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
         v_flex()
             .gap_2()
             .children(self.items.into_iter().map(|mut item| {
@@ -90,14 +90,14 @@ enum SidebarMenuItem {
     Item {
         icon: Option<Icon>,
         label: SharedString,
-        handler: Rc<dyn Fn(&ClickEvent, &mut WindowContext)>,
+        handler: Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>,
         active: bool,
         is_collapsed: bool,
     },
     Submenu {
         icon: Option<Icon>,
         label: SharedString,
-        handler: Rc<dyn Fn(&ClickEvent, &mut WindowContext)>,
+        handler: Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>,
         items: Vec<SidebarMenuItem>,
         is_open: bool,
         is_collapsed: bool,
@@ -151,7 +151,7 @@ impl SidebarMenuItem {
         is_submenu: bool,
         is_active: bool,
         is_open: bool,
-        cx: &WindowContext,
+        window: &Window, cx: &App,
     ) -> impl IntoElement {
         let handler = match &self {
             SidebarMenuItem::Item { handler, .. } => Some(handler.clone()),
@@ -200,7 +200,7 @@ impl SidebarMenuItem {
 }
 
 impl RenderOnce for SidebarMenuItem {
-    fn render(self, cx: &mut WindowContext) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let is_submenu = self.is_submenu();
         let is_active = self.is_active();
         let is_open = self.is_open();

@@ -43,7 +43,7 @@ impl Sizable for Indicator {
 }
 
 impl RenderOnce for Indicator {
-    fn render(self, _: &mut WindowContext) -> impl IntoElement {
+    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
         div()
             .child(
                 self.icon

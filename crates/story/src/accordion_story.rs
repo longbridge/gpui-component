@@ -24,17 +24,17 @@ impl super::Story for AccordionStory {
         "Accordion"
     }
 
-    fn new_view(cx: &mut WindowContext) -> Entity<impl gpui::FocusableView> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl gpui::Focusable> {
         Self::view(cx)
     }
 }
 
 impl AccordionStory {
-    pub fn view(cx: &mut WindowContext) -> Entity<Self> {
-        cx.new_view(Self::new)
+    pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
+        cx.new(Self::new)
     }
 
-    fn new(cx: &mut ViewContext<Self>) -> Self {
+    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
             bordered: true,
             open_ixs: Vec::new(),
@@ -44,25 +44,25 @@ impl AccordionStory {
         }
     }
 
-    fn toggle_accordion(&mut self, open_ixs: Vec<usize>, cx: &mut ViewContext<Self>) {
+    fn toggle_accordion(&mut self, open_ixs: Vec<usize>, window: &mut Window, cx: &mut Context<Self>) {
         self.open_ixs = open_ixs;
         cx.notify();
     }
 
-    fn set_size(&mut self, size: Size, cx: &mut ViewContext<Self>) {
+    fn set_size(&mut self, size: Size, window: &mut Window, cx: &mut Context<Self>) {
         self.size = size;
         cx.notify();
     }
 }
 
-impl gpui::FocusableView for AccordionStory {
-    fn focus_handle(&self, _: &gpui::AppContext) -> gpui::FocusHandle {
+impl gpui::Focusable for AccordionStory {
+    fn focus_handle(&self, _: &gpui::App) -> gpui::FocusHandle {
         self.focus_handle.clone()
     }
 }
 
 impl Render for AccordionStory {
-    fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .gap_3()
             .child(

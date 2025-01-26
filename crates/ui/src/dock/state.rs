@@ -1,5 +1,5 @@
 use gpui::{Window, Model,
-    point, px, size, AppContext, Axis, Bounds, Pixels,  VisualContext as _, WeakView,
+    point, px, size, AppContext, Axis, Bounds, Pixels,  VisualContext as _,
 
 };
 use itertools::Itertools as _;
@@ -36,7 +36,7 @@ pub struct DockState {
 }
 
 impl DockState {
-    pub fn new(dock: View<Dock>, cx: &AppContext) -> Self {
+    pub fn new(dock: Entity<Dock>, cx: &App) -> Self {
         let dock = dock.read(cx);
 
         Self {
@@ -48,9 +48,9 @@ impl DockState {
     }
 
     /// Convert the DockState to Dock
-    pub fn to_dock(&self, dock_area: WeakEntity<DockArea>, cx: &mut WindowContext) -> View<Dock> {
+    pub fn to_dock(&self, dock_area: WeakEntity<DockArea>, window: &mut Window, cx: &mut App) -> Entity<Dock> {
         let item = self.panel.to_item(dock_area.clone(), cx);
-        cx.new_view(|cx| {
+        cx.new(|cx| {
             Dock::from_state(
                 dock_area.clone(),
                 self.placement,
@@ -178,7 +178,7 @@ impl PanelState {
         self.children.push(panel);
     }
 
-    pub fn to_item(&self, dock_area: WeakEntity<DockArea>, cx: &mut WindowContext) -> DockItem {
+    pub fn to_item(&self, dock_area: WeakEntity<DockArea>, window: &mut Window, cx: &mut App) -> DockItem {
         let info = self.info.clone();
 
         let items: Vec<DockItem> = self
@@ -226,7 +226,7 @@ impl PanelState {
                 } else {
                     // Show an invalid panel if the panel is not registered.
                     Box::new(
-                        cx.new_view(|cx| InvalidPanel::new(&self.panel_name, self.clone(), cx)),
+                        cx.new(|cx| InvalidPanel::new(&self.panel_name, self.clone(), cx)),
                     )
                 };
 

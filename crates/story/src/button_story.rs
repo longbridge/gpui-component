@@ -1,5 +1,5 @@
 use gpui::{
-    actions, px, AppContext, ClickEvent, FocusableView, InteractiveElement, IntoElement, Model,
+    actions, px, AppContext, ClickEvent, Focusable, InteractiveElement, IntoElement, Model,
     ModelContext, ParentElement as _, Render, Styled as _, VisualContext as _, Window,
 };
 
@@ -25,8 +25,8 @@ pub struct ButtonStory {
 }
 
 impl ButtonStory {
-    pub fn view(cx: &mut WindowContext) -> Entity<Self> {
-        cx.new_view(|cx| Self {
+    pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
+        cx.new(|cx| Self {
             focus_handle: cx.focus_handle(),
             disabled: false,
             loading: false,
@@ -36,7 +36,7 @@ impl ButtonStory {
         })
     }
 
-    fn on_click(ev: &ClickEvent, _: &mut WindowContext) {
+    fn on_click(ev: &ClickEvent, _window: &mut Window, _cx: &mut App) {
         println!("Button clicked! {:?}", ev);
     }
 }
@@ -54,19 +54,19 @@ impl super::Story for ButtonStory {
         false
     }
 
-    fn new_view(cx: &mut WindowContext) -> Entity<impl gpui::FocusableView> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl gpui::Focusable> {
         Self::view(cx)
     }
 }
 
-impl FocusableView for ButtonStory {
-    fn focus_handle(&self, _: &gpui::AppContext) -> gpui::FocusHandle {
+impl Focusable for ButtonStory {
+    fn focus_handle(&self, _: &gpui::App) -> gpui::FocusHandle {
         self.focus_handle.clone()
     }
 }
 
 impl Render for ButtonStory {
-    fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let disabled = self.disabled;
         let loading = self.loading;
         let selected = self.selected;
@@ -123,11 +123,11 @@ impl Render for ButtonStory {
                         Checkbox::new("shadow-button")
                             .label("Shadow")
                             .checked(cx.theme().shadow)
-                            .on_click(cx.listener(|_, _, cx| {
+                            .on_click(cx.listener(|_, _, window, cx| {
                                 let mut theme = cx.theme().clone();
                                 theme.shadow = !theme.shadow;
                                 cx.set_global::<Theme>(theme);
-                                cx.refresh();
+                                window.refresh();
                             })),
                     ),
             )

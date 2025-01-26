@@ -289,15 +289,15 @@ impl StockTableDelegate {
 }
 
 impl TableDelegate for StockTableDelegate {
-    fn cols_count(&self, _: &AppContext) -> usize {
+    fn cols_count(&self, _: &App) -> usize {
         self.columns.len()
     }
 
-    fn rows_count(&self, _: &AppContext) -> usize {
+    fn rows_count(&self, _: &App) -> usize {
         self.stocks.len()
     }
 
-    fn col_name(&self, col_ix: usize, _: &AppContext) -> SharedString {
+    fn col_name(&self, col_ix: usize, _: &App) -> SharedString {
         if let Some(col) = self.columns.get(col_ix) {
             col.name.clone()
         } else {
@@ -305,7 +305,7 @@ impl TableDelegate for StockTableDelegate {
         }
     }
 
-    fn col_width(&self, col_ix: usize, _: &AppContext) -> Pixels {
+    fn col_width(&self, col_ix: usize, _: &App) -> Pixels {
         if col_ix < 10 {
             120.0.into()
         } else if col_ix < 20 {
@@ -315,7 +315,7 @@ impl TableDelegate for StockTableDelegate {
         }
     }
 
-    fn col_padding(&self, col_ix: usize, _: &AppContext) -> Option<Edges<Pixels>> {
+    fn col_padding(&self, col_ix: usize, _: &App) -> Option<Edges<Pixels>> {
         if col_ix >= 3 && col_ix <= 10 {
             Some(Edges::all(px(0.)))
         } else {
@@ -323,7 +323,7 @@ impl TableDelegate for StockTableDelegate {
         }
     }
 
-    fn col_fixed(&self, col_ix: usize, _: &AppContext) -> Option<ui::table::ColFixed> {
+    fn col_fixed(&self, col_ix: usize, _: &App) -> Option<ui::table::ColFixed> {
         if !self.fixed_cols {
             return None;
         }
@@ -335,11 +335,11 @@ impl TableDelegate for StockTableDelegate {
         }
     }
 
-    fn can_resize_col(&self, col_ix: usize, _: &AppContext) -> bool {
+    fn can_resize_col(&self, col_ix: usize, _: &App) -> bool {
         return self.col_resize && col_ix > 1;
     }
 
-    fn can_select_col(&self, _: usize, _: &AppContext) -> bool {
+    fn can_select_col(&self, _: usize, _: &App) -> bool {
         return self.col_selection;
     }
 
@@ -353,7 +353,7 @@ impl TableDelegate for StockTableDelegate {
         }
     }
 
-    fn context_menu(&self, row_ix: usize, menu: PopupMenu, _: &WindowContext) -> PopupMenu {
+    fn context_menu(&self, row_ix: usize, menu: PopupMenu, _window: &Window, _cx: &App) -> PopupMenu {
         menu.menu(
             format!("Selected Row: {}", row_ix),
             Box::new(OpenDetail(row_ix)),
@@ -437,11 +437,11 @@ impl TableDelegate for StockTableDelegate {
         }
     }
 
-    fn can_loop_select(&self, _: &AppContext) -> bool {
+    fn can_loop_select(&self, _: &App) -> bool {
         self.loop_selection
     }
 
-    fn can_move_col(&self, _: usize, _: &AppContext) -> bool {
+    fn can_move_col(&self, _: usize, _: &App) -> bool {
         self.col_order
     }
 
@@ -450,7 +450,7 @@ impl TableDelegate for StockTableDelegate {
         self.columns.insert(to_ix, col);
     }
 
-    fn col_sort(&self, col_ix: usize, _: &AppContext) -> Option<ColSort> {
+    fn col_sort(&self, col_ix: usize, _: &App) -> Option<ColSort> {
         if !self.col_sort {
             return None;
         }
@@ -485,11 +485,11 @@ impl TableDelegate for StockTableDelegate {
         }
     }
 
-    fn loading(&self, _: &AppContext) -> bool {
+    fn loading(&self, _: &App) -> bool {
         self.full_loading
     }
 
-    fn can_load_more(&self, _: &AppContext) -> bool {
+    fn can_load_more(&self, _: &App) -> bool {
         return !self.loading && !self.is_eof;
     }
 
@@ -533,8 +533,8 @@ impl TableDelegate for StockTableDelegate {
 }
 
 pub struct TableStory {
-    table: View<Table<StockTableDelegate>>,
-    num_stocks_input: View<TextInput>,
+    table: Entity<Table<StockTableDelegate>>,
+    num_stocks_input: Entity<TextInput>,
     stripe: bool,
     refresh_data: bool,
     size: Size,
@@ -549,7 +549,7 @@ impl super::Story for TableStory {
         "A complex data table with selection, sorting, column moving, and loading more."
     }
 
-    fn new_view(cx: &mut WindowContext) -> View<impl gpui::FocusableView> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl gpui::Focusable> {
         Self::view(cx)
     }
 
@@ -558,20 +558,20 @@ impl super::Story for TableStory {
     }
 }
 
-impl gpui::FocusableView for TableStory {
-    fn focus_handle(&self, cx: &gpui::AppContext) -> gpui::FocusHandle {
+impl gpui::Focusable for TableStory {
+    fn focus_handle(&self, cx: &gpui::App) -> gpui::FocusHandle {
         self.table.focus_handle(cx)
     }
 }
 
 impl TableStory {
-    pub fn view(cx: &mut WindowContext) -> View<Self> {
-        cx.new_view(Self::new)
+    pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
+        cx.new(Self::new)
     }
 
-    fn new(cx: &mut ViewContext<Self>) -> Self {
+    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         // Create the number input field with validation for positive integers
-        let num_stocks_input = cx.new_view(|cx| {
+        let num_stocks_input = cx.new(|cx| {
             let mut input = TextInput::new(cx)
                 .placeholder("Enter number of Stocks to display")
                 .validate(|s| s.parse::<usize>().is_ok());
@@ -580,7 +580,7 @@ impl TableStory {
         });
 
         let delegate = StockTableDelegate::new(5000);
-        let table = cx.new_view(|cx| Table::new(delegate, cx));
+        let table = cx.new(|cx| Table::new(delegate, cx));
 
         cx.subscribe(&table, Self::on_table_event).detach();
         cx.subscribe(&num_stocks_input, Self::on_num_stocks_input_change)
@@ -626,9 +626,9 @@ impl TableStory {
     // Event handler for changes in the number input field
     fn on_num_stocks_input_change(
         &mut self,
-        _: View<TextInput>,
+        _: Entity<TextInput>,
         event: &InputEvent,
-        cx: &mut ViewContext<Self>,
+        window: &mut Window, cx: &mut Context<Self>,
     ) {
         match event {
             // Update when the user presses Enter or the input loses focus
@@ -645,14 +645,14 @@ impl TableStory {
         }
     }
 
-    fn toggle_loop_selection(&mut self, checked: &bool, cx: &mut ViewContext<Self>) {
+    fn toggle_loop_selection(&mut self, checked: &bool, window: &mut Window, cx: &mut Context<Self>) {
         self.table.update(cx, |table, cx| {
             table.delegate_mut().loop_selection = *checked;
             cx.notify();
         });
     }
 
-    fn toggle_col_resize(&mut self, checked: &bool, cx: &mut ViewContext<Self>) {
+    fn toggle_col_resize(&mut self, checked: &bool, window: &mut Window, cx: &mut Context<Self>) {
         self.table.update(cx, |table, cx| {
             table.delegate_mut().col_resize = *checked;
             table.refresh(cx);
@@ -660,7 +660,7 @@ impl TableStory {
         });
     }
 
-    fn toggle_col_order(&mut self, checked: &bool, cx: &mut ViewContext<Self>) {
+    fn toggle_col_order(&mut self, checked: &bool, window: &mut Window, cx: &mut Context<Self>) {
         self.table.update(cx, |table, cx| {
             table.delegate_mut().col_order = *checked;
             table.refresh(cx);
@@ -668,7 +668,7 @@ impl TableStory {
         });
     }
 
-    fn toggle_col_sort(&mut self, checked: &bool, cx: &mut ViewContext<Self>) {
+    fn toggle_col_sort(&mut self, checked: &bool, window: &mut Window, cx: &mut Context<Self>) {
         self.table.update(cx, |table, cx| {
             table.delegate_mut().col_sort = *checked;
             table.refresh(cx);
@@ -676,7 +676,7 @@ impl TableStory {
         });
     }
 
-    fn toggle_col_selection(&mut self, checked: &bool, cx: &mut ViewContext<Self>) {
+    fn toggle_col_selection(&mut self, checked: &bool, window: &mut Window, cx: &mut Context<Self>) {
         self.table.update(cx, |table, cx| {
             table.delegate_mut().col_selection = *checked;
             table.refresh(cx);
@@ -684,7 +684,7 @@ impl TableStory {
         });
     }
 
-    fn toggle_stripe(&mut self, checked: &bool, cx: &mut ViewContext<Self>) {
+    fn toggle_stripe(&mut self, checked: &bool, window: &mut Window, cx: &mut Context<Self>) {
         self.stripe = *checked;
         let stripe = self.stripe;
         self.table.update(cx, |table, cx| {
@@ -693,7 +693,7 @@ impl TableStory {
         });
     }
 
-    fn toggle_fixed_cols(&mut self, checked: &bool, cx: &mut ViewContext<Self>) {
+    fn toggle_fixed_cols(&mut self, checked: &bool, window: &mut Window, cx: &mut Context<Self>) {
         self.table.update(cx, |table, cx| {
             table.delegate_mut().fixed_cols = *checked;
             table.refresh(cx);
@@ -701,7 +701,7 @@ impl TableStory {
         });
     }
 
-    fn on_change_size(&mut self, a: &ChangeSize, cx: &mut ViewContext<Self>) {
+    fn on_change_size(&mut self, a: &ChangeSize, window: &mut Window, cx: &mut Context<Self>) {
         self.size = a.0;
         self.table.update(cx, |table, cx| {
             table.set_size(a.0, cx);
@@ -709,16 +709,16 @@ impl TableStory {
         });
     }
 
-    fn toggle_refresh_data(&mut self, checked: &bool, cx: &mut ViewContext<Self>) {
+    fn toggle_refresh_data(&mut self, checked: &bool, window: &mut Window, cx: &mut Context<Self>) {
         self.refresh_data = *checked;
         cx.notify();
     }
 
     fn on_table_event(
         &mut self,
-        _: View<Table<StockTableDelegate>>,
+        _: Entity<Table<StockTableDelegate>>,
         event: &TableEvent,
-        _cx: &mut ViewContext<Self>,
+        _window: &mut Window, _cx: &mut Context<Self>,
     ) {
         match event {
             TableEvent::ColWidthsChanged(col_widths) => {
@@ -735,7 +735,7 @@ impl TableStory {
 }
 
 impl Render for TableStory {
-    fn render(&mut self, cx: &mut ViewContext<Self>) -> impl gpui::IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
         let delegate = self.table.read(cx).delegate();
         let rows_count = delegate.rows_count(cx);
         let size = self.size;
@@ -844,7 +844,7 @@ impl Render for TableStory {
                         Button::new("scroll-top")
                             .child("Scroll to Top")
                             .small()
-                            .on_click(cx.listener(|this, _, cx| {
+                            .on_click(cx.listener(|this, _, window, cx| {
                                 this.table.update(cx, |table, cx| {
                                     table.scroll_to_row(0, cx);
                                 })
@@ -854,7 +854,7 @@ impl Render for TableStory {
                         Button::new("scroll-bottom")
                             .child("Scroll to Bottom")
                             .small()
-                            .on_click(cx.listener(|this, _, cx| {
+                            .on_click(cx.listener(|this, _, window, cx| {
                                 this.table.update(cx, |table, cx| {
                                     table.scroll_to_row(table.delegate().rows_count(cx) - 1, cx);
                                 })
@@ -863,7 +863,7 @@ impl Render for TableStory {
                        //     Button::new("scroll-first-col")
                        //         .child("Scroll to First Column")
                        //         .small()
-                       //         .on_click(cx.listener(|this, _, cx| {
+                       //         .on_click(cx.listener(|this, _, window, cx| {
                        //             this.table.update(cx, |table, cx| {
                        //                 table.scroll_to_col(0, cx);
                        //             })
@@ -873,7 +873,7 @@ impl Render for TableStory {
                        //     Button::new("scroll-last-col")
                        //         .child("Scroll to Last Column")
                        //         .small()
-                       //         .on_click(cx.listener(|this, _, cx| {
+                       //         .on_click(cx.listener(|this, _, window, cx| {
                        //             this.table.update(cx, |table, cx| {
                        //                 table.scroll_to_col(table.delegate().cols_count(cx), cx);
                        //             })

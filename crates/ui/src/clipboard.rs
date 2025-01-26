@@ -13,9 +13,9 @@ use crate::{
 pub struct Clipboard {
     id: ElementId,
     value: SharedString,
-    value_fn: Option<Rc<dyn Fn(&mut WindowContext) -> SharedString>>,
-    content_builder: Option<Box<dyn Fn(&mut WindowContext) -> AnyElement>>,
-    copied_callback: Option<Rc<dyn Fn(SharedString, &mut WindowContext)>>,
+    value_fn: Option<Rc<dyn Fn(&mut Window, &mut App) -> SharedString>>,
+    content_builder: Option<Box<dyn Fn(&mut Window, &mut App) -> AnyElement>>,
+    copied_callback: Option<Rc<dyn Fn(SharedString, &mut Window, &mut App)>>,
 }
 
 impl Clipboard {
@@ -39,7 +39,7 @@ impl Clipboard {
     /// When used this, the copy value will use the result of the function.
     pub fn value_fn(
         mut self,
-        value: impl Fn(&mut WindowContext) -> SharedString + 'static,
+        value: impl Fn(&mut Window, &mut App) -> SharedString + 'static,
     ) -> Self {
         self.value_fn = Some(Rc::new(value));
         self
@@ -47,7 +47,7 @@ impl Clipboard {
 
     pub fn on_copied<F>(mut self, handler: F) -> Self
     where
-        F: Fn(SharedString, &mut WindowContext) + 'static,
+        F: Fn(SharedString, &mut Window, &mut App) + 'static,
     {
         self.copied_callback = Some(Rc::new(handler));
         self
@@ -56,7 +56,7 @@ impl Clipboard {
     pub fn content<E, F>(mut self, builder: F) -> Self
     where
         E: IntoElement,
-        F: Fn(&mut WindowContext) -> E + 'static,
+        F: Fn(&mut Window, &mut App) -> E + 'static,
     {
         self.content_builder = Some(Box::new(move |cx| builder(cx).into_any_element()));
         self
@@ -88,7 +88,7 @@ impl Element for Clipboard {
     fn request_layout(
         &mut self,
         global_id: Option<&GlobalElementId>,
-        cx: &mut WindowContext,
+        window: &mut Window, cx: &mut App,
     ) -> (LayoutId, Self::RequestLayoutState) {
         cx.with_element_state::<ClipboardState, _>(global_id.unwrap(), |state, cx| {
             let state = state.unwrap_or_default();
@@ -118,7 +118,7 @@ impl Element for Clipboard {
                         .ghost()
                         .xsmall()
                         .when(!copide_value, |this| {
-                            this.on_click(move |_, cx| {
+                            this.on_click(move |_, window, cx| {
                                 cx.stop_propagation();
                                 let value = value_fn
                                     .as_ref()
@@ -152,7 +152,7 @@ impl Element for Clipboard {
         _: Option<&gpui::GlobalElementId>,
         _: gpui::Bounds<gpui::Pixels>,
         element: &mut Self::RequestLayoutState,
-        cx: &mut WindowContext,
+        window: &mut Window, cx: &mut App,
     ) {
         element.prepaint(cx);
     }
@@ -163,7 +163,7 @@ impl Element for Clipboard {
         _: gpui::Bounds<gpui::Pixels>,
         element: &mut Self::RequestLayoutState,
         _: &mut Self::PrepaintState,
-        cx: &mut WindowContext,
+        window: &mut Window, cx: &mut App,
     ) {
         element.paint(cx)
     }
