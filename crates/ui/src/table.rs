@@ -1042,17 +1042,27 @@ where
                 // Render left fixed columns
                 this.child(
                     h_flex()
-                        .id("table-head-fixed-left")
+                        .relative()
                         .h_full()
                         .bg(cx.theme().table_head)
-                        .border_r_1()
-                        .border_color(cx.theme().border)
                         .children(
                             self.col_groups
                                 .iter()
                                 .filter(|col| col.fixed == Some(ColFixed::Left))
                                 .enumerate()
                                 .map(|(col_ix, _)| self.render_th(col_ix, cx)),
+                        )
+                        .child(
+                            // Fixed columns border
+                            div()
+                                .absolute()
+                                .top_0()
+                                .right_0()
+                                .bottom_0()
+                                .w_0()
+                                .flex_shrink_0()
+                                .border_r_1()
+                                .border_color(cx.theme().border),
                         )
                         .child(
                             canvas(
@@ -1155,9 +1165,8 @@ where
                 // Left fixed columns
                 this.child(
                     h_flex()
+                        .relative()
                         .h_full()
-                        .border_r_1()
-                        .border_color(cx.theme().table_row_border)
                         .children({
                             let mut items = Vec::with_capacity(left_cols_count);
 
@@ -1171,7 +1180,19 @@ where
                             });
 
                             items
-                        }),
+                        })
+                        .child(
+                            // Fixed columns border
+                            div()
+                                .absolute()
+                                .top_0()
+                                .right_0()
+                                .bottom_0()
+                                .w_0()
+                                .flex_shrink_0()
+                                .border_r_1()
+                                .border_color(cx.theme().border),
+                        ),
                 )
             })
             .child(
