@@ -85,9 +85,9 @@ pub struct ThemeColor {
     pub accordion_hover: Hsla,
     pub background: Hsla,
     pub border: Hsla,
-    pub window_border: Hsla,
     pub card: Hsla,
     pub card_foreground: Hsla,
+    pub caret: Hsla,
     pub danger: Hsla,
     pub danger_active: Hsla,
     pub danger_foreground: Hsla,
@@ -124,6 +124,13 @@ pub struct ThemeColor {
     pub secondary_foreground: Hsla,
     pub secondary_hover: Hsla,
     pub selection: Hsla,
+    pub sidebar: Hsla,
+    pub sidebar_accent: Hsla,
+    pub sidebar_accent_foreground: Hsla,
+    pub sidebar_border: Hsla,
+    pub sidebar_foreground: Hsla,
+    pub sidebar_primary: Hsla,
+    pub sidebar_primary_foreground: Hsla,
     pub skeleton: Hsla,
     pub slider_bar: Hsla,
     pub slider_thumb: Hsla,
@@ -142,13 +149,7 @@ pub struct ThemeColor {
     pub table_row_border: Hsla,
     pub title_bar: Hsla,
     pub title_bar_border: Hsla,
-    pub sidebar: Hsla,
-    pub sidebar_accent: Hsla,
-    pub sidebar_accent_foreground: Hsla,
-    pub sidebar_border: Hsla,
-    pub sidebar_foreground: Hsla,
-    pub sidebar_primary: Hsla,
-    pub sidebar_primary_foreground: Hsla,
+    pub window_border: Hsla,
 }
 
 impl ThemeColor {
@@ -161,9 +162,9 @@ impl ThemeColor {
             accordion_hover: hsl(240.0, 4.8, 95.9).opacity(0.7),
             background: hsl(0.0, 0.0, 100.),
             border: hsl(240.0, 5.9, 90.0),
-            window_border: hsl(240.0, 5.9, 78.0),
             card: hsl(0.0, 0.0, 100.0),
             card_foreground: hsl(240.0, 10.0, 3.9),
+            caret: hsl(240.0, 10., 3.9),
             danger: hsl(0.0, 84.2, 60.2),
             danger_active: hsl(0.0, 84.2, 47.0),
             danger_foreground: hsl(0.0, 0.0, 98.0),
@@ -200,6 +201,13 @@ impl ThemeColor {
             secondary_foreground: hsl(240.0, 59.0, 10.),
             secondary_hover: hsl(240.0, 5.9, 98.),
             selection: hsl(211.0, 97.0, 85.0),
+            sidebar: hsl(0.0, 0.0, 98.0),
+            sidebar_accent: hsl(240.0, 4.8, 92.),
+            sidebar_accent_foreground: hsl(240.0, 5.9, 10.0),
+            sidebar_border: hsl(220.0, 13.0, 91.0),
+            sidebar_foreground: hsl(240.0, 5.3, 26.1),
+            sidebar_primary: hsl(240.0, 5.9, 10.0),
+            sidebar_primary_foreground: hsl(0.0, 0.0, 98.0),
             skeleton: hsl(223.0, 5.9, 10.0).opacity(0.1),
             slider_bar: hsl(223.0, 5.9, 10.0),
             slider_thumb: hsl(0.0, 0.0, 100.0),
@@ -218,13 +226,7 @@ impl ThemeColor {
             table_row_border: hsl(240.0, 7.7, 94.5),
             title_bar: hsl(0.0, 0.0, 100.),
             title_bar_border: hsl(240.0, 5.9, 90.0),
-            sidebar: hsl(0.0, 0.0, 98.0),
-            sidebar_accent: hsl(240.0, 4.8, 92.),
-            sidebar_accent_foreground: hsl(240.0, 5.9, 10.0),
-            sidebar_border: hsl(220.0, 13.0, 91.0),
-            sidebar_foreground: hsl(240.0, 5.3, 26.1),
-            sidebar_primary: hsl(240.0, 5.9, 10.0),
-            sidebar_primary_foreground: hsl(0.0, 0.0, 98.0),
+            window_border: hsl(240.0, 5.9, 78.0),
         }
     }
 
@@ -237,9 +239,9 @@ impl ThemeColor {
             accordion_hover: hsl(240.0, 3.7, 15.9).opacity(0.7),
             background: hsl(0.0, 0.0, 8.0),
             border: hsl(240.0, 3.7, 16.9),
-            window_border: hsl(240.0, 3.7, 28.0),
             card: hsl(0.0, 0.0, 8.0),
             card_foreground: hsl(0.0, 0.0, 78.0),
+            caret: hsl(0., 0., 78.),
             danger: hsl(0.0, 62.8, 30.6),
             danger_active: hsl(0.0, 62.8, 20.6),
             danger_foreground: hsl(0.0, 0.0, 78.0),
@@ -276,6 +278,13 @@ impl ThemeColor {
             secondary_foreground: hsl(0.0, 0.0, 78.0),
             secondary_hover: hsl(240.0, 0., 15.),
             selection: hsl(211.0, 97.0, 22.0),
+            sidebar: hsl(240.0, 0.0, 10.0),
+            sidebar_accent: hsl(240.0, 3.7, 15.9),
+            sidebar_accent_foreground: hsl(240.0, 4.8, 95.9),
+            sidebar_border: hsl(240.0, 3.7, 15.9),
+            sidebar_foreground: hsl(240.0, 4.8, 95.9),
+            sidebar_primary: hsl(0.0, 0.0, 98.0),
+            sidebar_primary_foreground: hsl(240.0, 5.9, 10.0),
             skeleton: hsla(223.0, 0.0, 98.0, 0.1),
             slider_bar: hsl(223.0, 0.0, 98.0),
             slider_thumb: hsl(0.0, 0.0, 8.0),
@@ -294,13 +303,7 @@ impl ThemeColor {
             table_row_border: hsl(240.0, 3.7, 16.9).opacity(0.5),
             title_bar: hsl(0., 0., 9.7),
             title_bar_border: hsl(240.0, 3.7, 15.9),
-            sidebar: hsl(240.0, 0.0, 10.0),
-            sidebar_accent: hsl(240.0, 3.7, 15.9),
-            sidebar_accent_foreground: hsl(240.0, 4.8, 95.9),
-            sidebar_border: hsl(240.0, 3.7, 15.9),
-            sidebar_foreground: hsl(240.0, 4.8, 95.9),
-            sidebar_primary: hsl(0.0, 0.0, 98.0),
-            sidebar_primary_foreground: hsl(240.0, 5.9, 10.0),
+            window_border: hsl(240.0, 3.7, 28.0),
         }
     }
 }
@@ -354,6 +357,7 @@ impl Theme {
         self.foreground = self.foreground.apply(mask_color);
         self.card = self.card.apply(mask_color);
         self.card_foreground = self.card_foreground.apply(mask_color);
+        self.caret = self.caret.apply(mask_color);
         self.popover = self.popover.apply(mask_color);
         self.popover_foreground = self.popover_foreground.apply(mask_color);
         self.primary = self.primary.apply(mask_color);
