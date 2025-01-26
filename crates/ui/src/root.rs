@@ -120,7 +120,7 @@ impl ContextModal for Window {
     }
 
     fn close_modal(&mut self) {
-        Root::update(self, move |root, cx| {
+        Root::update(self, move |root, window, cx| {
             root.active_modals.pop();
 
             if let Some(top_modal) = root.active_modals.last() {

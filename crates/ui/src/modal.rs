@@ -1,10 +1,10 @@
 use std::{rc::Rc, time::Duration};
 
-use gpui::{Window, 
+use gpui::{
     actions, anchored, div, hsla, point, prelude::FluentBuilder, px, relative, Animation,
-    AnimationExt as _, AnyElement, AppContext, Bounds, ClickEvent, Div, FocusHandle, Hsla,
+    AnimationExt as _, AnyElement, App, AppContext, Bounds, ClickEvent, Div, FocusHandle, Hsla,
     InteractiveElement, IntoElement, KeyBinding, MouseButton, ParentElement, Pixels, Point,
-    RenderOnce, SharedString, Styled, 
+    RenderOnce, SharedString, Styled, Window,
 };
 use rust_i18n::t;
 
@@ -25,7 +25,8 @@ pub fn init(cx: &mut App) {
 }
 
 type RenderButtonFn = Box<dyn FnOnce(&mut Window, &mut App) -> AnyElement>;
-type FooterFn = Box<dyn Fn(RenderButtonFn, RenderButtonFn, &mut Window, &mut App) -> Vec<AnyElement>>;
+type FooterFn =
+    Box<dyn Fn(RenderButtonFn, RenderButtonFn, &mut Window, &mut App) -> Vec<AnyElement>>;
 
 /// Modal button props.
 pub struct ModalButtonProps {
@@ -291,7 +292,7 @@ impl RenderOnce for Modal {
                 .ok_text
                 .unwrap_or_else(|| t!("Modal.ok").into());
             let ok_variant = self.button_props.ok_variant;
-            move |_| {
+            move |window, _| {
                 Button::new("ok")
                     .label(ok_text)
                     .with_variant(ok_variant)
@@ -299,10 +300,10 @@ impl RenderOnce for Modal {
                         let on_ok = on_ok.clone();
                         let on_close = on_close.clone();
 
-                        move |_, cx| {
-                            if on_ok(&ClickEvent::default(), cx) {
-                                on_close(&ClickEvent::default(), cx);
-                                cx.close_modal();
+                        move |_, window, cx| {
+                            if on_ok(&ClickEvent::default(), window, cx) {
+                                on_close(&ClickEvent::default(), window, cx);
+                                window.close_modal();
                             }
                         }
                     })
@@ -317,17 +318,17 @@ impl RenderOnce for Modal {
                 .cancel_text
                 .unwrap_or_else(|| t!("Modal.cancel").into());
             let cancel_variant = self.button_props.cancel_variant;
-            move |_| {
+            move |window, _| {
                 Button::new("cancel")
                     .label(cancel_text)
                     .with_variant(cancel_variant)
                     .on_click({
                         let on_cancel = on_cancel.clone();
                         let on_close = on_close.clone();
-                        move |_, cx| {
-                            if on_cancel(&ClickEvent::default(), cx) {
-                                on_close(&ClickEvent::default(), cx);
-                                cx.close_modal();
+                        move |_, window, cx| {
+                            if on_cancel(&ClickEvent::default(), window, cx) {
+                                on_close(&ClickEvent::default(), window, cx);
+                                window.close_modal();
                             }
                         }
                     })
@@ -335,8 +336,8 @@ impl RenderOnce for Modal {
             }
         });
 
-        let window_paddings = crate::window_border::window_paddings(cx);
-        let view_size = cx.viewport_size()
+        let window_paddings = crate::window_border::window_paddings(window);
+        let view_size = window.viewport_size()
             - gpui::size(
                 window_paddings.left + window_paddings.right,
                 window_paddings.top + window_paddings.bottom,
@@ -358,16 +359,16 @@ impl RenderOnce for Modal {
                     .w(view_size.width)
                     .h(view_size.height)
                     .when(self.overlay_visible, |this| {
-                        this.bg(overlay_color(self.overlay, cx))
+                        this.bg(overlay_color(self.overlay, window, cx))
                     })
                     .when(self.overlay_closable, |this| {
                         this.on_mouse_down(MouseButton::Left, {
                             let on_cancel = on_cancel.clone();
                             let on_close = on_close.clone();
-                            move |_, cx| {
-                                on_cancel(&ClickEvent::default(), cx);
-                                on_close(&ClickEvent::default(), cx);
-                                cx.close_modal();
+                            move |_, window, cx| {
+                                on_cancel(&ClickEvent::default(), window, cx);
+                                on_close(&ClickEvent::default(), window, cx);
+                                window.close_modal();
                             }
                         })
                     })
@@ -380,23 +381,23 @@ impl RenderOnce for Modal {
                                 this.on_action({
                                     let on_cancel = on_cancel.clone();
                                     let on_close = on_close.clone();
-                                    move |_: &Escape, cx| {
+                                    move |_: &Escape, window, cx| {
                                         // FIXME:
                                         //
                                         // Here some Modal have no focus_handle, so it will not work will Escape key.
                                         // But by now, we `cx.close_modal()` going to close the last active model, so the Escape is unexpected to work.
-                                        on_cancel(&ClickEvent::default(), cx);
-                                        on_close(&ClickEvent::default(), cx);
-                                        cx.close_modal();
+                                        on_cancel(&ClickEvent::default(), window, cx);
+                                        on_close(&ClickEvent::default(), window, cx);
+                                        window.close_modal();
                                     }
                                 })
                                 .on_action({
                                     let on_ok = on_ok.clone();
                                     let on_close = on_close.clone();
-                                    move |_: &Enter, cx| {
-                                        if on_ok(&ClickEvent::default(), cx) {
-                                            on_close(&ClickEvent::default(), cx);
-                                            cx.close_modal();
+                                    move |_: &Enter, window, cx| {
+                                        if on_ok(&ClickEvent::default(), window, cx) {
+                                            on_close(&ClickEvent::default(), window, cx);
+                                            window.close_modal();
                                         }
                                     }
                                 })
