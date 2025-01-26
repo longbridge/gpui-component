@@ -1,9 +1,9 @@
 use std::{cell::Cell, rc::Rc, sync::Arc};
 
-use gpui::{
+use gpui::{Window, AppContext, 
     div, prelude::FluentBuilder as _, rems, AnyElement, Div, ElementId, InteractiveElement as _,
     IntoElement, ParentElement, RenderOnce, SharedString, StatefulInteractiveElement as _, Styled,
-    WindowContext,
+    
 };
 
 use crate::{h_flex, v_flex, ActiveTheme as _, Icon, IconName, Sizable, Size};
@@ -113,7 +113,7 @@ impl RenderOnce for Accordion {
             .when_some(
                 self.on_toggle_click.filter(|_| !self.disabled),
                 move |this, on_toggle_click| {
-                    this.on_click(move |_, cx| {
+                    this.on_click(move |_, window, cx| {
                         let mut open_ixs = open_ixs.clone();
                         if let Some(ix) = state.get() {
                             if multiple {

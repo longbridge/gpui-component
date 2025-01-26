@@ -1,6 +1,6 @@
-use gpui::{
+use gpui::{Window, ModelContext, AppContext, Model, 
     div, ClickEvent, FocusHandle, FocusableView, IntoElement, ParentElement as _, Render,
-    Styled as _, View, ViewContext, VisualContext as _, WindowContext,
+    Styled as _,   VisualContext as _, 
 };
 use ui::{
     h_flex,

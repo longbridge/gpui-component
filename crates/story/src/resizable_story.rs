@@ -1,6 +1,6 @@
-use gpui::{
-    div, px, AnyElement, IntoElement, ParentElement as _, Render, SharedString, Styled, View,
-    ViewContext, VisualContext, WindowContext,
+use gpui::{Window, ModelContext, AppContext, Model, 
+    div, px, AnyElement, IntoElement, ParentElement as _, Render, SharedString, Styled, 
+     VisualContext, 
 };
 use ui::ActiveTheme;
 use ui::{

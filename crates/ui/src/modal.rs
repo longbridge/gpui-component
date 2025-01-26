@@ -1,10 +1,10 @@
 use std::{rc::Rc, time::Duration};
 
-use gpui::{
+use gpui::{Window, 
     actions, anchored, div, hsla, point, prelude::FluentBuilder, px, relative, Animation,
     AnimationExt as _, AnyElement, AppContext, Bounds, ClickEvent, Div, FocusHandle, Hsla,
     InteractiveElement, IntoElement, KeyBinding, MouseButton, ParentElement, Pixels, Point,
-    RenderOnce, SharedString, Styled, WindowContext,
+    RenderOnce, SharedString, Styled, 
 };
 use rust_i18n::t;
 

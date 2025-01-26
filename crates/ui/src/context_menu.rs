@@ -1,10 +1,10 @@
 use std::{cell::RefCell, rc::Rc};
 
-use gpui::{
+use gpui::{Window, ModelContext, AppContext, Model, 
     anchored, deferred, div, prelude::FluentBuilder, px, relative, AnyElement, Corner,
     DismissEvent, DispatchPhase, Element, ElementId, Focusable, GlobalElementId,
     InteractiveElement, IntoElement, MouseButton, MouseDownEvent, ParentElement, Pixels, Point,
-    Position, Stateful, Style, View, ViewContext, WindowContext,
+    Position, Stateful, Style,   
 };
 
 use crate::popup_menu::PopupMenu;

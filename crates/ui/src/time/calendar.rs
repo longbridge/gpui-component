@@ -1,10 +1,10 @@
 use std::borrow::Cow;
 
 use chrono::{Datelike, Local, NaiveDate};
-use gpui::{
+use gpui::{Window, ModelContext, 
     prelude::FluentBuilder as _, px, relative, ClickEvent, ElementId, EventEmitter, FocusHandle,
     InteractiveElement, IntoElement, ParentElement, Render, SharedString,
-    StatefulInteractiveElement, Styled, ViewContext,
+    StatefulInteractiveElement, Styled, 
 };
 use rust_i18n::t;
 

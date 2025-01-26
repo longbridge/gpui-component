@@ -4,10 +4,10 @@ use std::{
 };
 
 use fake::{Fake, Faker};
-use gpui::{
+use gpui::{Window, ModelContext, Model, 
     div, impl_internal_actions, px, AnyElement, AppContext, Edges, InteractiveElement, IntoElement,
-    ParentElement, Pixels, Render, SharedString, Styled, Timer, View, ViewContext,
-    VisualContext as _, WindowContext,
+    ParentElement, Pixels, Render, SharedString, Styled, Timer,  
+    VisualContext as _, 
 };
 use serde::Deserialize;
 use ui::{

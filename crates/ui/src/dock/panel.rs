@@ -1,9 +1,9 @@
 use std::{collections::HashMap, sync::Arc};
 
 use crate::{button::Button, popup_menu::PopupMenu};
-use gpui::{
+use gpui::{Window, ModelContext, Model, 
     AnyElement, AnyView, AppContext, EventEmitter, FocusHandle, FocusableView, Global, Hsla,
-    IntoElement, SharedString, View, ViewContext, WeakView, WindowContext,
+    IntoElement, SharedString,   WeakView, 
 };
 
 use rust_i18n::t;
@@ -220,7 +220,7 @@ pub struct PanelRegistry {
         String,
         Arc<
             dyn Fn(
-                WeakView<DockArea>,
+                WeakEntity<DockArea>,
                 &PanelState,
                 &PanelInfo,
                 &mut WindowContext,
@@ -240,7 +240,7 @@ impl Global for PanelRegistry {}
 /// Register the Panel init by panel_name to global registry.
 pub fn register_panel<F>(cx: &mut AppContext, panel_name: &str, deserialize: F)
 where
-    F: Fn(WeakView<DockArea>, &PanelState, &PanelInfo, &mut WindowContext) -> Box<dyn PanelView>
+    F: Fn(WeakEntity<DockArea>, &PanelState, &PanelInfo, &mut WindowContext) -> Box<dyn PanelView>
         + 'static,
 {
     if let None = cx.try_global::<PanelRegistry>() {

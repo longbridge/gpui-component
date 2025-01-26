@@ -1,7 +1,7 @@
 use crate::{theme::ActiveTheme as _, Sizable, Size};
 use gpui::{
-    div, prelude::FluentBuilder as _, relative, transparent_black, AnyElement, Div, Hsla,
-    InteractiveElement as _, IntoElement, ParentElement, RenderOnce, Styled, WindowContext,
+    div, prelude::FluentBuilder as _, relative, transparent_black, AnyElement, App, AppContext,
+    Div, Hsla, InteractiveElement as _, IntoElement, ParentElement, RenderOnce, Styled, Window,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -18,7 +18,7 @@ pub enum TagVariant {
     },
 }
 impl TagVariant {
-    fn bg(&self, cx: &WindowContext) -> Hsla {
+    fn bg(&self, cx: &App) -> Hsla {
         match self {
             Self::Primary => cx.theme().primary,
             Self::Secondary => cx.theme().secondary,
@@ -28,7 +28,7 @@ impl TagVariant {
         }
     }
 
-    fn border(&self, cx: &WindowContext) -> Hsla {
+    fn border(&self, cx: &App) -> Hsla {
         match self {
             Self::Primary => cx.theme().primary,
             Self::Secondary => cx.theme().secondary,
@@ -38,7 +38,7 @@ impl TagVariant {
         }
     }
 
-    fn fg(&self, cx: &WindowContext) -> Hsla {
+    fn fg(&self, cx: &App) -> Hsla {
         match self {
             Self::Primary => cx.theme().primary_foreground,
             Self::Secondary => cx.theme().secondary_foreground,
@@ -108,7 +108,7 @@ impl ParentElement for Tag {
     }
 }
 impl RenderOnce for Tag {
-    fn render(self, cx: &mut WindowContext) -> impl IntoElement {
+    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         self.base
             .line_height(relative(1.3))
             .map(|this| match self.size {

@@ -1,9 +1,9 @@
 use std::time::Duration;
 
 use crate::{Icon, IconName, Sizable, Size};
-use gpui::{
+use gpui::{Window, AppContext, 
     div, ease_in_out, percentage, prelude::FluentBuilder as _, Animation, AnimationExt as _, Hsla,
-    IntoElement, ParentElement, RenderOnce, Styled as _, Transformation, WindowContext,
+    IntoElement, ParentElement, RenderOnce, Styled as _, Transformation, 
 };
 
 #[derive(IntoElement)]

@@ -1,6 +1,6 @@
-use gpui::{
+use gpui::{Window, AppContext, 
     div, prelude::FluentBuilder, px, relative, AnyElement, Div, IntoElement, ParentElement,
-    RenderOnce, Styled, WindowContext,
+    RenderOnce, Styled, 
 };
 
 use crate::{h_flex, red_500, white};

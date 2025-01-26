@@ -1,6 +1,6 @@
 use gpui::{
-    div, px, AnyView, IntoElement, ParentElement, Render, SharedString, Styled, ViewContext,
-    VisualContext, WindowContext,
+    div, px, AnyView, App, Context, IntoElement, ParentElement, Render, SharedString, Styled,
+    Window,
 };
 
 use crate::ActiveTheme;
@@ -10,13 +10,13 @@ pub struct Tooltip {
 }
 
 impl Tooltip {
-    pub fn new(text: impl Into<SharedString>, cx: &mut WindowContext) -> AnyView {
+    pub fn new(text: impl Into<SharedString>, window: &mut Window, cx: &mut App) -> AnyView {
         cx.new_view(|_| Self { text: text.into() }).into()
     }
 }
 
 impl Render for Tooltip {
-    fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div().child(
             // Wrap in a child, to ensure the left margin is applied to the tooltip
             div()

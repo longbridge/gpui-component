@@ -31,10 +31,10 @@ pub use form_story::FormStory;
 
 use gpui::{
     actions, div, impl_internal_actions, prelude::FluentBuilder as _, px, size, AnyElement,
-    AnyView, AppContext, Bounds, Context as _, Div, EventEmitter, FocusableView, Global, Hsla,
-    InteractiveElement, IntoElement, Model, ParentElement, Render, SharedString,
-    StatefulInteractiveElement, Styled as _, View, ViewContext, VisualContext, WindowBounds,
-    WindowContext, WindowKind, WindowOptions,
+    AnyView, App, AppContext, Bounds, Context as _, Div, EventEmitter, FocusableView, Global, Hsla,
+    InteractiveElement, IntoElement, Model, ModelContext, ParentElement, Render, SharedString,
+    StatefulInteractiveElement, Styled as _, VisualContext, Window, WindowBounds, WindowKind,
+    WindowOptions,
 };
 pub use icon_story::IconStory;
 pub use image_story::ImageStory;
@@ -409,7 +409,7 @@ impl Panel for StoryContainer {
         "StoryContainer"
     }
 
-    fn title(&self, _cx: &WindowContext) -> AnyElement {
+    fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
         self.name.clone().into_any_element()
     }
 
@@ -447,7 +447,7 @@ impl Panel for StoryContainer {
         println!("panel: {} active: {}", self.name, active);
     }
 
-    fn popup_menu(&self, menu: PopupMenu, _cx: &WindowContext) -> PopupMenu {
+    fn popup_menu(&self, menu: PopupMenu, _window: &Window, _cx: &App) -> PopupMenu {
         menu.track_focus(&self.focus_handle)
             .menu("Info", Box::new(ShowPanelInfo))
     }

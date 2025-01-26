@@ -1,9 +1,9 @@
 use gpui::{
     actions, anchored, canvas, deferred, div, prelude::FluentBuilder, px, rems, AnyElement,
     AppContext, Bounds, ClickEvent, DismissEvent, ElementId, EventEmitter, FocusHandle,
-    FocusableView, InteractiveElement, IntoElement, KeyBinding, Length, ParentElement, Pixels,
-    Render, SharedString, StatefulInteractiveElement, Styled, Task, View, ViewContext,
-    VisualContext, WeakView, WindowContext,
+    FocusableView, InteractiveElement, IntoElement, KeyBinding, Length, Model, ModelContext,
+    ParentElement, Pixels, Render, SharedString, StatefulInteractiveElement, Styled, Task,
+    VisualContext, WeakView, Window,
 };
 use rust_i18n::t;
 
@@ -117,7 +117,7 @@ impl<T: DropdownItem> DropdownDelegate for Vec<T> {
 
 struct DropdownListDelegate<D: DropdownDelegate + 'static> {
     delegate: D,
-    dropdown: WeakView<Dropdown<D>>,
+    dropdown: WeakEntity<Dropdown<D>>,
     selected_index: Option<usize>,
 }
 
@@ -449,12 +449,12 @@ where
     }
 
     pub fn focus(&self, cx: &mut WindowContext) {
-        self.focus_handle.focus(cx);
+        self.focus_handle.focus(window);
     }
 
     fn on_blur(&mut self, cx: &mut ViewContext<Self>) {
         // When the dropdown and dropdown menu are both not focused, close the dropdown menu.
-        if self.list.focus_handle(cx).is_focused(cx) || self.focus_handle.is_focused(cx) {
+        if self.list.focus_handle(cx).is_focused(cx) || self.focus_handle.is_focused(window) {
             return;
         }
 
@@ -574,7 +574,7 @@ where
     D: DropdownDelegate + 'static,
 {
     fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
-        let is_focused = self.focus_handle.is_focused(cx);
+        let is_focused = self.focus_handle.is_focused(window);
         let show_clean = self.cleanable && self.selected_index(cx).is_some();
         let view = cx.view().clone();
         let bounds = self.bounds;
@@ -674,8 +674,8 @@ where
                     )
                     .child(
                         canvas(
-                            move |bounds, cx| view.update(cx, |r, _| r.bounds = bounds),
-                            |_, _, _| {},
+                            move |bounds, window, cx| view.update(cx, |r, _| r.bounds = bounds),
+                            |_, _, _, _| {},
                         )
                         .absolute()
                         .size_full(),
@@ -700,7 +700,7 @@ where
                                         .border_color(cx.theme().border)
                                         .rounded(px(cx.theme().radius))
                                         .shadow_md()
-                                        .on_mouse_down_out(|_, cx| {
+                                        .on_mouse_down_out(|_, window, cx| {
                                             cx.dispatch_action(Box::new(Escape));
                                         })
                                         .child(self.list.clone()),

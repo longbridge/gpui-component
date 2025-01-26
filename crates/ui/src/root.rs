@@ -4,10 +4,10 @@ use crate::{
     notification::{Notification, NotificationList},
     window_border, ActiveTheme, Placement,
 };
-use gpui::{
+use gpui::{Window, ModelContext, AppContext, Model, 
     canvas, div, prelude::FluentBuilder as _, AnyView, DefiniteLength, FocusHandle,
-    InteractiveElement, IntoElement, ParentElement as _, Render, Styled, View, ViewContext,
-    VisualContext as _, WindowContext,
+    InteractiveElement, IntoElement, ParentElement as _, Render, Styled,  
+    VisualContext as _, 
 };
 use std::{
     ops::{Deref, DerefMut},
@@ -125,7 +125,7 @@ impl ContextModal for WindowContext<'_> {
 
             if let Some(top_modal) = root.active_modals.last() {
                 // Focus the next modal.
-                top_modal.focus_handle.focus(cx);
+                top_modal.focus_handle.focus(window);
             } else {
                 // Restore focus if there are no more modals.
                 root.focus_back(cx);
@@ -337,8 +337,8 @@ impl Root {
             return Some(
                 div().relative().child(drawer).child(
                     canvas(
-                        move |_, cx| root.update(cx, |r, _| r.drawer_size = Some(drawer_size)),
-                        |_, _, _| {},
+                        move |_, window, cx| root.update(cx, |r, _| r.drawer_size = Some(drawer_size)),
+                        |_, _, _, _| {},
                     )
                     .absolute()
                     .size_full(),

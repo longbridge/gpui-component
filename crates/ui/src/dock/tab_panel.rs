@@ -3,9 +3,9 @@ use std::sync::Arc;
 use gpui::{
     div, prelude::FluentBuilder, px, rems, AppContext, Corner, DefiniteLength, DismissEvent,
     DragMoveEvent, Empty, Entity, EventEmitter, FocusHandle, FocusableView,
-    InteractiveElement as _, IntoElement, ParentElement, Pixels, Render, ScrollHandle,
-    SharedString, StatefulInteractiveElement, Styled, View, ViewContext, VisualContext as _,
-    WeakView, WindowContext,
+    InteractiveElement as _, IntoElement, Model, ModelContext, ParentElement, Pixels, Render,
+    ScrollHandle, SharedString, StatefulInteractiveElement, Styled, VisualContext as _, WeakView,
+    Window,
 };
 use rust_i18n::t;
 
@@ -66,9 +66,9 @@ impl Render for DragPanel {
 
 pub struct TabPanel {
     focus_handle: FocusHandle,
-    dock_area: WeakView<DockArea>,
+    dock_area: WeakEntity<DockArea>,
     /// The stock_panel can be None, if is None, that means the panels can't be split or move
-    stack_panel: Option<WeakView<StackPanel>>,
+    stack_panel: Option<WeakEntity<StackPanel>>,
     pub(crate) panels: Vec<Arc<dyn PanelView>>,
     pub(crate) active_ix: usize,
     /// If this is true, the Panel closable will follow the active panel's closable,
@@ -136,8 +136,8 @@ impl Panel for TabPanel {
 
 impl TabPanel {
     pub fn new(
-        stack_panel: Option<WeakView<StackPanel>>,
-        dock_area: WeakView<DockArea>,
+        stack_panel: Option<WeakEntity<StackPanel>>,
+        dock_area: WeakEntity<DockArea>,
         cx: &mut ViewContext<Self>,
     ) -> Self {
         Self {
@@ -154,7 +154,7 @@ impl TabPanel {
         }
     }
 
-    pub(super) fn set_parent(&mut self, view: WeakView<StackPanel>) {
+    pub(super) fn set_parent(&mut self, view: WeakEntity<StackPanel>) {
         self.stack_panel = Some(view);
     }
 
@@ -582,7 +582,7 @@ impl TabPanel {
                                     panel: panel.clone(),
                                     tab_panel: view,
                                 },
-                                |drag, _, cx| {
+                                |drag, _, window, cx| {
                                     cx.stop_propagation();
                                     cx.new_view(|_| drag.clone())
                                 },
@@ -649,14 +649,14 @@ impl TabPanel {
                             .when(state.draggable, |this| {
                                 this.on_drag(
                                     DragPanel::new(panel.clone(), view.clone()),
-                                    |drag, _, cx| {
+                                    |drag, _, window, cx| {
                                         cx.stop_propagation();
                                         cx.new_view(|_| drag.clone())
                                     },
                                 )
                             })
                             .when(state.droppable, |this| {
-                                this.drag_over::<DragPanel>(|this, _, cx| {
+                                this.drag_over::<DragPanel>(|this, _, window, cx| {
                                     this.rounded_l_none()
                                         .border_l_2()
                                         .border_r_0()
@@ -680,8 +680,11 @@ impl TabPanel {
                     .flex_grow()
                     .min_w_16()
                     .when(state.droppable, |this| {
-                        this.drag_over::<DragPanel>(|this, _, cx| this.bg(cx.theme().drop_target))
-                            .on_drop(cx.listener(move |this, drag: &DragPanel, cx| {
+                        this.drag_over::<DragPanel>(|this, _, window, cx| {
+                            this.bg(cx.theme().drop_target)
+                        })
+                        .on_drop(cx.listener(
+                            move |this, drag: &DragPanel, cx| {
                                 this.will_split_placement = None;
 
                                 let ix = if drag.tab_panel == view {
@@ -691,7 +694,8 @@ impl TabPanel {
                                 };
 
                                 this.on_drop(drag, ix, false, cx)
-                            }))
+                            },
+                        ))
                     }),
             )
             .suffix(
@@ -936,7 +940,7 @@ impl TabPanel {
 
     fn focus_active_panel(&self, cx: &mut ViewContext<Self>) {
         if let Some(active_panel) = self.active_panel(cx) {
-            active_panel.focus_handle(cx).focus(cx);
+            active_panel.focus_handle(cx).focus(window);
         }
     }
 

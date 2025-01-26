@@ -1,7 +1,7 @@
-use gpui::{
+use gpui::{Window, ModelContext, 
     div, prelude::FluentBuilder, px, AnyElement, Context, EventEmitter, FocusHandle, FocusableView,
     InteractiveElement, IntoElement, KeyDownEvent, Model, MouseButton, MouseDownEvent,
-    ParentElement as _, Render, SharedString, Styled as _, ViewContext,
+    ParentElement as _, Render, SharedString, Styled as _, 
 };
 
 use crate::{h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable, Size};
@@ -102,7 +102,7 @@ impl OtpInput {
     }
 
     pub fn focus(&self, cx: &mut ViewContext<Self>) {
-        self.focus_handle.focus(cx);
+        self.focus_handle.focus(window);
     }
 
     fn on_input_mouse_down(&mut self, _: &MouseDownEvent, cx: &mut ViewContext<Self>) {
@@ -188,7 +188,7 @@ impl EventEmitter<InputEvent> for OtpInput {}
 impl Render for OtpInput {
     fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
         let blink_show = self.blink_cursor.read(cx).visible();
-        let is_focused = self.focus_handle.is_focused(cx);
+        let is_focused = self.focus_handle.is_focused(window);
 
         let text_size = match self.size {
             Size::XSmall => px(14.),

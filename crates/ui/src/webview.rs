@@ -5,11 +5,11 @@ use wry::{
     Rect,
 };
 
-use gpui::{
+use gpui::{Window, AppContext, Model, 
     canvas, div, Bounds, ContentMask, DismissEvent, Element, ElementId, EventEmitter, FocusHandle,
     FocusableView, GlobalElementId, Hitbox, InteractiveElement, IntoElement, LayoutId,
-    MouseDownEvent, ParentElement as _, Pixels, Render, Size, Style, Styled as _, View,
-    WindowContext,
+    MouseDownEvent, ParentElement as _, Pixels, Render, Size, Style, Styled as _, 
+    
 };
 
 pub struct WebView {
@@ -90,8 +90,8 @@ impl Render for WebView {
             .child({
                 let view = cx.view().clone();
                 canvas(
-                    move |bounds, cx| view.update(cx, |r, _| r.bounds = bounds),
-                    |_, _, _| {},
+                    move |bounds, window, cx| view.update(cx, |r, _| r.bounds = bounds),
+                    |_, _, _, _| {},
                 )
                 .absolute()
                 .size_full()

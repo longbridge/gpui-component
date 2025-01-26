@@ -1,10 +1,10 @@
 use std::rc::Rc;
 
 use crate::{h_flex, ActiveTheme, Icon, IconName, InteractiveElementExt as _, Sizable as _};
-use gpui::{
+use gpui::{Window, AppContext, 
     div, prelude::FluentBuilder as _, px, relative, AnyElement, ClickEvent, Div, Element, Hsla,
     InteractiveElement as _, IntoElement, MouseButton, ParentElement, Pixels, RenderOnce, Stateful,
-    StatefulInteractiveElement as _, Style, Styled, TitlebarOptions, WindowContext,
+    StatefulInteractiveElement as _, Style, Styled, TitlebarOptions, 
 };
 
 pub const TITLE_BAR_HEIGHT: Pixels = px(35.);
@@ -161,11 +161,11 @@ impl RenderOnce for ControlIcon {
             .items_center()
             .text_color(fg)
             .when(is_linux, |this| {
-                this.on_mouse_down(MouseButton::Left, move |_, cx| {
+                this.on_mouse_down(MouseButton::Left, move |_, window, cx| {
                     cx.prevent_default();
                     cx.stop_propagation();
                 })
-                .on_click(move |_, cx| match icon {
+                .on_click(move |_, window, cx| match icon {
                     Self::Minimize => cx.minimize_window(),
                     Self::Restore => cx.zoom_window(),
                     Self::Maximize => cx.zoom_window(),

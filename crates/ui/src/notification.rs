@@ -1,9 +1,9 @@
 use std::{any::TypeId, collections::VecDeque, sync::Arc, time::Duration};
 
-use gpui::{
+use gpui::{Window, ModelContext, AppContext, Model, 
     div, prelude::FluentBuilder, px, Animation, AnimationExt, ClickEvent, DismissEvent, ElementId,
     EventEmitter, InteractiveElement as _, IntoElement, ParentElement as _, Render, SharedString,
-    StatefulInteractiveElement, Styled, View, ViewContext, VisualContext, WindowContext,
+    StatefulInteractiveElement, Styled,   VisualContext, 
 };
 use smol::Timer;
 

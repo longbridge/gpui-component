@@ -1,7 +1,8 @@
 use crate::{ActiveTheme, Sizable, Size};
 use gpui::{
-    prelude::FluentBuilder as _, svg, AnyElement, Hsla, IntoElement, Radians, Render, RenderOnce,
-    SharedString, StyleRefinement, Styled, Svg, Transformation, View, VisualContext, WindowContext,
+    prelude::FluentBuilder as _, svg, AnyElement, App, AppContext, Context, Entity, Hsla,
+    IntoElement, Radians, Render, RenderOnce, SharedString, StyleRefinement, Styled, Svg,
+    Transformation, Window,
 };
 
 #[derive(IntoElement, Clone)]
@@ -160,7 +161,7 @@ impl IconName {
     }
 
     /// Return the icon as a View<Icon>
-    pub fn view(self, cx: &mut WindowContext) -> View<Icon> {
+    pub fn view(self, cx: &mut App) -> Entity<Icon> {
         Icon::build(self).view(cx)
     }
 }
@@ -178,7 +179,7 @@ impl From<IconName> for AnyElement {
 }
 
 impl RenderOnce for IconName {
-    fn render(self, _cx: &mut WindowContext) -> impl IntoElement {
+    fn render(self, _: &mut Window, _cx: &mut App) -> impl IntoElement {
         Icon::build(self)
     }
 }
@@ -236,7 +237,7 @@ impl Icon {
     }
 
     /// Create a new view for the icon
-    pub fn view(self, cx: &mut WindowContext) -> View<Icon> {
+    pub fn view(self, cx: &mut App) -> Entity<Icon> {
         cx.new_view(|_| self)
     }
 
@@ -277,8 +278,8 @@ impl Sizable for Icon {
 }
 
 impl RenderOnce for Icon {
-    fn render(self, cx: &mut WindowContext) -> impl IntoElement {
-        let text_color = self.text_color.unwrap_or_else(|| cx.text_style().color);
+    fn render(self, window: &mut Window, _cx: &mut App) -> impl IntoElement {
+        let text_color = self.text_color.unwrap_or_else(|| window.text_style().color);
 
         self.base
             .text_color(text_color)
@@ -300,7 +301,7 @@ impl From<Icon> for AnyElement {
 }
 
 impl Render for Icon {
-    fn render(&mut self, cx: &mut gpui::ViewContext<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let text_color = self.text_color.unwrap_or_else(|| cx.theme().foreground);
 
         svg()

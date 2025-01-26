@@ -1,8 +1,8 @@
 use crate::{h_flex, ActiveTheme, Disableable, Icon, IconName, Selectable, Sizable as _};
-use gpui::{
+use gpui::{Window, AppContext, 
     div, prelude::FluentBuilder as _, AnyElement, ClickEvent, Div, ElementId, InteractiveElement,
     IntoElement, MouseButton, MouseMoveEvent, ParentElement, RenderOnce, Stateful,
-    StatefulInteractiveElement as _, Styled, WindowContext,
+    StatefulInteractiveElement as _, Styled, 
 };
 use smallvec::SmallVec;
 
@@ -127,13 +127,13 @@ impl RenderOnce for ListItem {
             .when(!self.disabled, |this| {
                 this.when_some(self.on_click, |this, on_click| {
                     this.cursor_pointer()
-                        .on_mouse_down(MouseButton::Left, move |_, cx| {
+                        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                             cx.stop_propagation();
                         })
                         .on_click(on_click)
                 })
                 .when_some(self.on_mouse_enter, |this, on_mouse_enter| {
-                    this.on_mouse_move(move |ev, cx| (on_mouse_enter)(ev, cx))
+                    this.on_mouse_move(move |ev, window, cx| (on_mouse_enter)(ev, cx))
                 })
                 .when(!is_active, |this| {
                     this.hover(|this| this.bg(cx.theme().list_hover))

@@ -9,9 +9,9 @@ mod tiles;
 use anyhow::Result;
 use gpui::{
     actions, canvas, div, prelude::FluentBuilder, AnyElement, AnyView, AppContext, Axis, Bounds,
-    Edges, Entity as _, EntityId, EventEmitter, InteractiveElement as _, IntoElement,
-    ParentElement as _, Pixels, Render, SharedString, Styled, Subscription, View, ViewContext,
-    VisualContext, WeakView, WindowContext,
+    Edges, Entity as _, EntityId, EventEmitter, InteractiveElement as _, IntoElement, Model,
+    ModelContext, ParentElement as _, Pixels, Render, SharedString, Styled, Subscription,
+    VisualContext, WeakView, Window,
 };
 use std::sync::Arc;
 
@@ -121,7 +121,7 @@ impl DockItem {
     pub fn split(
         axis: Axis,
         items: Vec<DockItem>,
-        dock_area: &WeakView<DockArea>,
+        dock_area: &WeakEntity<DockArea>,
         cx: &mut WindowContext,
     ) -> Self {
         let sizes = vec![None; items.len()];
@@ -136,7 +136,7 @@ impl DockItem {
         axis: Axis,
         items: Vec<DockItem>,
         sizes: Vec<Option<Pixels>>,
-        dock_area: &WeakView<DockArea>,
+        dock_area: &WeakEntity<DockArea>,
         cx: &mut WindowContext,
     ) -> Self {
         let mut items = items;
@@ -186,7 +186,7 @@ impl DockItem {
     pub fn tiles(
         items: Vec<DockItem>,
         metas: Vec<impl Into<TileMeta> + Copy>,
-        dock_area: &WeakView<DockArea>,
+        dock_area: &WeakEntity<DockArea>,
         cx: &mut WindowContext,
     ) -> Self {
         assert!(items.len() == metas.len());
@@ -231,7 +231,7 @@ impl DockItem {
     pub fn tabs(
         items: Vec<Arc<dyn PanelView>>,
         active_ix: Option<usize>,
-        dock_area: &WeakView<DockArea>,
+        dock_area: &WeakEntity<DockArea>,
         cx: &mut WindowContext,
     ) -> Self {
         let mut new_items: Vec<Arc<dyn PanelView>> = vec![];
@@ -243,7 +243,7 @@ impl DockItem {
 
     pub fn tab<P: Panel>(
         item: View<P>,
-        dock_area: &WeakView<DockArea>,
+        dock_area: &WeakEntity<DockArea>,
         cx: &mut WindowContext,
     ) -> Self {
         Self::new_tabs(vec![Arc::new(item.clone())], None, dock_area, cx)
@@ -252,7 +252,7 @@ impl DockItem {
     fn new_tabs(
         items: Vec<Arc<dyn PanelView>>,
         active_ix: Option<usize>,
-        dock_area: &WeakView<DockArea>,
+        dock_area: &WeakEntity<DockArea>,
         cx: &mut WindowContext,
     ) -> Self {
         let active_ix = active_ix.unwrap_or(0);
@@ -304,7 +304,7 @@ impl DockItem {
     pub fn add_panel(
         &mut self,
         panel: Arc<dyn PanelView>,
-        dock_area: &WeakView<DockArea>,
+        dock_area: &WeakEntity<DockArea>,
         cx: &mut WindowContext,
     ) {
         match self {
@@ -854,8 +854,8 @@ impl Render for DockArea {
             .overflow_hidden()
             .child(
                 canvas(
-                    move |bounds, cx| view.update(cx, |r, _| r.bounds = bounds),
-                    |_, _, _| {},
+                    move |bounds, window, cx| view.update(cx, |r, _| r.bounds = bounds),
+                    |_, _, _, _| {},
                 )
                 .absolute()
                 .size_full(),

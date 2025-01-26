@@ -1,8 +1,8 @@
-use gpui::{
+use gpui::{Window, ModelContext, Model, 
     actions, div, impl_internal_actions, px, AppContext, Corner, DismissEvent, Element,
     EventEmitter, FocusHandle, FocusableView, InteractiveElement, IntoElement, KeyBinding,
-    MouseButton, ParentElement as _, Render, SharedString, Styled as _, View, ViewContext,
-    VisualContext, WindowContext,
+    MouseButton, ParentElement as _, Render, SharedString, Styled as _,  
+    VisualContext, 
 };
 use serde::Deserialize;
 use ui::{

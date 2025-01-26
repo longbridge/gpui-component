@@ -1,9 +1,9 @@
 use chrono::NaiveDate;
-use gpui::{
+use gpui::{Window, ModelContext, Model, 
     anchored, deferred, div, prelude::FluentBuilder as _, px, AppContext, ElementId, EventEmitter,
     FocusHandle, FocusableView, InteractiveElement as _, KeyBinding, Length, MouseButton,
-    ParentElement as _, Render, SharedString, StatefulInteractiveElement as _, Styled, View,
-    ViewContext, VisualContext as _,
+    ParentElement as _, Render, SharedString, StatefulInteractiveElement as _, Styled, 
+     VisualContext as _,
 };
 use rust_i18n::t;
 
@@ -203,7 +203,7 @@ impl DatePicker {
 
         if let Some(focused) = cx.focused() {
             if focused.contains(&self.focus_handle, cx) {
-                self.focus_handle.focus(cx);
+                self.focus_handle.focus(window);
             }
         }
     }
@@ -252,7 +252,7 @@ impl FocusableView for DatePicker {
 impl Render for DatePicker {
     fn render(&mut self, cx: &mut ViewContext<Self>) -> impl gpui::IntoElement {
         // This for keep focus border style, when click on the popup.
-        let is_focused = self.focus_handle.contains_focused(cx);
+        let is_focused = self.focus_handle.contains_focused(window, cx);
         let show_clean = self.cleanable && self.date.is_some();
         let placeholder = self
             .placeholder

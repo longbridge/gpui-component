@@ -3,8 +3,8 @@ use std::{sync::Arc, time::Duration};
 use fake::Fake;
 use gpui::{
     actions, div, prelude::FluentBuilder as _, px, AppContext, FocusHandle, FocusableView,
-    InteractiveElement as _, IntoElement, ParentElement, Render, SharedString, Styled, Task, Timer,
-    View, ViewContext, VisualContext as _, WeakView, WindowContext,
+    InteractiveElement as _, IntoElement, Model, ModelContext, ParentElement, Render, SharedString,
+    Styled, Task, Timer, VisualContext as _, WeakView, Window,
 };
 
 use ui::{
@@ -25,7 +25,7 @@ use ui::{
 actions!(modal_story, [TestAction]);
 
 pub struct ListItemDeletegate {
-    story: WeakView<ModalStory>,
+    story: WeakEntity<ModalStory>,
     confirmed_index: Option<usize>,
     selected_index: Option<usize>,
     items: Vec<Arc<String>>,

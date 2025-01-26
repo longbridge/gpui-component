@@ -1,7 +1,7 @@
 use chrono::{Days, Duration, Utc};
 use gpui::{
-    px, IntoElement, ParentElement as _, Render, Styled as _, View, ViewContext,
-    VisualContext as _, WindowContext,
+    px, AppContext, IntoElement, Model, ModelContext, ParentElement as _, Render, Styled as _,
+    VisualContext as _, Window,
 };
 use ui::{
     button::Button,
@@ -11,12 +11,12 @@ use ui::{
 
 pub struct CalendarStory {
     size: Size,
-    date_picker: View<DatePicker>,
-    date_picker_small: View<DatePicker>,
-    date_picker_large: View<DatePicker>,
+    date_picker: Entity<DatePicker>,
+    date_picker_small: Entity<DatePicker>,
+    date_picker_large: Entity<DatePicker>,
     date_picker_value: Option<String>,
-    date_range_picker: View<DatePicker>,
-    default_range_mode_picker: View<DatePicker>,
+    date_range_picker: Entity<DatePicker>,
+    default_range_mode_picker: Entity<DatePicker>,
 }
 
 impl super::Story for CalendarStory {
@@ -28,13 +28,13 @@ impl super::Story for CalendarStory {
         "A date picker and calendar component."
     }
 
-    fn new_view(cx: &mut WindowContext) -> View<impl gpui::FocusableView> {
+    fn new_view(cx: &mut WindowContext) -> Entity<impl gpui::FocusableView> {
         Self::view(cx)
     }
 }
 
 impl CalendarStory {
-    pub fn view(cx: &mut WindowContext) -> View<Self> {
+    pub fn view(cx: &mut WindowContext) -> Entity<Self> {
         cx.new_view(Self::new)
     }
 

@@ -1,6 +1,6 @@
-use gpui::{
-    point, px, size, AppContext, Axis, Bounds, Pixels, View, VisualContext as _, WeakView,
-    WindowContext,
+use gpui::{Window, Model,
+    point, px, size, AppContext, Axis, Bounds, Pixels,  VisualContext as _, WeakView,
+
 };
 use itertools::Itertools as _;
 use serde::{Deserialize, Serialize};
@@ -48,7 +48,7 @@ impl DockState {
     }
 
     /// Convert the DockState to Dock
-    pub fn to_dock(&self, dock_area: WeakView<DockArea>, cx: &mut WindowContext) -> View<Dock> {
+    pub fn to_dock(&self, dock_area: WeakEntity<DockArea>, cx: &mut WindowContext) -> View<Dock> {
         let item = self.panel.to_item(dock_area.clone(), cx);
         cx.new_view(|cx| {
             Dock::from_state(
@@ -178,7 +178,7 @@ impl PanelState {
         self.children.push(panel);
     }
 
-    pub fn to_item(&self, dock_area: WeakView<DockArea>, cx: &mut WindowContext) -> DockItem {
+    pub fn to_item(&self, dock_area: WeakEntity<DockArea>, cx: &mut WindowContext) -> DockItem {
         let info = self.info.clone();
 
         let items: Vec<DockItem> = self

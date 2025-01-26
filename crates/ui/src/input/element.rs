@@ -1,7 +1,7 @@
-use gpui::{
+use gpui::{Window, AppContext, Model, 
     fill, point, px, relative, size, Bounds, Corners, Element, ElementId, ElementInputHandler,
     GlobalElementId, IntoElement, LayoutId, MouseButton, MouseMoveEvent, PaintQuad, Path, Pixels,
-    Point, Style, TextRun, UnderlineStyle, View, WindowContext, WrappedLine,
+    Point, Style, TextRun, UnderlineStyle,   WrappedLine,
 };
 use smallvec::SmallVec;
 

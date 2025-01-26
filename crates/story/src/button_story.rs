@@ -1,6 +1,6 @@
 use gpui::{
-    actions, px, ClickEvent, FocusableView, InteractiveElement, IntoElement, ParentElement as _,
-    Render, Styled as _, View, ViewContext, VisualContext as _, WindowContext,
+    actions, px, AppContext, ClickEvent, FocusableView, InteractiveElement, IntoElement, Model,
+    ModelContext, ParentElement as _, Render, Styled as _, VisualContext as _, Window,
 };
 
 use ui::{
@@ -25,7 +25,7 @@ pub struct ButtonStory {
 }
 
 impl ButtonStory {
-    pub fn view(cx: &mut WindowContext) -> View<Self> {
+    pub fn view(cx: &mut WindowContext) -> Entity<Self> {
         cx.new_view(|cx| Self {
             focus_handle: cx.focus_handle(),
             disabled: false,
@@ -54,7 +54,7 @@ impl super::Story for ButtonStory {
         false
     }
 
-    fn new_view(cx: &mut WindowContext) -> View<impl gpui::FocusableView> {
+    fn new_view(cx: &mut WindowContext) -> Entity<impl gpui::FocusableView> {
         Self::view(cx)
     }
 }

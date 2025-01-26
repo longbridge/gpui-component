@@ -1,8 +1,8 @@
 use std::rc::Rc;
 
-use gpui::{
+use gpui::{Window, AppContext, 
     div, prelude::FluentBuilder as _, ClickEvent, ElementId, InteractiveElement as _, IntoElement,
-    ParentElement, RenderOnce, SharedString, StatefulInteractiveElement, Styled, WindowContext,
+    ParentElement, RenderOnce, SharedString, StatefulInteractiveElement, Styled, 
 };
 
 use crate::{h_flex, ActiveTheme, Icon, IconName};
@@ -64,7 +64,7 @@ impl RenderOnce for BreadcrumbItem {
             })
             .when(!self.disabled, |this| {
                 this.when_some(self.on_click, |this, on_click| {
-                    this.cursor_pointer().on_click(move |event, cx| {
+                    this.cursor_pointer().on_click(move |event, window, cx| {
                         on_click(event, cx);
                     })
                 })

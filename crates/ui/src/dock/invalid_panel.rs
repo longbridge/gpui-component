@@ -1,6 +1,6 @@
-use gpui::{
+use gpui::{Window, 
     AppContext, EventEmitter, FocusHandle, FocusableView, ParentElement as _, Render, SharedString,
-    Styled as _, WindowContext,
+    Styled as _, 
 };
 
 use crate::ActiveTheme as _;

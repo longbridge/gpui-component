@@ -2,7 +2,7 @@ use gpui::*;
 use story::{Assets, TableStory};
 
 pub struct Example {
-    table: View<TableStory>,
+    table: Entity<TableStory>,
 }
 
 impl Example {
@@ -12,7 +12,7 @@ impl Example {
         Self { table }
     }
 
-    fn view(cx: &mut WindowContext) -> View<Self> {
+    fn view(cx: &mut WindowContext) -> Entity<Self> {
         cx.new_view(Self::new)
     }
 }

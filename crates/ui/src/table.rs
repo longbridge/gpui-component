@@ -7,13 +7,13 @@ use crate::{
     scroll::{ScrollableMask, Scrollbar, ScrollbarState},
     v_flex, ActiveTheme, Icon, IconName, Sizable, Size, StyleSized as _,
 };
-use gpui::{
+use gpui::{Window, ModelContext, 
     actions, canvas, div, prelude::FluentBuilder, px, uniform_list, AppContext, Axis, Bounds, Div,
     DragMoveEvent, Edges, Entity, EntityId, EventEmitter, FocusHandle, FocusableView,
     InteractiveElement, IntoElement, KeyBinding, ListSizingBehavior, MouseButton, MouseDownEvent,
     ParentElement, Pixels, Point, Render, ScrollHandle, ScrollStrategy, SharedString, Stateful,
-    StatefulInteractiveElement as _, Styled, Task, UniformListScrollHandle, ViewContext,
-    VisualContext as _, WindowContext,
+    StatefulInteractiveElement as _, Styled, Task, UniformListScrollHandle, 
+    VisualContext as _, 
 };
 
 mod loading;
@@ -884,7 +884,7 @@ where
                     }
                 };
             }))
-            .on_drag(ResizeCol((cx.entity_id(), ix)), |drag, _, cx| {
+            .on_drag(ResizeCol((cx.entity_id(), ix)), |drag, _, window, cx| {
                 cx.stop_propagation();
                 cx.new_view(|_| drag.clone())
             })
@@ -985,12 +985,12 @@ where
                                 name,
                                 width: col_group.width,
                             },
-                            |drag, _, cx| {
+                            |drag, _, window, cx| {
                                 cx.stop_propagation();
                                 cx.new_view(|_| drag.clone())
                             },
                         )
-                        .drag_over::<DragCol>(|this, _, cx| {
+                        .drag_over::<DragCol>(|this, _, window, cx| {
                             this.rounded_l_none()
                                 .border_l_2()
                                 .border_r_0()
@@ -1014,8 +1014,8 @@ where
             .child({
                 let view = cx.view().clone();
                 canvas(
-                    move |bounds, cx| view.update(cx, |r, _| r.col_groups[col_ix].bounds = bounds),
-                    |_, _, _| {},
+                    move |bounds, window, cx| view.update(cx, |r, _| r.col_groups[col_ix].bounds = bounds),
+                    |_, _, _, _| {},
                 )
                 .absolute()
                 .size_full()
@@ -1066,10 +1066,10 @@ where
                         )
                         .child(
                             canvas(
-                                move |bounds, cx| {
+                                move |bounds, window, cx| {
                                     view.update(cx, |r, _| r.fixed_head_cols_bounds = bounds)
                                 },
-                                |_, _, _| {},
+                                |_, _, _, _| {},
                             )
                             .absolute()
                             .size_full(),
@@ -1100,10 +1100,10 @@ where
                             .child(self.delegate.render_last_empty_col(cx))
                             .child(
                                 canvas(
-                                    move |bounds, cx| {
+                                    move |bounds, window, cx| {
                                         view.update(cx, |r, _| r.head_content_bounds = bounds)
                                     },
-                                    |_, _, _| {},
+                                    |_, _, _, _| {},
                                 )
                                 .absolute()
                                 .size_full(),
@@ -1504,8 +1504,8 @@ where
                     })
             })
             .child(canvas(
-                move |bounds, cx| view.update(cx, |r, _| r.bounds = bounds),
-                |_, _, _| {},
+                move |bounds, window, cx| view.update(cx, |r, _| r.bounds = bounds),
+                |_, _, _, _| {},
             ))
             .child(
                 div()

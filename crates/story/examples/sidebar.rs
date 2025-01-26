@@ -2,7 +2,7 @@ use gpui::*;
 use story::{Assets, SidebarStory};
 
 pub struct Example {
-    root: View<SidebarStory>,
+    root: Entity<SidebarStory>,
 }
 
 impl Example {
@@ -12,7 +12,7 @@ impl Example {
         Self { root }
     }
 
-    fn view(cx: &mut WindowContext) -> View<Self> {
+    fn view(cx: &mut WindowContext) -> Entity<Self> {
         cx.new_view(Self::new)
     }
 }

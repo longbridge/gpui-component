@@ -13,13 +13,13 @@ use crate::{
 use super::{DockArea, Panel, PanelEvent, PanelState, PanelView, TabPanel};
 use gpui::{
     prelude::FluentBuilder as _, AppContext, Axis, DismissEvent, EventEmitter, FocusHandle,
-    FocusableView, IntoElement, ParentElement, Pixels, Render, Styled, Subscription, View,
-    ViewContext, VisualContext, WeakView,
+    FocusableView, IntoElement, Model, ModelContext, ParentElement, Pixels, Render, Styled,
+    Subscription, VisualContext, WeakView, Window,
 };
 use smallvec::SmallVec;
 
 pub struct StackPanel {
-    pub(super) parent: Option<WeakView<StackPanel>>,
+    pub(super) parent: Option<WeakEntity<StackPanel>>,
     pub(super) axis: Axis,
     focus_handle: FocusHandle,
     pub(crate) panels: SmallVec<[Arc<dyn PanelView>; 2]>,
@@ -108,7 +108,7 @@ impl StackPanel {
         &mut self,
         panel: Arc<dyn PanelView>,
         size: Option<Pixels>,
-        dock_area: WeakView<DockArea>,
+        dock_area: WeakEntity<DockArea>,
         cx: &mut ViewContext<Self>,
     ) {
         self.insert_panel(panel, self.panels.len(), size, dock_area, cx);
@@ -119,7 +119,7 @@ impl StackPanel {
         panel: Arc<dyn PanelView>,
         placement: Placement,
         size: Option<Pixels>,
-        dock_area: WeakView<DockArea>,
+        dock_area: WeakEntity<DockArea>,
         cx: &mut ViewContext<Self>,
     ) {
         self.insert_panel_at(panel, self.panels_len(), placement, size, dock_area, cx);
@@ -131,7 +131,7 @@ impl StackPanel {
         ix: usize,
         placement: Placement,
         size: Option<Pixels>,
-        dock_area: WeakView<DockArea>,
+        dock_area: WeakEntity<DockArea>,
         cx: &mut ViewContext<Self>,
     ) {
         match placement {
@@ -150,7 +150,7 @@ impl StackPanel {
         panel: Arc<dyn PanelView>,
         ix: usize,
         size: Option<Pixels>,
-        dock_area: WeakView<DockArea>,
+        dock_area: WeakEntity<DockArea>,
         cx: &mut ViewContext<Self>,
     ) {
         self.insert_panel(panel, ix, size, dock_area, cx);
@@ -162,7 +162,7 @@ impl StackPanel {
         panel: Arc<dyn PanelView>,
         ix: usize,
         size: Option<Pixels>,
-        dock_area: WeakView<DockArea>,
+        dock_area: WeakEntity<DockArea>,
         cx: &mut ViewContext<Self>,
     ) {
         self.insert_panel(panel, ix + 1, size, dock_area, cx);
@@ -180,7 +180,7 @@ impl StackPanel {
         panel: Arc<dyn PanelView>,
         ix: usize,
         size: Option<Pixels>,
-        dock_area: WeakView<DockArea>,
+        dock_area: WeakEntity<DockArea>,
         cx: &mut ViewContext<Self>,
     ) {
         // If the panel is already in the stack, return.

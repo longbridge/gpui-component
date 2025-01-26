@@ -1,10 +1,10 @@
 use std::{cell::Cell, rc::Rc};
 
 use super::{Scrollbar, ScrollbarAxis, ScrollbarState};
-use gpui::{
+use gpui::{Window, AppContext, 
     canvas, div, relative, AnyElement, Div, Element, ElementId, EntityId, GlobalElementId,
     InteractiveElement, IntoElement, ParentElement, Pixels, Position, ScrollHandle, SharedString,
-    Size, Stateful, StatefulInteractiveElement, Style, StyleRefinement, Styled, WindowContext,
+    Size, Stateful, StatefulInteractiveElement, Style, StyleRefinement, Styled, 
 };
 
 /// A scroll view is a container that allows the user to scroll through a large amount of content.
@@ -180,7 +180,7 @@ where
                         .size_full()
                         .child(div().children(content).child({
                             let scroll_size = element_state.scroll_size.clone();
-                            canvas(move |b, _| scroll_size.set(b.size), |_, _, _| {})
+                            canvas(move |b, _, _| scroll_size.set(b.size), |_, _, _, _| {})
                                 .absolute()
                                 .size_full()
                         })),

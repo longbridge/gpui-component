@@ -1,6 +1,6 @@
-use gpui::{
+use gpui::{Window, ModelContext, AppContext, Model, 
     div, CursorStyle, InteractiveElement, ParentElement, Render, StatefulInteractiveElement,
-    Styled, View, ViewContext, VisualContext as _, WindowContext,
+    Styled,   VisualContext as _, 
 };
 
 use ui::{

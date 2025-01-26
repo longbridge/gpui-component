@@ -4,10 +4,10 @@ use crate::{
     scroll::ScrollbarAxis,
     v_flex, ActiveTheme, Collapsible, Icon, IconName, Side, Sizable, StyledExt,
 };
-use gpui::{
+use gpui::{Window, AppContext, Model, 
     div, prelude::FluentBuilder, px, AnyElement, ClickEvent, Entity, EntityId,
-    InteractiveElement as _, IntoElement, ParentElement, Pixels, Render, RenderOnce, Styled, View,
-    WindowContext,
+    InteractiveElement as _, IntoElement, ParentElement, Pixels, Render, RenderOnce, Styled, 
+    
 };
 use std::rc::Rc;
 

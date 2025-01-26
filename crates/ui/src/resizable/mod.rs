@@ -1,4 +1,4 @@
-use gpui::{Axis, ViewContext};
+use gpui::{Window, ModelContext, Axis, };
 
 mod panel;
 mod resize_handle;

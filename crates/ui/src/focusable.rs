@@ -1,4 +1,4 @@
-use gpui::{FocusHandle, WindowContext};
+use gpui::{Window, AppContext, FocusHandle, };
 
 /// A trait for views that can cycle focus between its children.
 ///
@@ -34,7 +34,7 @@ pub trait FocusableCycle {
             .next()
             .unwrap_or(fallback_handle);
 
-        target_focus_handle.focus(cx);
+        target_focus_handle.focus(window);
         cx.stop_propagation();
     }
 }

@@ -1,7 +1,7 @@
-use gpui::{
+use gpui::{Window, ModelContext, Model, 
     actions, div, px, AppContext, FocusHandle, InteractiveElement, IntoElement, KeyBinding,
-    ParentElement as _, Render, SharedString, Styled, View, ViewContext, VisualContext,
-    WindowContext,
+    ParentElement as _, Render, SharedString, Styled,   VisualContext,
+    
 };
 use regex::Regex;
 

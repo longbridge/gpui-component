@@ -1,9 +1,9 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-use gpui::{
+use gpui::{Window, ModelContext, AppContext, Model, 
     div, px, size, Entity, InteractiveElement, IntoElement, ParentElement, Pixels, Render,
-    ScrollHandle, SharedString, Size, Styled, View, ViewContext, VisualContext, WindowContext,
+    ScrollHandle, SharedString, Size, Styled,   VisualContext, 
 };
 use ui::button::Button;
 use ui::divider::Divider;

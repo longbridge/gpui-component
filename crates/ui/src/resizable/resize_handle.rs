@@ -1,7 +1,7 @@
-use gpui::{
+use gpui::{Window, AppContext, 
     div, prelude::FluentBuilder as _, px, Axis, Div, ElementId, InteractiveElement, IntoElement,
     ParentElement as _, Pixels, RenderOnce, Stateful, StatefulInteractiveElement, Styled as _,
-    WindowContext,
+    
 };
 
 use crate::{ActiveTheme as _, AxisExt as _};

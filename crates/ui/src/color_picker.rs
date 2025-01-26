@@ -1,8 +1,8 @@
-use gpui::{
+use gpui::{Window, ModelContext, Model, 
     anchored, canvas, deferred, div, prelude::FluentBuilder as _, px, relative, AppContext, Bounds,
     Corner, ElementId, EventEmitter, FocusHandle, FocusableView, Hsla, InteractiveElement as _,
     IntoElement, KeyBinding, MouseButton, ParentElement, Pixels, Point, Render, SharedString,
-    StatefulInteractiveElement as _, Styled, View, ViewContext, VisualContext,
+    StatefulInteractiveElement as _, Styled,   VisualContext,
 };
 
 use crate::{
@@ -323,8 +323,8 @@ impl Render for ColorPicker {
                     .on_click(cx.listener(Self::toggle_picker))
                     .child(
                         canvas(
-                            move |bounds, cx| view.update(cx, |r, _| r.bounds = bounds),
-                            |_, _, _| {},
+                            move |bounds, window, cx| view.update(cx, |r, _| r.bounds = bounds),
+                            |_, _, _, _| {},
                         )
                         .absolute()
                         .size_full(),

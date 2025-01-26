@@ -225,7 +225,7 @@ impl StoryWorkspace {
         })
     }
 
-    fn reset_default_layout(dock_area: WeakView<DockArea>, cx: &mut WindowContext) {
+    fn reset_default_layout(dock_area: WeakEntity<DockArea>, cx: &mut WindowContext) {
         let dock_item = Self::init_default_layout(&dock_area, cx);
 
         let left_panels = DockItem::split_with_sizes(
@@ -285,7 +285,7 @@ impl StoryWorkspace {
         });
     }
 
-    fn init_default_layout(dock_area: &WeakView<DockArea>, cx: &mut WindowContext) -> DockItem {
+    fn init_default_layout(dock_area: &WeakEntity<DockArea>, cx: &mut WindowContext) -> DockItem {
         DockItem::split_with_sizes(
             Axis::Vertical,
             vec![DockItem::tabs(
@@ -425,7 +425,7 @@ pub fn open_new(
         StoryWorkspace::new_local(cx);
     cx.spawn(|mut cx| async move {
         if let Some(root) = task.await.ok() {
-            root.update(&mut cx, |workspace, cx| init(workspace, cx))
+            root.update(&mut cx, |workspace, window, cx| init(workspace, cx))
                 .expect("failed to init workspace");
         }
     })

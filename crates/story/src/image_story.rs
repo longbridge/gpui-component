@@ -1,4 +1,4 @@
-use gpui::{px, ParentElement as _, Render, Styled, View, VisualContext as _, WindowContext};
+use gpui::{Window, AppContext, Model, px, ParentElement as _, Render, Styled,  VisualContext as _, };
 use ui::{dock::PanelControl, h_flex, v_flex, SvgImg};
 
 const GOOGLE_LOGO: &str = include_str!("./fixtures/google.svg");

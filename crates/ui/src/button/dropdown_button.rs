@@ -1,6 +1,6 @@
 use gpui::{
-    prelude::FluentBuilder, Corner, Corners, Div, Edges, ElementId, IntoElement, ParentElement,
-    RenderOnce, Styled, ViewContext, WindowContext,
+    prelude::FluentBuilder, App, AppContext, Context, Corner, Corners, Div, Edges, ElementId,
+    IntoElement, ParentElement, RenderOnce, Styled, Window,
 };
 
 use crate::{
@@ -16,7 +16,8 @@ pub struct DropdownButton {
     base: Div,
     id: ElementId,
     button: Option<Button>,
-    popup_menu: Option<Box<dyn Fn(PopupMenu, &mut ViewContext<PopupMenu>) -> PopupMenu + 'static>>,
+    popup_menu:
+        Option<Box<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static>>,
 
     // The button props
     compact: Option<bool>,
@@ -47,7 +48,7 @@ impl DropdownButton {
 
     pub fn popup_menu(
         mut self,
-        popup_menu: impl Fn(PopupMenu, &mut ViewContext<PopupMenu>) -> PopupMenu + 'static,
+        popup_menu: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
     ) -> Self {
         self.popup_menu = Some(Box::new(popup_menu));
         self
@@ -85,7 +86,7 @@ impl ButtonVariants for DropdownButton {
 }
 
 impl RenderOnce for DropdownButton {
-    fn render(self, _: &mut WindowContext) -> impl IntoElement {
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         self.base.when_some(self.button, |this, button| {
             this.child(
                 button

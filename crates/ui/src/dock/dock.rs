@@ -2,11 +2,11 @@
 
 use std::sync::Arc;
 
-use gpui::{
+use gpui::{Window, ModelContext, AppContext, Model, 
     div, prelude::FluentBuilder as _, px, Axis, Element, Entity, InteractiveElement as _,
     IntoElement, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Render,
-    StatefulInteractiveElement, Style, Styled as _, View, ViewContext, VisualContext as _,
-    WeakView, WindowContext,
+    StatefulInteractiveElement, Style, Styled as _,   VisualContext as _,
+    WeakView, 
 };
 use serde::{Deserialize, Serialize};
 
@@ -59,7 +59,7 @@ impl DockPlacement {
 /// This is unlike Panel, it can't be move or add any other panel.
 pub struct Dock {
     pub(super) placement: DockPlacement,
-    dock_area: WeakView<DockArea>,
+    dock_area: WeakEntity<DockArea>,
     pub(crate) panel: DockItem,
     /// The size is means the width or height of the Dock, if the placement is left or right, the size is width, otherwise the size is height.
     pub(super) size: Pixels,
@@ -74,7 +74,7 @@ pub struct Dock {
 
 impl Dock {
     pub(crate) fn new(
-        dock_area: WeakView<DockArea>,
+        dock_area: WeakEntity<DockArea>,
         placement: DockPlacement,
         cx: &mut ViewContext<Self>,
     ) -> Self {
@@ -103,15 +103,15 @@ impl Dock {
         }
     }
 
-    pub fn left(dock_area: WeakView<DockArea>, cx: &mut ViewContext<Self>) -> Self {
+    pub fn left(dock_area: WeakEntity<DockArea>, cx: &mut ViewContext<Self>) -> Self {
         Self::new(dock_area, DockPlacement::Left, cx)
     }
 
-    pub fn bottom(dock_area: WeakView<DockArea>, cx: &mut ViewContext<Self>) -> Self {
+    pub fn bottom(dock_area: WeakEntity<DockArea>, cx: &mut ViewContext<Self>) -> Self {
         Self::new(dock_area, DockPlacement::Bottom, cx)
     }
 
-    pub fn right(dock_area: WeakView<DockArea>, cx: &mut ViewContext<Self>) -> Self {
+    pub fn right(dock_area: WeakEntity<DockArea>, cx: &mut ViewContext<Self>) -> Self {
         Self::new(dock_area, DockPlacement::Right, cx)
     }
 
@@ -127,7 +127,7 @@ impl Dock {
     }
 
     pub(super) fn from_state(
-        dock_area: WeakView<DockArea>,
+        dock_area: WeakEntity<DockArea>,
         placement: DockPlacement,
         size: Pixels,
         panel: DockItem,
@@ -164,7 +164,7 @@ impl Dock {
     }
 
     fn subscribe_panel_events(
-        dock_area: WeakView<DockArea>,
+        dock_area: WeakEntity<DockArea>,
         panel: &DockItem,
         cx: &mut WindowContext,
     ) {
@@ -291,7 +291,7 @@ impl Dock {
                     .when(axis.is_horizontal(), |this| this.h_full().w(HANDLE_SIZE))
                     .when(axis.is_vertical(), |this| this.w_full().h(HANDLE_SIZE)),
             )
-            .on_drag(ResizePanel {}, move |info, _, cx| {
+            .on_drag(ResizePanel {}, move |info, _, window, cx| {
                 cx.stop_propagation();
                 view.update(cx, |view, _| {
                     view.is_resizing = true;

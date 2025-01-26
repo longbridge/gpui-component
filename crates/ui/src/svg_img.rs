@@ -4,10 +4,10 @@ use std::{
     sync::{Arc, LazyLock},
 };
 
-use gpui::{
+use gpui::{Window, 
     px, size, AppContext, Asset, Bounds, Element, Hitbox, ImageCacheError, InteractiveElement,
     Interactivity, IntoElement, IsZero, Pixels, RenderImage, SharedString, Size, StyleRefinement,
-    Styled, WindowContext,
+    Styled, 
 };
 use image::Frame;
 use smallvec::SmallVec;

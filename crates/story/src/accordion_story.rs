@@ -1,6 +1,6 @@
 use gpui::{
-    FocusHandle, IntoElement, ParentElement as _, Render, Styled as _, View, ViewContext,
-    VisualContext as _, WindowContext,
+    AppContext, Entity, FocusHandle, IntoElement, Model, ModelContext, ParentElement as _, Render,
+    Styled as _, VisualContext as _, Window,
 };
 use ui::{
     accordion::Accordion,
@@ -24,13 +24,13 @@ impl super::Story for AccordionStory {
         "Accordion"
     }
 
-    fn new_view(cx: &mut WindowContext) -> View<impl gpui::FocusableView> {
+    fn new_view(cx: &mut WindowContext) -> Entity<impl gpui::FocusableView> {
         Self::view(cx)
     }
 }
 
 impl AccordionStory {
-    pub fn view(cx: &mut WindowContext) -> View<Self> {
+    pub fn view(cx: &mut WindowContext) -> Entity<Self> {
         cx.new_view(Self::new)
     }
 

@@ -14,11 +14,11 @@ use crate::{
 
 use super::{DockArea, Panel, PanelEvent, PanelInfo, PanelState, PanelView, TabPanel, TileMeta};
 use gpui::{
-    actions, canvas, div, point, px, size, AnyElement, AppContext, Bounds, DismissEvent,
+    actions, canvas, div, point, px, size, AnyElement, App, AppContext, Bounds, DismissEvent,
     DragMoveEvent, Entity, EntityId, EventEmitter, FocusHandle, FocusableView, Half,
-    InteractiveElement, IntoElement, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement,
-    Pixels, Point, Render, ScrollHandle, Size, StatefulInteractiveElement, Styled, ViewContext,
-    VisualContext, WeakView, WindowContext,
+    InteractiveElement, IntoElement, ModelContext, MouseButton, MouseDownEvent, MouseUpEvent,
+    ParentElement, Pixels, Point, Render, ScrollHandle, Size, StatefulInteractiveElement, Styled,
+    VisualContext, WeakView, Window,
 };
 
 actions!(tiles, [Undo, Redo,]);
@@ -119,7 +119,7 @@ impl Panel for Tiles {
         "Tiles"
     }
 
-    fn title(&self, _cx: &WindowContext) -> AnyElement {
+    fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
         "Tiles".into_any_element()
     }
 
@@ -301,7 +301,7 @@ impl Tiles {
     pub fn add_item(
         &mut self,
         item: TileItem,
-        dock_area: &WeakView<DockArea>,
+        dock_area: &WeakEntity<DockArea>,
         cx: &mut ViewContext<Self>,
     ) {
         self.panels.push(item.clone());
@@ -484,7 +484,7 @@ impl Tiles {
                         }
                     }),
                 )
-                .on_drag(DragResizing(entity_id), |drag, _, cx| {
+                .on_drag(DragResizing(entity_id), |drag, _, window, cx| {
                     cx.stop_propagation();
                     cx.new_view(|_| drag.clone())
                 })
@@ -542,7 +542,7 @@ impl Tiles {
                         }
                     }),
                 )
-                .on_drag(DragResizing(entity_id), |drag, _, cx| {
+                .on_drag(DragResizing(entity_id), |drag, _, window, cx| {
                     cx.stop_propagation();
                     cx.new_view(|_| drag.clone())
                 })
@@ -602,7 +602,7 @@ impl Tiles {
                         }
                     }),
                 )
-                .on_drag(DragResizing(entity_id), |drag, _, cx| {
+                .on_drag(DragResizing(entity_id), |drag, _, window, cx| {
                     cx.stop_propagation();
                     cx.new_view(|_| drag.clone())
                 })
@@ -674,7 +674,7 @@ impl Tiles {
                         }
                     }),
                 )
-                .on_drag(DragMoving(entity_id), |drag, _, cx| {
+                .on_drag(DragMoving(entity_id), |drag, _, window, cx| {
                     cx.stop_propagation();
                     cx.new_view(|_| drag.clone())
                 })
@@ -854,8 +854,8 @@ impl Render for Tiles {
                     )
                     .child({
                         canvas(
-                            move |bounds, cx| view.update(cx, |r, _| r.bounds = bounds),
-                            |_, _, _| {},
+                            move |bounds, window, cx| view.update(cx, |r, _| r.bounds = bounds),
+                            |_, _, _, _| {},
                         )
                         .absolute()
                         .size_full()

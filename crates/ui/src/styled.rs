@@ -4,9 +4,9 @@ use crate::{
     scroll::{Scrollable, ScrollbarAxis},
     ActiveTheme,
 };
-use gpui::{
+use gpui::{Window, AppContext, 
     div, px, Axis, Div, Edges, Element, ElementId, EntityId, FocusHandle, Pixels, Styled,
-    WindowContext,
+    
 };
 use serde::{Deserialize, Serialize};
 
@@ -94,7 +94,7 @@ pub trait StyledExt: Styled + Sized {
     /// Render a 1px blue border, when if the element is focused
     fn debug_focused(self, focus_handle: &FocusHandle, cx: &WindowContext) -> Self {
         if cfg!(debug_assertions) {
-            if focus_handle.contains_focused(cx) {
+            if focus_handle.contains_focused(window, cx) {
                 self.debug_blue()
             } else {
                 self

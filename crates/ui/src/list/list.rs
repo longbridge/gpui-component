@@ -7,11 +7,11 @@ use crate::{
     scroll::{Scrollbar, ScrollbarState},
     v_flex, ActiveTheme, IconName, Size,
 };
-use gpui::{
+use gpui::{Window, ModelContext, Model, 
     actions, div, prelude::FluentBuilder, uniform_list, AnyElement, AppContext, Entity,
     FocusHandle, FocusableView, InteractiveElement, IntoElement, KeyBinding, Length,
     ListSizingBehavior, MouseButton, ParentElement, Render, SharedString, Styled, Task,
-    UniformListScrollHandle, View, ViewContext, VisualContext, WindowContext,
+    UniformListScrollHandle,   VisualContext, 
 };
 use gpui::{px, EventEmitter, ScrollStrategy};
 use smol::Timer;

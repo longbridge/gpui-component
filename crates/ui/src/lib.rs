@@ -50,6 +50,7 @@ pub mod theme;
 pub mod tooltip;
 pub mod webview;
 
+use gpui::App;
 // re-export
 pub use wry;
 
@@ -84,7 +85,7 @@ pub struct Assets;
 ///
 /// This must be called before using any of the UI components.
 /// You can initialize the UI module at your application's entry point.
-pub fn init(cx: &mut gpui::AppContext) {
+pub fn init(cx: &mut App) {
     theme::init(cx);
     date_picker::init(cx);
     dock::init(cx);

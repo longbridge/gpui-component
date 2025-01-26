@@ -1,6 +1,6 @@
-use gpui::{
-    actions, div, Axis, InteractiveElement, IntoElement, ParentElement as _, Render, Styled, View,
-    ViewContext, VisualContext, WindowContext,
+use gpui::{Window, ModelContext, AppContext, Model, 
+    actions, div, Axis, InteractiveElement, IntoElement, ParentElement as _, Render, Styled, 
+     VisualContext, 
 };
 use ui::{
     button::{Button, ButtonGroup},

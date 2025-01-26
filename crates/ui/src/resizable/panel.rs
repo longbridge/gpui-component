@@ -1,10 +1,10 @@
 use std::rc::Rc;
 
 use gpui::{
-    canvas, div, prelude::FluentBuilder, px, relative, Along, AnyElement, AnyView, Axis, Bounds,
-    Element, Entity, EntityId, EventEmitter, IntoElement, IsZero, MouseMoveEvent, MouseUpEvent,
-    ParentElement, Pixels, Render, StatefulInteractiveElement as _, Style, Styled, View,
-    ViewContext, VisualContext as _, WeakView, WindowContext,
+    canvas, div, prelude::FluentBuilder, px, relative, Along, AnyElement, AnyView, AppContext,
+    Axis, Bounds, Element, Entity, EntityId, EventEmitter, IntoElement, IsZero, Model,
+    ModelContext, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, Render,
+    StatefulInteractiveElement as _, Style, Styled, VisualContext as _, WeakView, Window,
 };
 
 use crate::{h_flex, v_flex, AxisExt};
@@ -150,7 +150,7 @@ impl ResizablePanelGroup {
         let view = cx.view().clone();
         resize_handle(("resizable-handle", ix), self.axis).on_drag(
             DragPanel((cx.entity_id(), ix, self.axis)),
-            move |drag_panel, _, cx| {
+            move |drag_panel, _, window, cx| {
                 cx.stop_propagation();
                 // Set current resizing panel ix
                 view.update(cx, |view, _| {
@@ -261,8 +261,8 @@ impl Render for ResizablePanelGroup {
             }))
             .child({
                 canvas(
-                    move |bounds, cx| view.update(cx, |r, _| r.bounds = bounds),
-                    |_, _, _| {},
+                    move |bounds, window, cx| view.update(cx, |r, _| r.bounds = bounds),
+                    |_, _, _, _| {},
                 )
                 .absolute()
                 .size_full()
@@ -275,7 +275,7 @@ impl Render for ResizablePanelGroup {
 }
 
 pub struct ResizablePanel {
-    group: Option<WeakView<ResizablePanelGroup>>,
+    group: Option<WeakEntity<ResizablePanelGroup>>,
     /// Initial size is the size that the panel has when it is created.
     initial_size: Option<Pixels>,
     /// size is the size that the panel has when it is resized or adjusted by flex layout.
@@ -401,8 +401,8 @@ impl Render for ResizablePanel {
             })
             .child({
                 canvas(
-                    move |bounds, cx| view.update(cx, |r, cx| r.update_size(bounds, cx)),
-                    |_, _, _| {},
+                    move |bounds, window, cx| view.update(cx, |r, cx| r.update_size(bounds, cx)),
+                    |_, _, _, _| {},
                 )
                 .absolute()
                 .size_full()

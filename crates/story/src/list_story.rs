@@ -2,10 +2,10 @@ use core::time;
 use std::time::Duration;
 
 use fake::Fake;
-use gpui::{
+use gpui::{Window, ModelContext, Model, 
     actions, div, px, AppContext, ElementId, FocusHandle, FocusableView, InteractiveElement,
     IntoElement, ParentElement, Render, RenderOnce, SharedString, Styled, Subscription, Task,
-    Timer, View, ViewContext, VisualContext, WindowContext,
+    Timer,   VisualContext, 
 };
 
 use ui::{

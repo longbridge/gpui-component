@@ -1,6 +1,6 @@
 use gpui::{
-    actions, px, AppContext, InteractiveElement, IntoElement, KeyBinding, ParentElement, Render,
-    SharedString, Styled, View, ViewContext, VisualContext, WindowContext,
+    actions, px, AppContext, InteractiveElement, IntoElement, KeyBinding, Model, ModelContext,
+    ParentElement, Render, SharedString, Styled, VisualContext, Window,
 };
 
 use ui::{
@@ -47,11 +47,11 @@ impl DropdownItem for Country {
 
 pub struct DropdownStory {
     disabled: bool,
-    country_dropdown: View<Dropdown<Vec<Country>>>,
-    fruit_dropdown: View<Dropdown<SearchableVec<SharedString>>>,
-    simple_dropdown1: View<Dropdown<Vec<SharedString>>>,
-    simple_dropdown2: View<Dropdown<SearchableVec<SharedString>>>,
-    simple_dropdown3: View<Dropdown<Vec<SharedString>>>,
+    country_dropdown: Entity<Dropdown<Vec<Country>>>,
+    fruit_dropdown: Entity<Dropdown<SearchableVec<SharedString>>>,
+    simple_dropdown1: Entity<Dropdown<Vec<SharedString>>>,
+    simple_dropdown2: Entity<Dropdown<SearchableVec<SharedString>>>,
+    simple_dropdown3: Entity<Dropdown<Vec<SharedString>>>,
     disabled_dropdown: View<Dropdown<Vec<SharedString>>>,
 }
 

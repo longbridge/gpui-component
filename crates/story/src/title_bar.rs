@@ -1,9 +1,9 @@
 use std::rc::Rc;
 
-use gpui::{
+use gpui::{Window, ModelContext, AppContext, Model, 
     div, AnyElement, ClickEvent, Corner, FocusHandle, Hsla, InteractiveElement as _, IntoElement,
-    MouseButton, ParentElement as _, Render, SharedString, Styled as _, View, ViewContext,
-    VisualContext as _, WindowContext,
+    MouseButton, ParentElement as _, Render, SharedString, Styled as _,  
+    VisualContext as _, 
 };
 use ui::{
     badge::Badge,
@@ -102,7 +102,7 @@ impl Render for AppTitleBar {
                     .justify_end()
                     .px_2()
                     .gap_2()
-                    .on_mouse_down(MouseButton::Left, |_, cx| cx.stop_propagation())
+                    .on_mouse_down(MouseButton::Left, |_, window, cx| cx.stop_propagation())
                     .child(self.theme_color_picker.clone())
                     .child((self.child.clone())(cx))
                     .child(

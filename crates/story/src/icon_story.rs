@@ -1,5 +1,5 @@
-use gpui::{
-    px, rems, ParentElement, Render, Styled, View, ViewContext, VisualContext as _, WindowContext,
+use gpui::{Window, ModelContext, AppContext, Model, 
+    px, rems, ParentElement, Render, Styled,   VisualContext as _, 
 };
 use ui::{
     button::{Button, ButtonVariant, ButtonVariants},

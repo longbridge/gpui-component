@@ -1,6 +1,6 @@
-use gpui::{
+use gpui::{Window, ModelContext, AppContext, Model, 
     div, hsla, px, Hsla, IntoElement, ParentElement, Render, SharedString, Styled, Subscription,
-    View, ViewContext, VisualContext, WindowContext,
+      VisualContext, 
 };
 use ui::{
     button::Button,

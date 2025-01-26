@@ -1,8 +1,8 @@
 use crate::{h_flex, ActiveTheme, Disableable, Side, Sizable, Size};
-use gpui::{
+use gpui::{Window, AppContext, 
     div, prelude::FluentBuilder as _, px, Animation, AnimationExt as _, AnyElement, Element,
     ElementId, GlobalElementId, InteractiveElement, IntoElement, LayoutId, ParentElement as _,
-    SharedString, Styled as _, WindowContext,
+    SharedString, Styled as _, 
 };
 use std::{cell::RefCell, rc::Rc, time::Duration};
 
@@ -200,7 +200,7 @@ impl Element for Switch {
                                 .filter(|_| !self.disabled),
                             |this, on_click| {
                                 let prev_checked = state.prev_checked.clone();
-                                this.on_mouse_down(gpui::MouseButton::Left, move |_, cx| {
+                                this.on_mouse_down(gpui::MouseButton::Left, move |_, window, cx| {
                                     cx.stop_propagation();
                                     *prev_checked.borrow_mut() = Some(checked);
                                     on_click(&!checked, cx);

@@ -24,7 +24,7 @@ pub fn init(cx: &mut AppContext) {
 }
 
 pub struct StoryTiles {
-    dock_area: View<DockArea>,
+    dock_area: Entity<DockArea>,
     last_layout_state: Option<DockAreaState>,
     _save_layout_task: Option<Task<()>>,
 }
@@ -74,7 +74,7 @@ impl StoryTiles {
         }
     }
 
-    fn save_layout(&mut self, dock_area: View<DockArea>, cx: &mut ViewContext<Self>) {
+    fn save_layout(&mut self, dock_area: Entity<DockArea>, cx: &mut ViewContext<Self>) {
         self._save_layout_task = Some(cx.spawn(|this, mut cx| async move {
             Timer::after(Duration::from_secs(10)).await;
 
@@ -102,7 +102,7 @@ impl StoryTiles {
         Ok(())
     }
 
-    fn load_tiles(dock_area: View<DockArea>, cx: &mut WindowContext) -> Result<()> {
+    fn load_tiles(dock_area: Entity<DockArea>, cx: &mut WindowContext) -> Result<()> {
         let fname = "target/tiles.json";
         let json = std::fs::read_to_string(fname)?;
         let state = serde_json::from_str::<DockAreaState>(&json)?;
@@ -131,7 +131,7 @@ impl StoryTiles {
         })
     }
 
-    fn reset_default_layout(dock_area: WeakView<DockArea>, cx: &mut WindowContext) {
+    fn reset_default_layout(dock_area: WeakEntity<DockArea>, cx: &mut WindowContext) {
         let dock_item = Self::init_default_layout(&dock_area, cx);
         _ = dock_area.update(cx, |view, cx| {
             view.set_version(TILES_DOCK_AREA.version, cx);
@@ -141,7 +141,7 @@ impl StoryTiles {
         });
     }
 
-    fn init_default_layout(dock_area: &WeakView<DockArea>, cx: &mut WindowContext) -> DockItem {
+    fn init_default_layout(dock_area: &WeakEntity<DockArea>, cx: &mut WindowContext) -> DockItem {
         DockItem::tiles(
             vec![
                 DockItem::tab(StoryContainer::panel::<ButtonStory>(cx), dock_area, cx),
@@ -210,7 +210,7 @@ pub fn open_new(
         StoryTiles::new_local(cx);
     cx.spawn(|mut cx| async move {
         if let Some(root) = task.await.ok() {
-            root.update(&mut cx, |workspace, cx| init(workspace, cx))
+            root.update(&mut cx, |workspace, window, cx| init(workspace, cx))
                 .expect("failed to init workspace");
         }
     })

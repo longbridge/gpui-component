@@ -1,13 +1,10 @@
 use std::ops::{Deref, DerefMut};
 
-use gpui::{
-    hsla, point, AppContext, BoxShadow, Global, Hsla, ModelContext, Pixels, SharedString,
-    ViewContext, WindowAppearance, WindowContext,
-};
+use gpui::{hsla, point, App, BoxShadow, Global, Hsla, Pixels, SharedString, WindowAppearance};
 
 use crate::{scroll::ScrollbarShow, Colorize as _};
 
-pub fn init(cx: &mut AppContext) {
+pub fn init(cx: &mut App) {
     Theme::sync_system_appearance(cx)
 }
 
@@ -15,31 +12,10 @@ pub trait ActiveTheme {
     fn theme(&self) -> &Theme;
 }
 
-impl ActiveTheme for AppContext {
+impl ActiveTheme for App {
     #[inline]
     fn theme(&self) -> &Theme {
         Theme::global(self)
-    }
-}
-
-impl<V> ActiveTheme for ViewContext<'_, V> {
-    #[inline]
-    fn theme(&self) -> &Theme {
-        self.deref().theme()
-    }
-}
-
-impl<V> ActiveTheme for ModelContext<'_, V> {
-    #[inline]
-    fn theme(&self) -> &Theme {
-        self.deref().theme()
-    }
-}
-
-impl ActiveTheme for WindowContext<'_> {
-    #[inline]
-    fn theme(&self) -> &Theme {
-        self.deref().theme()
     }
 }
 
@@ -340,12 +316,12 @@ impl Global for Theme {}
 
 impl Theme {
     /// Returns the global theme reference
-    pub fn global(cx: &AppContext) -> &Theme {
+    pub fn global(cx: &App) -> &Theme {
         cx.global::<Theme>()
     }
 
     /// Returns the global theme mutable reference
-    pub fn global_mut(cx: &mut AppContext) -> &mut Theme {
+    pub fn global_mut(cx: &mut App) -> &mut Theme {
         cx.global_mut::<Theme>()
     }
 
@@ -427,7 +403,7 @@ impl Theme {
     }
 
     /// Sync the theme with the system appearance
-    pub fn sync_system_appearance(cx: &mut AppContext) {
+    pub fn sync_system_appearance(cx: &mut App) {
         match cx.window_appearance() {
             WindowAppearance::Dark | WindowAppearance::VibrantDark => {
                 Self::change(ThemeMode::Dark, cx)
@@ -438,7 +414,7 @@ impl Theme {
         }
     }
 
-    pub fn change(mode: ThemeMode, cx: &mut AppContext) {
+    pub fn change(mode: ThemeMode, cx: &mut App) {
         let colors = match mode {
             ThemeMode::Light => ThemeColor::light(),
             ThemeMode::Dark => ThemeColor::dark(),

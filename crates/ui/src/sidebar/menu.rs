@@ -1,8 +1,8 @@
 use crate::{h_flex, v_flex, ActiveTheme as _, Collapsible, Icon, IconName, StyledExt};
-use gpui::{
+use gpui::{Window, AppContext, 
     div, percentage, prelude::FluentBuilder as _, ClickEvent, InteractiveElement as _, IntoElement,
     ParentElement as _, RenderOnce, SharedString, StatefulInteractiveElement as _, Styled as _,
-    WindowContext,
+    
 };
 use std::rc::Rc;
 
@@ -194,7 +194,7 @@ impl SidebarMenuItem {
                     })
             })
             .when_some(handler, |this, handler| {
-                this.on_click(move |ev, cx| handler(ev, cx))
+                this.on_click(move |ev, window, cx| handler(ev, cx))
             })
     }
 }

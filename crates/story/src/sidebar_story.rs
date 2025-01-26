@@ -1,6 +1,6 @@
-use gpui::{
+use gpui::{Window, ModelContext, AppContext, Model, 
     div, impl_internal_actions, relative, ClickEvent, ParentElement, Render, SharedString, Styled,
-    View, ViewContext, VisualContext as _, WindowContext,
+      VisualContext as _, 
 };
 
 use serde::Deserialize;

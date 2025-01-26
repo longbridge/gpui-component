@@ -1,4 +1,4 @@
-use gpui::{Styled, WindowContext};
+use gpui::{Window, AppContext, Styled, };
 
 use crate::{
     button::{Button, ButtonVariants as _},

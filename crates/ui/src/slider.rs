@@ -1,8 +1,8 @@
 use crate::{h_flex, tooltip::Tooltip, ActiveTheme, AxisExt};
-use gpui::{
+use gpui::{Window, ModelContext, 
     canvas, div, prelude::FluentBuilder as _, px, Axis, Bounds, DragMoveEvent, EntityId,
     EventEmitter, InteractiveElement, IntoElement, MouseButton, MouseDownEvent, ParentElement as _,
-    Pixels, Point, Render, StatefulInteractiveElement as _, Styled, ViewContext,
+    Pixels, Point, Render, StatefulInteractiveElement as _, Styled, 
     VisualContext as _,
 };
 
@@ -154,7 +154,7 @@ impl Slider {
 
         div()
             .id("slider-thumb")
-            .on_drag(DragThumb(entity_id), |drag, _, cx| {
+            .on_drag(DragThumb(entity_id), |drag, _, window, cx| {
                 cx.stop_propagation();
                 cx.new_view(|_| drag.clone())
             })
@@ -247,8 +247,8 @@ impl Render for Slider {
                     .child({
                         let view = cx.view().clone();
                         canvas(
-                            move |bounds, cx| view.update(cx, |r, _| r.bounds = bounds),
-                            |_, _, _| {},
+                            move |bounds, window, cx| view.update(cx, |r, _| r.bounds = bounds),
+                            |_, _, _, _| {},
                         )
                         .absolute()
                         .size_full()

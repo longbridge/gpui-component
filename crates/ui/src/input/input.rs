@@ -10,12 +10,12 @@ use std::rc::Rc;
 use unicode_segmentation::*;
 
 use gpui::prelude::FluentBuilder as _;
-use gpui::{
+use gpui::{Window, ModelContext, 
     actions, div, point, px, AnyElement, AppContext, Bounds, ClickEvent, ClipboardItem,
     Context as _, Entity, EventEmitter, FocusHandle, FocusableView, InteractiveElement as _,
     IntoElement, KeyBinding, KeyDownEvent, Model, MouseButton, MouseDownEvent, MouseMoveEvent,
     MouseUpEvent, ParentElement as _, Pixels, Point, Rems, Render, ScrollHandle, ScrollWheelEvent,
-    SharedString, Styled as _, UTF16Selection, ViewContext, ViewInputHandler, WindowContext,
+    SharedString, Styled as _, UTF16Selection,  ViewInputHandler, 
     WrappedLine,
 };
 
@@ -555,7 +555,7 @@ impl TextInput {
 
     /// Focus the input field.
     pub fn focus(&self, cx: &mut ViewContext<Self>) {
-        self.focus_handle.focus(cx);
+        self.focus_handle.focus(window);
     }
 
     fn left(&mut self, _: &Left, cx: &mut ViewContext<Self>) {
@@ -1213,7 +1213,7 @@ impl TextInput {
 
     /// Returns the true to let InputElement to render cursor, when Input is focused and current BlinkCursor is visible.
     pub(crate) fn show_cursor(&self, cx: &WindowContext) -> bool {
-        self.focus_handle.is_focused(cx) && self.blink_cursor.read(cx).visible()
+        self.focus_handle.is_focused(window) && self.blink_cursor.read(cx).visible()
     }
 
     fn on_focus(&mut self, cx: &mut ViewContext<Self>) {
@@ -1250,7 +1250,7 @@ impl TextInput {
             return;
         }
 
-        if !self.focus_handle.is_focused(cx) {
+        if !self.focus_handle.is_focused(window) {
             return;
         }
 
@@ -1434,7 +1434,7 @@ impl FocusableView for TextInput {
 impl Render for TextInput {
     fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
         const LINE_HEIGHT: Rems = Rems(1.25);
-        let focused = self.focus_handle.is_focused(cx);
+        let focused = self.focus_handle.is_focused(window);
 
         let prefix = self.prefix.as_ref().map(|build| build(cx));
         let suffix = self.suffix.as_ref().map(|build| build(cx));

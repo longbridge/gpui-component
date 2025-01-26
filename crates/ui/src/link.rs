@@ -75,7 +75,7 @@ impl RenderOnce for Link {
                         this.text_color(cx.theme().link.opacity(0.6))
                             .text_decoration_1()
                     })
-                    .on_mouse_down(MouseButton::Left, |_, cx| {
+                    .on_mouse_down(MouseButton::Left, |_, window, cx| {
                         cx.stop_propagation();
                     })
                     .on_click({
