@@ -1267,8 +1267,7 @@ where
                 )
         } else {
             // Render fake rows to fill the rest table space
-            return self
-                .delegate
+            self.delegate
                 .render_tr(row_ix, cx)
                 .w_full()
                 .h_full()
@@ -1280,7 +1279,7 @@ where
                         .left(horizontal_scroll_handle.offset().x)
                         .child(self.render_cell(col_ix, cx))
                 }))
-                .child(self.delegate.render_last_empty_col(cx));
+                .child(self.delegate.render_last_empty_col(cx))
         }
     }
 
