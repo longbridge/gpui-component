@@ -1,4 +1,6 @@
-use gpui::{Window, AppContext, Model, px, ParentElement as _, Render, Styled,  VisualContext as _, };
+use gpui::{
+    px, App, AppContext, Entity, FocusHandle, Focusable, ParentElement as _, Render, Styled, Window,
+};
 use ui::{dock::PanelControl, h_flex, v_flex, SvgImg};
 
 const GOOGLE_LOGO: &str = include_str!("./fixtures/google.svg");
@@ -16,8 +18,8 @@ impl super::Story for ImageStory {
         "Image"
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl gpui::Focusable> {
-        Self::view(cx)
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+        Self::view(window, cx)
     }
 
     fn zoomable() -> Option<PanelControl> {
@@ -38,18 +40,22 @@ impl ImageStory {
     }
 
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
-        cx.new(|cx| Self::new(cx))
+        cx.new(|cx| Self::new(window, cx))
     }
 }
 
-impl gpui::Focusable for ImageStory {
-    fn focus_handle(&self, _: &gpui::App) -> gpui::FocusHandle {
+impl Focusable for ImageStory {
+    fn focus_handle(&self, _: &App) -> FocusHandle {
         self.focus_handle.clone()
     }
 }
 
 impl Render for ImageStory {
-    fn render(&mut self, _window: &mut gpui::Window, _cx: &mut gpui::Context<Self>) -> impl gpui::IntoElement {
+    fn render(
+        &mut self,
+        _window: &mut gpui::Window,
+        _cx: &mut gpui::Context<Self>,
+    ) -> impl gpui::IntoElement {
         v_flex()
             .gap_4()
             .size_full()

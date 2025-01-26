@@ -414,7 +414,7 @@ where
             _measure: Vec::new(),
         };
 
-        this.prepare_col_groups(window, cx);
+        this.prepare_col_groups(cx);
         this
     }
 
@@ -432,7 +432,7 @@ where
         self
     }
 
-    pub fn set_stripe(&mut self, stripe: bool, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn set_stripe(&mut self, stripe: bool, cx: &mut Context<Self>) {
         self.stripe = stripe;
         cx.notify();
     }
@@ -444,7 +444,7 @@ where
     }
 
     /// Set the size to the table.
-    pub fn set_size(&mut self, size: Size, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn set_size(&mut self, size: Size, cx: &mut Context<Self>) {
         self.size = size;
         cx.notify();
     }
@@ -465,11 +465,11 @@ where
     }
 
     /// When we update columns or rows, we need to refresh the table.
-    pub fn refresh(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.prepare_col_groups(window, cx);
+    pub fn refresh(&mut self, cx: &mut Context<Self>) {
+        self.prepare_col_groups(cx);
     }
 
-    fn prepare_col_groups(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    fn prepare_col_groups(&mut self, cx: &mut Context<Self>) {
         self.col_groups = (0..self.delegate.cols_count(cx))
             .map(|col_ix| ColGroup {
                 width: self.delegate.col_width(col_ix, cx),
@@ -488,7 +488,7 @@ where
     }
 
     /// Scroll to the row at the given index.
-    pub fn scroll_to_row(&mut self, row_ix: usize, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn scroll_to_row(&mut self, row_ix: usize, cx: &mut Context<Self>) {
         self.vertical_scroll_handle
             .scroll_to_item(row_ix, ScrollStrategy::Top);
         cx.notify();
@@ -507,7 +507,7 @@ where
     }
 
     /// Sets the selected row to the given index.
-    pub fn set_selected_row(&mut self, row_ix: usize, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn set_selected_row(&mut self, row_ix: usize, cx: &mut Context<Self>) {
         self.selection_state = SelectionState::Row;
         self.right_clicked_row = None;
         self.selected_row = Some(row_ix);
@@ -525,7 +525,7 @@ where
     }
 
     /// Sets the selected col to the given index.
-    pub fn set_selected_col(&mut self, col_ix: usize, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn set_selected_col(&mut self, col_ix: usize, cx: &mut Context<Self>) {
         self.selection_state = SelectionState::Column;
         self.selected_col = Some(col_ix);
         if let Some(_col_ix) = self.selected_col {
@@ -539,7 +539,7 @@ where
     }
 
     /// Clear the selection of the table.
-    pub fn clear_selection(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn clear_selection(&mut self, cx: &mut Context<Self>) {
         self.selection_state = SelectionState::Row;
         self.selected_row = None;
         self.selected_col = None;
@@ -561,7 +561,7 @@ where
         if ev.button == MouseButton::Right {
             self.right_clicked_row = Some(row_ix);
         } else {
-            self.set_selected_row(row_ix, window, cx);
+            self.set_selected_row(row_ix, cx);
 
             if ev.click_count == 2 {
                 cx.emit(TableEvent::DoubleClickedRow(row_ix));
@@ -574,11 +574,11 @@ where
             return;
         }
 
-        self.set_selected_col(col_ix, window, cx)
+        self.set_selected_col(col_ix, cx)
     }
 
     fn action_cancel(&mut self, _: &Cancel, window: &mut Window, cx: &mut Context<Self>) {
-        self.clear_selection(window, cx);
+        self.clear_selection(cx);
     }
 
     fn action_select_prev(&mut self, _: &SelectPrev, window: &mut Window, cx: &mut Context<Self>) {
@@ -592,7 +592,7 @@ where
             }
         }
 
-        self.set_selected_row(selected_row, window, cx);
+        self.set_selected_row(selected_row, cx);
     }
 
     fn action_select_next(&mut self, _: &SelectNext, window: &mut Window, cx: &mut Context<Self>) {
@@ -605,7 +605,7 @@ where
             }
         }
 
-        self.set_selected_row(selected_row, window, cx);
+        self.set_selected_row(selected_row, cx);
     }
 
     fn action_select_prev_col(
@@ -623,7 +623,7 @@ where
                 selected_col = cols_count - 1;
             }
         }
-        self.set_selected_col(selected_col, window, cx);
+        self.set_selected_col(selected_col, cx);
     }
 
     fn action_select_next_col(
@@ -641,7 +641,7 @@ where
             }
         }
 
-        self.set_selected_col(selected_col, window, cx);
+        self.set_selected_col(selected_col, cx);
     }
 
     /// Scroll table when mouse position is near the edge of the table bounds.
@@ -977,7 +977,7 @@ where
             })
             .on_mouse_up_out(
                 MouseButton::Left,
-                cx.listener(|view, _, window, cx| {
+                cx.listener(|view, _, _, cx| {
                     if view.resizing_col.is_none() {
                         return;
                     }
@@ -996,7 +996,7 @@ where
         &self,
         col_ix: usize,
         col_group: &ColGroup,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<impl IntoElement> {
         let Some(sort) = col_group.sort else {
@@ -1080,12 +1080,12 @@ where
                                 name,
                                 width: col_group.width,
                             },
-                            |drag, _, window, cx| {
+                            |drag, _, _, cx| {
                                 cx.stop_propagation();
                                 cx.new(|_| drag.clone())
                             },
                         )
-                        .drag_over::<DragCol>(|this, _, window, cx| {
+                        .drag_over::<DragCol>(|this, _, _, cx| {
                             this.rounded_l_none()
                                 .border_l_2()
                                 .border_r_0()
@@ -1109,7 +1109,7 @@ where
             .child({
                 let view = cx.model().clone();
                 canvas(
-                    move |bounds, window, cx| {
+                    move |bounds, _, cx| {
                         view.update(cx, |r, _| r.col_groups[col_ix].bounds = bounds)
                     },
                     |_, _, _, _| {},
@@ -1164,7 +1164,7 @@ where
                         )
                         .child(
                             canvas(
-                                move |bounds, window, cx| {
+                                move |bounds, _, cx| {
                                     view.update(cx, |r, _| r.fixed_head_cols_bounds = bounds)
                                 },
                                 |_, _, _, _| {},
@@ -1198,7 +1198,7 @@ where
                             .child(self.delegate.render_last_empty_col(window, cx))
                             .child(
                                 canvas(
-                                    move |bounds, window, cx| {
+                                    move |bounds, _, cx| {
                                         view.update(cx, |r, _| r.head_content_bounds = bounds)
                                     },
                                     |_, _, _, _| {},
@@ -1210,6 +1210,7 @@ where
             )
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn render_table_row(
         &mut self,
         row_ix: usize,
@@ -1559,7 +1560,6 @@ where
                                         if visible_range.end > rows_count {
                                             table.scroll_to_row(
                                                 std::cmp::min(visible_range.start, rows_count - 1),
-                                                window,
                                                 cx,
                                             );
                                         }
@@ -1614,14 +1614,14 @@ where
                         &horizontal_scroll_handle,
                     ))
                     .when(self.right_clicked_row.is_some(), |this| {
-                        this.on_mouse_down_out(cx.listener(|this, _, window, cx| {
+                        this.on_mouse_down_out(cx.listener(|this, _, _, cx| {
                             this.right_clicked_row = None;
                             cx.notify();
                         }))
                     })
             })
             .child(canvas(
-                move |bounds, window, cx| view.update(cx, |r, _| r.bounds = bounds),
+                move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds),
                 |_, _, _, _| {},
             ))
             .child(

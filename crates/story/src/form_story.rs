@@ -1,6 +1,6 @@
-use gpui::{Window, ModelContext, AppContext, Model, 
-    actions, div, Axis, InteractiveElement, IntoElement, ParentElement as _, Render, Styled, 
-     VisualContext, 
+use gpui::{
+    actions, div, App, AppContext, Axis, Context, Entity, Focusable, InteractiveElement,
+    IntoElement, ParentElement as _, Render, Styled, VisualContext, Window,
 };
 use ui::{
     button::{Button, ButtonGroup},
@@ -36,33 +36,33 @@ impl super::Story for FormStory {
         false
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl gpui::Focusable> {
-        Self::view(cx)
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+        Self::view(window, cx)
     }
 }
 
 impl FormStory {
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
-        cx.new(Self::new)
+        cx.new(|cx| Self::new(window, cx))
     }
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let name_input = cx.new(|cx| {
-            let mut input = TextInput::new(cx).cleanable();
-            input.set_text("Jason Lee", cx);
+            let mut input = TextInput::new(window, cx).cleanable();
+            input.set_text("Jason Lee", window, cx);
             input
         });
 
-        let email_input = cx.new(|cx| TextInput::new(cx).placeholder("Enter text here..."));
+        let email_input = cx.new(|cx| TextInput::new(window, cx).placeholder("Enter text here..."));
         let bio_input = cx.new(|cx| {
-            let mut input = TextInput::new(cx)
+            let mut input = TextInput::new(window, cx)
                 .multi_line()
                 .rows(10)
                 .placeholder("Enter text here...");
-            input.set_text("Hello 世界，this is GPUI component.", cx);
+            input.set_text("Hello 世界，this is GPUI component.", window, cx);
             input
         });
-        let date_picker = cx.new(|cx| DatePicker::new("birthday", cx));
+        let date_picker = cx.new(|cx| DatePicker::new("birthday", window, cx));
 
         Self {
             name_input,
@@ -89,7 +89,7 @@ impl FocusableCycle for FormStory {
     }
 }
 
-impl gpui::Focusable for FormStory {
+impl Focusable for FormStory {
     fn focus_handle(&self, cx: &gpui::App) -> gpui::FocusHandle {
         self.name_input.focus_handle(cx)
     }
@@ -112,7 +112,7 @@ impl Render for FormStory {
                         Switch::new("layout")
                             .checked(self.layout.is_horizontal())
                             .label("Horizontal")
-                            .on_click(cx.listener(|this, checked: &bool, cx| {
+                            .on_click(cx.listener(|this, checked: &bool, window, cx| {
                                 if *checked {
                                     this.layout = Axis::Horizontal;
                                 } else {
@@ -139,7 +139,7 @@ impl Render for FormStory {
                                     .child("Small")
                                     .selected(self.size == Size::Small),
                             )
-                            .on_click(cx.listener(|this, selecteds: &Vec<usize>, cx| {
+                            .on_click(cx.listener(|this, selecteds: &Vec<usize>, window, cx| {
                                 if selecteds.contains(&0) {
                                     this.size = Size::Large;
                                 } else if selecteds.contains(&1) {
@@ -158,7 +158,7 @@ impl Render for FormStory {
                     .with_size(self.size)
                     .child(
                         form_field()
-                            .label_fn(|_| "Name")
+                            .label_fn(|_, _| "Name")
                             .child(self.name_input.clone()),
                     )
                     .child(
@@ -172,7 +172,7 @@ impl Render for FormStory {
                             .label("Bio")
                             .when(self.layout.is_vertical(), |this| this.items_start())
                             .child(self.bio_input.clone())
-                            .description_fn(|_| {
+                            .description_fn(|_, _| {
                                 div().child("Use at most 100 words to describe yourself.")
                             }),
                     )
@@ -192,7 +192,7 @@ impl Render for FormStory {
                             Switch::new("subscribe-newsletter")
                                 .label("Subscribe our newsletter")
                                 .checked(self.subscribe_email)
-                                .on_click(cx.listener(|this, checked: &bool, cx| {
+                                .on_click(cx.listener(|this, checked: &bool, _, cx| {
                                     this.subscribe_email = *checked;
                                     cx.notify();
                                 })),
@@ -203,7 +203,7 @@ impl Render for FormStory {
                             Checkbox::new("use-vertical-layout")
                                 .label("Vertical layout")
                                 .checked(self.layout.is_vertical())
-                                .on_click(cx.listener(|this, checked: &bool, cx| {
+                                .on_click(cx.listener(|this, checked: &bool, _, cx| {
                                     this.layout = if *checked {
                                         Axis::Vertical
                                     } else {

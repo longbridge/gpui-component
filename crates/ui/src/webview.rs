@@ -25,7 +25,7 @@ impl Drop for WebView {
 }
 
 impl WebView {
-    pub fn new(window: &mut Window, cx: &mut App, webview: wry::WebView) -> Self {
+    pub fn new(webview: wry::WebView, window: &mut Window, cx: &mut App) -> Self {
         let _ = webview.set_bounds(Rect::default());
 
         Self {

@@ -37,7 +37,7 @@ pub struct ResizablePanelGroup {
 }
 
 impl ResizablePanelGroup {
-    pub(super) fn new(_window: &mut Window, _cx: &mut Context<Self>) -> Self {
+    pub(super) fn new() -> Self {
         Self {
             axis: Axis::Horizontal,
             sizes: Vec::new(),
@@ -65,29 +65,19 @@ impl ResizablePanelGroup {
     }
 
     /// Add a resizable panel to the group.
-    pub fn child(
-        mut self,
-        panel: ResizablePanel,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Self {
-        self.add_child(panel, window, cx);
+    pub fn child(mut self, panel: ResizablePanel, cx: &mut Context<Self>) -> Self {
+        self.add_child(panel, cx);
         self
     }
 
     /// Add a ResizablePanelGroup as a child to the group.
-    pub fn group(
-        self,
-        group: ResizablePanelGroup,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Self {
+    pub fn group(self, group: ResizablePanelGroup, cx: &mut Context<Self>) -> Self {
         let group: ResizablePanelGroup = group;
         let size = group.size;
         let panel = ResizablePanel::new()
             .content_view(cx.new(|_| group).into())
             .when_some(size, |this, size| this.size(size));
-        self.child(panel, window, cx)
+        self.child(panel, cx)
     }
 
     /// Set size of the resizable panel group
@@ -109,12 +99,7 @@ impl ResizablePanelGroup {
         self.sizes.iter().fold(px(0.0), |acc, &size| acc + size)
     }
 
-    pub fn add_child(
-        &mut self,
-        panel: ResizablePanel,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    pub fn add_child(&mut self, panel: ResizablePanel, cx: &mut Context<Self>) {
         let mut panel = panel;
         panel.axis = self.axis;
         panel.group = Some(cx.model().downgrade());

@@ -5,8 +5,8 @@ use std::{
 
 use fake::{Fake, Faker};
 use gpui::{
-    div, impl_internal_actions, px, AnyElement, AppContext, Edges, InteractiveElement, IntoElement,
-    Model, ModelContext, ParentElement, Pixels, Render, SharedString, Styled, Timer,
+    div, impl_internal_actions, px, AnyElement, App, AppContext, Context, Edges, Entity, Focusable,
+    InteractiveElement, IntoElement, ParentElement, Pixels, Render, SharedString, Styled, Timer,
     VisualContext as _, Window,
 };
 use serde::Deserialize;
@@ -260,12 +260,7 @@ impl StockTableDelegate {
         self.full_loading = false;
     }
 
-    fn render_value_cell(
-        &self,
-        val: f64,
-        window: &mut Window,
-        cx: &mut Context<Table<Self>>,
-    ) -> AnyElement {
+    fn render_value_cell(&self, val: f64, cx: &mut Context<Table<Self>>) -> AnyElement {
         let (fg_scale, bg_scale, opacity) = match cx.theme().mode.is_dark() {
             true => (200, 950, 0.3),
             false => (600, 50, 0.6),
@@ -462,7 +457,13 @@ impl TableDelegate for StockTableDelegate {
         self.col_order
     }
 
-    fn move_col(&mut self, col_ix: usize, to_ix: usize, _: &mut ViewContext<Table<Self>>) {
+    fn move_col(
+        &mut self,
+        col_ix: usize,
+        to_ix: usize,
+        _: &mut Window,
+        _: &mut Context<Table<Self>>,
+    ) {
         let col = self.columns.remove(col_ix);
         self.columns.insert(to_ix, col);
     }
@@ -475,7 +476,13 @@ impl TableDelegate for StockTableDelegate {
         self.columns.get(col_ix).and_then(|c| c.sort)
     }
 
-    fn perform_sort(&mut self, col_ix: usize, sort: ColSort, _: &mut ViewContext<Table<Self>>) {
+    fn perform_sort(
+        &mut self,
+        col_ix: usize,
+        sort: ColSort,
+        _: &mut Window,
+        _: &mut Context<Table<Self>>,
+    ) {
         if !self.col_sort {
             return;
         }
@@ -535,7 +542,8 @@ impl TableDelegate for StockTableDelegate {
     fn visible_rows_changed(
         &mut self,
         visible_range: Range<usize>,
-        _: &mut ViewContext<Table<Self>>,
+        _: &mut Window,
+        _: &mut Context<Table<Self>>,
     ) {
         self.visible_rows = visible_range;
     }
@@ -543,7 +551,8 @@ impl TableDelegate for StockTableDelegate {
     fn visible_cols_changed(
         &mut self,
         visible_range: Range<usize>,
-        _: &mut ViewContext<Table<Self>>,
+        _: &mut Window,
+        _: &mut Context<Table<Self>>,
     ) {
         self.visible_cols = visible_range;
     }
@@ -566,8 +575,8 @@ impl super::Story for TableStory {
         "A complex data table with selection, sorting, column moving, and loading more."
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl gpui::Focusable> {
-        Self::view(cx)
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+        Self::view(window, cx)
     }
 
     fn closable() -> bool {
@@ -575,7 +584,7 @@ impl super::Story for TableStory {
     }
 }
 
-impl gpui::Focusable for TableStory {
+impl Focusable for TableStory {
     fn focus_handle(&self, cx: &gpui::App) -> gpui::FocusHandle {
         self.table.focus_handle(cx)
     }
@@ -583,24 +592,25 @@ impl gpui::Focusable for TableStory {
 
 impl TableStory {
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
-        cx.new(Self::new)
+        cx.new(|cx| Self::new(window, cx))
     }
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         // Create the number input field with validation for positive integers
         let num_stocks_input = cx.new(|cx| {
-            let mut input = TextInput::new(cx)
+            let mut input = TextInput::new(window, cx)
                 .placeholder("Enter number of Stocks to display")
                 .validate(|s| s.parse::<usize>().is_ok());
-            input.set_text("5000", cx);
+            input.set_text("5000", window, cx);
             input
         });
 
         let delegate = StockTableDelegate::new(5000);
-        let table = cx.new(|cx| Table::new(delegate, cx));
+        let table = cx.new(|cx| Table::new(delegate, window, cx));
 
-        cx.subscribe(&table, Self::on_table_event).detach();
-        cx.subscribe(&num_stocks_input, Self::on_num_stocks_input_change)
+        cx.subscribe_in(&table, window, Self::on_table_event)
+            .detach();
+        cx.subscribe_in(&num_stocks_input, window, Self::on_num_stocks_input_change)
             .detach();
 
         // Spawn a background to random refresh the list
@@ -643,7 +653,7 @@ impl TableStory {
     // Event handler for changes in the number input field
     fn on_num_stocks_input_change(
         &mut self,
-        _: Entity<TextInput>,
+        _: &Entity<TextInput>,
         event: &InputEvent,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -663,19 +673,14 @@ impl TableStory {
         }
     }
 
-    fn toggle_loop_selection(
-        &mut self,
-        checked: &bool,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    fn toggle_loop_selection(&mut self, checked: &bool, _: &mut Window, cx: &mut Context<Self>) {
         self.table.update(cx, |table, cx| {
             table.delegate_mut().loop_selection = *checked;
             cx.notify();
         });
     }
 
-    fn toggle_col_resize(&mut self, checked: &bool, window: &mut Window, cx: &mut Context<Self>) {
+    fn toggle_col_resize(&mut self, checked: &bool, _: &mut Window, cx: &mut Context<Self>) {
         self.table.update(cx, |table, cx| {
             table.delegate_mut().col_resize = *checked;
             table.refresh(cx);
@@ -683,7 +688,7 @@ impl TableStory {
         });
     }
 
-    fn toggle_col_order(&mut self, checked: &bool, window: &mut Window, cx: &mut Context<Self>) {
+    fn toggle_col_order(&mut self, checked: &bool, _: &mut Window, cx: &mut Context<Self>) {
         self.table.update(cx, |table, cx| {
             table.delegate_mut().col_order = *checked;
             table.refresh(cx);
@@ -691,7 +696,7 @@ impl TableStory {
         });
     }
 
-    fn toggle_col_sort(&mut self, checked: &bool, window: &mut Window, cx: &mut Context<Self>) {
+    fn toggle_col_sort(&mut self, checked: &bool, _: &mut Window, cx: &mut Context<Self>) {
         self.table.update(cx, |table, cx| {
             table.delegate_mut().col_sort = *checked;
             table.refresh(cx);
@@ -699,12 +704,7 @@ impl TableStory {
         });
     }
 
-    fn toggle_col_selection(
-        &mut self,
-        checked: &bool,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    fn toggle_col_selection(&mut self, checked: &bool, _: &mut Window, cx: &mut Context<Self>) {
         self.table.update(cx, |table, cx| {
             table.delegate_mut().col_selection = *checked;
             table.refresh(cx);
@@ -712,7 +712,7 @@ impl TableStory {
         });
     }
 
-    fn toggle_stripe(&mut self, checked: &bool, window: &mut Window, cx: &mut Context<Self>) {
+    fn toggle_stripe(&mut self, checked: &bool, _: &mut Window, cx: &mut Context<Self>) {
         self.stripe = *checked;
         let stripe = self.stripe;
         self.table.update(cx, |table, cx| {
@@ -721,7 +721,7 @@ impl TableStory {
         });
     }
 
-    fn toggle_fixed_cols(&mut self, checked: &bool, window: &mut Window, cx: &mut Context<Self>) {
+    fn toggle_fixed_cols(&mut self, checked: &bool, _: &mut Window, cx: &mut Context<Self>) {
         self.table.update(cx, |table, cx| {
             table.delegate_mut().fixed_cols = *checked;
             table.refresh(cx);
@@ -729,7 +729,7 @@ impl TableStory {
         });
     }
 
-    fn on_change_size(&mut self, a: &ChangeSize, window: &mut Window, cx: &mut Context<Self>) {
+    fn on_change_size(&mut self, a: &ChangeSize, _: &mut Window, cx: &mut Context<Self>) {
         self.size = a.0;
         self.table.update(cx, |table, cx| {
             table.set_size(a.0, cx);
@@ -737,14 +737,14 @@ impl TableStory {
         });
     }
 
-    fn toggle_refresh_data(&mut self, checked: &bool, window: &mut Window, cx: &mut Context<Self>) {
+    fn toggle_refresh_data(&mut self, checked: &bool, _: &mut Window, cx: &mut Context<Self>) {
         self.refresh_data = *checked;
         cx.notify();
     }
 
     fn on_table_event(
         &mut self,
-        _: Entity<Table<StockTableDelegate>>,
+        _: &Entity<Table<StockTableDelegate>>,
         event: &TableEvent,
         _window: &mut Window,
         _cx: &mut Context<Self>,
@@ -825,7 +825,7 @@ impl Render for TableStory {
                         Checkbox::new("loading")
                             .label("Loading")
                             .checked(self.table.read(cx).delegate().full_loading)
-                            .on_click(cx.listener(|this, check: &bool, cx| {
+                            .on_click(cx.listener(|this, check: &bool, _, cx| {
                                 this.table.update(cx, |this, cx| {
                                     this.delegate_mut().full_loading = *check;
                                     cx.notify();
@@ -846,7 +846,7 @@ impl Render for TableStory {
                         Button::new("size")
                             .small()
                             .label(format!("size: {:?}", self.size))
-                            .popup_menu(move |menu, _| {
+                            .popup_menu(move |menu, _, _| {
                                 menu.menu_with_check(
                                     "Large",
                                     size == Size::Large,

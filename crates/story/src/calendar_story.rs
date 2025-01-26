@@ -1,7 +1,7 @@
 use chrono::{Days, Duration, Utc};
 use gpui::{
-    px, AppContext, IntoElement, Model, ModelContext, ParentElement as _, Render, Styled as _,
-    VisualContext as _, Window,
+    px, App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement as _, Render,
+    Styled as _, VisualContext as _, Window,
 };
 use ui::{
     button::Button,
@@ -28,14 +28,14 @@ impl super::Story for CalendarStory {
         "A date picker and calendar component."
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl gpui::Focusable> {
-        Self::view(cx)
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+        Self::view(window, cx)
     }
 }
 
 impl CalendarStory {
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
-        cx.new(Self::new)
+        cx.new(|cx| Self::new(window, cx))
     }
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
@@ -77,33 +77,37 @@ impl CalendarStory {
         ];
         let now = chrono::Local::now().naive_local().date();
         let date_picker = cx.new(|cx| {
-            let mut picker = DatePicker::new("date_picker_medium", cx)
+            let mut picker = DatePicker::new("date_picker_medium", window, cx)
                 .cleanable()
                 .width(px(220.))
                 .presets(presets);
-            picker.set_date(now, cx);
+            picker.set_date(now, window, cx);
             picker
         });
         let date_picker_large = cx.new(|cx| {
-            DatePicker::new("date_picker_large", cx)
+            DatePicker::new("date_picker_large", window, cx)
                 .large()
                 .date_format("%Y-%m-%d")
                 .width(px(300.))
         });
         let date_picker_small = cx.new(|cx| {
-            let mut picker = DatePicker::new("date_picker_small", cx)
+            let mut picker = DatePicker::new("date_picker_small", window, cx)
                 .small()
                 .width(px(180.));
-            picker.set_date(now, cx);
+            picker.set_date(now, window, cx);
             picker
         });
         let date_range_picker = cx.new(|cx| {
-            let mut picker = DatePicker::new("date_range_picker", cx)
+            let mut picker = DatePicker::new("date_range_picker", window, cx)
                 .width(px(300.))
                 .number_of_months(2)
                 .cleanable()
                 .presets(range_presets.clone());
-            picker.set_date((now, now.checked_add_days(Days::new(4)).unwrap()), cx);
+            picker.set_date(
+                (now, now.checked_add_days(Days::new(4)).unwrap()),
+                window,
+                cx,
+            );
             picker
         });
 
@@ -121,7 +125,7 @@ impl CalendarStory {
         .detach();
 
         let default_range_mode_picker = cx.new(|cx| {
-            DatePicker::range_picker("default_range_mode_picker", cx)
+            DatePicker::range_picker("default_range_mode_picker", window, cx)
                 .width(px(300.))
                 .placeholder("Range mode picker")
                 .cleanable()
@@ -149,19 +153,19 @@ impl CalendarStory {
     fn change_size(&mut self, size: Size, window: &mut Window, cx: &mut Context<Self>) {
         self.size = size;
         self.date_picker
-            .update(cx, |picker, cx| picker.set_size(size, cx));
+            .update(cx, |picker, cx| picker.set_size(size, window, cx));
         self.date_picker_large
-            .update(cx, |picker, cx| picker.set_size(size, cx));
+            .update(cx, |picker, cx| picker.set_size(size, window, cx));
         self.date_picker_small
-            .update(cx, |picker, cx| picker.set_size(size, cx));
+            .update(cx, |picker, cx| picker.set_size(size, window, cx));
         self.date_range_picker
-            .update(cx, |picker, cx| picker.set_size(size, cx));
+            .update(cx, |picker, cx| picker.set_size(size, window, cx));
         self.default_range_mode_picker
-            .update(cx, |picker, cx| picker.set_size(size, cx));
+            .update(cx, |picker, cx| picker.set_size(size, window, cx));
     }
 }
 
-impl gpui::Focusable for CalendarStory {
+impl Focusable for CalendarStory {
     fn focus_handle(&self, cx: &gpui::App) -> gpui::FocusHandle {
         self.date_picker.focus_handle(cx)
     }
@@ -175,9 +179,9 @@ impl Render for CalendarStory {
                 Button::new("change-size")
                     .label(format!("size: {:?}", self.size))
                     .on_click(cx.listener(|this, _, window, cx| match this.size {
-                        Size::Small => this.change_size(Size::Medium, cx),
-                        Size::Large => this.change_size(Size::Small, cx),
-                        _ => this.change_size(Size::Large, cx),
+                        Size::Small => this.change_size(Size::Medium, window, cx),
+                        Size::Large => this.change_size(Size::Small, window, cx),
+                        _ => this.change_size(Size::Large, window, cx),
                     })),
             )
             .child(self.date_picker.clone())

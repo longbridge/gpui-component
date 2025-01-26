@@ -2,8 +2,7 @@ use gpui::{
     actions, anchored, canvas, deferred, div, prelude::FluentBuilder, px, rems, AnyElement, App,
     AppContext, Bounds, ClickEvent, Context, DismissEvent, ElementId, Entity, EventEmitter,
     FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding, Length, ParentElement,
-    Pixels, Render, SharedString, StatefulInteractiveElement, Styled, Task, VisualContext,
-    WeakEntity, Window,
+    Pixels, Render, SharedString, StatefulInteractiveElement, Styled, Task, WeakEntity, Window,
 };
 use rust_i18n::t;
 
@@ -587,7 +586,7 @@ impl<D> EventEmitter<DropdownEvent<D>> for Dropdown<D> where D: DropdownDelegate
 impl<D> EventEmitter<DismissEvent> for Dropdown<D> where D: DropdownDelegate + 'static {}
 impl<D> Focusable for Dropdown<D>
 where
-    D: DropdownDelegate + 'static,
+    D: DropdownDelegate,
 {
     fn focus_handle(&self, cx: &App) -> FocusHandle {
         if self.open {

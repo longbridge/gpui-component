@@ -1,6 +1,6 @@
 use gpui::{
-    actions, px, AppContext, ClickEvent, Focusable, InteractiveElement, IntoElement, Model,
-    ModelContext, ParentElement as _, Render, Styled as _, VisualContext as _, Window,
+    actions, px, App, AppContext as _, ClickEvent, Context, Entity, Focusable, InteractiveElement,
+    IntoElement, ParentElement as _, Render, Styled as _, Window,
 };
 
 use ui::{
@@ -54,8 +54,8 @@ impl super::Story for ButtonStory {
         false
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl gpui::Focusable> {
-        Self::view(cx)
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+        Self::view(window, cx)
     }
 }
 
@@ -74,10 +74,10 @@ impl Render for ButtonStory {
         let toggle_multiple = self.toggle_multiple;
 
         v_flex()
-            .on_action(cx.listener(|this, _: &Disabled, _| this.disabled = !this.disabled))
-            .on_action(cx.listener(|this, _: &Loading, _| this.loading = !this.loading))
-            .on_action(cx.listener(|this, _: &Selected, _| this.selected = !this.selected))
-            .on_action(cx.listener(|this, _: &Compact, _| this.compact = !this.compact))
+            .on_action(cx.listener(|this, _: &Disabled, _, _| this.disabled = !this.disabled))
+            .on_action(cx.listener(|this, _: &Loading, _, _| this.loading = !this.loading))
+            .on_action(cx.listener(|this, _: &Selected, _, _| this.selected = !this.selected))
+            .on_action(cx.listener(|this, _: &Compact, _, _| this.compact = !this.compact))
             .gap_6()
             .child(
                 h_flex()
@@ -87,7 +87,7 @@ impl Render for ButtonStory {
                         Checkbox::new("disabled-button")
                             .label("Disabled")
                             .checked(self.disabled)
-                            .on_click(cx.listener(|view, _, cx| {
+                            .on_click(cx.listener(|view, _, _, cx| {
                                 view.disabled = !view.disabled;
                                 cx.notify();
                             })),
@@ -96,7 +96,7 @@ impl Render for ButtonStory {
                         Checkbox::new("loading-button")
                             .label("Loading")
                             .checked(self.loading)
-                            .on_click(cx.listener(|view, _, cx| {
+                            .on_click(cx.listener(|view, _, _, cx| {
                                 view.loading = !view.loading;
                                 cx.notify();
                             })),
@@ -105,7 +105,7 @@ impl Render for ButtonStory {
                         Checkbox::new("selected-button")
                             .label("Selected")
                             .checked(self.selected)
-                            .on_click(cx.listener(|view, _, cx| {
+                            .on_click(cx.listener(|view, _, _, cx| {
                                 view.selected = !view.selected;
                                 cx.notify();
                             })),
@@ -114,7 +114,7 @@ impl Render for ButtonStory {
                         Checkbox::new("compact-button")
                             .label("Compact")
                             .checked(self.compact)
-                            .on_click(cx.listener(|view, _, cx| {
+                            .on_click(cx.listener(|view, _, _, cx| {
                                 view.compact = !view.compact;
                                 cx.notify();
                             })),
@@ -510,7 +510,7 @@ impl Render for ButtonStory {
                                 Checkbox::new("multiple-button")
                                     .label("Multiple")
                                     .checked(toggle_multiple)
-                                    .on_click(cx.listener(|view, _, cx| {
+                                    .on_click(cx.listener(|view, _, _, cx| {
                                         view.toggle_multiple = !view.toggle_multiple;
                                         cx.notify();
                                     })),
@@ -540,7 +540,7 @@ impl Render for ButtonStory {
                                             .label("Compact")
                                             .selected(compact),
                                     )
-                                    .on_click(cx.listener(|view, selected: &Vec<usize>, cx| {
+                                    .on_click(cx.listener(|view, selected: &Vec<usize>, _, cx| {
                                         view.disabled = selected.contains(&0);
                                         view.loading = selected.contains(&1);
                                         view.selected = selected.contains(&2);
@@ -556,7 +556,7 @@ impl Render for ButtonStory {
                         DropdownButton::new("dropdown-button1")
                             .small()
                             .button(Button::new("dropdown-button-button1").label("Click Me"))
-                            .popup_menu(move |this, _| {
+                            .popup_menu(move |this, _, _| {
                                 this.menu("Disabled", Box::new(Disabled))
                                     .menu("Loading", Box::new(Loading))
                                     .menu("Selected", Box::new(Selected))
@@ -566,7 +566,7 @@ impl Render for ButtonStory {
                     .child(
                         DropdownButton::new("dropdown-button")
                             .button(Button::new("dropdown-button-button").label("Click Me"))
-                            .popup_menu(move |this, _| {
+                            .popup_menu(move |this, _, _| {
                                 this.menu("Disabled", Box::new(Disabled))
                                     .menu("Loading", Box::new(Loading))
                                     .menu("Selected", Box::new(Selected))

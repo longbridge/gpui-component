@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{Context as _, Result};
 use gpui::*;
 use std::time::Duration;
 use story::{Assets, ButtonStory, IconStory, StoryContainer};
@@ -36,28 +36,38 @@ struct DockAreaTab {
 
 impl StoryTiles {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let dock_area =
-            cx.new(|cx| DockArea::new(TILES_DOCK_AREA.id, Some(TILES_DOCK_AREA.version), cx));
+        let dock_area = cx.new(|cx| {
+            DockArea::new(
+                TILES_DOCK_AREA.id,
+                Some(TILES_DOCK_AREA.version),
+                window,
+                cx,
+            )
+        });
         let weak_dock_area = dock_area.downgrade();
 
-        match Self::load_tiles(dock_area.clone(), cx) {
+        match Self::load_tiles(dock_area.clone(), window, cx) {
             Ok(_) => {
                 println!("load tiles success");
             }
             Err(err) => {
                 eprintln!("load tiles error: {:?}", err);
-                Self::reset_default_layout(weak_dock_area, cx);
+                Self::reset_default_layout(weak_dock_area, window, cx);
             }
         };
 
-        cx.subscribe(&dock_area, |this, dock_area, ev: &DockEvent, cx| match ev {
-            DockEvent::LayoutChanged => this.save_layout(dock_area, cx),
-        })
+        cx.subscribe_in(
+            &dock_area,
+            window,
+            |this, dock_area, ev: &DockEvent, window, cx| match ev {
+                DockEvent::LayoutChanged => this.save_layout(dock_area, window, cx),
+            },
+        )
         .detach();
 
         cx.on_app_quit({
             let dock_area = dock_area.clone();
-            move |cx| {
+            move |_, cx| {
                 let state = dock_area.read(cx).dump(cx);
                 cx.background_executor().spawn(async move {
                     // Save layout before quitting
@@ -74,8 +84,14 @@ impl StoryTiles {
         }
     }
 
-    fn save_layout(&mut self, dock_area: Entity<DockArea>, window: &mut Window, cx: &mut Context<Self>) {
-        self._save_layout_task = Some(cx.spawn(|this, mut cx| async move {
+    fn save_layout(
+        &mut self,
+        dock_area: &Entity<DockArea>,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let dock_area = dock_area.clone();
+        self._save_layout_task = Some(cx.spawn(|this, cx| async move {
             Timer::after(Duration::from_secs(10)).await;
 
             let _ = cx.update(|cx| {
@@ -102,7 +118,11 @@ impl StoryTiles {
         Ok(())
     }
 
-    fn load_tiles(dock_area: Entity<DockArea>, window: &mut Window, cx: &mut App) -> Result<()> {
+    fn load_tiles(
+        dock_area: Entity<DockArea>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Result<()> {
         let fname = "target/tiles.json";
         let json = std::fs::read_to_string(fname)?;
         let state = serde_json::from_str::<DockAreaState>(&json)?;
@@ -110,14 +130,20 @@ impl StoryTiles {
         // Check if the saved layout version is different from the current version
         // Notify the user and ask if they want to reset the layout to default.
         if state.version != Some(TILES_DOCK_AREA.version) {
-            let answer = cx.prompt(PromptLevel::Info, "The default tiles layout has been updated.\nDo you want to reset the layout to default?", None,
-                &["Yes", "No"]);
+            let answer = window.prompt(
+                PromptLevel::Info,
+                "The default tiles layout has been updated.\n\
+                Do you want to reset the layout to default?",
+                None,
+                &["Yes", "No"],
+                cx,
+            );
 
             let weak_dock_area = dock_area.downgrade();
-            cx.spawn(|mut cx| async move {
+            cx.spawn_in(window, |this, mut window| async move {
                 if answer.await == Ok(0) {
-                    _ = cx.update(|cx| {
-                        Self::reset_default_layout(weak_dock_area, cx);
+                    _ = this.update_in(&mut window, |_, window, cx| {
+                        Self::reset_default_layout(weak_dock_area, window, cx);
                     });
                 }
             })
@@ -125,33 +151,52 @@ impl StoryTiles {
         }
 
         dock_area.update(cx, |dock_area, cx| {
-            dock_area.load(state, cx).context("load layout")?;
+            dock_area.load(state, window, cx).context("load layout")?;
 
             Ok::<(), anyhow::Error>(())
         })
     }
 
-    fn reset_default_layout(dock_area: WeakEntity<DockArea>, window: &mut Window, cx: &mut App) {
-        let dock_item = Self::init_default_layout(&dock_area, cx);
+    fn reset_default_layout(
+        dock_area: WeakEntity<DockArea>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let dock_item = Self::init_default_layout(&dock_area, window, cx);
         _ = dock_area.update(cx, |view, cx| {
-            view.set_version(TILES_DOCK_AREA.version, cx);
-            view.set_center(dock_item, cx);
+            view.set_version(TILES_DOCK_AREA.version, window, cx);
+            view.set_center(dock_item, window, cx);
 
             Self::save_tiles(&view.dump(cx)).unwrap();
         });
     }
 
-    fn init_default_layout(dock_area: &WeakEntity<DockArea>, window: &mut Window, cx: &mut App) -> DockItem {
+    fn init_default_layout(
+        dock_area: &WeakEntity<DockArea>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> DockItem {
         DockItem::tiles(
             vec![
-                DockItem::tab(StoryContainer::panel::<ButtonStory>(cx), dock_area, cx),
-                DockItem::tab(StoryContainer::panel::<IconStory>(cx), dock_area, cx),
+                DockItem::tab(
+                    StoryContainer::panel::<ButtonStory>(window, cx),
+                    dock_area,
+                    window,
+                    cx,
+                ),
+                DockItem::tab(
+                    StoryContainer::panel::<IconStory>(window, cx),
+                    dock_area,
+                    window,
+                    cx,
+                ),
             ],
             vec![
                 Bounds::new(point(px(10.), px(10.)), size(px(610.), px(190.))),
                 Bounds::new(point(px(120.), px(10.)), size(px(650.), px(300.))),
             ],
             dock_area,
+            window,
             cx,
         )
     }
@@ -185,15 +230,15 @@ impl StoryTiles {
                 ..Default::default()
             };
 
-            let window = cx.open_window(options, |cx| {
-                let tiles_view = cx.new(|cx| Self::new(cx));
-                cx.new(|cx| Root::new(tiles_view.into(), cx))
+            let window = cx.open_window(options, |window, cx| {
+                let tiles_view = cx.new(|cx| Self::new(window, cx));
+                cx.new(|cx| Root::new(tiles_view.into(), window, cx))
             })?;
 
             window
-                .update(&mut cx, |_, cx| {
-                    cx.activate_window();
-                    cx.set_window_title("Story Tiles");
+                .update(&mut cx, |_, window, _| {
+                    window.activate_window();
+                    window.set_window_title("Story Tiles");
                 })
                 .expect("failed to update window");
 
@@ -210,7 +255,7 @@ pub fn open_new(
         StoryTiles::new_local(cx);
     cx.spawn(|mut cx| async move {
         if let Some(root) = task.await.ok() {
-            root.update(&mut cx, |workspace, window, cx| init(workspace, cx))
+            root.update(&mut cx, |workspace, window, cx| init(workspace, window, cx))
                 .expect("failed to init workspace");
         }
     })
@@ -218,9 +263,9 @@ pub fn open_new(
 
 impl Render for StoryTiles {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let drawer_layer = Root::render_drawer_layer(cx);
-        let modal_layer = Root::render_modal_layer(cx);
-        let notification_layer = Root::render_notification_layer(cx);
+        let drawer_layer = Root::render_drawer_layer(window, cx);
+        let modal_layer = Root::render_modal_layer(window, cx);
+        let notification_layer = Root::render_notification_layer(window, cx);
 
         div()
             .font_family(".SystemUIFont")
@@ -239,7 +284,7 @@ impl Render for StoryTiles {
 }
 
 fn main() {
-    let app = App::new().with_assets(Assets);
+    let app = Application::new().with_assets(Assets);
 
     app.run(move |cx| {
         ui::init(cx);
@@ -253,7 +298,7 @@ fn main() {
         }]);
         cx.activate(true);
 
-        open_new(cx, |_workspace, _cx| {
+        open_new(cx, |_, _, _| {
             // do something
         })
         .detach();

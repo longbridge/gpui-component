@@ -7,13 +7,13 @@ pub struct Example {
 
 impl Example {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let root = SidebarStory::view(cx);
+        let root = SidebarStory::view(window, cx);
 
         Self { root }
     }
 
     fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
-        cx.new(Self::new)
+        cx.new(|cx| Self::new(window, cx))
     }
 }
 
@@ -24,7 +24,7 @@ impl Render for Example {
 }
 
 fn main() {
-    let app = App::new().with_assets(Assets);
+    let app = Application::new().with_assets(Assets);
 
     app.run(move |cx| {
         story::init(cx);

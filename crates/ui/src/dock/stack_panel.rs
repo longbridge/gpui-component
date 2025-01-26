@@ -14,7 +14,7 @@ use super::{DockArea, Panel, PanelEvent, PanelState, PanelView, TabPanel};
 use gpui::{
     prelude::FluentBuilder as _, App, AppContext, Axis, Context, DismissEvent, Entity,
     EventEmitter, FocusHandle, Focusable, IntoElement, ParentElement, Pixels, Render, Styled,
-    Subscription, VisualContext, WeakEntity, Window,
+    Subscription, WeakEntity, Window,
 };
 use smallvec::SmallVec;
 
@@ -52,9 +52,9 @@ impl StackPanel {
     pub fn new(axis: Axis, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let panel_group = cx.new(|cx| {
             if axis == Axis::Horizontal {
-                h_resizable(window, cx)
+                h_resizable()
             } else {
-                v_resizable(window, cx)
+                v_resizable()
             }
         });
 

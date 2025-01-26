@@ -3,8 +3,8 @@ use std::time::Duration;
 
 use fake::Fake;
 use gpui::{
-    actions, div, px, AppContext, ElementId, FocusHandle, Focusable, InteractiveElement,
-    IntoElement, Model, ModelContext, ParentElement, Render, RenderOnce, SharedString, Styled,
+    actions, div, px, App, AppContext, Context, ElementId, Entity, FocusHandle, Focusable,
+    InteractiveElement, IntoElement, ParentElement, Render, RenderOnce, SharedString, Styled,
     Subscription, Task, Timer, VisualContext, Window,
 };
 
@@ -158,7 +158,12 @@ impl ListDelegate for CompanyListDelegate {
         self.matched_companies.len()
     }
 
-    fn perform_search(&mut self, query: &str, _: &mut ViewContext<List<Self>>) -> Task<()> {
+    fn perform_search(
+        &mut self,
+        query: &str,
+        _: &mut Window,
+        _: &mut Context<List<Self>>,
+    ) -> Task<()> {
         self.query = query.to_string();
         self.matched_companies = self
             .companies
@@ -172,13 +177,13 @@ impl ListDelegate for CompanyListDelegate {
 
     fn confirm(&mut self, ix: usize, window: &mut Window, cx: &mut Context<List<Self>>) {
         self.confirmed_index = Some(ix);
-        cx.dispatch_action(Box::new(SelectedCompany));
+        window.dispatch_action(Box::new(SelectedCompany), cx);
     }
 
     fn set_selected_index(
         &mut self,
         ix: Option<usize>,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<List<Self>>,
     ) {
         self.selected_index = ix;
@@ -212,20 +217,18 @@ impl ListDelegate for CompanyListDelegate {
     }
 
     fn load_more(&mut self, window: &mut Window, cx: &mut Context<List<Self>>) {
-        cx.spawn(|view, mut cx| async move {
+        cx.spawn_in(window, |view, mut window| async move {
             // Simulate network request, delay 1s to load data.
             Timer::after(Duration::from_secs(1)).await;
 
-            cx.update(|cx| {
-                _ = view.update(cx, move |view, cx| {
-                    let query = view.delegate().query.clone();
-                    view.delegate_mut()
-                        .companies
-                        .extend((0..200).map(|_| random_company()));
-                    _ = view.delegate_mut().perform_search(&query, cx);
-                    view.delegate_mut().is_eof = view.delegate().companies.len() >= 6000;
-                });
-            })
+            _ = view.update_in(&mut window, move |view, window, cx| {
+                let query = view.delegate().query.clone();
+                view.delegate_mut()
+                    .companies
+                    .extend((0..200).map(|_| random_company()));
+                _ = view.delegate_mut().perform_search(&query, window, cx);
+                view.delegate_mut().is_eof = view.delegate().companies.len() >= 6000;
+            });
         })
         .detach();
     }
@@ -257,14 +260,14 @@ impl super::Story for ListStory {
         "A list displays a series of items."
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl gpui::Focusable> {
-        Self::view(cx)
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+        Self::view(window, cx)
     }
 }
 
 impl ListStory {
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
-        cx.new(Self::new)
+        cx.new(|cx| Self::new(window, cx))
     }
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
@@ -282,7 +285,7 @@ impl ListStory {
             is_eof: false,
         };
 
-        let company_list = cx.new(|cx| List::new(delegate, cx));
+        let company_list = cx.new(|cx| List::new(delegate, window, cx));
         // company_list.update(cx, |list, cx| {
         //     list.set_selected_index(Some(3), cx);
         // });
@@ -382,7 +385,7 @@ impl Render for ListStory {
                             .small()
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.company_list.update(cx, |list, cx| {
-                                    list.scroll_to_item(0, cx);
+                                    list.scroll_to_item(0, window, cx);
                                 })
                             })),
                     )
@@ -392,7 +395,11 @@ impl Render for ListStory {
                             .small()
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.company_list.update(cx, |list, cx| {
-                                    list.scroll_to_item(list.delegate().items_count(cx) - 1, cx);
+                                    list.scroll_to_item(
+                                        list.delegate().items_count(cx) - 1,
+                                        window,
+                                        cx,
+                                    );
                                 })
                             })),
                     )
@@ -403,7 +410,7 @@ impl Render for ListStory {
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.company_list.update(cx, |list, cx| {
                                     if let Some(selected) = list.selected_index() {
-                                        list.scroll_to_item(selected, cx);
+                                        list.scroll_to_item(selected, window, cx);
                                     }
                                 })
                             })),
@@ -412,7 +419,7 @@ impl Render for ListStory {
                         Checkbox::new("loading")
                             .label("Loading")
                             .checked(self.company_list.read(cx).delegate().loading)
-                            .on_click(cx.listener(|this, check: &bool, cx| {
+                            .on_click(cx.listener(|this, check: &bool, window, cx| {
                                 this.company_list.update(cx, |this, cx| {
                                     this.delegate_mut().loading = *check;
                                     cx.notify();

@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{Context as _, Result};
 use gpui::*;
 use serde::Deserialize;
 use std::{sync::Arc, time::Duration};
@@ -54,33 +54,38 @@ impl StoryWorkspace {
         // There will crash on Linux.
         // https://github.com/longbridge/gpui-component/issues/104
         #[cfg(not(target_os = "linux"))]
-        cx.observe_window_appearance(|_, cx| {
-            Theme::sync_system_appearance(cx);
-        })
-        .detach();
+        window
+            .observe_window_appearance(|window, cx| {
+                Theme::sync_system_appearance(Some(window), cx);
+            })
+            .detach();
 
         let dock_area =
-            cx.new(|cx| DockArea::new(MAIN_DOCK_AREA.id, Some(MAIN_DOCK_AREA.version), cx));
+            cx.new(|cx| DockArea::new(MAIN_DOCK_AREA.id, Some(MAIN_DOCK_AREA.version), window, cx));
         let weak_dock_area = dock_area.downgrade();
 
-        match Self::load_layout(dock_area.clone(), cx) {
+        match Self::load_layout(dock_area.clone(), window, cx) {
             Ok(_) => {
                 println!("load layout success");
             }
             Err(err) => {
                 eprintln!("load layout error: {:?}", err);
-                Self::reset_default_layout(weak_dock_area, cx);
+                Self::reset_default_layout(weak_dock_area, window, cx);
             }
         };
 
-        cx.subscribe(&dock_area, |this, dock_area, ev: &DockEvent, cx| match ev {
-            DockEvent::LayoutChanged => this.save_layout(dock_area, cx),
-        })
+        cx.subscribe_in(
+            &dock_area,
+            window,
+            |this, dock_area, ev: &DockEvent, window, cx| match ev {
+                DockEvent::LayoutChanged => this.save_layout(dock_area, window, cx),
+            },
+        )
         .detach();
 
         cx.on_app_quit({
             let dock_area = dock_area.clone();
-            move |cx| {
+            move |_, cx| {
                 let state = dock_area.read(cx).dump(cx);
                 cx.background_executor().spawn(async move {
                     // Save layout before quitting
@@ -91,8 +96,8 @@ impl StoryWorkspace {
         .detach();
 
         let title_bar = cx.new(|cx| {
-            AppTitleBar::new("Examples", cx).child({
-                move |cx| {
+            AppTitleBar::new("Examples", window, cx).child({
+                move |_, cx| {
                     Button::new("add-panel")
                         .icon(IconName::LayoutDashboard)
                         .small()
@@ -100,7 +105,7 @@ impl StoryWorkspace {
                         .popup_menu({
                             let invisible_panels = AppState::global(cx).invisible_panels.clone();
 
-                            move |menu, cx| {
+                            move |menu, _, cx| {
                                 menu.menu(
                                     "Add Panel to Center",
                                     Box::new(AddPanel(DockPlacement::Center)),
@@ -159,23 +164,27 @@ impl StoryWorkspace {
         }
     }
 
-    fn save_layout(&mut self, dock_area: Entity<DockArea>, window: &mut Window, cx: &mut Context<Self>) {
-        self._save_layout_task = Some(cx.spawn(|this, mut cx| async move {
+    fn save_layout(
+        &mut self,
+        dock_area: &Entity<DockArea>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let dock_area = dock_area.clone();
+        self._save_layout_task = Some(cx.spawn_in(window, |story, mut window| async move {
             Timer::after(Duration::from_secs(10)).await;
 
-            let _ = cx.update(|cx| {
+            _ = story.update_in(&mut window, move |this, _, cx| {
                 let dock_area = dock_area.read(cx);
                 let state = dock_area.dump(cx);
 
-                let last_layout_state = this.upgrade().unwrap().read(cx).last_layout_state.clone();
+                let last_layout_state = this.last_layout_state.clone();
                 if Some(&state) == last_layout_state.as_ref() {
                     return;
                 }
 
                 Self::save_state(&state).unwrap();
-                let _ = this.update(cx, |this, _| {
-                    this.last_layout_state = Some(state);
-                });
+                this.last_layout_state = Some(state);
             });
         }));
     }
@@ -187,7 +196,11 @@ impl StoryWorkspace {
         Ok(())
     }
 
-    fn load_layout(dock_area: Entity<DockArea>, window: &mut Window, cx: &mut App) -> Result<()> {
+    fn load_layout(
+        dock_area: Entity<DockArea>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Result<()> {
         let fname = "target/layout.json";
         let json = std::fs::read_to_string(fname)?;
         let state = serde_json::from_str::<DockAreaState>(&json)?;
@@ -195,14 +208,20 @@ impl StoryWorkspace {
         // Check if the saved layout version is different from the current version
         // Notify the user and ask if they want to reset the layout to default.
         if state.version != Some(MAIN_DOCK_AREA.version) {
-            let answer = cx.prompt(PromptLevel::Info, "The default main layout has been updated.\nDo you want to reset the layout to default?", None,
-                &["Yes", "No"]);
+            let answer = window.prompt(
+                PromptLevel::Info,
+                "The default main layout has been updated.\n\
+                Do you want to reset the layout to default?",
+                None,
+                &["Yes", "No"],
+                cx,
+            );
 
             let weak_dock_area = dock_area.downgrade();
-            cx.spawn(|mut cx| async move {
+            cx.spawn_in(window, |this, mut window| async move {
                 if answer.await == Ok(0) {
-                    _ = cx.update(|cx| {
-                        Self::reset_default_layout(weak_dock_area, cx);
+                    _ = this.update_in(&mut window, |_, window, cx| {
+                        Self::reset_default_layout(weak_dock_area, window, cx);
                     });
                 }
             })
@@ -210,7 +229,7 @@ impl StoryWorkspace {
         }
 
         dock_area.update(cx, |dock_area, cx| {
-            dock_area.load(state, cx).context("load layout")?;
+            dock_area.load(state, window, cx).context("load layout")?;
             dock_area.set_dock_collapsible(
                 Edges {
                     left: true,
@@ -218,6 +237,7 @@ impl StoryWorkspace {
                     right: true,
                     ..Default::default()
                 },
+                window,
                 cx,
             );
 
@@ -226,24 +246,31 @@ impl StoryWorkspace {
     }
 
     fn reset_default_layout(dock_area: WeakEntity<DockArea>, window: &mut Window, cx: &mut App) {
-        let dock_item = Self::init_default_layout(&dock_area, cx);
+        let dock_item = Self::init_default_layout(&dock_area, window, cx);
 
         let left_panels = DockItem::split_with_sizes(
             Axis::Vertical,
             vec![
-                DockItem::tab(StoryContainer::panel::<ListStory>(cx), &dock_area, cx),
+                DockItem::tab(
+                    StoryContainer::panel::<ListStory>(window, cx),
+                    &dock_area,
+                    window,
+                    cx,
+                ),
                 DockItem::tabs(
                     vec![
-                        Arc::new(StoryContainer::panel::<ScrollableStory>(cx)),
-                        Arc::new(StoryContainer::panel::<AccordionStory>(cx)),
+                        Arc::new(StoryContainer::panel::<ScrollableStory>(window, cx)),
+                        Arc::new(StoryContainer::panel::<AccordionStory>(window, cx)),
                     ],
                     None,
                     &dock_area,
+                    window,
                     cx,
                 ),
             ],
             vec![None, Some(px(360.))],
             &dock_area,
+            window,
             cx,
         );
 
@@ -251,72 +278,91 @@ impl StoryWorkspace {
             Axis::Vertical,
             vec![DockItem::tabs(
                 vec![
-                    Arc::new(StoryContainer::panel::<TooltipStory>(cx)),
-                    Arc::new(StoryContainer::panel::<IconStory>(cx)),
+                    Arc::new(StoryContainer::panel::<TooltipStory>(window, cx)),
+                    Arc::new(StoryContainer::panel::<IconStory>(window, cx)),
                 ],
                 None,
                 &dock_area,
+                window,
                 cx,
             )],
             vec![None],
             &dock_area,
+            window,
             cx,
         );
 
         let right_panels = DockItem::split_with_sizes(
             Axis::Vertical,
             vec![
-                DockItem::tab(StoryContainer::panel::<ImageStory>(cx), &dock_area, cx),
-                DockItem::tab(StoryContainer::panel::<IconStory>(cx), &dock_area, cx),
+                DockItem::tab(
+                    StoryContainer::panel::<ImageStory>(window, cx),
+                    &dock_area,
+                    window,
+                    cx,
+                ),
+                DockItem::tab(
+                    StoryContainer::panel::<IconStory>(window, cx),
+                    &dock_area,
+                    window,
+                    cx,
+                ),
             ],
             vec![None],
             &dock_area,
+            window,
             cx,
         );
 
         _ = dock_area.update(cx, |view, cx| {
-            view.set_version(MAIN_DOCK_AREA.version, cx);
-            view.set_center(dock_item, cx);
-            view.set_left_dock(left_panels, Some(px(350.)), true, cx);
-            view.set_bottom_dock(bottom_panels, Some(px(200.)), true, cx);
-            view.set_right_dock(right_panels, Some(px(320.)), true, cx);
+            view.set_version(MAIN_DOCK_AREA.version, window, cx);
+            view.set_center(dock_item, window, cx);
+            view.set_left_dock(left_panels, Some(px(350.)), true, window, cx);
+            view.set_bottom_dock(bottom_panels, Some(px(200.)), true, window, cx);
+            view.set_right_dock(right_panels, Some(px(320.)), true, window, cx);
 
             Self::save_state(&view.dump(cx)).unwrap();
         });
     }
 
-    fn init_default_layout(dock_area: &WeakEntity<DockArea>, window: &mut Window, cx: &mut App) -> DockItem {
+    fn init_default_layout(
+        dock_area: &WeakEntity<DockArea>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> DockItem {
         DockItem::split_with_sizes(
             Axis::Vertical,
             vec![DockItem::tabs(
                 vec![
-                    Arc::new(StoryContainer::panel::<ButtonStory>(cx)),
-                    Arc::new(StoryContainer::panel::<InputStory>(cx)),
-                    Arc::new(StoryContainer::panel::<DropdownStory>(cx)),
-                    Arc::new(StoryContainer::panel::<TextStory>(cx)),
-                    Arc::new(StoryContainer::panel::<ModalStory>(cx)),
-                    Arc::new(StoryContainer::panel::<PopupStory>(cx)),
-                    Arc::new(StoryContainer::panel::<SwitchStory>(cx)),
-                    Arc::new(StoryContainer::panel::<ProgressStory>(cx)),
-                    Arc::new(StoryContainer::panel::<TableStory>(cx)),
-                    Arc::new(StoryContainer::panel::<ImageStory>(cx)),
-                    Arc::new(StoryContainer::panel::<IconStory>(cx)),
-                    Arc::new(StoryContainer::panel::<TooltipStory>(cx)),
-                    Arc::new(StoryContainer::panel::<ProgressStory>(cx)),
-                    Arc::new(StoryContainer::panel::<CalendarStory>(cx)),
-                    Arc::new(StoryContainer::panel::<ResizableStory>(cx)),
-                    Arc::new(StoryContainer::panel::<ScrollableStory>(cx)),
-                    Arc::new(StoryContainer::panel::<AccordionStory>(cx)),
-                    Arc::new(StoryContainer::panel::<SidebarStory>(cx)),
-                    Arc::new(StoryContainer::panel::<FormStory>(cx)),
-                    // Arc::new(StoryContainer::panel::<WebViewStory>(cx)),
+                    Arc::new(StoryContainer::panel::<ButtonStory>(window, cx)),
+                    Arc::new(StoryContainer::panel::<InputStory>(window, cx)),
+                    Arc::new(StoryContainer::panel::<DropdownStory>(window, cx)),
+                    Arc::new(StoryContainer::panel::<TextStory>(window, cx)),
+                    Arc::new(StoryContainer::panel::<ModalStory>(window, cx)),
+                    Arc::new(StoryContainer::panel::<PopupStory>(window, cx)),
+                    Arc::new(StoryContainer::panel::<SwitchStory>(window, cx)),
+                    Arc::new(StoryContainer::panel::<ProgressStory>(window, cx)),
+                    Arc::new(StoryContainer::panel::<TableStory>(window, cx)),
+                    Arc::new(StoryContainer::panel::<ImageStory>(window, cx)),
+                    Arc::new(StoryContainer::panel::<IconStory>(window, cx)),
+                    Arc::new(StoryContainer::panel::<TooltipStory>(window, cx)),
+                    Arc::new(StoryContainer::panel::<ProgressStory>(window, cx)),
+                    Arc::new(StoryContainer::panel::<CalendarStory>(window, cx)),
+                    Arc::new(StoryContainer::panel::<ResizableStory>(window, cx)),
+                    Arc::new(StoryContainer::panel::<ScrollableStory>(window, cx)),
+                    Arc::new(StoryContainer::panel::<AccordionStory>(window, cx)),
+                    Arc::new(StoryContainer::panel::<SidebarStory>(window, cx)),
+                    Arc::new(StoryContainer::panel::<FormStory>(window, cx)),
+                    // Arc::new(StoryContainer::panel::<WebViewStory>(window, cx)),
                 ],
                 None,
                 &dock_area,
+                window,
                 cx,
             )],
             vec![None],
             &dock_area,
+            window,
             cx,
         )
     }
@@ -348,16 +394,16 @@ impl StoryWorkspace {
                 ..Default::default()
             };
 
-            let window = cx.open_window(options, |cx| {
-                let story_view = cx.new(|cx| Self::new(cx));
-                cx.new(|cx| Root::new(story_view.into(), cx))
+            let window = cx.open_window(options, |window, cx| {
+                let story_view = cx.new(|cx| Self::new(window, cx));
+                cx.new(|cx| Root::new(story_view.into(), window, cx))
             })?;
 
             window
-                .update(&mut cx, |_, cx| {
-                    cx.activate_window();
-                    cx.set_window_title("GPUI App");
-                    cx.on_release(|_, _, cx| {
+                .update(&mut cx, |_, window, cx| {
+                    window.activate_window();
+                    window.set_window_title("GPUI App");
+                    cx.on_release(|_, cx| {
                         // exit app
                         cx.quit();
                     })
@@ -369,39 +415,45 @@ impl StoryWorkspace {
         })
     }
 
-    fn on_action_add_panel(&mut self, action: &AddPanel, window: &mut Window, cx: &mut Context<Self>) {
+    fn on_action_add_panel(
+        &mut self,
+        action: &AddPanel,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         // Random pick up a panel to add
         let panel = match rand::random::<usize>() % 18 {
-            0 => Arc::new(StoryContainer::panel::<ButtonStory>(cx)),
-            1 => Arc::new(StoryContainer::panel::<InputStory>(cx)),
-            2 => Arc::new(StoryContainer::panel::<DropdownStory>(cx)),
-            3 => Arc::new(StoryContainer::panel::<TextStory>(cx)),
-            4 => Arc::new(StoryContainer::panel::<ModalStory>(cx)),
-            5 => Arc::new(StoryContainer::panel::<PopupStory>(cx)),
-            6 => Arc::new(StoryContainer::panel::<SwitchStory>(cx)),
-            7 => Arc::new(StoryContainer::panel::<ProgressStory>(cx)),
-            8 => Arc::new(StoryContainer::panel::<TableStory>(cx)),
-            9 => Arc::new(StoryContainer::panel::<ImageStory>(cx)),
-            10 => Arc::new(StoryContainer::panel::<IconStory>(cx)),
-            11 => Arc::new(StoryContainer::panel::<TooltipStory>(cx)),
-            12 => Arc::new(StoryContainer::panel::<ProgressStory>(cx)),
-            13 => Arc::new(StoryContainer::panel::<CalendarStory>(cx)),
-            14 => Arc::new(StoryContainer::panel::<ResizableStory>(cx)),
-            15 => Arc::new(StoryContainer::panel::<ScrollableStory>(cx)),
-            16 => Arc::new(StoryContainer::panel::<AccordionStory>(cx)),
-            // 17 => Arc::new(StoryContainer::panel::<WebViewStory>(cx)),
-            _ => Arc::new(StoryContainer::panel::<ButtonStory>(cx)),
+            0 => Arc::new(StoryContainer::panel::<ButtonStory>(window, cx)),
+            1 => Arc::new(StoryContainer::panel::<InputStory>(window, cx)),
+            2 => Arc::new(StoryContainer::panel::<DropdownStory>(window, cx)),
+            3 => Arc::new(StoryContainer::panel::<TextStory>(window, cx)),
+            4 => Arc::new(StoryContainer::panel::<ModalStory>(window, cx)),
+            5 => Arc::new(StoryContainer::panel::<PopupStory>(window, cx)),
+            6 => Arc::new(StoryContainer::panel::<SwitchStory>(window, cx)),
+            7 => Arc::new(StoryContainer::panel::<ProgressStory>(window, cx)),
+            8 => Arc::new(StoryContainer::panel::<TableStory>(window, cx)),
+            9 => Arc::new(StoryContainer::panel::<ImageStory>(window, cx)),
+            10 => Arc::new(StoryContainer::panel::<IconStory>(window, cx)),
+            11 => Arc::new(StoryContainer::panel::<TooltipStory>(window, cx)),
+            12 => Arc::new(StoryContainer::panel::<ProgressStory>(window, cx)),
+            13 => Arc::new(StoryContainer::panel::<CalendarStory>(window, cx)),
+            14 => Arc::new(StoryContainer::panel::<ResizableStory>(window, cx)),
+            15 => Arc::new(StoryContainer::panel::<ScrollableStory>(window, cx)),
+            16 => Arc::new(StoryContainer::panel::<AccordionStory>(window, cx)),
+            // 17 => Arc::new(StoryContainer::panel::<WebViewStory>(window, cx)),
+            _ => Arc::new(StoryContainer::panel::<ButtonStory>(window, cx)),
         };
 
         self.dock_area.update(cx, |dock_area, cx| {
-            dock_area.add_panel(panel, action.0, cx);
+            dock_area.add_panel(panel, action.0, window, cx);
         });
     }
 
     fn on_action_toggle_panel_visible(
         &mut self,
         action: &TogglePanelVisible,
-        window: &mut Window, cx: &mut Context<Self>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
     ) {
         let panel_name = action.0.clone();
         let invisible_panels = AppState::global(cx).invisible_panels.clone();
@@ -425,7 +477,7 @@ pub fn open_new(
         StoryWorkspace::new_local(cx);
     cx.spawn(|mut cx| async move {
         if let Some(root) = task.await.ok() {
-            root.update(&mut cx, |workspace, window, cx| init(workspace, cx))
+            root.update(&mut cx, |workspace, window, cx| init(workspace, window, cx))
                 .expect("failed to init workspace");
         }
     })
@@ -433,9 +485,9 @@ pub fn open_new(
 
 impl Render for StoryWorkspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let drawer_layer = Root::render_drawer_layer(cx);
-        let modal_layer = Root::render_modal_layer(cx);
-        let notification_layer = Root::render_notification_layer(cx);
+        let drawer_layer = Root::render_drawer_layer(window, cx);
+        let modal_layer = Root::render_modal_layer(window, cx);
+        let notification_layer = Root::render_notification_layer(window, cx);
 
         div()
             .id("story-workspace")
@@ -456,7 +508,7 @@ impl Render for StoryWorkspace {
 fn main() {
     use ui::input::{Copy, Cut, Paste, Redo, Undo};
 
-    let app = App::new().with_assets(Assets);
+    let app = Application::new().with_assets(Assets);
 
     app.run(move |cx| {
         init(cx);
@@ -485,7 +537,7 @@ fn main() {
         ]);
         cx.activate(true);
 
-        open_new(cx, |_workspace, _cx| {
+        open_new(cx, |_, _, _| {
             // do something
         })
         .detach();

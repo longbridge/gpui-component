@@ -1,6 +1,6 @@
-use gpui::{Window, ModelContext, AppContext, Model, 
-    div, hsla, px, Hsla, IntoElement, ParentElement, Render, SharedString, Styled, Subscription,
-      VisualContext, 
+use gpui::{
+    div, hsla, px, App, AppContext, Context, Entity, Focusable, Hsla, IntoElement, ParentElement,
+    Render, SharedString, Styled, Subscription, Window,
 };
 use ui::{
     button::Button,
@@ -31,14 +31,14 @@ impl super::Story for ProgressStory {
         "Progress"
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl gpui::Focusable> {
-        Self::view(cx)
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+        Self::view(window, cx)
     }
 }
 
 impl ProgressStory {
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
-        cx.new(Self::new)
+        cx.new(|cx| Self::new(window, cx))
     }
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
@@ -138,7 +138,7 @@ impl ProgressStory {
     }
 }
 
-impl gpui::Focusable for ProgressStory {
+impl Focusable for ProgressStory {
     fn focus_handle(&self, _: &gpui::App) -> gpui::FocusHandle {
         self.focus_handle.clone()
     }
@@ -155,22 +155,22 @@ impl Render for ProgressStory {
                 h_flex()
                     .gap_x_2()
                     .child(Button::new("button-1").label("0%").on_click(cx.listener(
-                        |this, _, _| {
+                        |this, _, _, _| {
                             this.set_value(0.);
                         },
                     )))
                     .child(Button::new("button-2").label("25%").on_click(cx.listener(
-                        |this, _, _| {
+                        |this, _, _, _| {
                             this.set_value(25.);
                         },
                     )))
                     .child(Button::new("button-3").label("75%").on_click(cx.listener(
-                        |this, _, _| {
+                        |this, _, _, _| {
                             this.set_value(75.);
                         },
                     )))
                     .child(Button::new("button-4").label("100%").on_click(cx.listener(
-                        |this, _, _| {
+                        |this, _, _, _| {
                             this.set_value(100.);
                         },
                     ))),
@@ -182,14 +182,14 @@ impl Render for ProgressStory {
                     .child(
                         Button::new("button-5")
                             .icon(IconName::Minus)
-                            .on_click(cx.listener(|this, _, _| {
+                            .on_click(cx.listener(|this, _, _, _| {
                                 this.set_value((this.value - 1.).max(0.));
                             })),
                     )
                     .child(
                         Button::new("button-6")
                             .icon(IconName::Plus)
-                            .on_click(cx.listener(|this, _, _| {
+                            .on_click(cx.listener(|this, _, _, _| {
                                 this.set_value((this.value + 1.).min(100.));
                             })),
                     ),
@@ -277,9 +277,11 @@ impl Render for ProgressStory {
                                     .child(rgb.clone())
                                     .text_color(self.slider_hsl_value.invert()),
                             )
-                            .child(Clipboard::new("copy-hsl").value(rgb).on_copied(|_, cx| {
-                                cx.push_notification("Color copied to clipboard.")
-                            })),
+                            .child(Clipboard::new("copy-hsl").value(rgb).on_copied(
+                                |_, window, cx| {
+                                    window.push_notification("Color copied to clipboard.", cx)
+                                },
+                            )),
                     ),
             )
             .child(

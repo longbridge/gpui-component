@@ -143,7 +143,7 @@ impl RenderOnce for Drawer {
                             let on_close = self.on_close.clone();
                             move |_, window, cx| {
                                 on_close(&ClickEvent::default(), window, cx);
-                                window.close_drawer();
+                                window.close_drawer(cx);
                             }
                         })
                     })
@@ -156,7 +156,7 @@ impl RenderOnce for Drawer {
                                 let on_close = self.on_close.clone();
                                 move |_: &Escape, window, cx| {
                                     on_close(&ClickEvent::default(), window, cx);
-                                    window.close_drawer();
+                                    window.close_drawer(cx);
                                 }
                             })
                             .absolute()
@@ -195,7 +195,7 @@ impl RenderOnce for Drawer {
                                             .icon(IconName::Close)
                                             .on_click(move |_, window, cx| {
                                                 on_close(&ClickEvent::default(), window, cx);
-                                                window.close_drawer();
+                                                window.close_drawer(cx);
                                             }),
                                     ),
                             )

@@ -1,5 +1,6 @@
-use gpui::{Window, ModelContext, AppContext, Model, 
-    px, rems, ParentElement, Render, Styled,   VisualContext as _, 
+use gpui::{
+    px, rems, App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement,
+    Render, Styled, VisualContext as _, Window,
 };
 use ui::{
     button::{Button, ButtonVariant, ButtonVariants},
@@ -12,14 +13,14 @@ pub struct IconStory {
 }
 
 impl IconStory {
-    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+    fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
         }
     }
 
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
-        cx.new(Self::new)
+        cx.new(|cx| Self::new(window, cx))
     }
 }
 
@@ -28,8 +29,8 @@ impl super::Story for IconStory {
         "Icon"
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl gpui::Focusable> {
-        Self::view(cx)
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+        Self::view(window, cx)
     }
 
     fn zoomable() -> Option<PanelControl> {
@@ -37,14 +38,14 @@ impl super::Story for IconStory {
     }
 }
 
-impl gpui::Focusable for IconStory {
-    fn focus_handle(&self, _: &gpui::App) -> gpui::FocusHandle {
+impl Focusable for IconStory {
+    fn focus_handle(&self, _: &App) -> FocusHandle {
         self.focus_handle.clone()
     }
 }
 
 impl Render for IconStory {
-    fn render(&mut self, window: &mut gpui::Window, cx: &mut gpui::Context<Self>) -> impl gpui::IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex().gap_3().child(
             h_flex()
                 .gap_4()

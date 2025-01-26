@@ -1,6 +1,6 @@
-use gpui::{Window, ModelContext, AppContext, Model, 
-    div, ClickEvent, FocusHandle, Focusable, IntoElement, ParentElement as _, Render,
-    Styled as _,   VisualContext as _, 
+use gpui::{
+    div, App, AppContext, ClickEvent, Context, Entity, FocusHandle, Focusable, IntoElement,
+    ParentElement as _, Render, Styled as _, VisualContext as _, Window,
 };
 use ui::{
     h_flex,
@@ -21,8 +21,8 @@ impl super::Story for WebViewStory {
         "WebView"
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl gpui::Focusable> {
-        Self::view(cx)
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+        Self::view(window, cx)
     }
 }
 
@@ -32,14 +32,14 @@ impl WebViewStory {
 
         let webview = cx.new(|cx| {
             let webview = ui::wry::WebViewBuilder::new()
-                .build_as_child(&cx.raw_window_handle())
+                .build_as_child(&window.raw_window_handle())
                 .unwrap();
-            WebView::new(cx, webview)
+            WebView::new(webview, window, cx)
         });
 
         let address_input = cx.new(|cx| {
-            let mut input = TextInput::new(cx);
-            input.set_text("https://google.com", cx);
+            let mut input = TextInput::new(window, cx);
+            input.set_text("https://google.com", window, cx);
             input
         });
 
@@ -73,7 +73,7 @@ impl WebViewStory {
         })
     }
 
-    pub fn hide(&self, window: &mut Window, cx: &mut App) {
+    pub fn hide(&self, _: &mut Window, cx: &mut App) {
         self.webview.update(cx, |webview, _| webview.hide())
     }
 
@@ -92,7 +92,7 @@ impl Focusable for WebViewStory {
 }
 
 impl Render for WebViewStory {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let webview = self.webview.clone();
         let address_input = self.address_input.clone();
 

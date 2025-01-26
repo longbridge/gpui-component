@@ -1,9 +1,9 @@
 use std::rc::Rc;
 
-use gpui::{Window, ModelContext, AppContext, Model, 
-    div, AnyElement, ClickEvent, Corner, FocusHandle, Hsla, InteractiveElement as _, IntoElement,
-    MouseButton, ParentElement as _, Render, SharedString, Styled as _,  
-    VisualContext as _, 
+use gpui::{
+    div, AnyElement, App, AppContext, ClickEvent, Context, Corner, Entity, FocusHandle, Hsla,
+    InteractiveElement as _, IntoElement, MouseButton, ParentElement as _, Render, SharedString,
+    Styled as _, VisualContext as _, Window,
 };
 use ui::{
     badge::Badge,
@@ -27,23 +27,28 @@ pub struct AppTitleBar {
 }
 
 impl AppTitleBar {
-    pub fn new(title: impl Into<SharedString>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let locale_selector = cx.new(LocaleSelector::new);
-        let font_size_selector = cx.new(FontSizeSelector::new);
+    pub fn new(
+        title: impl Into<SharedString>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        let locale_selector = cx.new(|cx| LocaleSelector::new(window, cx));
+        let font_size_selector = cx.new(|cx| FontSizeSelector::new(window, cx));
 
         let theme_color_picker = cx.new(|cx| {
-            let mut picker = ColorPicker::new("theme-color-picker", cx)
+            let mut picker = ColorPicker::new("theme-color-picker", window, cx)
                 .xsmall()
                 .anchor(Corner::TopRight)
                 .label("Theme Color");
-            picker.set_value(cx.theme().primary, cx);
+            picker.set_value(cx.theme().primary, window, cx);
             picker
         });
-        cx.subscribe(
+        cx.subscribe_in(
             &theme_color_picker,
-            |this, _, ev: &ColorPickerEvent, cx| match ev {
+            window,
+            |this, _, ev: &ColorPickerEvent, window, cx| match ev {
                 ColorPickerEvent::Change(color) => {
-                    this.set_theme_color(*color, cx);
+                    this.set_theme_color(*color, window, cx);
                 }
             },
         )
@@ -55,7 +60,7 @@ impl AppTitleBar {
             locale_selector,
             font_size_selector,
             theme_color_picker,
-            child: Rc::new(|_| div().into_any_element()),
+            child: Rc::new(|_, _| div().into_any_element()),
         }
     }
 
@@ -64,11 +69,16 @@ impl AppTitleBar {
         E: IntoElement,
         F: Fn(&mut Window, &mut App) -> E + 'static,
     {
-        self.child = Rc::new(move |cx| f(cx).into_any_element());
+        self.child = Rc::new(move |window, cx| f(window, cx).into_any_element());
         self
     }
 
-    fn set_theme_color(&mut self, color: Option<Hsla>, window: &mut Window, cx: &mut Context<Self>) {
+    fn set_theme_color(
+        &mut self,
+        color: Option<Hsla>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.theme_color = color;
         if let Some(color) = self.theme_color {
             let theme = cx.global_mut::<Theme>();
@@ -83,14 +93,14 @@ impl AppTitleBar {
             false => ui::ThemeMode::Dark,
         };
 
-        Theme::change(mode, cx);
-        self.set_theme_color(self.theme_color, cx);
+        Theme::change(mode, None, cx);
+        self.set_theme_color(self.theme_color, window, cx);
     }
 }
 
 impl Render for AppTitleBar {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let notifications_count = cx.notifications().len();
+        let notifications_count = window.notifications(cx).len();
 
         TitleBar::new()
             // left side
@@ -104,7 +114,7 @@ impl Render for AppTitleBar {
                     .gap_2()
                     .on_mouse_down(MouseButton::Left, |_, window, cx| cx.stop_propagation())
                     .child(self.theme_color_picker.clone())
-                    .child((self.child.clone())(cx))
+                    .child((self.child.clone())(window, cx))
                     .child(
                         Button::new("theme-mode")
                             .map(|this| {
@@ -126,7 +136,7 @@ impl Render for AppTitleBar {
                                 .icon(IconName::GitHub)
                                 .small()
                                 .ghost()
-                                .on_click(|_, cx| {
+                                .on_click(|_, _, cx| {
                                     cx.open_url("https://github.com/longbridge/gpui-component")
                                 }),
                         ),
@@ -157,7 +167,12 @@ impl LocaleSelector {
         }
     }
 
-    fn on_select_locale(&mut self, locale: &SelectLocale, window: &mut Window, cx: &mut Context<Self>) {
+    fn on_select_locale(
+        &mut self,
+        locale: &SelectLocale,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         ui::set_locale(&locale.0);
         window.refresh();
     }
@@ -177,7 +192,7 @@ impl Render for LocaleSelector {
                     .small()
                     .ghost()
                     .icon(IconName::Globe)
-                    .popup_menu(move |this, _| {
+                    .popup_menu(move |this, _, _| {
                         this.menu_with_check(
                             "English",
                             locale == "en",
@@ -205,12 +220,22 @@ impl FontSizeSelector {
         }
     }
 
-    fn on_select_font(&mut self, font_size: &SelectFont, window: &mut Window, cx: &mut Context<Self>) {
+    fn on_select_font(
+        &mut self,
+        font_size: &SelectFont,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         Theme::global_mut(cx).font_size = font_size.0 as f32;
         window.refresh();
     }
 
-    fn on_select_scrollbar_show(&mut self, show: &SelectScrollbarShow, window: &mut Window, cx: &mut Context<Self>) {
+    fn on_select_scrollbar_show(
+        &mut self,
+        show: &SelectScrollbarShow,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         Theme::global_mut(cx).scrollbar_show = show.0;
         window.refresh();
     }
@@ -232,7 +257,7 @@ impl Render for FontSizeSelector {
                     .small()
                     .ghost()
                     .icon(IconName::Settings2)
-                    .popup_menu(move |this, _| {
+                    .popup_menu(move |this, _, _| {
                         this.menu_with_check(
                             "Font Large",
                             font_size == 18,

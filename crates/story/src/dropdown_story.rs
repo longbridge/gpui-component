@@ -1,6 +1,6 @@
 use gpui::{
-    actions, px, AppContext, InteractiveElement, IntoElement, KeyBinding, Model, ModelContext,
-    ParentElement, Render, SharedString, Styled, VisualContext, Window,
+    actions, px, App, AppContext, Context, Entity, Focusable, InteractiveElement, IntoElement,
+    KeyBinding, ParentElement, Render, SharedString, Styled, Window,
 };
 
 use ui::{
@@ -64,12 +64,12 @@ impl super::Story for DropdownStory {
         "Displays a list of options for the user to pick from—triggered by a button."
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl gpui::Focusable> {
-        Self::view(cx)
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+        Self::view(window, cx)
     }
 }
 
-impl gpui::Focusable for DropdownStory {
+impl Focusable for DropdownStory {
     fn focus_handle(&self, cx: &gpui::App) -> gpui::FocusHandle {
         self.fruit_dropdown.focus_handle(cx)
     }
@@ -91,8 +91,9 @@ impl DropdownStory {
             Country::new("Ecuador", "EC"),
         ];
 
-        let country_dropdown =
-            cx.new(|cx| Dropdown::new("dropdown-country", countries, Some(6), cx).cleanable());
+        let country_dropdown = cx.new(|cx| {
+            Dropdown::new("dropdown-country", countries, Some(6), window, cx).cleanable()
+        });
 
         let fruits = SearchableVec::new(vec![
             "Apple".into(),
@@ -104,14 +105,14 @@ impl DropdownStory {
             "Avocado".into(),
         ]);
         let fruit_dropdown = cx.new(|cx| {
-            Dropdown::new("dropdown-fruits", fruits, None, cx)
+            Dropdown::new("dropdown-fruits", fruits, None, window, cx)
                 .icon(IconName::Search)
                 .width(px(200.))
                 .menu_width(px(320.))
         });
 
         cx.new(|cx| {
-            cx.subscribe(&country_dropdown, Self::on_dropdown_event)
+            cx.subscribe_in(&country_dropdown, window, Self::on_dropdown_event)
                 .detach();
 
             Self {
@@ -123,6 +124,7 @@ impl DropdownStory {
                         "string-list1",
                         vec!["QPUI".into(), "Iced".into(), "QT".into(), "Cocoa".into()],
                         Some(0),
+                        window,
                         cx,
                     )
                     .small()
@@ -139,6 +141,7 @@ impl DropdownStory {
                             "JavaScript".into(),
                         ]),
                         None,
+                        window,
                         cx,
                     )
                     .small()
@@ -146,9 +149,9 @@ impl DropdownStory {
                     .title_prefix("Language: ")
                 }),
                 simple_dropdown3: cx.new(|cx| {
-                    Dropdown::new("string-list3", Vec::<SharedString>::new(), None, cx)
+                    Dropdown::new("string-list3", Vec::<SharedString>::new(), None, window, cx)
                         .small()
-                        .empty(|cx| {
+                        .empty(|_, cx| {
                             h_flex()
                                 .h_24()
                                 .justify_center()
@@ -157,23 +160,30 @@ impl DropdownStory {
                         })
                 }),
                 disabled_dropdown: cx.new(|cx| {
-                    Dropdown::new("disabled-dropdown", Vec::<SharedString>::new(), None, cx)
-                        .small()
-                        .disabled(true)
+                    Dropdown::new(
+                        "disabled-dropdown",
+                        Vec::<SharedString>::new(),
+                        None,
+                        window,
+                        cx,
+                    )
+                    .small()
+                    .disabled(true)
                 }),
             }
         })
     }
 
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
-        Self::new(cx)
+        Self::new(window, cx)
     }
 
     fn on_dropdown_event(
         &mut self,
-        _: Entity<Dropdown<Vec<Country>>>,
+        _: &Entity<Dropdown<Vec<Country>>>,
         event: &DropdownEvent<Vec<Country>>,
-        _window: &mut Window, _cx: &mut Context<Self>,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
     ) {
         match event {
             DropdownEvent::Confirm(value) => println!("Selected country: {:?}", value),
@@ -181,16 +191,16 @@ impl DropdownStory {
     }
 
     fn on_key_tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
-        self.cycle_focus(true, cx);
+        self.cycle_focus(true, window, cx);
         cx.notify();
     }
 
     fn on_key_shift_tab(&mut self, _: &TabPrev, window: &mut Window, cx: &mut Context<Self>) {
-        self.cycle_focus(false, cx);
+        self.cycle_focus(false, window, cx);
         cx.notify();
     }
 
-    fn toggle_disabled(&mut self, disabled: bool, window: &mut Window, cx: &mut Context<Self>) {
+    fn toggle_disabled(&mut self, disabled: bool, _: &mut Window, cx: &mut Context<Self>) {
         self.disabled = disabled;
         self.country_dropdown
             .update(cx, |this, _| this.set_disabled(disabled));
@@ -232,8 +242,8 @@ impl Render for DropdownStory {
                 Checkbox::new("disable-dropdowns")
                     .label("Disabled")
                     .checked(self.disabled)
-                    .on_click(cx.listener(|this, checked, cx| {
-                        this.toggle_disabled(*checked, cx);
+                    .on_click(cx.listener(|this, checked, window, cx| {
+                        this.toggle_disabled(*checked, window, cx);
                     })),
             )
             .child(

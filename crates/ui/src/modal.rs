@@ -303,7 +303,7 @@ impl RenderOnce for Modal {
                         move |_, window, cx| {
                             if on_ok(&ClickEvent::default(), window, cx) {
                                 on_close(&ClickEvent::default(), window, cx);
-                                window.close_modal();
+                                window.close_modal(cx);
                             }
                         }
                     })
@@ -328,7 +328,7 @@ impl RenderOnce for Modal {
                         move |_, window, cx| {
                             if on_cancel(&ClickEvent::default(), window, cx) {
                                 on_close(&ClickEvent::default(), window, cx);
-                                window.close_modal();
+                                window.close_modal(cx);
                             }
                         }
                     })
@@ -368,7 +368,7 @@ impl RenderOnce for Modal {
                             move |_, window, cx| {
                                 on_cancel(&ClickEvent::default(), window, cx);
                                 on_close(&ClickEvent::default(), window, cx);
-                                window.close_modal();
+                                window.close_modal(cx);
                             }
                         })
                     })
@@ -388,7 +388,7 @@ impl RenderOnce for Modal {
                                         // But by now, we `cx.close_modal()` going to close the last active model, so the Escape is unexpected to work.
                                         on_cancel(&ClickEvent::default(), window, cx);
                                         on_close(&ClickEvent::default(), window, cx);
-                                        window.close_modal();
+                                        window.close_modal(cx);
                                     }
                                 })
                                 .on_action({
@@ -397,7 +397,7 @@ impl RenderOnce for Modal {
                                     move |_: &Enter, window, cx| {
                                         if on_ok(&ClickEvent::default(), window, cx) {
                                             on_close(&ClickEvent::default(), window, cx);
-                                            window.close_modal();
+                                            window.close_modal(cx);
                                         }
                                     }
                                 })
@@ -427,7 +427,7 @@ impl RenderOnce for Modal {
                                         move |_, window, cx| {
                                             on_cancel(&ClickEvent::default(), window, cx);
                                             on_close(&ClickEvent::default(), window, cx);
-                                            window.close_modal();
+                                            window.close_modal(cx);
                                         },
                                     ),
                                 )

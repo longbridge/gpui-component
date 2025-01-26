@@ -31,10 +31,9 @@ pub use form_story::FormStory;
 
 use gpui::{
     actions, div, impl_internal_actions, prelude::FluentBuilder as _, px, size, AnyElement,
-    AnyView, App, AppContext, Bounds, Context as _, Div, EventEmitter, Focusable, Global, Hsla,
-    InteractiveElement, IntoElement, Model, ModelContext, ParentElement, Render, SharedString,
-    StatefulInteractiveElement, Styled as _, VisualContext, Window, WindowBounds, WindowKind,
-    WindowOptions,
+    AnyView, App, AppContext, Bounds, Context, Div, Entity, EventEmitter, Focusable, Global, Hsla,
+    InteractiveElement, IntoElement, ParentElement, Render, SharedString,
+    StatefulInteractiveElement, Styled as _, Window, WindowBounds, WindowKind, WindowOptions,
 };
 pub use icon_story::IconStory;
 pub use image_story::ImageStory;
@@ -132,17 +131,17 @@ where
         };
 
         let window = cx
-            .open_window(options, |cx| {
-                let view = crate_view_fn(cx);
-                let root = cx.new(|cx| StoryRoot::new(title.clone(), view, cx));
-                cx.new(|cx| Root::new(root.into(), cx))
+            .open_window(options, |window, cx| {
+                let view = crate_view_fn(window, cx);
+                let root = cx.new(|cx| StoryRoot::new(title.clone(), view, window, cx));
+                cx.new(|cx| Root::new(root.into(), window, cx))
             })
             .expect("failed to open window");
 
         window
-            .update(&mut cx, |_, cx| {
-                cx.activate_window();
-                cx.set_window_title(&title);
+            .update(&mut cx, |_, window, cx| {
+                window.activate_window();
+                window.set_window_title(&title);
             })
             .expect("failed to update window");
 
@@ -160,9 +159,10 @@ impl StoryRoot {
     pub fn new(
         title: impl Into<SharedString>,
         view: impl Into<AnyView>,
-        window: &mut Window, cx: &mut Context<Self>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
     ) -> Self {
-        let title_bar = cx.new(|cx| AppTitleBar::new(title, cx));
+        let title_bar = cx.new(|cx| AppTitleBar::new(title, window, cx));
         Self {
             title_bar,
             view: view.into(),
@@ -188,7 +188,7 @@ pub fn init(cx: &mut App) {
     dropdown_story::init(cx);
     popup_story::init(cx);
 
-    register_panel(cx, PANEL_NAME, |_, _, info, cx| {
+    register_panel(cx, PANEL_NAME, |_, _, info, window, cx| {
         let story_state = match info {
             PanelInfo::Panel(value) => StoryState::from_value(value.clone()),
             _ => {
@@ -197,12 +197,17 @@ pub fn init(cx: &mut App) {
         };
 
         let view = cx.new(|cx| {
-            let (title, description, closable, zoomable, story) = story_state.to_story(cx);
-            let mut container = StoryContainer::new(cx).story(story, story_state.story_klass);
+            let (title, description, closable, zoomable, story) = story_state.to_story(window, cx);
+            let mut container =
+                StoryContainer::new(window, cx).story(story, story_state.story_klass);
 
-            cx.on_focus_in(&container.focus_handle, |this: &mut StoryContainer, _| {
-                println!("StoryContainer focus in: {}", this.name);
-            })
+            cx.on_focus_in(
+                &container.focus_handle,
+                window,
+                |this: &mut StoryContainer, _, _| {
+                    println!("StoryContainer focus in: {}", this.name);
+                },
+            )
             .detach();
 
             container.name = title.into();
@@ -217,7 +222,7 @@ pub fn init(cx: &mut App) {
 
 actions!(story, [ShowPanelInfo]);
 
-pub fn section(title: impl IntoElement, window: &Window, cx: &App) -> Div {
+pub fn section(title: impl IntoElement, cx: &App) -> Div {
     use ui::ActiveTheme;
     let theme = cx.theme();
 
@@ -252,7 +257,7 @@ pub enum ContainerEvent {
     Close,
 }
 
-pub trait Story: Focusable {
+pub trait Story: Focusable + Render {
     fn klass() -> &'static str {
         std::any::type_name::<Self>().split("::").last().unwrap()
     }
@@ -270,13 +275,13 @@ pub trait Story: Focusable {
     fn title_bg() -> Option<Hsla> {
         None
     }
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Focusable>;
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable>;
 }
 
 impl EventEmitter<ContainerEvent> for StoryContainer {}
 
 impl StoryContainer {
-    pub fn new(window: &mut Window, cx: &mut App) -> Self {
+    pub fn new(_window: &mut Window, cx: &mut App) -> Self {
         let focus_handle = cx.focus_handle();
 
         Self {
@@ -296,12 +301,12 @@ impl StoryContainer {
     pub fn panel<S: Story>(window: &mut Window, cx: &mut App) -> Entity<Self> {
         let name = S::title();
         let description = S::description();
-        let story = S::new_view(cx);
+        let story = S::new_view(window, cx);
         let story_klass = S::klass();
         let focus_handle = story.focus_handle(cx);
 
         let view = cx.new(|cx| {
-            let mut story = Self::new(cx).story(story.into(), story_klass);
+            let mut story = Self::new(window, cx).story(story.into(), story_klass);
             story.focus_handle = focus_handle;
             story.closable = S::closable();
             story.zoomable = S::zoomable();
@@ -330,11 +335,16 @@ impl StoryContainer {
         self
     }
 
-    fn on_action_panel_info(&mut self, _: &ShowPanelInfo, window: &mut Window, cx: &mut Context<Self>) {
+    fn on_action_panel_info(
+        &mut self,
+        _: &ShowPanelInfo,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         struct Info;
         let note = Notification::new(format!("You have clicked panel info on: {}", self.name))
             .id::<Info>();
-        cx.push_notification(note);
+        window.push_notification(note, cx);
     }
 }
 
@@ -356,7 +366,8 @@ impl StoryState {
 
     fn to_story(
         &self,
-        window: &mut Window, cx: &mut App,
+        window: &mut Window,
+        cx: &mut App,
     ) -> (
         &'static str,
         &'static str,
@@ -371,7 +382,7 @@ impl StoryState {
                     $klass::description(),
                     $klass::closable(),
                     $klass::zoomable(),
-                    $klass::view(cx).into(),
+                    $klass::view(window, cx).into(),
                 )
             };
         }
@@ -439,11 +450,11 @@ impl Panel for StoryContainer {
             .contains(&self.name)
     }
 
-    fn set_zoomed(&self, zoomed: bool, _window: &Window, _cx: &Context<Self>) {
+    fn set_zoomed(&self, zoomed: bool, _window: &Window, _cx: &App) {
         println!("panel: {} zoomed: {}", self.name, zoomed);
     }
 
-    fn set_active(&self, active: bool, _window: &Window, _cx: &Context<Self>) {
+    fn set_active(&self, active: bool, _window: &Window, _cx: &App) {
         println!("panel: {} active: {}", self.name, active);
     }
 
@@ -452,15 +463,17 @@ impl Panel for StoryContainer {
             .menu("Info", Box::new(ShowPanelInfo))
     }
 
-    fn toolbar_buttons(&self, _window: &mut Window, _cx: &mut Context<Self>) -> Option<Vec<Button>> {
+    fn toolbar_buttons(&self, _window: &mut Window, _cx: &mut App) -> Option<Vec<Button>> {
         Some(vec![
-            Button::new("info").icon(IconName::Info).on_click(|_, cx| {
-                cx.push_notification("You have clicked info button");
-            }),
+            Button::new("info")
+                .icon(IconName::Info)
+                .on_click(|_, window, cx| {
+                    window.push_notification("You have clicked info button", cx);
+                }),
             Button::new("search")
                 .icon(IconName::Search)
-                .on_click(|_, cx| {
-                    cx.push_notification("You have clicked search button");
+                .on_click(|_, window, cx| {
+                    window.push_notification("You have clicked search button", cx);
                 }),
         ])
     }
