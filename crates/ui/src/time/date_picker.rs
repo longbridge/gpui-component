@@ -1,9 +1,9 @@
 use chrono::NaiveDate;
-use gpui::{Window, ModelContext, Model, 
-    anchored, deferred, div, prelude::FluentBuilder as _, px, AppContext, ElementId, EventEmitter,
-    FocusHandle, Focusable, InteractiveElement as _, KeyBinding, Length, MouseButton,
-    ParentElement as _, Render, SharedString, StatefulInteractiveElement as _, Styled, 
-     VisualContext as _,
+use gpui::{
+    anchored, deferred, div, prelude::FluentBuilder as _, px, App, AppContext, Context, ElementId,
+    Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement as _, KeyBinding, Length,
+    MouseButton, ParentElement as _, Render, SharedString, StatefulInteractiveElement as _, Styled,
+    VisualContext as _, Window,
 };
 use rust_i18n::t;
 
@@ -73,18 +73,23 @@ pub struct DatePicker {
 impl DatePicker {
     /// Create a date picker.
     pub fn new(id: impl Into<ElementId>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        Self::new_with_range(id, false, cx)
+        Self::new_with_range(id, false, window, cx)
     }
 
     /// Create a date picker with range mode.
-    pub fn range_picker(id: impl Into<ElementId>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        Self::new_with_range(id, true, cx)
+    pub fn range_picker(
+        id: impl Into<ElementId>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        Self::new_with_range(id, true, window, cx)
     }
 
     fn new_with_range(
         id: impl Into<ElementId>,
         is_range: bool,
-        window: &mut Window, cx: &mut Context<Self>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
     ) -> Self {
         let date = if is_range {
             Date::Range(None, None)
@@ -92,15 +97,22 @@ impl DatePicker {
             Date::Single(None)
         };
 
-        let calendar = cx.new(Calendar::new);
-        calendar.update(cx, |view, cx| view.set_date(date, cx));
+        let calendar = cx.new(|cx| {
+            let mut this = Calendar::new(window, cx);
+            this.set_date(date, window, cx);
+            this
+        });
 
-        cx.subscribe(&calendar, |this, _, ev: &CalendarEvent, cx| match ev {
-            CalendarEvent::Selected(date) => {
-                this.update_date(*date, true, cx);
-                this.focus_handle.focus(cx);
-            }
-        })
+        cx.subscribe_in(
+            &calendar,
+            window,
+            |this, _, ev: &CalendarEvent, window, cx| match ev {
+                CalendarEvent::Selected(date) => {
+                    this.update_date(*date, true, window, cx);
+                    this.focus_handle.focus(window);
+                }
+            },
+        )
         .detach();
 
         Self {
@@ -162,13 +174,13 @@ impl DatePicker {
 
     /// Set the date of the date picker.
     pub fn set_date(&mut self, date: impl Into<Date>, window: &mut Window, cx: &mut Context<Self>) {
-        self.update_date(date.into(), false, cx);
+        self.update_date(date.into(), false, window, cx);
     }
 
     fn update_date(&mut self, date: Date, emit: bool, window: &mut Window, cx: &mut Context<Self>) {
         self.date = date;
         self.calendar.update(cx, |view, cx| {
-            view.set_date(date, cx);
+            view.set_date(date, window, cx);
         });
         self.open = false;
         if emit {
@@ -184,7 +196,7 @@ impl DatePicker {
     }
 
     fn escape(&mut self, _: &Escape, window: &mut Window, cx: &mut Context<Self>) {
-        self.focus_back_if_need(cx);
+        self.focus_back_if_need(window, cx);
         self.open = false;
 
         cx.notify();
@@ -202,7 +214,7 @@ impl DatePicker {
         }
 
         if let Some(focused) = window.focused(cx) {
-            if focused.contains(&self.focus_handle, cx) {
+            if focused.contains(&self.focus_handle, window) {
                 self.focus_handle.focus(window);
             }
         }
@@ -211,26 +223,36 @@ impl DatePicker {
     fn clean(&mut self, _: &gpui::ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
         match self.date {
             Date::Single(_) => {
-                self.update_date(Date::Single(None), true, cx);
+                self.update_date(Date::Single(None), true, window, cx);
             }
             Date::Range(_, _) => {
-                self.update_date(Date::Range(None, None), true, cx);
+                self.update_date(Date::Range(None, None), true, window, cx);
             }
         }
     }
 
-    fn toggle_calendar(&mut self, _: &gpui::ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
+    fn toggle_calendar(
+        &mut self,
+        _: &gpui::ClickEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.open = !self.open;
         cx.notify();
     }
 
-    fn select_preset(&mut self, preset: &DateRangePreset, window: &mut Window, cx: &mut Context<Self>) {
+    fn select_preset(
+        &mut self,
+        preset: &DateRangePreset,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         match preset.value {
             DateRangePresetValue::Single(single) => {
-                self.update_date(Date::Single(Some(single)), true, cx)
+                self.update_date(Date::Single(Some(single)), true, window, cx)
             }
             DateRangePresetValue::Range(start, end) => {
-                self.update_date(Date::Range(Some(start), Some(end)), true, cx)
+                self.update_date(Date::Range(Some(start), Some(end)), true, window, cx)
             }
         }
     }
@@ -264,8 +286,8 @@ impl Render for DatePicker {
             .unwrap_or(placeholder.clone());
 
         self.calendar.update(cx, |view, cx| {
-            view.set_size(self.size, cx);
-            view.set_number_of_months(self.number_of_months, cx);
+            view.set_size(self.size, window, cx);
+            view.set_number_of_months(self.number_of_months, window, cx);
         });
 
         div()
@@ -308,7 +330,9 @@ impl Render for DatePicker {
                             .gap_1()
                             .child(div().w_full().overflow_hidden().child(display_title))
                             .when(show_clean, |this| {
-                                this.child(ClearButton::new(cx).on_click(cx.listener(Self::clean)))
+                                this.child(
+                                    ClearButton::new(window, cx).on_click(cx.listener(Self::clean)),
+                                )
                             })
                             .when(!show_clean, |this| {
                                 this.child(
@@ -335,8 +359,8 @@ impl Render for DatePicker {
                                 .bg(cx.theme().background)
                                 .on_mouse_up_out(
                                     MouseButton::Left,
-                                    cx.listener(|view, _, cx| {
-                                        view.escape(&Escape, cx);
+                                    cx.listener(|view, _, window, cx| {
+                                        view.escape(&Escape, window, cx);
                                     }),
                                 )
                                 .child(
@@ -354,9 +378,9 @@ impl Render for DatePicker {
                                                                 .ghost()
                                                                 .label(preset.label.clone())
                                                                 .on_click(cx.listener(
-                                                                    move |this, _, cx| {
+                                                                    move |this, _, window, cx| {
                                                                         this.select_preset(
-                                                                            &preset, cx,
+                                                                            &preset, window, cx,
                                                                         );
                                                                     },
                                                                 ))

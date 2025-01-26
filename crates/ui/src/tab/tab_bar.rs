@@ -1,8 +1,8 @@
 use crate::{h_flex, ActiveTheme};
 use gpui::prelude::FluentBuilder as _;
-use gpui::{Window, AppContext, 
-    div, AnyElement, Div, ElementId, IntoElement, ParentElement, RenderOnce, ScrollHandle,
-    StatefulInteractiveElement as _, Styled, 
+use gpui::{
+    div, AnyElement, App, AppContext, Div, ElementId, IntoElement, ParentElement, RenderOnce,
+    ScrollHandle, StatefulInteractiveElement as _, Styled, Window,
 };
 use gpui::{px, InteractiveElement};
 use smallvec::SmallVec;

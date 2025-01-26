@@ -1,8 +1,8 @@
 use crate::{ActiveTheme, Selectable};
 use gpui::prelude::FluentBuilder as _;
-use gpui::{Window, AppContext, 
-    div, px, AnyElement, Div, ElementId, InteractiveElement, IntoElement, ParentElement as _,
-    RenderOnce, Stateful, StatefulInteractiveElement, Styled, 
+use gpui::{
+    div, px, AnyElement, App, AppContext, Div, ElementId, InteractiveElement, IntoElement,
+    ParentElement as _, RenderOnce, Stateful, StatefulInteractiveElement, Styled, Window,
 };
 
 #[derive(IntoElement)]
