@@ -1,8 +1,8 @@
 use crate::{h_flex, ActiveTheme, Disableable, Icon, IconName, Selectable, Sizable as _};
-use gpui::{Window, AppContext, 
-    div, prelude::FluentBuilder as _, AnyElement, ClickEvent, Div, ElementId, InteractiveElement,
-    IntoElement, MouseButton, MouseMoveEvent, ParentElement, RenderOnce, Stateful,
-    StatefulInteractiveElement as _, Styled, 
+use gpui::{
+    div, prelude::FluentBuilder as _, AnyElement, App, AppContext, ClickEvent, Div, ElementId,
+    InteractiveElement, IntoElement, MouseButton, MouseMoveEvent, ParentElement, RenderOnce,
+    Stateful, StatefulInteractiveElement as _, Styled, Window,
 };
 use smallvec::SmallVec;
 
@@ -66,11 +66,16 @@ impl ListItem {
         F: Fn(&mut Window, &mut App) -> E + 'static,
         E: IntoElement,
     {
-        self.suffix = Some(Box::new(move |cx| builder(cx).into_any_element()));
+        self.suffix = Some(Box::new(move |window, cx| {
+            builder(window, cx).into_any_element()
+        }));
         self
     }
 
-    pub fn on_click(mut self, handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static) -> Self {
+    pub fn on_click(
+        mut self,
+        handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+    ) -> Self {
         self.on_click = Some(Box::new(handler));
         self
     }
@@ -133,7 +138,7 @@ impl RenderOnce for ListItem {
                         .on_click(on_click)
                 })
                 .when_some(self.on_mouse_enter, |this, on_mouse_enter| {
-                    this.on_mouse_move(move |ev, window, cx| (on_mouse_enter)(ev, cx))
+                    this.on_mouse_move(move |ev, window, cx| (on_mouse_enter)(ev, window, cx))
                 })
                 .when(!is_active, |this| {
                     this.hover(|this| this.bg(cx.theme().list_hover))
@@ -157,6 +162,6 @@ impl RenderOnce for ListItem {
                         )
                     }),
             )
-            .when_some(self.suffix, |this, suffix| this.child(suffix(cx)))
+            .when_some(self.suffix, |this, suffix| this.child(suffix(window, cx)))
     }
 }

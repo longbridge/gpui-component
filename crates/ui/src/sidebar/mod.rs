@@ -4,10 +4,10 @@ use crate::{
     scroll::ScrollbarAxis,
     v_flex, ActiveTheme, Collapsible, Icon, IconName, Side, Sizable, StyledExt,
 };
-use gpui::{Window, AppContext, Model, 
-    div, prelude::FluentBuilder, px, AnyElement, ClickEvent, Entity, EntityId,
-    InteractiveElement as _, IntoElement, ParentElement, Pixels, Render, RenderOnce, Styled, 
-    
+use gpui::{
+    div, prelude::FluentBuilder, px, AnyElement, App, AppContext, ClickEvent, Entity, EntityId,
+    InteractiveElement as _, IntoElement, ParentElement, Pixels, Render, RenderOnce, Styled,
+    Window,
 };
 use std::rc::Rc;
 
@@ -167,8 +167,8 @@ impl RenderOnce for SidebarToggleButton {
 
         self.btn
             .when_some(on_click, |this, on_click| {
-                this.on_click(move |ev, cx| {
-                    on_click(ev, cx);
+                this.on_click(move |ev, window, cx| {
+                    on_click(ev, window, cx);
                 })
             })
             .icon(Icon::new(icon).size_4())

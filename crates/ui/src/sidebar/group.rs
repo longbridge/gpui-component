@@ -1,7 +1,7 @@
 use crate::{v_flex, ActiveTheme, Collapsible};
-use gpui::{Window, AppContext, 
-    div, prelude::FluentBuilder as _, Div, IntoElement, ParentElement, RenderOnce, SharedString,
-    Styled as _, 
+use gpui::{
+    div, prelude::FluentBuilder as _, App, AppContext, Div, IntoElement, ParentElement, RenderOnce,
+    SharedString, Styled as _, Window,
 };
 
 /// A sidebar group

@@ -1,8 +1,8 @@
 use crate::{h_flex, v_flex, ActiveTheme as _, Collapsible, Icon, IconName, StyledExt};
-use gpui::{Window, AppContext, 
-    div, percentage, prelude::FluentBuilder as _, ClickEvent, InteractiveElement as _, IntoElement,
-    ParentElement as _, RenderOnce, SharedString, StatefulInteractiveElement as _, Styled as _,
-    
+use gpui::{
+    div, percentage, prelude::FluentBuilder as _, App, AppContext, ClickEvent,
+    InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, SharedString,
+    StatefulInteractiveElement as _, Styled as _, Window,
 };
 use std::rc::Rc;
 
@@ -151,7 +151,8 @@ impl SidebarMenuItem {
         is_submenu: bool,
         is_active: bool,
         is_open: bool,
-        window: &Window, cx: &App,
+        window: &Window,
+        cx: &App,
     ) -> impl IntoElement {
         let handler = match &self {
             SidebarMenuItem::Item { handler, .. } => Some(handler.clone()),
@@ -194,7 +195,7 @@ impl SidebarMenuItem {
                     })
             })
             .when_some(handler, |this, handler| {
-                this.on_click(move |ev, window, cx| handler(ev, cx))
+                this.on_click(move |ev, window, cx| handler(ev, window, cx))
             })
     }
 }
@@ -207,7 +208,7 @@ impl RenderOnce for SidebarMenuItem {
 
         div()
             .w_full()
-            .child(self.render_menu_item(is_submenu, is_active, is_open, cx))
+            .child(self.render_menu_item(is_submenu, is_active, is_open, window, cx))
             .when(is_open, |this| {
                 this.map(|this| match self {
                     SidebarMenuItem::Submenu {
