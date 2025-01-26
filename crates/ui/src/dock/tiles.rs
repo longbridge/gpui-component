@@ -15,10 +15,10 @@ use crate::{
 use super::{DockArea, Panel, PanelEvent, PanelInfo, PanelState, PanelView, TabPanel, TileMeta};
 use gpui::{
     actions, canvas, div, point, px, size, AnyElement, App, AppContext, Bounds, Context,
-    DismissEvent, DragMoveEvent, Empty, Entity, EntityId, EventEmitter, FocusHandle, Focusable,
-    Half, InteractiveElement, IntoElement, MouseButton, MouseDownEvent, MouseUpEvent,
-    ParentElement, Pixels, Point, Render, ScrollHandle, Size, StatefulInteractiveElement, Styled,
-    VisualContext, WeakEntity, Window,
+    DismissEvent, DragMoveEvent, Empty, EntityId, EventEmitter, FocusHandle, Focusable, Half,
+    InteractiveElement, IntoElement, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement,
+    Pixels, Point, Render, ScrollHandle, Size, StatefulInteractiveElement, Styled, WeakEntity,
+    Window,
 };
 
 actions!(tiles, [Undo, Redo,]);
@@ -158,7 +158,7 @@ impl Panel for Tiles {
 }
 
 impl Tiles {
-    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
             panels: vec![],
@@ -187,12 +187,7 @@ impl Tiles {
     }
 
     /// Remove panel from the children.
-    pub fn remove(
-        &mut self,
-        panel: Arc<dyn PanelView>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    pub fn remove(&mut self, panel: Arc<dyn PanelView>, _: &mut Window, cx: &mut Context<Self>) {
         if let Some(ix) = self.index_of(panel.clone()) {
             self.panels.remove(ix);
 
@@ -203,7 +198,7 @@ impl Tiles {
     fn update_initial_position(
         &mut self,
         position: Point<Pixels>,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<'_, Self>,
     ) {
         let Some((index, item)) = self.find_at_position(position) else {
@@ -218,12 +213,7 @@ impl Tiles {
         cx.notify();
     }
 
-    fn update_position(
-        &mut self,
-        pos: Point<Pixels>,
-        window: &mut Window,
-        cx: &mut Context<'_, Self>,
-    ) {
+    fn update_position(&mut self, pos: Point<Pixels>, _: &mut Window, cx: &mut Context<'_, Self>) {
         let Some(index) = self.dragging_index else {
             return;
         };
@@ -262,7 +252,7 @@ impl Tiles {
     fn update_resizing_drag(
         &mut self,
         drag_data: ResizeDrag,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<'_, Self>,
     ) {
         if let Some((index, _item)) = self.find_at_position(drag_data.last_position) {
@@ -272,7 +262,7 @@ impl Tiles {
         }
     }
 
-    fn resize_width(&mut self, new_width: Pixels, window: &mut Window, cx: &mut Context<'_, Self>) {
+    fn resize_width(&mut self, new_width: Pixels, _: &mut Window, cx: &mut Context<'_, Self>) {
         if let Some(index) = self.resizing_index {
             if let Some(item) = self.panels.get_mut(index) {
                 let previous_bounds = item.bounds;
@@ -300,12 +290,7 @@ impl Tiles {
         }
     }
 
-    fn resize_height(
-        &mut self,
-        new_height: Pixels,
-        window: &mut Window,
-        cx: &mut Context<'_, Self>,
-    ) {
+    fn resize_height(&mut self, new_height: Pixels, _: &mut Window, cx: &mut Context<'_, Self>) {
         if let Some(index) = self.resizing_index {
             if let Some(item) = self.panels.get_mut(index) {
                 let previous_bounds = item.bounds;
@@ -410,7 +395,7 @@ impl Tiles {
     }
 
     /// Handle the undo action
-    pub fn undo(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn undo(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         self.history.ignore = true;
 
         if let Some(changes) = self.history.undo() {
@@ -437,7 +422,7 @@ impl Tiles {
     }
 
     /// Handle the redo action
-    pub fn redo(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn redo(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         self.history.ignore = true;
 
         if let Some(changes) = self.history.redo() {
@@ -466,7 +451,7 @@ impl Tiles {
     /// Produce a vector of AnyElement representing the three possible resize handles
     fn render_resize_handles(
         &mut self,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
         entity_id: EntityId,
         item: &TileItem,

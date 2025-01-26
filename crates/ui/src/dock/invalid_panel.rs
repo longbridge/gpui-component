@@ -1,6 +1,6 @@
 use gpui::{
-    App, AppContext, EventEmitter, FocusHandle, Focusable, ParentElement as _, Render,
-    SharedString, Styled as _, Window,
+    App, EventEmitter, FocusHandle, Focusable, ParentElement as _, Render, SharedString,
+    Styled as _, Window,
 };
 
 use crate::ActiveTheme as _;
@@ -14,7 +14,7 @@ pub(crate) struct InvalidPanel {
 }
 
 impl InvalidPanel {
-    pub(crate) fn new(name: &str, state: PanelState, window: &mut Window, cx: &mut App) -> Self {
+    pub(crate) fn new(name: &str, state: PanelState, _: &mut Window, cx: &mut App) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
             name: SharedString::from(name.to_owned()),
@@ -40,7 +40,7 @@ impl Focusable for InvalidPanel {
 impl Render for InvalidPanel {
     fn render(
         &mut self,
-        window: &mut gpui::Window,
+        _: &mut gpui::Window,
         cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
         gpui::div()

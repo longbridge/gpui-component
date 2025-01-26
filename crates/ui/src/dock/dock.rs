@@ -5,8 +5,7 @@ use std::sync::Arc;
 use gpui::{
     div, prelude::FluentBuilder as _, px, App, AppContext, Axis, Context, Element, Empty, Entity,
     InteractiveElement as _, IntoElement, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels,
-    Point, Render, StatefulInteractiveElement, Style, Styled as _, VisualContext as _, WeakEntity,
-    Window,
+    Point, Render, StatefulInteractiveElement, Style, Styled as _, WeakEntity, Window,
 };
 use serde::{Deserialize, Serialize};
 
@@ -137,12 +136,7 @@ impl Dock {
     /// Update the Dock to be collapsible or not.
     ///
     /// And if the Dock is not collapsible, it will be open.
-    pub fn set_collapsible(
-        &mut self,
-        collapsible: bool,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    pub fn set_collapsible(&mut self, collapsible: bool, _: &mut Window, cx: &mut Context<Self>) {
         self.collapsible = collapsible;
         if !collapsible {
             self.open = true
@@ -234,7 +228,7 @@ impl Dock {
         }
     }
 
-    pub fn set_panel(&mut self, panel: DockItem, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn set_panel(&mut self, panel: DockItem, _: &mut Window, cx: &mut Context<Self>) {
         self.panel = panel;
         cx.notify();
     }
@@ -255,7 +249,7 @@ impl Dock {
     }
 
     /// Set the size of the Dock.
-    pub fn set_size(&mut self, size: Pixels, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn set_size(&mut self, size: Pixels, _: &mut Window, cx: &mut Context<Self>) {
         self.size = size.max(PANEL_MIN_SIZE);
         cx.notify();
     }
@@ -281,11 +275,7 @@ impl Dock {
         cx.notify();
     }
 
-    fn render_resize_handle(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    fn render_resize_handle(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let axis = self.placement.axis();
         let neg_offset = -HANDLE_PADDING;
         let view = cx.model().clone();
@@ -326,7 +316,7 @@ impl Dock {
                     .when(axis.is_horizontal(), |this| this.h_full().w(HANDLE_SIZE))
                     .when(axis.is_vertical(), |this| this.w_full().h(HANDLE_SIZE)),
             )
-            .on_drag(ResizePanel {}, move |info, _, window, cx| {
+            .on_drag(ResizePanel {}, move |info, _, _, cx| {
                 cx.stop_propagation();
                 view.update(cx, |view, _| {
                     view.is_resizing = true;
@@ -334,12 +324,7 @@ impl Dock {
                 cx.new(|_| info.clone())
             })
     }
-    fn resize(
-        &mut self,
-        mouse_position: Point<Pixels>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    fn resize(&mut self, mouse_position: Point<Pixels>, _: &mut Window, cx: &mut Context<Self>) {
         if !self.is_resizing {
             return;
         }
@@ -482,7 +467,7 @@ impl Element for DockElement {
         _: &mut Self::RequestLayoutState,
         _: &mut Self::PrepaintState,
         window: &mut gpui::Window,
-        cx: &mut App,
+        _: &mut App,
     ) {
         window.on_mouse_event({
             let view = self.view.clone();

@@ -1,7 +1,4 @@
-use gpui::{
-    point, px, size, App, AppContext, Axis, Bounds, Entity, Pixels, VisualContext as _, WeakEntity,
-    Window,
-};
+use gpui::{point, px, size, App, AppContext, Axis, Bounds, Entity, Pixels, WeakEntity, Window};
 use itertools::Itertools as _;
 use serde::{Deserialize, Serialize};
 

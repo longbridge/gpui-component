@@ -49,8 +49,8 @@ impl Panel for StackPanel {
 }
 
 impl StackPanel {
-    pub fn new(axis: Axis, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let panel_group = cx.new(|cx| {
+    pub fn new(axis: Axis, _: &mut Window, cx: &mut Context<Self>) -> Self {
+        let panel_group = cx.new(|_| {
             if axis == Axis::Horizontal {
                 h_resizable()
             } else {
@@ -135,6 +135,7 @@ impl StackPanel {
         );
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn insert_panel_at(
         &mut self,
         panel: Arc<dyn PanelView>,
@@ -395,7 +396,7 @@ impl Focusable for StackPanel {
 impl EventEmitter<PanelEvent> for StackPanel {}
 impl EventEmitter<DismissEvent> for StackPanel {}
 impl Render for StackPanel {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         h_flex()
             .size_full()
             .overflow_hidden()

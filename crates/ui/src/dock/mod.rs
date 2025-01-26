@@ -10,8 +10,7 @@ use anyhow::Result;
 use gpui::{
     actions, canvas, div, prelude::FluentBuilder, AnyElement, AnyView, App, AppContext, Axis,
     Bounds, Context, Edges, Entity, EntityId, EventEmitter, InteractiveElement as _, IntoElement,
-    ParentElement as _, Pixels, Render, SharedString, Styled, Subscription, VisualContext,
-    WeakEntity, Window,
+    ParentElement as _, Pixels, Render, SharedString, Styled, Subscription, WeakEntity, Window,
 };
 use std::sync::Arc;
 
@@ -426,7 +425,7 @@ impl DockArea {
     }
 
     /// Set version of the dock area.
-    pub fn set_version(&mut self, version: usize, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn set_version(&mut self, version: usize, _: &mut Window, cx: &mut Context<Self>) {
         self.version = Some(version);
         cx.notify();
     }
@@ -831,7 +830,7 @@ impl DockArea {
     pub fn set_zoomed_in<P: Panel>(
         &mut self,
         panel: Entity<P>,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) {
         self.zoom_view = Some(panel.into());

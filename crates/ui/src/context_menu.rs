@@ -1,10 +1,10 @@
 use std::{cell::RefCell, rc::Rc};
 
 use gpui::{
-    anchored, deferred, div, prelude::FluentBuilder, px, relative, AnyElement, App, AppContext,
-    Context, Corner, DismissEvent, DispatchPhase, Element, ElementId, Entity, Focusable,
-    FocusableWrapper, GlobalElementId, InteractiveElement, IntoElement, MouseButton,
-    MouseDownEvent, ParentElement, Pixels, Point, Position, Stateful, Style, Window,
+    anchored, deferred, div, prelude::FluentBuilder, px, relative, AnyElement, App, Context,
+    Corner, DismissEvent, DispatchPhase, Element, ElementId, Entity, Focusable, FocusableWrapper,
+    GlobalElementId, InteractiveElement, IntoElement, MouseButton, MouseDownEvent, ParentElement,
+    Pixels, Point, Position, Stateful, Style, Window,
 };
 
 use crate::popup_menu::PopupMenu;
@@ -209,7 +209,7 @@ impl Element for ContextMenu {
             id.unwrap(),
             window,
             cx,
-            |_view, state: &mut ContextMenuState, window, cx| {
+            |_view, state: &mut ContextMenuState, window, _| {
                 let position = state.position.clone();
                 let open = state.open.clone();
                 let menu_view = state.menu_view.clone();
@@ -230,7 +230,7 @@ impl Element for ContextMenu {
 
                         let open = open.clone();
                         window
-                            .subscribe(&menu, cx, move |_, _: &DismissEvent, window, cx| {
+                            .subscribe(&menu, cx, move |_, _: &DismissEvent, window, _| {
                                 *open.borrow_mut() = false;
                                 window.refresh();
                             })

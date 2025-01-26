@@ -11,9 +11,9 @@ use gpui::{
     actions, div, prelude::FluentBuilder, uniform_list, AnyElement, AppContext, Entity,
     FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding, Length,
     ListSizingBehavior, MouseButton, ParentElement, Render, SharedString, Styled, Task,
-    UniformListScrollHandle, VisualContext, Window,
+    UniformListScrollHandle, Window,
 };
-use gpui::{px, App, AsyncWindowContext, Context, EventEmitter, ScrollStrategy};
+use gpui::{px, App, Context, EventEmitter, ScrollStrategy};
 use smol::Timer;
 
 use super::loading::Loading;

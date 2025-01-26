@@ -4,7 +4,7 @@ use gpui::{
     div, prelude::FluentBuilder, px, rems, App, AppContext, Context, Corner, DefiniteLength,
     DismissEvent, DragMoveEvent, Empty, Entity, EventEmitter, FocusHandle, Focusable,
     InteractiveElement as _, IntoElement, ParentElement, Pixels, Render, ScrollHandle,
-    SharedString, StatefulInteractiveElement, Styled, VisualContext as _, WeakEntity, Window,
+    SharedString, StatefulInteractiveElement, Styled, WeakEntity, Window,
 };
 use rust_i18n::t;
 
@@ -137,7 +137,7 @@ impl TabPanel {
     pub fn new(
         stack_panel: Option<WeakEntity<StackPanel>>,
         dock_area: WeakEntity<DockArea>,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
         Self {
@@ -332,7 +332,7 @@ impl TabPanel {
     pub(super) fn set_collapsed(
         &mut self,
         collapsed: bool,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) {
         self.is_collapsed = collapsed;
@@ -468,7 +468,7 @@ impl TabPanel {
     fn render_dock_toggle_button(
         &self,
         placement: DockPlacement,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<impl IntoElement> {
         if self.is_zoomed {
@@ -613,7 +613,7 @@ impl TabPanel {
                                     panel: panel.clone(),
                                     tab_panel: view,
                                 },
-                                |drag, _, window, cx| {
+                                |drag, _, _, cx| {
                                     cx.stop_propagation();
                                     cx.new(|_| drag.clone())
                                 },
@@ -680,14 +680,14 @@ impl TabPanel {
                             .when(state.draggable, |this| {
                                 this.on_drag(
                                     DragPanel::new(panel.clone(), view.clone()),
-                                    |drag, _, window, cx| {
+                                    |drag, _, _, cx| {
                                         cx.stop_propagation();
                                         cx.new(|_| drag.clone())
                                     },
                                 )
                             })
                             .when(state.droppable, |this| {
-                                this.drag_over::<DragPanel>(|this, _, window, cx| {
+                                this.drag_over::<DragPanel>(|this, _, _, cx| {
                                     this.rounded_l_none()
                                         .border_l_2()
                                         .border_r_0()
@@ -711,7 +711,7 @@ impl TabPanel {
                     .flex_grow()
                     .min_w_16()
                     .when(state.droppable, |this| {
-                        this.drag_over::<DragPanel>(|this, _, window, cx| {
+                        this.drag_over::<DragPanel>(|this, _, _, cx| {
                             this.bg(cx.theme().drop_target)
                         })
                         .on_drop(cx.listener(
@@ -750,7 +750,7 @@ impl TabPanel {
     fn render_active_panel(
         &self,
         state: &TabState,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         if self.is_collapsed {
@@ -804,7 +804,7 @@ impl TabPanel {
     fn on_panel_drag_move(
         &mut self,
         drag: &DragMoveEvent<DragPanel>,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let bounds = drag.bounds;

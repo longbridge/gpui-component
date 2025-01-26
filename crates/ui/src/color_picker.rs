@@ -164,7 +164,7 @@ impl ColorPicker {
         cx.notify();
     }
 
-    fn toggle_picker(&mut self, _: &gpui::ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
+    fn toggle_picker(&mut self, _: &gpui::ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
         self.open = !self.open;
         cx.notify();
     }
@@ -195,7 +195,7 @@ impl ColorPicker {
         &self,
         color: Hsla,
         clickable: bool,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         div()
@@ -213,7 +213,7 @@ impl ColorPicker {
                             .shadow_sm()
                     })
                     .active(|this| this.border_color(color.darken(0.5)).bg(color.darken(0.2)))
-                    .on_mouse_move(cx.listener(move |view, _, window, cx| {
+                    .on_mouse_move(cx.listener(move |view, _, _, cx| {
                         view.hovered_color = Some(color);
                         cx.notify();
                     }))
@@ -336,7 +336,7 @@ impl Render for ColorPicker {
                     .on_click(cx.listener(Self::toggle_picker))
                     .child(
                         canvas(
-                            move |bounds, window, cx| view.update(cx, |r, _| r.bounds = bounds),
+                            move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds),
                             |_, _, _, _| {},
                         )
                         .absolute()
