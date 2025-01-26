@@ -395,7 +395,7 @@ impl StoryWorkspace {
             };
 
             let window = cx.open_window(options, |window, cx| {
-                let story_view = cx.new(|cx| Self::new(window, cx));
+                let story_view = cx.new(|cx| StoryWorkspace::new(window, cx));
                 cx.new(|cx| Root::new(story_view.into(), window, cx))
             })?;
 

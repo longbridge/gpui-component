@@ -24,7 +24,7 @@ pub trait ContextModal: Sized {
         F: Fn(Drawer, &mut Window, &mut App) -> Drawer + 'static;
 
     /// Return true, if there is an active Drawer.
-    fn has_active_drawer(&self, cx: &mut App) -> bool;
+    fn has_active_drawer(&mut self, cx: &mut App) -> bool;
 
     /// Closes the active Drawer.
     fn close_drawer(&mut self, cx: &mut App);
@@ -34,7 +34,7 @@ pub trait ContextModal: Sized {
     where
         F: Fn(Modal, &mut Window, &mut App) -> Modal + 'static;
     /// Return true, if there is an active Modal.
-    fn has_active_modal(&self, cx: &mut App) -> bool;
+    fn has_active_modal(&mut self, cx: &mut App) -> bool;
 
     /// Closes the last active Modal.
     fn close_modal(&mut self, cx: &mut App);
@@ -46,7 +46,7 @@ pub trait ContextModal: Sized {
     fn push_notification(&mut self, note: impl Into<Notification>, cx: &mut App);
     fn clear_notifications(&mut self, cx: &mut App);
     /// Returns number of notifications.
-    fn notifications(&self, cx: &mut App) -> Rc<Vec<Entity<Notification>>>;
+    fn notifications(&mut self, cx: &mut App) -> Rc<Vec<Entity<Notification>>>;
 }
 
 impl ContextModal for Window {
@@ -78,8 +78,8 @@ impl ContextModal for Window {
         })
     }
 
-    fn has_active_drawer(&self, cx: &mut App) -> bool {
-        Root::read(&self, cx).active_drawer.is_some()
+    fn has_active_drawer(&mut self, cx: &mut App) -> bool {
+        Root::read(self, cx).active_drawer.is_some()
     }
 
     fn close_drawer(&mut self, cx: &mut App) {
@@ -112,8 +112,8 @@ impl ContextModal for Window {
         })
     }
 
-    fn has_active_modal(&self, cx: &mut App) -> bool {
-        Root::read(&self, cx).active_modals.len() > 0
+    fn has_active_modal(&mut self, cx: &mut App) -> bool {
+        Root::read(self, cx).active_modals.len() > 0
     }
 
     fn close_modal(&mut self, cx: &mut App) {
@@ -156,8 +156,8 @@ impl ContextModal for Window {
         })
     }
 
-    fn notifications(&self, cx: &mut App) -> Rc<Vec<Entity<Notification>>> {
-        let entity = Root::read(&self, cx).notification.clone();
+    fn notifications(&mut self, cx: &mut App) -> Rc<Vec<Entity<Notification>>> {
+        let entity = Root::read(self, cx).notification.clone();
         Rc::new(entity.read(cx).notifications())
     }
 }
@@ -262,25 +262,17 @@ impl Root {
     where
         F: FnOnce(&mut Self, &mut Window, &mut Context<Self>) + 'static,
     {
-        let root = window
-            .window_handle()
-            .downcast::<Root>()
-            .expect("The window root view should be of type `ui::Root`.")
-            .root(cx)
-            .unwrap();
-
-        root.update(cx, |root, cx| f(root, window, cx))
+        if let Some(Some(root)) = window.root_model::<Root>() {
+            root.update(cx, |root, cx| f(root, window, cx));
+        }
     }
 
-    pub fn read<'a>(window: &'a Window, cx: &'a mut App) -> &'a Self {
-        let root = window
-            .window_handle()
-            .downcast::<Root>()
+    pub fn read<'a>(window: &'a mut Window, cx: &'a mut App) -> &'a Self {
+        &window
+            .root_model::<Root>()
             .expect("The window root view should be of type `ui::Root`.")
-            .root(cx)
-            .unwrap();
-
-        root.read(cx)
+            .unwrap()
+            .read(cx)
     }
 
     fn focus_back(&mut self, window: &mut Window, _: &mut App) {
@@ -294,12 +286,7 @@ impl Root {
         window: &mut Window,
         cx: &mut App,
     ) -> Option<impl IntoElement> {
-        let root = window
-            .window_handle()
-            .downcast::<Root>()
-            .expect("The window root view should be of type `ui::Root`.")
-            .root(cx)
-            .ok()?;
+        let root = window.root_model::<Root>()??;
 
         let active_drawer_placement = root.read(cx).active_drawer.clone().map(|d| d.placement);
 
@@ -319,12 +306,7 @@ impl Root {
 
     /// Render the Drawer layer.
     pub fn render_drawer_layer(window: &mut Window, cx: &mut App) -> Option<impl IntoElement> {
-        let root = window
-            .window_handle()
-            .downcast::<Root>()
-            .expect("The window root view should be of type `ui::Root`.")
-            .root(cx)
-            .ok()?;
+        let root = window.root_model::<Root>()??;
 
         if let Some(active_drawer) = root.read(cx).active_drawer.clone() {
             let mut drawer = Drawer::new(window, cx);
@@ -351,12 +333,7 @@ impl Root {
 
     /// Render the Modal layer.
     pub fn render_modal_layer(window: &mut Window, cx: &mut App) -> Option<impl IntoElement> {
-        let root = window
-            .window_handle()
-            .downcast::<Root>()
-            .expect("The window root view should be of type `ui::Root`.")
-            .root(cx)
-            .ok()?;
+        let root = window.root_model::<Root>()??;
 
         let active_modals = root.read(cx).active_modals.clone();
         let mut has_overlay = false;

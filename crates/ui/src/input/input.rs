@@ -1097,7 +1097,6 @@ impl TextInput {
                 // Click in the this line but not in the text, move cursor to the end of the line.
                 // The fallback index is saved in Err from `index_for_position` method.
                 index += index_result.unwrap_err();
-                println!("------------------ 2");
                 break;
             } else if line.len() == 0 {
                 // empty line
@@ -1110,7 +1109,6 @@ impl TextInput {
                     break;
                 }
             } else {
-                println!("------------------ 3 {}", line.len());
                 index += line.len();
             }
 
