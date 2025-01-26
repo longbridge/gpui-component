@@ -4,10 +4,10 @@ use crate::{
     notification::{Notification, NotificationList},
     window_border, ActiveTheme, Placement,
 };
-use gpui::{Window, ModelContext, AppContext, Model, 
-    canvas, div, prelude::FluentBuilder as _, AnyView, DefiniteLength, FocusHandle,
-    InteractiveElement, IntoElement, ParentElement as _, Render, Styled,  
-    VisualContext as _, 
+use gpui::{
+    canvas, div, prelude::FluentBuilder as _, AnyView, App, AppContext, Context, DefiniteLength,
+    Entity, FocusHandle, InteractiveElement, IntoElement, ParentElement as _, Render, Styled,
+    VisualContext as _, Window,
 };
 use std::{
     ops::{Deref, DerefMut},
@@ -52,7 +52,7 @@ pub trait ContextModal: Sized {
     fn notifications(&self) -> Rc<Vec<Entity<Notification>>>;
 }
 
-impl ContextModal for WindowContext<'_> {
+impl ContextModal for Window {
     fn open_drawer<F>(&mut self, build: F)
     where
         F: Fn(Drawer, &mut Window, &mut App) -> Drawer + 'static,
@@ -64,7 +64,7 @@ impl ContextModal for WindowContext<'_> {
     where
         F: Fn(Drawer, &mut Window, &mut App) -> Drawer + 'static,
     {
-        Root::update(self, move |root, cx| {
+        Root::update(self, move |root, window, cx| {
             if root.active_drawer.is_none() {
                 root.previous_focus_handle = window.focused(cx);
             }
@@ -161,7 +161,7 @@ impl ContextModal for WindowContext<'_> {
         Rc::new(Root::read(&self).notification.read(&self).notifications())
     }
 }
-impl<V> ContextModal for ViewContext<'_, V> {
+impl<V> ContextModal for Context<'_, V> {
     fn open_drawer<F>(&mut self, build: F)
     where
         F: Fn(Drawer, &mut Window, &mut App) -> Drawer + 'static,
@@ -251,7 +251,7 @@ impl Root {
             previous_focus_handle: None,
             active_drawer: None,
             active_modals: Vec::new(),
-            notification: cx.new(NotificationList::new),
+            notification: cx.new(|cx| NotificationList::new(window, cx)),
             drawer_size: None,
             view,
         }
@@ -261,20 +261,20 @@ impl Root {
     where
         F: FnOnce(&mut Self, &mut Window, &mut Context<Self>) + 'static,
     {
-        let root = cx
+        let root = window
             .window_handle()
             .downcast::<Root>()
-            .and_then(|w| w.root_view(cx).ok())
+            .and_then(|w| w.root(cx).ok())
             .expect("The window root view should be of type `ui::Root`.");
 
-        root.update(cx, |root, cx| f(root, cx))
+        root.update(cx, |root, cx| f(root, window, cx))
     }
 
-    pub fn read<'a>(cx: &'a WindowContext) -> &'a Self {
-        let root = cx
+    pub fn read<'a>(window: &'a Window, cx: &'a mut App) -> &'a Self {
+        let root = window
             .window_handle()
             .downcast::<Root>()
-            .and_then(|w| w.root_view(cx).ok())
+            .and_then(|w| w.root(cx).ok())
             .expect("The window root view should be of type `ui::Root`.");
 
         root.read(cx)
@@ -282,12 +282,12 @@ impl Root {
 
     fn focus_back(&mut self, window: &mut Window, cx: &mut App) {
         if let Some(handle) = self.previous_focus_handle.clone() {
-            cx.focus(&handle);
+            window.focus(&handle);
         }
     }
 
-    fn active_drawer_placement(&self, window: &Window, cx: &App) -> Option<Placement> {
-        if let Some(drawer) = Root::read(cx).active_drawer.as_ref() {
+    fn active_drawer_placement(&self, window: &Window, cx: &mut App) -> Option<Placement> {
+        if let Some(drawer) = Root::read(window, cx).active_drawer.as_ref() {
             Some(drawer.placement)
         } else {
             None
@@ -295,14 +295,17 @@ impl Root {
     }
 
     // Render Notification layer.
-    pub fn render_notification_layer(window: &mut Window, cx: &mut App) -> Option<impl IntoElement> {
-        let root = cx
+    pub fn render_notification_layer(
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Option<impl IntoElement> {
+        let root = window
             .window_handle()
             .downcast::<Root>()
-            .and_then(|w| w.root_view(cx).ok())
+            .and_then(|w| w.root(cx).ok())
             .expect("The window root view should be of type `ui::Root`.");
 
-        let active_drawer_placement = root.read(cx).active_drawer_placement(cx);
+        let active_drawer_placement = root.read(cx).active_drawer.clone().map(|d| d.placement);
 
         let (mt, mr) = match active_drawer_placement {
             Some(Placement::Right) => (None, root.read(cx).drawer_size),
@@ -320,15 +323,15 @@ impl Root {
 
     /// Render the Drawer layer.
     pub fn render_drawer_layer(window: &mut Window, cx: &mut App) -> Option<impl IntoElement> {
-        let root = cx
+        let root = window
             .window_handle()
             .downcast::<Root>()
-            .and_then(|w| w.root_view(cx).ok())
+            .and_then(|w| w.root(cx).ok())
             .expect("The window root view should be of type `ui::Root`.");
 
         if let Some(active_drawer) = root.read(cx).active_drawer.clone() {
-            let mut drawer = Drawer::new(cx);
-            drawer = (active_drawer.builder)(drawer, cx);
+            let mut drawer = Drawer::new(window, cx);
+            drawer = (active_drawer.builder)(drawer, window, cx);
             drawer.focus_handle = active_drawer.focus_handle.clone();
             drawer.placement = active_drawer.placement;
 
@@ -337,7 +340,9 @@ impl Root {
             return Some(
                 div().relative().child(drawer).child(
                     canvas(
-                        move |_, window, cx| root.update(cx, |r, _| r.drawer_size = Some(drawer_size)),
+                        move |_, window, cx| {
+                            root.update(cx, |r, _| r.drawer_size = Some(drawer_size))
+                        },
                         |_, _, _, _| {},
                     )
                     .absolute()
@@ -351,10 +356,10 @@ impl Root {
 
     /// Render the Modal layer.
     pub fn render_modal_layer(window: &mut Window, cx: &mut App) -> Option<impl IntoElement> {
-        let root = cx
+        let root = window
             .window_handle()
             .downcast::<Root>()
-            .and_then(|w| w.root_view(cx).ok())
+            .and_then(|w| w.root(cx).ok())
             .expect("The window root view should be of type `ui::Root`.");
 
         let active_modals = root.read(cx).active_modals.clone();
@@ -366,9 +371,9 @@ impl Root {
 
         Some(
             div().children(active_modals.iter().enumerate().map(|(i, active_modal)| {
-                let mut modal = Modal::new(cx);
+                let mut modal = Modal::new(window, cx);
 
-                modal = (active_modal.builder)(modal, cx);
+                modal = (active_modal.builder)(modal, window, cx);
                 modal.layer_ix = i;
                 // Give the modal the focus handle, because `modal` is a temporary value, is not possible to
                 // keep the focus handle in the modal.
@@ -396,9 +401,13 @@ impl Root {
 }
 
 impl Render for Root {
-    fn render(&mut self, window: &mut gpui::Window, cx: &mut gpui::Context<Self>) -> impl IntoElement {
+    fn render(
+        &mut self,
+        window: &mut gpui::Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> impl IntoElement {
         let base_font_size = cx.theme().font_size;
-        cx.set_rem_size(base_font_size);
+        window.set_rem_size(base_font_size);
 
         window_border().child(
             div()

@@ -1,9 +1,10 @@
 use std::rc::Rc;
 
 use crate::{h_flex, v_flex, ActiveTheme, AxisExt, IconName};
-use gpui::{Window, AppContext, 
-    div, prelude::FluentBuilder, relative, svg, Axis, ElementId, InteractiveElement, IntoElement,
-    ParentElement, RenderOnce, SharedString, StatefulInteractiveElement, Styled, 
+use gpui::{
+    div, prelude::FluentBuilder, relative, svg, App, AppContext, Axis, ElementId,
+    InteractiveElement, IntoElement, ParentElement, RenderOnce, SharedString,
+    StatefulInteractiveElement, Styled, Window,
 };
 
 /// A Radio element.
@@ -105,7 +106,7 @@ impl RenderOnce for Radio {
                     self.on_click.filter(|_| !self.disabled),
                     |this, on_click| {
                         this.on_click(move |_event, window, cx| {
-                            on_click(&!self.checked, cx);
+                            on_click(&!self.checked, window, cx);
                         })
                     },
                 ),
@@ -220,7 +221,7 @@ impl RenderOnce for RadioGroup {
                         on_change.clone(),
                         |this, on_change| {
                             this.on_click(move |_, window, cx| {
-                                on_change(&ix, cx);
+                                on_change(&ix, window, cx);
                             })
                         },
                     )

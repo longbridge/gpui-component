@@ -1,9 +1,9 @@
 use std::{any::TypeId, collections::VecDeque, sync::Arc, time::Duration};
 
-use gpui::{Window, ModelContext, AppContext, Model, 
-    div, prelude::FluentBuilder, px, Animation, AnimationExt, ClickEvent, DismissEvent, ElementId,
-    EventEmitter, InteractiveElement as _, IntoElement, ParentElement as _, Render, SharedString,
-    StatefulInteractiveElement, Styled,   VisualContext, 
+use gpui::{
+    div, prelude::FluentBuilder, px, Animation, AnimationExt, App, AppContext, ClickEvent, Context,
+    DismissEvent, ElementId, Entity, EventEmitter, InteractiveElement as _, IntoElement,
+    ParentElement as _, Render, SharedString, StatefulInteractiveElement, Styled, Window,
 };
 use smol::Timer;
 
@@ -242,9 +242,9 @@ impl Render for Notification {
             )
             .when_some(self.on_click.clone(), |this, on_click| {
                 this.cursor_pointer()
-                    .on_click(cx.listener(move |view, event, cx| {
-                        view.dismiss(event, cx);
-                        on_click(event, cx);
+                    .on_click(cx.listener(move |view, event, window, cx| {
+                        view.dismiss(event, window, cx);
+                        on_click(event, window, cx);
                     }))
             })
             .when(!self.autohide, |this| {
@@ -296,7 +296,12 @@ impl NotificationList {
         }
     }
 
-    pub fn push(&mut self, notification: impl Into<Notification>, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn push(
+        &mut self,
+        notification: impl Into<Notification>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let notification = notification.into();
         let id = notification.id.clone();
         let autohide = notification.autohide;
@@ -316,9 +321,9 @@ impl NotificationList {
             cx.spawn(|_, mut cx| async move {
                 Timer::after(Duration::from_secs(5)).await;
 
-                if let Err(err) = notification
-                    .update(&mut cx, |note, cx| note.dismiss(&ClickEvent::default(), cx))
-                {
+                if let Err(err) = notification.update(&mut cx, |note, cx| {
+                    note.dismiss(&ClickEvent::default(), window, cx)
+                }) {
                     println!("failed to auto hide notification: {:?}", err);
                 }
             })
@@ -338,8 +343,12 @@ impl NotificationList {
 }
 
 impl Render for NotificationList {
-    fn render(&mut self, window: &mut gpui::Window, cx: &mut gpui::Context<Self>) -> impl IntoElement {
-        let size = cx.viewport_size();
+    fn render(
+        &mut self,
+        window: &mut gpui::Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> impl IntoElement {
+        let size = window.viewport_size();
         let items = self.notifications.iter().rev().take(10).rev().cloned();
 
         div()
@@ -356,7 +365,7 @@ impl Render for NotificationList {
                     .relative()
                     .right_0()
                     .h(size.height - px(8.))
-                    .on_hover(cx.listener(|view, hovered, cx| {
+                    .on_hover(cx.listener(|view, hovered, window, cx| {
                         view.expanded = *hovered;
                         cx.notify()
                     }))

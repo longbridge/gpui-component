@@ -1,7 +1,7 @@
 use crate::ActiveTheme;
-use gpui::{Window, AppContext, 
-    div, prelude::FluentBuilder, px, relative, IntoElement, ParentElement, RenderOnce, Styled,
-    
+use gpui::{
+    div, prelude::FluentBuilder, px, relative, App, AppContext, IntoElement, ParentElement,
+    RenderOnce, Styled, Window,
 };
 
 /// A Progress bar element.

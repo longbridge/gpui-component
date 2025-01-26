@@ -96,7 +96,7 @@ impl Element for Switch {
         window: &mut Window,
         cx: &mut App,
     ) -> (LayoutId, Self::RequestLayoutState) {
-        cx.with_element_state::<SwitchState, _>(global_id.unwrap(), move |state, cx| {
+        window.with_element_state::<SwitchState, _>(global_id.unwrap(), move |state, window| {
             let state = state.unwrap_or_default();
 
             let theme = cx.theme();

@@ -54,7 +54,9 @@ pub trait PopupMenuExt: Styled + Selectable + IntoElement + 'static {
             .trigger(self)
             .trigger_style(style)
             .anchor(anchor.into())
-            .content(move |cx| PopupMenu::build(window, cx, |menu, window, cx| f(menu, window, cx)))
+            .content(move |window, cx| {
+                PopupMenu::build(window, cx, |menu, window, cx| f(menu, window, cx))
+            })
     }
 }
 impl PopupMenuExt for Button {}
@@ -121,9 +123,10 @@ impl PopupMenu {
     ) -> Entity<Self> {
         cx.new(|cx| {
             let focus_handle = cx.focus_handle();
-            let _on_blur_subscription = cx.on_blur(&focus_handle, |this: &mut PopupMenu, cx| {
-                this.dismiss(&Dismiss, window, cx)
-            });
+            let _on_blur_subscription =
+                cx.on_blur(&focus_handle, window, |this: &mut PopupMenu, window, cx| {
+                    this.dismiss(&Dismiss, window, cx)
+                });
 
             let menu = Self {
                 focus_handle,
@@ -143,7 +146,7 @@ impl PopupMenu {
                 _subscriptions: [_on_blur_subscription],
             };
             window.refresh();
-            f(menu, cx)
+            f(menu, window, cx)
         })
     }
 
@@ -192,7 +195,7 @@ impl PopupMenu {
             icon: None,
             label: label.into(),
             action: None,
-            handler: Rc::new(move |cx| cx.open_url(&href)),
+            handler: Rc::new(move |_, cx| cx.open_url(&href)),
         });
         self
     }
@@ -209,7 +212,7 @@ impl PopupMenu {
             icon: Some(icon.into()),
             label: label.into(),
             action: None,
-            handler: Rc::new(move |cx| cx.open_url(&href)),
+            handler: Rc::new(move |_, cx| cx.open_url(&href)),
         });
         self
     }
@@ -248,7 +251,7 @@ impl PopupMenu {
         E: IntoElement,
     {
         self.menu_items.push(PopupMenuItem::ElementItem {
-            render: Box::new(move |cx| builder(cx).into_any_element()),
+            render: Box::new(move |window, cx| builder(window, cx).into_any_element()),
             handler: self.wrap_handler(action),
         });
         self
@@ -257,8 +260,8 @@ impl PopupMenu {
     fn wrap_handler(&self, action: Box<dyn Action>) -> Rc<dyn Fn(&mut Window, &mut App)> {
         let action_focus_handle = self.action_focus_handle.clone();
 
-        Rc::new(move |cx| {
-            cx.activate_window();
+        Rc::new(move |window, cx| {
+            window.activate_window();
 
             // Focus back to the user expected focus handle
             // Then the actions listened on that focus handle can be received
@@ -273,10 +276,10 @@ impl PopupMenu {
             // If the actions are listened on the `PanelContent`,
             // it can't receive the actions from the `PopupMenu`, unless we focus on `PanelContent`.
             if let Some(handle) = action_focus_handle.as_ref() {
-                cx.focus(&handle);
+                window.focus(&handle);
             }
 
-            cx.dispatch_action(action.boxed_clone());
+            cx.dispatch_action(action.as_ref());
         })
     }
 
@@ -320,7 +323,7 @@ impl PopupMenu {
         cx: &mut Context<Self>,
         f: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
     ) -> Self {
-        self.submenu_with_icon(None, label, cx, window, f)
+        self.submenu_with_icon(None, label, window, cx, f)
     }
 
     /// Add a Submenu item with icon
@@ -332,7 +335,7 @@ impl PopupMenu {
         cx: &mut Context<Self>,
         f: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
     ) -> Self {
-        let submenu = PopupMenu::build(cx, window, f);
+        let submenu = PopupMenu::build(window, cx, f);
         let parent_menu = cx.model().downgrade();
         submenu.update(cx, |view, _| {
             view.parent_menu = Some(parent_menu);
@@ -383,11 +386,11 @@ impl PopupMenu {
                 let item = self.menu_items.get(index);
                 match item {
                     Some(PopupMenuItem::Item { handler, .. }) => {
-                        handler(cx);
+                        handler(window, cx);
                         self.dismiss(&Dismiss, window, cx)
                     }
                     Some(PopupMenuItem::ElementItem { handler, .. }) => {
-                        handler(cx);
+                        handler(window, cx);
                         self.dismiss(&Dismiss, window, cx)
                     }
                     _ => {}
@@ -452,7 +455,7 @@ impl PopupMenu {
         cx: &mut Context<Self>,
     ) -> Option<impl IntoElement> {
         if let Some(action) = action {
-            if let Some(keybinding) = cx.bindings_for_action(action.deref()).first() {
+            if let Some(keybinding) = window.bindings_for_action(action.deref()).first() {
                 let el = div().text_color(cx.theme().muted_foreground).children(
                     keybinding
                         .keystrokes()
@@ -529,7 +532,9 @@ impl Render for PopupMenu {
             .on_action(cx.listener(Self::select_prev))
             .on_action(cx.listener(Self::confirm))
             .on_action(cx.listener(Self::dismiss))
-            .on_mouse_down_out(cx.listener(|this, _, window, cx| this.dismiss(&Dismiss, cx)))
+            .on_mouse_down_out(
+                cx.listener(|this, _, window, cx| this.dismiss(&Dismiss, window, cx)),
+            )
             .popover_style(cx)
             .text_color(cx.theme().popover_foreground)
             .relative()
@@ -574,10 +579,12 @@ impl Render for PopupMenu {
                                             .px_1()
                                             .rounded_md()
                                             .items_center()
-                                            .on_mouse_enter(cx.listener(move |this, _, window, cx| {
-                                                this.hovered_menu_ix = Some(ix);
-                                                cx.notify();
-                                            }));
+                                            .on_mouse_enter(cx.listener(
+                                                move |this, _, window, cx| {
+                                                    this.hovered_menu_ix = Some(ix);
+                                                    cx.notify();
+                                                },
+                                            ));
 
                                         match item {
                                             PopupMenuItem::Separator => {
@@ -604,7 +611,7 @@ impl Render for PopupMenu {
                                                         .children(Self::render_icon(
                                                             has_icon, None, window, cx,
                                                         ))
-                                                        .child((render)(cx)),
+                                                        .child((render)(window, cx)),
                                                 ),
                                             PopupMenuItem::Item {
                                                 icon,

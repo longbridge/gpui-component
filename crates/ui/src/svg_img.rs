@@ -4,10 +4,10 @@ use std::{
     sync::{Arc, LazyLock},
 };
 
-use gpui::{Window, 
-    px, size, AppContext, Asset, Bounds, Element, Hitbox, ImageCacheError, InteractiveElement,
+use gpui::{
+    px, size, App, AppContext, Asset, Bounds, Element, Hitbox, ImageCacheError, InteractiveElement,
     Interactivity, IntoElement, IsZero, Pixels, RenderImage, SharedString, Size, StyleRefinement,
-    Styled, 
+    Styled, Window,
 };
 use image::Frame;
 use smallvec::SmallVec;
@@ -203,11 +203,14 @@ impl Element for SvgImg {
     fn request_layout(
         &mut self,
         global_id: Option<&gpui::GlobalElementId>,
-        window: &mut Window, cx: &mut App,
+        window: &mut Window,
+        cx: &mut App,
     ) -> (gpui::LayoutId, Self::RequestLayoutState) {
-        let layout_id = self
-            .interactivity
-            .request_layout(global_id, cx, |style, cx| window.request_layout(cx, style, None));
+        let layout_id =
+            self.interactivity
+                .request_layout(global_id, window, cx, |style, window, cx| {
+                    window.request_layout(style, None, cx)
+                });
 
         (layout_id, ())
     }
@@ -217,10 +220,17 @@ impl Element for SvgImg {
         global_id: Option<&gpui::GlobalElementId>,
         bounds: gpui::Bounds<gpui::Pixels>,
         _: &mut Self::RequestLayoutState,
-        window: &mut Window, cx: &mut App,
+        window: &mut Window,
+        cx: &mut App,
     ) -> Self::PrepaintState {
-        self.interactivity
-            .prepaint(global_id, bounds, bounds.size, cx, |_, _, hitbox, _| hitbox)
+        self.interactivity.prepaint(
+            global_id,
+            bounds,
+            bounds.size,
+            window,
+            cx,
+            |_, _, hitbox, _, _| hitbox,
+        )
     }
 
     fn paint(
@@ -229,16 +239,22 @@ impl Element for SvgImg {
         bounds: gpui::Bounds<gpui::Pixels>,
         _: &mut Self::RequestLayoutState,
         hitbox: &mut Self::PrepaintState,
-        window: &mut Window, cx: &mut App,
+        window: &mut Window,
+        cx: &mut App,
     ) {
         let source = self.source.clone();
 
-        self.interactivity
-            .paint(global_id, bounds, hitbox.as_ref(), cx, |_style, cx| {
+        self.interactivity.paint(
+            global_id,
+            bounds,
+            hitbox.as_ref(),
+            window,
+            cx,
+            |_style, window, cx| {
                 let size = self.size;
 
                 let data = if let Some(source) = source {
-                    match cx.use_asset::<Image>(&ImageSource { source, size }) {
+                    match window.use_asset::<Image>(&ImageSource { source, size }, cx) {
                         Some(Ok(data)) => Some(data),
                         _ => None,
                     }
@@ -273,12 +289,13 @@ impl Element for SvgImg {
                         size: new_size.map(|size| size.ceil()),
                     };
 
-                    match cx.paint_image(img_bounds, px(0.).into(), data, 0, false) {
+                    match window.paint_image(img_bounds, px(0.).into(), data, 0, false) {
                         Ok(_) => {}
                         Err(err) => eprintln!("failed to paint svg image: {:?}", err),
                     }
                 }
-            })
+            },
+        )
     }
 }
 

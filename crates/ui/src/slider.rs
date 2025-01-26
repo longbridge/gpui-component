@@ -1,13 +1,19 @@
 use crate::{h_flex, tooltip::Tooltip, ActiveTheme, AxisExt};
-use gpui::{Window, ModelContext, 
-    canvas, div, prelude::FluentBuilder as _, px, Axis, Bounds, DragMoveEvent, EntityId,
-    EventEmitter, InteractiveElement, IntoElement, MouseButton, MouseDownEvent, ParentElement as _,
-    Pixels, Point, Render, StatefulInteractiveElement as _, Styled, 
-    VisualContext as _,
+use gpui::{
+    canvas, div, prelude::FluentBuilder as _, px, AppContext as _, Axis, Bounds, Context,
+    DragMoveEvent, Empty, EntityId, EventEmitter, InteractiveElement, IntoElement, MouseButton,
+    MouseDownEvent, ParentElement as _, Pixels, Point, Render, StatefulInteractiveElement as _,
+    Styled, Window,
 };
 
-#[derive(Clone, Render)]
+#[derive(Clone)]
 pub struct DragThumb(EntityId);
+
+impl Render for DragThumb {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        Empty
+    }
+}
 
 pub enum SliderEvent {
     Change(f32),
@@ -83,7 +89,12 @@ impl Slider {
     }
 
     /// Set the value of the slider.
-    pub fn set_value(&mut self, value: f32, window: &mut gpui::Window, cx: &mut gpui::Context<Self>) {
+    pub fn set_value(
+        &mut self,
+        value: f32,
+        window: &mut gpui::Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
         self.value = value;
         self.update_thumb_pos();
         cx.notify();
@@ -102,7 +113,8 @@ impl Slider {
     fn update_value_by_position(
         &mut self,
         position: Point<Pixels>,
-        window: &mut gpui::Window, cx: &mut gpui::Context<Self>,
+        window: &mut gpui::Window,
+        cx: &mut gpui::Context<Self>,
     ) {
         let bounds = self.bounds;
         let axis = self.axis;
@@ -147,7 +159,8 @@ impl Slider {
     fn render_thumb(
         &self,
         thumb_bar_size: Pixels,
-        window: &mut Window, cx: &mut Context<Self>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
     ) -> impl gpui::IntoElement {
         let value = self.value;
         let entity_id = cx.entity_id();
@@ -158,18 +171,20 @@ impl Slider {
                 cx.stop_propagation();
                 cx.new(|_| drag.clone())
             })
-            .on_drag_move(cx.listener(
-                move |view, e: &DragMoveEvent<DragThumb>, cx| match e.drag(cx) {
-                    DragThumb(id) => {
-                        if *id != entity_id {
-                            return;
-                        }
+            .on_drag_move(
+                cx.listener(move |view, e: &DragMoveEvent<DragThumb>, window, cx| {
+                    match e.drag(cx) {
+                        DragThumb(id) => {
+                            if *id != entity_id {
+                                return;
+                            }
 
-                        // set value by mouse position
-                        view.update_value_by_position(e.event.position, cx)
+                            // set value by mouse position
+                            view.update_value_by_position(e.event.position, window, cx)
+                        }
                     }
-                },
-            ))
+                }),
+            )
             .absolute()
             .map(|this| match self.reverse {
                 true => this
@@ -193,11 +208,16 @@ impl Slider {
             .border_color(cx.theme().slider_bar.opacity(0.9))
             .when(cx.theme().shadow, |this| this.shadow_md())
             .bg(cx.theme().slider_thumb)
-            .tooltip(move |cx| Tooltip::new(format!("{}", value), cx))
+            .tooltip(move |window, cx| Tooltip::new(format!("{}", value), window, cx))
     }
 
-    fn on_mouse_down(&mut self, event: &MouseDownEvent, window: &mut gpui::Window, cx: &mut gpui::Context<Self>) {
-        self.update_value_by_position(event.position, cx);
+    fn on_mouse_down(
+        &mut self,
+        event: &MouseDownEvent,
+        window: &mut gpui::Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.update_value_by_position(event.position, window, cx);
     }
 }
 
@@ -243,7 +263,7 @@ impl Render for Slider {
                             .bg(cx.theme().slider_bar)
                             .rounded_full(),
                     )
-                    .child(self.render_thumb(thumb_bar_size, cx))
+                    .child(self.render_thumb(thumb_bar_size, window, cx))
                     .child({
                         let view = cx.model().clone();
                         canvas(
