@@ -1,7 +1,7 @@
-use gpui::{Window, AppContext, 
-    px, relative, Axis, Bounds, ContentMask, Corners, Edges, Element, ElementId, EntityId,
-    GlobalElementId, Hitbox, Hsla, IntoElement, IsZero as _, LayoutId, PaintQuad, Pixels, Point,
-    Position, ScrollHandle, ScrollWheelEvent, Style, 
+use gpui::{
+    px, relative, App, AppContext, Axis, Bounds, ContentMask, Corners, Edges, Element, ElementId,
+    EntityId, GlobalElementId, Hitbox, Hsla, IntoElement, IsZero as _, LayoutId, PaintQuad, Pixels,
+    Point, Position, ScrollHandle, ScrollWheelEvent, Style, Window,
 };
 
 use crate::AxisExt;
@@ -56,7 +56,8 @@ impl Element for ScrollableMask {
     fn request_layout(
         &mut self,
         _: Option<&GlobalElementId>,
-        window: &mut Window, cx: &mut App,
+        window: &mut Window,
+        cx: &mut App,
     ) -> (LayoutId, Self::RequestLayoutState) {
         let mut style = Style::default();
         // Set the layout style relative to the table view to get same size.
@@ -66,7 +67,7 @@ impl Element for ScrollableMask {
         style.size.width = relative(1.).into();
         style.size.height = relative(1.).into();
 
-        (window.request_layout(cx, style, None), ())
+        (window.request_layout(style, None, cx), ())
     }
 
     fn prepaint(
@@ -74,7 +75,8 @@ impl Element for ScrollableMask {
         _: Option<&GlobalElementId>,
         bounds: Bounds<Pixels>,
         _: &mut Self::RequestLayoutState,
-        window: &mut Window, cx: &mut App,
+        window: &mut Window,
+        cx: &mut App,
     ) -> Self::PrepaintState {
         // Move y to bounds height to cover the parent view.
         let cover_bounds = Bounds {
@@ -94,14 +96,15 @@ impl Element for ScrollableMask {
         _: Bounds<Pixels>,
         _: &mut Self::RequestLayoutState,
         hitbox: &mut Self::PrepaintState,
-        window: &mut Window, cx: &mut App,
+        window: &mut Window,
+        cx: &mut App,
     ) {
         let line_height = window.line_height();
         let bounds = hitbox.bounds;
 
-        window.with_content_mask(Some(ContentMask { bounds }), |cx| {
+        window.with_content_mask(Some(ContentMask { bounds }), |window| {
             if let Some(color) = self.debug {
-                cx.paint_quad(PaintQuad {
+                window.paint_quad(PaintQuad {
                     bounds,
                     border_widths: Edges::all(px(1.0)),
                     border_color: color,
@@ -118,8 +121,11 @@ impl Element for ScrollableMask {
                 let mouse_position = window.mouse_position();
                 let last_offset = scroll_handle.offset();
 
-                move |event: &ScrollWheelEvent, phase, cx| {
-                    if bounds.contains(&mouse_position) && phase.bubble() && hitbox.is_hovered(cx) {
+                move |event: &ScrollWheelEvent, phase, window, cx| {
+                    if bounds.contains(&mouse_position)
+                        && phase.bubble()
+                        && hitbox.is_hovered(window)
+                    {
                         let mut offset = scroll_handle.offset();
                         let mut delta = event.delta.pixel_delta(line_height);
 
@@ -142,7 +148,7 @@ impl Element for ScrollableMask {
 
                         if last_offset != offset {
                             scroll_handle.set_offset(offset);
-                            cx.notify(Some(view_id));
+                            cx.notify(view_id);
                             cx.stop_propagation();
                         }
                     }

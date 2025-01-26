@@ -1,10 +1,11 @@
 use std::{cell::Cell, rc::Rc};
 
 use super::{Scrollbar, ScrollbarAxis, ScrollbarState};
-use gpui::{Window, AppContext, 
-    canvas, div, relative, AnyElement, Div, Element, ElementId, EntityId, GlobalElementId,
-    InteractiveElement, IntoElement, ParentElement, Pixels, Position, ScrollHandle, SharedString,
-    Size, Stateful, StatefulInteractiveElement, Style, StyleRefinement, Styled, 
+use gpui::{
+    canvas, div, relative, AnyElement, App, AppContext, Context, Div, Element, ElementId, EntityId,
+    GlobalElementId, InteractiveElement, IntoElement, ParentElement, Pixels, Position,
+    ScrollHandle, SharedString, Size, Stateful, StatefulInteractiveElement, Style, StyleRefinement,
+    Styled, Window,
 };
 
 /// A scroll view is a container that allows the user to scroll through a large amount of content.
@@ -58,14 +59,18 @@ where
     fn with_element_state<R>(
         &mut self,
         id: &GlobalElementId,
-        window: &mut Window, cx: &mut App,
+        window: &mut Window,
+        cx: &mut App,
         f: impl FnOnce(&mut Self, &mut ScrollViewState, &mut Window, &mut App) -> R,
     ) -> R {
-        cx.with_optional_element_state::<ScrollViewState, _>(Some(id), |element_state, cx| {
-            let mut element_state = element_state.unwrap().unwrap_or_default();
-            let result = f(self, &mut element_state, cx);
-            (result, Some(element_state))
-        })
+        window.with_optional_element_state::<ScrollViewState, _>(
+            Some(id),
+            |element_state, window| {
+                let mut element_state = element_state.unwrap().unwrap_or_default();
+                let result = f(self, &mut element_state, window, cx);
+                (result, Some(element_state))
+            },
+        )
     }
 }
 
@@ -148,7 +153,8 @@ where
     fn request_layout(
         &mut self,
         id: Option<&gpui::GlobalElementId>,
-        window: &mut gpui::Window, cx: &mut gpui::Context,
+        window: &mut Window,
+        cx: &mut App,
     ) -> (gpui::LayoutId, Self::RequestLayoutState) {
         let mut style = Style::default();
         style.flex_grow = 1.0;
@@ -162,7 +168,7 @@ where
         let scroll_id = self.id.clone();
         let content = self.element.take().map(|c| c.into_any_element());
 
-        self.with_element_state(id.unwrap(), cx, |_, element_state, cx| {
+        self.with_element_state(id.unwrap(), window, cx, |_, element_state, window, cx| {
             let handle = element_state.handle.clone();
             let state = element_state.state.clone();
             let scroll_size = element_state.scroll_size.clone();
@@ -198,9 +204,9 @@ where
                         ),
                 )
                 .into_any_element();
-            let element_id = element.request_layout(cx);
+            let element_id = element.request_layout(window, cx);
 
-            let layout_id = window.request_layout(cx, style, vec![element_id]);
+            let layout_id = window.request_layout(style, vec![element_id], cx);
 
             (layout_id, element)
         })
@@ -211,9 +217,10 @@ where
         _: Option<&gpui::GlobalElementId>,
         _: gpui::Bounds<Pixels>,
         element: &mut Self::RequestLayoutState,
-        window: &mut gpui::Window, cx: &mut gpui::Context,
+        window: &mut Window,
+        cx: &mut App,
     ) -> Self::PrepaintState {
-        element.prepaint(cx);
+        element.prepaint(window, cx);
         // do nothing
         ScrollViewState::default()
     }
@@ -224,8 +231,9 @@ where
         _: gpui::Bounds<Pixels>,
         element: &mut Self::RequestLayoutState,
         _: &mut Self::PrepaintState,
-        window: &mut gpui::Window, cx: &mut gpui::Context,
+        window: &mut Window,
+        cx: &mut App,
     ) {
-        element.paint(cx)
+        element.paint(window, cx)
     }
 }
