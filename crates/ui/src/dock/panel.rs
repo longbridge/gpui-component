@@ -1,9 +1,9 @@
 use std::{collections::HashMap, sync::Arc};
 
 use crate::{button::Button, popup_menu::PopupMenu};
-use gpui::{Window, ModelContext, Model, 
-    AnyElement, AnyView, AppContext, EventEmitter, FocusHandle, Focusable, Global, Hsla,
-    IntoElement, SharedString,   
+use gpui::{
+    AnyElement, AnyView, App, Entity, EventEmitter, FocusHandle, Focusable, Global, Hsla,
+    IntoElement, Render, SharedString, WeakEntity, Window,
 };
 
 use rust_i18n::t;
@@ -52,7 +52,7 @@ impl PanelControl {
 
 /// The Panel trait used to define the panel.
 #[allow(unused_variables)]
-pub trait Panel: EventEmitter<PanelEvent> + Focusable {
+pub trait Panel: EventEmitter<PanelEvent> + Render + Focusable {
     /// The name of the panel used to serialize, deserialize and identify the panel.
     ///
     /// This is used to identify the panel when deserializing the panel.
@@ -96,14 +96,14 @@ pub trait Panel: EventEmitter<PanelEvent> + Focusable {
     ///
     /// The last_active_panel and current_active_panel will be touched when the panel is active.
     #[allow(unused_variables)]
-    fn set_active(&self, active: bool, window: &Window, cx: &Context<Self>) {}
+    fn set_active(&self, active: bool, window: &Window, cx: &App) {}
 
     /// Set zoomed state of the panel.
     ///
     /// This method will be called when the panel is zoomed or unzoomed.
     ///
     /// Only current Panel will touch this method.
-    fn set_zoomed(&self, zoomed: bool, window: &Window, cx: &Context<Self>) {}
+    fn set_zoomed(&self, zoomed: bool, window: &Window, cx: &App) {}
 
     /// The addition popup menu of the panel, default is `None`.
     fn popup_menu(&self, this: PopupMenu, window: &Window, cx: &App) -> PopupMenu {
@@ -111,7 +111,7 @@ pub trait Panel: EventEmitter<PanelEvent> + Focusable {
     }
 
     /// The addition toolbar buttons of the panel used to show in the right of the title bar, default is `None`.
-    fn toolbar_buttons(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<Vec<Button>> {
+    fn toolbar_buttons(&self, window: &mut Window, cx: &mut App) -> Option<Vec<Button>> {
         None
     }
 
@@ -145,7 +145,7 @@ impl<T: Panel> PanelView for Entity<T> {
     }
 
     fn title(&self, window: &Window, cx: &App) -> AnyElement {
-        self.read(cx).title(cx)
+        self.read(cx).title(window, cx)
     }
 
     fn title_style(&self, cx: &App) -> Option<TitleStyle> {
@@ -166,22 +166,22 @@ impl<T: Panel> PanelView for Entity<T> {
 
     fn set_active(&self, active: bool, window: &mut Window, cx: &mut App) {
         self.update(cx, |this, cx| {
-            this.set_active(active, cx);
+            this.set_active(active, window, cx);
         })
     }
 
     fn set_zoomed(&self, zoomed: bool, window: &mut Window, cx: &mut App) {
         self.update(cx, |this, cx| {
-            this.set_zoomed(zoomed, cx);
+            this.set_zoomed(zoomed, window, cx);
         })
     }
 
     fn popup_menu(&self, menu: PopupMenu, window: &Window, cx: &App) -> PopupMenu {
-        self.read(cx).popup_menu(menu, cx)
+        self.read(cx).popup_menu(menu, window, cx)
     }
 
     fn toolbar_buttons(&self, window: &mut Window, cx: &mut App) -> Option<Vec<Button>> {
-        self.update(cx, |this, cx| this.toolbar_buttons(cx))
+        self.update(cx, |this, cx| this.toolbar_buttons(window, cx))
     }
 
     fn view(&self) -> AnyView {
@@ -223,7 +223,8 @@ pub struct PanelRegistry {
                 WeakEntity<DockArea>,
                 &PanelState,
                 &PanelInfo,
-                &mut
+                &mut Window,
+                &mut App,
             ) -> Box<dyn PanelView>,
         >,
     >,
@@ -240,7 +241,13 @@ impl Global for PanelRegistry {}
 /// Register the Panel init by panel_name to global registry.
 pub fn register_panel<F>(cx: &mut App, panel_name: &str, deserialize: F)
 where
-    F: Fn(WeakEntity<DockArea>, &PanelState, &PanelInfo, &mut Window, &mut App) -> Box<dyn PanelView>
+    F: Fn(
+            WeakEntity<DockArea>,
+            &PanelState,
+            &PanelInfo,
+            &mut Window,
+            &mut App,
+        ) -> Box<dyn PanelView>
         + 'static,
 {
     if let None = cx.try_global::<PanelRegistry>() {

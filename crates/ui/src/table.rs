@@ -9,7 +9,7 @@ use crate::{
 };
 use gpui::{
     actions, canvas, div, prelude::FluentBuilder, px, uniform_list, App, AppContext, Axis, Bounds,
-    Context, Div, DragMoveEvent, Edges, EntityId, EventEmitter, FocusHandle, Focusable,
+    Context, Div, DragMoveEvent, Edges, Empty, EntityId, EventEmitter, FocusHandle, Focusable,
     InteractiveElement, IntoElement, KeyBinding, ListSizingBehavior, MouseButton, MouseDownEvent,
     ParentElement, Pixels, Point, Render, ScrollHandle, ScrollStrategy, SharedString, Stateful,
     StatefulInteractiveElement as _, Styled, Task, UniformListScrollHandle, Window,
@@ -89,8 +89,13 @@ impl Render for DragCol {
     }
 }
 
-#[derive(Clone, Render)]
+#[derive(Clone)]
 pub struct ResizeCol(pub (EntityId, usize));
+impl Render for ResizeCol {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        Empty
+    }
+}
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum SelectionState {
@@ -759,11 +764,9 @@ where
                 return;
             }
 
-            self._load_more_task = cx.spawn(|view, mut cx| async move {
-                _ = cx.update(|cx| {
-                    view.update(cx, |view, cx| {
-                        view.delegate.load_more(window, cx);
-                    })
+            self._load_more_task = cx.spawn_in(window, |view, mut window| async move {
+                _ = view.update_in(&mut window, |view, window, cx| {
+                    view.delegate.load_more(window, cx);
                 });
             });
         }

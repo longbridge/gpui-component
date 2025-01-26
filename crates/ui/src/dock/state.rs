@@ -1,6 +1,6 @@
-use gpui::{Window, Model,
-    point, px, size, AppContext, Axis, Bounds, Pixels,  VisualContext as _,
-
+use gpui::{
+    point, px, size, App, AppContext, Axis, Bounds, Entity, Pixels, VisualContext as _, WeakEntity,
+    Window,
 };
 use itertools::Itertools as _;
 use serde::{Deserialize, Serialize};
@@ -48,8 +48,13 @@ impl DockState {
     }
 
     /// Convert the DockState to Dock
-    pub fn to_dock(&self, dock_area: WeakEntity<DockArea>, window: &mut Window, cx: &mut App) -> Entity<Dock> {
-        let item = self.panel.to_item(dock_area.clone(), cx);
+    pub fn to_dock(
+        &self,
+        dock_area: WeakEntity<DockArea>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Entity<Dock> {
+        let item = self.panel.to_item(dock_area.clone(), window, cx);
         cx.new(|cx| {
             Dock::from_state(
                 dock_area.clone(),
@@ -57,6 +62,7 @@ impl DockState {
                 self.size,
                 item,
                 self.open,
+                window,
                 cx,
             )
         })
@@ -178,13 +184,18 @@ impl PanelState {
         self.children.push(panel);
     }
 
-    pub fn to_item(&self, dock_area: WeakEntity<DockArea>, window: &mut Window, cx: &mut App) -> DockItem {
+    pub fn to_item(
+        &self,
+        dock_area: WeakEntity<DockArea>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> DockItem {
         let info = self.info.clone();
 
         let items: Vec<DockItem> = self
             .children
             .iter()
-            .map(|child| child.to_item(dock_area.clone(), cx))
+            .map(|child| child.to_item(dock_area.clone(), window, cx))
             .collect();
 
         match info {
@@ -195,7 +206,7 @@ impl PanelState {
                     Axis::Vertical
                 };
                 let sizes = sizes.iter().map(|s| Some(*s)).collect_vec();
-                DockItem::split_with_sizes(axis, items, sizes, &dock_area, cx)
+                DockItem::split_with_sizes(axis, items, sizes, &dock_area, window, cx)
             }
             PanelInfo::Tabs { active_index } => {
                 if items.len() == 1 {
@@ -213,7 +224,7 @@ impl PanelState {
                     })
                     .collect_vec();
 
-                DockItem::tabs(items, Some(active_index), &dock_area, cx)
+                DockItem::tabs(items, Some(active_index), &dock_area, window, cx)
             }
             PanelInfo::Panel(_) => {
                 let view = if let Some(f) = cx
@@ -222,17 +233,17 @@ impl PanelState {
                     .get(&self.panel_name)
                     .cloned()
                 {
-                    f(dock_area.clone(), self, &info, cx)
+                    f(dock_area.clone(), self, &info, window, cx)
                 } else {
                     // Show an invalid panel if the panel is not registered.
                     Box::new(
-                        cx.new(|cx| InvalidPanel::new(&self.panel_name, self.clone(), cx)),
+                        cx.new(|cx| InvalidPanel::new(&self.panel_name, self.clone(), window, cx)),
                     )
                 };
 
-                DockItem::tabs(vec![view.into()], None, &dock_area, cx)
+                DockItem::tabs(vec![view.into()], None, &dock_area, window, cx)
             }
-            PanelInfo::Tiles { metas } => DockItem::tiles(items, metas, &dock_area, cx),
+            PanelInfo::Tiles { metas } => DockItem::tiles(items, metas, &dock_area, window, cx),
         }
     }
 }

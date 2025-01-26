@@ -72,22 +72,26 @@ impl ColorPicker {
     pub fn new(id: impl Into<ElementId>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let color_input = cx.new(|cx| TextInput::new(window, cx).xsmall());
 
-        cx.subscribe(&color_input, |this, _, ev: &InputEvent, cx| match ev {
-            InputEvent::Change(value) => {
-                if let Ok(color) = Hsla::parse_hex(value) {
-                    this.value = Some(color);
-                    this.hovered_color = Some(color);
+        cx.subscribe_in(
+            &color_input,
+            window,
+            |this, _, ev: &InputEvent, window, cx| match ev {
+                InputEvent::Change(value) => {
+                    if let Ok(color) = Hsla::parse_hex(value) {
+                        this.value = Some(color);
+                        this.hovered_color = Some(color);
+                    }
                 }
-            }
-            InputEvent::PressEnter => {
-                let val = this.color_input.read(cx).text();
-                if let Ok(color) = Hsla::parse_hex(&val) {
-                    this.open = false;
-                    this.update_value(Some(color), true, window, cx);
+                InputEvent::PressEnter => {
+                    let val = this.color_input.read(cx).text();
+                    if let Ok(color) = Hsla::parse_hex(&val) {
+                        this.open = false;
+                        this.update_value(Some(color), true, window, cx);
+                    }
                 }
-            }
-            _ => {}
-        })
+                _ => {}
+            },
+        )
         .detach();
 
         Self {

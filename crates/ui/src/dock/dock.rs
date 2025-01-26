@@ -2,11 +2,11 @@
 
 use std::sync::Arc;
 
-use gpui::{Window, ModelContext, AppContext, Model, 
-    div, prelude::FluentBuilder as _, px, Axis, Element, Entity, InteractiveElement as _,
-    IntoElement, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Render,
-    StatefulInteractiveElement, Style, Styled as _,   VisualContext as _,
-    
+use gpui::{
+    div, prelude::FluentBuilder as _, px, App, AppContext, Axis, Context, Element, Empty, Entity,
+    InteractiveElement as _, IntoElement, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels,
+    Point, Render, StatefulInteractiveElement, Style, Styled as _, VisualContext as _, WeakEntity,
+    Window,
 };
 use serde::{Deserialize, Serialize};
 
@@ -17,8 +17,14 @@ use crate::{
 
 use super::{DockArea, DockItem, PanelView, TabPanel};
 
-#[derive(Clone, Render)]
+#[derive(Clone)]
 struct ResizePanel;
+
+impl Render for ResizePanel {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        Empty
+    }
+}
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum DockPlacement {
@@ -76,10 +82,11 @@ impl Dock {
     pub(crate) fn new(
         dock_area: WeakEntity<DockArea>,
         placement: DockPlacement,
-        window: &mut Window, cx: &mut Context<Self>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
     ) -> Self {
         let panel = cx.new(|cx| {
-            let mut tab = TabPanel::new(None, dock_area.clone(), cx);
+            let mut tab = TabPanel::new(None, dock_area.clone(), window, cx);
             tab.closable = false;
             tab
         });
@@ -90,7 +97,7 @@ impl Dock {
             view: panel.clone(),
         };
 
-        Self::subscribe_panel_events(dock_area.clone(), &panel, cx);
+        Self::subscribe_panel_events(dock_area.clone(), &panel, window, cx);
 
         Self {
             placement,
@@ -103,22 +110,39 @@ impl Dock {
         }
     }
 
-    pub fn left(dock_area: WeakEntity<DockArea>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        Self::new(dock_area, DockPlacement::Left, cx)
+    pub fn left(
+        dock_area: WeakEntity<DockArea>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        Self::new(dock_area, DockPlacement::Left, window, cx)
     }
 
-    pub fn bottom(dock_area: WeakEntity<DockArea>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        Self::new(dock_area, DockPlacement::Bottom, cx)
+    pub fn bottom(
+        dock_area: WeakEntity<DockArea>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        Self::new(dock_area, DockPlacement::Bottom, window, cx)
     }
 
-    pub fn right(dock_area: WeakEntity<DockArea>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        Self::new(dock_area, DockPlacement::Right, cx)
+    pub fn right(
+        dock_area: WeakEntity<DockArea>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        Self::new(dock_area, DockPlacement::Right, window, cx)
     }
 
     /// Update the Dock to be collapsible or not.
     ///
     /// And if the Dock is not collapsible, it will be open.
-    pub fn set_collapsible(&mut self, collapsible: bool, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn set_collapsible(
+        &mut self,
+        collapsible: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.collapsible = collapsible;
         if !collapsible {
             self.open = true
@@ -132,20 +156,21 @@ impl Dock {
         size: Pixels,
         panel: DockItem,
         open: bool,
-        window: &mut Window, cx: &mut App,
+        window: &mut Window,
+        cx: &mut Context<Self>,
     ) -> Self {
-        Self::subscribe_panel_events(dock_area.clone(), &panel, cx);
+        Self::subscribe_panel_events(dock_area.clone(), &panel, window, cx);
 
         if !open {
             match panel.clone() {
                 DockItem::Tabs { view, .. } => {
                     view.update(cx, |panel, cx| {
-                        panel.set_collapsed(true, cx);
+                        panel.set_collapsed(true, window, cx);
                     });
                 }
                 DockItem::Split { items, .. } => {
                     for item in items {
-                        item.set_collapsed(true, cx);
+                        item.set_collapsed(true, window, cx);
                     }
                 }
                 _ => {}
@@ -166,38 +191,39 @@ impl Dock {
     fn subscribe_panel_events(
         dock_area: WeakEntity<DockArea>,
         panel: &DockItem,
-        window: &mut Window, cx: &mut App,
+        window: &mut Window,
+        cx: &mut Context<Self>,
     ) {
         match panel {
             DockItem::Tabs { view, .. } => {
-                cx.defer({
+                window.defer(cx, {
                     let view = view.clone();
-                    move |cx| {
+                    move |window, cx| {
                         _ = dock_area.update(cx, |this, cx| {
-                            this.subscribe_panel(&view, cx);
+                            this.subscribe_panel(&view, window, cx);
                         });
                     }
                 });
             }
             DockItem::Split { items, view, .. } => {
                 for item in items {
-                    Self::subscribe_panel_events(dock_area.clone(), item, cx);
+                    Self::subscribe_panel_events(dock_area.clone(), item, window, cx);
                 }
-                cx.defer({
+                window.defer(cx, {
                     let view = view.clone();
-                    move |cx| {
+                    move |window, cx| {
                         _ = dock_area.update(cx, |this, cx| {
-                            this.subscribe_panel(&view, cx);
+                            this.subscribe_panel(&view, window, cx);
                         });
                     }
                 });
             }
             DockItem::Tiles { view, .. } => {
-                cx.defer({
+                window.defer(cx, {
                     let view = view.clone();
-                    move |cx| {
+                    move |window, cx| {
                         _ = dock_area.update(cx, |this, cx| {
-                            this.subscribe_panel(&view, cx);
+                            this.subscribe_panel(&view, window, cx);
                         });
                     }
                 });
@@ -218,7 +244,7 @@ impl Dock {
     }
 
     pub fn toggle_open(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.set_open(!self.open, cx);
+        self.set_open(!self.open, window, cx);
     }
 
     /// Returns the size of the Dock, the size is means the width or height of
@@ -238,19 +264,28 @@ impl Dock {
     pub fn set_open(&mut self, open: bool, window: &mut Window, cx: &mut Context<Self>) {
         self.open = open;
         let item = self.panel.clone();
-        cx.defer(move |_, cx| {
-            item.set_collapsed(!open, cx);
+        cx.defer_in(window, move |_, window, cx| {
+            item.set_collapsed(!open, window, cx);
         });
         cx.notify();
     }
 
     /// Add item to the Dock.
-    pub fn add_panel(&mut self, panel: Arc<dyn PanelView>, window: &mut Window, cx: &mut Context<Self>) {
-        self.panel.add_panel(panel, &self.dock_area, cx);
+    pub fn add_panel(
+        &mut self,
+        panel: Arc<dyn PanelView>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.panel.add_panel(panel, &self.dock_area, window, cx);
         cx.notify();
     }
 
-    fn render_resize_handle(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_resize_handle(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let axis = self.placement.axis();
         let neg_offset = -HANDLE_PADDING;
         let view = cx.model().clone();
@@ -299,7 +334,12 @@ impl Dock {
                 cx.new(|_| info.clone())
             })
     }
-    fn resize(&mut self, mouse_position: Point<Pixels>, window: &mut Window, cx: &mut Context<Self>) {
+    fn resize(
+        &mut self,
+        mouse_position: Point<Pixels>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if !self.is_resizing {
             return;
         }
@@ -388,7 +428,7 @@ impl Render for Dock {
                 // Not support to render Tiles and Tile into Dock
                 DockItem::Tiles { .. } => this,
             })
-            .child(self.render_resize_handle(cx))
+            .child(self.render_resize_handle(window, cx))
             .child(DockElement {
                 view: cx.model().clone(),
             })
@@ -418,9 +458,10 @@ impl Element for DockElement {
     fn request_layout(
         &mut self,
         _: Option<&gpui::GlobalElementId>,
-        window: &mut gpui::Window, cx: &mut gpui::Context,
+        window: &mut gpui::Window,
+        cx: &mut App,
     ) -> (gpui::LayoutId, Self::RequestLayoutState) {
-        (window.request_layout(cx, Style::default(), None), ())
+        (window.request_layout(Style::default(), None, cx), ())
     }
 
     fn prepaint(
@@ -428,7 +469,8 @@ impl Element for DockElement {
         _: Option<&gpui::GlobalElementId>,
         _: gpui::Bounds<Pixels>,
         _: &mut Self::RequestLayoutState,
-        _window: &mut gpui::Window, _cx: &mut gpui::App,
+        _window: &mut gpui::Window,
+        _cx: &mut App,
     ) -> Self::PrepaintState {
         ()
     }
@@ -439,13 +481,14 @@ impl Element for DockElement {
         _: gpui::Bounds<Pixels>,
         _: &mut Self::RequestLayoutState,
         _: &mut Self::PrepaintState,
-        window: &mut gpui::Window, cx: &mut gpui::Context,
+        window: &mut gpui::Window,
+        cx: &mut App,
     ) {
         window.on_mouse_event({
             let view = self.view.clone();
-            move |e: &MouseMoveEvent, phase, cx| {
+            move |e: &MouseMoveEvent, phase, window, cx| {
                 if phase.bubble() {
-                    view.update(cx, |view, cx| view.resize(e.position, cx))
+                    view.update(cx, |view, cx| view.resize(e.position, window, cx))
                 }
             }
         });
@@ -453,9 +496,9 @@ impl Element for DockElement {
         // When any mouse up, stop dragging
         window.on_mouse_event({
             let view = self.view.clone();
-            move |_: &MouseUpEvent, phase, cx| {
+            move |_: &MouseUpEvent, phase, window, cx| {
                 if phase.bubble() {
-                    view.update(cx, |view, cx| view.done_resizing(cx));
+                    view.update(cx, |view, cx| view.done_resizing(window, cx));
                 }
             }
         })

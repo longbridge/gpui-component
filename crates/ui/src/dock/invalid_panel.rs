@@ -1,6 +1,6 @@
-use gpui::{Window, 
-    AppContext, EventEmitter, FocusHandle, Focusable, ParentElement as _, Render, SharedString,
-    Styled as _, 
+use gpui::{
+    App, AppContext, EventEmitter, FocusHandle, Focusable, ParentElement as _, Render,
+    SharedString, Styled as _, Window,
 };
 
 use crate::ActiveTheme as _;
@@ -38,7 +38,11 @@ impl Focusable for InvalidPanel {
     }
 }
 impl Render for InvalidPanel {
-    fn render(&mut self, window: &mut gpui::Window, cx: &mut gpui::Context<Self>) -> impl gpui::IntoElement {
+    fn render(
+        &mut self,
+        window: &mut gpui::Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> impl gpui::IntoElement {
         gpui::div()
             .size_full()
             .my_6()

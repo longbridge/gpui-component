@@ -12,9 +12,9 @@ use crate::{
 
 use super::{DockArea, Panel, PanelEvent, PanelState, PanelView, TabPanel};
 use gpui::{
-    prelude::FluentBuilder as _, AppContext, Axis, DismissEvent, EventEmitter, FocusHandle,
-    Focusable, IntoElement, Model, ModelContext, ParentElement, Pixels, Render, Styled,
-    Subscription, VisualContext, Window,
+    prelude::FluentBuilder as _, App, AppContext, Axis, Context, DismissEvent, Entity,
+    EventEmitter, FocusHandle, Focusable, IntoElement, ParentElement, Pixels, Render, Styled,
+    Subscription, VisualContext, WeakEntity, Window,
 };
 use smallvec::SmallVec;
 
@@ -52,9 +52,9 @@ impl StackPanel {
     pub fn new(axis: Axis, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let panel_group = cx.new(|cx| {
             if axis == Axis::Horizontal {
-                h_resizable(cx)
+                h_resizable(window, cx)
             } else {
-                v_resizable(cx)
+                v_resizable(window, cx)
             }
         });
 
@@ -109,9 +109,10 @@ impl StackPanel {
         panel: Arc<dyn PanelView>,
         size: Option<Pixels>,
         dock_area: WeakEntity<DockArea>,
-        window: &mut Window, cx: &mut Context<Self>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
     ) {
-        self.insert_panel(panel, self.panels.len(), size, dock_area, cx);
+        self.insert_panel(panel, self.panels.len(), size, dock_area, window, cx);
     }
 
     pub fn add_panel_at(
@@ -120,9 +121,18 @@ impl StackPanel {
         placement: Placement,
         size: Option<Pixels>,
         dock_area: WeakEntity<DockArea>,
-        window: &mut Window, cx: &mut Context<Self>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
     ) {
-        self.insert_panel_at(panel, self.panels_len(), placement, size, dock_area, cx);
+        self.insert_panel_at(
+            panel,
+            self.panels_len(),
+            placement,
+            size,
+            dock_area,
+            window,
+            cx,
+        );
     }
 
     pub fn insert_panel_at(
@@ -132,14 +142,15 @@ impl StackPanel {
         placement: Placement,
         size: Option<Pixels>,
         dock_area: WeakEntity<DockArea>,
-        window: &mut Window, cx: &mut Context<Self>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
     ) {
         match placement {
             Placement::Top | Placement::Left => {
-                self.insert_panel_before(panel, ix, size, dock_area, cx)
+                self.insert_panel_before(panel, ix, size, dock_area, window, cx)
             }
             Placement::Right | Placement::Bottom => {
-                self.insert_panel_after(panel, ix, size, dock_area, cx)
+                self.insert_panel_after(panel, ix, size, dock_area, window, cx)
             }
         }
     }
@@ -151,9 +162,10 @@ impl StackPanel {
         ix: usize,
         size: Option<Pixels>,
         dock_area: WeakEntity<DockArea>,
-        window: &mut Window, cx: &mut Context<Self>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
     ) {
-        self.insert_panel(panel, ix, size, dock_area, cx);
+        self.insert_panel(panel, ix, size, dock_area, window, cx);
     }
 
     /// Insert a panel after the index.
@@ -163,15 +175,16 @@ impl StackPanel {
         ix: usize,
         size: Option<Pixels>,
         dock_area: WeakEntity<DockArea>,
-        window: &mut Window, cx: &mut Context<Self>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
     ) {
-        self.insert_panel(panel, ix + 1, size, dock_area, cx);
+        self.insert_panel(panel, ix + 1, size, dock_area, window, cx);
     }
 
     fn new_resizable_panel(panel: Arc<dyn PanelView>, size: Option<Pixels>) -> ResizablePanel {
         resizable_panel()
             .content_view(panel.view())
-            .content_visible(move |cx| panel.visible(cx))
+            .content_visible(move |_, cx| panel.visible(cx))
             .when_some(size, |this, size| this.size(size))
     }
 
@@ -181,7 +194,8 @@ impl StackPanel {
         ix: usize,
         size: Option<Pixels>,
         dock_area: WeakEntity<DockArea>,
-        window: &mut Window, cx: &mut Context<Self>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
     ) {
         // If the panel is already in the stack, return.
         if let Some(_) = self.index_of_panel(panel.clone()) {
@@ -189,10 +203,10 @@ impl StackPanel {
         }
 
         let view = cx.model().clone();
-        cx.window_context().defer({
+        window.defer(cx, {
             let panel = panel.clone();
 
-            move |cx| {
+            move |window, cx| {
                 // If the panel is a TabPanel, set its parent to this.
                 if let Ok(tab_panel) = panel.view().downcast::<TabPanel>() {
                     tab_panel.update(cx, |tab_panel, _| tab_panel.set_parent(view.downgrade()));
@@ -205,9 +219,9 @@ impl StackPanel {
                 // Subscribe to the panel's layout change event.
                 _ = dock_area.update(cx, |this, cx| {
                     if let Ok(tab_panel) = panel.view().downcast::<TabPanel>() {
-                        this.subscribe_panel(&tab_panel, cx);
+                        this.subscribe_panel(&tab_panel, window, cx);
                     } else if let Ok(stack_panel) = panel.view().downcast::<Self>() {
-                        this.subscribe_panel(&stack_panel, cx);
+                        this.subscribe_panel(&stack_panel, window, cx);
                     }
                 });
             }
@@ -221,7 +235,12 @@ impl StackPanel {
 
         self.panels.insert(ix, panel.clone());
         self.panel_group.update(cx, |view, cx| {
-            view.insert_child(Self::new_resizable_panel(panel.clone(), size), ix, cx)
+            view.insert_child(
+                Self::new_resizable_panel(panel.clone(), size),
+                ix,
+                window,
+                cx,
+            )
         });
 
         cx.emit(PanelEvent::LayoutChanged);
@@ -229,15 +248,20 @@ impl StackPanel {
     }
 
     /// Remove panel from the stack.
-    pub fn remove_panel(&mut self, panel: Arc<dyn PanelView>, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn remove_panel(
+        &mut self,
+        panel: Arc<dyn PanelView>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if let Some(ix) = self.index_of_panel(panel.clone()) {
             self.panels.remove(ix);
             self.panel_group.update(cx, |view, cx| {
-                view.remove_child(ix, cx);
+                view.remove_child(ix, window, cx);
             });
 
             cx.emit(PanelEvent::LayoutChanged);
-            self.remove_self_if_empty(cx);
+            self.remove_self_if_empty(window, cx);
         } else {
             println!("Panel not found in stack panel.");
         }
@@ -248,7 +272,8 @@ impl StackPanel {
         &mut self,
         old_panel: Arc<dyn PanelView>,
         new_panel: Entity<StackPanel>,
-        window: &mut Window, cx: &mut Context<Self>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
     ) {
         if let Some(ix) = self.index_of_panel(old_panel.clone()) {
             self.panels[ix] = Arc::new(new_panel.clone());
@@ -256,6 +281,7 @@ impl StackPanel {
                 view.replace_child(
                     Self::new_resizable_panel(Arc::new(new_panel.clone()), None),
                     ix,
+                    window,
                     cx,
                 );
             });
@@ -276,7 +302,7 @@ impl StackPanel {
         let view = cx.model().clone();
         if let Some(parent) = self.parent.as_ref() {
             _ = parent.update(cx, |parent, cx| {
-                parent.remove_panel(Arc::new(view.clone()), cx);
+                parent.remove_panel(Arc::new(view.clone()), window, cx);
             });
         }
 
@@ -349,14 +375,14 @@ impl StackPanel {
     pub(super) fn remove_all_panels(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.panels.clear();
         self.panel_group
-            .update(cx, |view, cx| view.remove_all_children(cx));
+            .update(cx, |view, cx| view.remove_all_children(window, cx));
     }
 
     /// Change the axis of the stack panel.
     pub(super) fn set_axis(&mut self, axis: Axis, window: &mut Window, cx: &mut Context<Self>) {
         self.axis = axis;
         self.panel_group
-            .update(cx, |view, cx| view.set_axis(axis, cx));
+            .update(cx, |view, cx| view.set_axis(axis, window, cx));
         cx.notify();
     }
 }

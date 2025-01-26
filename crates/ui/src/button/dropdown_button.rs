@@ -127,8 +127,8 @@ impl RenderOnce for DropdownButton {
                         .when_some(self.compact, |this, _| this.compact())
                         .when_some(self.size, |this, size| this.with_size(size))
                         .when_some(self.variant, |this, variant| this.with_variant(variant))
-                        .popup_menu_with_anchor(Corner::TopRight, move |this, cx| {
-                            popup_menu(this, cx)
+                        .popup_menu_with_anchor(Corner::TopRight, move |this, window, cx| {
+                            popup_menu(this, window, cx)
                         }),
                 )
             })

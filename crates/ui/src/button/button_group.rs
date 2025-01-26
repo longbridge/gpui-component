@@ -194,7 +194,7 @@ impl RenderOnce for ButtonGroup {
                             }
                         }
 
-                        on_click(&selected_ixs, cx);
+                        on_click(&selected_ixs, window, cx);
                     })
                 },
             )

@@ -245,7 +245,7 @@ impl RenderOnce for TitleBar {
                 .border_color(cx.theme().title_bar_border)
                 .bg(cx.theme().title_bar)
                 .when(window.is_fullscreen(), |this| this.pl(px(12.)))
-                .on_double_click(|_, cx| cx.zoom_window())
+                .on_double_click(|_, window, _| window.zoom_window())
                 .child(
                     h_flex()
                         .h_full()
