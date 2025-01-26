@@ -13,10 +13,10 @@
 use std::{cmp, ops::Range, rc::Rc};
 
 use gpui::{
-    div, point, px, size, AnyElement, App, AppContext, AvailableSpace, Axis, Bounds, ContentMask,
-    Context, Div, Element, ElementId, Entity, GlobalElementId, Hitbox, InteractiveElement,
-    IntoElement, IsZero as _, Pixels, Render, ScrollHandle, Size, Stateful,
-    StatefulInteractiveElement, StyleRefinement, Styled, Window,
+    div, point, px, size, AnyElement, App, AvailableSpace, Axis, Bounds, ContentMask, Context, Div,
+    Element, ElementId, Entity, GlobalElementId, Hitbox, InteractiveElement, IntoElement,
+    IsZero as _, Pixels, Render, ScrollHandle, Size, Stateful, StatefulInteractiveElement,
+    StyleRefinement, Styled, Window,
 };
 use smallvec::SmallVec;
 

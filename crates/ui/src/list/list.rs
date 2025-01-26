@@ -275,15 +275,11 @@ where
     }
 
     /// Get the query_input text
-    pub fn query(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<SharedString> {
+    pub fn query(&self, _: &mut Window, cx: &mut Context<Self>) -> Option<SharedString> {
         self.query_input.as_ref().map(|input| input.read(cx).text())
     }
 
-    fn render_scrollbar(
-        &self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Option<impl IntoElement> {
+    fn render_scrollbar(&self, _: &mut Window, cx: &mut Context<Self>) -> Option<impl IntoElement> {
         if !self.scrollbar_visible {
             return None;
         }
@@ -296,7 +292,7 @@ where
     }
 
     /// Scroll to the item at the given index.
-    pub fn scroll_to_item(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn scroll_to_item(&mut self, ix: usize, _: &mut Window, cx: &mut Context<Self>) {
         self.vertical_scroll_handle
             .scroll_to_item(ix, ScrollStrategy::Top);
         cx.notify();
@@ -334,7 +330,7 @@ where
                 self._search_task = cx.spawn_in(window, |this, mut window| async move {
                     search.await;
 
-                    _ = this.update_in(&mut window, |this, window, _| {
+                    _ = this.update_in(&mut window, |this, _, _| {
                         this.vertical_scroll_handle
                             .scroll_to_item(0, ScrollStrategy::Top);
                         this.last_query = Some(text);
@@ -497,7 +493,7 @@ where
                 )
                 .on_mouse_down(
                     MouseButton::Right,
-                    cx.listener(move |this, _, window, cx| {
+                    cx.listener(move |this, _, _, cx| {
                         this.right_clicked_index = Some(ix);
                         cx.notify();
                     }),

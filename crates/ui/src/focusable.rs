@@ -1,4 +1,4 @@
-use gpui::{App, AppContext, FocusHandle, Window};
+use gpui::{App, FocusHandle, Window};
 
 /// A trait for views that can cycle focus between its children.
 ///

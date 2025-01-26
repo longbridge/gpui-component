@@ -450,19 +450,19 @@ impl TextInput {
     }
 
     /// Set the disabled state of the input field.
-    pub fn set_disabled(&mut self, disabled: bool, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn set_disabled(&mut self, disabled: bool, _: &mut Window, cx: &mut Context<Self>) {
         self.disabled = disabled;
         cx.notify();
     }
 
     /// Set the masked state of the input field.
-    pub fn set_masked(&mut self, masked: bool, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn set_masked(&mut self, masked: bool, _: &mut Window, cx: &mut Context<Self>) {
         self.masked = masked;
         cx.notify();
     }
 
     /// Set the prefix element of the input field.
-    pub fn set_prefix<F, E>(&mut self, builder: F, window: &mut Window, cx: &mut Context<Self>)
+    pub fn set_prefix<F, E>(&mut self, builder: F, _: &mut Window, cx: &mut Context<Self>)
     where
         F: Fn(&Window, &Context<Self>) -> E + 'static,
         E: IntoElement,
@@ -474,7 +474,7 @@ impl TextInput {
     }
 
     /// Set the suffix element of the input field.
-    pub fn set_suffix<F, E>(&mut self, builder: F, window: &mut Window, cx: &mut Context<Self>)
+    pub fn set_suffix<F, E>(&mut self, builder: F, _: &mut Window, cx: &mut Context<Self>)
     where
         F: Fn(&Window, &Context<Self>) -> E + 'static,
         E: IntoElement,
@@ -556,7 +556,7 @@ impl TextInput {
     }
 
     /// Set true to show indicator at the input right.
-    pub fn set_loading(&mut self, loading: bool, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn set_loading(&mut self, loading: bool, _: &mut Window, cx: &mut Context<Self>) {
         self.loading = loading;
         cx.notify();
     }
@@ -571,7 +571,7 @@ impl TextInput {
     }
 
     /// Focus the input field.
-    pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn focus(&self, window: &mut Window, _: &mut Context<Self>) {
         self.focus_handle.focus(window);
     }
 
@@ -856,12 +856,12 @@ impl TextInput {
         &mut self,
         _: &ShowCharacterPalette,
         window: &mut Window,
-        cx: &mut Context<Self>,
+        _: &mut Context<Self>,
     ) {
         window.show_character_palette();
     }
 
-    fn copy(&mut self, _: &Copy, window: &mut Window, cx: &mut Context<Self>) {
+    fn copy(&mut self, _: &Copy, _: &mut Window, cx: &mut Context<Self>) {
         if self.selected_range.is_empty() {
             return;
         }
@@ -943,7 +943,7 @@ impl TextInput {
     /// The offset is the UTF-8 offset.
     ///
     /// Ensure the offset use self.next_boundary or self.previous_boundary to get the correct offset.
-    fn move_to(&mut self, offset: usize, window: &mut Window, cx: &mut Context<Self>) {
+    fn move_to(&mut self, offset: usize, _: &mut Window, cx: &mut Context<Self>) {
         self.selected_range = offset..offset;
         self.pause_blink_cursor(cx);
         self.update_preferred_x_offset(cx);
@@ -1151,7 +1151,7 @@ impl TextInput {
     /// The offset is the UTF-8 offset.
     ///
     /// Ensure the offset use self.next_boundary or self.previous_boundary to get the correct offset.
-    fn select_to(&mut self, offset: usize, window: &mut Window, cx: &mut Context<Self>) {
+    fn select_to(&mut self, offset: usize, _: &mut Window, cx: &mut Context<Self>) {
         if self.selection_reversed {
             self.selected_range.start = offset
         } else {
@@ -1219,7 +1219,7 @@ impl TextInput {
         cx.notify()
     }
 
-    fn unselect(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    fn unselect(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         let offset = self.next_boundary(self.cursor_offset());
         self.selected_range = offset..offset;
         cx.notify()
@@ -1283,7 +1283,7 @@ impl TextInput {
         self.focus_handle.is_focused(window) && self.blink_cursor.read(cx).visible()
     }
 
-    fn on_focus(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    fn on_focus(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         self.blink_cursor.update(cx, |cursor, cx| {
             cursor.start(cx);
         });
@@ -1307,7 +1307,7 @@ impl TextInput {
     fn on_key_down_for_blink_cursor(
         &mut self,
         _: &KeyDownEvent,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) {
         self.pause_blink_cursor(cx)

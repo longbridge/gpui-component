@@ -10,13 +10,13 @@ pub struct Tooltip {
 }
 
 impl Tooltip {
-    pub fn new(text: impl Into<SharedString>, window: &mut Window, cx: &mut App) -> AnyView {
+    pub fn new(text: impl Into<SharedString>, _: &mut Window, cx: &mut App) -> AnyView {
         cx.new(|_| Self { text: text.into() }).into()
     }
 }
 
 impl Render for Tooltip {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div().child(
             // Wrap in a child, to ensure the left margin is applied to the tooltip
             div()

@@ -506,7 +506,7 @@ impl Tiles {
                         }
                     }),
                 )
-                .on_drag(DragResizing(entity_id), |drag, _, window, cx| {
+                .on_drag(DragResizing(entity_id), |drag, _, _, cx| {
                     cx.stop_propagation();
                     cx.new(|_| drag.clone())
                 })
@@ -562,7 +562,7 @@ impl Tiles {
                         }
                     }),
                 )
-                .on_drag(DragResizing(entity_id), |drag, _, window, cx| {
+                .on_drag(DragResizing(entity_id), |drag, _, _, cx| {
                     cx.stop_propagation();
                     cx.new(|_| drag.clone())
                 })
@@ -620,7 +620,7 @@ impl Tiles {
                         }
                     }),
                 )
-                .on_drag(DragResizing(entity_id), |drag, _, window, cx| {
+                .on_drag(DragResizing(entity_id), |drag, _, _, cx| {
                     cx.stop_propagation();
                     cx.new(|_| drag.clone())
                 })
@@ -659,7 +659,7 @@ impl Tiles {
     /// Produce the drag-bar element for the given panel item
     fn render_drag_bar(
         &mut self,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
         entity_id: EntityId,
         item: &TileItem,
@@ -691,7 +691,7 @@ impl Tiles {
                         }
                     }),
                 )
-                .on_drag(DragMoving(entity_id), |drag, _, window, cx| {
+                .on_drag(DragMoving(entity_id), |drag, _, _, cx| {
                     cx.stop_propagation();
                     cx.new(|_| drag.clone())
                 })
@@ -758,7 +758,7 @@ impl Tiles {
     }
 
     /// Handle the mouse up event to finalize drag or resize operations
-    fn on_mouse_up(&mut self, window: &mut Window, cx: &mut Context<'_, Tiles>) {
+    fn on_mouse_up(&mut self, _: &mut Window, cx: &mut Context<'_, Tiles>) {
         // Check if a drag or resize was active
         if self.dragging_index.is_some()
             || self.resizing_index.is_some()
@@ -872,7 +872,7 @@ impl Render for Tiles {
                     )
                     .child({
                         canvas(
-                            move |bounds, window, cx| view.update(cx, |r, _| r.bounds = bounds),
+                            move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds),
                             |_, _, _, _| {},
                         )
                         .absolute()

@@ -1,23 +1,18 @@
-use std::cell::Cell;
-use std::ops::Deref;
-use std::rc::Rc;
-
-use gpui::{
-    actions, div, prelude::FluentBuilder, px, Action, AppContext, DismissEvent, EventEmitter,
-    FocusHandle, InteractiveElement, IntoElement, KeyBinding, ParentElement, Pixels, Render,
-    SharedString, VisualContext as _, Window,
-};
-use gpui::{
-    anchored, canvas, rems, AnyElement, App, Bounds, Context, Corner, Edges, Entity, Focusable,
-    Keystroke, ScrollHandle, StatefulInteractiveElement, Styled, WeakEntity,
-};
-
 use crate::scroll::{Scrollbar, ScrollbarState};
 use crate::StyledExt;
 use crate::{
     button::Button, h_flex, list::ListItem, popover::Popover, v_flex, ActiveTheme, Icon, IconName,
     Selectable, Sizable as _,
 };
+use gpui::{
+    actions, anchored, canvas, div, prelude::FluentBuilder, px, rems, Action, AnyElement, App,
+    AppContext, Bounds, Context, Corner, DismissEvent, Edges, Entity, EventEmitter, FocusHandle,
+    Focusable, InteractiveElement, IntoElement, KeyBinding, Keystroke, ParentElement, Pixels,
+    Render, ScrollHandle, SharedString, StatefulInteractiveElement, Styled, WeakEntity, Window,
+};
+use std::cell::Cell;
+use std::ops::Deref;
+use std::rc::Rc;
 
 actions!(menu, [Confirm, Dismiss, SelectNext, SelectPrev]);
 
@@ -400,7 +395,7 @@ impl PopupMenu {
         }
     }
 
-    fn select_next(&mut self, _: &SelectNext, window: &mut Window, cx: &mut Context<Self>) {
+    fn select_next(&mut self, _: &SelectNext, _: &mut Window, cx: &mut Context<Self>) {
         let count = self.clickable_menu_items().count();
         if count > 0 {
             let last_ix = count.saturating_sub(1);
@@ -414,7 +409,7 @@ impl PopupMenu {
         }
     }
 
-    fn select_prev(&mut self, _: &SelectPrev, window: &mut Window, cx: &mut Context<Self>) {
+    fn select_prev(&mut self, _: &SelectPrev, _: &mut Window, cx: &mut Context<Self>) {
         let count = self.clickable_menu_items().count();
         if count > 0 {
             let last_ix = count.saturating_sub(1);
@@ -434,19 +429,22 @@ impl PopupMenu {
         }
     }
 
-    fn dismiss(&mut self, _: &Dismiss, window: &mut Window, cx: &mut Context<Self>) {
+    fn dismiss(&mut self, _: &Dismiss, _window: &mut Window, cx: &mut Context<Self>) {
         if self.active_submenu().is_some() {
             return;
         }
 
         cx.emit(DismissEvent);
+
+        let Some(parent_menu) = self.parent_menu.clone() else {
+            return;
+        };
+
         // Dismiss parent menu, when this menu is dismissed
-        if let Some(parent_menu) = self.parent_menu.clone().and_then(|menu| menu.upgrade()) {
-            parent_menu.update(cx, |view, cx| {
-                view.hovered_menu_ix = None;
-                view.dismiss(&Dismiss, window, cx);
-            })
-        }
+        _ = parent_menu.update(cx, |view, cx| {
+            view.hovered_menu_ix = None;
+            view.dismiss(&Dismiss, _window, cx);
+        });
     }
 
     fn render_keybinding(
@@ -555,9 +553,7 @@ impl Render for PopupMenu {
                             .min_w(rems(8.))
                             .child({
                                 canvas(
-                                    move |bounds, window, cx| {
-                                        view.update(cx, |r, _| r.bounds = bounds)
-                                    },
+                                    move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds),
                                     |_, _, _, _| {},
                                 )
                                 .absolute()
@@ -579,12 +575,10 @@ impl Render for PopupMenu {
                                             .px_1()
                                             .rounded_md()
                                             .items_center()
-                                            .on_mouse_enter(cx.listener(
-                                                move |this, _, window, cx| {
-                                                    this.hovered_menu_ix = Some(ix);
-                                                    cx.notify();
-                                                },
-                                            ));
+                                            .on_mouse_enter(cx.listener(move |this, _, _, cx| {
+                                                this.hovered_menu_ix = Some(ix);
+                                                cx.notify();
+                                            }));
 
                                         match item {
                                             PopupMenuItem::Separator => {

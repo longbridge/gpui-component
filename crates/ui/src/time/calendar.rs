@@ -162,7 +162,7 @@ pub struct Calendar {
 }
 
 impl Calendar {
-    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
         let today = Local::now().naive_local().date();
         Self {
             focus_handle: cx.focus_handle(),
@@ -182,7 +182,7 @@ impl Calendar {
     /// Set the date of the calendar.
     ///
     /// When you set a range date, the mode will be automatically set to `Mode::Range`.
-    pub fn set_date(&mut self, date: impl Into<Date>, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn set_date(&mut self, date: impl Into<Date>, _: &mut Window, cx: &mut Context<Self>) {
         self.date = date.into();
 
         match self.date {
@@ -211,7 +211,7 @@ impl Calendar {
         self
     }
 
-    pub fn set_size(&mut self, size: Size, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn set_size(&mut self, size: Size, _: &mut Window, cx: &mut Context<Self>) {
         self.size = size;
         cx.notify();
     }
@@ -219,7 +219,7 @@ impl Calendar {
     pub fn set_number_of_months(
         &mut self,
         number_of_months: usize,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) {
         self.number_of_months = number_of_months;
@@ -276,7 +276,7 @@ impl Calendar {
         self.year_page < self.years.len() as i32 - 1
     }
 
-    fn prev_year_page(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
+    fn prev_year_page(&mut self, _: &ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
         if !self.has_prev_year_page() {
             return;
         }
@@ -285,7 +285,7 @@ impl Calendar {
         cx.notify()
     }
 
-    fn next_year_page(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
+    fn next_year_page(&mut self, _: &ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
         if !self.has_next_year_page() {
             return;
         }
@@ -294,7 +294,7 @@ impl Calendar {
         cx.notify()
     }
 
-    fn prev_month(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
+    fn prev_month(&mut self, _: &ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
         self.current_month = if self.current_month == 1 {
             12
         } else {
@@ -308,7 +308,7 @@ impl Calendar {
         cx.notify()
     }
 
-    fn next_month(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
+    fn next_month(&mut self, _: &ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
         self.current_month = if self.current_month == 12 {
             1
         } else {
@@ -345,7 +345,7 @@ impl Calendar {
     fn render_week(
         &self,
         week: impl Into<SharedString>,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         h_flex()
@@ -360,6 +360,7 @@ impl Calendar {
             .child(week.into())
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn item_button(
         &self,
         id: impl Into<ElementId>,
@@ -367,7 +368,7 @@ impl Calendar {
         active: bool,
         secondary_active: bool,
         muted: bool,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement + Styled + StatefulInteractiveElement {
         h_flex()
@@ -459,7 +460,7 @@ impl Calendar {
         }))
     }
 
-    fn set_view_mode(&mut self, mode: ViewMode, window: &mut Window, cx: &mut Context<Self>) {
+    fn set_view_mode(&mut self, mode: ViewMode, _: &mut Window, cx: &mut Context<Self>) {
         self.view_mode = mode;
         cx.notify();
     }
@@ -484,7 +485,7 @@ impl Calendar {
         .collect()
     }
 
-    fn render_header(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_header(&self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let current_year = self.current_year;
         let disabled = self.view_mode.is_month();
         let multiple_months = self.number_of_months > 1;

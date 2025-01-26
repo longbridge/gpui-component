@@ -82,7 +82,7 @@ impl OtpInput {
     pub fn set_value(
         &mut self,
         value: impl Into<SharedString>,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) {
         self.value = value.into();
@@ -101,12 +101,12 @@ impl OtpInput {
     }
 
     /// Set masked to true use masked input.
-    pub fn set_masked(&mut self, masked: bool, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn set_masked(&mut self, masked: bool, _: &mut Window, cx: &mut Context<Self>) {
         self.masked = masked;
         cx.notify();
     }
 
-    pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn focus(&self, window: &mut Window, _: &mut Context<Self>) {
         self.focus_handle.focus(window);
     }
 
@@ -114,7 +114,7 @@ impl OtpInput {
         &mut self,
         _: &MouseDownEvent,
         window: &mut Window,
-        cx: &mut Context<Self>,
+        _: &mut Context<Self>,
     ) {
         window.focus(&self.focus_handle);
     }
@@ -160,14 +160,14 @@ impl OtpInput {
         cx.notify()
     }
 
-    fn on_focus(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    fn on_focus(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         self.blink_cursor.update(cx, |cursor, cx| {
             cursor.start(cx);
         });
         cx.emit(InputEvent::Focus);
     }
 
-    fn on_blur(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    fn on_blur(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         self.blink_cursor.update(cx, |cursor, cx| {
             cursor.stop(cx);
         });

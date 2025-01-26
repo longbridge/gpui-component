@@ -5,7 +5,7 @@ use crate::{
     v_flex, ActiveTheme, Collapsible, Icon, IconName, Side, Sizable, StyledExt,
 };
 use gpui::{
-    div, prelude::FluentBuilder, px, AnyElement, App, AppContext, ClickEvent, Entity, EntityId,
+    div, prelude::FluentBuilder, px, AnyElement, App, ClickEvent, Entity, EntityId,
     InteractiveElement as _, IntoElement, ParentElement, Pixels, Render, RenderOnce, Styled,
     Window,
 };
@@ -176,7 +176,7 @@ impl RenderOnce for SidebarToggleButton {
 }
 
 impl<E: Collapsible + IntoElement> RenderOnce for Sidebar<E> {
-    fn render(mut self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(mut self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let is_collapsed = self.is_collapsed;
         v_flex()
             .id("sidebar")

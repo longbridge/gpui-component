@@ -89,12 +89,7 @@ impl Slider {
     }
 
     /// Set the value of the slider.
-    pub fn set_value(
-        &mut self,
-        value: f32,
-        window: &mut gpui::Window,
-        cx: &mut gpui::Context<Self>,
-    ) {
+    pub fn set_value(&mut self, value: f32, _: &mut gpui::Window, cx: &mut gpui::Context<Self>) {
         self.value = value;
         self.update_thumb_pos();
         cx.notify();
@@ -113,7 +108,7 @@ impl Slider {
     fn update_value_by_position(
         &mut self,
         position: Point<Pixels>,
-        window: &mut gpui::Window,
+        _: &mut gpui::Window,
         cx: &mut gpui::Context<Self>,
     ) {
         let bounds = self.bounds;
@@ -159,7 +154,7 @@ impl Slider {
     fn render_thumb(
         &self,
         thumb_bar_size: Pixels,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl gpui::IntoElement {
         let value = self.value;
@@ -167,7 +162,7 @@ impl Slider {
 
         div()
             .id("slider-thumb")
-            .on_drag(DragThumb(entity_id), |drag, _, window, cx| {
+            .on_drag(DragThumb(entity_id), |drag, _, _, cx| {
                 cx.stop_propagation();
                 cx.new(|_| drag.clone())
             })
@@ -267,7 +262,7 @@ impl Render for Slider {
                     .child({
                         let view = cx.model().clone();
                         canvas(
-                            move |bounds, window, cx| view.update(cx, |r, _| r.bounds = bounds),
+                            move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds),
                             |_, _, _, _| {},
                         )
                         .absolute()

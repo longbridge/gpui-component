@@ -2,10 +2,9 @@ use std::{cell::Cell, rc::Rc};
 
 use super::{Scrollbar, ScrollbarAxis, ScrollbarState};
 use gpui::{
-    canvas, div, relative, AnyElement, App, AppContext, Context, Div, Element, ElementId, EntityId,
-    GlobalElementId, InteractiveElement, IntoElement, ParentElement, Pixels, Position,
-    ScrollHandle, SharedString, Size, Stateful, StatefulInteractiveElement, Style, StyleRefinement,
-    Styled, Window,
+    canvas, div, relative, AnyElement, App, Div, Element, ElementId, EntityId, GlobalElementId,
+    InteractiveElement, IntoElement, ParentElement, Pixels, Position, ScrollHandle, SharedString,
+    Size, Stateful, StatefulInteractiveElement, Style, StyleRefinement, Styled, Window,
 };
 
 /// A scroll view is a container that allows the user to scroll through a large amount of content.

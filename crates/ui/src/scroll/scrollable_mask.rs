@@ -1,7 +1,7 @@
 use gpui::{
-    px, relative, App, AppContext, Axis, Bounds, ContentMask, Corners, Edges, Element, ElementId,
-    EntityId, GlobalElementId, Hitbox, Hsla, IntoElement, IsZero as _, LayoutId, PaintQuad, Pixels,
-    Point, Position, ScrollHandle, ScrollWheelEvent, Style, Window,
+    px, relative, App, Axis, Bounds, ContentMask, Corners, Edges, Element, ElementId, EntityId,
+    GlobalElementId, Hitbox, Hsla, IntoElement, IsZero as _, LayoutId, PaintQuad, Pixels, Point,
+    Position, ScrollHandle, ScrollWheelEvent, Style, Window,
 };
 
 use crate::AxisExt;
@@ -76,7 +76,7 @@ impl Element for ScrollableMask {
         bounds: Bounds<Pixels>,
         _: &mut Self::RequestLayoutState,
         window: &mut Window,
-        cx: &mut App,
+        _: &mut App,
     ) -> Self::PrepaintState {
         // Move y to bounds height to cover the parent view.
         let cover_bounds = Bounds {
@@ -97,7 +97,7 @@ impl Element for ScrollableMask {
         _: &mut Self::RequestLayoutState,
         hitbox: &mut Self::PrepaintState,
         window: &mut Window,
-        cx: &mut App,
+        _: &mut App,
     ) {
         let line_height = window.line_height();
         let bounds = hitbox.bounds;

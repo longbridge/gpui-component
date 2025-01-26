@@ -93,7 +93,7 @@ pub trait DropdownDelegate: Sized {
         &mut self,
         _query: &str,
         _window: &mut Window,
-        cx: &mut Context<Dropdown<Self>>,
+        _: &mut Context<Dropdown<Self>>,
     ) -> Task<()> {
         Task::ready(())
     }
@@ -138,7 +138,7 @@ where
     fn render_item(
         &self,
         ix: usize,
-        window: &mut gpui::Window,
+        _: &mut gpui::Window,
         cx: &mut gpui::Context<List<Self>>,
     ) -> Option<Self::Item> {
         let selected = self
@@ -206,7 +206,7 @@ where
     fn set_selected_index(
         &mut self,
         ix: Option<usize>,
-        window: &mut Window,
+        _: &mut Window,
         _: &mut Context<List<Self>>,
     ) {
         self.selected_index = ix;
@@ -302,7 +302,7 @@ impl<T: DropdownItem + Clone> DropdownDelegate for SearchableVec<T> {
         &mut self,
         query: &str,
         _window: &mut Window,
-        cx: &mut Context<Dropdown<Self>>,
+        _: &mut Context<Dropdown<Self>>,
     ) -> Task<()> {
         self.matched_items = self
             .items
@@ -465,7 +465,7 @@ where
         self.list.read(cx).selected_index()
     }
 
-    fn update_selected_value(&mut self, window: &Window, cx: &App) {
+    fn update_selected_value(&mut self, _: &Window, cx: &App) {
         self.selected_value = self
             .selected_index(cx)
             .and_then(|ix| self.list.read(cx).delegate().delegate.get(ix))
@@ -476,7 +476,7 @@ where
         self.selected_value.as_ref()
     }
 
-    pub fn focus(&self, window: &mut Window, cx: &mut App) {
+    pub fn focus(&self, window: &mut Window, _: &mut App) {
         self.focus_handle.focus(window);
     }
 
@@ -530,7 +530,7 @@ where
         cx.notify();
     }
 
-    fn escape(&mut self, _: &Escape, window: &mut Window, cx: &mut Context<Self>) {
+    fn escape(&mut self, _: &Escape, _: &mut Window, cx: &mut Context<Self>) {
         // Propagate the event to the parent view, for example to the Modal to support ESC to close.
         cx.propagate();
 
@@ -543,7 +543,7 @@ where
         cx.emit(DropdownEvent::Confirm(None));
     }
 
-    fn display_title(&self, window: &Window, cx: &App) -> impl IntoElement {
+    fn display_title(&self, _: &Window, cx: &App) -> impl IntoElement {
         let title = if let Some(selected_index) = &self.selected_index(cx) {
             let title = self
                 .list
@@ -702,7 +702,7 @@ where
                     )
                     .child(
                         canvas(
-                            move |bounds, window, cx| view.update(cx, |r, _| r.bounds = bounds),
+                            move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds),
                             |_, _, _, _| {},
                         )
                         .absolute()
@@ -728,7 +728,7 @@ where
                                         .border_color(cx.theme().border)
                                         .rounded(px(cx.theme().radius))
                                         .shadow_md()
-                                        .on_mouse_down_out(|_, window, cx| {
+                                        .on_mouse_down_out(|_, _, cx| {
                                             cx.dispatch_action(&Escape);
                                         })
                                         .child(self.list.clone()),

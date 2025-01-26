@@ -2,9 +2,9 @@ use std::rc::Rc;
 
 use crate::{h_flex, ActiveTheme, Icon, IconName, InteractiveElementExt as _, Sizable as _};
 use gpui::{
-    div, prelude::FluentBuilder as _, px, relative, AnyElement, App, AppContext, ClickEvent, Div,
-    Element, Hsla, InteractiveElement as _, IntoElement, MouseButton, ParentElement, Pixels,
-    RenderOnce, Stateful, StatefulInteractiveElement as _, Style, Styled, TitlebarOptions, Window,
+    div, prelude::FluentBuilder as _, px, relative, AnyElement, App, ClickEvent, Div, Element,
+    Hsla, InteractiveElement as _, IntoElement, MouseButton, ParentElement, Pixels, RenderOnce,
+    Stateful, StatefulInteractiveElement as _, Style, Styled, TitlebarOptions, Window,
 };
 
 pub const TITLE_BAR_HEIGHT: Pixels = px(35.);
@@ -139,7 +139,7 @@ impl ControlIcon {
 }
 
 impl RenderOnce for ControlIcon {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let fg = self.fg(cx);
         let hover_fg = self.hover_fg(cx);
         let hover_bg = self.hover_bg(cx);
@@ -190,7 +190,7 @@ struct WindowControls {
 }
 
 impl RenderOnce for WindowControls {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, _: &mut App) -> impl IntoElement {
         if cfg!(target_os = "macos") {
             return div().id("window-controls");
         }

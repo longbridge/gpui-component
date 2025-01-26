@@ -1,7 +1,7 @@
 use gpui::{
     actions, px, App, AppContext as _, Context, Entity, EventEmitter, FocusHandle, Focusable,
     InteractiveElement, IntoElement, KeyBinding, ParentElement, Pixels, Render, SharedString,
-    Styled, Subscription, VisualContext, Window,
+    Styled, Subscription, Window,
 };
 use regex::Regex;
 
@@ -57,7 +57,7 @@ impl NumberInput {
     pub fn placeholder(
         self,
         placeholder: impl Into<SharedString>,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
         self.input
@@ -81,12 +81,7 @@ impl NumberInput {
         });
     }
 
-    pub fn pattern(
-        self,
-        pattern: regex::Regex,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Self {
+    pub fn pattern(self, pattern: regex::Regex, _: &mut Window, cx: &mut Context<Self>) -> Self {
         self.input.update(cx, |input, _| input.set_pattern(pattern));
         self
     }
@@ -122,7 +117,7 @@ impl NumberInput {
         self.on_step(StepAction::Decrement, window, cx);
     }
 
-    fn on_step(&mut self, action: StepAction, window: &mut Window, cx: &mut Context<Self>) {
+    fn on_step(&mut self, action: StepAction, _: &mut Window, cx: &mut Context<Self>) {
         if self.input.read(cx).disabled {
             return;
         }

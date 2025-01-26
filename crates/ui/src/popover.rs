@@ -1,9 +1,9 @@
 use gpui::{
-    actions, anchored, deferred, div, prelude::FluentBuilder as _, px, AnyElement, App, AppContext,
-    Bounds, Context, Corner, DismissEvent, DispatchPhase, Element, ElementId, Entity, EventEmitter,
+    actions, anchored, deferred, div, prelude::FluentBuilder as _, px, AnyElement, App, Bounds,
+    Context, Corner, DismissEvent, DispatchPhase, Element, ElementId, Entity, EventEmitter,
     FocusHandle, Focusable, GlobalElementId, Hitbox, InteractiveElement as _, IntoElement,
     KeyBinding, LayoutId, ManagedView, MouseButton, MouseDownEvent, ParentElement, Pixels, Point,
-    Render, Style, StyleRefinement, Styled, VisualContext, Window,
+    Render, Style, StyleRefinement, Styled, Window,
 };
 use std::{cell::RefCell, rc::Rc};
 
@@ -24,7 +24,7 @@ pub struct PopoverContent {
 }
 
 impl PopoverContent {
-    pub fn new<B>(window: &mut Window, cx: &mut App, content: B) -> Self
+    pub fn new<B>(_: &mut Window, cx: &mut App, content: B) -> Self
     where
         B: Fn(&mut Window, &mut Context<Self>) -> AnyElement + 'static,
     {
@@ -55,7 +55,7 @@ impl Render for PopoverContent {
         div()
             .track_focus(&self.focus_handle)
             .key_context(CONTEXT)
-            .on_action(cx.listener(|_, _: &Escape, window, cx| cx.emit(DismissEvent)))
+            .on_action(cx.listener(|_, _: &Escape, _, cx| cx.emit(DismissEvent)))
             .p_2()
             .when_some(self.max_width, |this, v| this.max_w(v))
             .child(self.content.clone()(window, cx))
@@ -106,7 +106,7 @@ where
     where
         T: Selectable + IntoElement + 'static,
     {
-        self.trigger = Some(Box::new(|is_open, window, _| {
+        self.trigger = Some(Box::new(|is_open, _, _| {
             trigger.selected(is_open).into_any_element()
         }));
         self
@@ -280,7 +280,7 @@ impl<M: ManagedView> Element for Popover<M> {
                                     })
                                     .child(content_view.clone())
                                     .when(!no_style, |this| {
-                                        this.on_mouse_down_out(move |_, window, cx| {
+                                        this.on_mouse_down_out(move |_, window, _| {
                                             // Update the element_state.content_view to `None`,
                                             // so that the `paint`` method will not paint it.
                                             *content_view_mut.borrow_mut() = None;

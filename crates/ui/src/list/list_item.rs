@@ -1,6 +1,6 @@
 use crate::{h_flex, ActiveTheme, Disableable, Icon, IconName, Selectable, Sizable as _};
 use gpui::{
-    div, prelude::FluentBuilder as _, AnyElement, App, AppContext, ClickEvent, Div, ElementId,
+    div, prelude::FluentBuilder as _, AnyElement, App, ClickEvent, Div, ElementId,
     InteractiveElement, IntoElement, MouseButton, MouseMoveEvent, ParentElement, RenderOnce,
     Stateful, StatefulInteractiveElement as _, Styled, Window,
 };
@@ -132,7 +132,7 @@ impl RenderOnce for ListItem {
             .when(!self.disabled, |this| {
                 this.when_some(self.on_click, |this, on_click| {
                     this.cursor_pointer()
-                        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+                        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
                             cx.stop_propagation();
                         })
                         .on_click(on_click)

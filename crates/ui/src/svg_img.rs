@@ -5,7 +5,7 @@ use std::{
 };
 
 use gpui::{
-    px, size, App, AppContext, Asset, Bounds, Element, Hitbox, ImageCacheError, InteractiveElement,
+    px, size, App, Asset, Bounds, Element, Hitbox, ImageCacheError, InteractiveElement,
     Interactivity, IntoElement, IsZero, Pixels, RenderImage, SharedString, Size, StyleRefinement,
     Styled, Window,
 };

@@ -1,8 +1,8 @@
 use crate::{ActiveTheme, Selectable};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    div, px, AnyElement, App, AppContext, Div, ElementId, InteractiveElement, IntoElement,
-    ParentElement as _, RenderOnce, Stateful, StatefulInteractiveElement, Styled, Window,
+    div, px, AnyElement, App, Div, ElementId, InteractiveElement, IntoElement, ParentElement as _,
+    RenderOnce, Stateful, StatefulInteractiveElement, Styled, Window,
 };
 
 #[derive(IntoElement)]
@@ -75,7 +75,7 @@ impl Styled for Tab {
 }
 
 impl RenderOnce for Tab {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let (text_color, bg_color) = match (self.selected, self.disabled) {
             (true, false) => (cx.theme().tab_active_foreground, cx.theme().tab_active),
             (false, false) => (cx.theme().muted_foreground, cx.theme().tab),

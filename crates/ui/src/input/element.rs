@@ -1,8 +1,7 @@
 use gpui::{
-    fill, point, px, relative, size, App, AppContext, Bounds, Corners, Element, ElementId,
-    ElementInputHandler, Entity, GlobalElementId, IntoElement, LayoutId, MouseButton,
-    MouseMoveEvent, PaintQuad, Path, Pixels, Point, Style, TextRun, UnderlineStyle, Window,
-    WrappedLine,
+    fill, point, px, relative, size, App, Bounds, Corners, Element, ElementId, ElementInputHandler,
+    Entity, GlobalElementId, IntoElement, LayoutId, MouseButton, MouseMoveEvent, PaintQuad, Path,
+    Pixels, Point, Style, TextRun, UnderlineStyle, Window, WrappedLine,
 };
 use smallvec::SmallVec;
 
@@ -22,7 +21,7 @@ impl TextElement {
         Self { input }
     }
 
-    fn paint_mouse_listeners(&mut self, window: &mut Window, cx: &mut App) {
+    fn paint_mouse_listeners(&mut self, window: &mut Window, _: &mut App) {
         window.on_mouse_event({
             let input = self.input.clone();
 
@@ -164,7 +163,7 @@ impl TextElement {
         lines: &[WrappedLine],
         line_height: Pixels,
         bounds: &mut Bounds<Pixels>,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut App,
     ) -> Option<Path<Pixels>> {
         let input = self.input.read(cx);

@@ -1,7 +1,7 @@
 use crate::{theme::ActiveTheme as _, Sizable, Size};
 use gpui::{
-    div, prelude::FluentBuilder as _, relative, transparent_black, AnyElement, App, AppContext,
-    Div, Hsla, InteractiveElement as _, IntoElement, ParentElement, RenderOnce, Styled, Window,
+    div, prelude::FluentBuilder as _, relative, transparent_black, AnyElement, App, Div, Hsla,
+    InteractiveElement as _, IntoElement, ParentElement, RenderOnce, Styled, Window,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

@@ -635,7 +635,7 @@ impl Element for Scrollbar {
                 let view_id = self.view_id;
                 let scroll_handle = self.scroll_handle.clone();
 
-                move |event: &ScrollWheelEvent, phase, window, cx| {
+                move |event: &ScrollWheelEvent, phase, _, cx| {
                     if phase.bubble() && hitbox_bounds.contains(&event.position) {
                         if scroll_handle.offset() != state.get().last_scroll_offset {
                             state.set(
@@ -657,7 +657,7 @@ impl Element for Scrollbar {
                     let view_id = self.view_id;
                     let scroll_handle = self.scroll_handle.clone();
 
-                    move |event: &MouseDownEvent, phase, window, cx| {
+                    move |event: &MouseDownEvent, phase, _, cx| {
                         if phase.bubble() && bounds.contains(&event.position) {
                             cx.stop_propagation();
 
@@ -705,7 +705,7 @@ impl Element for Scrollbar {
                 let state = self.state.clone();
                 let view_id = self.view_id;
 
-                move |event: &MouseMoveEvent, _, window, cx| {
+                move |event: &MouseMoveEvent, _, _, cx| {
                     // Update hovered state for scrollbar
                     if bounds.contains(&event.position) {
                         if state.get().hovered_axis != Some(axis) {
@@ -777,7 +777,7 @@ impl Element for Scrollbar {
                 let view_id = self.view_id;
                 let state = self.state.clone();
 
-                move |_event: &MouseUpEvent, phase, window, cx| {
+                move |_event: &MouseUpEvent, phase, _, cx| {
                     if phase.bubble() {
                         state.set(state.get().with_unset_drag_pos());
                         cx.notify(view_id);

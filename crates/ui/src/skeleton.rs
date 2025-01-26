@@ -32,7 +32,7 @@ impl Styled for Skeleton {
 }
 
 impl RenderOnce for Skeleton {
-    fn render(self, window: &mut gpui::Window, cx: &mut gpui::App) -> impl IntoElement {
+    fn render(self, _: &mut gpui::Window, cx: &mut gpui::App) -> impl IntoElement {
         let color = if self.secondary {
             cx.theme().skeleton.opacity(0.5)
         } else {

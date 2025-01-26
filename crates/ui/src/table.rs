@@ -92,7 +92,7 @@ impl Render for DragCol {
 #[derive(Clone)]
 pub struct ResizeCol(pub (EntityId, usize));
 impl Render for ResizeCol {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         Empty
     }
 }
@@ -387,7 +387,7 @@ impl<D> Table<D>
 where
     D: TableDelegate,
 {
-    pub fn new(delegate: D, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(delegate: D, _: &mut Window, cx: &mut Context<Self>) -> Self {
         let mut this = Self {
             focus_handle: cx.focus_handle(),
             delegate,
@@ -555,7 +555,7 @@ where
         &mut self,
         ev: &MouseDownEvent,
         row_ix: usize,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) {
         if ev.button == MouseButton::Right {
@@ -569,7 +569,7 @@ where
         }
     }
 
-    fn on_col_head_click(&mut self, col_ix: usize, window: &mut Window, cx: &mut Context<Self>) {
+    fn on_col_head_click(&mut self, col_ix: usize, _: &mut Window, cx: &mut Context<Self>) {
         if !self.delegate.can_select_col(col_ix, cx) {
             return;
         }
@@ -577,11 +577,11 @@ where
         self.set_selected_col(col_ix, cx)
     }
 
-    fn action_cancel(&mut self, _: &Cancel, window: &mut Window, cx: &mut Context<Self>) {
+    fn action_cancel(&mut self, _: &Cancel, _: &mut Window, cx: &mut Context<Self>) {
         self.clear_selection(cx);
     }
 
-    fn action_select_prev(&mut self, _: &SelectPrev, window: &mut Window, cx: &mut Context<Self>) {
+    fn action_select_prev(&mut self, _: &SelectPrev, _: &mut Window, cx: &mut Context<Self>) {
         let mut selected_row = self.selected_row.unwrap_or(0);
         let rows_count = self.delegate.rows_count(cx);
         if selected_row > 0 {
@@ -595,7 +595,7 @@ where
         self.set_selected_row(selected_row, cx);
     }
 
-    fn action_select_next(&mut self, _: &SelectNext, window: &mut Window, cx: &mut Context<Self>) {
+    fn action_select_next(&mut self, _: &SelectNext, _: &mut Window, cx: &mut Context<Self>) {
         let mut selected_row = self.selected_row.unwrap_or(0);
         if selected_row < self.delegate.rows_count(cx) - 1 {
             selected_row += 1;
@@ -611,7 +611,7 @@ where
     fn action_select_prev_col(
         &mut self,
         _: &SelectPrevColumn,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let mut selected_col = self.selected_col.unwrap_or(0);
@@ -629,7 +629,7 @@ where
     fn action_select_next_col(
         &mut self,
         _: &SelectNextColumn,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let mut selected_col = self.selected_col.unwrap_or(0);
@@ -667,13 +667,7 @@ where
 
     /// The `ix`` is the index of the col to resize,
     /// and the `size` is the new size for the col.
-    fn resize_cols(
-        &mut self,
-        ix: usize,
-        size: Pixels,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    fn resize_cols(&mut self, ix: usize, size: Pixels, _: &mut Window, cx: &mut Context<Self>) {
         const MIN_WIDTH: Pixels = px(10.0);
         const MAX_WIDTH: Pixels = px(1200.0);
 
@@ -845,7 +839,7 @@ where
     }
 
     /// Show Column selection style, when the column is selected and the selection state is Column.
-    fn render_col_wrap(&self, col_ix: usize, window: &mut Window, cx: &mut Context<Self>) -> Div {
+    fn render_col_wrap(&self, col_ix: usize, _: &mut Window, cx: &mut Context<Self>) -> Div {
         let el = h_flex().h_full();
 
         if self.delegate().can_select_col(col_ix, cx)
@@ -860,7 +854,7 @@ where
 
     fn render_vertical_scrollbar(
         &self,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<impl IntoElement> {
         let state = self.vertical_scrollbar_state.clone();
@@ -882,7 +876,7 @@ where
 
     fn render_horizontal_scrollbar(
         &self,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let state = self.horizontal_scrollbar_state.clone();
@@ -905,7 +899,7 @@ where
     fn render_resize_handle(
         &self,
         ix: usize,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         const HANDLE_SIZE: Pixels = px(2.);
@@ -971,7 +965,7 @@ where
                     };
                 }),
             )
-            .on_drag(ResizeCol((cx.entity_id(), ix)), |drag, _, window, cx| {
+            .on_drag(ResizeCol((cx.entity_id(), ix)), |drag, _, _, cx| {
                 cx.stop_propagation();
                 cx.new(|_| drag.clone())
             })

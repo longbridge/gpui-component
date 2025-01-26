@@ -2,9 +2,9 @@ use std::rc::Rc;
 
 use crate::{h_flex, v_flex, ActiveTheme, AxisExt, IconName};
 use gpui::{
-    div, prelude::FluentBuilder, relative, svg, App, AppContext, Axis, ElementId,
-    InteractiveElement, IntoElement, ParentElement, RenderOnce, SharedString,
-    StatefulInteractiveElement, Styled, Window,
+    div, prelude::FluentBuilder, relative, svg, App, Axis, ElementId, InteractiveElement,
+    IntoElement, ParentElement, RenderOnce, SharedString, StatefulInteractiveElement, Styled,
+    Window,
 };
 
 /// A Radio element.
@@ -52,7 +52,7 @@ impl Radio {
 }
 
 impl RenderOnce for Radio {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let color = if self.disabled {
             cx.theme().primary.opacity(0.5)
         } else {

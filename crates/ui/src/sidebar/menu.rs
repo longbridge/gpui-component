@@ -1,8 +1,8 @@
 use crate::{h_flex, v_flex, ActiveTheme as _, Collapsible, Icon, IconName, StyledExt};
 use gpui::{
-    div, percentage, prelude::FluentBuilder as _, App, AppContext, ClickEvent,
-    InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, SharedString,
-    StatefulInteractiveElement as _, Styled as _, Window,
+    div, percentage, prelude::FluentBuilder as _, App, ClickEvent, InteractiveElement as _,
+    IntoElement, ParentElement as _, RenderOnce, SharedString, StatefulInteractiveElement as _,
+    Styled as _, Window,
 };
 use std::rc::Rc;
 
@@ -151,7 +151,7 @@ impl SidebarMenuItem {
         is_submenu: bool,
         is_active: bool,
         is_open: bool,
-        window: &Window,
+        _: &Window,
         cx: &App,
     ) -> impl IntoElement {
         let handler = match &self {

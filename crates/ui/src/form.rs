@@ -1,9 +1,9 @@
 use std::rc::{Rc, Weak};
 
 use gpui::{
-    div, prelude::FluentBuilder as _, px, AlignItems, AnyElement, AnyView, App, AppContext, Axis,
-    Div, Element, ElementId, FocusHandle, InteractiveElement as _, IntoElement, ParentElement,
-    Pixels, Rems, RenderOnce, SharedString, Styled, Window,
+    div, prelude::FluentBuilder as _, px, AlignItems, AnyElement, AnyView, App, Axis, Div, Element,
+    ElementId, FocusHandle, InteractiveElement as _, IntoElement, ParentElement, Pixels, Rems,
+    RenderOnce, SharedString, Styled, Window,
 };
 
 use crate::{h_flex, v_flex, ActiveTheme as _, AxisExt, FocusableCycle, Sizable, Size, StyledExt};

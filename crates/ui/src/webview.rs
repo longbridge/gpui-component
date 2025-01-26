@@ -25,7 +25,7 @@ impl Drop for WebView {
 }
 
 impl WebView {
-    pub fn new(webview: wry::WebView, window: &mut Window, cx: &mut App) -> Self {
+    pub fn new(webview: wry::WebView, _: &mut Window, cx: &mut App) -> Self {
         let _ = webview.set_bounds(Rect::default());
 
         Self {
@@ -93,7 +93,7 @@ impl Render for WebView {
             .child({
                 let view = cx.model().clone();
                 canvas(
-                    move |bounds, window, cx| view.update(cx, |r, _| r.bounds = bounds),
+                    move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds),
                     |_, _, _, _| {},
                 )
                 .absolute()
@@ -189,7 +189,7 @@ impl Element for WebViewElement {
         _: &mut Self::RequestLayoutState,
         hitbox: &mut Self::PrepaintState,
         window: &mut Window,
-        cx: &mut App,
+        _: &mut App,
     ) {
         let bounds = hitbox.clone().map(|h| h.bounds).unwrap_or(bounds);
         window.with_content_mask(Some(ContentMask { bounds }), |window| {

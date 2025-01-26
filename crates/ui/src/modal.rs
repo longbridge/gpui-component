@@ -2,7 +2,7 @@ use std::{rc::Rc, time::Duration};
 
 use gpui::{
     actions, anchored, div, hsla, point, prelude::FluentBuilder, px, relative, Animation,
-    AnimationExt as _, AnyElement, App, AppContext, Bounds, ClickEvent, Div, FocusHandle, Hsla,
+    AnimationExt as _, AnyElement, App, Bounds, ClickEvent, Div, FocusHandle, Hsla,
     InteractiveElement, IntoElement, KeyBinding, MouseButton, ParentElement, Pixels, Point,
     RenderOnce, SharedString, Styled, Window,
 };
@@ -98,7 +98,7 @@ pub struct Modal {
     pub(crate) overlay_visible: bool,
 }
 
-pub(crate) fn overlay_color(overlay: bool, window: &Window, cx: &App) -> Hsla {
+pub(crate) fn overlay_color(overlay: bool, _: &Window, cx: &App) -> Hsla {
     if !overlay {
         return hsla(0., 0., 0., 0.);
     }
@@ -111,7 +111,7 @@ pub(crate) fn overlay_color(overlay: bool, window: &Window, cx: &App) -> Hsla {
 }
 
 impl Modal {
-    pub fn new(window: &mut Window, cx: &mut App) -> Self {
+    pub fn new(_: &mut Window, cx: &mut App) -> Self {
         let base = v_flex()
             .bg(cx.theme().background)
             .border_1()
@@ -292,7 +292,7 @@ impl RenderOnce for Modal {
                 .ok_text
                 .unwrap_or_else(|| t!("Modal.ok").into());
             let ok_variant = self.button_props.ok_variant;
-            move |window, _| {
+            move |_, _| {
                 Button::new("ok")
                     .label(ok_text)
                     .with_variant(ok_variant)
@@ -318,7 +318,7 @@ impl RenderOnce for Modal {
                 .cancel_text
                 .unwrap_or_else(|| t!("Modal.cancel").into());
             let cancel_variant = self.button_props.cancel_variant;
-            move |window, _| {
+            move |_, _| {
                 Button::new("cancel")
                     .label(cancel_text)
                     .with_variant(cancel_variant)

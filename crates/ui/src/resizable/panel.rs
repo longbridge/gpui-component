@@ -4,7 +4,7 @@ use gpui::{
     canvas, div, prelude::FluentBuilder, px, relative, Along, AnyElement, AnyView, App, AppContext,
     Axis, Bounds, Context, Element, Empty, Entity, EntityId, EventEmitter, IntoElement, IsZero,
     MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, Render, StatefulInteractiveElement as _,
-    Style, Styled, VisualContext as _, WeakEntity, Window,
+    Style, Styled, WeakEntity, Window,
 };
 
 use crate::{h_flex, v_flex, AxisExt};
@@ -21,7 +21,7 @@ pub enum ResizablePanelEvent {
 pub struct DragPanel(pub (EntityId, usize, Axis));
 
 impl Render for DragPanel {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, _: &mut Context<'_, Self>) -> impl IntoElement {
         Empty
     }
 }
@@ -59,7 +59,7 @@ impl ResizablePanelGroup {
         self
     }
 
-    pub(crate) fn set_axis(&mut self, axis: Axis, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn set_axis(&mut self, axis: Axis, _: &mut Window, cx: &mut Context<Self>) {
         self.axis = axis;
         cx.notify();
     }
@@ -111,7 +111,7 @@ impl ResizablePanelGroup {
         &mut self,
         panel: ResizablePanel,
         ix: usize,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let mut panel = panel;
@@ -129,7 +129,7 @@ impl ResizablePanelGroup {
         &mut self,
         panel: ResizablePanel,
         ix: usize,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let mut panel = panel;
@@ -147,13 +147,13 @@ impl ResizablePanelGroup {
         cx.notify()
     }
 
-    pub fn remove_child(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn remove_child(&mut self, ix: usize, _: &mut Window, cx: &mut Context<Self>) {
         self.sizes.remove(ix);
         self.panels.remove(ix);
         cx.notify()
     }
 
-    pub(crate) fn remove_all_children(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn remove_all_children(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         self.sizes.clear();
         self.panels.clear();
         cx.notify()
@@ -162,13 +162,13 @@ impl ResizablePanelGroup {
     fn render_resize_handle(
         &self,
         ix: usize,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let view = cx.model().clone();
         resize_handle(("resizable-handle", ix), self.axis).on_drag(
             DragPanel((cx.entity_id(), ix, self.axis)),
-            move |drag_panel, _, window, cx| {
+            move |drag_panel, _, _, cx| {
                 cx.stop_propagation();
                 // Set current resizing panel ix
                 view.update(cx, |view, _| {
@@ -179,12 +179,12 @@ impl ResizablePanelGroup {
         )
     }
 
-    fn done_resizing(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    fn done_resizing(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         cx.emit(ResizablePanelEvent::Resized);
         self.resizing_panel_ix = None;
     }
 
-    fn sync_real_panel_sizes(&mut self, window: &Window, cx: &App) {
+    fn sync_real_panel_sizes(&mut self, _: &Window, cx: &App) {
         for (i, panel) in self.panels.iter().enumerate() {
             self.sizes[i] = panel.read(cx).bounds.size.along(self.axis)
         }
@@ -285,7 +285,7 @@ impl Render for ResizablePanelGroup {
             }))
             .child({
                 canvas(
-                    move |bounds, window, cx| view.update(cx, |r, _| r.bounds = bounds),
+                    move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds),
                     |_, _, _, _| {},
                 )
                 .absolute()
@@ -359,7 +359,7 @@ impl ResizablePanel {
     }
 
     /// Save the real panel size, and update group sizes
-    fn update_size(&mut self, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut Context<Self>) {
+    fn update_size(&mut self, bounds: Bounds<Pixels>, _: &mut Window, cx: &mut Context<Self>) {
         let new_size = bounds.size.along(self.axis);
         self.bounds = bounds;
         self.size_ratio = None;

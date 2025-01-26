@@ -3,7 +3,7 @@ use gpui::{
     anchored, deferred, div, prelude::FluentBuilder as _, px, App, AppContext, Context, ElementId,
     Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement as _, KeyBinding, Length,
     MouseButton, ParentElement as _, Render, SharedString, StatefulInteractiveElement as _, Styled,
-    VisualContext as _, Window,
+    Window,
 };
 use rust_i18n::t;
 
@@ -190,7 +190,7 @@ impl DatePicker {
     }
 
     /// Set size of the date picker.
-    pub fn set_size(&mut self, size: Size, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn set_size(&mut self, size: Size, _: &mut Window, cx: &mut Context<Self>) {
         self.size = size;
         cx.notify();
     }
@@ -231,12 +231,7 @@ impl DatePicker {
         }
     }
 
-    fn toggle_calendar(
-        &mut self,
-        _: &gpui::ClickEvent,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    fn toggle_calendar(&mut self, _: &gpui::ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
         self.open = !self.open;
         cx.notify();
     }

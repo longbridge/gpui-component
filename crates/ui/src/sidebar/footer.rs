@@ -55,7 +55,7 @@ impl Styled for SidebarFooter {
 }
 impl PopupMenuExt for SidebarFooter {}
 impl RenderOnce for SidebarFooter {
-    fn render(self, window: &mut gpui::Window, cx: &mut gpui::App) -> impl gpui::IntoElement {
+    fn render(self, _: &mut gpui::Window, cx: &mut gpui::App) -> impl gpui::IntoElement {
         h_flex()
             .id(self.id)
             .gap_2()

@@ -283,7 +283,7 @@ impl Root {
         root.read(cx)
     }
 
-    fn focus_back(&mut self, window: &mut Window, cx: &mut App) {
+    fn focus_back(&mut self, window: &mut Window, _: &mut App) {
         if let Some(handle) = self.previous_focus_handle.clone() {
             window.focus(&handle);
         }
@@ -337,9 +337,7 @@ impl Root {
             return Some(
                 div().relative().child(drawer).child(
                     canvas(
-                        move |_, window, cx| {
-                            root.update(cx, |r, _| r.drawer_size = Some(drawer_size))
-                        },
+                        move |_, _, cx| root.update(cx, |r, _| r.drawer_size = Some(drawer_size)),
                         |_, _, _, _| {},
                     )
                     .absolute()

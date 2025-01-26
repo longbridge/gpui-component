@@ -1,7 +1,7 @@
 use gpui::{
-    div, prelude::FluentBuilder as _, px, App, AppContext, Axis, Div, ElementId,
-    InteractiveElement, IntoElement, ParentElement as _, Pixels, RenderOnce, Stateful,
-    StatefulInteractiveElement, Styled as _, Window,
+    div, prelude::FluentBuilder as _, px, App, Axis, Div, ElementId, InteractiveElement,
+    IntoElement, ParentElement as _, Pixels, RenderOnce, Stateful, StatefulInteractiveElement,
+    Styled as _, Window,
 };
 
 use crate::{ActiveTheme as _, AxisExt as _};
@@ -37,7 +37,7 @@ impl InteractiveElement for ResizeHandle {
 impl StatefulInteractiveElement for ResizeHandle {}
 
 impl RenderOnce for ResizeHandle {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let neg_offset = -HANDLE_PADDING;
 
         self.base
