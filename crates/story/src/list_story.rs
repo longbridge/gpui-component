@@ -2,10 +2,10 @@ use core::time;
 use std::time::Duration;
 
 use fake::Fake;
-use gpui::{Window, ModelContext, Model, 
+use gpui::{
     actions, div, px, AppContext, ElementId, FocusHandle, Focusable, InteractiveElement,
-    IntoElement, ParentElement, Render, RenderOnce, SharedString, Styled, Subscription, Task,
-    Timer,   VisualContext, 
+    IntoElement, Model, ModelContext, ParentElement, Render, RenderOnce, SharedString, Styled,
+    Subscription, Task, Timer, VisualContext, Window,
 };
 
 use ui::{
@@ -170,17 +170,27 @@ impl ListDelegate for CompanyListDelegate {
         Task::ready(())
     }
 
-    fn confirm(&mut self, ix: usize, cx: &mut ViewContext<List<Self>>) {
+    fn confirm(&mut self, ix: usize, window: &mut Window, cx: &mut Context<List<Self>>) {
         self.confirmed_index = Some(ix);
         cx.dispatch_action(Box::new(SelectedCompany));
     }
 
-    fn set_selected_index(&mut self, ix: Option<usize>, cx: &mut ViewContext<List<Self>>) {
+    fn set_selected_index(
+        &mut self,
+        ix: Option<usize>,
+        window: &mut Window,
+        cx: &mut Context<List<Self>>,
+    ) {
         self.selected_index = ix;
         cx.notify();
     }
 
-    fn render_item(&self, ix: usize, _cx: &mut ViewContext<List<Self>>) -> Option<Self::Item> {
+    fn render_item(
+        &self,
+        ix: usize,
+        _window: &mut Window,
+        cx: &mut Context<List<Self>>,
+    ) -> Option<Self::Item> {
         let selected = Some(ix) == self.selected_index || Some(ix) == self.confirmed_index;
         if let Some(company) = self.matched_companies.get(ix) {
             return Some(CompanyListItem::new(ix, company.clone(), ix, selected));
@@ -201,7 +211,7 @@ impl ListDelegate for CompanyListDelegate {
         150
     }
 
-    fn load_more(&mut self, cx: &mut ViewContext<List<Self>>) {
+    fn load_more(&mut self, window: &mut Window, cx: &mut Context<List<Self>>) {
         cx.spawn(|view, mut cx| async move {
             // Simulate network request, delay 1s to load data.
             Timer::after(Duration::from_secs(1)).await;
@@ -320,7 +330,12 @@ impl ListStory {
         }
     }
 
-    fn selected_company(&mut self, _: &SelectedCompany, window: &mut Window, cx: &mut Context<Self>) {
+    fn selected_company(
+        &mut self,
+        _: &SelectedCompany,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let picker = self.company_list.read(cx);
         if let Some(company) = picker.delegate().selected_company() {
             self.selected_company = Some(company);

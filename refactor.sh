@@ -57,6 +57,10 @@ re '\(&mut WindowContext'          '(&mut Window, &mut App'
 re '\(&mut gpui::WindowContext'          '(&mut gpui::Window, &mut gpui::App'
 re '\(&mut ViewContext<([^>]+)>'   '(&mut Window, &mut Context<$1>'
 re '\(&mut gpui::ViewContext<([^>]+)>'   '(&mut gpui::Window, &mut gpui::Context<$1>'
+re '(&mut ViewContext<'   '(&mut Window, &mut Context<'
+re ', &mut ViewContext<'   ', &mut Window, &mut Context<'
+re 'cx: &mut ViewContext<'   'window: &mut Window, cx: &mut Context<'
+re 'cx: &mut gpui::ViewContext<'   'window: &mut gpui::Window, &mut gpui::Context<'
 
 # function parameters
 re '_: &mut WindowContext\)'          '_window: &mut Window, _cx: &mut App)'

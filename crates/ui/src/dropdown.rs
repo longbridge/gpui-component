@@ -90,7 +90,7 @@ pub trait DropdownDelegate: Sized {
         false
     }
 
-    fn perform_search(&mut self, _query: &str, _cx: &mut ViewContext<Dropdown<Self>>) -> Task<()> {
+    fn perform_search(&mut self, _query: &str, _window: &mut Window, cx: &mut Context<Dropdown<Self>>) -> Task<()> {
         Task::ready(())
     }
 }
@@ -131,7 +131,7 @@ where
         self.delegate.len()
     }
 
-    fn render_item(&self, ix: usize, cx: &mut gpui::ViewContext<List<Self>>) -> Option<Self::Item> {
+    fn render_item(&self, ix: usize, window: &mut gpui::Window, &mut gpui::Context<List<Self>>) -> Option<Self::Item> {
         let selected = self
             .selected_index
             .map_or(false, |selected_index| selected_index == ix);
@@ -154,7 +154,7 @@ where
         }
     }
 
-    fn cancel(&mut self, cx: &mut ViewContext<List<Self>>) {
+    fn cancel(&mut self, window: &mut Window, cx: &mut Context<List<Self>>) {
         let dropdown = self.dropdown.clone();
         cx.defer(move |_, cx| {
             _ = dropdown.update(cx, |this, cx| {
@@ -164,7 +164,7 @@ where
         });
     }
 
-    fn confirm(&mut self, ix: usize, cx: &mut ViewContext<List<Self>>) {
+    fn confirm(&mut self, ix: usize, window: &mut Window, cx: &mut Context<List<Self>>) {
         self.selected_index = Some(ix);
 
         let selected_value = self
@@ -183,7 +183,7 @@ where
         });
     }
 
-    fn perform_search(&mut self, query: &str, cx: &mut ViewContext<List<Self>>) -> Task<()> {
+    fn perform_search(&mut self, query: &str, window: &mut Window, cx: &mut Context<List<Self>>) -> Task<()> {
         self.dropdown.upgrade().map_or(Task::ready(()), |dropdown| {
             dropdown.update(cx, |_, cx| self.delegate.perform_search(query, cx))
         })
@@ -193,7 +193,7 @@ where
         self.selected_index = ix;
     }
 
-    fn render_empty(&self, cx: &mut ViewContext<List<Self>>) -> impl IntoElement {
+    fn render_empty(&self, window: &mut Window, cx: &mut Context<List<Self>>) -> impl IntoElement {
         if let Some(empty) = self
             .dropdown
             .upgrade()
@@ -279,7 +279,7 @@ impl<T: DropdownItem + Clone> DropdownDelegate for SearchableVec<T> {
         true
     }
 
-    fn perform_search(&mut self, query: &str, _cx: &mut ViewContext<Dropdown<Self>>) -> Task<()> {
+    fn perform_search(&mut self, query: &str, _window: &mut Window, cx: &mut Context<Dropdown<Self>>) -> Task<()> {
         self.matched_items = self
             .items
             .iter()

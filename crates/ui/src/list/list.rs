@@ -7,11 +7,11 @@ use crate::{
     scroll::{Scrollbar, ScrollbarState},
     v_flex, ActiveTheme, IconName, Size,
 };
-use gpui::{Window, ModelContext, Model, 
+use gpui::{
     actions, div, prelude::FluentBuilder, uniform_list, AnyElement, AppContext, Entity,
     FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding, Length,
-    ListSizingBehavior, MouseButton, ParentElement, Render, SharedString, Styled, Task,
-    UniformListScrollHandle,   VisualContext, 
+    ListSizingBehavior, Model, ModelContext, MouseButton, ParentElement, Render, SharedString,
+    Styled, Task, UniformListScrollHandle, VisualContext, Window,
 };
 use gpui::{px, EventEmitter, ScrollStrategy};
 use smol::Timer;
@@ -47,7 +47,12 @@ pub trait ListDelegate: Sized + 'static {
 
     /// When Query Input change, this method will be called.
     /// You can perform search here.
-    fn perform_search(&mut self, query: &str, cx: &mut ViewContext<List<Self>>) -> Task<()> {
+    fn perform_search(
+        &mut self,
+        query: &str,
+        window: &mut Window,
+        cx: &mut Context<List<Self>>,
+    ) -> Task<()> {
         Task::ready(())
     }
 
@@ -57,10 +62,15 @@ pub trait ListDelegate: Sized + 'static {
     /// Render the item at the given index.
     ///
     /// Return None will skip the item.
-    fn render_item(&self, ix: usize, cx: &mut ViewContext<List<Self>>) -> Option<Self::Item>;
+    fn render_item(
+        &self,
+        ix: usize,
+        window: &mut Window,
+        cx: &mut Context<List<Self>>,
+    ) -> Option<Self::Item>;
 
     /// Return a Element to show when list is empty.
-    fn render_empty(&self, cx: &mut ViewContext<List<Self>>) -> impl IntoElement {
+    fn render_empty(&self, window: &mut Window, cx: &mut Context<List<Self>>) -> impl IntoElement {
         div()
     }
 
@@ -71,7 +81,11 @@ pub trait ListDelegate: Sized + 'static {
     /// For example: The last search results, or the last selected item.
     ///
     /// Default is None, that means no initial state.
-    fn render_initial(&self, cx: &mut ViewContext<List<Self>>) -> Option<AnyElement> {
+    fn render_initial(
+        &self,
+        window: &mut Window,
+        cx: &mut Context<List<Self>>,
+    ) -> Option<AnyElement> {
         None
     }
 
@@ -81,18 +95,27 @@ pub trait ListDelegate: Sized + 'static {
     }
 
     /// Returns a Element to show when loading, default is built-in Skeleton loading view.
-    fn render_loading(&self, cx: &mut ViewContext<List<Self>>) -> impl IntoElement {
+    fn render_loading(
+        &self,
+        window: &mut Window,
+        cx: &mut Context<List<Self>>,
+    ) -> impl IntoElement {
         Loading
     }
 
     /// Set the selected index, just store the ix, don't confirm.
-    fn set_selected_index(&mut self, ix: Option<usize>, cx: &mut ViewContext<List<Self>>);
+    fn set_selected_index(
+        &mut self,
+        ix: Option<usize>,
+        window: &mut Window,
+        cx: &mut Context<List<Self>>,
+    );
 
     /// Set the confirm and give the selected index, this is means user have clicked the item or pressed Enter.
-    fn confirm(&mut self, ix: usize, cx: &mut ViewContext<List<Self>>) {}
+    fn confirm(&mut self, ix: usize, window: &mut Window, cx: &mut Context<List<Self>>) {}
 
     /// Cancel the selection, e.g.: Pressed ESC.
-    fn cancel(&mut self, cx: &mut ViewContext<List<Self>>) {}
+    fn cancel(&mut self, window: &mut Window, cx: &mut Context<List<Self>>) {}
 
     /// Return true to enable load more data when scrolling to the bottom.
     ///
@@ -116,7 +139,7 @@ pub trait ListDelegate: Sized + 'static {
     ///
     /// This is always called when the table is near the bottom,
     /// so you must check if there is more data to load or lock the loading state.
-    fn load_more(&mut self, cx: &mut ViewContext<List<Self>>) {}
+    fn load_more(&mut self, window: &mut Window, cx: &mut Context<List<Self>>) {}
 }
 
 pub struct List<D: ListDelegate> {
@@ -204,7 +227,12 @@ where
         self
     }
 
-    pub fn set_query_input(&mut self, query_input: Entity<TextInput>, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn set_query_input(
+        &mut self,
+        query_input: Entity<TextInput>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         cx.subscribe(&query_input, Self::on_query_input_event)
             .detach();
         self.query_input = Some(query_input);
@@ -223,7 +251,12 @@ where
     }
 
     /// Set the selected index of the list, this will also scroll to the selected item.
-    pub fn set_selected_index(&mut self, ix: Option<usize>, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn set_selected_index(
+        &mut self,
+        ix: Option<usize>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.selected_index = ix;
         self.delegate.set_selected_index(ix, cx);
         self.scroll_to_selected_item(cx);
@@ -246,7 +279,11 @@ where
         self.query_input.as_ref().map(|input| input.read(cx).text())
     }
 
-    fn render_scrollbar(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<impl IntoElement> {
+    fn render_scrollbar(
+        &self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<impl IntoElement> {
         if !self.scrollbar_visible {
             return None;
         }
@@ -281,7 +318,8 @@ where
         &mut self,
         _: Entity<TextInput>,
         event: &InputEvent,
-        window: &mut Window, cx: &mut Context<Self>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
     ) {
         match event {
             InputEvent::Change(text) => {
@@ -327,7 +365,8 @@ where
         &mut self,
         items_count: usize,
         visible_end: usize,
-        window: &mut Window, cx: &mut Context<Self>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
     ) {
         let threshold = self.delegate.load_more_threshold();
         // Securely handle subtract logic to prevent attempt to subtract with overflow
@@ -375,7 +414,12 @@ where
         cx.notify();
     }
 
-    fn on_action_select_prev(&mut self, _: &SelectPrev, window: &mut Window, cx: &mut Context<Self>) {
+    fn on_action_select_prev(
+        &mut self,
+        _: &SelectPrev,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let items_count = self.delegate.items_count(cx);
         if items_count == 0 {
             return;
@@ -390,7 +434,12 @@ where
         self.select_item(selected_index, cx);
     }
 
-    fn on_action_select_next(&mut self, _: &SelectNext, window: &mut Window, cx: &mut Context<Self>) {
+    fn on_action_select_next(
+        &mut self,
+        _: &SelectNext,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let items_count = self.delegate.items_count(cx);
         if items_count == 0 {
             return;
@@ -412,7 +461,12 @@ where
         self.select_item(selected_index, cx);
     }
 
-    fn render_list_item(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_list_item(
+        &mut self,
+        ix: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let selected = self.selected_index == Some(ix);
         let right_clicked = self.right_clicked_index == Some(ix);
 

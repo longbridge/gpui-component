@@ -39,7 +39,12 @@ impl ListDelegate for ListItemDeletegate {
         self.matches.len()
     }
 
-    fn perform_search(&mut self, query: &str, cx: &mut ViewContext<List<Self>>) -> Task<()> {
+    fn perform_search(
+        &mut self,
+        query: &str,
+        window: &mut Window,
+        cx: &mut Context<List<Self>>,
+    ) -> Task<()> {
         let query = query.to_string();
         cx.spawn(move |this, mut cx| async move {
             // Simulate a slow search.
@@ -95,7 +100,7 @@ impl ListDelegate for ListItemDeletegate {
         }
     }
 
-    fn render_empty(&self, cx: &mut ViewContext<List<Self>>) -> impl IntoElement {
+    fn render_empty(&self, window: &mut Window, cx: &mut Context<List<Self>>) -> impl IntoElement {
         v_flex()
             .size_full()
             .child(
@@ -111,13 +116,13 @@ impl ListDelegate for ListItemDeletegate {
             .text_color(cx.theme().muted_foreground)
     }
 
-    fn cancel(&mut self, cx: &mut ViewContext<List<Self>>) {
+    fn cancel(&mut self, window: &mut Window, cx: &mut Context<List<Self>>) {
         if let Some(story) = self.story.upgrade() {
             cx.update_view(&story, |story, cx| story.close_drawer(cx));
         }
     }
 
-    fn confirm(&mut self, ix: usize, cx: &mut ViewContext<List<Self>>) {
+    fn confirm(&mut self, ix: usize, window: &mut Window, cx: &mut Context<List<Self>>) {
         if let Some(story) = self.story.upgrade() {
             cx.update_view(&story, |story, cx| {
                 self.confirmed_index = Some(ix);
@@ -130,7 +135,12 @@ impl ListDelegate for ListItemDeletegate {
         }
     }
 
-    fn set_selected_index(&mut self, ix: Option<usize>, cx: &mut ViewContext<List<Self>>) {
+    fn set_selected_index(
+        &mut self,
+        ix: Option<usize>,
+        window: &mut Window,
+        cx: &mut Context<List<Self>>,
+    ) {
         self.selected_index = ix;
 
         if let Some(_) = ix {
@@ -276,7 +286,12 @@ impl ModalStory {
         }
     }
 
-    fn open_drawer_at(&mut self, placement: Placement, window: &mut Window, cx: &mut Context<Self>) {
+    fn open_drawer_at(
+        &mut self,
+        placement: Placement,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let input = self.input1.clone();
         let date_picker = self.date_picker.clone();
         let list = self.list.clone();
@@ -406,7 +421,12 @@ impl ModalStory {
         self.input1.focus_handle(cx).focus(cx);
     }
 
-    fn on_action_test_action(&mut self, _: &TestAction, window: &mut Window, cx: &mut Context<Self>) {
+    fn on_action_test_action(
+        &mut self,
+        _: &TestAction,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         cx.push_notification("You have clicked the TestAction.");
     }
 }

@@ -4,10 +4,10 @@ use std::{
 };
 
 use fake::{Fake, Faker};
-use gpui::{Window, ModelContext, Model, 
+use gpui::{
     div, impl_internal_actions, px, AnyElement, AppContext, Edges, InteractiveElement, IntoElement,
-    ParentElement, Pixels, Render, SharedString, Styled, Timer,  
-    VisualContext as _, 
+    Model, ModelContext, ParentElement, Pixels, Render, SharedString, Styled, Timer,
+    VisualContext as _, Window,
 };
 use serde::Deserialize;
 use ui::{
@@ -260,7 +260,12 @@ impl StockTableDelegate {
         self.full_loading = false;
     }
 
-    fn render_value_cell(&self, val: f64, cx: &mut ViewContext<Table<Self>>) -> AnyElement {
+    fn render_value_cell(
+        &self,
+        val: f64,
+        window: &mut Window,
+        cx: &mut Context<Table<Self>>,
+    ) -> AnyElement {
         let (fg_scale, bg_scale, opacity) = match cx.theme().mode.is_dark() {
             true => (200, 950, 0.3),
             false => (600, 50, 0.6),
@@ -343,7 +348,12 @@ impl TableDelegate for StockTableDelegate {
         return self.col_selection;
     }
 
-    fn render_th(&self, col_ix: usize, cx: &mut ViewContext<Table<Self>>) -> impl IntoElement {
+    fn render_th(
+        &self,
+        col_ix: usize,
+        window: &mut Window,
+        cx: &mut Context<Table<Self>>,
+    ) -> impl IntoElement {
         let th = div().child(self.col_name(col_ix, cx));
 
         if col_ix >= 3 && col_ix <= 10 {
@@ -353,7 +363,13 @@ impl TableDelegate for StockTableDelegate {
         }
     }
 
-    fn context_menu(&self, row_ix: usize, menu: PopupMenu, _window: &Window, _cx: &App) -> PopupMenu {
+    fn context_menu(
+        &self,
+        row_ix: usize,
+        menu: PopupMenu,
+        _window: &Window,
+        _cx: &App,
+    ) -> PopupMenu {
         menu.menu(
             format!("Selected Row: {}", row_ix),
             Box::new(OpenDetail(row_ix)),
@@ -377,7 +393,8 @@ impl TableDelegate for StockTableDelegate {
         &self,
         row_ix: usize,
         col_ix: usize,
-        cx: &mut ViewContext<Table<Self>>,
+        window: &mut Window,
+        cx: &mut Context<Table<Self>>,
     ) -> impl IntoElement {
         let stock = self.stocks.get(row_ix).unwrap();
         let col = self.columns.get(col_ix).unwrap();
@@ -497,7 +514,7 @@ impl TableDelegate for StockTableDelegate {
         150
     }
 
-    fn load_more(&mut self, cx: &mut ViewContext<Table<Self>>) {
+    fn load_more(&mut self, window: &mut Window, cx: &mut Context<Table<Self>>) {
         self.loading = true;
 
         cx.spawn(|view, mut cx| async move {
@@ -628,7 +645,8 @@ impl TableStory {
         &mut self,
         _: Entity<TextInput>,
         event: &InputEvent,
-        window: &mut Window, cx: &mut Context<Self>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
     ) {
         match event {
             // Update when the user presses Enter or the input loses focus
@@ -645,7 +663,12 @@ impl TableStory {
         }
     }
 
-    fn toggle_loop_selection(&mut self, checked: &bool, window: &mut Window, cx: &mut Context<Self>) {
+    fn toggle_loop_selection(
+        &mut self,
+        checked: &bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.table.update(cx, |table, cx| {
             table.delegate_mut().loop_selection = *checked;
             cx.notify();
@@ -676,7 +699,12 @@ impl TableStory {
         });
     }
 
-    fn toggle_col_selection(&mut self, checked: &bool, window: &mut Window, cx: &mut Context<Self>) {
+    fn toggle_col_selection(
+        &mut self,
+        checked: &bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.table.update(cx, |table, cx| {
             table.delegate_mut().col_selection = *checked;
             table.refresh(cx);
@@ -718,7 +746,8 @@ impl TableStory {
         &mut self,
         _: Entity<Table<StockTableDelegate>>,
         event: &TableEvent,
-        _window: &mut Window, _cx: &mut Context<Self>,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
     ) {
         match event {
             TableEvent::ColWidthsChanged(col_widths) => {
