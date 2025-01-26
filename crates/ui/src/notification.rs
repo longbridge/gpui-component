@@ -318,7 +318,7 @@ impl NotificationList {
         self.notifications.push_back(notification.clone());
         if autohide {
             // Sleep for 5 seconds to autohide the notification
-            cx.spawn_in(window, |this, mut cx| async move {
+            cx.spawn_in(window, |_, mut cx| async move {
                 Timer::after(Duration::from_secs(5)).await;
 
                 if let Err(err) = notification.update_in(&mut cx, |note, window, cx| {

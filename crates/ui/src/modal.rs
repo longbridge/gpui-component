@@ -135,9 +135,9 @@ impl Modal {
             keyboard: true,
             layer_ix: 0,
             overlay_visible: true,
-            on_close: Rc::new(|_, _| {}),
-            on_ok: Rc::new(|_, _| true),
-            on_cancel: Rc::new(|_, _| true),
+            on_close: Rc::new(|_, _, _| {}),
+            on_ok: Rc::new(|_, _, _| true),
+            on_cancel: Rc::new(|_, _, _| true),
             button_props: ModalButtonProps::default(),
             show_close: true,
             overlay_closable: true,
@@ -163,8 +163,8 @@ impl Modal {
         E: IntoElement,
         F: Fn(RenderButtonFn, RenderButtonFn, &mut Window, &mut App) -> Vec<E> + 'static,
     {
-        self.footer = Some(Box::new(move |ok, cancel, cx| {
-            footer(ok, cancel, cx)
+        self.footer = Some(Box::new(move |ok, cancel, window, cx| {
+            footer(ok, cancel, window, cx)
                 .into_iter()
                 .map(|e| e.into_any_element())
                 .collect()
@@ -174,7 +174,7 @@ impl Modal {
 
     /// Set to use confirm modal, with OK and CANCEL buttons.
     pub fn confirm(self) -> Self {
-        self.footer(|ok, cancel, cx| vec![cancel(cx), ok(cx)])
+        self.footer(|ok, cancel, window, cx| vec![cancel(window, cx), ok(window, cx)])
             .overlay_closable(false)
             .show_close(false)
     }
@@ -424,10 +424,10 @@ impl RenderOnce for Modal {
                                     .ghost()
                                     .icon(IconName::Close)
                                     .on_click(
-                                        move |_, cx| {
-                                            on_cancel(&ClickEvent::default(), cx);
-                                            on_close(&ClickEvent::default(), cx);
-                                            cx.close_modal();
+                                        move |_, window, cx| {
+                                            on_cancel(&ClickEvent::default(), window, cx);
+                                            on_close(&ClickEvent::default(), window, cx);
+                                            window.close_modal();
                                         },
                                     ),
                                 )
@@ -439,6 +439,7 @@ impl RenderOnce for Modal {
                                 this.child(h_flex().gap_2().justify_end().children(footer(
                                     render_ok,
                                     render_cancel,
+                                    window,
                                     cx,
                                 )))
                             })
