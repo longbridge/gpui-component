@@ -745,9 +745,9 @@ dependencies = [
 
 [[package]]
 name = "cbindgen"
-version = "0.27.0"
+version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3fce8dd7fcfcbf3a0a87d8f515194b49d6135acab73e18bd380d1d93bb1a15eb"
+checksum = "eadd868a2ce9ca38de7eeafdcec9c7065ef89b42b32f0839278d55f35c54d1ff"
 dependencies = [
  "heck 0.4.1",
  "indexmap 2.7.1",
@@ -952,7 +952,7 @@ dependencies = [
 [[package]]
 name = "collections"
 version = "0.1.0"
-source = "git+https://github.com/huacnlee/zed.git?branch=export-platform-window#1c322c0f2daa50f46644832a6a1cdf15bcf921ea"
+source = "git+https://github.com/huacnlee/zed.git?branch=webview#47beb1e705567fd74d0035ef6902299c757b7b5f"
 dependencies = [
  "indexmap 2.7.1",
  "rustc-hash 2.1.0",
@@ -1316,7 +1316,7 @@ dependencies = [
 [[package]]
 name = "derive_refineable"
 version = "0.1.0"
-source = "git+https://github.com/huacnlee/zed.git?branch=export-platform-window#1c322c0f2daa50f46644832a6a1cdf15bcf921ea"
+source = "git+https://github.com/huacnlee/zed.git?branch=webview#47beb1e705567fd74d0035ef6902299c757b7b5f"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2275,7 +2275,7 @@ dependencies = [
 [[package]]
 name = "gpui"
 version = "0.1.0"
-source = "git+https://github.com/huacnlee/zed.git?branch=export-platform-window#1c322c0f2daa50f46644832a6a1cdf15bcf921ea"
+source = "git+https://github.com/huacnlee/zed.git?branch=webview#47beb1e705567fd74d0035ef6902299c757b7b5f"
 dependencies = [
  "anyhow",
  "as-raw-xcb-connection",
@@ -2361,7 +2361,7 @@ dependencies = [
 [[package]]
 name = "gpui_macros"
 version = "0.1.0"
-source = "git+https://github.com/huacnlee/zed.git?branch=export-platform-window#1c322c0f2daa50f46644832a6a1cdf15bcf921ea"
+source = "git+https://github.com/huacnlee/zed.git?branch=webview#47beb1e705567fd74d0035ef6902299c757b7b5f"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2551,7 +2551,7 @@ dependencies = [
 [[package]]
 name = "http_client"
 version = "0.1.0"
-source = "git+https://github.com/huacnlee/zed.git?branch=export-platform-window#1c322c0f2daa50f46644832a6a1cdf15bcf921ea"
+source = "git+https://github.com/huacnlee/zed.git?branch=webview#47beb1e705567fd74d0035ef6902299c757b7b5f"
 dependencies = [
  "anyhow",
  "bytes",
@@ -3129,7 +3129,7 @@ dependencies = [
 [[package]]
 name = "media"
 version = "0.1.0"
-source = "git+https://github.com/huacnlee/zed.git?branch=export-platform-window#1c322c0f2daa50f46644832a6a1cdf15bcf921ea"
+source = "git+https://github.com/huacnlee/zed.git?branch=webview#47beb1e705567fd74d0035ef6902299c757b7b5f"
 dependencies = [
  "anyhow",
  "bindgen",
@@ -3166,9 +3166,9 @@ dependencies = [
 
 [[package]]
 name = "metal"
-version = "0.30.0"
+version = "0.31.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c3572083504c43e14aec05447f8a3d57cce0f66d7a3c1b9058572eca4d70ab9"
+checksum = "f569fb946490b5743ad69813cb19629130ce9374034abe31614a36402d18f99e"
 dependencies = [
  "bitflags 2.6.0",
  "block",
@@ -4409,7 +4409,7 @@ dependencies = [
 [[package]]
 name = "refineable"
 version = "0.1.0"
-source = "git+https://github.com/huacnlee/zed.git?branch=export-platform-window#1c322c0f2daa50f46644832a6a1cdf15bcf921ea"
+source = "git+https://github.com/huacnlee/zed.git?branch=webview#47beb1e705567fd74d0035ef6902299c757b7b5f"
 dependencies = [
  "derive_refineable",
 ]
@@ -4737,7 +4737,7 @@ checksum = "d369a96f978623eb3dc28807c4852d6cc617fed53da5d3c400feff1ef34a714a"
 [[package]]
 name = "semantic_version"
 version = "0.1.0"
-source = "git+https://github.com/huacnlee/zed.git?branch=export-platform-window#1c322c0f2daa50f46644832a6a1cdf15bcf921ea"
+source = "git+https://github.com/huacnlee/zed.git?branch=webview#47beb1e705567fd74d0035ef6902299c757b7b5f"
 dependencies = [
  "anyhow",
  "serde",
@@ -5176,7 +5176,7 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 [[package]]
 name = "sum_tree"
 version = "0.1.0"
-source = "git+https://github.com/huacnlee/zed.git?branch=export-platform-window#1c322c0f2daa50f46644832a6a1cdf15bcf921ea"
+source = "git+https://github.com/huacnlee/zed.git?branch=webview#47beb1e705567fd74d0035ef6902299c757b7b5f"
 dependencies = [
  "arrayvec",
  "log",
@@ -5861,7 +5861,7 @@ checksum = "09cc8ee72d2a9becf2f2febe0205bbed8fc6615b7cb429ad062dc7b7ddd036a9"
 [[package]]
 name = "util"
 version = "0.1.0"
-source = "git+https://github.com/huacnlee/zed.git?branch=export-platform-window#1c322c0f2daa50f46644832a6a1cdf15bcf921ea"
+source = "git+https://github.com/huacnlee/zed.git?branch=webview#47beb1e705567fd74d0035ef6902299c757b7b5f"
 dependencies = [
  "anyhow",
  "async-fs 2.1.2",
