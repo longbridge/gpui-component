@@ -929,6 +929,59 @@ impl TextInput {
         line.unwrapped_layout.len
     }
 
+    /// Get the closest index for position
+    ///
+    /// Fork:
+    /// https://github.com/zed-industries/zed/blob/1c322c0f2daa50f46644832a6a1cdf15bcf921ea/crates/gpui/src/text_system/line_layout.rs#L272
+    pub fn closest_index_for_position(
+        &self,
+        line: &WrappedLine,
+        position: Point<Pixels>,
+        line_height: Pixels,
+    ) -> Result<usize, usize> {
+        let wrapped_line_ix = (position.y / line_height) as usize;
+
+        let wrapped_line_start_index;
+        let wrapped_line_start_x;
+        if wrapped_line_ix > 0 {
+            let Some(line_start_boundary) = line.wrap_boundaries.get(wrapped_line_ix - 1) else {
+                return Err(0);
+            };
+            let run = &line.unwrapped_layout.runs[line_start_boundary.run_ix];
+            let glyph = &run.glyphs[line_start_boundary.glyph_ix];
+            wrapped_line_start_index = glyph.index;
+            wrapped_line_start_x = glyph.position.x;
+        } else {
+            wrapped_line_start_index = 0;
+            wrapped_line_start_x = Pixels::ZERO;
+        };
+
+        let wrapped_line_end_index;
+        let wrapped_line_end_x;
+        if wrapped_line_ix < line.wrap_boundaries.len() {
+            let next_wrap_boundary_ix = wrapped_line_ix;
+            let next_wrap_boundary = line.wrap_boundaries[next_wrap_boundary_ix];
+            let run = &line.unwrapped_layout.runs[next_wrap_boundary.run_ix];
+            let glyph = &run.glyphs[next_wrap_boundary.glyph_ix];
+            wrapped_line_end_index = glyph.index;
+            wrapped_line_end_x = glyph.position.x;
+        } else {
+            wrapped_line_end_index = line.unwrapped_layout.len;
+            wrapped_line_end_x = line.unwrapped_layout.width;
+        };
+
+        let mut position_in_unwrapped_line = position;
+        position_in_unwrapped_line.x += wrapped_line_start_x;
+        if position_in_unwrapped_line.x < wrapped_line_start_x {
+            Err(wrapped_line_start_index)
+        } else if position_in_unwrapped_line.x >= wrapped_line_end_x {
+            Err(wrapped_line_end_index)
+        } else {
+            // HOTFIX
+            Ok(self.closest_index_for_x(&line, position_in_unwrapped_line.x))
+        }
+    }
+
     fn index_for_mouse_position(&self, position: Point<Pixels>, _: &WindowContext) -> usize {
         // If the text is empty, always return 0
         if self.text.is_empty() {
@@ -967,17 +1020,11 @@ impl TextInput {
                 return closest_index;
             }
 
-            let index_result = line.index_for_position(pos, line_height);
+            let index_result = self.closest_index_for_position(line, pos, line_height);
             if let Ok(v) = index_result {
-                // FIXME: If the line have soft wrap, only first line can get correct position (closest_index is correct).
-                // The second line or more, the position is always at offset +1,
-                // but if we mouse down on left half or character, we expect the cursor is at offset.
-                // We need find a way to improve.
-                if pos.y > line_height / 2. {
-                    index += v + 1;
-                } else {
-                    index += closest_index;
-                }
+                index += v;
+                // If index is the newline, move offset
+
                 break;
             } else if let Ok(_) = line.index_for_position(point(px(0.), pos.y), line_height) {
                 // Click in the this line but not in the text, move cursor to the end of the line.
