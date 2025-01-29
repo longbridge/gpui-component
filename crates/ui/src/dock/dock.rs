@@ -278,7 +278,7 @@ impl Dock {
     fn render_resize_handle(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let axis = self.placement.axis();
         let neg_offset = -HANDLE_PADDING;
-        let view = cx.model().clone();
+        let view = cx.entity().clone();
 
         div()
             .id("resize-handle")
@@ -340,7 +340,7 @@ impl Dock {
 
         // Get the size of the left dock if it's open and not the current dock
         if let Some(left_dock) = &dock_area.left_dock {
-            if left_dock.entity_id() != cx.model().entity_id() {
+            if left_dock.entity_id() != cx.entity().entity_id() {
                 let left_dock_read = left_dock.read(cx);
                 if left_dock_read.is_open() {
                     left_dock_size = left_dock_read.size;
@@ -350,7 +350,7 @@ impl Dock {
 
         // Get the size of the right dock if it's open and not the current dock
         if let Some(right_dock) = &dock_area.right_dock {
-            if right_dock.entity_id() != cx.model().entity_id() {
+            if right_dock.entity_id() != cx.entity().entity_id() {
                 let right_dock_read = right_dock.read(cx);
                 if right_dock_read.is_open() {
                     right_dock_size = right_dock_read.size;
@@ -415,7 +415,7 @@ impl Render for Dock {
             })
             .child(self.render_resize_handle(window, cx))
             .child(DockElement {
-                view: cx.model().clone(),
+                view: cx.entity().clone(),
             })
     }
 }

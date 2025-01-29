@@ -12,10 +12,10 @@ use unicode_segmentation::*;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     actions, div, point, px, AnyElement, App, AppContext, Bounds, ClickEvent, ClipboardItem,
-    Context, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement,
-    KeyBinding, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
-    ParentElement as _, Pixels, Point, Rems, Render, ScrollHandle, ScrollWheelEvent, SharedString,
-    Styled as _, UTF16Selection, ViewInputHandler, Window, WrappedLine,
+    Context, Entity, EntityInputHandler, EventEmitter, FocusHandle, Focusable,
+    InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent, MouseButton, MouseDownEvent,
+    MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Rems, Render, ScrollHandle,
+    ScrollWheelEvent, SharedString, Styled as _, UTF16Selection, Window, WrappedLine,
 };
 
 // TODO:
@@ -1362,7 +1362,7 @@ impl Sizable for TextInput {
     }
 }
 
-impl ViewInputHandler for TextInput {
+impl EntityInputHandler for TextInput {
     fn text_for_range(
         &mut self,
         range_utf16: Range<usize>,
@@ -1593,7 +1593,7 @@ impl Render for TextInput {
                     .id("TextElement")
                     .flex_grow()
                     .overflow_x_hidden()
-                    .child(TextElement::new(cx.model().clone())),
+                    .child(TextElement::new(cx.entity().clone())),
             )
             .when(self.loading, |this| {
                 this.child(Indicator::new().color(cx.theme().muted_foreground))
@@ -1604,7 +1604,7 @@ impl Render for TextInput {
             )
             .children(suffix)
             .when(self.is_multi_line(), |this| {
-                let entity_id = cx.model().entity_id();
+                let entity_id = cx.entity().entity_id();
                 if self.last_layout.is_some() {
                     let scroll_size = self.scroll_size;
 

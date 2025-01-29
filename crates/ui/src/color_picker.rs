@@ -299,7 +299,7 @@ impl Render for ColorPicker {
         }
         .into();
 
-        let view = cx.model().clone();
+        let view = cx.entity().clone();
 
         div()
             .id(self.id.clone())

@@ -242,7 +242,7 @@ impl ModalStory {
         .map(|s| Arc::new(s.to_string()))
         .collect();
 
-        let story = cx.model().downgrade();
+        let story = cx.entity().downgrade();
         let delegate = ListItemDeletegate {
             story,
             selected_index: None,
@@ -362,7 +362,7 @@ impl ModalStory {
         let input1 = self.input1.clone();
         let date_picker = self.date_picker.clone();
         let dropdown = self.dropdown.clone();
-        let view = cx.model().clone();
+        let view = cx.entity().clone();
         let keyboard = self.model_keyboard;
 
         window.open_modal(cx, move |modal, _, _| {

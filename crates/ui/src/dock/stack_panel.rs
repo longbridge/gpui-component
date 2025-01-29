@@ -203,7 +203,7 @@ impl StackPanel {
             return;
         }
 
-        let view = cx.model().clone();
+        let view = cx.entity().clone();
         window.defer(cx, {
             let panel = panel.clone();
 
@@ -300,7 +300,7 @@ impl StackPanel {
             return;
         }
 
-        let view = cx.model().clone();
+        let view = cx.entity().clone();
         if let Some(parent) = self.parent.as_ref() {
             _ = parent.update(cx, |parent, cx| {
                 parent.remove_panel(Arc::new(view.clone()), window, cx);

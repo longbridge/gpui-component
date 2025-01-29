@@ -262,14 +262,14 @@ impl Root {
     where
         F: FnOnce(&mut Self, &mut Window, &mut Context<Self>) + 'static,
     {
-        if let Some(Some(root)) = window.root_model::<Root>() {
+        if let Some(Some(root)) = window.root::<Root>() {
             root.update(cx, |root, cx| f(root, window, cx));
         }
     }
 
-    pub fn read<'a>(window: &'a mut Window, cx: &'a mut App) -> &'a Self {
+    pub fn read<'a>(window: &'a Window, cx: &'a App) -> &'a Self {
         &window
-            .root_model::<Root>()
+            .root::<Root>()
             .expect("The window root view should be of type `ui::Root`.")
             .unwrap()
             .read(cx)
@@ -286,7 +286,7 @@ impl Root {
         window: &mut Window,
         cx: &mut App,
     ) -> Option<impl IntoElement> {
-        let root = window.root_model::<Root>()??;
+        let root = window.root::<Root>()??;
 
         let active_drawer_placement = root.read(cx).active_drawer.clone().map(|d| d.placement);
 
@@ -306,7 +306,7 @@ impl Root {
 
     /// Render the Drawer layer.
     pub fn render_drawer_layer(window: &mut Window, cx: &mut App) -> Option<impl IntoElement> {
-        let root = window.root_model::<Root>()??;
+        let root = window.root::<Root>()??;
 
         if let Some(active_drawer) = root.read(cx).active_drawer.clone() {
             let mut drawer = Drawer::new(window, cx);
@@ -333,7 +333,7 @@ impl Root {
 
     /// Render the Modal layer.
     pub fn render_modal_layer(window: &mut Window, cx: &mut App) -> Option<impl IntoElement> {
-        let root = window.root_model::<Root>()??;
+        let root = window.root::<Root>()??;
 
         let active_modals = root.read(cx).active_modals.clone();
         let mut has_overlay = false;

@@ -138,7 +138,7 @@ impl Render for TextStory {
                                     Clipboard::new("clipboard1")
                                         .content(|_, _| Label::new("Click icon to copy"))
                                         .value_fn({
-                                            let view = cx.model().clone();
+                                            let view = cx.entity().clone();
                                             move |_, cx| {
                                                 SharedString::from(format!(
                                                     "masked :{}",

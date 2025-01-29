@@ -285,7 +285,7 @@ where
         }
 
         Some(Scrollbar::uniform_scroll(
-            cx.model().entity_id(),
+            cx.entity().entity_id(),
             self.scrollbar_state.clone(),
             self.vertical_scroll_handle.clone(),
         ))
@@ -520,7 +520,7 @@ where
     D: ListDelegate,
 {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let view = cx.model().clone();
+        let view = cx.entity().clone();
         let vertical_scroll_handle = self.vertical_scroll_handle.clone();
         let items_count = self.delegate.items_count(cx);
         let loading = self.delegate.loading(cx);

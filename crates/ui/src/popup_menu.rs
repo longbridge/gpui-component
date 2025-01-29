@@ -331,7 +331,7 @@ impl PopupMenu {
         f: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
     ) -> Self {
         let submenu = PopupMenu::build(window, cx, f);
-        let parent_menu = cx.model().downgrade();
+        let parent_menu = cx.entity().downgrade();
         submenu.update(cx, |view, _| {
             view.parent_menu = Some(parent_menu);
         });
@@ -507,7 +507,7 @@ impl Focusable for PopupMenu {
 
 impl Render for PopupMenu {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let view = cx.model().clone();
+        let view = cx.entity().clone();
         let has_icon = self.menu_items.iter().any(|item| item.has_icon());
         let items_count = self.menu_items.len();
         let max_width = self.max_width;

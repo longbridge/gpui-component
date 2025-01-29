@@ -205,7 +205,7 @@ impl Render for SidebarStory {
             .border_color(cx.theme().border)
             .h_full()
             .child(
-                Sidebar::left(&cx.model())
+                Sidebar::left(&cx.entity())
                     .collapsed(self.is_collapsed)
                     .header(
                         SidebarHeader::new()
