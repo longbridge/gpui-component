@@ -504,6 +504,10 @@ impl Element for TextElement {
         let origin = bounds.origin;
 
         let mut offset_y = px(0.);
+        if self.input.read(cx).masked {
+            // Move down offset for vertical centering the *****
+            offset_y = px(2.5);
+        }
         for line in prepaint.lines.iter() {
             let p = point(origin.x, origin.y + offset_y);
             _ = line.paint(p, line_height, window, cx);
