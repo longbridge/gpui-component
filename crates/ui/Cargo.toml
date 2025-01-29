@@ -26,7 +26,7 @@ serde = "1.0.203"
 serde_json = "1"
 smallvec = "1.13.2"
 smol = "1"
-unicode-segmentation = "1.11.0"
+unicode-segmentation = "1.12.0"
 usvg = { version = "0.44.0", default-features = false, features = [
   "system-fonts",
   "text",

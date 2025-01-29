@@ -42,6 +42,8 @@ actions!(
         Delete,
         DeleteToBeginningOfLine,
         DeleteToEndOfLine,
+        DeleteToPreviousWordStart,
+        DeleteToNextWordEnd,
         Enter,
         Up,
         Down,
@@ -58,6 +60,8 @@ actions!(
         SelectToEndOfLine,
         SelectToStart,
         SelectToEnd,
+        SelectToPreviousWordStart,
+        SelectToNextWordEnd,
         ShowCharacterPalette,
         Copy,
         Cut,
@@ -68,6 +72,8 @@ actions!(
         MoveToEndOfLine,
         MoveToStart,
         MoveToEnd,
+        MoveToPreviousWord,
+        MoveToNextWord,
         TextChanged,
     ]
 );
@@ -90,6 +96,14 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("cmd-backspace", DeleteToBeginningOfLine, Some(CONTEXT)),
         #[cfg(target_os = "macos")]
         KeyBinding::new("cmd-delete", DeleteToEndOfLine, Some(CONTEXT)),
+        #[cfg(target_os = "macos")]
+        KeyBinding::new("alt-backspace", DeleteToPreviousWordStart, Some(CONTEXT)),
+        #[cfg(not(target_os = "macos"))]
+        KeyBinding::new("ctrl-backspace", DeleteToPreviousWordStart, Some(CONTEXT)),
+        #[cfg(target_os = "macos")]
+        KeyBinding::new("alt-delete", DeleteToNextWordEnd, Some(CONTEXT)),
+        #[cfg(not(target_os = "macos"))]
+        KeyBinding::new("ctrl-delete", DeleteToNextWordEnd, Some(CONTEXT)),
         KeyBinding::new("enter", Enter, Some(CONTEXT)),
         KeyBinding::new("up", Up, Some(CONTEXT)),
         KeyBinding::new("down", Down, Some(CONTEXT)),
@@ -111,6 +125,14 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("shift-cmd-left", SelectToStartOfLine, Some(CONTEXT)),
         #[cfg(target_os = "macos")]
         KeyBinding::new("shift-cmd-right", SelectToEndOfLine, Some(CONTEXT)),
+        #[cfg(target_os = "macos")]
+        KeyBinding::new("alt-shift-left", SelectToPreviousWordStart, Some(CONTEXT)),
+        #[cfg(not(target_os = "macos"))]
+        KeyBinding::new("ctrl-shift-left", SelectToPreviousWordStart, Some(CONTEXT)),
+        #[cfg(target_os = "macos")]
+        KeyBinding::new("alt-shift-right", SelectToNextWordEnd, Some(CONTEXT)),
+        #[cfg(not(target_os = "macos"))]
+        KeyBinding::new("ctrl-shift-right", SelectToNextWordEnd, Some(CONTEXT)),
         #[cfg(target_os = "macos")]
         KeyBinding::new("ctrl-cmd-space", ShowCharacterPalette, Some(CONTEXT)),
         #[cfg(target_os = "macos")]
@@ -145,6 +167,14 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("cmd-up", MoveToStart, Some(CONTEXT)),
         #[cfg(target_os = "macos")]
         KeyBinding::new("cmd-down", MoveToEnd, Some(CONTEXT)),
+        #[cfg(target_os = "macos")]
+        KeyBinding::new("alt-left", MoveToPreviousWord, Some(CONTEXT)),
+        #[cfg(target_os = "macos")]
+        KeyBinding::new("alt-right", MoveToNextWord, Some(CONTEXT)),
+        #[cfg(not(target_os = "macos"))]
+        KeyBinding::new("ctrl-left", MoveToPreviousWord, Some(CONTEXT)),
+        #[cfg(not(target_os = "macos"))]
+        KeyBinding::new("ctrl-right", MoveToNextWord, Some(CONTEXT)),
         #[cfg(target_os = "macos")]
         KeyBinding::new("cmd-shift-up", SelectToStart, Some(CONTEXT)),
         #[cfg(target_os = "macos")]
@@ -659,6 +689,26 @@ impl TextInput {
         self.move_to(end, window, cx);
     }
 
+    fn move_to_previous_word(
+        &mut self,
+        _: &MoveToPreviousWord,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let offset = self.previous_start_of_word();
+        self.move_to(offset, window, cx);
+    }
+
+    fn move_to_next_word(
+        &mut self,
+        _: &MoveToNextWord,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let offset = self.next_end_of_word();
+        self.move_to(offset, window, cx);
+    }
+
     fn select_to_start(&mut self, _: &SelectToStart, window: &mut Window, cx: &mut Context<Self>) {
         self.select_to(0, window, cx);
     }
@@ -686,6 +736,47 @@ impl TextInput {
     ) {
         let offset = self.end_of_line(window, cx);
         self.select_to(self.next_boundary(offset), window, cx);
+    }
+
+    fn select_to_previous_word(
+        &mut self,
+        _: &SelectToPreviousWordStart,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let offset = self.previous_start_of_word();
+        self.select_to(offset, window, cx);
+    }
+
+    fn select_to_next_word(
+        &mut self,
+        _: &SelectToNextWordEnd,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let offset = self.next_end_of_word();
+        self.select_to(offset, window, cx);
+    }
+
+    /// Return the start offset of the previous word.
+    fn previous_start_of_word(&mut self) -> usize {
+        let offset = self.selected_range.start;
+        let prev_str = &self.text[..offset].to_string();
+        UnicodeSegmentation::split_word_bound_indices(prev_str as &str)
+            .filter(|(_, s)| !s.trim_start().is_empty())
+            .next_back()
+            .map(|(i, _)| i)
+            .unwrap_or(0)
+    }
+
+    /// Return the next end offset of the next word.
+    fn next_end_of_word(&mut self) -> usize {
+        let offset = self.cursor_offset();
+        let next_str = &self.text[offset..].to_string();
+        UnicodeSegmentation::split_word_bound_indices(next_str as &str)
+            .find(|(_, s)| !s.trim_start().is_empty())
+            .map(|(i, s)| offset + i + s.len())
+            .unwrap_or(self.text.len())
     }
 
     /// Get start of line
@@ -778,6 +869,38 @@ impl TextInput {
         cx: &mut Context<Self>,
     ) {
         let offset = self.end_of_line(window, cx);
+        self.replace_text_in_range(
+            Some(self.range_to_utf16(&(self.cursor_offset()..offset))),
+            "",
+            window,
+            cx,
+        );
+        self.pause_blink_cursor(cx);
+    }
+
+    fn delete_previous_word(
+        &mut self,
+        _: &DeleteToPreviousWordStart,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let offset = self.previous_start_of_word();
+        self.replace_text_in_range(
+            Some(self.range_to_utf16(&(offset..self.cursor_offset()))),
+            "",
+            window,
+            cx,
+        );
+        self.pause_blink_cursor(cx);
+    }
+
+    fn delete_next_word(
+        &mut self,
+        _: &DeleteToNextWordEnd,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let offset = self.next_end_of_word();
         self.replace_text_in_range(
             Some(self.range_to_utf16(&(self.cursor_offset()..offset))),
             "",
@@ -1533,6 +1656,8 @@ impl Render for TextInput {
                     .on_action(cx.listener(Self::delete))
                     .on_action(cx.listener(Self::delete_to_beginning_of_line))
                     .on_action(cx.listener(Self::delete_to_end_of_line))
+                    .on_action(cx.listener(Self::delete_previous_word))
+                    .on_action(cx.listener(Self::delete_next_word))
                     .on_action(cx.listener(Self::enter))
             })
             .on_action(cx.listener(Self::left))
@@ -1548,10 +1673,14 @@ impl Render for TextInput {
             .on_action(cx.listener(Self::select_all))
             .on_action(cx.listener(Self::select_to_start_of_line))
             .on_action(cx.listener(Self::select_to_end_of_line))
+            .on_action(cx.listener(Self::select_to_previous_word))
+            .on_action(cx.listener(Self::select_to_next_word))
             .on_action(cx.listener(Self::home))
             .on_action(cx.listener(Self::end))
             .on_action(cx.listener(Self::move_to_start))
             .on_action(cx.listener(Self::move_to_end))
+            .on_action(cx.listener(Self::move_to_previous_word))
+            .on_action(cx.listener(Self::move_to_next_word))
             .on_action(cx.listener(Self::select_to_start))
             .on_action(cx.listener(Self::select_to_end))
             .on_action(cx.listener(Self::show_character_palette))
