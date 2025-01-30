@@ -1081,39 +1081,6 @@ impl TextInput {
         }
     }
 
-    // Fork of `closest_index_for_x` method from `gpui::text::Layout`
-    // https://github.com/zed-industries/zed/blob/d1be419fff415329b38f26aff90488700702c82a/crates/gpui/src/text_system/line_layout.rs#L74
-    fn closest_index_for_x(&self, line: &WrappedLine, x: Pixels) -> usize {
-        let mut prev_index = 0;
-        let mut prev_x = px(0.);
-
-        for run in line.unwrapped_layout.runs.iter() {
-            for glyph in run.glyphs.iter() {
-                if glyph.position.x >= x {
-                    if glyph.position.x - x < x - prev_x {
-                        return glyph.index;
-                    } else {
-                        return prev_index;
-                    }
-                }
-                prev_index = glyph.index;
-                prev_x = glyph.position.x;
-            }
-        }
-
-        // HOTFIX:
-        //
-        // Wait https://github.com/zed-industries/zed/pull/23603
-        if line.unwrapped_layout.len == 1 {
-            if x > line.width() / 2.0 {
-                return 1;
-            }
-            return 0;
-        }
-
-        line.unwrapped_layout.len
-    }
-
     /// Get the closest index for position
     ///
     /// Fork:
@@ -1165,7 +1132,9 @@ impl TextInput {
             Err(wrapped_line_end_index)
         } else {
             // HOTFIX
-            Ok(self.closest_index_for_x(&line, position_in_unwrapped_line.x))
+            Ok(line
+                .unwrapped_layout
+                .closest_index_for_x(position_in_unwrapped_line.x))
         }
     }
 
@@ -1205,7 +1174,7 @@ impl TextInput {
         for line in lines.iter() {
             let line_origin = self.line_origin_with_y_offset(&mut y_offset, &line, line_height);
             let pos = inner_position - line_origin;
-            let closest_index = self.closest_index_for_x(line, pos.x);
+            let closest_index = line.unwrapped_layout.closest_index_for_x(pos.x);
 
             // Return offset by use closest_index_for_x if is single line mode.
             if self.is_single_line() {
