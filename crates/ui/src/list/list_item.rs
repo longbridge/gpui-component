@@ -128,7 +128,6 @@ impl RenderOnce for ListItem {
             .relative()
             .items_center()
             .justify_between()
-            .when(is_active, |this| this.bg(cx.theme().list_active))
             .when(!self.disabled, |this| {
                 this.when_some(self.on_click, |this, on_click| {
                     this.cursor_pointer()
