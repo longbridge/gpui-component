@@ -15,7 +15,7 @@ use gpui::{
     Context, Entity, EntityInputHandler, EventEmitter, FocusHandle, Focusable,
     InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent, MouseButton, MouseDownEvent,
     MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Rems, Render, ScrollHandle,
-    ScrollWheelEvent, SharedString, Styled as _, TextAlign, UTF16Selection, Window, WrappedLine,
+    ScrollWheelEvent, SharedString, Styled as _, UTF16Selection, Window, WrappedLine,
 };
 
 // TODO:
@@ -222,7 +222,6 @@ pub struct TextInput {
     pub(super) cleanable: bool,
     pub(super) size: Size,
     pub(super) rows: usize,
-    pub(super) text_align: TextAlign,
     pattern: Option<regex::Regex>,
     validate: Option<Box<dyn Fn(&str) -> bool + 'static>>,
     pub(crate) scroll_handle: ScrollHandle,
@@ -273,7 +272,6 @@ impl TextInput {
             scrollbar_state: Rc::new(Cell::new(ScrollbarState::default())),
             scroll_size: gpui::size(px(0.), px(0.)),
             preferred_x_offset: None,
-            text_align: TextAlign::default(),
         };
 
         // Observe the blink cursor to repaint the view when it changes.
@@ -301,14 +299,6 @@ impl TextInput {
     /// Use the text input field as a multi-line Textarea.
     pub fn multi_line(mut self) -> Self {
         self.multi_line = true;
-        self
-    }
-
-    /// Set the text alignment of the input field.
-    ///
-    /// Only support left and center alignment.
-    pub fn text_align(mut self, text_align: TextAlign) -> Self {
-        self.text_align = text_align;
         self
     }
 

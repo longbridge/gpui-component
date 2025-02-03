@@ -1,7 +1,7 @@
 use gpui::{
     fill, point, px, relative, size, App, Bounds, Corners, Element, ElementId, ElementInputHandler,
     Entity, GlobalElementId, IntoElement, LayoutId, MouseButton, MouseMoveEvent, PaintQuad, Path,
-    Pixels, Point, Style, TextRun, UnderlineStyle, Window, WrappedLine,
+    Pixels, Point, Style, TextAlign, TextRun, UnderlineStyle, Window, WrappedLine,
 };
 use smallvec::SmallVec;
 
@@ -487,7 +487,6 @@ impl Element for TextElement {
         let focused = focus_handle.is_focused(window);
         let bounds = prepaint.bounds;
         let selected_range = self.input.read(cx).selected_range.clone();
-        let text_align = self.input.read(cx).text_align;
 
         window.handle_input(
             &focus_handle,
@@ -515,7 +514,7 @@ impl Element for TextElement {
         }
         for line in prepaint.lines.iter() {
             let p = point(origin.x, origin.y + offset_y);
-            _ = line.paint(p, line_height, text_align, window, cx);
+            _ = line.paint(p, line_height, TextAlign::Left, window, cx);
             offset_y += line.size(line_height).height;
         }
 
