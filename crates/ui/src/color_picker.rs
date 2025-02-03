@@ -260,7 +260,7 @@ impl ColorPicker {
                                 .border_1()
                                 .border_color(hovered_color.darken(0.2))
                                 .size_5()
-                                .rounded(px(cx.theme().radius)),
+                                .rounded(cx.theme().radius),
                         )
                         .child(self.color_input.clone()),
                 )
@@ -320,7 +320,7 @@ impl Render for ColorPicker {
                             .bg(cx.theme().background)
                             .border_1()
                             .border_color(cx.theme().input)
-                            .rounded(px(cx.theme().radius))
+                            .rounded(cx.theme().radius)
                             .bg(cx.theme().background)
                             .shadow_sm()
                             .overflow_hidden()
@@ -359,12 +359,12 @@ impl Render for ColorPicker {
                                     })
                                     .w_72()
                                     .overflow_hidden()
-                                    .rounded_lg()
+                                    .rounded(cx.theme().radius)
                                     .p_3()
                                     .border_1()
                                     .border_color(cx.theme().border)
                                     .shadow_lg()
-                                    .rounded_lg()
+                                    .rounded(cx.theme().radius)
                                     .bg(cx.theme().background)
                                     .on_mouse_up_out(
                                         MouseButton::Left,

@@ -259,7 +259,7 @@ impl Render for DropdownStory {
                     .w_full()
                     .items_center()
                     .p_10()
-                    .rounded_lg()
+                    .rounded(cx.theme().radius)
                     .bg(cx.theme().card)
                     .border_1()
                     .border_color(cx.theme().border)

@@ -223,7 +223,9 @@ impl RenderOnce for AccordionItem {
             .bg(cx.theme().accordion)
             .overflow_hidden()
             .when(self.bordered, |this| {
-                this.border_1().border_color(cx.theme().border).rounded_md()
+                this.border_1()
+                    .border_color(cx.theme().border)
+                    .rounded(cx.theme().radius)
             })
             .text_size(text_size)
             .child(

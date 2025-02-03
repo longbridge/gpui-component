@@ -27,7 +27,8 @@ impl Progress {
 
 impl RenderOnce for Progress {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let rounded = px(self.height / 2.);
+        // Match the theme radius, if theme radius is zero use it.
+        let radius = px(self.height / 2.).min(cx.theme().radius);
         let relative_w = relative(match self.value {
             v if v < 0. => 0.,
             v if v > 100. => 1.,
@@ -37,7 +38,7 @@ impl RenderOnce for Progress {
         div()
             .relative()
             .h(px(self.height))
-            .rounded(rounded)
+            .rounded(radius)
             .bg(cx.theme().progress_bar.opacity(0.2))
             .child(
                 div()
@@ -48,8 +49,8 @@ impl RenderOnce for Progress {
                     .w(relative_w)
                     .bg(cx.theme().progress_bar)
                     .map(|this| match self.value {
-                        v if v >= 100. => this.rounded(rounded),
-                        _ => this.rounded_l(rounded),
+                        v if v >= 100. => this.rounded(radius),
+                        _ => this.rounded_l(radius),
                     }),
             )
     }

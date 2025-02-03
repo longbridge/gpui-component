@@ -233,7 +233,7 @@ impl Render for OtpInput {
                     .when(cx.theme().shadow, |this| this.shadow_sm())
                     .items_center()
                     .justify_center()
-                    .rounded_md()
+                    .rounded(cx.theme().radius)
                     .text_size(text_size)
                     .map(|this| match self.size {
                         Size::XSmall => this.w_6().h_6(),

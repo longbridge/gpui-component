@@ -61,9 +61,9 @@ pub struct Tag {
 impl Tag {
     fn new() -> Self {
         Self {
-            base: div().flex().items_center().rounded_md().border_1(),
+            base: div().flex().items_center().border_1(),
             variant: TagVariant::default(),
-            size: Size::Medium,
+            size: Size::default(),
         }
     }
 
@@ -111,9 +111,10 @@ impl RenderOnce for Tag {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         self.base
             .line_height(relative(1.3))
+            .text_xs()
             .map(|this| match self.size {
-                Size::XSmall | Size::Small => this.text_xs().px_1p5().py_0(),
-                _ => this.text_xs().px_2p5().py_0p5(),
+                Size::XSmall | Size::Small => this.px_1p5().py_0().rounded(cx.theme().radius / 2.),
+                _ => this.px_2p5().py_0p5().rounded(cx.theme().radius),
             })
             .bg(self.variant.bg(cx))
             .text_color(self.variant.fg(cx))

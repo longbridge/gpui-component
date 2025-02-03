@@ -122,6 +122,11 @@ impl Element for Switch {
                 _ => px(16.),
             };
             let inset = px(2.);
+            let radius = if cx.theme().radius >= px(4.) {
+                bg_height
+            } else {
+                cx.theme().radius
+            };
 
             let mut element = div()
                 .flex()
@@ -137,7 +142,7 @@ impl Element for Switch {
                                 .id(self.id.clone())
                                 .w(bg_width)
                                 .h(bg_height)
-                                .rounded(bg_height / 2.)
+                                .rounded(radius)
                                 .flex()
                                 .items_center()
                                 .border(inset)
@@ -146,7 +151,7 @@ impl Element for Switch {
                                 .when(!self.disabled, |this| this.cursor_pointer())
                                 .child(
                                     // Switch Toggle
-                                    div().rounded_full().bg(toggle_bg).size(bar_width).map(
+                                    div().rounded(radius).bg(toggle_bg).size(bar_width).map(
                                         |this| {
                                             let prev_checked = state.prev_checked.clone();
                                             if !self.disabled

@@ -1,6 +1,6 @@
 use crate::{h_flex, v_flex, ActiveTheme, Disableable, IconName, Selectable};
 use gpui::{
-    div, prelude::FluentBuilder as _, relative, svg, App, ElementId, InteractiveElement,
+    div, prelude::FluentBuilder as _, px, relative, svg, App, ElementId, InteractiveElement,
     IntoElement, ParentElement, RenderOnce, SharedString, StatefulInteractiveElement as _,
     Styled as _, Window,
 };
@@ -69,6 +69,7 @@ impl RenderOnce for Checkbox {
         } else {
             (cx.theme().primary, cx.theme().primary_foreground)
         };
+        let radius = (cx.theme().radius / 2.).min(px(6.));
 
         // wrap a flex to patch for let Checkbox display inline
         div().flex().child(
@@ -82,7 +83,7 @@ impl RenderOnce for Checkbox {
                         .relative()
                         .border_1()
                         .border_color(color)
-                        .rounded_sm()
+                        .rounded(radius)
                         .size_4()
                         .flex_shrink_0()
                         .map(|this| match self.checked {

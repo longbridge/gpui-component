@@ -1008,7 +1008,7 @@ where
                 .id(("icon-sort", col_ix))
                 .cursor_pointer()
                 .p(px(2.))
-                .rounded_sm()
+                .rounded(cx.theme().radius / 2.)
                 .map(|this| match is_on {
                     true => this,
                     false => this.opacity(0.5),
@@ -1594,7 +1594,9 @@ where
         div()
             .size_full()
             .when(self.border, |this| {
-                this.rounded_md().border_1().border_color(cx.theme().border)
+                this.rounded(cx.theme().radius)
+                    .border_1()
+                    .border_color(cx.theme().border)
             })
             .bg(cx.theme().table)
             .when(loading, |this| {

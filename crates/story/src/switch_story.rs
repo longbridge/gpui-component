@@ -84,7 +84,7 @@ impl Render for SwitchStory {
                 .gap_4()
                 .p_4()
                 .w_full()
-                .rounded_lg()
+                .rounded(cx.theme().radius)
                 .border_1()
                 .border_color(theme.border)
         }

@@ -1619,7 +1619,7 @@ impl Render for TextInput {
                 })
                 .border_color(cx.theme().input)
                 .border_1()
-                .rounded(px(cx.theme().radius))
+                .rounded(cx.theme().radius)
                 .when(cx.theme().shadow, |this| this.shadow_sm())
                 .when(focused, |this| this.outline(cx))
             })

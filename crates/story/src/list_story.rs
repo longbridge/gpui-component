@@ -128,7 +128,7 @@ impl RenderOnce for CompanyListItem {
                             .child(
                                 h_flex().w(px(65.)).justify_end().child(
                                     div()
-                                        .rounded_md()
+                                        .rounded(cx.theme().radius)
                                         .whitespace_nowrap()
                                         .text_size(px(12.))
                                         .px_1()
@@ -428,7 +428,7 @@ impl Render for ListStory {
                     .w_full()
                     .border_1()
                     .border_color(cx.theme().border)
-                    .rounded_md()
+                    .rounded(cx.theme().radius)
                     .child(self.company_list.clone()),
             )
     }

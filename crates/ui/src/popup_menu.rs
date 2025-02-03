@@ -521,6 +521,7 @@ impl Render for PopupMenu {
         );
 
         const ITEM_HEIGHT: Pixels = px(26.);
+        let item_radius = cx.theme().radius.min(px(8.));
 
         v_flex()
             .id("popup-menu")
@@ -573,7 +574,7 @@ impl Render for PopupMenu {
                                             .text_sm()
                                             .py_0()
                                             .px_1()
-                                            .rounded_md()
+                                            .rounded(item_radius)
                                             .items_center()
                                             .on_mouse_enter(cx.listener(move |this, _, _, cx| {
                                                 this.hovered_menu_ix = Some(ix);

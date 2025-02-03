@@ -55,7 +55,7 @@ impl Render for DragPanel {
             .whitespace_nowrap()
             .border_1()
             .border_color(cx.theme().border)
-            .rounded_md()
+            .rounded(cx.theme().radius)
             .text_color(cx.theme().tab_foreground)
             .bg(cx.theme().tab_active)
             .opacity(0.75)

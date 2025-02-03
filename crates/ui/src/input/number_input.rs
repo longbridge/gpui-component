@@ -178,7 +178,7 @@ impl Render for NumberInput {
             .bg(cx.theme().background)
             .border_color(cx.theme().input)
             .border_1()
-            .rounded_md()
+            .rounded(cx.theme().radius)
             .when(focused, |this| this.outline(cx))
             .child(
                 Button::new("minus")

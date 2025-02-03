@@ -608,6 +608,7 @@ where
         let bounds = self.bounds;
         let allow_open = !(self.open || self.disabled);
         let outline_visible = self.open || is_focused && !self.disabled;
+        let popup_radius = cx.theme().radius.min(px(8.));
 
         // If the size has change, set size to self.list, to change the QueryInput size.
         if self.list.read(cx).size != self.size {
@@ -636,7 +637,7 @@ where
                     .bg(cx.theme().background)
                     .border_1()
                     .border_color(cx.theme().input)
-                    .rounded(px(cx.theme().radius))
+                    .rounded(cx.theme().radius)
                     .when(cx.theme().shadow, |this| this.shadow_sm())
                     .map(|this| {
                         if self.disabled {
@@ -726,7 +727,7 @@ where
                                         .bg(cx.theme().background)
                                         .border_1()
                                         .border_color(cx.theme().border)
-                                        .rounded(px(cx.theme().radius))
+                                        .rounded(popup_radius)
                                         .shadow_md()
                                         .on_mouse_down_out(|_, _, cx| {
                                             cx.dispatch_action(&Escape);

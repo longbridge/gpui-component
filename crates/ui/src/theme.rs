@@ -1,7 +1,7 @@
 use std::ops::{Deref, DerefMut};
 
 use gpui::{
-    hsla, point, App, BoxShadow, Global, Hsla, Pixels, SharedString, Window, WindowAppearance,
+    hsla, point, px, App, BoxShadow, Global, Hsla, Pixels, SharedString, Window, WindowAppearance,
 };
 
 use crate::{scroll::ScrollbarShow, Colorize as _};
@@ -364,8 +364,8 @@ pub struct Theme {
 
     pub mode: ThemeMode,
     pub font_family: SharedString,
-    pub font_size: f32,
-    pub radius: f32,
+    pub font_size: Pixels,
+    pub radius: Pixels,
     pub shadow: bool,
     pub transparent: Hsla,
     /// Show the scrollbar mode, default: Scrolling
@@ -508,7 +508,7 @@ impl From<ThemeColor> for Theme {
         Theme {
             mode: ThemeMode::default(),
             transparent: Hsla::transparent_black(),
-            font_size: 16.0,
+            font_size: px(16.),
             font_family: if cfg!(target_os = "macos") {
                 ".SystemUIFont".into()
             } else if cfg!(target_os = "windows") {
@@ -516,7 +516,7 @@ impl From<ThemeColor> for Theme {
             } else {
                 "FreeMono".into()
             },
-            radius: 4.0,
+            radius: px(4.),
             shadow: true,
             scrollbar_show: ScrollbarShow::default(),
             colors,

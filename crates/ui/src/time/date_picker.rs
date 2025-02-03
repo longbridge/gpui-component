@@ -307,7 +307,7 @@ impl Render for DatePicker {
                     .bg(cx.theme().background)
                     .border_1()
                     .border_color(cx.theme().input)
-                    .rounded(px(cx.theme().radius))
+                    .rounded(cx.theme().radius)
                     .when(cx.theme().shadow, |this| this.shadow_sm())
                     .cursor_pointer()
                     .overflow_hidden()
@@ -345,12 +345,11 @@ impl Render for DatePicker {
                             div()
                                 .occlude()
                                 .mt_1p5()
-                                .rounded_lg()
                                 .p_3()
                                 .border_1()
                                 .border_color(cx.theme().border)
                                 .shadow_lg()
-                                .rounded_lg()
+                                .rounded((cx.theme().radius * 2.).min(px(8.)))
                                 .bg(cx.theme().background)
                                 .on_mouse_up_out(
                                     MouseButton::Left,

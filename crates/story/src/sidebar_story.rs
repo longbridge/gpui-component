@@ -200,7 +200,7 @@ impl Render for SidebarStory {
         ];
 
         h_flex()
-            .rounded_md()
+            .rounded(cx.theme().radius)
             .border_1()
             .border_color(cx.theme().border)
             .h_full()
@@ -216,7 +216,7 @@ impl Render for SidebarStory {
                                     .flex()
                                     .items_center()
                                     .justify_center()
-                                    .rounded_md()
+                                    .rounded(cx.theme().radius)
                                     .bg(ui::blue_500())
                                     .text_color(ui::white())
                                     .size_8()

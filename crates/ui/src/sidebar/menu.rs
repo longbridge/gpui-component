@@ -167,7 +167,7 @@ impl SidebarMenuItem {
             .p_2()
             .gap_2()
             .items_center()
-            .rounded_md()
+            .rounded(cx.theme().radius)
             .text_sm()
             .cursor_pointer()
             .hover(|this| {

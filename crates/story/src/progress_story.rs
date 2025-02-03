@@ -11,7 +11,7 @@ use ui::{
     progress::Progress,
     skeleton::Skeleton,
     slider::{Slider, SliderEvent},
-    v_flex, Colorize as _, ContextModal, IconName, Sizable,
+    v_flex, ActiveTheme as _, Colorize as _, ContextModal, IconName, Sizable,
 };
 
 pub struct ProgressStory {
@@ -271,7 +271,7 @@ impl Render for ProgressStory {
                                 h_flex()
                                     .w_32()
                                     .p_1()
-                                    .rounded_lg()
+                                    .rounded(cx.theme().radius)
                                     .justify_center()
                                     .bg(self.slider_hsl_value)
                                     .child(rgb.clone())

@@ -350,9 +350,9 @@ impl Calendar {
     ) -> impl IntoElement {
         h_flex()
             .map(|this| match self.size {
-                Size::Small => this.size_7().rounded_sm(),
-                Size::Large => this.size_10().rounded_md(),
-                _ => this.size_9().rounded_md(),
+                Size::Small => this.size_7().rounded(cx.theme().radius / 2.0),
+                Size::Large => this.size_10().rounded(cx.theme().radius),
+                _ => this.size_9().rounded(cx.theme().radius),
             })
             .justify_center()
             .text_color(cx.theme().muted_foreground)
@@ -374,9 +374,9 @@ impl Calendar {
         h_flex()
             .id(id.into())
             .map(|this| match self.size {
-                Size::Small => this.size_7().rounded_md(),
-                Size::Large => this.size_10().rounded_lg(),
-                _ => this.size_9().rounded_lg(),
+                Size::Small => this.size_7().rounded(cx.theme().radius),
+                Size::Large => this.size_10().rounded(cx.theme().radius * 2.),
+                _ => this.size_9().rounded(cx.theme().radius * 2.),
             })
             .justify_center()
             .cursor_pointer()

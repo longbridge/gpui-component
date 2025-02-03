@@ -13,7 +13,7 @@ pub struct Skeleton {
 impl Skeleton {
     pub fn new() -> Self {
         Self {
-            base: div().w_full().h_4().rounded_md(),
+            base: div().w_full().h_4(),
             secondary: false,
         }
     }

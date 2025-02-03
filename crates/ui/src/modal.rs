@@ -112,11 +112,13 @@ pub(crate) fn overlay_color(overlay: bool, _: &Window, cx: &App) -> Hsla {
 
 impl Modal {
     pub fn new(_: &mut Window, cx: &mut App) -> Self {
+        let radius = (cx.theme().radius * 2.).min(px(20.));
+
         let base = v_flex()
             .bg(cx.theme().background)
             .border_1()
             .border_color(cx.theme().border)
-            .rounded_lg()
+            .rounded(radius)
             .shadow_xl()
             .min_h_24()
             .p_4()

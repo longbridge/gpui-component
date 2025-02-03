@@ -53,7 +53,7 @@ impl<E: Collapsible + IntoElement> RenderOnce for SidebarGroup<E> {
                     div()
                         .flex_shrink_0()
                         .px_2()
-                        .rounded_md()
+                        .rounded(cx.theme().radius)
                         .text_xs()
                         .text_color(cx.theme().sidebar_foreground.opacity(0.7))
                         .h_8()

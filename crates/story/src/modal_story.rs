@@ -324,7 +324,7 @@ impl ModalStory {
                     div()
                         .border_1()
                         .border_color(cx.theme().border)
-                        .rounded_md()
+                        .rounded(cx.theme().radius)
                         .size_full()
                         .flex_1()
                         .h(list_h)

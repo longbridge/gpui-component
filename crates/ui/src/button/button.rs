@@ -3,8 +3,8 @@ use crate::{
     Selectable, Sizable, Size,
 };
 use gpui::{
-    div, prelude::FluentBuilder as _, px, relative, AnyElement, App, ClickEvent, Corners, Div,
-    Edges, ElementId, Hsla, InteractiveElement, IntoElement, MouseButton, ParentElement, Pixels,
+    div, prelude::FluentBuilder as _, relative, AnyElement, App, ClickEvent, Corners, Div, Edges,
+    ElementId, Hsla, InteractiveElement, IntoElement, MouseButton, ParentElement, Pixels,
     RenderOnce, SharedString, StatefulInteractiveElement as _, Styled, Window,
 };
 
@@ -359,9 +359,9 @@ impl RenderOnce for Button {
             .when(
                 self.border_corners.top_left && self.border_corners.bottom_left,
                 |this| match self.rounded {
-                    ButtonRounded::Small => this.rounded_l(px(cx.theme().radius * 0.5)),
-                    ButtonRounded::Medium => this.rounded_l(px(cx.theme().radius)),
-                    ButtonRounded::Large => this.rounded_l(px(cx.theme().radius * 2.0)),
+                    ButtonRounded::Small => this.rounded_l(cx.theme().radius * 0.5),
+                    ButtonRounded::Medium => this.rounded_l(cx.theme().radius),
+                    ButtonRounded::Large => this.rounded_l(cx.theme().radius * 2.0),
                     ButtonRounded::Size(px) => this.rounded_l(px),
                     ButtonRounded::None => this.rounded_none(),
                 },
@@ -369,9 +369,9 @@ impl RenderOnce for Button {
             .when(
                 self.border_corners.top_right && self.border_corners.bottom_right,
                 |this| match self.rounded {
-                    ButtonRounded::Small => this.rounded_r(px(cx.theme().radius * 0.5)),
-                    ButtonRounded::Medium => this.rounded_r(px(cx.theme().radius)),
-                    ButtonRounded::Large => this.rounded_r(px(cx.theme().radius * 2.0)),
+                    ButtonRounded::Small => this.rounded_r(cx.theme().radius * 0.5),
+                    ButtonRounded::Medium => this.rounded_r(cx.theme().radius),
+                    ButtonRounded::Large => this.rounded_r(cx.theme().radius * 2.0),
                     ButtonRounded::Size(px) => this.rounded_r(px),
                     ButtonRounded::None => this.rounded_none(),
                 },
