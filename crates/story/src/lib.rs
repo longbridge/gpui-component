@@ -74,7 +74,13 @@ pub struct SelectLocale(SharedString);
 #[derive(Clone, PartialEq, Eq, Deserialize)]
 pub struct SelectFont(usize);
 
-impl_internal_actions!(story, [SelectLocale, SelectFont, SelectScrollbarShow,]);
+#[derive(Clone, PartialEq, Eq, Deserialize)]
+pub struct SelectRadius(usize);
+
+impl_internal_actions!(
+    story,
+    [SelectLocale, SelectFont, SelectRadius, SelectScrollbarShow,]
+);
 
 actions!(story, [Quit, Open, CloseWindow]);
 
