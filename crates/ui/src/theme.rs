@@ -56,77 +56,151 @@ pub fn box_shadow(
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ThemeColor {
+    /// Used for accents such as hover background on MenuItem, ListItem, etc.
     pub accent: Hsla,
+    /// Used for accent text color.
     pub accent_foreground: Hsla,
+    /// Accordion background color.
     pub accordion: Hsla,
+    /// Accordion active background color.
     pub accordion_active: Hsla,
+    /// Accordion hover background color.
     pub accordion_hover: Hsla,
+    /// Default background color.
     pub background: Hsla,
+    /// Default border color
     pub border: Hsla,
+    /// Background color for Card.
     pub card: Hsla,
+    /// Text color for Card.
     pub card_foreground: Hsla,
+    /// Input caret color (Blinking cursor).
     pub caret: Hsla,
+    /// Danger background color.
     pub danger: Hsla,
+    /// Danger active background color.
     pub danger_active: Hsla,
+    /// Danger text color.
     pub danger_foreground: Hsla,
+    /// Danger hover background color.
     pub danger_hover: Hsla,
+    /// Drag border color.
     pub drag_border: Hsla,
+    /// Drop target background color.
     pub drop_target: Hsla,
+    /// Default text color.
     pub foreground: Hsla,
+    /// Border color for inputs such as Input, Dropdown, etc.
     pub input: Hsla,
+    /// Link text color.
     pub link: Hsla,
+    /// Active link text color.
     pub link_active: Hsla,
+    /// Hover link text color.
     pub link_hover: Hsla,
+    /// Background color for List and ListItem.
     pub list: Hsla,
+    /// Background color for active ListItem.
     pub list_active: Hsla,
+    /// Border color for active ListItem.
     pub list_active_border: Hsla,
+    /// Stripe background color for even ListItem.
     pub list_even: Hsla,
+    /// Background color for List header.
     pub list_head: Hsla,
+    /// Hover background color for ListItem.
     pub list_hover: Hsla,
+    /// Muted backgrounds such as Skeleton and Switch.
     pub muted: Hsla,
+    /// Muted text color, as used in disabled text.
     pub muted_foreground: Hsla,
-    pub panel: Hsla,
+    /// Background color for Popover.
     pub popover: Hsla,
+    /// Text color for Popover.
     pub popover_foreground: Hsla,
+    /// Primary background color.
     pub primary: Hsla,
+    /// Active primary background color.
     pub primary_active: Hsla,
+    /// Primary text color.
     pub primary_foreground: Hsla,
+    /// Hover primary background color.
     pub primary_hover: Hsla,
+    /// Progress bar background color.
     pub progress_bar: Hsla,
+    /// Used for focus ring.
     pub ring: Hsla,
+    /// Scrollbar background color.
     pub scrollbar: Hsla,
+    /// Scrollbar thumb background color.
     pub scrollbar_thumb: Hsla,
+    /// Scrollbar thumb hover background color.
     pub scrollbar_thumb_hover: Hsla,
+    /// Secondary background color.
     pub secondary: Hsla,
+    /// Active secondary background color.
     pub secondary_active: Hsla,
+    /// Secondary text color, used for secondary Button text color or secondary text.
     pub secondary_foreground: Hsla,
+    /// Hover secondary background color.
     pub secondary_hover: Hsla,
+    /// Input selection background color.
     pub selection: Hsla,
+    /// Sidebar background color.
     pub sidebar: Hsla,
+    /// Sidebar accent background color.
     pub sidebar_accent: Hsla,
+    /// Sidebar accent text color.
     pub sidebar_accent_foreground: Hsla,
+    /// Sidebar border color.
     pub sidebar_border: Hsla,
+    /// Sidebar text color.
     pub sidebar_foreground: Hsla,
+    /// Sidebar primary background color.
     pub sidebar_primary: Hsla,
+    /// Sidebar primary text color.
     pub sidebar_primary_foreground: Hsla,
+    /// Skeleton background color.
     pub skeleton: Hsla,
+    /// Slider bar background color.
     pub slider_bar: Hsla,
+    /// Slider thumb background color.
     pub slider_thumb: Hsla,
+    /// Tab background color.
     pub tab: Hsla,
+    /// Tab active background color.
     pub tab_active: Hsla,
+    /// Tab active text color.
     pub tab_active_foreground: Hsla,
+    /// TabBar background color.
     pub tab_bar: Hsla,
+    /// Tab text color.
     pub tab_foreground: Hsla,
+    /// Table background color.
     pub table: Hsla,
+    /// Table active item background color.
     pub table_active: Hsla,
+    /// Table active item border color.
     pub table_active_border: Hsla,
+    /// Stripe background color for even TableRow.
     pub table_even: Hsla,
+    /// Table head background color.
     pub table_head: Hsla,
+    /// Table head text color.
     pub table_head_foreground: Hsla,
+    /// Table item hover background color.
     pub table_hover: Hsla,
+    /// Table row border color.
     pub table_row_border: Hsla,
+    /// TitleBar background color, use for Window title bar.
     pub title_bar: Hsla,
+    /// TitleBar border color.
     pub title_bar_border: Hsla,
+    /// Window border color.
+    ///
+    /// # Platform specific:
+    ///
+    /// This is only works on Linux, other platforms we can't change the window border color.
     pub window_border: Hsla,
 }
 
@@ -162,7 +236,6 @@ impl ThemeColor {
             list_hover: hsl(240.0, 4.8, 95.0),
             muted: hsl(240.0, 4.8, 95.9),
             muted_foreground: hsl(240.0, 3.8, 46.1),
-            panel: hsl(0.0, 0.0, 100.0),
             popover: hsl(0.0, 0.0, 100.0),
             popover_foreground: hsl(240.0, 10.0, 3.9),
             primary: hsl(223.0, 5.9, 10.0),
@@ -239,7 +312,6 @@ impl ThemeColor {
             list_hover: hsl(240.0, 3.7, 15.9),
             muted: hsl(240.0, 3.7, 15.9),
             muted_foreground: hsl(240.0, 5.0, 64.9),
-            panel: hsl(299.0, 2., 11.),
             popover: hsl(0.0, 0.0, 10.),
             popover_foreground: hsl(0.0, 0.0, 78.0),
             primary: hsl(223.0, 0.0, 98.0),
@@ -361,7 +433,6 @@ impl Theme {
         self.scrollbar = self.scrollbar.apply(mask_color);
         self.scrollbar_thumb = self.scrollbar_thumb.apply(mask_color);
         self.scrollbar_thumb_hover = self.scrollbar_thumb_hover.apply(mask_color);
-        self.panel = self.panel.apply(mask_color);
         self.drag_border = self.drag_border.apply(mask_color);
         self.drop_target = self.drop_target.apply(mask_color);
         self.tab_bar = self.tab_bar.apply(mask_color);
