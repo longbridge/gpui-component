@@ -1,9 +1,15 @@
-use std::{any::TypeId, collections::VecDeque, sync::Arc, time::Duration};
+use std::{
+    any::TypeId,
+    collections::{HashMap, VecDeque},
+    sync::Arc,
+    time::Duration,
+};
 
 use gpui::{
     div, prelude::FluentBuilder, px, Animation, AnimationExt, App, AppContext, ClickEvent, Context,
     DismissEvent, ElementId, Entity, EventEmitter, InteractiveElement as _, IntoElement,
-    ParentElement as _, Render, SharedString, StatefulInteractiveElement, Styled, Window,
+    ParentElement as _, Render, SharedString, StatefulInteractiveElement, Styled, Subscription,
+    Window,
 };
 use smol::Timer;
 
@@ -20,7 +26,7 @@ pub enum NotificationType {
     Error,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub(crate) enum NotificationId {
     Id(TypeId),
     IdAndElementId(TypeId, ElementId),
@@ -286,6 +292,7 @@ pub struct NotificationList {
     /// Notifications that will be auto hidden.
     pub(crate) notifications: VecDeque<Entity<Notification>>,
     expanded: bool,
+    _subscriptions: HashMap<NotificationId, Subscription>,
 }
 
 impl NotificationList {
@@ -293,6 +300,7 @@ impl NotificationList {
         Self {
             notifications: VecDeque::new(),
             expanded: false,
+            _subscriptions: HashMap::new(),
         }
     }
 
@@ -310,10 +318,14 @@ impl NotificationList {
         self.notifications.retain(|note| note.read(cx).id != id);
 
         let notification = cx.new(|_| notification);
-        cx.subscribe(&notification, move |view, _, _: &DismissEvent, cx| {
-            view.notifications.retain(|note| id != note.read(cx).id);
-        })
-        .detach();
+
+        self._subscriptions.insert(
+            id.clone(),
+            cx.subscribe(&notification, move |view, _, _: &DismissEvent, cx| {
+                view.notifications.retain(|note| id != note.read(cx).id);
+                view._subscriptions.remove(&id);
+            }),
+        );
 
         self.notifications.push_back(notification.clone());
         if autohide {

@@ -3,7 +3,7 @@ use gpui::{
     anchored, deferred, div, prelude::FluentBuilder as _, px, App, AppContext, Context, ElementId,
     Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement as _, KeyBinding, Length,
     MouseButton, ParentElement as _, Render, SharedString, StatefulInteractiveElement as _, Styled,
-    Window,
+    Subscription, Window,
 };
 use rust_i18n::t;
 
@@ -68,6 +68,7 @@ pub struct DatePicker {
     calendar: Entity<Calendar>,
     number_of_months: usize,
     presets: Option<Vec<DateRangePreset>>,
+    _subscriptions: Vec<Subscription>,
 }
 
 impl DatePicker {
@@ -103,7 +104,7 @@ impl DatePicker {
             this
         });
 
-        cx.subscribe_in(
+        let _subscriptions = vec![cx.subscribe_in(
             &calendar,
             window,
             |this, _, ev: &CalendarEvent, window, cx| match ev {
@@ -112,8 +113,7 @@ impl DatePicker {
                     this.focus_handle.focus(window);
                 }
             },
-        )
-        .detach();
+        )];
 
         Self {
             id: id.into(),
@@ -128,6 +128,7 @@ impl DatePicker {
             number_of_months: 1,
             placeholder: None,
             presets: None,
+            _subscriptions,
         }
     }
 

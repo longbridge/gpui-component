@@ -13,7 +13,7 @@ use gpui::{
     ListSizingBehavior, MouseButton, ParentElement, Render, SharedString, Styled, Task,
     UniformListScrollHandle, Window,
 };
-use gpui::{px, App, Context, EventEmitter, ScrollStrategy};
+use gpui::{px, App, Context, EventEmitter, ScrollStrategy, Subscription};
 use smol::Timer;
 
 use super::loading::Loading;
@@ -158,6 +158,7 @@ pub struct List<D: ListDelegate> {
     right_clicked_index: Option<usize>,
     _search_task: Task<()>,
     _load_more_task: Task<()>,
+    _query_input_subscription: Subscription,
 }
 
 impl<D> List<D>
@@ -173,8 +174,8 @@ where
                 .cleanable()
         });
 
-        cx.subscribe_in(&query_input, window, Self::on_query_input_event)
-            .detach();
+        let _query_input_subscription =
+            cx.subscribe_in(&query_input, window, Self::on_query_input_event);
 
         Self {
             focus_handle: cx.focus_handle(),
@@ -192,6 +193,7 @@ where
             size: Size::default(),
             _search_task: Task::ready(()),
             _load_more_task: Task::ready(()),
+            _query_input_subscription,
         }
     }
 
@@ -233,8 +235,8 @@ where
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        cx.subscribe_in(&query_input, window, Self::on_query_input_event)
-            .detach();
+        self._query_input_subscription =
+            cx.subscribe_in(&query_input, window, Self::on_query_input_event);
         self.query_input = Some(query_input);
     }
 

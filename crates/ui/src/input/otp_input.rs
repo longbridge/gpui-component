@@ -1,7 +1,7 @@
 use gpui::{
     div, prelude::FluentBuilder, px, AnyElement, AppContext as _, Context, Entity, EventEmitter,
     FocusHandle, Focusable, InteractiveElement, IntoElement, KeyDownEvent, MouseButton,
-    MouseDownEvent, ParentElement as _, Render, SharedString, Styled as _, Window,
+    MouseDownEvent, ParentElement as _, Render, SharedString, Styled as _, Subscription, Window,
 };
 
 use crate::{h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable, Size};
@@ -29,13 +29,33 @@ pub struct OtpInput {
     value: SharedString,
     blink_cursor: Entity<BlinkCursor>,
     size: Size,
+    _subscriptions: Vec<Subscription>,
 }
 
 impl OtpInput {
     pub fn new(length: usize, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
         let blink_cursor = cx.new(|_| BlinkCursor::new());
-        let input = Self {
+
+        let _subscriptions = vec![
+            // Observe the blink cursor to repaint the view when it changes.
+            cx.observe(&blink_cursor, |_, _, cx| cx.notify()),
+            // Blink the cursor when the window is active, pause when it's not.
+            cx.observe_window_activation(window, |this, window, cx| {
+                if window.is_window_active() {
+                    let focus_handle = this.focus_handle.clone();
+                    if focus_handle.is_focused(window) {
+                        this.blink_cursor.update(cx, |blink_cursor, cx| {
+                            blink_cursor.start(cx);
+                        });
+                    }
+                }
+            }),
+            cx.on_focus(&focus_handle, window, Self::on_focus),
+            cx.on_blur(&focus_handle, window, Self::on_blur),
+        ];
+
+        Self {
             focus_handle: focus_handle.clone(),
             length,
             number_of_groups: 2,
@@ -43,27 +63,8 @@ impl OtpInput {
             masked: false,
             blink_cursor: blink_cursor.clone(),
             size: Size::Medium,
-        };
-
-        // Observe the blink cursor to repaint the view when it changes.
-        cx.observe(&blink_cursor, |_, _, cx| cx.notify()).detach();
-        // Blink the cursor when the window is active, pause when it's not.
-        cx.observe_window_activation(window, |this, window, cx| {
-            if window.is_window_active() {
-                let focus_handle = this.focus_handle.clone();
-                if focus_handle.is_focused(window) {
-                    this.blink_cursor.update(cx, |blink_cursor, cx| {
-                        blink_cursor.start(cx);
-                    });
-                }
-            }
-        })
-        .detach();
-
-        cx.on_focus(&focus_handle, window, Self::on_focus).detach();
-        cx.on_blur(&focus_handle, window, Self::on_blur).detach();
-
-        input
+            _subscriptions,
+        }
     }
 
     /// Set number of groups in the OTP Input.

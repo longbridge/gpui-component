@@ -4,6 +4,7 @@ use crate::{
     button::Button, h_flex, list::ListItem, popover::Popover, v_flex, ActiveTheme, Icon, IconName,
     Selectable, Sizable as _,
 };
+use gpui::Subscription;
 use gpui::{
     actions, anchored, canvas, div, prelude::FluentBuilder, px, rems, Action, AnyElement, App,
     AppContext, Bounds, Context, Corner, DismissEvent, Edges, Entity, EventEmitter, FocusHandle,
@@ -107,7 +108,7 @@ pub struct PopupMenu {
     scroll_state: Rc<Cell<ScrollbarState>>,
 
     action_focus_handle: Option<FocusHandle>,
-    _subscriptions: [gpui::Subscription; 1],
+    _subscriptions: Vec<Subscription>,
 }
 
 impl PopupMenu {
@@ -118,10 +119,12 @@ impl PopupMenu {
     ) -> Entity<Self> {
         cx.new(|cx| {
             let focus_handle = cx.focus_handle();
-            let _on_blur_subscription =
-                cx.on_blur(&focus_handle, window, |this: &mut PopupMenu, window, cx| {
-                    this.dismiss(&Dismiss, window, cx)
-                });
+            let _subscriptions =
+                vec![
+                    cx.on_blur(&focus_handle, window, |this: &mut PopupMenu, window, cx| {
+                        this.dismiss(&Dismiss, window, cx)
+                    }),
+                ];
 
             let menu = Self {
                 focus_handle,
@@ -138,7 +141,7 @@ impl PopupMenu {
                 scrollable: false,
                 scroll_handle: ScrollHandle::default(),
                 scroll_state: Rc::new(Cell::new(ScrollbarState::default())),
-                _subscriptions: [_on_blur_subscription],
+                _subscriptions,
             };
             window.refresh();
             f(menu, window, cx)

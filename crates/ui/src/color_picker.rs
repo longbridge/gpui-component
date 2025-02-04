@@ -2,7 +2,7 @@ use gpui::{
     anchored, canvas, deferred, div, prelude::FluentBuilder as _, px, relative, App, AppContext,
     Bounds, Context, Corner, ElementId, Entity, EventEmitter, FocusHandle, Focusable, Hsla,
     InteractiveElement as _, IntoElement, KeyBinding, MouseButton, ParentElement, Pixels, Point,
-    Render, SharedString, StatefulInteractiveElement as _, Styled, Window,
+    Render, SharedString, StatefulInteractiveElement as _, Styled, Subscription, Window,
 };
 
 use crate::{
@@ -66,13 +66,14 @@ pub struct ColorPicker {
 
     open: bool,
     bounds: Bounds<Pixels>,
+    _subscriptions: Vec<Subscription>,
 }
 
 impl ColorPicker {
     pub fn new(id: impl Into<ElementId>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let color_input = cx.new(|cx| TextInput::new(window, cx).xsmall());
 
-        cx.subscribe_in(
+        let _subscriptions = vec![cx.subscribe_in(
             &color_input,
             window,
             |this, _, ev: &InputEvent, window, cx| match ev {
@@ -91,8 +92,7 @@ impl ColorPicker {
                 }
                 _ => {}
             },
-        )
-        .detach();
+        )];
 
         Self {
             id: id.into(),
@@ -118,6 +118,7 @@ impl ColorPicker {
             color_input,
             open: false,
             bounds: Bounds::default(),
+            _subscriptions,
         }
     }
 

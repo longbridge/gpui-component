@@ -15,7 +15,7 @@ use gpui::{
     Context, Entity, EntityInputHandler, EventEmitter, FocusHandle, Focusable,
     InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent, MouseButton, MouseDownEvent,
     MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Rems, Render, ScrollHandle,
-    ScrollWheelEvent, SharedString, Styled as _, UTF16Selection, Window, WrappedLine,
+    ScrollWheelEvent, SharedString, Styled as _, Subscription, UTF16Selection, Window, WrappedLine,
 };
 
 // TODO:
@@ -230,6 +230,7 @@ pub struct TextInput {
     pub(crate) scroll_size: gpui::Size<Pixels>,
     /// To remember the horizontal column (x-coordinate) of the cursor position.
     preferred_x_offset: Option<Pixels>,
+    _subscriptions: Vec<Subscription>,
 }
 
 impl EventEmitter<InputEvent> for TextInput {}
@@ -239,7 +240,26 @@ impl TextInput {
         let focus_handle = cx.focus_handle();
         let blink_cursor = cx.new(|_| BlinkCursor::new());
         let history = History::new().group_interval(std::time::Duration::from_secs(1));
-        let input = Self {
+
+        let _subscriptions = vec![
+            // Observe the blink cursor to repaint the view when it changes.
+            cx.observe(&blink_cursor, |_, _, cx| cx.notify()),
+            // Blink the cursor when the window is active, pause when it's not.
+            cx.observe_window_activation(window, |input, window, cx| {
+                if window.is_window_active() {
+                    let focus_handle = input.focus_handle.clone();
+                    if focus_handle.is_focused(window) {
+                        input.blink_cursor.update(cx, |blink_cursor, cx| {
+                            blink_cursor.start(cx);
+                        });
+                    }
+                }
+            }),
+            cx.on_focus(&focus_handle, window, Self::on_focus),
+            cx.on_blur(&focus_handle, window, Self::on_blur),
+        ];
+
+        Self {
             focus_handle: focus_handle.clone(),
             text: "".into(),
             multi_line: false,
@@ -272,28 +292,8 @@ impl TextInput {
             scrollbar_state: Rc::new(Cell::new(ScrollbarState::default())),
             scroll_size: gpui::size(px(0.), px(0.)),
             preferred_x_offset: None,
-        };
-
-        // Observe the blink cursor to repaint the view when it changes.
-        cx.observe(&input.blink_cursor, |_, _, cx| cx.notify())
-            .detach();
-        // Blink the cursor when the window is active, pause when it's not.
-        cx.observe_window_activation(window, |input, window, cx| {
-            if window.is_window_active() {
-                let focus_handle = input.focus_handle.clone();
-                if focus_handle.is_focused(window) {
-                    input.blink_cursor.update(cx, |blink_cursor, cx| {
-                        blink_cursor.start(cx);
-                    });
-                }
-            }
-        })
-        .detach();
-
-        cx.on_focus(&focus_handle, window, Self::on_focus).detach();
-        cx.on_blur(&focus_handle, window, Self::on_blur).detach();
-
-        input
+            _subscriptions,
+        }
     }
 
     /// Use the text input field as a multi-line Textarea.

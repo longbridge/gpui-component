@@ -3,7 +3,7 @@ use std::rc::Rc;
 use gpui::{
     div, px, AnyElement, App, AppContext, ClickEvent, Context, Corner, Entity, FocusHandle, Hsla,
     InteractiveElement as _, IntoElement, MouseButton, ParentElement as _, Render, SharedString,
-    Styled as _, Window,
+    Styled as _, Subscription, Window,
 };
 use ui::{
     badge::Badge,
@@ -24,6 +24,7 @@ pub struct AppTitleBar {
     font_size_selector: Entity<FontSizeSelector>,
     theme_color_picker: Entity<ColorPicker>,
     child: Rc<dyn Fn(&mut Window, &mut App) -> AnyElement>,
+    _subscriptions: Vec<Subscription>,
 }
 
 impl AppTitleBar {
@@ -43,7 +44,8 @@ impl AppTitleBar {
             picker.set_value(cx.theme().primary, window, cx);
             picker
         });
-        cx.subscribe_in(
+
+        let _subscriptions = vec![cx.subscribe_in(
             &theme_color_picker,
             window,
             |this, _, ev: &ColorPickerEvent, window, cx| match ev {
@@ -51,8 +53,7 @@ impl AppTitleBar {
                     this.set_theme_color(*color, window, cx);
                 }
             },
-        )
-        .detach();
+        )];
 
         Self {
             title: title.into(),
@@ -61,6 +62,7 @@ impl AppTitleBar {
             font_size_selector,
             theme_color_picker,
             child: Rc::new(|_, _| div().into_any_element()),
+            _subscriptions,
         }
     }
 

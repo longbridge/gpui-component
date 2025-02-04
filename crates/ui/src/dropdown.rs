@@ -2,7 +2,8 @@ use gpui::{
     actions, anchored, canvas, deferred, div, prelude::FluentBuilder, px, rems, AnyElement, App,
     AppContext, Bounds, ClickEvent, Context, DismissEvent, ElementId, Entity, EventEmitter,
     FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding, Length, ParentElement,
-    Pixels, Render, SharedString, StatefulInteractiveElement, Styled, Task, WeakEntity, Window,
+    Pixels, Render, SharedString, StatefulInteractiveElement, Styled, Subscription, Task,
+    WeakEntity, Window,
 };
 use rust_i18n::t;
 
@@ -252,6 +253,7 @@ pub struct Dropdown<D: DropdownDelegate + 'static> {
     /// Store the bounds of the input
     bounds: Bounds<Pixels>,
     disabled: bool,
+    _subscriptions: Vec<Subscription>,
 }
 
 pub struct SearchableVec<T> {
@@ -352,9 +354,10 @@ where
             list
         });
 
-        cx.on_blur(&list.focus_handle(cx), window, Self::on_blur)
-            .detach();
-        cx.on_blur(&focus_handle, window, Self::on_blur).detach();
+        let _subscriptions = vec![
+            cx.on_blur(&list.focus_handle(cx), window, Self::on_blur),
+            cx.on_blur(&focus_handle, window, Self::on_blur),
+        ];
 
         let mut this = Self {
             id: id.into(),
@@ -372,6 +375,7 @@ where
             menu_width: Length::Auto,
             bounds: Bounds::default(),
             disabled: false,
+            _subscriptions,
         };
         this.set_selected_index(selected_index, window, cx);
         this
