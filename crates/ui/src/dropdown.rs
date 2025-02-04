@@ -9,7 +9,7 @@ use rust_i18n::t;
 
 use crate::{
     h_flex,
-    input::ClearButton,
+    input::clear_button,
     list::{self, List, ListDelegate, ListItem},
     v_flex, ActiveTheme, Disableable as _, Icon, IconName, Sizable, Size, StyleSized, StyledExt,
 };
@@ -674,7 +674,7 @@ where
                                     .child(self.display_title(window, cx)),
                             )
                             .when(show_clean, |this| {
-                                this.child(ClearButton::new().map(|this| {
+                                this.child(clear_button(cx).map(|this| {
                                     if self.disabled {
                                         this.disabled(true)
                                     } else {

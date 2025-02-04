@@ -15,8 +15,7 @@ use gpui::{
     Context, Entity, EntityInputHandler, EventEmitter, FocusHandle, Focusable,
     InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent, MouseButton, MouseDownEvent,
     MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Rems, Render, ScrollHandle,
-    ScrollWheelEvent, SharedString, StatefulInteractiveElement as _, Styled as _, Subscription,
-    UTF16Selection, Window, WrappedLine,
+    ScrollWheelEvent, SharedString, Styled as _, Subscription, UTF16Selection, Window, WrappedLine,
 };
 
 // TODO:
@@ -25,10 +24,11 @@ use gpui::{
 use super::blink_cursor::BlinkCursor;
 use super::change::Change;
 use super::element::TextElement;
-use super::{number_input, ClearButton};
+use super::number_input;
 
 use crate::history::History;
 use crate::indicator::Indicator;
+use crate::input::clear_button;
 use crate::scroll::{Scrollbar, ScrollbarAxis, ScrollbarState};
 use crate::ActiveTheme;
 use crate::Size;
@@ -1641,7 +1641,7 @@ impl Render for TextInput {
             })
             .when(
                 self.cleanable && !self.loading && !self.text.is_empty() && self.is_single_line(),
-                |this| this.child(ClearButton::new().on_click(cx.listener(Self::clean))),
+                |this| this.child(clear_button(cx).on_click(cx.listener(Self::clean))),
             )
             .children(suffix)
             .when(self.is_multi_line(), |this| {
