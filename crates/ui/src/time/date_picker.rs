@@ -326,9 +326,7 @@ impl Render for DatePicker {
                             .gap_1()
                             .child(div().w_full().overflow_hidden().child(display_title))
                             .when(show_clean, |this| {
-                                this.child(
-                                    ClearButton::new(window, cx).on_click(cx.listener(Self::clean)),
-                                )
+                                this.child(ClearButton::new().on_click(cx.listener(Self::clean)))
                             })
                             .when(!show_clean, |this| {
                                 this.child(

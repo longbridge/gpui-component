@@ -15,7 +15,8 @@ use gpui::{
     Context, Entity, EntityInputHandler, EventEmitter, FocusHandle, Focusable,
     InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent, MouseButton, MouseDownEvent,
     MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Rems, Render, ScrollHandle,
-    ScrollWheelEvent, SharedString, Styled as _, Subscription, UTF16Selection, Window, WrappedLine,
+    ScrollWheelEvent, SharedString, StatefulInteractiveElement as _, Styled as _, Subscription,
+    UTF16Selection, Window, WrappedLine,
 };
 
 // TODO:
@@ -1640,7 +1641,7 @@ impl Render for TextInput {
             })
             .when(
                 self.cleanable && !self.loading && !self.text.is_empty() && self.is_single_line(),
-                |this| this.child(ClearButton::new(window, cx).on_click(cx.listener(Self::clean))),
+                |this| this.child(ClearButton::new().on_click(cx.listener(Self::clean))),
             )
             .children(suffix)
             .when(self.is_multi_line(), |this| {

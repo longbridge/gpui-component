@@ -11,7 +11,7 @@ use crate::{
     h_flex,
     input::ClearButton,
     list::{self, List, ListDelegate, ListItem},
-    v_flex, ActiveTheme, Disableable, Icon, IconName, Sizable, Size, StyleSized, StyledExt,
+    v_flex, ActiveTheme, Disableable as _, Icon, IconName, Sizable, Size, StyleSized, StyledExt,
 };
 
 actions!(dropdown, [Up, Down, Enter, Escape]);
@@ -674,7 +674,7 @@ where
                                     .child(self.display_title(window, cx)),
                             )
                             .when(show_clean, |this| {
-                                this.child(ClearButton::new(window, cx).map(|this| {
+                                this.child(ClearButton::new().map(|this| {
                                     if self.disabled {
                                         this.disabled(true)
                                     } else {
