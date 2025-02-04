@@ -1,7 +1,7 @@
 use gpui::{
-    actions, div, px, App, AppContext as _, Context, Entity, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, KeyBinding, ParentElement as _, Render, SharedString, Styled,
-    Window,
+    actions, div, prelude::FluentBuilder as _, px, App, AppContext as _, Context, Entity,
+    FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding, ParentElement as _,
+    Render, SharedString, Styled, Window,
 };
 use regex::Regex;
 
@@ -11,7 +11,6 @@ use ui::{
     checkbox::Checkbox,
     h_flex,
     input::{InputEvent, NumberInput, NumberInputEvent, OtpInput, TextInput},
-    prelude::FluentBuilder as _,
     v_flex, FocusableCycle, IconName, Sizable,
 };
 

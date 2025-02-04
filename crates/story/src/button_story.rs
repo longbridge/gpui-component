@@ -1,14 +1,13 @@
 use gpui::{
-    actions, px, App, AppContext as _, ClickEvent, Context, Entity, Focusable, InteractiveElement,
-    IntoElement, ParentElement as _, Render, Styled as _, Window,
+    actions, prelude::FluentBuilder, px, App, AppContext as _, ClickEvent, Context, Entity,
+    Focusable, InteractiveElement, IntoElement, ParentElement as _, Render, Styled as _, Window,
 };
 
 use ui::{
     button::{Button, ButtonCustomVariant, ButtonGroup, ButtonVariants as _, DropdownButton},
     checkbox::Checkbox,
-    h_flex,
-    prelude::FluentBuilder,
-    v_flex, ActiveTheme, Disableable as _, Icon, IconName, Selectable as _, Sizable as _, Theme,
+    h_flex, v_flex, ActiveTheme, Disableable as _, Icon, IconName, Selectable as _, Sizable as _,
+    Theme,
 };
 
 use crate::section;

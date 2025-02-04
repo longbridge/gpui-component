@@ -1,6 +1,6 @@
 use gpui::{
-    div, impl_internal_actions, relative, App, AppContext, ClickEvent, Context, Entity, Focusable,
-    ParentElement, Render, SharedString, Styled, Window,
+    div, impl_internal_actions, prelude::FluentBuilder, relative, App, AppContext, ClickEvent,
+    Context, Entity, Focusable, ParentElement, Render, SharedString, Styled, Window,
 };
 
 use serde::Deserialize;
@@ -9,7 +9,6 @@ use ui::{
     divider::Divider,
     h_flex,
     popup_menu::PopupMenuExt,
-    prelude::FluentBuilder,
     sidebar::{
         Sidebar, SidebarFooter, SidebarGroup, SidebarHeader, SidebarMenu, SidebarToggleButton,
     },

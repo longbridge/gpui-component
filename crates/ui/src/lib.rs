@@ -34,7 +34,6 @@ pub mod modal;
 pub mod notification;
 pub mod popover;
 pub mod popup_menu;
-pub mod prelude;
 pub mod progress;
 pub mod radio;
 pub mod resizable;

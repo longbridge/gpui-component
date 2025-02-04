@@ -5,9 +5,9 @@ use std::{
 
 use fake::{Fake, Faker};
 use gpui::{
-    div, impl_internal_actions, px, AnyElement, App, AppContext, Context, Edges, Entity, Focusable,
-    InteractiveElement, IntoElement, ParentElement, Pixels, Render, SharedString, Styled, Timer,
-    Window,
+    div, impl_internal_actions, prelude::FluentBuilder as _, px, AnyElement, App, AppContext,
+    Context, Edges, Entity, Focusable, InteractiveElement, IntoElement, ParentElement, Pixels,
+    Render, SharedString, Styled, Timer, Window,
 };
 use serde::Deserialize;
 use ui::{
@@ -18,7 +18,6 @@ use ui::{
     input::{InputEvent, TextInput},
     label::Label,
     popup_menu::{PopupMenu, PopupMenuExt},
-    prelude::FluentBuilder as _,
     table::{ColFixed, ColSort, Table, TableDelegate, TableEvent},
     v_flex, ActiveTheme as _, Selectable, Sizable as _, Size, StyleSized as _,
 };

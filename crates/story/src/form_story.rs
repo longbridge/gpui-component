@@ -1,6 +1,6 @@
 use gpui::{
-    actions, div, App, AppContext, Axis, Context, Entity, Focusable, InteractiveElement,
-    IntoElement, ParentElement as _, Render, Styled, Window,
+    actions, div, prelude::FluentBuilder as _, App, AppContext, Axis, Context, Entity, Focusable,
+    InteractiveElement, IntoElement, ParentElement as _, Render, Styled, Window,
 };
 use ui::{
     button::{Button, ButtonGroup},
@@ -10,7 +10,6 @@ use ui::{
     form::{form_field, v_form},
     h_flex,
     input::TextInput,
-    prelude::FluentBuilder as _,
     switch::Switch,
     v_flex, AxisExt, FocusableCycle, Selectable, Sizable, Size,
 };

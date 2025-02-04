@@ -1,16 +1,15 @@
 use std::rc::Rc;
 
 use gpui::{
-    div, px, AnyElement, App, AppContext, ClickEvent, Context, Corner, Entity, FocusHandle, Hsla,
-    InteractiveElement as _, IntoElement, MouseButton, ParentElement as _, Render, SharedString,
-    Styled as _, Subscription, Window,
+    div, prelude::FluentBuilder as _, px, AnyElement, App, AppContext, ClickEvent, Context, Corner,
+    Entity, FocusHandle, Hsla, InteractiveElement as _, IntoElement, MouseButton,
+    ParentElement as _, Render, SharedString, Styled as _, Subscription, Window,
 };
 use ui::{
     badge::Badge,
     button::{Button, ButtonVariants as _},
     color_picker::{ColorPicker, ColorPickerEvent},
     popup_menu::PopupMenuExt as _,
-    prelude::FluentBuilder as _,
     scroll::ScrollbarShow,
     ActiveTheme as _, ContextModal as _, IconName, Sizable as _, Theme, TitleBar,
 };

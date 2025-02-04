@@ -1,7 +1,7 @@
 use gpui::{
-    actions, px, App, AppContext as _, Context, Entity, EventEmitter, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, KeyBinding, ParentElement, Pixels, Render, SharedString,
-    Styled, Subscription, Window,
+    actions, prelude::FluentBuilder as _, px, App, AppContext as _, Context, Entity, EventEmitter,
+    FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding, ParentElement, Pixels,
+    Render, SharedString, Styled, Subscription, Window,
 };
 use regex::Regex;
 
@@ -9,7 +9,6 @@ use crate::{
     button::{Button, ButtonVariants as _},
     h_flex,
     input::{InputEvent, TextInput},
-    prelude::FluentBuilder,
     ActiveTheme, IconName, Sizable, Size, StyleSized, StyledExt,
 };
 
