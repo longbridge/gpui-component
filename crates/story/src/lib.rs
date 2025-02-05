@@ -54,7 +54,7 @@ pub use tooltip_story::TooltipStory;
 pub use webview_story::WebViewStory;
 
 use ui::{
-    button::Button,
+    button::{Button, ButtonVariants},
     divider::Divider,
     dock::{register_panel, Panel, PanelControl, PanelEvent, PanelInfo, PanelState, TitleStyle},
     h_flex,
@@ -62,7 +62,7 @@ use ui::{
     notification::Notification,
     popup_menu::PopupMenu,
     scroll::ScrollbarShow,
-    v_flex, ActiveTheme, ContextModal, IconName, Root, TitleBar,
+    v_flex, ActiveTheme, ContextModal, IconName, Root, Sizable, TitleBar,
 };
 
 #[derive(Clone, PartialEq, Eq, Deserialize)]
@@ -469,18 +469,24 @@ impl Panel for StoryContainer {
             .menu("Info", Box::new(ShowPanelInfo))
     }
 
-    fn toolbar_buttons(&self, _window: &mut Window, _cx: &mut App) -> Option<Vec<Button>> {
+    fn toolbar_buttons(&self, _window: &mut Window, _cx: &mut App) -> Option<Vec<AnyElement>> {
         Some(vec![
             Button::new("info")
                 .icon(IconName::Info)
+                .xsmall()
+                .ghost()
                 .on_click(|_, window, cx| {
                     window.push_notification("You have clicked info button", cx);
-                }),
+                })
+                .into_any_element(),
             Button::new("search")
                 .icon(IconName::Search)
+                .xsmall()
+                .ghost()
                 .on_click(|_, window, cx| {
                     window.push_notification("You have clicked search button", cx);
-                }),
+                })
+                .into_any_element(),
         ])
     }
 

@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use gpui::{
-    div, prelude::FluentBuilder, px, rems, App, AppContext, Context, Corner, DefiniteLength,
-    DismissEvent, DragMoveEvent, Empty, Entity, EventEmitter, FocusHandle, Focusable,
-    InteractiveElement as _, IntoElement, ParentElement, Pixels, Render, ScrollHandle,
+    div, prelude::FluentBuilder, px, rems, AnyElement, App, AppContext, Context, Corner,
+    DefiniteLength, DismissEvent, DragMoveEvent, Empty, Entity, EventEmitter, FocusHandle,
+    Focusable, InteractiveElement as _, IntoElement, ParentElement, Pixels, Render, ScrollHandle,
     SharedString, StatefulInteractiveElement, Styled, WeakEntity, Window,
 };
 use rust_i18n::t;
@@ -118,7 +118,7 @@ impl Panel for TabPanel {
         }
     }
 
-    fn toolbar_buttons(&self, window: &mut Window, cx: &mut App) -> Option<Vec<Button>> {
+    fn toolbar_buttons(&self, window: &mut Window, cx: &mut App) -> Option<Vec<AnyElement>> {
         self.active_panel(cx)
             .and_then(|panel| panel.toolbar_buttons(window, cx))
     }
@@ -408,8 +408,8 @@ impl TabPanel {
             .gap_2()
             .occlude()
             .items_center()
-            .when_some(self.toolbar_buttons(window, cx), |this, buttons| {
-                this.children(buttons.into_iter().map(|btn| btn.xsmall().ghost()))
+            .when_some(self.toolbar_buttons(window, cx), |this, elements| {
+                this.children(elements)
             })
             .map(|this| {
                 let value = if is_zoomed {

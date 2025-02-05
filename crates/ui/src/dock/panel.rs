@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use crate::{button::Button, popup_menu::PopupMenu};
+use crate::popup_menu::PopupMenu;
 use gpui::{
     AnyElement, AnyView, App, Entity, EventEmitter, FocusHandle, Focusable, Global, Hsla,
     IntoElement, Render, SharedString, WeakEntity, Window,
@@ -111,7 +111,7 @@ pub trait Panel: EventEmitter<PanelEvent> + Render + Focusable {
     }
 
     /// The addition toolbar buttons of the panel used to show in the right of the title bar, default is `None`.
-    fn toolbar_buttons(&self, window: &mut Window, cx: &mut App) -> Option<Vec<Button>> {
+    fn toolbar_buttons(&self, window: &mut Window, cx: &mut App) -> Option<Vec<AnyElement>> {
         None
     }
 
@@ -133,7 +133,7 @@ pub trait PanelView: 'static + Send + Sync {
     fn set_active(&self, active: bool, window: &mut Window, cx: &mut App);
     fn set_zoomed(&self, zoomed: bool, window: &mut Window, cx: &mut App);
     fn popup_menu(&self, menu: PopupMenu, window: &Window, cx: &App) -> PopupMenu;
-    fn toolbar_buttons(&self, window: &mut Window, cx: &mut App) -> Option<Vec<Button>>;
+    fn toolbar_buttons(&self, window: &mut Window, cx: &mut App) -> Option<Vec<AnyElement>>;
     fn view(&self) -> AnyView;
     fn focus_handle(&self, cx: &App) -> FocusHandle;
     fn dump(&self, cx: &App) -> PanelState;
@@ -180,7 +180,7 @@ impl<T: Panel> PanelView for Entity<T> {
         self.read(cx).popup_menu(menu, window, cx)
     }
 
-    fn toolbar_buttons(&self, window: &mut Window, cx: &mut App) -> Option<Vec<Button>> {
+    fn toolbar_buttons(&self, window: &mut Window, cx: &mut App) -> Option<Vec<AnyElement>> {
         self.update(cx, |this, cx| this.toolbar_buttons(window, cx))
     }
 
