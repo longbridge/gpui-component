@@ -1559,7 +1559,7 @@ where
                                         }
 
                                         let mut items = Vec::with_capacity(
-                                            visible_range.end - visible_range.start,
+                                            visible_range.end.saturating_sub(visible_range.start),
                                         );
 
                                         // Render fake rows to fill the table
