@@ -10,7 +10,7 @@ use ui::{
     h_flex,
     label::Label,
     tooltip::Tooltip,
-    v_flex,
+    v_flex, ActiveTheme, IconName,
 };
 
 pub struct TooltipStory {
@@ -72,15 +72,39 @@ impl Render for TooltipStory {
                     .justify_center()
                     .cursor(CursorStyle::PointingHand)
                     .child(Label::new("Hover me"))
-                    .id("tooltip-3")
+                    .id("tooltip-2")
                     .tooltip(|window, cx| Tooltip::new("This is a Label", window, cx)),
             )
             .child(
                 div()
                     .cursor(CursorStyle::PointingHand)
                     .child(Checkbox::new("check").label("Remember me").checked(true))
-                    .id("tooltip-4")
+                    .id("tooltip-3")
                     .tooltip(|window, cx| Tooltip::new("Checked!", window, cx)),
+            )
+            .child(
+                div()
+                    .cursor(CursorStyle::PointingHand)
+                    .child(
+                        Button::new("button")
+                            .label("Hover me")
+                            .with_variant(ButtonVariant::Primary),
+                    )
+                    .id("tooltip-4")
+                    .tooltip(|window, cx| {
+                        Tooltip::new_element(window, cx, |_, cx| {
+                            h_flex()
+                                .gap_x_1()
+                                .child(IconName::Info)
+                                .child(
+                                    div()
+                                        .child("Muted Foreground")
+                                        .text_color(cx.theme().muted_foreground),
+                                )
+                                .child(div().child("Danger").text_color(cx.theme().danger))
+                                .child(IconName::ArrowUp)
+                        })
+                    }),
             )
     }
 }
