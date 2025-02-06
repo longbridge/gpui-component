@@ -4,6 +4,10 @@ edition = "2021"
 name = "gpui-component"
 publish = false
 version = "0.1.0"
+homepage = "https://github.com/longbridge/gpui-component"
+license = "Apache-2.0"
+license-file = "LICENSE-APACHE"
+keywords = ["ui", "desktop", "application", "GPUI"]
 
 [lib]
 doctest = false
