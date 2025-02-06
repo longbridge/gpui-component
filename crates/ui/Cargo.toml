@@ -13,7 +13,7 @@ keywords = ["ui", "desktop", "application", "GPUI"]
 doctest = false
 
 [dependencies]
-gpui.workspace = true
+gpui = "0"
 anyhow = "1"
 image = "0.25.1"
 itertools = "0.13.0"
