@@ -2275,12 +2275,6 @@ dependencies = [
 [[package]]
 name = "gpui"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa09f677375595915cb0039f88218ed46987d6ff572bbc506469a67f44a897af"
-
-[[package]]
-name = "gpui"
-version = "0.1.0"
 source = "git+https://github.com/huacnlee/zed.git?branch=webview#d45d61a264afd26e20e7e06e6c4121ce8e9fd046"
 dependencies = [
  "anyhow",
@@ -2372,7 +2366,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
- "gpui 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "gpui",
  "image",
  "itertools 0.13.0",
  "once_cell",
@@ -5188,7 +5182,7 @@ dependencies = [
  "charts-rs",
  "chrono",
  "fake",
- "gpui 0.1.0 (git+https://github.com/huacnlee/zed.git?branch=webview)",
+ "gpui",
  "gpui-component",
  "rand 0.8.5",
  "regex",
