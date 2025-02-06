@@ -1,7 +1,7 @@
 [package]
-description = "UI components for the GPUI"
+description = "UI components for building fantastic desktop application by using GPUI."
 edition = "2021"
-name = "ui"
+name = "gpui-component"
 publish = false
 version = "0.1.0"
 

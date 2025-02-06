@@ -13,7 +13,7 @@ serde_json = "1"
 smallvec = "1"
 rust-embed = "8.5.0"
 story = { path = "crates/story" }
-ui = { path = "crates/ui" }
+ui = { package = "gpui-component", path = "crates/ui" }
 windows = { version = "0.58.0", features = [
     "Wdk",
     "Wdk_System",
