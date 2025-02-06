@@ -1,4 +1,8 @@
-use std::{cell::Cell, rc::Rc, time::Instant};
+use std::{
+    cell::Cell,
+    rc::Rc,
+    time::{Duration, Instant},
+};
 
 use crate::ActiveTheme;
 use gpui::{
@@ -69,6 +73,8 @@ pub struct ScrollbarState {
     drag_pos: Point<Pixels>,
     last_scroll_offset: Point<Pixels>,
     last_scroll_time: Option<Instant>,
+    // Last update offset
+    last_update: Instant,
 }
 
 impl Default for ScrollbarState {
@@ -80,6 +86,7 @@ impl Default for ScrollbarState {
             drag_pos: point(px(0.), px(0.)),
             last_scroll_offset: point(px(0.), px(0.)),
             last_scroll_time: None,
+            last_update: Instant::now(),
         }
     }
 }
@@ -136,6 +143,12 @@ impl ScrollbarState {
     fn with_last_scroll_time(&self, t: Option<Instant>) -> Self {
         let mut state = *self;
         state.last_scroll_time = t;
+        state
+    }
+
+    fn with_last_update(&self, t: Instant) -> Self {
+        let mut state = *self;
+        state.last_update = t;
         state
     }
 
@@ -198,6 +211,11 @@ pub struct Scrollbar {
     scroll_handle: Rc<Box<dyn ScrollHandleOffsetable>>,
     scroll_size: gpui::Size<Pixels>,
     state: Rc<Cell<ScrollbarState>>,
+    /// Maximum frames per second for scrolling by drag. Default is 120 FPS.
+    ///
+    /// This is used to limit the update rate of the scrollbar when it is
+    /// being dragged for some complex interactions for reducing CPU usage.
+    max_fps: usize,
 }
 
 impl Scrollbar {
@@ -215,6 +233,7 @@ impl Scrollbar {
             scroll_size,
             width: px(12.),
             scroll_handle: Rc::new(Box::new(scroll_handle)),
+            max_fps: 120,
         }
     }
 
@@ -291,6 +310,16 @@ impl Scrollbar {
     /// Set scrollbar axis.
     pub fn axis(mut self, axis: ScrollbarAxis) -> Self {
         self.axis = axis;
+        self
+    }
+
+    /// Set maximum frames per second for scrolling by drag. Default is 120 FPS.
+    ///
+    /// If you have very high CPU usage, consider reducing this value to improve performance.
+    ///
+    /// Available values: 30..120
+    pub fn max_fps(mut self, max_fps: usize) -> Self {
+        self.max_fps = max_fps.clamp(30, 120);
         self
     }
 
@@ -710,19 +739,21 @@ impl Element for Scrollbar {
                         let scroll_handle = self.scroll_handle.clone();
                         let state = self.state.clone();
                         let view_id = self.view_id;
+                        let max_fps_duration = Duration::from_millis((1000 / self.max_fps) as u64);
 
                         move |event: &MouseMoveEvent, _, _, cx| {
+                            let mut notify = false;
                             // Update hovered state for scrollbar
                             if bounds.contains(&event.position) {
                                 if state.get().hovered_axis != Some(axis) {
                                     state.set(state.get().with_hovered(Some(axis)));
-                                    cx.notify(view_id);
+                                    notify = true;
                                 }
                             } else {
                                 if state.get().hovered_axis == Some(axis) {
                                     if state.get().hovered_axis.is_some() {
                                         state.set(state.get().with_hovered(None));
-                                        cx.notify(view_id);
+                                        notify = true;
                                     }
                                 }
                             }
@@ -731,12 +762,12 @@ impl Element for Scrollbar {
                             if thumb_bounds.contains(&event.position) {
                                 if state.get().hovered_on_thumb != Some(axis) {
                                     state.set(state.get().with_hovered_on_thumb(Some(axis)));
-                                    cx.notify(view_id);
+                                    notify = true;
                                 }
                             } else {
                                 if state.get().hovered_on_thumb == Some(axis) {
                                     state.set(state.get().with_hovered_on_thumb(None));
-                                    cx.notify(view_id);
+                                    notify = true;
                                 }
                             }
 
@@ -772,9 +803,17 @@ impl Element for Scrollbar {
                                 if (scroll_handle.offset().y - offset.y).abs() > px(1.)
                                     || (scroll_handle.offset().x - offset.x).abs() > px(1.)
                                 {
-                                    scroll_handle.set_offset(offset);
-                                    cx.notify(view_id);
+                                    // Limit update rate
+                                    if state.get().last_update.elapsed() > max_fps_duration {
+                                        scroll_handle.set_offset(offset);
+                                        state.set(state.get().with_last_update(Instant::now()));
+                                        notify = true;
+                                    }
                                 }
+                            }
+
+                            if notify {
+                                cx.notify(view_id);
                             }
                         }
                     });

@@ -5,9 +5,9 @@ use std::{
 
 use fake::{Fake, Faker};
 use gpui::{
-    div, impl_internal_actions, prelude::FluentBuilder as _, px, AnyElement, App, AppContext,
-    Context, Edges, Entity, Focusable, InteractiveElement, IntoElement, ParentElement, Pixels,
-    Render, SharedString, Styled, Timer, Window,
+    div, impl_internal_actions, prelude::FluentBuilder as _, px, AnyElement, AnyView, App,
+    AppContext, Context, Edges, Entity, Focusable, InteractiveElement, IntoElement, ParentElement,
+    Pixels, Render, SharedString, StyleRefinement, Styled, Timer, Window,
 };
 use serde::Deserialize;
 use ui::{
@@ -19,7 +19,7 @@ use ui::{
     label::Label,
     popup_menu::{PopupMenu, PopupMenuExt},
     table::{ColFixed, ColSort, Table, TableDelegate, TableEvent},
-    v_flex, ActiveTheme as _, Selectable, Sizable as _, Size, StyleSized as _,
+    v_flex, ActiveTheme as _, Selectable, Sizable as _, Size, StyleSized as _, StyledExt,
 };
 
 #[derive(Clone, PartialEq, Eq, Deserialize)]
@@ -929,6 +929,9 @@ impl Render for TableStory {
                         .when(delegate.is_eof, |this| this.child("All data loaded.")),
                 ),
             )
-            .child(self.table.clone())
+            .child(
+                AnyView::from(self.table.clone())
+                    .cached(StyleRefinement::default().size_full().v_flex()),
+            )
     }
 }

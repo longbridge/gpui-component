@@ -866,11 +866,14 @@ where
                 .left_0()
                 .right_0()
                 .bottom_0()
-                .child(Scrollbar::uniform_scroll(
-                    cx.entity().entity_id(),
-                    state,
-                    self.vertical_scroll_handle.clone(),
-                )),
+                .child(
+                    Scrollbar::uniform_scroll(
+                        cx.entity().entity_id(),
+                        state,
+                        self.vertical_scroll_handle.clone(),
+                    )
+                    .max_fps(60),
+                ),
         )
     }
 
