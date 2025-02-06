@@ -2,7 +2,7 @@ use gpui::{
     App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement as _,
     Render, Styled as _, Window,
 };
-use ui::{
+use gpui_component::{
     accordion::Accordion,
     button::{Button, ButtonGroup},
     checkbox::Checkbox,

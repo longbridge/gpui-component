@@ -9,18 +9,19 @@ use gpui::{
     Context, Edges, Entity, Focusable, InteractiveElement, IntoElement, ParentElement, Pixels,
     Render, SharedString, Styled, Timer, Window,
 };
-use serde::Deserialize;
-use ui::{
+use gpui_component::{
     button::Button,
     checkbox::Checkbox,
-    h_flex,
+    green, h_flex,
     indicator::Indicator,
     input::{InputEvent, TextInput},
     label::Label,
     popup_menu::{PopupMenu, PopupMenuExt},
-    table::{ColFixed, ColSort, Table, TableDelegate, TableEvent},
+    red,
+    table::{self, ColFixed, ColSort, Table, TableDelegate, TableEvent},
     v_flex, ActiveTheme as _, Selectable, Sizable as _, Size, StyleSized as _,
 };
+use serde::Deserialize;
 
 #[derive(Clone, PartialEq, Eq, Deserialize)]
 struct ChangeSize(Size);
@@ -274,11 +275,11 @@ impl StockTableDelegate {
         let right_num = ((val - val.floor()) * 1000.).floor() as i32;
 
         let this = if right_num % 3 == 0 {
-            this.text_color(ui::red(fg_scale))
-                .bg(ui::red(bg_scale).opacity(opacity))
+            this.text_color(red(fg_scale))
+                .bg(red(bg_scale).opacity(opacity))
         } else if right_num % 3 == 1 {
-            this.text_color(ui::green(fg_scale))
-                .bg(ui::green(bg_scale).opacity(opacity))
+            this.text_color(green(fg_scale))
+                .bg(green(bg_scale).opacity(opacity))
         } else {
             this
         };
@@ -322,7 +323,7 @@ impl TableDelegate for StockTableDelegate {
         }
     }
 
-    fn col_fixed(&self, col_ix: usize, _: &App) -> Option<ui::table::ColFixed> {
+    fn col_fixed(&self, col_ix: usize, _: &App) -> Option<table::ColFixed> {
         if !self.fixed_cols {
             return None;
         }

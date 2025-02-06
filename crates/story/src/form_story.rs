@@ -2,7 +2,7 @@ use gpui::{
     actions, div, prelude::FluentBuilder as _, App, AppContext, Axis, Context, Entity, Focusable,
     InteractiveElement, IntoElement, ParentElement as _, Render, Styled, Window,
 };
-use ui::{
+use gpui_component::{
     button::{Button, ButtonGroup},
     checkbox::Checkbox,
     date_picker::DatePicker,

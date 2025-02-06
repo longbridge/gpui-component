@@ -1,7 +1,7 @@
 use gpui::{
     px, App, AppContext, Entity, FocusHandle, Focusable, ParentElement as _, Render, Styled, Window,
 };
-use ui::{dock::PanelControl, h_flex, v_flex, SvgImg};
+use gpui_component::{dock::PanelControl, h_flex, v_flex, SvgImg};
 
 const GOOGLE_LOGO: &str = include_str!("./fixtures/google.svg");
 const PIE_JSON: &str = include_str!("./fixtures/pie.json");

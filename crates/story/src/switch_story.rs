@@ -3,7 +3,7 @@ use gpui::{
     SharedString, Styled, Window,
 };
 
-use ui::{
+use gpui_component::{
     checkbox::Checkbox,
     h_flex,
     label::Label,

@@ -2,10 +2,10 @@ use gpui::{
     px, rems, App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement,
     Render, Styled, Window,
 };
-use ui::{
+use gpui_component::{
     button::{Button, ButtonVariant, ButtonVariants},
     dock::PanelControl,
-    h_flex, v_flex, ActiveTheme as _, Icon, IconName,
+    gray_500, green_500, h_flex, red_500, v_flex, ActiveTheme as _, Icon, IconName,
 };
 
 pub struct IconStory {
@@ -53,25 +53,17 @@ impl Render for IconStory {
                 .child(
                     Icon::new(IconName::Maximize)
                         .size_6()
-                        .text_color(ui::green_500()),
+                        .text_color(green_500()),
                 )
                 .child(Icon::new(IconName::Maximize).size(px(55.)))
                 .child(
                     Button::new("like1")
-                        .icon(
-                            Icon::new(IconName::Heart)
-                                .text_color(ui::gray_500())
-                                .size_6(),
-                        )
+                        .icon(Icon::new(IconName::Heart).text_color(gray_500()).size_6())
                         .with_variant(ButtonVariant::Ghost),
                 )
                 .child(
                     Button::new("like2")
-                        .icon(
-                            Icon::new(IconName::HeartOff)
-                                .text_color(ui::red_500())
-                                .size_6(),
-                        )
+                        .icon(Icon::new(IconName::HeartOff).text_color(red_500()).size_6())
                         .with_variant(ButtonVariant::Ghost),
                 )
                 .child(

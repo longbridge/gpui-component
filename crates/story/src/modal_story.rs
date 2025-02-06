@@ -7,7 +7,7 @@ use gpui::{
     Task, Timer, WeakEntity, Window,
 };
 
-use ui::{
+use gpui_component::{
     button::{Button, ButtonVariant, ButtonVariants as _},
     checkbox::Checkbox,
     date_picker::DatePicker,
@@ -19,7 +19,7 @@ use ui::{
     notification::{Notification, NotificationType},
     v_flex,
     webview::WebView,
-    ActiveTheme as _, ContextModal as _, Icon, IconName, Placement,
+    wry, ActiveTheme as _, ContextModal as _, Icon, IconName, Placement,
 };
 
 actions!(modal_story, [TestAction]);
@@ -76,7 +76,7 @@ impl ListDelegate for ListItemDeletegate {
 
         if let Some(item) = self.matches.get(ix) {
             let list_item = ListItem::new(("item", ix))
-                .check_icon(ui::IconName::Check)
+                .check_icon(IconName::Check)
                 .confirmed(confirmed)
                 .selected(selected)
                 .py_1()
@@ -523,7 +523,7 @@ impl Render for ModalStory {
                             .child(Button::new("webview").label("Open WebView").on_click(
                                 cx.listener(|_, _, window, cx| {
                                     let webview = cx.new(|cx| {
-                                        let webview = ui::wry::WebViewBuilder::new()
+                                        let webview = wry::WebViewBuilder::new()
                                             .build_as_child(&window.raw_window_handle())
                                             .unwrap();
 

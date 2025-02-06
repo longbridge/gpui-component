@@ -2,12 +2,12 @@ use gpui::{
     div, App, AppContext, ClickEvent, Context, Entity, FocusHandle, Focusable, IntoElement,
     ParentElement as _, Render, Styled as _, Window,
 };
-use ui::{
+use gpui_component::{
     h_flex,
     input::{InputEvent, TextInput},
     v_flex,
     webview::WebView,
-    ActiveTheme,
+    wry, ActiveTheme,
 };
 
 pub struct WebViewStory {
@@ -31,7 +31,7 @@ impl WebViewStory {
         let focus_handle = cx.focus_handle();
 
         let webview = cx.new(|cx| {
-            let webview = ui::wry::WebViewBuilder::new()
+            let webview = wry::WebViewBuilder::new()
                 .build_as_child(&window.raw_window_handle())
                 .unwrap();
             WebView::new(webview, window, cx)

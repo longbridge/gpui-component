@@ -8,7 +8,7 @@ use gpui::{
     Subscription, Task, Timer, Window,
 };
 
-use ui::{
+use gpui_component::{
     button::Button,
     checkbox::Checkbox,
     h_flex, hsl,

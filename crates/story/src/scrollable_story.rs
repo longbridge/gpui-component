@@ -5,12 +5,14 @@ use gpui::{
     div, px, size, App, AppContext, Context, Entity, Focusable, InteractiveElement, IntoElement,
     ParentElement, Pixels, Render, ScrollHandle, SharedString, Size, Styled, Window,
 };
-use ui::button::Button;
-use ui::divider::Divider;
-use ui::label::Label;
-use ui::scroll::{Scrollbar, ScrollbarAxis, ScrollbarState};
-use ui::ActiveTheme;
-use ui::{h_flex, v_flex, v_virtual_list, StyledExt as _};
+use gpui_component::{
+    button::Button,
+    divider::Divider,
+    gray_100, gray_800, h_flex,
+    label::Label,
+    scroll::{Scrollbar, ScrollbarAxis, ScrollbarState},
+    v_flex, v_virtual_list, ActiveTheme as _, StyledExt as _,
+};
 
 pub struct ScrollableStory {
     focus_handle: gpui::FocusHandle,
@@ -212,9 +214,9 @@ impl Render for ScrollableStory {
                                                                     .bg(
                                                                         if cx.theme().mode.is_dark()
                                                                         {
-                                                                            ui::gray_800()
+                                                                            gray_800()
                                                                         } else {
-                                                                            ui::gray_100()
+                                                                            gray_100()
                                                                         },
                                                                     )
                                                                     .child(if i == 0 {

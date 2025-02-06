@@ -3,11 +3,12 @@ use gpui::{
     Focusable, InteractiveElement, IntoElement, ParentElement as _, Render, Styled as _, Window,
 };
 
-use ui::{
+use gpui_component::{
+    black,
     button::{Button, ButtonCustomVariant, ButtonGroup, ButtonVariants as _, DropdownButton},
     checkbox::Checkbox,
-    h_flex, v_flex, ActiveTheme, Disableable as _, Icon, IconName, Selectable as _, Sizable as _,
-    Theme,
+    green_500, green_600, green_800, green_900, green_950, h_flex, v_flex, white, ActiveTheme,
+    Disableable as _, Icon, IconName, Selectable as _, Sizable as _, Theme,
 };
 
 use crate::section;
@@ -209,29 +210,29 @@ impl Render for ButtonStory {
                                     .custom(
                                         ButtonCustomVariant::new(cx)
                                             .color(if cx.theme().mode.is_dark() {
-                                                ui::green_900()
+                                                green_900()
                                             } else {
-                                                ui::green_500()
+                                                green_500()
                                             })
                                             .foreground(if cx.theme().mode.is_dark() {
-                                                ui::white()
+                                                white()
                                             } else {
-                                                ui::black()
+                                                black()
                                             })
                                             .border(if cx.theme().mode.is_dark() {
-                                                ui::green_800()
+                                                green_800()
                                             } else {
-                                                ui::green_600()
+                                                green_600()
                                             })
                                             .hover(if cx.theme().mode.is_dark() {
-                                                ui::green_800()
+                                                green_800()
                                             } else {
-                                                ui::green_500()
+                                                green_500()
                                             })
                                             .active(if cx.theme().mode.is_dark() {
-                                                ui::green_950()
+                                                green_950()
                                             } else {
-                                                ui::green_600()
+                                                green_600()
                                             }),
                                     )
                                     .label("Custom Button")

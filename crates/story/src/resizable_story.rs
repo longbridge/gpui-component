@@ -2,10 +2,9 @@ use gpui::{
     div, px, AnyElement, App, AppContext, Context, Entity, Focusable, IntoElement,
     ParentElement as _, Render, SharedString, Styled, Window,
 };
-use ui::ActiveTheme;
-use ui::{
+use gpui_component::{
     resizable::{h_resizable, resizable_panel, v_resizable, ResizablePanelGroup},
-    v_flex,
+    v_flex, ActiveTheme,
 };
 
 pub struct ResizableStory {

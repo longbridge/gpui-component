@@ -1,5 +1,11 @@
 use anyhow::{Context as _, Result};
 use gpui::*;
+use gpui_component::{
+    button::{Button, ButtonVariants as _},
+    dock::{DockArea, DockAreaState, DockEvent, DockItem, DockPlacement},
+    popup_menu::PopupMenuExt,
+    IconName, Root, Sizable, Theme, TitleBar,
+};
 use serde::Deserialize;
 use std::{sync::Arc, time::Duration};
 use story::{
@@ -7,12 +13,6 @@ use story::{
     FormStory, IconStory, ImageStory, InputStory, ListStory, ModalStory, Open, PopupStory,
     ProgressStory, Quit, ResizableStory, ScrollableStory, SidebarStory, StoryContainer,
     SwitchStory, TableStory, TextStory, TooltipStory,
-};
-use ui::{
-    button::{Button, ButtonVariants as _},
-    dock::{DockArea, DockAreaState, DockEvent, DockItem, DockPlacement},
-    popup_menu::PopupMenuExt,
-    IconName, Root, Sizable, Theme, TitleBar,
 };
 
 #[derive(Clone, PartialEq, Eq, Deserialize)]
@@ -33,7 +33,7 @@ pub fn init(cx: &mut App) {
 
     cx.on_action(|_action: &Open, _cx: &mut App| {});
 
-    ui::init(cx);
+    gpui_component::init(cx);
     story::init(cx);
 }
 
@@ -506,7 +506,7 @@ impl Render for StoryWorkspace {
 }
 
 fn main() {
-    use ui::input::{Copy, Cut, Paste, Redo, Undo};
+    use gpui_component::input::{Copy, Cut, Paste, Redo, Undo};
 
     let app = Application::new().with_assets(Assets);
 

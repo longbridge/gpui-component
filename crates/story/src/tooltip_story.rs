@@ -3,7 +3,7 @@ use gpui::{
     ParentElement, Render, StatefulInteractiveElement, Styled, Window,
 };
 
-use ui::{
+use gpui_component::{
     button::{Button, ButtonVariant, ButtonVariants},
     checkbox::Checkbox,
     dock::PanelControl,

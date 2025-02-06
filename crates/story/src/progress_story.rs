@@ -2,11 +2,12 @@ use gpui::{
     div, hsla, px, App, AppContext, Context, Entity, Focusable, Hsla, IntoElement, ParentElement,
     Render, SharedString, Styled, Subscription, Window,
 };
-use ui::{
+use gpui_component::{
+    blue_500,
     button::Button,
     clipboard::Clipboard,
     divider::Divider,
-    h_flex,
+    gray_300, h_flex,
     indicator::Indicator,
     progress::Progress,
     skeleton::Skeleton,
@@ -204,7 +205,7 @@ impl Render for ProgressStory {
                         Indicator::new()
                             .large()
                             .icon(IconName::LoaderCircle)
-                            .color(ui::blue_500()),
+                            .color(blue_500()),
                     )
                     .child(Indicator::new().with_size(px(64.))),
             )
@@ -212,7 +213,7 @@ impl Render for ProgressStory {
                 Divider::horizontal()
                     .mt_10()
                     .label("Slider")
-                    .color(ui::gray_300()),
+                    .color(gray_300()),
             )
             .child(self.slider1.clone())
             .child(format!("Slider 1: {}", self.slider1_value))

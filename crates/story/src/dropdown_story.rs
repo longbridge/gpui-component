@@ -3,7 +3,7 @@ use gpui::{
     KeyBinding, ParentElement, Render, SharedString, Styled, Window,
 };
 
-use ui::{
+use gpui_component::{
     checkbox::Checkbox,
     dropdown::{Dropdown, DropdownEvent, DropdownItem, SearchableVec},
     h_flex, v_flex, ActiveTheme, FocusableCycle, IconName, Sizable,

@@ -3,7 +3,7 @@ use gpui::{
     px, App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement as _, Render,
     Styled as _, Window,
 };
-use ui::{
+use gpui_component::{
     button::Button,
     date_picker::{DatePicker, DatePickerEvent, DateRangePreset},
     v_flex, Sizable as _, Size,

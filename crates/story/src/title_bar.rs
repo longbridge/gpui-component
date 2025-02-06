@@ -5,13 +5,15 @@ use gpui::{
     Entity, FocusHandle, Hsla, InteractiveElement as _, IntoElement, MouseButton,
     ParentElement as _, Render, SharedString, Styled as _, Subscription, Window,
 };
-use ui::{
+use gpui_component::{
     badge::Badge,
     button::{Button, ButtonVariants as _},
     color_picker::{ColorPicker, ColorPickerEvent},
+    locale,
     popup_menu::PopupMenuExt as _,
     scroll::ScrollbarShow,
-    ActiveTheme as _, ContextModal as _, IconName, Sizable as _, Theme, TitleBar,
+    set_locale, ActiveTheme as _, ContextModal as _, IconName, Sizable as _, Theme, ThemeMode,
+    TitleBar,
 };
 
 use crate::{SelectFont, SelectLocale, SelectRadius, SelectScrollbarShow};
@@ -90,8 +92,8 @@ impl AppTitleBar {
 
     fn change_color_mode(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
         let mode = match cx.theme().mode.is_dark() {
-            true => ui::ThemeMode::Light,
-            false => ui::ThemeMode::Dark,
+            true => ThemeMode::Light,
+            false => ThemeMode::Dark,
         };
 
         Theme::change(mode, None, cx);
@@ -174,7 +176,7 @@ impl LocaleSelector {
         window: &mut Window,
         _: &mut Context<Self>,
     ) {
-        ui::set_locale(&locale.0);
+        set_locale(&locale.0);
         window.refresh();
     }
 }
@@ -182,7 +184,7 @@ impl LocaleSelector {
 impl Render for LocaleSelector {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let focus_handle = self.focus_handle.clone();
-        let locale = ui::locale().to_string();
+        let locale = locale().to_string();
 
         div()
             .id("locale-selector")

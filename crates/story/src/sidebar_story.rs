@@ -3,8 +3,8 @@ use gpui::{
     Context, Entity, Focusable, ParentElement, Render, SharedString, Styled, Window,
 };
 
-use serde::Deserialize;
-use ui::{
+use gpui_component::{
+    blue_500,
     breadcrumb::{Breadcrumb, BreadcrumbItem},
     divider::Divider,
     h_flex,
@@ -12,8 +12,9 @@ use ui::{
     sidebar::{
         Sidebar, SidebarFooter, SidebarGroup, SidebarHeader, SidebarMenu, SidebarToggleButton,
     },
-    v_flex, ActiveTheme, Collapsible, Icon, IconName,
+    v_flex, white, ActiveTheme, Collapsible, Icon, IconName,
 };
+use serde::Deserialize;
 
 #[derive(Clone, PartialEq, Eq, Deserialize)]
 pub struct SelectCompany(SharedString);
@@ -216,8 +217,8 @@ impl Render for SidebarStory {
                                     .items_center()
                                     .justify_center()
                                     .rounded(cx.theme().radius)
-                                    .bg(ui::blue_500())
-                                    .text_color(ui::white())
+                                    .bg(blue_500())
+                                    .text_color(white())
                                     .size_8()
                                     .flex_shrink_0()
                                     .child(Icon::new(IconName::GalleryVerticalEnd).size_4())

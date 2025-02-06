@@ -3,8 +3,7 @@ use gpui::{
     Element, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement,
     KeyBinding, MouseButton, ParentElement as _, Render, SharedString, Styled as _, Window,
 };
-use serde::Deserialize;
-use ui::{
+use gpui_component::{
     button::{Button, ButtonVariants as _},
     context_menu::ContextMenuExt,
     divider::Divider,
@@ -15,6 +14,7 @@ use ui::{
     switch::Switch,
     v_flex, ActiveTheme as _, ContextModal, IconName, Sizable,
 };
+use serde::Deserialize;
 
 #[derive(Clone, PartialEq, Deserialize)]
 struct Info(usize);

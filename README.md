@@ -58,7 +58,7 @@ And GPUI Component depends on `gpui` by special version (It keep updated to upst
 
 ```toml
 gpui = { git = "https://github.com/huacnlee/zed.git", branch = "export-platform-window" }
-ui = { git = "https://github.com/longbridge/gpui-component.git" }
+gpui-component = { git = "https://github.com/longbridge/gpui-component.git" }
 ```
 
 More usage can be found in [story](https://github.com/longbridge/gpui-component/tree/main/crates/story) directory.

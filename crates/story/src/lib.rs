@@ -53,7 +53,7 @@ pub use title_bar::AppTitleBar;
 pub use tooltip_story::TooltipStory;
 pub use webview_story::WebViewStory;
 
-use ui::{
+use gpui_component::{
     button::Button,
     divider::Divider,
     dock::{register_panel, Panel, PanelControl, PanelEvent, PanelInfo, PanelState, TitleStyle},
@@ -188,7 +188,7 @@ impl Render for StoryRoot {
 impl Global for AppState {}
 
 pub fn init(cx: &mut App) {
-    ui::init(cx);
+    gpui_component::init(cx);
     AppState::init(cx);
     input_story::init(cx);
     dropdown_story::init(cx);
@@ -229,7 +229,7 @@ pub fn init(cx: &mut App) {
 actions!(story, [ShowPanelInfo]);
 
 pub fn section(title: impl IntoElement, cx: &App) -> Div {
-    use ui::ActiveTheme;
+    use gpui_component::ActiveTheme;
     let theme = cx.theme();
 
     h_flex()

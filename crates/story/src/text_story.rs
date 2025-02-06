@@ -3,14 +3,15 @@ use gpui::{
     SharedString, Styled, Window,
 };
 
-use ui::{
+use gpui_component::{
     button::{Button, ButtonVariant, ButtonVariants as _},
     clipboard::Clipboard,
     h_flex,
     label::Label,
     link::Link,
+    red_500,
     tag::Tag,
-    v_flex, IconName, Sizable, StyledExt,
+    v_flex, yellow_500, yellow_800, IconName, Sizable, StyledExt,
 };
 
 use crate::section;
@@ -71,7 +72,7 @@ impl Render for TextStory {
                             .child(Label::new("Text align center").text_center())
                             .child(Label::new("Text align right").text_right()),
                     )
-                    .child(Label::new("Color Label").text_color(ui::red_500()))
+                    .child(Label::new("Color Label").text_color(red_500()))
                     .child(
                         Label::new("Font Size Label")
                             .text_size(px(20.))
@@ -104,8 +105,8 @@ impl Render for TextStory {
                                 .child(
                                     Link::new("link2")
                                         .href("https://github.com")
-                                        .text_color(ui::red_500())
-                                        .text_decoration_color(ui::red_500())
+                                        .text_color(red_500())
+                                        .text_decoration_color(red_500())
                                         .child("Red Link"),
                                 )
                                 .child(
@@ -199,7 +200,7 @@ impl Render for TextStory {
                             .child(Tag::outline().small().child("Outline"))
                             .child(Tag::danger().small().child("danger"))
                             .child(
-                                Tag::custom(ui::yellow_500(), ui::yellow_800(), ui::yellow_500())
+                                Tag::custom(yellow_500(), yellow_800(), yellow_500())
                                     .small()
                                     .child("Custom"),
                             ),
@@ -212,7 +213,7 @@ impl Render for TextStory {
                             .child(Tag::outline().child("Outline"))
                             .child(Tag::danger().child("danger"))
                             .child(
-                                Tag::custom(ui::yellow_500(), ui::yellow_800(), ui::yellow_500())
+                                Tag::custom(yellow_500(), yellow_800(), yellow_500())
                                     .child("Custom"),
                             ),
                     ),
