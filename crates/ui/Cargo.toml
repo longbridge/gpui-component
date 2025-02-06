@@ -2,7 +2,7 @@
 description = "UI components for building fantastic desktop application by using GPUI."
 edition = "2021"
 name = "gpui-component"
-publish = false
+publish = true
 version = "0.1.0"
 homepage = "https://github.com/longbridge/gpui-component"
 license = "Apache-2.0"
