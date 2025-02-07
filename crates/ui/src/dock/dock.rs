@@ -3,10 +3,9 @@
 use std::sync::Arc;
 
 use gpui::{
-    div, prelude::FluentBuilder as _, px, AnyView, App, AppContext, Axis, Context, Element, Empty,
-    Entity, InteractiveElement as _, IntoElement, MouseMoveEvent, MouseUpEvent, ParentElement as _,
-    Pixels, Point, Render, StatefulInteractiveElement, Style, StyleRefinement, Styled as _,
-    WeakEntity, Window,
+    div, prelude::FluentBuilder as _, px, App, AppContext, Axis, Context, Element, Empty, Entity,
+    InteractiveElement as _, IntoElement, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels,
+    Point, Render, StatefulInteractiveElement, Style, Styled as _, WeakEntity, Window,
 };
 use serde::{Deserialize, Serialize};
 
@@ -395,8 +394,6 @@ impl Render for Dock {
             return div();
         }
 
-        let cache_style = StyleRefinement::default().v_flex().size_full();
-
         div()
             .relative()
             .overflow_hidden()
@@ -411,10 +408,8 @@ impl Render for Dock {
             })
             .map(|this| match &self.panel {
                 DockItem::Split { view, .. } => this.child(view.clone()),
-                DockItem::Tabs { view, .. } => {
-                    this.child(AnyView::from(view.clone()).cached(cache_style))
-                }
-                DockItem::Panel { view, .. } => this.child(view.clone().view().cached(cache_style)),
+                DockItem::Tabs { view, .. } => this.child(view.clone()),
+                DockItem::Panel { view, .. } => this.child(view.clone().view()),
                 // Not support to render Tiles and Tile into Dock
                 DockItem::Tiles { .. } => this,
             })

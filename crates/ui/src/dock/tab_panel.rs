@@ -4,7 +4,7 @@ use gpui::{
     div, prelude::FluentBuilder, px, rems, App, AppContext, Context, Corner, DefiniteLength,
     DismissEvent, DragMoveEvent, Empty, Entity, EventEmitter, FocusHandle, Focusable,
     InteractiveElement as _, IntoElement, ParentElement, Pixels, Render, ScrollHandle,
-    SharedString, StatefulInteractiveElement, StyleRefinement, Styled, WeakEntity, Window,
+    SharedString, StatefulInteractiveElement, Styled, WeakEntity, Window,
 };
 use rust_i18n::t;
 
@@ -14,7 +14,7 @@ use crate::{
     h_flex,
     popup_menu::{PopupMenu, PopupMenuExt},
     tab::{Tab, TabBar},
-    v_flex, ActiveTheme, AxisExt, IconName, Placement, Selectable, Sizable, StyledExt as _,
+    v_flex, ActiveTheme, AxisExt, IconName, Placement, Selectable, Sizable,
 };
 
 use super::{
@@ -767,11 +767,7 @@ impl TabPanel {
             .overflow_y_scroll()
             .overflow_x_hidden()
             .flex_1()
-            .child(
-                active_panel
-                    .view()
-                    .cached(StyleRefinement::default().v_flex().size_full()),
-            )
+            .child(active_panel.view())
             .when(state.droppable, |this| {
                 this.on_drag_move(cx.listener(Self::on_panel_drag_move))
                     .child(
