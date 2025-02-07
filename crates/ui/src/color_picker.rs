@@ -160,7 +160,6 @@ impl ColorPicker {
 
     fn on_escape(&mut self, _: &Escape, _: &mut Window, cx: &mut Context<Self>) {
         cx.propagate();
-
         self.open = false;
         cx.notify();
     }
@@ -335,6 +334,10 @@ impl Render for ColorPicker {
                     )
                     .when_some(self.label.clone(), |this, label| this.child(label))
                     .on_click(cx.listener(Self::toggle_picker))
+                    .on_mouse_up_out(
+                        MouseButton::Left,
+                        cx.listener(|view, _, window, cx| view.on_escape(&Escape, window, cx)),
+                    )
                     .child(
                         canvas(
                             move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds),
@@ -367,12 +370,6 @@ impl Render for ColorPicker {
                                     .shadow_lg()
                                     .rounded(cx.theme().radius)
                                     .bg(cx.theme().background)
-                                    .on_mouse_up_out(
-                                        MouseButton::Left,
-                                        cx.listener(|view, _, window, cx| {
-                                            view.on_escape(&Escape, window, cx)
-                                        }),
-                                    )
                                     .child(self.render_colors(window, cx)),
                             ),
                     )
