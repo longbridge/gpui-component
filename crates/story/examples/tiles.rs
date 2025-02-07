@@ -1,11 +1,11 @@
 use anyhow::{Context as _, Result};
 use gpui::*;
-use std::time::Duration;
-use story::{Assets, ButtonStory, IconStory, StoryContainer};
-use ui::{
+use gpui_component::{
     dock::{DockArea, DockAreaState, DockEvent, DockItem},
     ActiveTheme, Root, TitleBar,
 };
+use std::time::Duration;
+use story::{Assets, ButtonStory, IconStory, StoryContainer};
 
 actions!(main_menu, [Quit]);
 
@@ -19,7 +19,7 @@ actions!(workspace, [Open, CloseWindow]);
 pub fn init(cx: &mut App) {
     cx.on_action(|_action: &Open, _cx: &mut App| {});
 
-    ui::init(cx);
+    gpui_component::init(cx);
     story::init(cx);
 }
 
@@ -287,7 +287,7 @@ fn main() {
     let app = Application::new().with_assets(Assets);
 
     app.run(move |cx| {
-        ui::init(cx);
+        gpui_component::init(cx);
         story::init(cx);
 
         cx.on_action(quit);
