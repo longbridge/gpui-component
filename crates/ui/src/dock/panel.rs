@@ -119,6 +119,11 @@ pub trait Panel: EventEmitter<PanelEvent> + Render + Focusable {
     fn dump(&self, cx: &App) -> PanelState {
         PanelState::new(self)
     }
+
+    /// Whether the panel has inner padding when the panel is in the tabs layout, default is `true`.
+    fn inner_padding(&self, cx: &App) -> bool {
+        true
+    }
 }
 
 /// The PanelView trait used to define the panel view.
@@ -137,6 +142,7 @@ pub trait PanelView: 'static + Send + Sync {
     fn view(&self) -> AnyView;
     fn focus_handle(&self, cx: &App) -> FocusHandle;
     fn dump(&self, cx: &App) -> PanelState;
+    fn inner_padding(&self, cx: &App) -> bool;
 }
 
 impl<T: Panel> PanelView for Entity<T> {
@@ -194,6 +200,10 @@ impl<T: Panel> PanelView for Entity<T> {
 
     fn dump(&self, cx: &App) -> PanelState {
         self.read(cx).dump(cx)
+    }
+
+    fn inner_padding(&self, cx: &App) -> bool {
+        self.read(cx).inner_padding(cx)
     }
 }
 

@@ -131,6 +131,11 @@ impl Panel for TabPanel {
         }
         state
     }
+
+    fn inner_padding(&self, cx: &App) -> bool {
+        self.active_panel(cx)
+            .map_or(true, |panel| panel.inner_padding(cx))
+    }
 }
 
 impl TabPanel {
@@ -761,7 +766,7 @@ impl TabPanel {
             return Empty {}.into_any_element();
         };
 
-        let is_render_in_tabs = self.panels.len() > 1;
+        let is_render_in_tabs = self.panels.len() > 1 && self.inner_padding(cx);
 
         v_flex()
             .id("tab-content")
