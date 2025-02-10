@@ -761,12 +761,15 @@ impl TabPanel {
             return Empty {}.into_any_element();
         };
 
+        let is_render_in_tabs = self.panels.len() > 1;
+
         v_flex()
             .id("tab-content")
             .group("")
             .overflow_y_scroll()
             .overflow_x_hidden()
             .flex_1()
+            .when(is_render_in_tabs, |this| this.pt_2())
             .child(
                 active_panel
                     .view()
