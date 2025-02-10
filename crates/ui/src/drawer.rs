@@ -203,10 +203,7 @@ impl RenderOnce for Drawer {
                                 // Body
                                 div().flex_1().overflow_hidden().child(
                                     v_flex()
-                                        .scrollable(
-                                            window.parent_view_id().unwrap_or_default(),
-                                            ScrollbarAxis::Vertical,
-                                        )
+                                        .scrollable(window.current_view(), ScrollbarAxis::Vertical)
                                         .child(self.content),
                                 ),
                             )

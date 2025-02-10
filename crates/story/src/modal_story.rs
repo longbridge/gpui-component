@@ -6,6 +6,7 @@ use gpui::{
     Focusable, InteractiveElement as _, IntoElement, ParentElement, Render, SharedString, Styled,
     Task, Timer, WeakEntity, Window,
 };
+use raw_window_handle::HasWindowHandle;
 
 use gpui_component::{
     button::{Button, ButtonVariant, ButtonVariants as _},
@@ -524,7 +525,9 @@ impl Render for ModalStory {
                                 cx.listener(|_, _, window, cx| {
                                     let webview = cx.new(|cx| {
                                         let webview = wry::WebViewBuilder::new()
-                                            .build_as_child(&window.raw_window_handle())
+                                            .build_as_child(
+                                                &window.window_handle().expect("No window handle"),
+                                            )
                                             .unwrap();
 
                                         WebView::new(webview, window, cx)

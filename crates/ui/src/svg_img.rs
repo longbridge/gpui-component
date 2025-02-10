@@ -5,9 +5,9 @@ use std::{
 };
 
 use gpui::{
-    px, size, App, Asset, Bounds, Element, Hitbox, ImageCacheError, InteractiveElement,
-    Interactivity, IntoElement, IsZero, Pixels, RenderImage, SharedString, Size, StyleRefinement,
-    Styled, Window,
+    px, size, App, Asset, Bounds, Element, ElementId, GlobalElementId, Hitbox, ImageCacheError,
+    InteractiveElement, Interactivity, IntoElement, IsZero, Pixels, RenderImage, SharedString,
+    Size, StyleRefinement, Styled, Window,
 };
 use image::Frame;
 use smallvec::SmallVec;
@@ -193,16 +193,16 @@ impl IntoElement for SvgImg {
 }
 
 impl Element for SvgImg {
-    type RequestLayoutState = ();
-    type PrepaintState = Option<Hitbox>;
+    type RequestLayoutState = Option<Arc<RenderImage>>;
+    type PrepaintState = (Option<Hitbox>, Option<Arc<RenderImage>>);
 
-    fn id(&self) -> Option<gpui::ElementId> {
+    fn id(&self) -> Option<ElementId> {
         self.interactivity.element_id.clone()
     }
 
     fn request_layout(
         &mut self,
-        global_id: Option<&gpui::GlobalElementId>,
+        global_id: Option<&GlobalElementId>,
         window: &mut Window,
         cx: &mut App,
     ) -> (gpui::LayoutId, Self::RequestLayoutState) {
@@ -212,56 +212,55 @@ impl Element for SvgImg {
                     window.request_layout(style, None, cx)
                 });
 
-        (layout_id, ())
+        let source = self.source.clone();
+        let size = self.size;
+        let data = if let Some(source) = source {
+            match window.use_asset::<Image>(&ImageSource { source, size }, cx) {
+                Some(Ok(data)) => Some(data),
+                _ => None,
+            }
+        } else {
+            None
+        };
+
+        (layout_id, data)
     }
 
     fn prepaint(
         &mut self,
-        global_id: Option<&gpui::GlobalElementId>,
-        bounds: gpui::Bounds<gpui::Pixels>,
-        _: &mut Self::RequestLayoutState,
+        global_id: Option<&GlobalElementId>,
+        bounds: Bounds<Pixels>,
+        state: &mut Self::RequestLayoutState,
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
-        self.interactivity.prepaint(
+        let hitbox = self.interactivity.prepaint(
             global_id,
             bounds,
             bounds.size,
             window,
             cx,
             |_, _, hitbox, _, _| hitbox,
-        )
+        );
+
+        (hitbox, state.clone())
     }
 
     fn paint(
         &mut self,
-        global_id: Option<&gpui::GlobalElementId>,
-        bounds: gpui::Bounds<gpui::Pixels>,
+        global_id: Option<&GlobalElementId>,
+        bounds: Bounds<Pixels>,
         _: &mut Self::RequestLayoutState,
-        hitbox: &mut Self::PrepaintState,
+        state: &mut Self::PrepaintState,
         window: &mut Window,
         cx: &mut App,
     ) {
-        let source = self.source.clone();
+        let size = self.size;
+        let hitbox = state.0.as_ref();
+        let data = state.1.clone();
 
-        self.interactivity.paint(
-            global_id,
-            bounds,
-            hitbox.as_ref(),
-            window,
-            cx,
-            |_style, window, cx| {
-                let size = self.size;
-
-                let data = if let Some(source) = source {
-                    match window.use_asset::<Image>(&ImageSource { source, size }, cx) {
-                        Some(Ok(data)) => Some(data),
-                        _ => None,
-                    }
-                } else {
-                    None
-                };
-
+        self.interactivity
+            .paint(global_id, bounds, hitbox, window, cx, |_, window, _| {
                 if let Some(data) = data {
                     // To calculate the ratio of the original image size to the container bounds size.
                     // Scale by shortest side (width or height) to get a fit image.
@@ -294,8 +293,7 @@ impl Element for SvgImg {
                         Err(err) => eprintln!("failed to paint svg image: {:?}", err),
                     }
                 }
-            },
-        )
+            })
     }
 }
 

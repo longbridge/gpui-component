@@ -514,7 +514,7 @@ impl Element for TextElement {
         }
         for line in prepaint.lines.iter() {
             let p = point(origin.x, origin.y + offset_y);
-            _ = line.paint(p, line_height, TextAlign::Left, window, cx);
+            _ = line.paint(p, line_height, TextAlign::Left, None, window, cx);
             offset_y += line.size(line_height).height;
         }
 

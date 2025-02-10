@@ -9,6 +9,7 @@ use gpui_component::{
     webview::WebView,
     wry, ActiveTheme,
 };
+use raw_window_handle::HasWindowHandle;
 
 pub struct WebViewStory {
     focus_handle: FocusHandle,
@@ -32,7 +33,7 @@ impl WebViewStory {
 
         let webview = cx.new(|cx| {
             let webview = wry::WebViewBuilder::new()
-                .build_as_child(&window.raw_window_handle())
+                .build_as_child(&window.window_handle().expect("No window handle"))
                 .unwrap();
             WebView::new(webview, window, cx)
         });

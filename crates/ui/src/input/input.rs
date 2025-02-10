@@ -1542,6 +1542,25 @@ impl EntityInputHandler for TextInput {
             bounds.origin + end_origin.unwrap_or_default(),
         ))
     }
+
+    fn character_index_for_point(
+        &mut self,
+        point: gpui::Point<Pixels>,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> Option<usize> {
+        let line_height = self.last_line_height;
+        let line_point = self.last_bounds?.localize(&point)?;
+        let lines = self.last_layout.as_ref()?;
+
+        for line in lines.iter() {
+            if let Ok(utf8_index) = line.closest_index_for_position(line_point, line_height) {
+                return Some(self.offset_to_utf16(utf8_index));
+            }
+        }
+
+        None
+    }
 }
 
 impl Focusable for TextInput {
