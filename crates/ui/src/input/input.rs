@@ -1522,10 +1522,14 @@ impl EntityInputHandler for TextInput {
         let mut index_offset = 0;
 
         for line in lines.iter() {
-            if let Some(p) = line.position_for_index(range.start - index_offset, line_height) {
+            if let Some(p) =
+                line.position_for_index(range.start.saturating_sub(index_offset), line_height)
+            {
                 start_origin = Some(p + point(px(0.), y_offset));
             }
-            if let Some(p) = line.position_for_index(range.end - index_offset, line_height) {
+            if let Some(p) =
+                line.position_for_index(range.end.saturating_sub(index_offset), line_height)
+            {
                 end_origin = Some(p + point(px(0.), y_offset));
             }
 
@@ -1537,9 +1541,13 @@ impl EntityInputHandler for TextInput {
             index_offset += line.len();
         }
 
+        let start_origin = start_origin.unwrap_or_default();
+        let end_origin = end_origin.unwrap_or_default();
+
         Some(Bounds::from_corners(
-            bounds.origin + start_origin.unwrap_or_default(),
-            bounds.origin + end_origin.unwrap_or_default(),
+            bounds.origin + start_origin,
+            // + line_height for show IME panel under the cursor line.
+            bounds.origin + point(end_origin.x, end_origin.y + line_height),
         ))
     }
 
@@ -1554,7 +1562,7 @@ impl EntityInputHandler for TextInput {
         let lines = self.last_layout.as_ref()?;
 
         for line in lines.iter() {
-            if let Ok(utf8_index) = line.closest_index_for_position(line_point, line_height) {
+            if let Ok(utf8_index) = line.index_for_position(line_point, line_height) {
                 return Some(self.offset_to_utf16(utf8_index));
             }
         }
