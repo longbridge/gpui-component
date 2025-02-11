@@ -347,7 +347,9 @@ where
         let searchable = delegate.delegate.can_search();
 
         let list = cx.new(|cx| {
-            let mut list = List::new(delegate, window, cx).max_h(rems(20.));
+            let mut list = List::new(delegate, window, cx)
+                .max_h(rems(20.))
+                .reset_on_cancel(false);
             if !searchable {
                 list = list.no_query();
             }

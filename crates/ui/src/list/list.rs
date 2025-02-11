@@ -156,6 +156,7 @@ pub struct List<D: ListDelegate> {
     pub(crate) size: Size,
     selected_index: Option<usize>,
     right_clicked_index: Option<usize>,
+    reset_on_cancel: bool,
     _search_task: Task<()>,
     _load_more_task: Task<()>,
     _query_input_subscription: Subscription,
@@ -191,6 +192,7 @@ where
             selectable: true,
             querying: false,
             size: Size::default(),
+            reset_on_cancel: true,
             _search_task: Task::ready(()),
             _load_more_task: Task::ready(()),
             _query_input_subscription,
@@ -381,8 +383,15 @@ where
         }
     }
 
+    pub(crate) fn reset_on_cancel(mut self, reset: bool) -> Self {
+        self.reset_on_cancel = reset;
+        self
+    }
+
     fn on_action_cancel(&mut self, _: &Cancel, window: &mut Window, cx: &mut Context<Self>) {
-        self.set_selected_index(None, window, cx);
+        if self.reset_on_cancel {
+            self.set_selected_index(None, window, cx);
+        }
         self.delegate.cancel(window, cx);
         cx.emit(ListEvent::Cancel);
         cx.notify();
