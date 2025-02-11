@@ -124,7 +124,6 @@ impl RenderOnce for WindowBorder {
                     .when(!tiling.bottom, |div| div.pb(SHADOW_SIZE))
                     .when(!tiling.left, |div| div.pl(SHADOW_SIZE))
                     .when(!tiling.right, |div| div.pr(SHADOW_SIZE))
-                    // .on_mouse_move(|_e, window, _| window.refresh())
                     .on_mouse_down(MouseButton::Left, move |_, window, _| {
                         let size = window.window_bounds().get_bounds().size;
                         let pos = window.mouse_position();
