@@ -3,10 +3,10 @@
 use std::sync::Arc;
 
 use gpui::{
-    div, prelude::FluentBuilder as _, px, AnyView, App, AppContext, Axis, Context, Element, Empty,
-    Entity, InteractiveElement as _, IntoElement, MouseMoveEvent, MouseUpEvent, ParentElement as _,
-    Pixels, Point, Render, StatefulInteractiveElement, Style, StyleRefinement, Styled as _,
-    WeakEntity, Window,
+    div, prelude::FluentBuilder as _, px, App, AppContext, Axis, Context, Element, Empty, Entity,
+    InteractiveElement as _, IntoElement, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels,
+    Point, Render, StatefulInteractiveElement, Style, StyleRefinement, Styled as _, WeakEntity,
+    Window,
 };
 use serde::{Deserialize, Serialize};
 
@@ -410,10 +410,8 @@ impl Render for Dock {
                 this.h(px(29.))
             })
             .map(|this| match &self.panel {
-                DockItem::Split { view, .. } => this.child(AnyView::from(view.clone()).cached(cache_style)),
-                DockItem::Tabs { view, .. } => {
-                    this.child(AnyView::from(view.clone()).cached(cache_style))
-                }
+                DockItem::Split { view, .. } => this.child(view.clone()),
+                DockItem::Tabs { view, .. } => this.child(view.clone()),
                 DockItem::Panel { view, .. } => this.child(view.clone().view().cached(cache_style)),
                 // Not support to render Tiles and Tile into Dock
                 DockItem::Tiles { .. } => this,
