@@ -496,41 +496,38 @@ impl Element for ResizePanelGroupElement {
             let axis = self.axis;
             let current_ix = view.read(cx).resizing_panel_ix;
             move |e: &MouseMoveEvent, phase, window, cx| {
-                if phase.bubble() {
-                    if let Some(ix) = current_ix {
-                        view.update(cx, |view, cx| {
-                            let panel = view
-                                .panels
-                                .get(ix)
-                                .expect("BUG: invalid panel index")
-                                .read(cx);
-
-                            match axis {
-                                Axis::Horizontal => view.resize_panels(
-                                    ix,
-                                    e.position.x - panel.bounds.left(),
-                                    window,
-                                    cx,
-                                ),
-                                Axis::Vertical => {
-                                    view.resize_panels(
-                                        ix,
-                                        e.position.y - panel.bounds.top(),
-                                        window,
-                                        cx,
-                                    );
-                                }
-                            }
-                        })
-                    }
+                if !phase.bubble() {
+                    return;
                 }
+                let Some(ix) = current_ix else { return };
+
+                view.update(cx, |view, cx| {
+                    let panel = view
+                        .panels
+                        .get(ix)
+                        .expect("BUG: invalid panel index")
+                        .read(cx);
+
+                    match axis {
+                        Axis::Horizontal => {
+                            view.resize_panels(ix, e.position.x - panel.bounds.left(), window, cx)
+                        }
+                        Axis::Vertical => {
+                            view.resize_panels(ix, e.position.y - panel.bounds.top(), window, cx);
+                        }
+                    }
+                })
             }
         });
 
         // When any mouse up, stop dragging
         window.on_mouse_event({
             let view = self.view.clone();
+            let current_ix = view.read(cx).resizing_panel_ix;
             move |_: &MouseUpEvent, phase, window, cx| {
+                if current_ix.is_none() {
+                    return;
+                }
                 if phase.bubble() {
                     view.update(cx, |view, cx| view.done_resizing(window, cx));
                 }
