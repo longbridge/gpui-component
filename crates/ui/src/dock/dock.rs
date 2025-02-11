@@ -410,7 +410,7 @@ impl Render for Dock {
                 this.h(px(29.))
             })
             .map(|this| match &self.panel {
-                DockItem::Split { view, .. } => this.child(view.clone()),
+                DockItem::Split { view, .. } => this.child(AnyView::from(view.clone()).cached(cache_style)),
                 DockItem::Tabs { view, .. } => {
                     this.child(AnyView::from(view.clone()).cached(cache_style))
                 }
