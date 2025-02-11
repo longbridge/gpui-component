@@ -1,26 +1,16 @@
 use gpui::{
-    div, prelude::FluentBuilder, rems, App, Div, IntoElement, ParentElement, RenderOnce,
-    SharedString, Styled, Window,
+    div, rems, App, Div, IntoElement, ParentElement, RenderOnce, SharedString, Styled, Window,
 };
 
-use crate::{h_flex, ActiveTheme};
+use crate::ActiveTheme;
 
 const MASKED: &'static str = "•";
-
-#[derive(Default, PartialEq, Eq)]
-pub enum TextAlign {
-    #[default]
-    Left,
-    Center,
-    Right,
-}
 
 #[derive(IntoElement)]
 pub struct Label {
     base: Div,
     label: SharedString,
     chars_count: usize,
-    align: TextAlign,
     marked: bool,
 }
 
@@ -29,10 +19,9 @@ impl Label {
         let label: SharedString = label.into();
         let chars_count = label.chars().count();
         Self {
-            base: h_flex().line_height(rems(1.25)),
+            base: div().line_height(rems(1.25)),
             label,
             chars_count,
-            align: TextAlign::default(),
             marked: false,
         }
     }
@@ -59,12 +48,6 @@ impl RenderOnce for Label {
 
         div()
             .text_color(cx.theme().foreground)
-            .child(self.base.map(|this| {
-                if self.align == TextAlign::Left {
-                    this.child(div().size_full().child(text))
-                } else {
-                    this.child(text)
-                }
-            }))
+            .child(self.base.child(text))
     }
 }
