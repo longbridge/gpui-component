@@ -143,7 +143,6 @@ impl PopupMenu {
                 scroll_state: Rc::new(Cell::new(ScrollbarState::default())),
                 _subscriptions,
             };
-            window.refresh();
             f(menu, window, cx)
         })
     }
