@@ -1,4 +1,3 @@
-use core::time;
 use std::time::Duration;
 
 use fake::Fake;
@@ -306,22 +305,19 @@ impl ListStory {
 
         // Spawn a background to random refresh the list
         cx.spawn(move |this, mut cx| async move {
-            loop {
-                Timer::after(time::Duration::from_secs_f64(0.5)).await;
-                this.update(&mut cx, |this, cx| {
-                    this.company_list.update(cx, |picker, _| {
-                        picker
-                            .delegate_mut()
-                            .companies
-                            .iter_mut()
-                            .for_each(|company| {
-                                company.random_update();
-                            });
-                    });
-                    cx.notify();
-                })
-                .ok();
-            }
+            this.update(&mut cx, |this, cx| {
+                this.company_list.update(cx, |picker, _| {
+                    picker
+                        .delegate_mut()
+                        .companies
+                        .iter_mut()
+                        .for_each(|company| {
+                            company.random_update();
+                        });
+                });
+                cx.notify();
+            })
+            .ok();
         })
         .detach();
 
