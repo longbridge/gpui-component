@@ -37,6 +37,12 @@ impl AppTitleBar {
         let locale_selector = cx.new(|cx| LocaleSelector::new(window, cx));
         let font_size_selector = cx.new(|cx| FontSizeSelector::new(window, cx));
 
+        if cx.should_auto_hide_scrollbars() {
+            Theme::global_mut(cx).scrollbar_show = ScrollbarShow::Scrolling;
+        } else {
+            Theme::global_mut(cx).scrollbar_show = ScrollbarShow::Always;
+        }
+
         let theme_color_picker = cx.new(|cx| {
             let mut picker = ColorPicker::new("theme-color-picker", window, cx)
                 .xsmall()

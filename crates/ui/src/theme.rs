@@ -7,7 +7,8 @@ use gpui::{
 use crate::{scroll::ScrollbarShow, Colorize as _};
 
 pub fn init(cx: &mut App) {
-    Theme::sync_system_appearance(None, cx)
+    Theme::sync_system_appearance(None, cx);
+    Theme::sync_scrollbar_appearance(cx);
 }
 
 pub trait ActiveTheme {
@@ -487,16 +488,31 @@ impl Theme {
         }
     }
 
+    /// Sync the Scrollbar showing behavior with the system
+    pub fn sync_scrollbar_appearance(cx: &mut App) {
+        if cx.should_auto_hide_scrollbars() {
+            cx.global_mut::<Theme>().scrollbar_show = ScrollbarShow::Scrolling;
+        } else {
+            cx.global_mut::<Theme>().scrollbar_show = ScrollbarShow::Always;
+        }
+    }
+
     pub fn change(mode: ThemeMode, window: Option<&mut Window>, cx: &mut App) {
         let colors = match mode {
             ThemeMode::Light => ThemeColor::light(),
             ThemeMode::Dark => ThemeColor::dark(),
         };
 
-        let mut theme = Theme::from(colors);
-        theme.mode = mode;
+        if !cx.has_global::<Theme>() {
+            let theme = Theme::from(colors);
+            cx.set_global(theme);
+        }
 
-        cx.set_global(theme);
+        let theme = cx.global_mut::<Theme>();
+
+        theme.mode = mode;
+        theme.colors = colors;
+
         if let Some(window) = window {
             window.refresh();
         }

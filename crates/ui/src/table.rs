@@ -1628,11 +1628,11 @@ where
                     .absolute()
                     .top_0()
                     .size_full()
-                    .when(self.scrollbar_visible.right && rows_count > 0, |this| {
-                        this.children(self.render_vertical_scrollbar(window, cx))
-                    })
                     .when(self.scrollbar_visible.bottom, |this| {
                         this.child(self.render_horizontal_scrollbar(window, cx))
+                    })
+                    .when(self.scrollbar_visible.right && rows_count > 0, |this| {
+                        this.children(self.render_vertical_scrollbar(window, cx))
                     }),
             )
     }
