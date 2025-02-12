@@ -57,11 +57,18 @@ GPUI and GPUI Component still in development, so we need add dependency by git.
 And GPUI Component depends on `gpui` by special version (It keep updated to upstream) for including WebView support.
 
 ```toml
-gpui = { git = "https://github.com/huacnlee/zed.git", branch = "export-platform-window" }
+gpui = { git = "https://github.com/huacnlee/zed.git", branch = "webview" }
 gpui-component = { git = "https://github.com/longbridge/gpui-component.git" }
 ```
 
 More usage can be found in [story](https://github.com/longbridge/gpui-component/tree/main/crates/story) directory.
+
+### Icons
+
+GPUI Component have `Icon` element, but it does not include SVG files by default.
+
+The example is using [Lucide](https://lucide.dev) icons, but you can use any icons you like, just named the svg files like [IconName](https://github.com/longbridge/gpui-component/blob/main/crates/ui/src/icon.rs#L86) defined the path name.
+You can add icons that you need in your project.
 
 ## Demo
 
