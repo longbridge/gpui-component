@@ -6,12 +6,12 @@ use gpui::{
     ParentElement, Pixels, Render, ScrollHandle, SharedString, Size, Styled, Window,
 };
 use gpui_component::{
-    button::Button,
+    button::{Button, ButtonGroup},
     divider::Divider,
     gray_100, gray_800, h_flex,
     label::Label,
     scroll::{Scrollbar, ScrollbarAxis, ScrollbarState},
-    v_flex, v_virtual_list, ActiveTheme as _, StyledExt as _,
+    v_flex, v_virtual_list, ActiveTheme as _, Selectable, StyledExt as _,
 };
 
 pub struct ScrollableStory {
@@ -23,6 +23,7 @@ pub struct ScrollableStory {
     item_sizes: Rc<Vec<Size<Pixels>>>,
     test_width: Pixels,
     axis: ScrollbarAxis,
+    size_mode: usize,
     message: SharedString,
 }
 
@@ -46,6 +47,7 @@ impl ScrollableStory {
             item_sizes: Rc::new(item_sizes),
             test_width,
             axis: ScrollbarAxis::Both,
+            size_mode: 0,
             message: SharedString::default(),
         }
     }
@@ -55,6 +57,7 @@ impl ScrollableStory {
     }
 
     pub fn change_test_cases(&mut self, n: usize, cx: &mut Context<Self>) {
+        self.size_mode = n;
         if n == 0 {
             self.items = (0..5000).map(|i| format!("Item {}", i)).collect::<Vec<_>>();
             self.test_width = px(3000.);
@@ -98,46 +101,66 @@ impl ScrollableStory {
             .child(
                 h_flex()
                     .gap_2()
-                    .child(Button::new("test-0").label("Size 0").on_click(cx.listener(
-                        |view, _, _, cx| {
-                            view.change_test_cases(0, cx);
-                        },
-                    )))
-                    .child(Button::new("test-1").label("Size 1").on_click(cx.listener(
-                        |view, _, _, cx| {
-                            view.change_test_cases(1, cx);
-                        },
-                    )))
-                    .child(Button::new("test-2").label("Size 2").on_click(cx.listener(
-                        |view, _, _, cx| {
-                            view.change_test_cases(2, cx);
-                        },
-                    )))
-                    .child(Button::new("test-3").label("Size 3").on_click(cx.listener(
-                        |view, _, _, cx| {
-                            view.change_test_cases(3, cx);
-                        },
-                    )))
+                    .child(
+                        ButtonGroup::new("test-cases")
+                            .child(
+                                Button::new("test-0")
+                                    .label("Size 0")
+                                    .selected(self.size_mode == 0),
+                            )
+                            .child(
+                                Button::new("test-1")
+                                    .label("Size 1")
+                                    .selected(self.size_mode == 1),
+                            )
+                            .child(
+                                Button::new("test-2")
+                                    .label("Size 2")
+                                    .selected(self.size_mode == 2),
+                            )
+                            .child(
+                                Button::new("test-3")
+                                    .label("Size 3")
+                                    .selected(self.size_mode == 3),
+                            )
+                            .on_click(cx.listener(|view, clicks: &Vec<usize>, _, cx| {
+                                if clicks.contains(&0) {
+                                    view.change_test_cases(0, cx)
+                                } else if clicks.contains(&1) {
+                                    view.change_test_cases(1, cx)
+                                } else if clicks.contains(&2) {
+                                    view.change_test_cases(2, cx)
+                                } else if clicks.contains(&3) {
+                                    view.change_test_cases(3, cx)
+                                }
+                            })),
+                    )
                     .child(Divider::vertical().px_2())
                     .child(
-                        Button::new("test-axis-both")
-                            .label("Both Scrollbar")
-                            .on_click(cx.listener(|view, _, _, cx| {
-                                view.change_axis(ScrollbarAxis::Both, cx)
-                            })),
-                    )
-                    .child(
-                        Button::new("test-axis-vertical")
-                            .label("Vertical")
-                            .on_click(cx.listener(|view, _, _, cx| {
-                                view.change_axis(ScrollbarAxis::Vertical, cx)
-                            })),
-                    )
-                    .child(
-                        Button::new("test-axis-horizontal")
-                            .label("Horizontal")
-                            .on_click(cx.listener(|view, _, _, cx| {
-                                view.change_axis(ScrollbarAxis::Horizontal, cx)
+                        ButtonGroup::new("scrollbars")
+                            .child(
+                                Button::new("test-axis-both")
+                                    .label("Both Scrollbar")
+                                    .selected(self.axis == ScrollbarAxis::Both),
+                            )
+                            .child(
+                                Button::new("test-axis-vertical")
+                                    .label("Vertical")
+                                    .selected(self.axis == ScrollbarAxis::Vertical),
+                            )
+                            .child(
+                                Button::new("test-axis-horizontal")
+                                    .label("Horizontal")
+                                    .selected(self.axis == ScrollbarAxis::Horizontal),
+                            )
+                            .on_click(cx.listener(|view, clicks: &Vec<usize>, _, cx| {
+                                if clicks.contains(&0) {
+                                    view.change_axis(ScrollbarAxis::Both, cx)
+                                } else if clicks.contains(&1) {
+                                    view.change_axis(ScrollbarAxis::Vertical, cx)
+                                } else if clicks.contains(&2) {
+                                    view.change_axis(ScrollbarAxis::Horizontal, cx)
+                                }
                             })),
                     ),
             )
@@ -179,8 +202,8 @@ impl Render for ScrollableStory {
             .gap_4()
             .child(self.render_buttons(cx))
             .child(
-                div().w_full().child(
-                    div().relative().w_full().h(px(350.)).child(
+                div().w_full().flex_1().child(
+                    div().relative().size_full().child(
                         v_flex()
                             .id("test-0")
                             .relative()
@@ -265,8 +288,8 @@ impl Render for ScrollableStory {
                     .border_1()
                     .border_color(cx.theme().border)
                     .w_full()
-                    .overflow_hidden()
                     .max_h(px(400.))
+                    .min_h(px(200.))
                     .child(
                         v_flex()
                             .p_3()

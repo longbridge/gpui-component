@@ -70,6 +70,26 @@ impl ButtonGroup {
     /// Sets the on_click handler for the ButtonGroup.
     ///
     /// The handler first argument is a vector of the selected button indices.
+    ///
+    /// The `&Vec<usize>` is the indices of the clicked (selected in `multiple` mode) buttons.
+    /// For example: `[0, 2, 3]` is means the first, third and fourth buttons are clicked.
+    ///
+    /// ```rust
+    /// ButtonGroup::new("size-button")
+    ///    .child(Button::new("large").label("Large").selected(self.size == Size::Large))
+    ///    .child(Button::new("medium").label("Medium").selected(self.size == Size::Medium))
+    ///    .child(Button::new("small").label("Small").selected(self.size == Size::Small))
+    ///    .on_click(cx.listener(|view, clicks: &Vec<usize>, _, cx| {
+    ///        if clicks.contains(&0) {
+    ///            view.size = Size::Large;
+    ///        } else if clicks.contains(&1) {
+    ///            view.size = Size::Medium;
+    ///        } else if clicks.contains(&2) {
+    ///            view.size = Size::Small;
+    ///        }
+    ///        cx.notify();
+    ///    }))
+    /// ```
     pub fn on_click(
         mut self,
         handler: impl Fn(&Vec<usize>, &mut Window, &mut App) + 'static,
