@@ -244,7 +244,7 @@ impl ThemeColor {
             primary_hover: hsl(223.0, 5.9, 15.0),
             progress_bar: hsl(223.0, 5.9, 10.0),
             ring: hsl(240.0, 5.9, 65.0),
-            scrollbar: hsl(0., 0., 97.).opacity(0.75),
+            scrollbar: hsl(0., 0., 92.).opacity(0.75),
             scrollbar_thumb: hsl(0., 0., 69.).opacity(0.9),
             scrollbar_thumb_hover: hsl(0., 0., 59.),
             secondary: hsl(240.0, 5.9, 96.9),

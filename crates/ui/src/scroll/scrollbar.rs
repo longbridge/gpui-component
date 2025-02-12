@@ -18,18 +18,24 @@ pub enum ScrollbarShow {
     #[default]
     Scrolling,
     Hover,
+    Always,
 }
 
 impl ScrollbarShow {
     fn is_hover(&self) -> bool {
         matches!(self, Self::Hover)
     }
+
+    fn is_always(&self) -> bool {
+        matches!(self, Self::Always)
+    }
 }
 
 const BORDER_WIDTH: Pixels = px(0.);
+const WIDTH: Pixels = px(12.);
 const MIN_THUMB_SIZE: f32 = 80.;
-const THUMB_RADIUS: Pixels = Pixels(3.0);
-const THUMB_INSET: Pixels = Pixels(4.);
+const THUMB_RADIUS: Pixels = Pixels(4.0);
+const THUMB_INSET: Pixels = Pixels(3.);
 const FADE_OUT_DURATION: f32 = 3.0;
 const FADE_OUT_DELAY: f32 = 2.0;
 
@@ -153,6 +159,10 @@ impl ScrollbarState {
     }
 
     fn is_scrollbar_visible(&self) -> bool {
+        if self.hovered_axis.is_some() || self.dragged_axis.is_some() {
+            return true;
+        }
+
         if let Some(last_time) = self.last_scroll_time {
             let elapsed = Instant::now().duration_since(last_time).as_secs_f32();
             elapsed < FADE_OUT_DURATION
@@ -195,9 +205,9 @@ impl ScrollbarAxis {
         match self {
             Self::Vertical => vec![Self::Vertical],
             Self::Horizontal => vec![Self::Horizontal],
-            // This should keep vertical first, vertical is the primary axis
-            // if vertical not need display, then horizontal will not keep right margin.
-            Self::Both => vec![Self::Vertical, Self::Horizontal],
+            // This should keep Horizontal first, Vertical is the primary axis
+            // if Vertical not need display, then Horizontal will not keep right margin.
+            Self::Both => vec![Self::Horizontal, Self::Vertical],
         }
     }
 }
@@ -206,8 +216,6 @@ impl ScrollbarAxis {
 pub struct Scrollbar {
     view_id: EntityId,
     axis: ScrollbarAxis,
-    /// When is vertical, this is the height of the scrollbar.
-    width: Pixels,
     scroll_handle: Rc<Box<dyn ScrollHandleOffsetable>>,
     scroll_size: gpui::Size<Pixels>,
     state: Rc<Cell<ScrollbarState>>,
@@ -231,7 +239,6 @@ impl Scrollbar {
             state,
             axis,
             scroll_size,
-            width: px(12.),
             scroll_handle: Rc::new(Box::new(scroll_handle)),
             max_fps: 120,
         }
@@ -459,7 +466,7 @@ impl Element for Scrollbar {
 
             // The horizontal scrollbar is set avoid overlapping with the vertical scrollbar, if the vertical scrollbar is visible.
             let margin_end = if has_both && !is_vertical {
-                self.width
+                WIDTH
             } else {
                 px(0.)
             };
@@ -478,31 +485,29 @@ impl Element for Scrollbar {
 
             let bounds = Bounds {
                 origin: if is_vertical {
-                    point(
-                        hitbox.origin.x + hitbox.size.width - self.width,
-                        hitbox.origin.y,
-                    )
+                    point(hitbox.origin.x + hitbox.size.width - WIDTH, hitbox.origin.y)
                 } else {
                     point(
                         hitbox.origin.x,
-                        hitbox.origin.y + hitbox.size.height - self.width,
+                        hitbox.origin.y + hitbox.size.height - WIDTH,
                     )
                 },
                 size: gpui::Size {
                     width: if is_vertical {
-                        self.width
+                        WIDTH
                     } else {
                         hitbox.size.width
                     },
                     height: if is_vertical {
                         hitbox.size.height
                     } else {
-                        self.width
+                        WIDTH
                     },
                 },
             };
 
             let state = self.state.clone();
+            let is_always_to_show = cx.theme().scrollbar_show.is_always();
             let is_hover_to_show = cx.theme().scrollbar_show.is_hover();
             let is_hovered_on_bar = state.get().hovered_axis == Some(axis);
             let is_hovered_on_thumb = state.get().hovered_on_thumb == Some(axis);
@@ -510,7 +515,13 @@ impl Element for Scrollbar {
             let (thumb_bg, bar_bg, bar_border, inset, radius) =
                 if state.get().dragged_axis == Some(axis) {
                     Self::style_for_active(cx)
-                } else if is_hover_to_show && is_hovered_on_bar {
+                } else if is_hover_to_show && (is_hovered_on_bar || is_hovered_on_thumb) {
+                    if is_hovered_on_thumb {
+                        Self::style_for_hovered_thumb(cx)
+                    } else {
+                        Self::style_for_hovered_bar(cx)
+                    }
+                } else if is_always_to_show {
                     if is_hovered_on_thumb {
                         Self::style_for_hovered_thumb(cx)
                     } else {
@@ -549,12 +560,12 @@ impl Element for Scrollbar {
             let thumb_bounds = if is_vertical {
                 Bounds::from_corners(
                     point(bounds.origin.x, bounds.origin.y + thumb_start),
-                    point(bounds.origin.x + self.width, bounds.origin.y + thumb_end),
+                    point(bounds.origin.x + WIDTH, bounds.origin.y + thumb_end),
                 )
             } else {
                 Bounds::from_corners(
                     point(bounds.origin.x + thumb_start, bounds.origin.y),
-                    point(bounds.origin.x + thumb_end, bounds.origin.y + self.width),
+                    point(bounds.origin.x + thumb_end, bounds.origin.y + WIDTH),
                 )
             };
             let thumb_fill_bounds = if is_vertical {
@@ -564,7 +575,7 @@ impl Element for Scrollbar {
                         bounds.origin.y + thumb_start + inset,
                     ),
                     point(
-                        bounds.origin.x + self.width - inset,
+                        bounds.origin.x + WIDTH - inset,
                         bounds.origin.y + thumb_end - inset,
                     ),
                 )
@@ -576,7 +587,7 @@ impl Element for Scrollbar {
                     ),
                     point(
                         bounds.origin.x + thumb_end - inset,
-                        bounds.origin.y + self.width - inset,
+                        bounds.origin.y + WIDTH - inset,
                     ),
                 )
             };

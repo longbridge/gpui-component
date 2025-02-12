@@ -299,6 +299,11 @@ impl Render for FontSizeSelector {
                             scroll_show == ScrollbarShow::Hover,
                             Box::new(SelectScrollbarShow(ScrollbarShow::Hover)),
                         )
+                        .menu_with_check(
+                            "Always show Scrollbar",
+                            scroll_show == ScrollbarShow::Always,
+                            Box::new(SelectScrollbarShow(ScrollbarShow::Always)),
+                        )
                     })
                     .anchor(Corner::TopRight),
             )
