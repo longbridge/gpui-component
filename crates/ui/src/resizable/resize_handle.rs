@@ -6,7 +6,7 @@ use gpui::{
     ParentElement as _, Pixels, Point, Render, StatefulInteractiveElement, Styled as _, Window,
 };
 
-use crate::{dock::DockPlacement, ActiveTheme as _, AxisExt as _, Placement};
+use crate::{dock::DockPlacement, ActiveTheme as _, AxisExt as _};
 
 pub(crate) const HANDLE_PADDING: Pixels = px(4.);
 pub(crate) const HANDLE_SIZE: Pixels = px(1.);

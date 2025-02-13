@@ -4,15 +4,14 @@ use std::{ops::Deref, sync::Arc};
 
 use gpui::{
     div, prelude::FluentBuilder as _, px, App, AppContext, Axis, Context, Element, Empty, Entity,
-    InteractiveElement as _, IntoElement, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels,
-    Point, Render, StatefulInteractiveElement, Style, StyleRefinement, Styled as _, WeakEntity,
-    Window,
+    IntoElement, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Render, Style,
+    StyleRefinement, Styled as _, WeakEntity, Window,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    resizable::{resize_handle, HANDLE_PADDING, HANDLE_SIZE, PANEL_MIN_SIZE},
-    ActiveTheme as _, AxisExt as _, StyledExt,
+    resizable::{resize_handle, PANEL_MIN_SIZE},
+    StyledExt,
 };
 
 use super::{DockArea, DockItem, PanelView, TabPanel};
