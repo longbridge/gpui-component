@@ -15,7 +15,7 @@ use crate::{
     v_flex, ActiveTheme, Icon, IconName, Sizable, Size, StyleSized as _, StyledExt as _,
 };
 
-use super::calendar::{Calendar, CalendarEvent, Date};
+use super::calendar::{Calendar, CalendarEvent, Date, Matcher};
 
 pub fn init(cx: &mut App) {
     let context = Some("DatePicker");
@@ -188,6 +188,18 @@ impl DatePicker {
             cx.emit(DatePickerEvent::Change(date));
         }
         cx.notify();
+    }
+
+    /// Set the disabled matcher of the date picker.
+    pub fn set_disabled(
+        &mut self,
+        disabled: impl Into<Matcher>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.calendar.update(cx, |view, cx| {
+            view.set_disabled(disabled.into(), window, cx);
+        });
     }
 
     /// Set size of the date picker.

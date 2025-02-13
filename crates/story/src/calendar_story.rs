@@ -5,6 +5,7 @@ use gpui::{
 };
 use gpui_component::{
     button::Button,
+    calendar,
     date_picker::{DatePicker, DatePickerEvent, DateRangePreset},
     v_flex, Sizable as _, Size,
 };
@@ -82,18 +83,31 @@ impl CalendarStory {
                 .width(px(220.))
                 .presets(presets);
             picker.set_date(now, window, cx);
+            picker.set_disabled(vec![0, 6], window, cx);
             picker
         });
         let date_picker_large = cx.new(|cx| {
-            DatePicker::new("date_picker_large", window, cx)
+            let mut picker = DatePicker::new("date_picker_large", window, cx)
                 .large()
                 .date_format("%Y-%m-%d")
-                .width(px(300.))
+                .width(px(300.));
+            picker.set_disabled(
+                calendar::Matcher::range(Some(now), now.checked_add_days(Days::new(7))),
+                window,
+                cx,
+            );
+            picker.set_date(now, window, cx);
+            picker
         });
         let date_picker_small = cx.new(|cx| {
             let mut picker = DatePicker::new("date_picker_small", window, cx)
                 .small()
                 .width(px(180.));
+            picker.set_disabled(
+                calendar::Matcher::interval(Some(now), now.checked_add_days(Days::new(5))),
+                window,
+                cx,
+            );
             picker.set_date(now, window, cx);
             picker
         });

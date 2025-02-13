@@ -147,6 +147,80 @@ impl ViewMode {
     }
 }
 
+pub struct IntervalMatcher {
+    before: Option<NaiveDate>,
+    after: Option<NaiveDate>,
+}
+
+pub struct RangeMatcher {
+    from: Option<NaiveDate>,
+    to: Option<NaiveDate>,
+}
+
+pub enum Matcher {
+    /// Match declare days of the week.
+    ///
+    /// Matcher::DayOfWeek(vec![0, 6])
+    /// @ill match the days of the week that are Sunday and Saturday.
+    DayOfWeek(Vec<u32>),
+    /// Match the included days, except for those before and after the interval.
+    ///
+    /// Matcher::Interval(IntervalMatcher {     
+    ///   before: Some(NaiveDate::from_ymd(2020, 1, 2)),
+    ///   after: Some(NaiveDate::from_ymd(2020, 1, 3)),
+    /// })
+    /// Will match the days that are not between 2020-01-02 and 2020-01-03.
+    Interval(IntervalMatcher),
+    /// Match the days within the range.
+    ///
+    /// Matcher::Range(RangeMatcher {
+    ///   from: Some(NaiveDate::from_ymd(2020, 1, 1)),
+    ///   to: Some(NaiveDate::from_ymd(2020, 1, 3)),
+    /// })
+    /// Will match the days that are between 2020-01-01 and 2020-01-03.
+    Range(RangeMatcher),
+}
+
+impl From<Vec<u32>> for Matcher {
+    fn from(days: Vec<u32>) -> Self {
+        Matcher::DayOfWeek(days)
+    }
+}
+
+impl Matcher {
+    pub fn interval(before: Option<NaiveDate>, after: Option<NaiveDate>) -> Self {
+        Matcher::Interval(IntervalMatcher { before, after })
+    }
+
+    pub fn range(from: Option<NaiveDate>, to: Option<NaiveDate>) -> Self {
+        Matcher::Range(RangeMatcher { from, to })
+    }
+
+    fn matched(&self, date: &NaiveDate) -> bool {
+        match self {
+            Matcher::DayOfWeek(days) => days.contains(&date.weekday().num_days_from_sunday()),
+            Matcher::Interval(interval) => {
+                let before_check = interval.before.map_or(false, |before| date < &before);
+                let after_check = interval.after.map_or(false, |after| date > &after);
+                before_check || after_check
+            }
+            Matcher::Range(range) => {
+                let from_check = range.from.map_or(false, |from| date < &from);
+                let to_check = range.to.map_or(false, |to| date > &to);
+                !from_check && !to_check
+            }
+        }
+    }
+
+    pub fn date_matched(&self, date: &Date) -> bool {
+        match date {
+            Date::Single(Some(date)) => self.matched(date),
+            Date::Range(Some(start), Some(end)) => self.matched(start) || self.matched(end),
+            _ => false,
+        }
+    }
+}
+
 pub struct Calendar {
     focus_handle: FocusHandle,
     size: Size,
@@ -159,6 +233,7 @@ pub struct Calendar {
     /// Number of the months view to show.
     number_of_months: usize,
     today: NaiveDate,
+    disabled: Option<Matcher>,
 }
 
 impl Calendar {
@@ -175,6 +250,7 @@ impl Calendar {
             year_page: 0,
             number_of_months: 1,
             today,
+            disabled: None,
         }
         .year_range((today.year() - 50, today.year() + 50))
     }
@@ -183,8 +259,18 @@ impl Calendar {
     ///
     /// When you set a range date, the mode will be automatically set to `Mode::Range`.
     pub fn set_date(&mut self, date: impl Into<Date>, _: &mut Window, cx: &mut Context<Self>) {
-        self.date = date.into();
+        let date = date.into();
 
+        let invalid = self
+            .disabled
+            .as_ref()
+            .map_or(false, |disabled| disabled.date_matched(&date));
+
+        if invalid {
+            return;
+        }
+
+        self.date = date;
         match self.date {
             Date::Single(Some(date)) => {
                 self.current_month = date.month() as u8;
@@ -241,6 +327,13 @@ impl Calendar {
             .position(|years| years.contains(&self.current_year))
             .unwrap_or(0) as i32;
         self
+    }
+
+    /// Set the disabled matcher of the calendar.
+    ///
+    /// The disabled matcher will be used to disable the days that match the matcher.
+    pub fn set_disabled(&mut self, disabled: Matcher, _: &mut Window, _: &mut Context<Self>) {
+        self.disabled = Some(disabled);
     }
 
     /// Get year and month by offset month.
@@ -368,6 +461,7 @@ impl Calendar {
         active: bool,
         secondary_active: bool,
         muted: bool,
+        disabled: bool,
         _: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement + Styled + StatefulInteractiveElement {
@@ -379,7 +473,13 @@ impl Calendar {
                 _ => this.size_9().rounded(cx.theme().radius * 2.),
             })
             .justify_center()
-            .cursor_pointer()
+            .map(|this| {
+                if disabled {
+                    this.cursor_not_allowed()
+                } else {
+                    this.cursor_pointer()
+                }
+            })
             .when(muted, |this| {
                 this.text_color(cx.theme().muted_foreground.opacity(0.3))
             })
@@ -391,7 +491,7 @@ impl Calendar {
                 })
                 .text_color(cx.theme().accent_foreground)
             })
-            .when(!active, |this| {
+            .when(!active && !disabled, |this| {
                 this.hover(|this| {
                     this.bg(cx.theme().accent)
                         .text_color(cx.theme().accent_foreground)
@@ -420,44 +520,55 @@ impl Calendar {
 
         let date = *d;
         let is_today = *d == self.today;
+        let disabled = self
+            .disabled
+            .as_ref()
+            .map_or(false, |disabled| disabled.matched(&date));
 
         self.item_button(
             ix,
             day.to_string(),
             is_active,
             is_in_range,
-            !is_current_month,
+            !is_current_month || disabled,
+            disabled,
             window,
             cx,
         )
         .when(is_today && !is_active, |this| {
             this.border_1().border_color(cx.theme().border)
         }) // Add border for today
-        .on_click(cx.listener(move |view, _: &ClickEvent, window, cx| {
-            if view.date.is_single() {
-                view.set_date(date, window, cx);
-                cx.emit(CalendarEvent::Selected(view.date()));
-            } else {
-                let start = view.date.start();
-                let end = view.date.end();
-
-                if start.is_none() && end.is_none() {
-                    view.set_date(Date::Range(Some(date), None), window, cx);
-                } else if start.is_some() && end.is_none() {
-                    if date < start.unwrap() {
-                        view.set_date(Date::Range(Some(date), None), window, cx);
-                    } else {
-                        view.set_date(Date::Range(Some(start.unwrap()), Some(date)), window, cx);
-                    }
-                } else {
-                    view.set_date(Date::Range(Some(date), None), window, cx);
-                }
-
-                if view.date.is_complete() {
+        .when(!disabled, |this| {
+            this.on_click(cx.listener(move |view, _: &ClickEvent, window, cx| {
+                if view.date.is_single() {
+                    view.set_date(date, window, cx);
                     cx.emit(CalendarEvent::Selected(view.date()));
+                } else {
+                    let start = view.date.start();
+                    let end = view.date.end();
+
+                    if start.is_none() && end.is_none() {
+                        view.set_date(Date::Range(Some(date), None), window, cx);
+                    } else if start.is_some() && end.is_none() {
+                        if date < start.unwrap() {
+                            view.set_date(Date::Range(Some(date), None), window, cx);
+                        } else {
+                            view.set_date(
+                                Date::Range(Some(start.unwrap()), Some(date)),
+                                window,
+                                cx,
+                            );
+                        }
+                    } else {
+                        view.set_date(Date::Range(Some(date), None), window, cx);
+                    }
+
+                    if view.date.is_complete() {
+                        cx.emit(CalendarEvent::Selected(view.date()));
+                    }
                 }
-            }
-        }))
+            }))
+        })
     }
 
     fn set_view_mode(&mut self, mode: ViewMode, _: &mut Window, cx: &mut Context<Self>) {
@@ -647,14 +758,25 @@ impl Calendar {
                     .map(|(ix, month)| {
                         let active = (ix + 1) as u8 == self.current_month;
 
-                        self.item_button(ix, month.to_string(), active, false, false, window, cx)
-                            .w(relative(0.3))
-                            .text_sm()
-                            .on_click(cx.listener(move |view, _, window, cx| {
+                        self.item_button(
+                            ix,
+                            month.to_string(),
+                            active,
+                            false,
+                            false,
+                            false,
+                            window,
+                            cx,
+                        )
+                        .w(relative(0.3))
+                        .text_sm()
+                        .on_click(cx.listener(
+                            move |view, _, window, cx| {
                                 view.current_month = (ix + 1) as u8;
                                 view.set_view_mode(ViewMode::Day, window, cx);
                                 cx.notify();
-                            }))
+                            },
+                        ))
                     })
                     .collect::<Vec<_>>(),
             )
@@ -681,13 +803,24 @@ impl Calendar {
                         let year = *year;
                         let active = year == self.current_year;
 
-                        self.item_button(ix, year.to_string(), active, false, false, window, cx)
-                            .w(relative(0.2))
-                            .on_click(cx.listener(move |view, _, window, cx| {
+                        self.item_button(
+                            ix,
+                            year.to_string(),
+                            active,
+                            false,
+                            false,
+                            false,
+                            window,
+                            cx,
+                        )
+                        .w(relative(0.2))
+                        .on_click(cx.listener(
+                            move |view, _, window, cx| {
                                 view.current_year = year;
                                 view.set_view_mode(ViewMode::Day, window, cx);
                                 cx.notify();
-                            }))
+                            },
+                        ))
                     })
                     .collect::<Vec<_>>(),
             )
