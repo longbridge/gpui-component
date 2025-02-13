@@ -1,6 +1,6 @@
 //! Dock is a fixed container that places at left, bottom, right of the Windows.
 
-use std::sync::Arc;
+use std::{ops::Deref, sync::Arc};
 
 use gpui::{
     div, prelude::FluentBuilder as _, px, App, AppContext, Axis, Context, Element, Empty, Entity,
@@ -11,7 +11,7 @@ use gpui::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    resizable::{HANDLE_PADDING, HANDLE_SIZE, PANEL_MIN_SIZE},
+    resizable::{resize_handle, HANDLE_PADDING, HANDLE_SIZE, PANEL_MIN_SIZE},
     ActiveTheme as _, AxisExt as _, StyledExt,
 };
 
@@ -278,51 +278,16 @@ impl Dock {
 
     fn render_resize_handle(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let axis = self.placement.axis();
-        let neg_offset = -HANDLE_PADDING;
         let view = cx.entity().clone();
 
-        div()
-            .id("resize-handle")
-            .occlude()
-            .absolute()
-            .flex_shrink_0()
-            .when(self.placement.is_left(), |this| {
-                // FIXME: Improve this to let the scroll bar have px(HANDLE_PADDING)
-                this.cursor_col_resize()
-                    .top_0()
-                    .right(px(1.))
-                    .h_full()
-                    .w(HANDLE_SIZE)
-                    .pl(HANDLE_PADDING)
-            })
-            .when(self.placement.is_right(), |this| {
-                this.cursor_col_resize()
-                    .top_0()
-                    .left(neg_offset)
-                    .h_full()
-                    .w(HANDLE_SIZE)
-                    .px(HANDLE_PADDING)
-            })
-            .when(self.placement.is_bottom(), |this| {
-                this.cursor_row_resize()
-                    .top(neg_offset)
-                    .left_0()
-                    .w_full()
-                    .h(HANDLE_SIZE)
-                    .py(HANDLE_PADDING)
-            })
-            .child(
-                div()
-                    .bg(cx.theme().border)
-                    .when(axis.is_horizontal(), |this| this.h_full().w(HANDLE_SIZE))
-                    .when(axis.is_vertical(), |this| this.w_full().h(HANDLE_SIZE)),
-            )
+        resize_handle("resize-handle", axis)
+            .placement(self.placement)
             .on_drag(ResizePanel {}, move |info, _, _, cx| {
                 cx.stop_propagation();
                 view.update(cx, |view, _| {
                     view.is_resizing = true;
                 });
-                cx.new(|_| info.clone())
+                cx.new(|_| info.deref().clone())
             })
     }
     fn resize(&mut self, mouse_position: Point<Pixels>, _: &mut Window, cx: &mut Context<Self>) {

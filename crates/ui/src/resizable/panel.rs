@@ -1,10 +1,9 @@
-use std::rc::Rc;
+use std::{ops::Deref, rc::Rc};
 
 use gpui::{
     canvas, div, prelude::FluentBuilder, px, relative, Along, AnyElement, AnyView, App, AppContext,
     Axis, Bounds, Context, Element, Empty, Entity, EntityId, EventEmitter, IntoElement, IsZero,
-    MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, Render, StatefulInteractiveElement as _,
-    Style, Styled, WeakEntity, Window,
+    MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, Render, Style, Styled, WeakEntity, Window,
 };
 
 use crate::{h_flex, v_flex, AxisExt};
@@ -174,7 +173,7 @@ impl ResizablePanelGroup {
                 view.update(cx, |view, _| {
                     view.resizing_panel_ix = Some(ix);
                 });
-                cx.new(|_| drag_panel.clone())
+                cx.new(|_| drag_panel.deref().clone())
             },
         )
     }
