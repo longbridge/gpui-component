@@ -177,11 +177,18 @@ impl StoryRoot {
 }
 
 impl Render for StoryRoot {
-    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let drawer_layer = Root::render_drawer_layer(window, cx);
+        let modal_layer = Root::render_modal_layer(window, cx);
+        let notification_layer = Root::render_notification_layer(window, cx);
+
         v_flex()
             .size_full()
             .child(self.title_bar.clone())
             .child(self.view.clone())
+            .children(drawer_layer)
+            .children(modal_layer)
+            .child(div().absolute().top_8().children(notification_layer))
     }
 }
 
