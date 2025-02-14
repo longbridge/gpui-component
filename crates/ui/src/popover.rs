@@ -139,12 +139,12 @@ where
         self
     }
 
-    fn render_trigger(&mut self, is_open: bool, window: &mut Window, cx: &mut App) -> AnyElement {
+    fn render_trigger(&mut self, open: bool, window: &mut Window, cx: &mut App) -> AnyElement {
         let Some(trigger) = self.trigger.take() else {
             return div().into_any_element();
         };
 
-        (trigger)(is_open, window, cx)
+        (trigger)(open, window, cx)
     }
 
     fn resolved_corner(&self, bounds: Bounds<Pixels>) -> Point<Pixels> {

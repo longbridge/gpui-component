@@ -25,7 +25,7 @@ impl_internal_actions!(sidebar_story, [SelectCompany]);
 pub struct SidebarStory {
     active_item: Item,
     active_subitem: Option<SubItem>,
-    is_collapsed: bool,
+    collapsed: bool,
     side: Side,
     focus_handle: gpui::FocusHandle,
 }
@@ -39,7 +39,7 @@ impl SidebarStory {
         Self {
             active_item: Item::Playground,
             active_subitem: None,
-            is_collapsed: false,
+            collapsed: false,
             side: Side::Left,
             focus_handle: cx.focus_handle(),
         }
@@ -231,10 +231,10 @@ impl Render for SidebarStory {
             .when(self.side.is_right(), |this| this.flex_row_reverse())
             .child(
                 sidebar
-                    .collapsed(self.is_collapsed)
+                    .collapsed(self.collapsed)
                     .header(
                         SidebarHeader::new()
-                            .collapsed(self.is_collapsed)
+                            .collapsed(self.collapsed)
                             .w_full()
                             .child(
                                 div()
@@ -246,17 +246,17 @@ impl Render for SidebarStory {
                                     .text_color(white())
                                     .size_8()
                                     .flex_shrink_0()
-                                    .when(!self.is_collapsed, |this| {
+                                    .when(!self.collapsed, |this| {
                                         this.child(Icon::new(IconName::GalleryVerticalEnd).size_4())
                                     })
-                                    .when(self.is_collapsed, |this| {
+                                    .when(self.collapsed, |this| {
                                         this.size_4()
                                             .bg(cx.theme().transparent)
                                             .text_color(cx.theme().foreground)
                                             .child(Icon::new(IconName::GalleryVerticalEnd).size_5())
                                     }),
                             )
-                            .when(!self.is_collapsed, |this| {
+                            .when(!self.collapsed, |this| {
                                 this.child(
                                     v_flex()
                                         .gap_0()
@@ -269,7 +269,7 @@ impl Render for SidebarStory {
                                         .child(div().child("Enterprise").text_xs()),
                                 )
                             })
-                            .when(!self.is_collapsed, |this| {
+                            .when(!self.collapsed, |this| {
                                 this.child(
                                     Icon::new(IconName::ChevronsUpDown).size_4().flex_shrink_0(),
                                 )
@@ -291,15 +291,15 @@ impl Render for SidebarStory {
                     )
                     .footer(
                         SidebarFooter::new()
-                            .collapsed(self.is_collapsed)
+                            .collapsed(self.collapsed)
                             .justify_between()
                             .child(
                                 h_flex()
                                     .gap_2()
                                     .child(IconName::CircleUser)
-                                    .when(!self.is_collapsed, |this| this.child("Jason Lee")),
+                                    .when(!self.collapsed, |this| this.child("Jason Lee")),
                             )
-                            .when(!self.is_collapsed, |this| {
+                            .when(!self.collapsed, |this| {
                                 this.child(
                                     Icon::new(IconName::ChevronsUpDown).size_4().flex_shrink_0(),
                                 )
@@ -362,9 +362,9 @@ impl Render for SidebarStory {
                             .child(
                                 SidebarToggleButton::left()
                                     .side(self.side)
-                                    .collapsed(self.is_collapsed)
+                                    .collapsed(self.collapsed)
                                     .on_click(cx.listener(|this, _, _, cx| {
-                                        this.is_collapsed = !this.is_collapsed;
+                                        this.collapsed = !this.collapsed;
                                         cx.notify();
                                     })),
                             )

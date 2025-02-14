@@ -37,7 +37,7 @@ pub struct Sidebar<E: Collapsible + IntoElement + 'static> {
     side: Side,
     collapsible: bool,
     width: Pixels,
-    is_collapsed: bool,
+    collapsed: bool,
 }
 
 impl<E: Collapsible + IntoElement> Sidebar<E> {
@@ -50,7 +50,7 @@ impl<E: Collapsible + IntoElement> Sidebar<E> {
             side,
             collapsible: true,
             width: DEFAULT_WIDTH,
-            is_collapsed: false,
+            collapsed: false,
         }
     }
 
@@ -76,7 +76,7 @@ impl<E: Collapsible + IntoElement> Sidebar<E> {
 
     /// Set the sidebar to be collapsed
     pub fn collapsed(mut self, collapsed: bool) -> Self {
-        self.is_collapsed = collapsed;
+        self.collapsed = collapsed;
         self
     }
 
@@ -109,7 +109,7 @@ impl<E: Collapsible + IntoElement> Sidebar<E> {
 #[derive(IntoElement)]
 pub struct SidebarToggleButton {
     btn: Button,
-    is_collapsed: bool,
+    collapsed: bool,
     side: Side,
     on_click: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>>,
 }
@@ -118,7 +118,7 @@ impl SidebarToggleButton {
     fn new(side: Side) -> Self {
         Self {
             btn: Button::new("sidebar-collapse").ghost().small(),
-            is_collapsed: false,
+            collapsed: false,
             side,
             on_click: None,
         }
@@ -137,8 +137,8 @@ impl SidebarToggleButton {
         self
     }
 
-    pub fn collapsed(mut self, is_collapsed: bool) -> Self {
-        self.is_collapsed = is_collapsed;
+    pub fn collapsed(mut self, collapsed: bool) -> Self {
+        self.collapsed = collapsed;
         self
     }
 
@@ -153,10 +153,10 @@ impl SidebarToggleButton {
 
 impl RenderOnce for SidebarToggleButton {
     fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
-        let is_collapsed = self.is_collapsed;
+        let collapsed = self.collapsed;
         let on_click = self.on_click.clone();
 
-        let icon = if is_collapsed {
+        let icon = if collapsed {
             if self.side.is_left() {
                 IconName::PanelLeftOpen
             } else {
@@ -182,11 +182,11 @@ impl RenderOnce for SidebarToggleButton {
 
 impl<E: Collapsible + IntoElement> RenderOnce for Sidebar<E> {
     fn render(mut self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let is_collapsed = self.is_collapsed;
+        let is_collapsed = self.collapsed;
         v_flex()
             .id("sidebar")
             .w(self.width)
-            .when(self.is_collapsed, |this| this.w(COLLAPSED_WIDTH))
+            .when(self.collapsed, |this| this.w(COLLAPSED_WIDTH))
             .flex_shrink_0()
             .h_full()
             .overflow_hidden()
