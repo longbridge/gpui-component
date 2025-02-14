@@ -216,7 +216,7 @@ pub struct TextInput {
     /// The text bounds
     pub(super) last_bounds: Option<Bounds<Pixels>>,
     pub(super) last_selected_range: Option<Range<usize>>,
-    pub(super) is_selecting: bool,
+    pub(super) selecting: bool,
     pub(super) disabled: bool,
     pub(super) masked: bool,
     pub(super) appearance: bool,
@@ -272,7 +272,7 @@ impl TextInput {
             selection_reversed: false,
             marked_range: None,
             input_bounds: Bounds::default(),
-            is_selecting: false,
+            selecting: false,
             disabled: false,
             masked: false,
             appearance: true,
@@ -936,7 +936,7 @@ impl TextInput {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.is_selecting = true;
+        self.selecting = true;
         let offset = self.index_for_mouse_position(event.position, window, cx);
         // Double click to select word
         if event.button == MouseButton::Left && event.click_count == 2 {
@@ -952,7 +952,7 @@ impl TextInput {
     }
 
     fn on_mouse_up(&mut self, _: &MouseUpEvent, _window: &mut Window, _cx: &mut Context<Self>) {
-        self.is_selecting = false;
+        self.selecting = false;
         self.selected_word_range = None;
     }
 
@@ -1364,7 +1364,7 @@ impl TextInput {
             return;
         }
 
-        if !self.is_selecting {
+        if !self.selecting {
             return;
         }
 

@@ -9,7 +9,7 @@ use gpui::{
 pub struct SidebarGroup<E: Collapsible + IntoElement + 'static> {
     base: Div,
     label: SharedString,
-    is_collapsed: bool,
+    collapsed: bool,
     children: Vec<E>,
 }
 
@@ -18,7 +18,7 @@ impl<E: Collapsible + IntoElement> SidebarGroup<E> {
         Self {
             base: div().gap_2().flex_col(),
             label: label.into(),
-            is_collapsed: false,
+            collapsed: false,
             children: Vec::new(),
         }
     }
@@ -35,11 +35,11 @@ impl<E: Collapsible + IntoElement> SidebarGroup<E> {
 }
 impl<E: Collapsible + IntoElement> Collapsible for SidebarGroup<E> {
     fn is_collapsed(&self) -> bool {
-        self.is_collapsed
+        self.collapsed
     }
 
     fn collapsed(mut self, collapsed: bool) -> Self {
-        self.is_collapsed = collapsed;
+        self.collapsed = collapsed;
         self
     }
 }
@@ -48,7 +48,7 @@ impl<E: Collapsible + IntoElement> RenderOnce for SidebarGroup<E> {
         v_flex()
             .relative()
             .p_2()
-            .when(!self.is_collapsed, |this| {
+            .when(!self.collapsed, |this| {
                 this.child(
                     div()
                         .flex_shrink_0()
@@ -64,7 +64,7 @@ impl<E: Collapsible + IntoElement> RenderOnce for SidebarGroup<E> {
                 self.base.children(
                     self.children
                         .into_iter()
-                        .map(|child| child.collapsed(self.is_collapsed)),
+                        .map(|child| child.collapsed(self.collapsed)),
                 ),
             )
     }

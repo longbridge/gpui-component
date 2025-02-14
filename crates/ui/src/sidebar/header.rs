@@ -10,7 +10,7 @@ pub struct SidebarHeader {
     id: ElementId,
     base: Div,
     selected: bool,
-    is_collapsed: bool,
+    collapsed: bool,
 }
 
 impl SidebarHeader {
@@ -19,7 +19,7 @@ impl SidebarHeader {
             id: SharedString::from("sidebar-header").into(),
             base: h_flex().gap_2().w_full(),
             selected: false,
-            is_collapsed: false,
+            collapsed: false,
         }
     }
 }
@@ -35,11 +35,11 @@ impl Selectable for SidebarHeader {
 }
 impl Collapsible for SidebarHeader {
     fn is_collapsed(&self) -> bool {
-        self.is_collapsed
+        self.collapsed
     }
 
     fn collapsed(mut self, collapsed: bool) -> Self {
-        self.is_collapsed = collapsed;
+        self.collapsed = collapsed;
         self
     }
 }

@@ -8,7 +8,7 @@ use std::rc::Rc;
 
 #[derive(IntoElement)]
 pub struct SidebarMenu {
-    is_collapsed: bool,
+    collapsed: bool,
     items: Vec<SidebarMenuItem>,
 }
 
@@ -16,7 +16,7 @@ impl SidebarMenu {
     pub fn new() -> Self {
         Self {
             items: Vec::new(),
-            is_collapsed: false,
+            collapsed: false,
         }
     }
 
@@ -32,7 +32,7 @@ impl SidebarMenu {
             label: label.into(),
             handler: Rc::new(handler),
             active,
-            is_collapsed: self.is_collapsed,
+            collapsed: self.collapsed,
         });
         self
     }
@@ -51,8 +51,8 @@ impl SidebarMenu {
             icon,
             label: label.into(),
             items: menu.items,
-            is_open: open,
-            is_collapsed: self.is_collapsed,
+            open,
+            collapsed: self.collapsed,
             handler: Rc::new(handler),
         });
         self
@@ -60,11 +60,11 @@ impl SidebarMenu {
 }
 impl Collapsible for SidebarMenu {
     fn is_collapsed(&self) -> bool {
-        self.is_collapsed
+        self.collapsed
     }
 
     fn collapsed(mut self, collapsed: bool) -> Self {
-        self.is_collapsed = collapsed;
+        self.collapsed = collapsed;
         self
     }
 }
@@ -74,10 +74,8 @@ impl RenderOnce for SidebarMenu {
             .gap_2()
             .children(self.items.into_iter().map(|mut item| {
                 match &mut item {
-                    SidebarMenuItem::Item { is_collapsed, .. } => *is_collapsed = self.is_collapsed,
-                    SidebarMenuItem::Submenu { is_collapsed, .. } => {
-                        *is_collapsed = self.is_collapsed
-                    }
+                    SidebarMenuItem::Item { collapsed, .. } => *collapsed = self.collapsed,
+                    SidebarMenuItem::Submenu { collapsed, .. } => *collapsed = self.collapsed,
                 }
                 item
             }))
@@ -92,15 +90,15 @@ enum SidebarMenuItem {
         label: SharedString,
         handler: Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>,
         active: bool,
-        is_collapsed: bool,
+        collapsed: bool,
     },
     Submenu {
         icon: Option<Icon>,
         label: SharedString,
         handler: Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>,
         items: Vec<SidebarMenuItem>,
-        is_open: bool,
-        is_collapsed: bool,
+        open: bool,
+        collapsed: bool,
     },
 }
 
@@ -133,16 +131,16 @@ impl SidebarMenuItem {
     fn is_open(&self) -> bool {
         match self {
             SidebarMenuItem::Item { .. } => false,
-            SidebarMenuItem::Submenu { is_open, items, .. } => {
-                *is_open || items.iter().any(|item| item.is_active())
+            SidebarMenuItem::Submenu { open, items, .. } => {
+                *open || items.iter().any(|item| item.is_active())
             }
         }
     }
 
     fn is_collapsed(&self) -> bool {
         match self {
-            SidebarMenuItem::Item { is_collapsed, .. } => *is_collapsed,
-            SidebarMenuItem::Submenu { is_collapsed, .. } => *is_collapsed,
+            SidebarMenuItem::Item { collapsed, .. } => *collapsed,
+            SidebarMenuItem::Submenu { collapsed, .. } => *collapsed,
         }
     }
 
@@ -212,11 +210,9 @@ impl RenderOnce for SidebarMenuItem {
             .when(is_open, |this| {
                 this.map(|this| match self {
                     SidebarMenuItem::Submenu {
-                        items,
-                        is_collapsed,
-                        ..
+                        items, collapsed, ..
                     } => {
-                        if is_collapsed {
+                        if collapsed {
                             this
                         } else {
                             this.child(

@@ -10,7 +10,7 @@ pub struct SidebarFooter {
     id: ElementId,
     base: Div,
     selected: bool,
-    is_collapsed: bool,
+    collapsed: bool,
 }
 
 impl SidebarFooter {
@@ -19,7 +19,7 @@ impl SidebarFooter {
             id: SharedString::from("sidebar-footer").into(),
             base: h_flex().gap_2().w_full(),
             selected: false,
-            is_collapsed: false,
+            collapsed: false,
         }
     }
 }
@@ -35,11 +35,11 @@ impl Selectable for SidebarFooter {
 }
 impl Collapsible for SidebarFooter {
     fn is_collapsed(&self) -> bool {
-        self.is_collapsed
+        self.collapsed
     }
 
     fn collapsed(mut self, collapsed: bool) -> Self {
-        self.is_collapsed = collapsed;
+        self.collapsed = collapsed;
         self
     }
 }

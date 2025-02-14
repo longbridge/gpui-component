@@ -58,7 +58,7 @@ pub struct DockArea {
     zoom_view: Option<AnyView>,
 
     /// Lock panels layout, but allow to resize.
-    is_locked: bool,
+    locked: bool,
 
     /// The panel style, default is [`PanelStyle::Default`](PanelStyle::Default).
     pub(crate) panel_style: PanelStyle,
@@ -408,7 +408,7 @@ impl DockArea {
             left_dock: None,
             right_dock: None,
             bottom_dock: None,
-            is_locked: false,
+            locked: false,
             panel_style: PanelStyle::Default,
             _subscriptions: vec![],
         };
@@ -514,12 +514,12 @@ impl DockArea {
 
     /// Set locked state of the dock area, if locked, the dock area cannot be split or move, but allows to resize panels.
     pub fn set_locked(&mut self, locked: bool, _window: &mut Window, _cx: &mut App) {
-        self.is_locked = locked;
+        self.locked = locked;
     }
 
     /// Determine if the dock area is locked.
     pub fn is_locked(&self) -> bool {
-        self.is_locked
+        self.locked
     }
 
     /// Determine if the dock area has a dock at the given placement.

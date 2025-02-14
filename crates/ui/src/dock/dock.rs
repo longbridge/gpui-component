@@ -74,7 +74,7 @@ pub struct Dock {
 
     // Runtime state
     /// Whether the Dock is resizing
-    is_resizing: bool,
+    resizing: bool,
 }
 
 impl Dock {
@@ -105,7 +105,7 @@ impl Dock {
             open: true,
             collapsible: true,
             size: px(200.0),
-            is_resizing: false,
+            resizing: false,
         }
     }
 
@@ -178,7 +178,7 @@ impl Dock {
             open,
             size,
             collapsible: true,
-            is_resizing: false,
+            resizing: false,
         }
     }
 
@@ -284,13 +284,13 @@ impl Dock {
             .on_drag(ResizePanel {}, move |info, _, _, cx| {
                 cx.stop_propagation();
                 view.update(cx, |view, _| {
-                    view.is_resizing = true;
+                    view.resizing = true;
                 });
                 cx.new(|_| info.deref().clone())
             })
     }
     fn resize(&mut self, mouse_position: Point<Pixels>, _: &mut Window, cx: &mut Context<Self>) {
-        if !self.is_resizing {
+        if !self.resizing {
             return;
         }
 
@@ -349,7 +349,7 @@ impl Dock {
     }
 
     fn done_resizing(&mut self, _window: &mut Window, _cx: &mut Context<Self>) {
-        self.is_resizing = false;
+        self.resizing = false;
     }
 }
 
@@ -438,9 +438,9 @@ impl Element for DockElement {
     ) {
         window.on_mouse_event({
             let view = self.view.clone();
-            let is_resizing = view.read(cx).is_resizing;
+            let resizing = view.read(cx).resizing;
             move |e: &MouseMoveEvent, phase, window, cx| {
-                if !is_resizing {
+                if !resizing {
                     return;
                 }
                 if !phase.bubble() {

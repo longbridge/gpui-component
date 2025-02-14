@@ -183,7 +183,7 @@ struct StockTableDelegate {
     loading: bool,
     full_loading: bool,
     fixed_cols: bool,
-    is_eof: bool,
+    eof: bool,
     visible_rows: Range<usize>,
     visible_cols: Range<usize>,
 }
@@ -247,7 +247,7 @@ impl StockTableDelegate {
             fixed_cols: false,
             loading: false,
             full_loading: false,
-            is_eof: false,
+            eof: false,
             visible_cols: Range::default(),
             visible_rows: Range::default(),
         }
@@ -255,7 +255,7 @@ impl StockTableDelegate {
 
     fn update_stocks(&mut self, size: usize) {
         self.stocks = random_stocks(size);
-        self.is_eof = size <= 50;
+        self.eof = size <= 50;
         self.loading = false;
         self.full_loading = false;
     }
@@ -514,7 +514,7 @@ impl TableDelegate for StockTableDelegate {
     }
 
     fn can_load_more(&self, _: &App) -> bool {
-        return !self.loading && !self.is_eof;
+        return !self.loading && !self.eof;
     }
 
     fn load_more_threshold(&self) -> usize {
@@ -532,7 +532,7 @@ impl TableDelegate for StockTableDelegate {
                 let _ = view.update(cx, |view, _| {
                     view.delegate_mut().stocks.extend(random_stocks(200));
                     view.delegate_mut().loading = false;
-                    view.delegate_mut().is_eof = view.delegate().stocks.len() >= 6000;
+                    view.delegate_mut().eof = view.delegate().stocks.len() >= 6000;
                 });
             })
         })
@@ -927,7 +927,7 @@ impl Render for TableStory {
                         .child(format!("Total Rows: {}", rows_count))
                         .child(format!("Visible Rows: {:?}", delegate.visible_rows))
                         .child(format!("Visible Cols: {:?}", delegate.visible_cols))
-                        .when(delegate.is_eof, |this| this.child("All data loaded.")),
+                        .when(delegate.eof, |this| this.child("All data loaded.")),
                 ),
             )
             .child(self.table.clone())

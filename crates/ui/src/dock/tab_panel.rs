@@ -75,8 +75,8 @@ pub struct TabPanel {
     pub(crate) closable: bool,
 
     tab_bar_scroll_handle: ScrollHandle,
-    is_zoomed: bool,
-    is_collapsed: bool,
+    zoomed: bool,
+    collapsed: bool,
     /// When drag move, will get the placement of the panel to be split
     will_split_placement: Option<Placement>,
 }
@@ -153,8 +153,8 @@ impl TabPanel {
             active_ix: 0,
             tab_bar_scroll_handle: ScrollHandle::new(),
             will_split_placement: None,
-            is_zoomed: false,
-            is_collapsed: false,
+            zoomed: false,
+            collapsed: false,
             closable: true,
         }
     }
@@ -340,7 +340,7 @@ impl TabPanel {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.is_collapsed = collapsed;
+        self.collapsed = collapsed;
         cx.notify();
     }
 
@@ -353,7 +353,7 @@ impl TabPanel {
             return true;
         }
 
-        if self.is_zoomed {
+        if self.zoomed {
             return true;
         }
 
@@ -404,7 +404,7 @@ impl TabPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let is_zoomed = self.is_zoomed;
+        let zoomed = self.zoomed;
         let view = cx.entity().clone();
         let zoomable_toolbar_visible = state.zoomable.map_or(false, |v| v.toolbar_visible());
 
@@ -417,7 +417,7 @@ impl TabPanel {
                 this.children(buttons.into_iter().map(|btn| btn.xsmall().ghost()))
             })
             .map(|this| {
-                let value = if is_zoomed {
+                let value = if zoomed {
                     Some(("zoom-out", IconName::Minimize, t!("Dock.Zoom Out")))
                 } else if zoomable_toolbar_visible {
                     Some(("zoom-in", IconName::Maximize, t!("Dock.Zoom In")))
@@ -453,7 +453,7 @@ impl TabPanel {
                             view.read(cx)
                                 .popup_menu(this, window, cx)
                                 .when(zoomable, |this| {
-                                    let name = if is_zoomed {
+                                    let name = if zoomed {
                                         t!("Dock.Zoom Out")
                                     } else {
                                         t!("Dock.Zoom In")
@@ -476,7 +476,7 @@ impl TabPanel {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<impl IntoElement> {
-        if self.is_zoomed {
+        if self.zoomed {
             return None;
         }
 
@@ -662,14 +662,14 @@ impl TabPanel {
             )
             .children(self.panels.iter().enumerate().filter_map(|(ix, panel)| {
                 let mut active = state.active_panel.as_ref() == Some(panel);
-                let disabled = self.is_collapsed;
+                let disabled = self.collapsed;
 
                 if !panel.visible(cx) {
                     return None;
                 }
 
                 // Always not show active tab style, if the panel is collapsed
-                if self.is_collapsed {
+                if self.collapsed {
                     active = false;
                 }
 
@@ -758,7 +758,7 @@ impl TabPanel {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        if self.is_collapsed {
+        if self.collapsed {
             return Empty {}.into_any_element();
         }
 
@@ -1026,19 +1026,19 @@ impl TabPanel {
             return;
         }
 
-        if !self.is_zoomed {
+        if !self.zoomed {
             cx.emit(PanelEvent::ZoomIn)
         } else {
             cx.emit(PanelEvent::ZoomOut)
         }
-        self.is_zoomed = !self.is_zoomed;
+        self.zoomed = !self.zoomed;
 
         cx.spawn_in(window, |view, mut cx| {
-            let is_zoomed = self.is_zoomed;
+            let zoomed = self.zoomed;
             async move {
                 _ = cx.update(|window, cx| {
                     _ = view.update(cx, |view, cx| {
-                        view.set_zoomed(is_zoomed, window, cx);
+                        view.set_zoomed(zoomed, window, cx);
                     });
                 });
             }

@@ -147,7 +147,7 @@ struct CompanyListDelegate {
     confirmed_index: Option<usize>,
     query: String,
     loading: bool,
-    is_eof: bool,
+    eof: bool,
 }
 
 impl ListDelegate for CompanyListDelegate {
@@ -208,7 +208,7 @@ impl ListDelegate for CompanyListDelegate {
     }
 
     fn can_load_more(&self, _: &App) -> bool {
-        return !self.loading && !self.is_eof;
+        return !self.loading && !self.eof;
     }
 
     fn load_more_threshold(&self) -> usize {
@@ -226,7 +226,7 @@ impl ListDelegate for CompanyListDelegate {
                     .companies
                     .extend((0..200).map(|_| random_company()));
                 _ = view.delegate_mut().perform_search(&query, window, cx);
-                view.delegate_mut().is_eof = view.delegate().companies.len() >= 6000;
+                view.delegate_mut().eof = view.delegate().companies.len() >= 6000;
             });
         })
         .detach();
@@ -281,7 +281,7 @@ impl ListStory {
             confirmed_index: None,
             query: "".to_string(),
             loading: false,
-            is_eof: false,
+            eof: false,
         };
 
         let company_list = cx.new(|cx| List::new(delegate, window, cx));
