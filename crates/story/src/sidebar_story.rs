@@ -13,7 +13,7 @@ use gpui_component::{
         Sidebar, SidebarFooter, SidebarGroup, SidebarHeader, SidebarMenu, SidebarToggleButton,
     },
     switch::Switch,
-    v_flex, white, ActiveTheme, Collapsible, Icon, IconName, Placement, Side,
+    v_flex, white, ActiveTheme, Collapsible, Icon, IconName, Side,
 };
 use serde::Deserialize;
 
@@ -246,9 +246,14 @@ impl Render for SidebarStory {
                                     .text_color(white())
                                     .size_8()
                                     .flex_shrink_0()
-                                    .child(Icon::new(IconName::GalleryVerticalEnd).size_4())
+                                    .when(!self.is_collapsed, |this| {
+                                        this.child(Icon::new(IconName::GalleryVerticalEnd).size_4())
+                                    })
                                     .when(self.is_collapsed, |this| {
-                                        this.size_4().bg(cx.theme().transparent)
+                                        this.size_4()
+                                            .bg(cx.theme().transparent)
+                                            .text_color(cx.theme().foreground)
+                                            .child(Icon::new(IconName::GalleryVerticalEnd).size_5())
                                     }),
                             )
                             .when(!self.is_collapsed, |this| {
