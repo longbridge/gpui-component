@@ -20,41 +20,16 @@ impl SidebarMenu {
         }
     }
 
-    pub fn menu(
-        mut self,
-        label: impl Into<SharedString>,
-        icon: Option<Icon>,
-        active: bool,
-        handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
-    ) -> Self {
-        self.items.push(SidebarMenuItem::Item {
-            icon,
-            label: label.into(),
-            handler: Rc::new(handler),
-            active,
-            collapsed: self.collapsed,
-        });
+    pub fn child(mut self, child: impl Into<SidebarMenuItem>) -> Self {
+        self.items.push(child.into());
         self
     }
 
-    pub fn submenu(
+    pub fn children(
         mut self,
-        label: impl Into<SharedString>,
-        icon: Option<Icon>,
-        open: bool,
-        items: impl FnOnce(SidebarMenu) -> Self,
-        handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+        children: impl IntoIterator<Item = impl Into<SidebarMenuItem>>,
     ) -> Self {
-        let menu = SidebarMenu::new();
-        let menu = items(menu);
-        self.items.push(SidebarMenuItem::Submenu {
-            icon,
-            label: label.into(),
-            items: menu.items,
-            open,
-            collapsed: self.collapsed,
-            handler: Rc::new(handler),
-        });
+        self.items = children.into_iter().map(Into::into).collect();
         self
     }
 }
@@ -70,93 +45,84 @@ impl Collapsible for SidebarMenu {
 }
 impl RenderOnce for SidebarMenu {
     fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
-        v_flex()
-            .gap_2()
-            .children(self.items.into_iter().map(|mut item| {
-                match &mut item {
-                    SidebarMenuItem::Item { collapsed, .. } => *collapsed = self.collapsed,
-                    SidebarMenuItem::Submenu { collapsed, .. } => *collapsed = self.collapsed,
-                }
-                item
-            }))
+        v_flex().gap_2().children(self.items)
     }
 }
 
 /// A sidebar menu item
 #[derive(IntoElement)]
-enum SidebarMenuItem {
-    Item {
-        icon: Option<Icon>,
-        label: SharedString,
-        handler: Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>,
-        active: bool,
-        collapsed: bool,
-    },
-    Submenu {
-        icon: Option<Icon>,
-        label: SharedString,
-        handler: Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>,
-        items: Vec<SidebarMenuItem>,
-        open: bool,
-        collapsed: bool,
-    },
+pub struct SidebarMenuItem {
+    icon: Option<Icon>,
+    label: SharedString,
+    handler: Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>,
+    active: bool,
+    collapsed: bool,
+    children: Vec<Self>,
 }
 
 impl SidebarMenuItem {
+    /// Create a new SidebarMenuItem with a label
+    pub fn new(label: impl Into<SharedString>) -> Self {
+        Self {
+            icon: None,
+            label: label.into(),
+            handler: Rc::new(|_, _, _| {}),
+            active: false,
+            collapsed: false,
+            children: Vec::new(),
+        }
+    }
+
+    /// Set the icon for the menu item
+    pub fn icon(mut self, icon: Icon) -> Self {
+        self.icon = Some(icon);
+        self
+    }
+
+    /// Set the active state of the menu item
+    pub fn active(mut self, active: bool) -> Self {
+        self.active = active;
+        self
+    }
+
+    /// Add a click handler to the menu item
+    pub fn on_click(
+        mut self,
+        handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.handler = Rc::new(handler);
+        self
+    }
+
+    /// Set the collapsed state of the menu item
+    pub fn collapsed(mut self, collapsed: bool) -> Self {
+        self.collapsed = collapsed;
+        self
+    }
+
+    pub fn children(mut self, children: impl IntoIterator<Item = impl Into<Self>>) -> Self {
+        self.children = children.into_iter().map(Into::into).collect();
+        self
+    }
+
     fn is_submenu(&self) -> bool {
-        matches!(self, SidebarMenuItem::Submenu { .. })
-    }
-
-    fn icon(&self) -> Option<Icon> {
-        match self {
-            SidebarMenuItem::Item { icon, .. } => icon.clone(),
-            SidebarMenuItem::Submenu { icon, .. } => icon.clone(),
-        }
-    }
-
-    fn label(&self) -> SharedString {
-        match self {
-            SidebarMenuItem::Item { label, .. } => label.clone(),
-            SidebarMenuItem::Submenu { label, .. } => label.clone(),
-        }
-    }
-
-    fn is_active(&self) -> bool {
-        match self {
-            SidebarMenuItem::Item { active, .. } => *active,
-            SidebarMenuItem::Submenu { .. } => false,
-        }
+        self.children.len() > 0
     }
 
     fn is_open(&self) -> bool {
-        match self {
-            SidebarMenuItem::Item { .. } => false,
-            SidebarMenuItem::Submenu { open, items, .. } => {
-                *open || items.iter().any(|item| item.is_active())
-            }
+        if self.is_submenu() {
+            self.active
+        } else {
+            false
         }
     }
 
-    fn is_collapsed(&self) -> bool {
-        match self {
-            SidebarMenuItem::Item { collapsed, .. } => *collapsed,
-            SidebarMenuItem::Submenu { collapsed, .. } => *collapsed,
-        }
-    }
-
-    fn render_menu_item(
-        &self,
-        is_submenu: bool,
-        is_active: bool,
-        is_open: bool,
-        _: &Window,
-        cx: &App,
-    ) -> impl IntoElement {
-        let handler = match &self {
-            SidebarMenuItem::Item { handler, .. } => Some(handler.clone()),
-            SidebarMenuItem::Submenu { handler, .. } => Some(handler.clone()),
-        };
-        let is_collapsed = self.is_collapsed();
+    fn render_menu_item(&self, _: &Window, cx: &App) -> impl IntoElement {
+        let handler = self.handler.clone();
+        let is_collapsed = self.collapsed;
+        let is_active = self.active;
+        let is_open = self.is_open();
+        let is_submenu = self.is_submenu();
 
         h_flex()
             .id("sidebar-menu-item")
@@ -172,18 +138,18 @@ impl SidebarMenuItem {
                 this.bg(cx.theme().sidebar_accent)
                     .text_color(cx.theme().sidebar_accent_foreground)
             })
-            .when(is_active, |this| {
+            .when(is_active && !is_submenu, |this| {
                 this.font_medium()
                     .bg(cx.theme().sidebar_accent)
                     .text_color(cx.theme().sidebar_accent_foreground)
             })
-            .when_some(self.icon(), |this, icon| this.child(icon.size_4()))
+            .when_some(self.icon.clone(), |this, icon| this.child(icon.size_4()))
             .when(is_collapsed, |this| {
                 this.justify_center().size_7().mx_auto()
             })
             .when(!is_collapsed, |this| {
                 this.h_7()
-                    .child(div().flex_1().child(self.label()))
+                    .child(div().flex_1().child(self.label.clone()))
                     .when(is_submenu, |this| {
                         this.child(
                             Icon::new(IconName::ChevronRight)
@@ -192,43 +158,29 @@ impl SidebarMenuItem {
                         )
                     })
             })
-            .when_some(handler, |this, handler| {
-                this.on_click(move |ev, window, cx| handler(ev, window, cx))
-            })
+            .on_click(move |ev, window, cx| handler(ev, window, cx))
     }
 }
 
 impl RenderOnce for SidebarMenuItem {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let is_submenu = self.is_submenu();
-        let is_active = self.is_active();
         let is_open = self.is_open();
 
         div()
             .w_full()
-            .child(self.render_menu_item(is_submenu, is_active, is_open, window, cx))
-            .when(is_open, |this| {
-                this.map(|this| match self {
-                    SidebarMenuItem::Submenu {
-                        items, collapsed, ..
-                    } => {
-                        if collapsed {
-                            this
-                        } else {
-                            this.child(
-                                v_flex()
-                                    .border_l_1()
-                                    .border_color(cx.theme().sidebar_border)
-                                    .gap_1()
-                                    .mx_3p5()
-                                    .px_2p5()
-                                    .py_0p5()
-                                    .children(items),
-                            )
-                        }
-                    }
-                    _ => this,
-                })
+            .child(self.render_menu_item(window, cx))
+            .when(is_submenu && is_open, |this| {
+                this.child(
+                    v_flex()
+                        .border_l_1()
+                        .border_color(cx.theme().sidebar_border)
+                        .gap_1()
+                        .mx_3p5()
+                        .px_2p5()
+                        .py_0p5()
+                        .children(self.children),
+                )
             })
     }
 }

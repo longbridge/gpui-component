@@ -10,7 +10,8 @@ use gpui_component::{
     h_flex,
     popup_menu::PopupMenuExt,
     sidebar::{
-        Sidebar, SidebarFooter, SidebarGroup, SidebarHeader, SidebarMenu, SidebarToggleButton,
+        Sidebar, SidebarFooter, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuItem,
+        SidebarToggleButton,
     },
     switch::Switch,
     v_flex, white, ActiveTheme, Collapsible, Icon, IconName, Side,
@@ -197,6 +198,7 @@ impl Focusable for SidebarStory {
         self.focus_handle.clone()
     }
 }
+
 impl Render for SidebarStory {
     fn render(
         &mut self,
@@ -305,47 +307,51 @@ impl Render for SidebarStory {
                                 )
                             }),
                     )
-                    .child(SidebarGroup::new("Platform").child(SidebarMenu::new().map(
-                        |mut menu| {
+                    .child(
+                        SidebarGroup::new("Platform").child(SidebarMenu::new().children({
+                            let mut items = Vec::with_capacity(groups[0].len());
                             for item in groups[0].iter() {
                                 let item = *item;
-                                menu = menu.submenu(
-                                    item.label(),
-                                    Some(item.icon().into()),
-                                    self.active_item == item,
-                                    |mut submenu| {
-                                        for subitem in item.items() {
-                                            submenu = submenu.menu(
-                                                subitem.label(),
-                                                None,
-                                                self.active_subitem == Some(subitem),
-                                                cx.listener(subitem.handler(&item)),
-                                            );
-                                        }
-                                        submenu
-                                    },
-                                    cx.listener(move |this, _, _, cx| {
-                                        this.active_item = item;
-                                        cx.notify();
-                                    }),
+                                items.push(
+                                    SidebarMenuItem::new(item.label())
+                                        .icon(item.icon().into())
+                                        .active(self.active_item == item)
+                                        .children({
+                                            let mut sub_items =
+                                                Vec::with_capacity(item.items().len());
+                                            for sub_item in item.items() {
+                                                sub_items.push(
+                                                    SidebarMenuItem::new(sub_item.label())
+                                                        .active(
+                                                            self.active_subitem == Some(sub_item),
+                                                        )
+                                                        .on_click(
+                                                            cx.listener(sub_item.handler(&item)),
+                                                        ),
+                                                );
+                                            }
+                                            sub_items
+                                        })
+                                        .on_click(cx.listener(item.handler())),
                                 );
                             }
-                            menu
-                        },
-                    )))
-                    .child(SidebarGroup::new("Projects").child(SidebarMenu::new().map(
-                        |mut menu| {
+                            items
+                        })),
+                    )
+                    .child(
+                        SidebarGroup::new("Projects").child(SidebarMenu::new().children({
+                            let mut items = Vec::with_capacity(groups[1].len());
                             for item in groups[1].iter() {
-                                menu = menu.menu(
-                                    item.label(),
-                                    Some(item.icon().into()),
-                                    self.active_item == *item,
-                                    cx.listener(item.handler()),
+                                items.push(
+                                    SidebarMenuItem::new(item.label())
+                                        .icon(item.icon().into())
+                                        .active(self.active_item == *item)
+                                        .on_click(cx.listener(item.handler())),
                                 );
                             }
-                            menu
-                        },
-                    ))),
+                            items
+                        })),
+                    ),
             )
             .child(
                 v_flex()
