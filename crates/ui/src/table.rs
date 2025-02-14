@@ -4,15 +4,16 @@ use crate::{
     context_menu::ContextMenuExt,
     h_flex,
     popup_menu::PopupMenu,
-    scroll::{ScrollableMask, Scrollbar, ScrollbarState},
+    scroll::{self, ScrollableMask, Scrollbar, ScrollbarState},
     v_flex, ActiveTheme, Icon, IconName, Sizable, Size, StyleSized as _,
 };
 use gpui::{
     actions, canvas, div, prelude::FluentBuilder, px, uniform_list, App, AppContext, Axis, Bounds,
     Context, Div, DragMoveEvent, Edges, Empty, EntityId, EventEmitter, FocusHandle, Focusable,
     InteractiveElement, IntoElement, KeyBinding, ListSizingBehavior, MouseButton, MouseDownEvent,
-    ParentElement, Pixels, Point, Render, ScrollHandle, ScrollStrategy, SharedString, Stateful,
-    StatefulInteractiveElement as _, Styled, Task, UniformListScrollHandle, Window,
+    ParentElement, Pixels, Point, Render, ScrollHandle, ScrollStrategy, ScrollWheelEvent,
+    SharedString, Stateful, StatefulInteractiveElement as _, Styled, Task, UniformListScrollHandle,
+    Window,
 };
 
 mod loading;
@@ -861,11 +862,15 @@ where
 
         Some(
             div()
+                .occlude()
                 .absolute()
                 .top(self.size.table_row_height())
-                .left_0()
                 .right_0()
                 .bottom_0()
+                .w(scroll::WIDTH)
+                .on_scroll_wheel(cx.listener(|_, _: &ScrollWheelEvent, _, cx| {
+                    cx.notify();
+                }))
                 .child(
                     Scrollbar::uniform_scroll(
                         cx.entity().entity_id(),
@@ -885,12 +890,15 @@ where
         let state = self.horizontal_scrollbar_state.clone();
 
         div()
+            .occlude()
             .absolute()
-            .top_0()
             .left_0()
             .right_0()
             .bottom_0()
-            .size_full()
+            .h(scroll::WIDTH)
+            .on_scroll_wheel(cx.listener(|_, _: &ScrollWheelEvent, _, cx| {
+                cx.notify();
+            }))
             .child(Scrollbar::horizontal(
                 cx.entity().entity_id(),
                 state,

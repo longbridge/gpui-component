@@ -32,7 +32,7 @@ impl ScrollbarShow {
 }
 
 const BORDER_WIDTH: Pixels = px(0.);
-const WIDTH: Pixels = px(12.);
+pub(crate) const WIDTH: Pixels = px(12.);
 const MIN_THUMB_SIZE: f32 = 80.;
 const THUMB_RADIUS: Pixels = Pixels(4.0);
 const THUMB_INSET: Pixels = Pixels(3.);
@@ -644,6 +644,16 @@ impl Element for Scrollbar {
                     let thumb_size = state.thumb_size;
                     let margin_end = state.margin_end;
                     let is_vertical = axis.is_vertical();
+
+                    // Update last_scroll_time when offset is changed.
+                    if self.scroll_handle.offset() != self.state.get().last_scroll_offset {
+                        self.state.set(
+                            self.state.get().with_last_scroll(
+                                self.scroll_handle.offset(),
+                                Some(Instant::now()),
+                            ),
+                        );
+                    }
 
                     window.set_cursor_style(CursorStyle::default(), &state.bar_hitbox);
 
