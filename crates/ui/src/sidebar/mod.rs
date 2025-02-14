@@ -132,6 +132,11 @@ impl SidebarToggleButton {
         Self::new(Side::Right)
     }
 
+    pub fn side(mut self, side: Side) -> Self {
+        self.side = side;
+        self
+    }
+
     pub fn collapsed(mut self, is_collapsed: bool) -> Self {
         self.is_collapsed = is_collapsed;
         self
@@ -191,7 +196,7 @@ impl<E: Collapsible + IntoElement> RenderOnce for Sidebar<E> {
             .border_color(cx.theme().sidebar_border)
             .map(|this| match self.side {
                 Side::Left => this.border_r_1(),
-                Side::Right => this.text_2xl(),
+                Side::Right => this.border_l_1(),
             })
             .when_some(self.header.take(), |this, header| {
                 this.child(h_flex().id("header").p_2().gap_2().child(header))

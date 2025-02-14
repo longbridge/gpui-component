@@ -1,6 +1,6 @@
 use gpui::{
     div, impl_internal_actions, prelude::FluentBuilder, relative, App, AppContext, ClickEvent,
-    Context, Entity, Focusable, ParentElement, Render, SharedString, Styled, Window,
+    Context, Entity, Focusable, IntoElement, ParentElement, Render, SharedString, Styled, Window,
 };
 
 use gpui_component::{
@@ -12,7 +12,8 @@ use gpui_component::{
     sidebar::{
         Sidebar, SidebarFooter, SidebarGroup, SidebarHeader, SidebarMenu, SidebarToggleButton,
     },
-    v_flex, white, ActiveTheme, Collapsible, Icon, IconName,
+    switch::Switch,
+    v_flex, white, ActiveTheme, Collapsible, Icon, IconName, Placement, Side,
 };
 use serde::Deserialize;
 
@@ -25,6 +26,7 @@ pub struct SidebarStory {
     active_item: Item,
     active_subitem: Option<SubItem>,
     is_collapsed: bool,
+    side: Side,
     focus_handle: gpui::FocusHandle,
 }
 
@@ -38,8 +40,23 @@ impl SidebarStory {
             active_item: Item::Playground,
             active_subitem: None,
             is_collapsed: false,
+            side: Side::Left,
             focus_handle: cx.focus_handle(),
         }
+    }
+
+    fn render_content(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        v_flex().child(
+            h_flex().gap_2().child(
+                Switch::new("side")
+                    .label("Placement Right")
+                    .checked(self.side.is_right())
+                    .on_click(cx.listener(|this, checked: &bool, _, cx| {
+                        this.side = if *checked { Side::Right } else { Side::Left };
+                        cx.notify();
+                    })),
+            ),
+        )
     }
 }
 
@@ -174,6 +191,7 @@ impl super::Story for SidebarStory {
         Self::view(window, cx)
     }
 }
+
 impl Focusable for SidebarStory {
     fn focus_handle(&self, _: &gpui::App) -> gpui::FocusHandle {
         self.focus_handle.clone()
@@ -182,7 +200,7 @@ impl Focusable for SidebarStory {
 impl Render for SidebarStory {
     fn render(
         &mut self,
-        _: &mut gpui::Window,
+        window: &mut gpui::Window,
         cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
         let groups: [Vec<Item>; 2] = [
@@ -199,13 +217,20 @@ impl Render for SidebarStory {
             ],
         ];
 
+        let sidebar = if self.side.is_left() {
+            Sidebar::left(&cx.entity())
+        } else {
+            Sidebar::right(&cx.entity())
+        };
+
         h_flex()
             .rounded(cx.theme().radius)
             .border_1()
             .border_color(cx.theme().border)
             .h_full()
+            .when(self.side.is_right(), |this| this.flex_row_reverse())
             .child(
-                Sidebar::left(&cx.entity())
+                sidebar
                     .collapsed(self.is_collapsed)
                     .header(
                         SidebarHeader::new()
@@ -326,8 +351,12 @@ impl Render for SidebarStory {
                         h_flex()
                             .items_center()
                             .gap_3()
+                            .when(self.side.is_right(), |this| {
+                                this.flex_row_reverse().justify_between()
+                            })
                             .child(
                                 SidebarToggleButton::left()
+                                    .side(self.side)
                                     .collapsed(self.is_collapsed)
                                     .on_click(cx.listener(|this, _, _, cx| {
                                         this.is_collapsed = !this.is_collapsed;
@@ -355,7 +384,7 @@ impl Render for SidebarStory {
                                     }),
                             ),
                     )
-                    .child("This content"),
+                    .child(self.render_content(window, cx)),
             )
     }
 }

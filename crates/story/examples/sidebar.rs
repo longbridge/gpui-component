@@ -19,7 +19,7 @@ impl Example {
 
 impl Render for Example {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
-        div().p_4().size_full().child(self.root.clone())
+        div().mt(-px(1.)).size_full().child(self.root.clone())
     }
 }
 

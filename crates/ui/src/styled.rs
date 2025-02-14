@@ -443,9 +443,16 @@ pub enum Side {
 }
 
 impl Side {
+    /// Returns true if the side is left.
     #[inline]
-    pub(crate) fn is_left(&self) -> bool {
+    pub fn is_left(&self) -> bool {
         matches!(self, Self::Left)
+    }
+
+    /// Returns true if the side is right.
+    #[inline]
+    pub fn is_right(&self) -> bool {
+        matches!(self, Self::Right)
     }
 }
 
