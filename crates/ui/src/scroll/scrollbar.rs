@@ -123,8 +123,8 @@ impl ScrollbarState {
     fn with_hovered(&self, axis: Option<ScrollbarAxis>) -> Self {
         let mut state = *self;
         state.hovered_axis = axis;
-        if self.is_scrollbar_visible() {
-            state.last_scroll_time = Some(Instant::now());
+        if axis.is_some() {
+            state.last_scroll_time = Some(std::time::Instant::now());
         }
         state
     }
@@ -132,6 +132,9 @@ impl ScrollbarState {
     fn with_hovered_on_thumb(&self, axis: Option<ScrollbarAxis>) -> Self {
         let mut state = *self;
         state.hovered_on_thumb = axis;
+        if axis.is_some() {
+            state.last_scroll_time = Some(std::time::Instant::now());
+        }
         state
     }
 
@@ -159,7 +162,8 @@ impl ScrollbarState {
     }
 
     fn is_scrollbar_visible(&self) -> bool {
-        if self.hovered_axis.is_some() || self.dragged_axis.is_some() {
+        // On drag
+        if self.dragged_axis.is_some() {
             return true;
         }
 
@@ -629,6 +633,15 @@ impl Element for Scrollbar {
         let is_visible = self.state.get().is_scrollbar_visible();
         let is_hover_to_show = cx.theme().scrollbar_show.is_hover();
 
+        // Update last_scroll_time when offset is changed.
+        if self.scroll_handle.offset() != self.state.get().last_scroll_offset {
+            self.state.set(
+                self.state
+                    .get()
+                    .with_last_scroll(self.scroll_handle.offset(), Some(Instant::now())),
+            );
+        }
+
         window.with_content_mask(
             Some(ContentMask {
                 bounds: hitbox_bounds,
@@ -644,16 +657,6 @@ impl Element for Scrollbar {
                     let thumb_size = state.thumb_size;
                     let margin_end = state.margin_end;
                     let is_vertical = axis.is_vertical();
-
-                    // Update last_scroll_time when offset is changed.
-                    if self.scroll_handle.offset() != self.state.get().last_scroll_offset {
-                        self.state.set(
-                            self.state.get().with_last_scroll(
-                                self.scroll_handle.offset(),
-                                Some(Instant::now()),
-                            ),
-                        );
-                    }
 
                     window.set_cursor_style(CursorStyle::default(), &state.bar_hitbox);
 
@@ -764,10 +767,14 @@ impl Element for Scrollbar {
 
                         move |event: &MouseMoveEvent, _, _, cx| {
                             let mut notify = false;
+                            // When is hover to show mode or it was visible,
+                            // we need to update the hovered state and increase the last_scroll_time.
+                            let need_hover_to_update = is_hover_to_show || is_visible;
                             // Update hovered state for scrollbar
-                            if bounds.contains(&event.position) {
+                            if bounds.contains(&event.position) && need_hover_to_update {
+                                state.set(state.get().with_hovered(Some(axis)));
+
                                 if state.get().hovered_axis != Some(axis) {
-                                    state.set(state.get().with_hovered(Some(axis)));
                                     notify = true;
                                 }
                             } else {

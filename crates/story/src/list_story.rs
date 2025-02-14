@@ -361,11 +361,6 @@ impl Focusable for ListStory {
 
 impl Render for ListStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        println!(
-            "-----------------------ListStory {:?}",
-            std::time::Instant::now()
-        );
-
         v_flex()
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::selected_company))
