@@ -106,7 +106,7 @@ pub trait StyledExt: Styled + Sized {
 
     /// Render a border with a width of 1px, color ring color
     #[inline]
-    fn focusd_border(self, cx: &App) -> Self {
+    fn focused_border(self, cx: &App) -> Self {
         self.border_color(cx.theme().ring)
     }
 

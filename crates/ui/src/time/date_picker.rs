@@ -325,7 +325,7 @@ impl Render for DatePicker {
                     .cursor_pointer()
                     .overflow_hidden()
                     .input_text_size(self.size)
-                    .when(is_focused, |this| this.focusd_border(cx))
+                    .when(is_focused, |this| this.focused_border(cx))
                     .input_size(self.size)
                     .when(!self.open, |this| {
                         this.on_click(cx.listener(Self::toggle_calendar))
