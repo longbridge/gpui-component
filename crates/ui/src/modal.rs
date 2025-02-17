@@ -451,7 +451,7 @@ impl RenderOnce for Modal {
                                     .with_easing(cubic_bezier(0.32, 0.72, 0., 1.)),
                                 move |this, delta| {
                                     let y_offset = px(0.) + delta * px(30.);
-                                    this.top(y + y_offset).opacity(delta)
+                                    this.top(y + y_offset)
                                 },
                             ),
                     ),
