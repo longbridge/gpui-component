@@ -233,11 +233,12 @@ impl Tiles {
         let mut new_origin = self.dragging_initial_bounds.origin + delta;
 
         // Avoid out of bounds
-        if new_origin.x < px(0.) {
-            new_origin.x = px(0.);
-        }
         if new_origin.y < px(0.) {
             new_origin.y = px(0.);
+        }
+        let min_left = -self.dragging_initial_bounds.size.width + px(64.);
+        if new_origin.x < min_left {
+            new_origin.x = min_left;
         }
 
         let final_origin = round_point_to_nearest_ten(new_origin, cx);
