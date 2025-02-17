@@ -197,6 +197,8 @@ pub struct ThemeColor {
     pub title_bar: Hsla,
     /// TitleBar border color.
     pub title_bar_border: Hsla,
+    /// Background color for Tiles.
+    pub tiles: Hsla,
     /// Window border color.
     ///
     /// # Platform specific:
@@ -278,6 +280,7 @@ impl ThemeColor {
             table_row_border: hsl(240.0, 7.7, 94.5),
             title_bar: hsl(0.0, 0.0, 100.),
             title_bar_border: hsl(240.0, 5.9, 90.0),
+            tiles: hsl(0.0, 0.0, 95.),
             window_border: hsl(240.0, 5.9, 78.0),
         }
     }
@@ -354,6 +357,7 @@ impl ThemeColor {
             table_row_border: hsl(240.0, 3.7, 16.9).opacity(0.5),
             title_bar: hsl(0., 0., 9.7),
             title_bar_border: hsl(240.0, 3.7, 15.9),
+            tiles: hsl(0.0, 0.0, 5.0),
             window_border: hsl(240.0, 3.7, 28.0),
         }
     }
@@ -373,8 +377,6 @@ pub struct Theme {
     pub scrollbar_show: ScrollbarShow,
     /// Tile grid size, default is 4px.
     pub tile_grid_size: Pixels,
-    /// The radius of the tile panel.
-    pub tile_radius: Pixels,
     /// The shadow of the tile panel.
     pub tile_shadow: bool,
 }
@@ -480,6 +482,7 @@ impl Theme {
         self.sidebar_foreground = self.sidebar_foreground.apply(mask_color);
         self.sidebar_primary = self.sidebar_primary.apply(mask_color);
         self.sidebar_primary_foreground = self.sidebar_primary_foreground.apply(mask_color);
+        self.tiles = self.tiles.apply(mask_color);
     }
 
     /// Sync the theme with the system appearance
@@ -541,7 +544,6 @@ impl From<ThemeColor> for Theme {
             radius: px(4.),
             shadow: true,
             scrollbar_show: ScrollbarShow::default(),
-            tile_radius: px(7.),
             tile_grid_size: px(4.),
             tile_shadow: true,
             colors,

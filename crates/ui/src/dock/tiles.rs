@@ -614,7 +614,7 @@ impl Tiles {
                         .size_3()
                         .text_color(cx.theme().muted_foreground.opacity(0.5)),
                 )
-                .rounded(cx.theme().tile_radius)
+                .rounded(cx.theme().radius)
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener({
@@ -758,15 +758,10 @@ impl Tiles {
             .top(item.bounds.origin.y - px(1.))
             .w(item.bounds.size.width + px(1.))
             .h(item.bounds.size.height + px(1.))
-            .rounded(cx.theme().tile_radius)
+            .overflow_hidden()
+            .rounded(cx.theme().radius)
             .when(cx.theme().tile_shadow, |this| this.shadow_md())
-            .child(
-                h_flex()
-                    .w_full()
-                    .h_full()
-                    .overflow_hidden()
-                    .child(panel_view),
-            )
+            .child(h_flex().size_full().child(panel_view))
             .children(self.render_resize_handles(window, cx, entity_id, &item, &is_occluded))
             .child(self.render_drag_bar(window, cx, entity_id, &item, &is_occluded))
     }
@@ -874,7 +869,7 @@ impl Render for Tiles {
 
         div()
             .relative()
-            .bg(cx.theme().background)
+            .bg(cx.theme().tiles)
             .child(
                 div()
                     .id("tiles")
