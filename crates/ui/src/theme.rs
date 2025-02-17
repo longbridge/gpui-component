@@ -544,7 +544,7 @@ impl From<ThemeColor> for Theme {
             radius: px(4.),
             shadow: true,
             scrollbar_show: ScrollbarShow::default(),
-            tile_grid_size: px(4.),
+            tile_grid_size: px(8.),
             tile_shadow: true,
             colors,
         }

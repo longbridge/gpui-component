@@ -755,8 +755,9 @@ impl Tiles {
             .border_1()
             .border_color(cx.theme().border)
             .absolute()
-            .left(item.bounds.origin.x - px(1.))
-            .top(item.bounds.origin.y - px(1.))
+            .left(item.bounds.origin.x)
+            .top(item.bounds.origin.y)
+            // More 1px to account for the border width when 2 panels are too close
             .w(item.bounds.size.width + px(1.))
             .h(item.bounds.size.height + px(1.))
             .overflow_hidden()
@@ -876,6 +877,7 @@ impl Render for Tiles {
                     .id("tiles")
                     .track_scroll(&self.scroll_handle)
                     .size_full()
+                    .top(-px(1.))
                     .overflow_scroll()
                     .children(
                         panels
