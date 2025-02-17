@@ -1649,7 +1649,7 @@ impl Render for TextInput {
                 .border_1()
                 .rounded(cx.theme().radius)
                 .when(cx.theme().shadow, |this| this.shadow_sm())
-                .when(focused, |this| this.outline(cx))
+                .when(focused, |this| this.focusd_border(cx))
             })
             .when(prefix.is_none(), |this| this.input_pl(self.size))
             .when(suffix.is_none(), |this| this.input_pr(self.size))

@@ -658,7 +658,7 @@ where
                         Length::Definite(l) => this.flex_none().w(l),
                         Length::Auto => this.w_full(),
                     })
-                    .when(outline_visible, |this| this.outline(cx))
+                    .when(outline_visible, |this| this.focusd_border(cx))
                     .input_size(self.size)
                     .when(allow_open, |this| {
                         this.on_click(cx.listener(Self::toggle_menu))
