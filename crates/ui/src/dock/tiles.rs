@@ -26,6 +26,7 @@ actions!(tiles, [Undo, Redo,]);
 const MINIMUM_SIZE: Size<Pixels> = size(px(100.), px(100.));
 const DRAG_BAR_HEIGHT: Pixels = px(30.);
 const HANDLE_SIZE: Pixels = px(20.0);
+const GRID_ALIGNMENT: Pixels = px(10.0);
 
 #[derive(Clone, PartialEq, Debug)]
 struct TileChange {
@@ -213,7 +214,12 @@ impl Tiles {
         cx.notify();
     }
 
-    fn update_position(&mut self, pos: Point<Pixels>, _: &mut Window, cx: &mut Context<'_, Self>) {
+    fn update_position(
+        &mut self,
+        mouse_position: Point<Pixels>,
+        _: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
         let Some(index) = self.dragging_index else {
             return;
         };
@@ -223,12 +229,19 @@ impl Tiles {
         };
 
         let previous_bounds = item.bounds;
-        let adjusted_position = pos - self.bounds.origin;
+        let adjusted_position = mouse_position - self.bounds.origin;
         let delta = adjusted_position - self.dragging_initial_mouse;
-        let new_origin = self.dragging_initial_bounds.origin + delta;
+        let mut new_origin = self.dragging_initial_bounds.origin + delta;
+
+        // Avoid out of bounds
+        if new_origin.x < px(0.) {
+            new_origin.x = px(0.);
+        }
+        if new_origin.y < px(0.) {
+            new_origin.y = px(0.);
+        }
 
         let final_origin = round_point_to_nearest_ten(new_origin);
-
         // Only push to history if bounds have changed
         if final_origin != previous_bounds.origin {
             item.bounds.origin = final_origin;
@@ -820,7 +833,7 @@ impl Tiles {
 
 #[inline]
 fn round_to_nearest_ten(value: Pixels) -> Pixels {
-    px((value.0 / 10.0).round() * 10.0)
+    (value / GRID_ALIGNMENT).round() * GRID_ALIGNMENT
 }
 
 #[inline]
