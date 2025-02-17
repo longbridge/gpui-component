@@ -9,7 +9,7 @@ use crate::{
     button::{Button, ButtonVariants as _},
     h_flex,
     input::{InputEvent, TextInput},
-    ActiveTheme, IconName, Sizable, Size, StyleSized, StyledExt,
+    ActiveTheme, IconName, Sizable, Size, StyleSized, StyledExt as _,
 };
 
 actions!(number_input, [Increment, Decrement]);
@@ -178,7 +178,7 @@ impl Render for NumberInput {
             .border_color(cx.theme().input)
             .border_1()
             .rounded(cx.theme().radius)
-            .when(focused, |this| this.outline(cx))
+            .when(focused, |this| this.focusd_border(cx))
             .child(
                 Button::new("minus")
                     .ghost()
