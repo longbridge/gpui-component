@@ -410,7 +410,7 @@ impl TabPanel {
 
         // TODO: Do not show MenuButton if there is no menu items
         h_flex()
-            .gap_2()
+            .gap_1()
             .occlude()
             .items_center()
             .when_some(self.toolbar_buttons(window, cx), |this, buttons| {
@@ -432,6 +432,7 @@ impl TabPanel {
                             .xsmall()
                             .ghost()
                             .tooltip(tooltip)
+                            .when(zoomed, |this| this.selected(true))
                             .on_click(cx.listener(|view, _, window, cx| {
                                 view.on_action_toggle_zoom(&ToggleZoom, window, cx)
                             })),
