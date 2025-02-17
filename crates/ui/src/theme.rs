@@ -371,6 +371,12 @@ pub struct Theme {
     pub transparent: Hsla,
     /// Show the scrollbar mode, default: Scrolling
     pub scrollbar_show: ScrollbarShow,
+    /// Tile grid size, default is 4px.
+    pub tile_grid_size: Pixels,
+    /// The radius of the tile panel.
+    pub tile_radius: Pixels,
+    /// The shadow of the tile panel.
+    pub tile_shadow: bool,
 }
 
 impl Deref for Theme {
@@ -535,6 +541,9 @@ impl From<ThemeColor> for Theme {
             radius: px(4.),
             shadow: true,
             scrollbar_show: ScrollbarShow::default(),
+            tile_radius: px(7.),
+            tile_grid_size: px(4.),
+            tile_shadow: true,
             colors,
         }
     }

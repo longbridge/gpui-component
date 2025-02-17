@@ -14,19 +14,18 @@ use crate::{
 
 use super::{DockArea, Panel, PanelEvent, PanelInfo, PanelState, PanelView, TabPanel, TileMeta};
 use gpui::{
-    actions, canvas, div, point, px, size, AnyElement, App, AppContext, Bounds, Context,
-    DismissEvent, DragMoveEvent, Empty, EntityId, EventEmitter, FocusHandle, Focusable, Half,
-    InteractiveElement, IntoElement, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement,
-    Pixels, Point, Render, ScrollHandle, Size, StatefulInteractiveElement, Styled, WeakEntity,
-    Window,
+    actions, canvas, div, point, prelude::FluentBuilder as _, px, size, AnyElement, App,
+    AppContext, Bounds, Context, DismissEvent, DragMoveEvent, Empty, EntityId, EventEmitter,
+    FocusHandle, Focusable, Half, InteractiveElement, IntoElement, MouseButton, MouseDownEvent,
+    MouseUpEvent, ParentElement, Pixels, Point, Render, ScrollHandle, Size,
+    StatefulInteractiveElement, Styled, WeakEntity, Window,
 };
 
 actions!(tiles, [Undo, Redo,]);
 
 const MINIMUM_SIZE: Size<Pixels> = size(px(100.), px(100.));
 const DRAG_BAR_HEIGHT: Pixels = px(30.);
-const HANDLE_SIZE: Pixels = px(20.0);
-const GRID_ALIGNMENT: Pixels = px(10.0);
+const HANDLE_SIZE: Pixels = px(12.0);
 
 #[derive(Clone, PartialEq, Debug)]
 struct TileChange {
@@ -241,7 +240,7 @@ impl Tiles {
             new_origin.y = px(0.);
         }
 
-        let final_origin = round_point_to_nearest_ten(new_origin);
+        let final_origin = round_point_to_nearest_ten(new_origin, cx);
         // Only push to history if bounds have changed
         if final_origin != previous_bounds.origin {
             item.bounds.origin = final_origin;
@@ -279,7 +278,7 @@ impl Tiles {
         if let Some(index) = self.resizing_index {
             if let Some(item) = self.panels.get_mut(index) {
                 let previous_bounds = item.bounds;
-                let final_width = round_to_nearest_ten(new_width);
+                let final_width = round_to_nearest_ten(new_width, cx);
 
                 // Only push to history if width has changed
                 if final_width != item.bounds.size.width {
@@ -307,7 +306,7 @@ impl Tiles {
         if let Some(index) = self.resizing_index {
             if let Some(item) = self.panels.get_mut(index) {
                 let previous_bounds = item.bounds;
-                let final_height = round_to_nearest_ten(new_height);
+                let final_height = round_to_nearest_ten(new_height, cx);
 
                 // Only push to history if height has changed
                 if final_height != item.bounds.size.height {
@@ -607,15 +606,15 @@ impl Tiles {
                 .id("corner-resize-handle")
                 .cursor_nwse_resize()
                 .absolute()
-                .right(-HANDLE_SIZE.half())
-                .bottom(-HANDLE_SIZE.half())
-                .w(HANDLE_SIZE)
-                .h(HANDLE_SIZE)
+                .right(px(3.))
+                .bottom(px(3.))
+                .size_3()
                 .child(
                     Icon::new(IconName::ResizeCorner)
-                        .size(HANDLE_SIZE.half())
-                        .text_color(cx.theme().foreground.opacity(0.3)),
+                        .size_3()
+                        .text_color(cx.theme().muted_foreground.opacity(0.5)),
                 )
+                .rounded(cx.theme().tile_radius)
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener({
@@ -759,6 +758,8 @@ impl Tiles {
             .top(item.bounds.origin.y - px(1.))
             .w(item.bounds.size.width + px(1.))
             .h(item.bounds.size.height + px(1.))
+            .rounded(cx.theme().tile_radius)
+            .when(cx.theme().tile_shadow, |this| this.shadow_md())
             .child(
                 h_flex()
                     .w_full()
@@ -832,13 +833,16 @@ impl Tiles {
 }
 
 #[inline]
-fn round_to_nearest_ten(value: Pixels) -> Pixels {
-    (value / GRID_ALIGNMENT).round() * GRID_ALIGNMENT
+fn round_to_nearest_ten(value: Pixels, cx: &App) -> Pixels {
+    (value / cx.theme().tile_grid_size).round() * cx.theme().tile_grid_size
 }
 
 #[inline]
-fn round_point_to_nearest_ten(point: Point<Pixels>) -> Point<Pixels> {
-    Point::new(round_to_nearest_ten(point.x), round_to_nearest_ten(point.y))
+fn round_point_to_nearest_ten(point: Point<Pixels>, cx: &App) -> Point<Pixels> {
+    Point::new(
+        round_to_nearest_ten(point.x, cx),
+        round_to_nearest_ten(point.y, cx),
+    )
 }
 
 impl Focusable for Tiles {
