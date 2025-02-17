@@ -1,7 +1,7 @@
 use gpui::{
     actions, prelude::FluentBuilder as _, px, App, AppContext as _, Context, Entity, EventEmitter,
-    FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding, ParentElement, Pixels,
-    Render, SharedString, Styled, Subscription, Window,
+    FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding, ParentElement, Render,
+    SharedString, Styled, Subscription, Window,
 };
 use regex::Regex;
 
@@ -162,7 +162,6 @@ impl Render for NumberInput {
 
         // Sync size to input at first.
         self.sync_size_to_input_if_needed(window, cx);
-        const BUTTON_OFFSET: Pixels = px(-3.);
         let btn_size = match self.size {
             Size::XSmall | Size::Small => Size::XSmall,
             _ => Size::Small,
@@ -174,16 +173,20 @@ impl Render for NumberInput {
             .on_action(cx.listener(Self::on_action_decrement))
             .flex_1()
             .input_size(self.size)
+            .px(match self.size {
+                Size::XSmall => px(1.),
+                Size::Small => px(2.),
+                _ => px(3.),
+            })
             .bg(cx.theme().background)
             .border_color(cx.theme().input)
             .border_1()
             .rounded(cx.theme().radius)
-            .when(focused, |this| this.outline(cx))
+            .when(focused, |this| this.focusd_border(cx))
             .child(
                 Button::new("minus")
                     .ghost()
                     .with_size(btn_size)
-                    .ml(BUTTON_OFFSET)
                     .icon(IconName::Minus)
                     .on_click(cx.listener(|this, _, window, cx| {
                         this.on_step(StepAction::Decrement, window, cx)
@@ -194,7 +197,6 @@ impl Render for NumberInput {
                 Button::new("plus")
                     .ghost()
                     .with_size(btn_size)
-                    .mr(BUTTON_OFFSET)
                     .icon(IconName::Plus)
                     .on_click(cx.listener(|this, _, window, cx| {
                         this.on_step(StepAction::Increment, window, cx)
