@@ -1,5 +1,5 @@
 use gpui::*;
-use gpui_component::text_view::MarkdownView;
+use gpui_component::{text_view::MarkdownView, ActiveTheme as _};
 use story::Assets;
 
 pub struct Example {
@@ -21,8 +21,35 @@ impl Example {
 }
 
 impl Render for Example {
-    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
-        div().p_4().size_full().child(self.markdown.clone())
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .flex()
+            .flex_row()
+            .h_full()
+            .child(
+                div()
+                    .id("source")
+                    .h_full()
+                    .w_1_2()
+                    .border_1()
+                    .border_color(cx.theme().border)
+                    .flex_1()
+                    .p_5()
+                    .overflow_y_scroll()
+                    .child(EXMAPLE),
+            )
+            .child(
+                div()
+                    .id("preview")
+                    .h_full()
+                    .w_1_2()
+                    .border_1()
+                    .border_color(cx.theme().border)
+                    .p_5()
+                    .flex_1()
+                    .overflow_y_scroll()
+                    .child(self.markdown.clone()),
+            )
     }
 }
 
