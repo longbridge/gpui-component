@@ -324,6 +324,7 @@ impl Node {
                 };
 
                 h_flex()
+                    .mb(rems(0.5))
                     .whitespace_normal()
                     .text_size(text_size)
                     .font_weight(font_weight)
@@ -334,9 +335,9 @@ impl Node {
                 .w_full()
                 .mb(mb)
                 .bg(cx.theme().accent)
-                .border_l_2()
+                .border_l_3()
                 .border_color(cx.theme().border)
-                .px_1()
+                .px_2()
                 .py_1()
                 .child(children)
                 .into_any_element(),

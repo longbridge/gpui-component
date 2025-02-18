@@ -75,6 +75,11 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node) -> String {
     let mut text = String::new();
 
     match node {
+        Node::Paragraph(val) => {
+            val.children.iter().for_each(|c| {
+                text.push_str(&parse_paragraph(paragraph, c));
+            });
+        }
         Node::Text(val) => {
             text = val.value.clone();
             paragraph.push_str(&val.value)
@@ -239,7 +244,8 @@ mod tests {
     #[test]
     fn test_parse() {
         let source = include_str!("../../../story/examples/markdown.md");
-        let _renderer = MarkdownView::new(source);
-        println!("{:#?}", _renderer.root);
+        let mut renderer = MarkdownView::new(source);
+        renderer.parse_if_needed();
+        println!("{:#?}", renderer.root);
     }
 }

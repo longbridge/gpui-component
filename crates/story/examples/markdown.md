@@ -2,7 +2,8 @@
 
 This is first paragraph, there have **BOLD**, _italic_, and ~strikethrough~, `code` text.
 
-More complex nested inline style like **bold: _italic_**.
+> BlockQuote: More complex nested inline style like **bold: _italic_**.
+> This is second paragraph, it includes a block quote.
 
 This is an additional demonstration paragraph in English demonstrating more content for [Markdown GFM](https://github.github.com/gfm/). It includes various stylistic elements and plain text.
 
@@ -12,7 +13,13 @@ This is an additional demonstration paragraph in English demonstrating more cont
 
 Here is a link to [Google](https://www.google.com), and another to [Rust](https://www.rust-lang.org).
 
-### Heading for Lists
+### Images
+
+![Rust](https://www.rust-lang.org/logos/rust-logo-blk.svg)
+
+#### Lists
+
+##### Bulleted List
 
 - Bullet 1
 - Bullet 2
@@ -21,26 +28,26 @@ Here is a link to [Google](https://www.google.com), and another to [Rust](https:
   - Bullet 2.2
 - Bullet 3
 
+##### Numbered List
+
 1. Numbered item 1
    1. Numbered item 1.1
    2. Numbered item 1.2
 2. Numbered item 2
 3. Numbered item 3
 
-#### To-Do List
+##### To-Do List
 
 - [x] Task 1
 - [ ] Task 2
 - [ ] Task 3
 
-#### Heading for Images
-
-![Rust](https://www.rust-lang.org/logos/rust-logo-blk.svg)
-
-##### Heading for Code
+#### Heading for Code
 
 ```rust
 fn main() {
     println!("Hello, World!");
 }
 ```
+
+This is final paragraph, it includes a code block and a list of items.
