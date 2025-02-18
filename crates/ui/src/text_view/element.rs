@@ -1,50 +1,90 @@
+use std::ops::Range;
+
 use gpui::{
-    div, img, prelude::FluentBuilder as _, rems, App, FontWeight, IntoElement, ParentElement as _,
-    Pixels, RenderOnce, SharedString, SharedUri, Styled, Window,
+    div, img, prelude::FluentBuilder as _, rems, App, ElementId, FontStyle, FontWeight,
+    HighlightStyle, InteractiveText, IntoElement, ParentElement as _, Pixels, RenderOnce,
+    SharedString, SharedUri, Styled, StyledText, Window,
 };
 
 use crate::{h_flex, link::Link, v_flex, ActiveTheme as _, StyledExt};
 
-#[derive(Debug, Default, Clone, IntoElement)]
-pub struct TextNode {
-    pub text: SharedString,
+#[derive(Debug, Default, Clone)]
+pub struct LinkMark {
+    pub url: SharedUri,
+    pub title: Option<SharedString>,
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct InlineTextStyle {
     pub bold: bool,
     pub italic: bool,
     pub strikethrough: bool,
     pub code: bool,
+    pub link: Option<LinkMark>,
+}
+
+#[derive(Debug, Default, Copy, Clone)]
+pub struct Span {
+    pub start: usize,
+    pub end: usize,
+}
+
+impl From<Span> for ElementId {
+    fn from(value: Span) -> Self {
+        ElementId::Name(format!("md-{}:{}", value.start, value.end).into())
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct TextNode {
+    pub text: String,
+    pub marks: Vec<(Range<usize>, InlineTextStyle)>,
+}
+
+#[derive(Debug, Default, Clone, IntoElement)]
+pub struct Paragraph {
+    pub span: Option<Span>,
+    children: Vec<TextNode>,
+}
+
+impl Paragraph {
+    pub fn push_str(&mut self, text: &str) {
+        self.children.push(TextNode {
+            text: text.to_string(),
+            marks: vec![],
+        });
+    }
+
+    pub fn push(&mut self, text: TextNode) {
+        self.children.push(text);
+    }
 }
 
 #[allow(unused)]
 #[derive(Debug, Clone, IntoElement)]
 pub enum Node {
     Root(Vec<Node>),
-    Paragraph(Vec<Node>),
+    Paragraph(Paragraph),
     Heading {
         level: u8,
-        children: Vec<Node>,
+        children: Paragraph,
     },
-    Blockquote(Vec<Node>),
+    Blockquote(Paragraph),
     List {
         children: Vec<Node>,
         ordered: bool,
     },
     ListItem {
-        children: Vec<Node>,
+        children: Paragraph,
         /// Whether the list item is checked, if None, it's not a checkbox
         checked: Option<bool>,
     },
-    Text(TextNode),
     Image {
         url: SharedUri,
         title: Option<SharedString>,
         alt: Option<SharedString>,
         width: Option<Pixels>,
         height: Option<Pixels>,
-    },
-    Link {
-        children: Vec<Node>,
-        url: SharedString,
-        title: Option<SharedString>,
     },
     CodeBlock {
         code: SharedString,
@@ -55,20 +95,56 @@ pub enum Node {
     Unknown,
 }
 
-impl RenderOnce for TextNode {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+impl RenderOnce for Paragraph {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let mut text = String::new();
+        let mut highlights: Vec<(Range<usize>, HighlightStyle)> = vec![];
+
+        for text_node in self.children.into_iter() {
+            text.push_str(&text_node.text);
+
+            for (range, style) in text_node.marks {
+                let mut highlight = HighlightStyle::default();
+                if style.bold {
+                    highlight.font_weight = Some(FontWeight::BOLD);
+                }
+                if style.italic {
+                    highlight.font_style = Some(FontStyle::Italic);
+                }
+                if style.strikethrough {
+                    highlight.strikethrough = Some(gpui::StrikethroughStyle {
+                        thickness: gpui::px(1.),
+                        ..Default::default()
+                    });
+                }
+                if style.code {
+                    highlight.background_color = Some(cx.theme().accent);
+                }
+                // if let Some(link) = style.link {
+                //     highlight = highlight
+                //         .text_color(cx.theme().accent)
+                //         .hover_text_color(cx.theme().accent)
+                //         .hover_bg_color(cx.theme().bg)
+                //         .cursor_pointer()
+                //         .on_click(move |_, _| {
+                //             if let Some(url) = link.url.as_ref() {
+                //                 open_url(url);
+                //             }
+                //         });
+                // }
+                highlights.push((range, highlight))
+            }
+        }
+
+        let text_style = window.text_style();
+        let element_id: ElementId = self.span.unwrap_or_default().into();
+        let styled_text = StyledText::new(text).with_highlights(&text_style, highlights);
+
         div()
             .w_auto()
+            .mb_4()
             .whitespace_normal()
-            .when(self.bold, |this| this.font_bold())
-            .when(self.italic, |this| this.italic())
-            .when(self.strikethrough, |this| this.line_through())
-            .when(self.code, |this| {
-                this.px_0p5()
-                    .bg(cx.theme().accent)
-                    .rounded(cx.theme().radius)
-            })
-            .child(self.text)
+            .child(InteractiveText::new(element_id, styled_text))
     }
 }
 
@@ -78,13 +154,7 @@ impl RenderOnce for Node {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         match self {
             Node::Root(children) => v_flex().w_full().children(children).into_any_element(),
-
-            Node::Paragraph(children) => h_flex()
-                .mb_4()
-                .whitespace_normal()
-                .flex_wrap()
-                .children(children)
-                .into_any_element(),
+            Node::Paragraph(paragraph) => paragraph.into_any_element(),
             Node::Heading { level, children } => {
                 let (text_size, font_weight) = match level {
                     1 => (rems(3.), FontWeight::BOLD),
@@ -101,7 +171,7 @@ impl RenderOnce for Node {
                     .mb_2()
                     .text_size(text_size)
                     .font_weight(font_weight)
-                    .children(children)
+                    .child(children)
                     .into_any_element()
             }
             Node::Blockquote(children) => div()
@@ -112,7 +182,7 @@ impl RenderOnce for Node {
                 .border_color(cx.theme().border)
                 .px_1()
                 .py_1()
-                .children(children)
+                .child(children)
                 .into_any_element(),
             Node::List { children, ordered } => v_flex()
                 .mb_4()
@@ -136,27 +206,17 @@ impl RenderOnce for Node {
                 .relative()
                 .child(code)
                 .into_any_element(),
-            Node::ListItem { children, .. } => h_flex()
-                .flex_wrap()
-                .children({
-                    let mut items = Vec::with_capacity(children.len());
-                    for child in children {
-                        items.push(child);
-                    }
-                    items
-                })
-                .into_any_element(),
-            Node::Text(text_node) => text_node.into_any_element(),
+            Node::ListItem { children, .. } => children.into_any_element(),
             Node::Image {
                 url, width, height, ..
             } => img(url)
                 .when_some(width, |this, width| this.w(width))
                 .when_some(height, |this, height| this.w(height))
                 .into_any_element(),
-            Node::Link { children, url, .. } => Link::new("link")
-                .href(url)
-                .children(children)
-                .into_any_element(),
+            // Node::Link { children, url, .. } => Link::new("link")
+            //     .href(url)
+            //     .children(children)
+            //     .into_any_element(),
             Node::Break => div().into_any_element(),
             _ => div().into_any_element(),
         }

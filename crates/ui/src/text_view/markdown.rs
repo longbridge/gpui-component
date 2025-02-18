@@ -6,7 +6,7 @@ use markdown::{
 
 use crate::v_flex;
 
-use super::element::{self, TextNode};
+use super::element::{self, InlineTextStyle, LinkMark, Paragraph, Span};
 
 /// Markdown GFM renderer
 pub struct MarkdownView {
@@ -36,34 +36,127 @@ impl Render for MarkdownView {
     }
 }
 
+fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node) -> String {
+    paragraph.span = node.position().map(|pos| Span {
+        start: pos.start.offset,
+        end: pos.end.offset,
+    });
+
+    let mut text = String::new();
+
+    match node {
+        Node::Text(val) => {
+            text = val.value.clone();
+            paragraph.push_str(&val.value)
+        }
+        Node::Emphasis(val) => {
+            let mut child_paragraph = Paragraph::default();
+            for child in val.children.iter() {
+                text.push_str(&parse_paragraph(&mut child_paragraph, &child));
+            }
+            paragraph.push(element::TextNode {
+                text: text.clone(),
+                marks: vec![(
+                    0..text.len(),
+                    InlineTextStyle {
+                        italic: true,
+                        ..Default::default()
+                    },
+                )],
+            });
+        }
+        Node::Strong(val) => {
+            let mut child_paragraph = Paragraph::default();
+            for child in val.children.iter() {
+                text.push_str(&parse_paragraph(&mut child_paragraph, &child));
+            }
+            paragraph.push(element::TextNode {
+                text: text.clone(),
+                marks: vec![(
+                    0..text.len(),
+                    InlineTextStyle {
+                        bold: true,
+                        ..Default::default()
+                    },
+                )],
+            });
+        }
+        Node::Delete(val) => {
+            let mut child_paragraph = Paragraph::default();
+            for child in val.children.iter() {
+                text.push_str(&parse_paragraph(&mut child_paragraph, &child));
+            }
+            paragraph.push(element::TextNode {
+                text: text.clone(),
+                marks: vec![(
+                    0..text.len(),
+                    InlineTextStyle {
+                        strikethrough: true,
+                        ..Default::default()
+                    },
+                )],
+            });
+        }
+        Node::Code(val) => {
+            text = val.value.clone();
+            paragraph.push(element::TextNode {
+                text: text.clone(),
+                marks: vec![(
+                    0..text.len(),
+                    InlineTextStyle {
+                        code: true,
+                        ..Default::default()
+                    },
+                )],
+            });
+        }
+        Node::Link(val) => {
+            let mut child_paragraph = Paragraph::default();
+            for child in val.children.iter() {
+                text.push_str(&parse_paragraph(&mut child_paragraph, &child));
+            }
+            paragraph.push(element::TextNode {
+                text: text.clone(),
+                marks: vec![(
+                    0..text.len(),
+                    InlineTextStyle {
+                        link: Some(LinkMark {
+                            url: val.url.clone().into(),
+                            title: val.title.clone().map(|s| s.into()),
+                        }),
+                        ..Default::default()
+                    },
+                )],
+            });
+        }
+        _ => {}
+    }
+
+    text
+}
+
 impl From<mdast::Node> for element::Node {
     fn from(value: Node) -> Self {
-        fn parse_text(node: &Node) -> &str {
-            match node {
-                Node::Text(text) => return &text.value,
-                Node::Code(code) => return &code.value,
-                _ => "",
-            }
-        }
-
         match value {
             Node::Root(val) => {
                 let children = val.children.into_iter().map(|c| c.into()).collect();
                 element::Node::Root(children)
             }
             Node::Paragraph(val) => {
-                let children = val.children.into_iter().map(|c| c.into()).collect();
-                element::Node::Paragraph(children)
+                let mut paragraph = Paragraph::default();
+                val.children.iter().for_each(|c| {
+                    parse_paragraph(&mut paragraph, c);
+                });
+
+                element::Node::Paragraph(paragraph)
             }
             Node::Blockquote(val) => {
-                let children = val.children.into_iter().map(|c| c.into()).collect();
-                element::Node::Blockquote(children)
-            }
-            Node::Text(val) => {
-                return element::Node::Text(TextNode {
-                    text: val.value.into(),
-                    ..Default::default()
-                })
+                let mut paragraph = Paragraph::default();
+                val.children.iter().for_each(|c| {
+                    parse_paragraph(&mut paragraph, c);
+                });
+
+                element::Node::Blockquote(paragraph)
             }
             Node::List(list) => {
                 let children = list.children.into_iter().map(|c| c.into()).collect();
@@ -72,55 +165,17 @@ impl From<mdast::Node> for element::Node {
                     children,
                 }
             }
-            Node::ListItem(item) => {
-                let children = item.children.into_iter().map(|c| c.into()).collect();
+            Node::ListItem(val) => {
+                let mut paragraph = Paragraph::default();
+                val.children.iter().for_each(|c| {
+                    parse_paragraph(&mut paragraph, c);
+                });
                 element::Node::ListItem {
-                    children,
-                    checked: item.checked,
+                    children: paragraph,
+                    checked: val.checked,
                 }
             }
             Node::Break(_) => element::Node::Break,
-            Node::InlineCode(code) => element::Node::Text(TextNode {
-                text: code.value.into(),
-                code: true,
-                ..Default::default()
-            }),
-            Node::Delete(raw) => {
-                let mut text = String::new();
-                for child in raw.children {
-                    text.push_str(parse_text(&child));
-                }
-
-                element::Node::Text(TextNode {
-                    text: text.into(),
-                    strikethrough: true,
-                    ..Default::default()
-                })
-            }
-            Node::Emphasis(raw) => {
-                let mut text = String::new();
-                for child in raw.children {
-                    text.push_str(parse_text(&child));
-                }
-
-                element::Node::Text(TextNode {
-                    text: text.into(),
-                    italic: true,
-                    ..Default::default()
-                })
-            }
-            Node::Strong(raw) => {
-                let mut text = String::new();
-                for child in raw.children {
-                    text.push_str(parse_text(&child));
-                }
-
-                element::Node::Text(TextNode {
-                    text: text.into(),
-                    bold: true,
-                    ..Default::default()
-                })
-            }
             Node::Image(image) => element::Node::Image {
                 url: image.url.into(),
                 title: image.title.map(|t| t.into()),
@@ -128,23 +183,19 @@ impl From<mdast::Node> for element::Node {
                 width: None,
                 height: None,
             },
-            Node::Link(link) => {
-                let children = link.children.into_iter().map(|c| c.into()).collect();
-                element::Node::Link {
-                    url: link.url.into(),
-                    title: link.title.map(|t| t.into()),
-                    children,
-                }
-            }
             Node::Code(raw) => element::Node::CodeBlock {
                 code: raw.value.into(),
                 lang: raw.lang.map(|s| s.into()),
             },
-            Node::Heading(heading) => {
-                let children = heading.children.into_iter().map(|c| c.into()).collect();
+            Node::Heading(val) => {
+                let mut paragraph = Paragraph::default();
+                val.children.iter().for_each(|c| {
+                    parse_paragraph(&mut paragraph, c);
+                });
+
                 element::Node::Heading {
-                    level: heading.depth,
-                    children,
+                    level: val.depth,
+                    children: paragraph,
                 }
             }
             _ => element::Node::Unknown,
@@ -159,7 +210,7 @@ mod tests {
     #[test]
     fn test_parse() {
         let source = include_str!("../../../story/examples/markdown.md");
-        let _ = MarkdownView::new(source);
-        // println!("{:#?}", renderer.root);
+        let _renderer = MarkdownView::new(source);
+        // println!("{:#?}", _renderer.root);
     }
 }
