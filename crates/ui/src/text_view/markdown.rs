@@ -6,15 +6,16 @@ use markdown::{
 
 use crate::v_flex;
 
-use super::ast::{self, TextNode};
+use super::element::{self, TextNode};
 
+/// Markdown GFM renderer
 pub struct MarkdownView {
-    root: Result<ast::Node, markdown::message::Message>,
+    root: Result<element::Node, markdown::message::Message>,
 }
 
 impl MarkdownView {
     pub fn new(source: &str) -> Self {
-        let node = markdown::to_mdast(source, &ParseOptions::default());
+        let node = markdown::to_mdast(source, &ParseOptions::gfm());
         Self {
             root: node.map(|n| n.into()),
         }
@@ -35,7 +36,7 @@ impl Render for MarkdownView {
     }
 }
 
-impl From<mdast::Node> for ast::Node {
+impl From<mdast::Node> for element::Node {
     fn from(value: Node) -> Self {
         fn parse_text(node: &Node) -> &str {
             match node {
@@ -48,31 +49,38 @@ impl From<mdast::Node> for ast::Node {
         match value {
             Node::Root(val) => {
                 let children = val.children.into_iter().map(|c| c.into()).collect();
-                ast::Node::Root(children)
+                element::Node::Root(children)
             }
             Node::Paragraph(val) => {
                 let children = val.children.into_iter().map(|c| c.into()).collect();
-                ast::Node::Paragraph(children)
+                element::Node::Paragraph(children)
             }
             Node::Blockquote(val) => {
                 let children = val.children.into_iter().map(|c| c.into()).collect();
-                ast::Node::Blockquote(children)
+                element::Node::Blockquote(children)
             }
             Node::Text(val) => {
-                return ast::Node::Text(TextNode {
+                return element::Node::Text(TextNode {
                     text: val.value.into(),
                     ..Default::default()
                 })
             }
             Node::List(list) => {
                 let children = list.children.into_iter().map(|c| c.into()).collect();
-                ast::Node::List {
+                element::Node::List {
                     ordered: list.ordered,
                     children,
                 }
             }
-            Node::Break(_) => ast::Node::Break,
-            Node::InlineCode(code) => ast::Node::Text(TextNode {
+            Node::ListItem(item) => {
+                let children = item.children.into_iter().map(|c| c.into()).collect();
+                element::Node::ListItem {
+                    children,
+                    checked: item.checked,
+                }
+            }
+            Node::Break(_) => element::Node::Break,
+            Node::InlineCode(code) => element::Node::Text(TextNode {
                 text: code.value.into(),
                 code: true,
                 ..Default::default()
@@ -83,7 +91,7 @@ impl From<mdast::Node> for ast::Node {
                     text.push_str(parse_text(&child));
                 }
 
-                ast::Node::Text(TextNode {
+                element::Node::Text(TextNode {
                     text: text.into(),
                     strikethrough: true,
                     ..Default::default()
@@ -95,7 +103,7 @@ impl From<mdast::Node> for ast::Node {
                     text.push_str(parse_text(&child));
                 }
 
-                ast::Node::Text(TextNode {
+                element::Node::Text(TextNode {
                     text: text.into(),
                     italic: true,
                     ..Default::default()
@@ -107,13 +115,13 @@ impl From<mdast::Node> for ast::Node {
                     text.push_str(parse_text(&child));
                 }
 
-                ast::Node::Text(TextNode {
+                element::Node::Text(TextNode {
                     text: text.into(),
                     bold: true,
                     ..Default::default()
                 })
             }
-            Node::Image(image) => ast::Node::Image {
+            Node::Image(image) => element::Node::Image {
                 url: image.url.into(),
                 title: image.title.map(|t| t.into()),
                 alt: Some(image.alt.into()),
@@ -122,24 +130,24 @@ impl From<mdast::Node> for ast::Node {
             },
             Node::Link(link) => {
                 let children = link.children.into_iter().map(|c| c.into()).collect();
-                ast::Node::Link {
+                element::Node::Link {
                     url: link.url.into(),
                     title: link.title.map(|t| t.into()),
                     children,
                 }
             }
-            Node::Code(raw) => ast::Node::CodeBlock {
+            Node::Code(raw) => element::Node::CodeBlock {
                 code: raw.value.into(),
                 lang: raw.lang.map(|s| s.into()),
             },
             Node::Heading(heading) => {
                 let children = heading.children.into_iter().map(|c| c.into()).collect();
-                ast::Node::Heading {
+                element::Node::Heading {
                     level: heading.depth,
                     children,
                 }
             }
-            _ => ast::Node::Unknown,
+            _ => element::Node::Unknown,
         }
     }
 }
@@ -151,7 +159,7 @@ mod tests {
     #[test]
     fn test_parse() {
         let source = include_str!("../../../story/examples/markdown.md");
-        let _ = MarkdownView::parse(source).unwrap();
+        let _ = MarkdownView::new(source);
         // println!("{:#?}", renderer.root);
     }
 }

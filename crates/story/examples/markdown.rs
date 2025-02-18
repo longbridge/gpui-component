@@ -1,6 +1,6 @@
 use gpui::*;
 use gpui_component::text_view::MarkdownView;
-use story::{Assets, ModalStory};
+use story::Assets;
 
 pub struct Example {
     markdown: Entity<MarkdownView>,
@@ -9,7 +9,7 @@ pub struct Example {
 const EXMAPLE: &str = include_str!("./markdown.md");
 
 impl Example {
-    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
         let markdown = cx.new(|_| MarkdownView::new(EXMAPLE));
 
         Self { markdown }
