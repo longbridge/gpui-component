@@ -1,18 +1,18 @@
 use gpui::*;
-use gpui_component::{text_view::MarkdownView, ActiveTheme as _};
+use gpui_component::{text_view::TextView, ActiveTheme as _};
 use story::Assets;
 
 pub struct Example {
-    markdown: Entity<MarkdownView>,
+    text_view: Entity<TextView>,
 }
 
 const EXMAPLE: &str = include_str!("./markdown.md");
 
 impl Example {
     pub fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
-        let markdown = cx.new(|_| MarkdownView::new(EXMAPLE));
+        let text_view = cx.new(|cx| TextView::markdown(EXMAPLE, cx));
 
-        Self { markdown }
+        Self { text_view }
     }
 
     fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
@@ -48,7 +48,7 @@ impl Render for Example {
                     .p_5()
                     .flex_1()
                     .overflow_y_scroll()
-                    .child(self.markdown.clone()),
+                    .child(self.text_view.clone()),
             )
     }
 }

@@ -1,4 +1,7 @@
-use gpui::{div, prelude::FluentBuilder as _, IntoElement, ParentElement, Render, Styled, Window};
+use gpui::{
+    div, prelude::FluentBuilder as _, Context, IntoElement, ParentElement, Render, SharedString,
+    Styled, Window,
+};
 use markdown::{
     mdast::{self, Node},
     ParseOptions,
@@ -9,22 +12,46 @@ use crate::v_flex;
 use super::element::{self, ImageNode, InlineTextStyle, LinkMark, Paragraph, Span};
 
 /// Markdown GFM renderer
-pub struct MarkdownView {
-    root: Result<element::Node, markdown::message::Message>,
+pub(super) struct MarkdownView {
+    source: SharedString,
+    parsed: bool,
+    root: Option<Result<element::Node, markdown::message::Message>>,
 }
 
 impl MarkdownView {
-    pub fn new(source: &str) -> Self {
-        let node = markdown::to_mdast(source, &ParseOptions::gfm());
+    pub(super) fn new(source: impl Into<SharedString>) -> Self {
         Self {
-            root: node.map(|n| n.into()),
+            source: source.into(),
+            parsed: false,
+            root: None,
         }
+    }
+
+    /// Set the source of the markdown view.
+    pub(crate) fn set_source(&mut self, source: impl Into<SharedString>, cx: &mut Context<Self>) {
+        self.source = source.into();
+        self.parsed = false;
+        cx.notify();
+    }
+
+    fn parse_if_needed(&mut self) {
+        if self.parsed {
+            return;
+        }
+
+        self.root = Some(markdown::to_mdast(&self.source, &ParseOptions::gfm()).map(|n| n.into()));
     }
 }
 
 impl Render for MarkdownView {
     fn render(&mut self, _: &mut Window, _: &mut gpui::Context<'_, Self>) -> impl IntoElement {
-        div().map(|this| match self.root.clone() {
+        self.parse_if_needed();
+
+        let Some(root) = self.root.clone() else {
+            return div();
+        };
+
+        div().map(|this| match root {
             Ok(node) => this.child(node),
             Err(err) => this.child(
                 v_flex()
