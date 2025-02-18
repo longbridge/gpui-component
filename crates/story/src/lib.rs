@@ -201,6 +201,11 @@ pub fn init(cx: &mut App) {
     dropdown_story::init(cx);
     popup_story::init(cx);
 
+    let http_client = std::sync::Arc::new(
+        reqwest_client::ReqwestClient::user_agent("gpui-component/story").unwrap(),
+    );
+    cx.set_http_client(http_client);
+
     register_panel(cx, PANEL_NAME, |_, _, info, window, cx| {
         let story_state = match info {
             PanelInfo::Panel(value) => StoryState::from_value(value.clone()),
