@@ -45,7 +45,7 @@ pub mod switch;
 pub mod tab;
 pub mod table;
 pub mod tag;
-pub mod text_view;
+pub mod text;
 pub mod theme;
 pub mod tooltip;
 pub mod webview;

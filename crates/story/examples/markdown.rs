@@ -1,5 +1,5 @@
 use gpui::*;
-use gpui_component::{text_view::TextView, ActiveTheme as _};
+use gpui_component::{text::TextView, ActiveTheme as _};
 use story::Assets;
 
 pub struct Example {

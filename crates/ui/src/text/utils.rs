@@ -1,7 +1,7 @@
 const NUMBERED_PREFIXES_1: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const NUMBERED_PREFIXES_2: &str = "abcdefghijklmnopqrstuvwxyz";
 
-const BULLETS: [&str; 3] = ["•", "◦", "▪"];
+const BULLETS: [&str; 5] = ["▪", "•", "◦", "‣", "⁃"];
 
 /// Returns the prefix for a list item.
 pub fn list_item_prefix(ix: usize, ordered: bool, depth: usize) -> String {
@@ -36,7 +36,7 @@ pub fn list_item_prefix(ix: usize, ordered: bool, depth: usize) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::text_view::utils::list_item_prefix;
+    use crate::text::utils::list_item_prefix;
 
     #[test]
     fn test_list_item_prefix() {
@@ -52,7 +52,7 @@ mod tests {
         assert_eq!(list_item_prefix(6, true, 2), "g. ");
         assert_eq!(list_item_prefix(0, true, 1), "A. ");
         assert_eq!(list_item_prefix(0, true, 2), "a. ");
-        assert_eq!(list_item_prefix(0, false, 0), "• ");
+        assert_eq!(list_item_prefix(0, false, 0), "● ");
         assert_eq!(list_item_prefix(0, false, 1), "◦ ");
         assert_eq!(list_item_prefix(0, false, 2), "▪ ");
         assert_eq!(list_item_prefix(0, false, 3), "▪ ");
