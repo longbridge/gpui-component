@@ -4,11 +4,11 @@ This is first paragraph, there have **BOLD**, _italic_, and ~strikethrough~, `co
 
 More complex nested inline style like **bold: _italic_**.
 
-This is an additional demonstration paragraph in English demonstrating more content for Markdown. It includes various stylistic elements and plain text.
+This is an additional demonstration paragraph in English demonstrating more content for [Markdown GFM](https://github.github.com/gfm/). It includes various stylistic elements and plain text.
 
-这是一个中文演示段落，用于展示更多的 Markdown 内容。您可以在此尝试使用使用**粗体**、*斜体*和`代码`等样式。これは日本語のデモ段落です。Markdown の多言語サポートを示すためのテキストが含まれています。例えば、、**ボールド**、_イタリック_、および`コード`のスタイルなどを試すことができます。
+这是一个中文演示段落，用于展示更多的 [Markdown GFM](https://github.github.com/gfm/) 内容。您可以在此尝试使用使用**粗体**、*斜体*和`代码`等样式。これは日本語のデモ段落です。Markdown の多言語サポートを示すためのテキストが含まれています。例えば、、**ボールド**、_イタリック_、および`コード`のスタイルなどを試すことができます。
 
-## Heading for Links
+## Heading for [Links](https://www.google.com)
 
 Here is a link to [Google](https://www.google.com), and another to [Rust](https://www.rust-lang.org).
 

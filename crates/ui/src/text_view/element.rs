@@ -1,12 +1,14 @@
 use std::ops::Range;
 
 use gpui::{
-    div, img, prelude::FluentBuilder as _, relative, rems, App, ElementId, FontStyle, FontWeight,
+    div, img, prelude::FluentBuilder as _, rems, App, ElementId, FontStyle, FontWeight,
     HighlightStyle, InteractiveText, IntoElement, ParentElement, Pixels, RenderOnce, SharedString,
     SharedUri, Styled, StyledText, Window,
 };
 
-use crate::{h_flex, v_flex, ActiveTheme as _, IconName, StyledExt};
+use crate::{h_flex, v_flex, ActiveTheme as _, IconName};
+
+use super::utils::list_item_prefix;
 
 #[allow(unused)]
 #[derive(Debug, Default, Clone)]
@@ -117,6 +119,7 @@ pub enum Node {
     },
     ListItem {
         children: Vec<Node>,
+        spread: bool,
         /// Whether the list item is checked, if None, it's not a checkbox
         checked: Option<bool>,
     },
@@ -186,7 +189,6 @@ impl RenderOnce for Paragraph {
 
                 div()
                     .w_auto()
-                    .mb(rems(1.))
                     .whitespace_normal()
                     .child(
                         InteractiveText::new(element_id, styled_text).on_click(link_ranges, {
@@ -208,13 +210,108 @@ impl RenderOnce for Paragraph {
     }
 }
 
-/// Ref:
-/// https://ui.shadcn.com/docs/components/typography
-impl RenderOnce for Node {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+#[derive(Default)]
+struct ListState {
+    todo: bool,
+    ordered: bool,
+    depth: usize,
+}
+
+impl Node {
+    fn render_list_item(
+        item: Node,
+        ix: usize,
+        state: ListState,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> impl IntoElement {
+        match item {
+            Node::ListItem {
+                children,
+                spread,
+                checked,
+            } => v_flex()
+                .when(spread, |this| this.child(div()))
+                .children({
+                    let mut items = Vec::with_capacity(children.len());
+                    for child in children.into_iter() {
+                        match &child {
+                            Node::Paragraph(_) => {
+                                items.push(
+                                    h_flex()
+                                        .when(!state.todo && checked.is_none(), |this| {
+                                            this.child(list_item_prefix(
+                                                ix,
+                                                state.ordered,
+                                                state.depth,
+                                            ))
+                                        })
+                                        .when_some(checked, |this, checked| {
+                                            this.child(
+                                                div()
+                                                    .flex()
+                                                    .size(rems(0.875))
+                                                    .mr_1()
+                                                    .items_center()
+                                                    .justify_center()
+                                                    .rounded(cx.theme().radius)
+                                                    .border_1()
+                                                    .border_color(cx.theme().border)
+                                                    .bg(cx.theme().accent)
+                                                    .when(checked, |this| {
+                                                        this.child(
+                                                            div()
+                                                                .items_center()
+                                                                .text_xs()
+                                                                .child(IconName::Check),
+                                                        )
+                                                    }),
+                                            )
+                                        })
+                                        .child(child.render_node(
+                                            Some(ListState {
+                                                depth: state.depth + 1,
+                                                ordered: state.ordered,
+                                                todo: checked.is_some(),
+                                            }),
+                                            window,
+                                            cx,
+                                        )),
+                                );
+                            }
+                            Node::List { .. } => {
+                                items.push(div().ml(rems(1.)).child(child.render_node(
+                                    Some(ListState {
+                                        depth: state.depth + 1,
+                                        ordered: state.ordered,
+                                        todo: checked.is_some(),
+                                    }),
+                                    window,
+                                    cx,
+                                )))
+                            }
+                            _ => {}
+                        }
+                    }
+                    items
+                })
+                .into_any_element(),
+            _ => div().into_any_element(),
+        }
+    }
+
+    fn render_node(
+        self,
+        list_state: Option<ListState>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> impl IntoElement {
+        let in_list = list_state.is_some();
+        let mb = if in_list { rems(0.0) } else { rems(1.) };
+
         match self {
             Node::Root(children) => v_flex().w_full().children(children).into_any_element(),
-            Node::Paragraph(paragraph) => paragraph.into_any_element(),
+            Node::Paragraph(paragraph) => div().mb(mb).child(paragraph).into_any_element(),
             Node::Heading { level, children } => {
                 let (text_size, font_weight) = match level {
                     1 => (rems(2.), FontWeight::BOLD),
@@ -235,7 +332,7 @@ impl RenderOnce for Node {
             }
             Node::Blockquote(children) => div()
                 .w_full()
-                .mb(rems(1.))
+                .mb(mb)
                 .bg(cx.theme().accent)
                 .border_l_2()
                 .border_color(cx.theme().border)
@@ -244,41 +341,28 @@ impl RenderOnce for Node {
                 .child(children)
                 .into_any_element(),
             Node::List { children, ordered } => v_flex()
-                .mb(rems(1.))
+                .mb(mb)
                 .children({
                     let mut items = Vec::with_capacity(children.len());
+                    let list_state = list_state.unwrap_or_default();
                     for (ix, item) in children.into_iter().enumerate() {
-                        items.push(h_flex().items_baseline().flex_wrap().pl_4().w_full().map(
-                            |this| match ordered {
-                                true => this.child(format!("{}. ", ix + 1)).child(item),
-                                false => this.child("• ").child(item),
+                        items.push(Self::render_list_item(
+                            item,
+                            ix,
+                            ListState {
+                                ordered,
+                                todo: list_state.todo,
+                                depth: list_state.depth,
                             },
+                            window,
+                            cx,
                         ))
                     }
                     items
                 })
                 .into_any_element(),
-            Node::ListItem { children, checked } => h_flex()
-                .items_baseline()
-                .when_some(checked, |this, checked| {
-                    this.child(
-                        div()
-                            .flex()
-                            .size(rems(0.875))
-                            .mr_1()
-                            .items_center()
-                            .justify_center()
-                            .rounded(cx.theme().radius)
-                            .border_1()
-                            .border_color(cx.theme().border)
-                            .bg(cx.theme().accent)
-                            .when(checked, |this| this.child(IconName::Check)),
-                    )
-                })
-                .children(children)
-                .into_any_element(),
             Node::CodeBlock { code, .. } => div()
-                .mb(rems(1.))
+                .mb(mb)
                 .rounded(cx.theme().radius)
                 .bg(cx.theme().accent)
                 .p_3()
@@ -289,5 +373,13 @@ impl RenderOnce for Node {
             Node::Break => div().into_any_element(),
             _ => div().into_any_element(),
         }
+    }
+}
+
+/// Ref:
+/// https://ui.shadcn.com/docs/components/typography
+impl RenderOnce for Node {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        self.render_node(None, window, cx)
     }
 }

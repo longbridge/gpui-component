@@ -180,6 +180,7 @@ impl From<mdast::Node> for element::Node {
                 let children = val.children.into_iter().map(|c| c.into()).collect();
                 element::Node::ListItem {
                     children,
+                    spread: val.spread,
                     checked: val.checked,
                 }
             }
