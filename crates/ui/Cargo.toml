@@ -36,6 +36,7 @@ usvg = { version = "0.44.0", default-features = false, features = [
 ] }
 uuid = "1.10"
 wry = "0.48.0"
+markdown = "1.0.0-alpha.22"
 
 # Calendar
 chrono = "0.4.38"
