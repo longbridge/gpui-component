@@ -51,7 +51,7 @@ impl Paragraph {
     pub fn push_str(&mut self, text: &str) {
         self.children.push(TextNode {
             text: text.to_string(),
-            marks: vec![],
+            marks: vec![(0..text.len(), InlineTextStyle::default())],
         });
     }
 
@@ -99,6 +99,7 @@ impl RenderOnce for Paragraph {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let mut text = String::new();
         let mut highlights: Vec<(Range<usize>, HighlightStyle)> = vec![];
+        let mut offset = 0;
 
         for text_node in self.children.into_iter() {
             text.push_str(&text_node.text);
@@ -132,7 +133,10 @@ impl RenderOnce for Paragraph {
                 //             }
                 //         });
                 // }
-                highlights.push((range, highlight))
+                let new_range = ((range.start + offset)..(range.end + offset));
+                offset += range.end - range.start;
+
+                highlights.push((new_range, highlight));
             }
         }
 

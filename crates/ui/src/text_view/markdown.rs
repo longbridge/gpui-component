@@ -97,7 +97,7 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node) -> String {
                 )],
             });
         }
-        Node::Code(val) => {
+        Node::InlineCode(val) => {
             text = val.value.clone();
             paragraph.push(element::TextNode {
                 text: text.clone(),
@@ -211,6 +211,6 @@ mod tests {
     fn test_parse() {
         let source = include_str!("../../../story/examples/markdown.md");
         let _renderer = MarkdownView::new(source);
-        // println!("{:#?}", _renderer.root);
+        println!("{:#?}", _renderer.root);
     }
 }
