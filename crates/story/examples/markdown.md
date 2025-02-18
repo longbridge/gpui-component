@@ -2,7 +2,7 @@
 
 This is first paragraph, there have **BOLD**, _italic_, and ~strikethrough~, `code` text.
 
-> BlockQuote: More complex nested inline style like **bold: _italic_**.
+> Blockquote: More complex nested inline style like **bold: _italic_**.
 > This is second paragraph, it includes a block quote.
 
 This is an additional demonstration paragraph in English demonstrating more content for [Markdown GFM](https://github.github.com/gfm/). It includes various stylistic elements and plain text.
