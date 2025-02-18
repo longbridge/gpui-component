@@ -6,7 +6,7 @@ use markdown::{
 
 use crate::v_flex;
 
-use super::element::{self, InlineTextStyle, LinkMark, Paragraph, Span};
+use super::element::{self, ImageNode, InlineTextStyle, LinkMark, Paragraph, Span};
 
 /// Markdown GFM renderer
 pub struct MarkdownView {
@@ -37,10 +37,13 @@ impl Render for MarkdownView {
 }
 
 fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node) -> String {
-    paragraph.span = node.position().map(|pos| Span {
+    let span = node.position().map(|pos| Span {
         start: pos.start.offset,
         end: pos.end.offset,
     });
+    if let Some(span) = span {
+        paragraph.set_span(span);
+    }
 
     let mut text = String::new();
 
@@ -129,6 +132,14 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node) -> String {
                 )],
             });
         }
+        Node::Image(raw) => {
+            paragraph.set_image(ImageNode {
+                url: raw.url.clone().into(),
+                title: raw.title.clone().map(|t| t.into()),
+                alt: Some(raw.alt.clone().into()),
+                ..Default::default()
+            });
+        }
         _ => {}
     }
 
@@ -166,23 +177,13 @@ impl From<mdast::Node> for element::Node {
                 }
             }
             Node::ListItem(val) => {
-                let mut paragraph = Paragraph::default();
-                val.children.iter().for_each(|c| {
-                    parse_paragraph(&mut paragraph, c);
-                });
+                let children = val.children.into_iter().map(|c| c.into()).collect();
                 element::Node::ListItem {
-                    children: paragraph,
+                    children,
                     checked: val.checked,
                 }
             }
             Node::Break(_) => element::Node::Break,
-            Node::Image(image) => element::Node::Image {
-                url: image.url.into(),
-                title: image.title.map(|t| t.into()),
-                alt: Some(image.alt.into()),
-                width: None,
-                height: None,
-            },
             Node::Code(raw) => element::Node::CodeBlock {
                 code: raw.value.into(),
                 lang: raw.lang.map(|s| s.into()),

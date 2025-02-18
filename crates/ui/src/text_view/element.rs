@@ -1,16 +1,17 @@
 use std::ops::Range;
 
 use gpui::{
-    div, img, prelude::FluentBuilder as _, rems, App, ElementId, FontStyle, FontWeight,
-    HighlightStyle, InteractiveText, IntoElement, ParentElement as _, Pixels, RenderOnce,
-    SharedString, SharedUri, Styled, StyledText, Window,
+    div, img, prelude::FluentBuilder as _, relative, rems, App, ElementId, FontStyle, FontWeight,
+    HighlightStyle, InteractiveText, IntoElement, ParentElement, Pixels, RenderOnce, SharedString,
+    SharedUri, Styled, StyledText, Window,
 };
 
-use crate::{h_flex, link::Link, v_flex, ActiveTheme as _, StyledExt};
+use crate::{h_flex, v_flex, ActiveTheme as _, IconName, StyledExt};
 
+#[allow(unused)]
 #[derive(Debug, Default, Clone)]
 pub struct LinkMark {
-    pub url: SharedUri,
+    pub url: SharedString,
     pub title: Option<SharedString>,
 }
 
@@ -35,28 +36,68 @@ impl From<Span> for ElementId {
     }
 }
 
+#[allow(unused)]
+#[derive(Debug, Default, Clone)]
+pub struct ImageNode {
+    pub url: SharedUri,
+    pub title: Option<SharedString>,
+    pub alt: Option<SharedString>,
+    pub width: Option<Pixels>,
+    pub height: Option<Pixels>,
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct TextNode {
     pub text: String,
     pub marks: Vec<(Range<usize>, InlineTextStyle)>,
 }
 
-#[derive(Debug, Default, Clone, IntoElement)]
-pub struct Paragraph {
-    pub span: Option<Span>,
-    children: Vec<TextNode>,
+#[derive(Debug, Clone, IntoElement)]
+pub enum Paragraph {
+    Texts {
+        span: Option<Span>,
+        children: Vec<TextNode>,
+    },
+    Image {
+        span: Option<Span>,
+        image: ImageNode,
+    },
+}
+
+impl Default for Paragraph {
+    fn default() -> Self {
+        Self::Texts {
+            span: None,
+            children: vec![],
+        }
+    }
 }
 
 impl Paragraph {
+    pub fn set_span(&mut self, span: Span) {
+        match self {
+            Self::Texts { span: s, .. } => *s = Some(span),
+            Self::Image { span: s, .. } => *s = Some(span),
+        }
+    }
+
     pub fn push_str(&mut self, text: &str) {
-        self.children.push(TextNode {
-            text: text.to_string(),
-            marks: vec![(0..text.len(), InlineTextStyle::default())],
-        });
+        if let Self::Texts { children, .. } = self {
+            children.push(TextNode {
+                text: text.to_string(),
+                marks: vec![(0..text.len(), InlineTextStyle::default())],
+            });
+        }
     }
 
     pub fn push(&mut self, text: TextNode) {
-        self.children.push(text);
+        if let Self::Texts { children, .. } = self {
+            children.push(text);
+        }
+    }
+
+    pub fn set_image(&mut self, image: ImageNode) {
+        *self = Self::Image { span: None, image };
     }
 }
 
@@ -75,16 +116,9 @@ pub enum Node {
         ordered: bool,
     },
     ListItem {
-        children: Paragraph,
+        children: Vec<Node>,
         /// Whether the list item is checked, if None, it's not a checkbox
         checked: Option<bool>,
-    },
-    Image {
-        url: SharedUri,
-        title: Option<SharedString>,
-        alt: Option<SharedString>,
-        width: Option<Pixels>,
-        height: Option<Pixels>,
     },
     CodeBlock {
         code: SharedString,
@@ -97,58 +131,80 @@ pub enum Node {
 
 impl RenderOnce for Paragraph {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let mut text = String::new();
-        let mut highlights: Vec<(Range<usize>, HighlightStyle)> = vec![];
-        let mut offset = 0;
+        match self {
+            Self::Texts { span, children } => {
+                let mut text = String::new();
+                let mut highlights: Vec<(Range<usize>, HighlightStyle)> = vec![];
+                let mut links: Vec<(Range<usize>, LinkMark)> = vec![];
+                let mut offset = 0;
 
-        for text_node in self.children.into_iter() {
-            text.push_str(&text_node.text);
+                for text_node in children.into_iter() {
+                    text.push_str(&text_node.text);
 
-            for (range, style) in text_node.marks {
-                let mut highlight = HighlightStyle::default();
-                if style.bold {
-                    highlight.font_weight = Some(FontWeight::BOLD);
-                }
-                if style.italic {
-                    highlight.font_style = Some(FontStyle::Italic);
-                }
-                if style.strikethrough {
-                    highlight.strikethrough = Some(gpui::StrikethroughStyle {
-                        thickness: gpui::px(1.),
-                        ..Default::default()
-                    });
-                }
-                if style.code {
-                    highlight.background_color = Some(cx.theme().accent);
-                }
-                // if let Some(link) = style.link {
-                //     highlight = highlight
-                //         .text_color(cx.theme().accent)
-                //         .hover_text_color(cx.theme().accent)
-                //         .hover_bg_color(cx.theme().bg)
-                //         .cursor_pointer()
-                //         .on_click(move |_, _| {
-                //             if let Some(url) = link.url.as_ref() {
-                //                 open_url(url);
-                //             }
-                //         });
-                // }
-                let new_range = ((range.start + offset)..(range.end + offset));
-                offset += range.end - range.start;
+                    for (range, style) in text_node.marks {
+                        let mut highlight = HighlightStyle::default();
+                        if style.bold {
+                            highlight.font_weight = Some(FontWeight::BOLD);
+                        }
+                        if style.italic {
+                            highlight.font_style = Some(FontStyle::Italic);
+                        }
+                        if style.strikethrough {
+                            highlight.strikethrough = Some(gpui::StrikethroughStyle {
+                                thickness: gpui::px(1.),
+                                ..Default::default()
+                            });
+                        }
+                        if style.code {
+                            highlight.background_color = Some(cx.theme().accent);
+                        }
 
-                highlights.push((new_range, highlight));
+                        let new_range = (range.start + offset)..(range.end + offset);
+
+                        if let Some(link_mark) = style.link {
+                            highlight.color = Some(cx.theme().link);
+                            highlight.underline = Some(gpui::UnderlineStyle {
+                                thickness: gpui::px(1.),
+                                ..Default::default()
+                            });
+                            links.push((new_range.clone(), link_mark));
+                        }
+
+                        offset += range.end - range.start;
+
+                        highlights.push((new_range, highlight));
+                    }
+                }
+
+                let text_style = window.text_style();
+                let element_id: ElementId = span.unwrap_or_default().into();
+                let styled_text = StyledText::new(text).with_highlights(&text_style, highlights);
+                let link_ranges = links
+                    .iter()
+                    .map(|(range, _)| range.clone())
+                    .collect::<Vec<_>>();
+
+                div()
+                    .w_auto()
+                    .mb(rems(1.))
+                    .whitespace_normal()
+                    .child(
+                        InteractiveText::new(element_id, styled_text).on_click(link_ranges, {
+                            let links = links.clone();
+                            move |ix, _, cx| {
+                                if let Some((_, link)) = &links.get(ix) {
+                                    cx.open_url(&link.url);
+                                }
+                            }
+                        }),
+                    )
+                    .into_any_element()
             }
+            Self::Image { image, .. } => img(image.url)
+                .when_some(image.width, |this, width| this.w(width))
+                .when_some(image.height, |this, height| this.h(height))
+                .into_any_element(),
         }
-
-        let text_style = window.text_style();
-        let element_id: ElementId = self.span.unwrap_or_default().into();
-        let styled_text = StyledText::new(text).with_highlights(&text_style, highlights);
-
-        div()
-            .w_auto()
-            .mb_4()
-            .whitespace_normal()
-            .child(InteractiveText::new(element_id, styled_text))
     }
 }
 
@@ -161,18 +217,17 @@ impl RenderOnce for Node {
             Node::Paragraph(paragraph) => paragraph.into_any_element(),
             Node::Heading { level, children } => {
                 let (text_size, font_weight) = match level {
-                    1 => (rems(3.), FontWeight::BOLD),
-                    2 => (rems(1.875), FontWeight::SEMIBOLD),
-                    3 => (rems(1.5), FontWeight::SEMIBOLD),
-                    4 => (rems(1.25), FontWeight::SEMIBOLD),
-                    5 => (rems(1.125), FontWeight::MEDIUM),
+                    1 => (rems(2.), FontWeight::BOLD),
+                    2 => (rems(1.5), FontWeight::SEMIBOLD),
+                    3 => (rems(1.25), FontWeight::SEMIBOLD),
+                    4 => (rems(1.125), FontWeight::SEMIBOLD),
+                    5 => (rems(1.), FontWeight::SEMIBOLD),
                     6 => (rems(1.), FontWeight::MEDIUM),
                     _ => (rems(1.), FontWeight::NORMAL),
                 };
 
                 h_flex()
                     .whitespace_normal()
-                    .mb_2()
                     .text_size(text_size)
                     .font_weight(font_weight)
                     .child(children)
@@ -180,7 +235,7 @@ impl RenderOnce for Node {
             }
             Node::Blockquote(children) => div()
                 .w_full()
-                .mb_4()
+                .mb(rems(1.))
                 .bg(cx.theme().accent)
                 .border_l_2()
                 .border_color(cx.theme().border)
@@ -189,20 +244,41 @@ impl RenderOnce for Node {
                 .child(children)
                 .into_any_element(),
             Node::List { children, ordered } => v_flex()
-                .mb_4()
+                .mb(rems(1.))
                 .children({
                     let mut items = Vec::with_capacity(children.len());
                     for (ix, item) in children.into_iter().enumerate() {
-                        items.push(h_flex().flex_wrap().w_full().child(match ordered {
-                            true => div().pl_4().child(format!("{}. ", ix + 1)).child(item),
-                            false => div().pl_4().child("• ").child(item),
-                        }))
+                        items.push(h_flex().items_baseline().flex_wrap().pl_4().w_full().map(
+                            |this| match ordered {
+                                true => this.child(format!("{}. ", ix + 1)).child(item),
+                                false => this.child("• ").child(item),
+                            },
+                        ))
                     }
                     items
                 })
                 .into_any_element(),
+            Node::ListItem { children, checked } => h_flex()
+                .items_baseline()
+                .when_some(checked, |this, checked| {
+                    this.child(
+                        div()
+                            .flex()
+                            .size(rems(0.875))
+                            .mr_1()
+                            .items_center()
+                            .justify_center()
+                            .rounded(cx.theme().radius)
+                            .border_1()
+                            .border_color(cx.theme().border)
+                            .bg(cx.theme().accent)
+                            .when(checked, |this| this.child(IconName::Check)),
+                    )
+                })
+                .children(children)
+                .into_any_element(),
             Node::CodeBlock { code, .. } => div()
-                .mb_4()
+                .mb(rems(1.))
                 .rounded(cx.theme().radius)
                 .bg(cx.theme().accent)
                 .p_3()
@@ -210,17 +286,6 @@ impl RenderOnce for Node {
                 .relative()
                 .child(code)
                 .into_any_element(),
-            Node::ListItem { children, .. } => children.into_any_element(),
-            Node::Image {
-                url, width, height, ..
-            } => img(url)
-                .when_some(width, |this, width| this.w(width))
-                .when_some(height, |this, height| this.w(height))
-                .into_any_element(),
-            // Node::Link { children, url, .. } => Link::new("link")
-            //     .href(url)
-            //     .children(children)
-            //     .into_any_element(),
             Node::Break => div().into_any_element(),
             _ => div().into_any_element(),
         }

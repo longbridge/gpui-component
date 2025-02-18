@@ -10,21 +10,9 @@ This is an additional demonstration paragraph in English demonstrating more cont
 
 ## Heading for Links
 
-Here is a link to [Google](https://www.google.com).
+Here is a link to [Google](https://www.google.com), and another to [Rust](https://www.rust-lang.org).
 
-### Heading for Images
-
-![Rust](https://www.rust-lang.org/logos/rust-logo-blk.svg)
-
-#### Heading for Code
-
-```rust
-fn main() {
-    println!("Hello, World!");
-}
-```
-
-##### Heading for Lists
+### Heading for Lists
 
 - Bullet 1
 - Bullet 2
@@ -38,3 +26,21 @@ fn main() {
    2. Numbered item 1.2
 2. Numbered item 2
 3. Numbered item 3
+
+#### To-Do List
+
+- [x] Task 1
+- [ ] Task 2
+- [ ] Task 3
+
+#### Heading for Images
+
+![Rust](https://www.rust-lang.org/logos/rust-logo-blk.svg)
+
+##### Heading for Code
+
+```rust
+fn main() {
+    println!("Hello, World!");
+}
+```
