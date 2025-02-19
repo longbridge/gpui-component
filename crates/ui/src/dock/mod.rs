@@ -33,6 +33,9 @@ pub enum DockEvent {
     /// This event is emitted when every time the layout of the dock has changed,
     /// So it emits may be too frequently, you may want to debounce the event.
     LayoutChanged,
+
+    /// The drag item drop event.
+    DragItemDropped(AnyDragItem),
 }
 
 /// The main area of the dock.
@@ -217,6 +220,7 @@ impl DockItem {
             move |window, cx| {
                 _ = dock_area.update(cx, |this, cx| {
                     this.subscribe_panel(&tile_panel, window, cx);
+                    this.subscribe_tiles_item_drop(&tile_panel, window, cx);
                 });
             }
         });
@@ -416,6 +420,22 @@ impl DockArea {
         this.subscribe_panel(&stack_panel, window, cx);
 
         this
+    }
+
+    /// Subscribe to the tiles item drag item drop event
+    fn subscribe_tiles_item_drop(
+        &mut self,
+        tile_panel: &Entity<Tiles>,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self._subscriptions.push(cx.subscribe(
+            tile_panel,
+            move |_, _, evt: &DragItemDropped, cx| {
+                let item = evt.0.clone();
+                cx.emit(DockEvent::DragItemDropped(item));
+            },
+        ));
     }
 
     /// Set the panel style of the dock area.

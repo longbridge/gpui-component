@@ -1,4 +1,5 @@
 use std::{
+    any::Any,
     cell::Cell,
     fmt::{Debug, Formatter},
     rc::Rc,
@@ -109,6 +110,19 @@ impl TileItem {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct AnyDragItem {
+    pub value: Arc<dyn Any>,
+}
+
+impl AnyDragItem {
+    pub fn new(value: impl Any) -> Self {
+        Self {
+            value: Arc::new(value),
+        }
+    }
+}
+
 /// Tiles is a canvas that can contain multiple panels, each of which can be dragged and resized.
 pub struct Tiles {
     focus_handle: FocusHandle,
@@ -156,6 +170,11 @@ impl Panel for Tiles {
         state
     }
 }
+
+#[derive(Clone, Debug)]
+pub struct DragItemDropped(pub AnyDragItem);
+
+impl EventEmitter<DragItemDropped> for Tiles {}
 
 impl Tiles {
     pub fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
@@ -326,7 +345,6 @@ impl Tiles {
         cx: &mut Context<Self>,
     ) {
         self.panels.push(item.clone());
-
         window.defer(cx, {
             let panel = item.panel.clone();
             let dock_area = dock_area.clone();
@@ -877,7 +895,10 @@ impl Render for Tiles {
                         )
                         .absolute()
                         .size_full()
-                    }),
+                    })
+                    .on_drop(cx.listener(move |_, item: &AnyDragItem, _, cx| {
+                        cx.emit(DragItemDropped(item.clone()));
+                    })),
             )
             .on_mouse_up(
                 MouseButton::Left,

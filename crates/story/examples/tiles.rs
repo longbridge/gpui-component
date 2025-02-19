@@ -61,6 +61,9 @@ impl StoryTiles {
             window,
             |this, dock_area, ev: &DockEvent, window, cx| match ev {
                 DockEvent::LayoutChanged => this.save_layout(dock_area, window, cx),
+                DockEvent::DragItemDropped(item) => {
+                    println!("DragItemDropped: {:?}", item);
+                }
             },
         )
         .detach();
