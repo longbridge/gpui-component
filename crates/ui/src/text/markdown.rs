@@ -9,7 +9,9 @@ use markdown::{
 
 use crate::v_flex;
 
-use super::element::{self, ImageNode, InlineTextStyle, LinkMark, Paragraph, Span};
+use super::element::{
+    self, ImageNode, InlineTextStyle, LinkMark, Paragraph, Span, Table, TableRow,
+};
 
 /// Markdown GFM renderer
 ///
@@ -76,6 +78,30 @@ impl Render for MarkdownView {
             ),
         })
     }
+}
+
+fn parse_table_row(table: &mut Table, node: &mdast::TableRow) {
+    let mut row = TableRow::default();
+    node.children.iter().for_each(|c| {
+        match c {
+            Node::TableCell(cell) => {
+                parse_table_cell(&mut row, cell);
+            }
+            _ => {}
+        };
+    });
+    table.children.push(row);
+}
+
+fn parse_table_cell(row: &mut element::TableRow, node: &mdast::TableCell) {
+    let mut paragraph = Paragraph::default();
+    node.children.iter().for_each(|c| {
+        parse_paragraph(&mut paragraph, c);
+    });
+    let table_cell = element::TableCell {
+        children: paragraph,
+    };
+    row.children.push(table_cell);
 }
 
 fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node) -> String {
@@ -297,6 +323,16 @@ impl From<mdast::Node> for element::Node {
                 element::Node::Paragraph(paragraph)
             }
             Node::ThematicBreak(_) => element::Node::Divider,
+            Node::Table(val) => {
+                let mut table = Table::default();
+                val.children.iter().for_each(|c| {
+                    if let Node::TableRow(row) = c {
+                        parse_table_row(&mut table, row);
+                    }
+                });
+
+                element::Node::Table(table)
+            }
             _ => {
                 if cfg!(debug_assertions) {
                     eprintln!("[markdown] unsupported node: {:#?}", value);

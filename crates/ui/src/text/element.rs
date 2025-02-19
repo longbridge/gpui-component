@@ -1,12 +1,12 @@
 use std::ops::Range;
 
 use gpui::{
-    div, img, prelude::FluentBuilder as _, px, rems, App, ElementId, FontStyle, FontWeight,
-    HighlightStyle, InteractiveText, IntoElement, ParentElement, Pixels, RenderOnce, SharedString,
-    SharedUri, Styled, StyledText, Window,
+    div, img, prelude::FluentBuilder as _, px, relative, rems, App, ElementId, FontStyle,
+    FontWeight, Half, HighlightStyle, InteractiveElement as _, InteractiveText, IntoElement,
+    Length, ParentElement, Pixels, RenderOnce, SharedString, SharedUri, Styled, StyledText, Window,
 };
 
-use crate::{h_flex, v_flex, ActiveTheme as _, IconName};
+use crate::{h_flex, v_flex, ActiveTheme as _, Icon, IconName};
 
 use super::utils::list_item_prefix;
 
@@ -87,6 +87,21 @@ impl From<String> for Paragraph {
     }
 }
 
+#[derive(Debug, Default, Clone)]
+pub struct Table {
+    pub children: Vec<TableRow>,
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct TableRow {
+    pub children: Vec<TableCell>,
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct TableCell {
+    pub children: Paragraph,
+}
+
 impl Paragraph {
     pub fn set_span(&mut self, span: Span) {
         match self {
@@ -113,6 +128,20 @@ impl Paragraph {
     pub fn set_image(&mut self, image: ImageNode) {
         *self = Self::Image { span: None, image };
     }
+
+    /// Return length of children text.
+    pub fn text_len(&self) -> usize {
+        match self {
+            Self::Texts { children, .. } => {
+                let mut len = 0;
+                for text_node in children.iter() {
+                    len = text_node.text.len().max(len);
+                }
+                len
+            }
+            Self::Image { .. } => 1,
+        }
+    }
 }
 
 #[allow(unused)]
@@ -126,6 +155,7 @@ pub enum Node {
     },
     Blockquote(Paragraph),
     List {
+        /// Only contains ListItem, others will be ignored
         children: Vec<Node>,
         ordered: bool,
     },
@@ -139,6 +169,7 @@ pub enum Node {
         code: SharedString,
         lang: Option<SharedString>,
     },
+    Table(Table),
     // <br>
     Break,
     Divider,
@@ -252,6 +283,7 @@ impl Node {
                             Node::Paragraph(_) => {
                                 items.push(
                                     h_flex()
+                                        .items_center()
                                         .when(!state.todo && checked.is_none(), |this| {
                                             this.child(list_item_prefix(
                                                 ix,
@@ -263,20 +295,18 @@ impl Node {
                                             this.child(
                                                 div()
                                                     .flex()
+                                                    .mr_1p5()
                                                     .size(rems(0.875))
-                                                    .mr_1()
                                                     .items_center()
                                                     .justify_center()
-                                                    .rounded(cx.theme().radius)
-                                                    .border_1()
-                                                    .border_color(cx.theme().border)
-                                                    .bg(cx.theme().accent)
+                                                    .rounded(cx.theme().radius.half())
+                                                    .bg(cx.theme().primary)
+                                                    .text_color(cx.theme().primary_foreground)
                                                     .when(checked, |this| {
                                                         this.child(
-                                                            div()
-                                                                .items_center()
-                                                                .text_xs()
-                                                                .child(IconName::Check),
+                                                            Icon::new(IconName::Check)
+                                                                .size_2()
+                                                                .text_xs(),
                                                         )
                                                     }),
                                             )
@@ -307,6 +337,78 @@ impl Node {
                         }
                     }
                     items
+                })
+                .into_any_element(),
+            _ => div().into_any_element(),
+        }
+    }
+
+    fn render_table(item: &Node, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        const DEFAULT_LENGTH: usize = 5;
+        const MAX_LENGTH: usize = 150;
+        let col_lens = match item {
+            Node::Table(table) => {
+                let mut col_lens = vec![];
+                for row in table.children.iter() {
+                    for (ix, cell) in row.children.iter().enumerate() {
+                        if col_lens.len() <= ix {
+                            col_lens.push(DEFAULT_LENGTH);
+                        }
+
+                        let len = cell.children.text_len();
+                        if len > col_lens[ix] {
+                            col_lens[ix] = len;
+                        }
+                    }
+                }
+                col_lens
+            }
+            _ => vec![],
+        };
+
+        match item {
+            Node::Table(table) => div()
+                .id("table")
+                .mb(rems(1.))
+                .w_full()
+                .border_1()
+                .border_color(cx.theme().border)
+                .rounded(cx.theme().radius)
+                .children({
+                    let mut rows = Vec::with_capacity(table.children.len());
+                    for (row_ix, row) in table.children.iter().enumerate() {
+                        rows.push(
+                            div()
+                                .id("row")
+                                .w_full()
+                                .when(row_ix < table.children.len() - 1, |this| this.border_b_1())
+                                .border_color(cx.theme().border)
+                                .flex()
+                                .flex_row()
+                                .children({
+                                    let mut cells = Vec::with_capacity(row.children.len());
+                                    for (ix, cell) in row.children.iter().enumerate() {
+                                        let len = col_lens
+                                            .get(ix)
+                                            .copied()
+                                            .unwrap_or(MAX_LENGTH)
+                                            .min(MAX_LENGTH);
+
+                                        cells.push(
+                                            div()
+                                                .id("cell")
+                                                .w(Length::Definite(relative(len as f32)))
+                                                .px_2()
+                                                .py_1()
+                                                .truncate()
+                                                .child(cell.children.clone()),
+                                        )
+                                    }
+                                    cells
+                                }),
+                        )
+                    }
+                    rows
                 })
                 .into_any_element(),
             _ => div().into_any_element(),
@@ -384,13 +486,20 @@ impl Node {
                 .relative()
                 .child(code)
                 .into_any_element(),
+            Node::Table { .. } => Self::render_table(&self, window, cx).into_any_element(),
             Node::Divider => div()
                 .bg(cx.theme().border)
                 .h(px(2.))
                 .mb(mb)
                 .into_any_element(),
             Node::Break => div().into_any_element(),
-            _ => div().into_any_element(),
+            _ => {
+                if cfg!(debug_assertions) {
+                    eprintln!("Unknown implementation: {:?}", self);
+                }
+
+                div().into_any_element()
+            }
         }
     }
 }
