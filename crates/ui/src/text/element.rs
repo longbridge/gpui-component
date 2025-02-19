@@ -1,7 +1,7 @@
 use std::ops::Range;
 
 use gpui::{
-    div, img, prelude::FluentBuilder as _, rems, App, ElementId, FontStyle, FontWeight,
+    div, img, prelude::FluentBuilder as _, px, rems, App, ElementId, FontStyle, FontWeight,
     HighlightStyle, InteractiveText, IntoElement, ParentElement, Pixels, RenderOnce, SharedString,
     SharedUri, Styled, StyledText, Window,
 };
@@ -75,6 +75,18 @@ impl Default for Paragraph {
     }
 }
 
+impl From<String> for Paragraph {
+    fn from(value: String) -> Self {
+        Self::Texts {
+            span: None,
+            children: vec![TextNode {
+                text: value.clone(),
+                marks: vec![],
+            }],
+        }
+    }
+}
+
 impl Paragraph {
     pub fn set_span(&mut self, span: Span) {
         match self {
@@ -129,6 +141,7 @@ pub enum Node {
     },
     // <br>
     Break,
+    Divider,
     Unknown,
 }
 
@@ -334,10 +347,10 @@ impl Node {
             Node::Blockquote(children) => div()
                 .w_full()
                 .mb(mb)
-                .bg(cx.theme().accent)
+                .bg(cx.theme().secondary)
                 .border_l_3()
-                .border_color(cx.theme().border)
-                .px_2()
+                .border_color(cx.theme().secondary_active)
+                .px_4()
                 .py_1()
                 .child(children)
                 .into_any_element(),
@@ -365,11 +378,16 @@ impl Node {
             Node::CodeBlock { code, .. } => div()
                 .mb(mb)
                 .rounded(cx.theme().radius)
-                .bg(cx.theme().accent)
+                .bg(cx.theme().secondary)
                 .p_3()
                 .text_size(rems(0.875))
                 .relative()
                 .child(code)
+                .into_any_element(),
+            Node::Divider => div()
+                .bg(cx.theme().border)
+                .h(px(2.))
+                .mb(mb)
                 .into_any_element(),
             Node::Break => div().into_any_element(),
             _ => div().into_any_element(),

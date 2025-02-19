@@ -7,6 +7,8 @@ This is first paragraph, there have **BOLD**, _italic_, and ~strikethrough~, `co
 
 This is an additional demonstration paragraph in English demonstrating more content for [Markdown GFM](https://github.github.com/gfm/). It includes various stylistic elements and plain text.
 
+---
+
 这是一个中文演示段落，用于展示更多的 [Markdown GFM](https://github.github.com/gfm/) 内容。您可以在此尝试使用使用**粗体**、*斜体*和`代码`等样式。これは日本語のデモ段落です。Markdown の多言語サポートを示すためのテキストが含まれています。例えば、、**ボールド**、_イタリック_、および`コード`のスタイルなどを試すことができます。
 
 ## Heading for [Links](https://www.google.com)
@@ -16,6 +18,10 @@ Here is a link to [Google](https://www.google.com), and another to [Rust](https:
 ### Images
 
 ![Rust](https://www.rust-lang.org/logos/rust-logo-blk.svg)
+
+And img with HTML
+
+<img src="https://www.rust-lang.org/logos/rust-logo-blk.svg" alt="Rust" width="100" height="100" />
 
 #### Lists
 
@@ -52,5 +58,26 @@ fn main() {
     println!("Hello, World!");
 }
 ```
+
+## Unsupported
+
+### HTML
+
+<details>
+<summary>Click to expand</summary>
+</details>
+
+### Math
+
+This is an inline math $x^2 + y^2 = z^2$.
+
+This is a block math:
+
+$$
+\begin{aligned}
+x^2 + y^2 &= z^2 \\
+x^3 + y^3 &= z^3
+\end{aligned}
+$$
 
 This is final paragraph, it includes a code block and a list of items.

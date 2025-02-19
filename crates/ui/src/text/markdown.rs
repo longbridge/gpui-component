@@ -12,6 +12,21 @@ use crate::v_flex;
 use super::element::{self, ImageNode, InlineTextStyle, LinkMark, Paragraph, Span};
 
 /// Markdown GFM renderer
+///
+/// This is design goal is to be able to most common Markdown (GFM) features
+/// to let us to display rich text in our application.
+///
+/// The goal:
+///
+/// - For used to help message.
+/// - For used to display like about page.
+/// - Some general style customization (Like base text size, line-height...).
+///
+/// Not in goal:
+///
+/// - As a markdown editor.
+/// - Add custom markdown syntax.
+/// - Complex styles cumstomization.
 pub(super) struct MarkdownView {
     source: SharedString,
     parsed: bool,
@@ -172,7 +187,31 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node) -> String {
                 ..Default::default()
             });
         }
-        _ => {}
+        Node::InlineMath(raw) => {
+            text = raw.value.clone();
+            paragraph.push(element::TextNode {
+                text: text.clone(),
+                marks: vec![(
+                    0..text.len(),
+                    InlineTextStyle {
+                        code: true,
+                        ..Default::default()
+                    },
+                )],
+            });
+        }
+        Node::MdxTextExpression(raw) => {
+            text = raw.value.clone();
+            paragraph.push(element::TextNode {
+                text: text.clone(),
+                marks: vec![(0..text.len(), InlineTextStyle::default())],
+            });
+        }
+        _ => {
+            if cfg!(debug_assertions) {
+                eprintln!("[markdown] unsupported inline node: {:#?}", node);
+            }
+        }
     }
 
     text
@@ -232,7 +271,38 @@ impl From<mdast::Node> for element::Node {
                     children: paragraph,
                 }
             }
-            _ => element::Node::Unknown,
+            Node::Math(val) => element::Node::Paragraph(val.value.into()),
+            Node::Html(val) => element::Node::Paragraph(val.value.into()),
+            Node::MdxFlowExpression(val) => element::Node::Paragraph(val.value.into()),
+            Node::Yaml(val) => element::Node::CodeBlock {
+                code: val.value.into(),
+                lang: Some("yaml".into()),
+            },
+            Node::Toml(val) => element::Node::CodeBlock {
+                code: val.value.into(),
+                lang: Some("toml".into()),
+            },
+            Node::MdxJsxTextElement(val) => {
+                let mut paragraph = Paragraph::default();
+                val.children.iter().for_each(|c| {
+                    parse_paragraph(&mut paragraph, c);
+                });
+                element::Node::Paragraph(paragraph)
+            }
+            Node::MdxJsxFlowElement(val) => {
+                let mut paragraph = Paragraph::default();
+                val.children.iter().for_each(|c| {
+                    parse_paragraph(&mut paragraph, c);
+                });
+                element::Node::Paragraph(paragraph)
+            }
+            Node::ThematicBreak(_) => element::Node::Divider,
+            _ => {
+                if cfg!(debug_assertions) {
+                    eprintln!("[markdown] unsupported node: {:#?}", value);
+                }
+                element::Node::Unknown
+            }
         }
     }
 }
