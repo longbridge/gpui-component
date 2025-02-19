@@ -2,6 +2,7 @@ use gpui::{App, AppContext, Entity, IntoElement, Render, SharedString};
 use markdown::MarkdownView;
 
 mod element;
+mod html;
 mod markdown;
 mod utils;
 

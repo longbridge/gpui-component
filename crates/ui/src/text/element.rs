@@ -173,6 +173,7 @@ pub enum Node {
     // <br>
     Break,
     Divider,
+    Ignore,
     Unknown,
 }
 
@@ -493,6 +494,7 @@ impl Node {
                 .mb(mb)
                 .into_any_element(),
             Node::Break => div().into_any_element(),
+            Node::Ignore => div().into_any_element(),
             _ => {
                 if cfg!(debug_assertions) {
                     eprintln!("Unknown implementation: {:?}", self);

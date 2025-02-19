@@ -9,8 +9,9 @@ use markdown::{
 
 use crate::v_flex;
 
-use super::element::{
-    self, ImageNode, InlineTextStyle, LinkMark, Paragraph, Span, Table, TableRow,
+use super::{
+    element::{self, ImageNode, InlineTextStyle, LinkMark, Paragraph, Span, Table, TableRow},
+    html::parse_html,
 };
 
 /// Markdown GFM renderer
@@ -103,6 +104,10 @@ fn parse_table_cell(row: &mut element::TableRow, node: &mdast::TableCell) {
     };
     row.children.push(table_cell);
 }
+
+// fn parse_html(node: &mdast::Html) -> element::Node {
+
+// }
 
 fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node) -> String {
     let span = node.position().map(|pos| Span {
@@ -301,7 +306,16 @@ impl From<mdast::Node> for element::Node {
                 code: val.value.into(),
                 lang: Some("math".into()),
             },
-            Node::Html(val) => element::Node::Paragraph(val.value.into()),
+            Node::Html(val) => match parse_html(&val.value) {
+                Ok(el) => el,
+                Err(err) => {
+                    if cfg!(debug_assertions) {
+                        eprintln!("[markdown] error parsing html: {:#?}", err);
+                    }
+
+                    element::Node::Paragraph(val.value.into())
+                }
+            },
             Node::MdxFlowExpression(val) => element::Node::CodeBlock {
                 code: val.value.into(),
                 lang: Some("mdx".into()),
