@@ -40,6 +40,7 @@ wry = "0.48.0"
 markdown = "1.0.0-alpha.22"
 # HTML Parser
 html5ever =  "0.27"
+html5ever-atoms = "0.3.0"
 markup5ever_rcdom = "0.3.0"
 
 # Calendar

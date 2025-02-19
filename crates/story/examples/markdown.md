@@ -28,7 +28,7 @@ And img with HTML
 | Header 1 | Header 2 | Header 3                             | Header 4 |
 | -------- | -------- | ------------------------------------ | -------- |
 | Cell 0   | Cell 1   | This is a long cell with line break. | Cell 3   |
-| Row 2    | Row 2    | Row 2\n[Link](https://github.com)    | Row 2    |
+| Row 2    | Row 2    | Row 2<br>[Link](https://github.com)  | Row 2    |
 | Row 3    | **Bold** | Row 3                                | Row 3    |
 
 #### Lists
@@ -73,6 +73,10 @@ fn main() {
 
 <details>
 <summary>Click to expand</summary>
+<div>
+    <p>This is a paragraph inside a details element.</p>
+    <p>This is second paragraph.</p>
+</div>
 </details>
 
 ### Math

@@ -1,9 +1,10 @@
 use std::ops::Range;
 
 use gpui::{
-    div, img, prelude::FluentBuilder as _, px, relative, rems, App, ElementId, FontStyle,
-    FontWeight, Half, HighlightStyle, InteractiveElement as _, InteractiveText, IntoElement,
-    Length, ParentElement, Pixels, RenderOnce, SharedString, SharedUri, Styled, StyledText, Window,
+    div, img, prelude::FluentBuilder as _, px, relative, rems, App, DefiniteLength, ElementId,
+    FontStyle, FontWeight, Half, HighlightStyle, InteractiveElement as _, InteractiveText,
+    IntoElement, Length, ParentElement, RenderOnce, SharedString, SharedUri, Styled, StyledText,
+    Window,
 };
 
 use crate::{h_flex, v_flex, ActiveTheme as _, Icon, IconName};
@@ -11,13 +12,13 @@ use crate::{h_flex, v_flex, ActiveTheme as _, Icon, IconName};
 use super::utils::list_item_prefix;
 
 #[allow(unused)]
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct LinkMark {
     pub url: SharedString,
     pub title: Option<SharedString>,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct InlineTextStyle {
     pub bold: bool,
     pub italic: bool,
@@ -26,7 +27,7 @@ pub struct InlineTextStyle {
     pub link: Option<LinkMark>,
 }
 
-#[derive(Debug, Default, Copy, Clone)]
+#[derive(Debug, Default, Copy, Clone, PartialEq)]
 pub struct Span {
     pub start: usize,
     pub end: usize,
@@ -44,17 +45,23 @@ pub struct ImageNode {
     pub url: SharedUri,
     pub title: Option<SharedString>,
     pub alt: Option<SharedString>,
-    pub width: Option<Pixels>,
-    pub height: Option<Pixels>,
+    pub width: Option<DefiniteLength>,
+    pub height: Option<DefiniteLength>,
 }
 
-#[derive(Debug, Default, Clone)]
+impl PartialEq for ImageNode {
+    fn eq(&self, other: &Self) -> bool {
+        self.url == other.url && self.title == other.title && self.alt == other.alt
+    }
+}
+
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct TextNode {
     pub text: String,
     pub marks: Vec<(Range<usize>, InlineTextStyle)>,
 }
 
-#[derive(Debug, Clone, IntoElement)]
+#[derive(Debug, Clone, PartialEq, IntoElement)]
 pub enum Paragraph {
     Texts {
         span: Option<Span>,
@@ -87,17 +94,17 @@ impl From<String> for Paragraph {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct Table {
     pub children: Vec<TableRow>,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct TableRow {
     pub children: Vec<TableCell>,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct TableCell {
     pub children: Paragraph,
 }
@@ -145,7 +152,7 @@ impl Paragraph {
 }
 
 #[allow(unused)]
-#[derive(Debug, Clone, IntoElement)]
+#[derive(Debug, Clone, IntoElement, PartialEq)]
 pub enum Node {
     Root(Vec<Node>),
     Paragraph(Paragraph),
@@ -175,6 +182,31 @@ pub enum Node {
     Divider,
     Ignore,
     Unknown,
+}
+
+impl Node {
+    fn is_ignore(&self) -> bool {
+        matches!(self, Self::Ignore)
+    }
+
+    /// Combine all children, omitting the empt parent nodes.
+    pub(super) fn compact(&self) -> Node {
+        match self {
+            Self::Root(children) => {
+                let children = children
+                    .iter()
+                    .map(|c| c.compact())
+                    .filter(|c| !c.is_ignore())
+                    .collect::<Vec<_>>();
+                if children.len() == 1 {
+                    children.first().unwrap().compact()
+                } else {
+                    self.clone()
+                }
+            }
+            _ => self.clone(),
+        }
+    }
 }
 
 impl RenderOnce for Paragraph {

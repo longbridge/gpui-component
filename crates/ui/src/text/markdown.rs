@@ -238,6 +238,24 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node) -> String {
                 marks: vec![(0..text.len(), InlineTextStyle::default())],
             });
         }
+        Node::Html(val) => match parse_html(&val.value) {
+            Ok(el) => {
+                if el == element::Node::Break {
+                    text.push_str("\n");
+                } else {
+                    if cfg!(debug_assertions) {
+                        eprintln!("[markdown] unsupprted inline html tag: {:#?}", el);
+                    }
+                }
+            }
+            Err(err) => {
+                if cfg!(debug_assertions) {
+                    eprintln!("[markdown] error parsing html: {:#?}", err);
+                }
+
+                text.push_str(&val.value);
+            }
+        },
         _ => {
             if cfg!(debug_assertions) {
                 eprintln!("[markdown] unsupported inline node: {:#?}", node);
