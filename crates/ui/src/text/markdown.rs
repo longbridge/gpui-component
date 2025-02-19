@@ -246,6 +246,6 @@ mod tests {
         let source = include_str!("../../../story/examples/markdown.md");
         let mut renderer = MarkdownView::new(source);
         renderer.parse_if_needed();
-        println!("{:#?}", renderer.root);
+        // println!("{:#?}", renderer.root);
     }
 }

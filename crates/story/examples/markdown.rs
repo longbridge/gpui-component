@@ -6,11 +6,11 @@ pub struct Example {
     text_view: Entity<TextView>,
 }
 
-const EXMAPLE: &str = include_str!("./markdown.md");
+const EXAMPLE: &str = include_str!("./markdown.md");
 
 impl Example {
     pub fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
-        let text_view = cx.new(|cx| TextView::markdown(EXMAPLE, cx));
+        let text_view = cx.new(|cx| TextView::markdown(EXAMPLE, cx));
 
         Self { text_view }
     }
@@ -36,7 +36,7 @@ impl Render for Example {
                     .flex_1()
                     .p_5()
                     .overflow_y_scroll()
-                    .child(EXMAPLE),
+                    .child(EXAMPLE),
             )
             .child(
                 div()
