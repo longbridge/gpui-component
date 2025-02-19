@@ -35,7 +35,7 @@ pub enum DockEvent {
     LayoutChanged,
 
     /// The drag item drop event.
-    DragItemDropped(AnyDrag),
+    DragDrop(AnyDrag),
 }
 
 /// The main area of the dock.
@@ -432,7 +432,7 @@ impl DockArea {
         self._subscriptions
             .push(cx.subscribe(tile_panel, move |_, _, evt: &DragDrop, cx| {
                 let item = evt.0.clone();
-                cx.emit(DockEvent::DragItemDropped(item));
+                cx.emit(DockEvent::DragDrop(item));
             }));
     }
 
