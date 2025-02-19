@@ -19,9 +19,55 @@ Here is a link to [Google](https://www.google.com), and another to [Rust](https:
 
 ![Rust](https://www.rust-lang.org/logos/rust-logo-blk.svg)
 
-And img with HTML
+### HTML
+
+#### Paragraph and Text
+
+<div>
+<p>This is a paragraph inside a div element, have <a href="https://google.com">link</a>, <strong>bold</strong>, <em>italic</em>, and <code>code</code> text.</p>
+<div>
+    <p>This is second paragraph.</p>
+</div>
+</div>
+
+#### List
+
+<ol>
+<li>Numbered item 1</li>
+<li>Numbered item 2</li>
+</ol>
+
+<ul>
+<li>Bullet 1</li>
+<li>Bullet 2</li>
+</ul>
+
+#### Table
+
+<table>
+<thead>
+<tr>
+<td>Head 1</td>
+<td>Head 2</td>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Cell</strong> 1</td>
+<td>Cell 2</td>
+</tr>
+<tr>
+<td>Cell 3</td>
+<td>Cell 4</td>
+</tr>
+</tbody>
+</table>
+
+#### Image
 
 <img src="https://www.rust-lang.org/logos/rust-logo-blk.svg" alt="Rust" width="100" height="100" />
+<img src="https://www.rust-lang.org/logos/rust-logo-blk.svg" alt="Rust" width="100%" />
+<img src="https://www.rust-lang.org/logos/rust-logo-blk.svg" alt="Rust" style="width:100%" />
 
 ### Table
 
@@ -74,7 +120,7 @@ fn main() {
 <details>
 <summary>Click to expand</summary>
 <div>
-    <p>This is a paragraph inside a details element.</p>
+    <p>This is a paragraph <a href="https://google.com">inside</a> a details element.</p>
     <p>This is second paragraph.</p>
 </div>
 </details>

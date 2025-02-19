@@ -101,13 +101,10 @@ fn parse_table_cell(row: &mut element::TableRow, node: &mdast::TableCell) {
     });
     let table_cell = element::TableCell {
         children: paragraph,
+        ..Default::default()
     };
     row.children.push(table_cell);
 }
-
-// fn parse_html(node: &mdast::Html) -> element::Node {
-
-// }
 
 fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node) -> String {
     let span = node.position().map(|pos| Span {

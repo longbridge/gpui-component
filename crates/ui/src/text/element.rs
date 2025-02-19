@@ -107,6 +107,7 @@ pub struct TableRow {
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct TableCell {
     pub children: Paragraph,
+    pub width: Option<DefiniteLength>,
 }
 
 impl Paragraph {

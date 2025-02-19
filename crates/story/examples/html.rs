@@ -6,11 +6,11 @@ pub struct Example {
     text_view: Entity<TextView>,
 }
 
-const EXAMPLE: &str = include_str!("./markdown.md");
+const EXAMPLE: &str = include_str!("./html.html");
 
 impl Example {
     pub fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
-        let text_view = cx.new(|cx| TextView::markdown(EXAMPLE, cx));
+        let text_view = cx.new(|cx| TextView::html(EXAMPLE, cx));
 
         Self { text_view }
     }
@@ -60,6 +60,6 @@ fn main() {
         story::init(cx);
         cx.activate(true);
 
-        story::create_new_window("Markdown Example", Example::view, cx);
+        story::create_new_window("HTML Example", Example::view, cx);
     });
 }

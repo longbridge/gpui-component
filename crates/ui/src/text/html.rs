@@ -2,13 +2,18 @@ extern crate markup5ever_rcdom as rcdom;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::ops::Range;
+use std::rc::Rc;
 
-use gpui::{px, relative, DefiniteLength};
+use gpui::{
+    div, px, relative, Context, DefiniteLength, IntoElement, ParentElement as _, Render,
+    SharedString,
+};
 use html5ever::tendril::TendrilSink;
 use html5ever::{local_name, parse_document, LocalName, ParseOpts};
-use markup5ever_rcdom::{Handle, NodeData, RcDom};
+use markup5ever_rcdom::{Handle, Node, NodeData, RcDom};
 
-use super::element::{self, ImageNode, Paragraph};
+use super::element::{self, ImageNode, InlineTextStyle, Paragraph, Table, TableRow};
 
 pub(super) fn parse_html(source: &str) -> Result<element::Node, std::io::Error> {
     let opts = ParseOpts {
@@ -23,7 +28,51 @@ pub(super) fn parse_html(source: &str) -> Result<element::Node, std::io::Error> 
 
     let node: element::Node = dom.document.into();
 
+    println!("----- dom: {:?}", node);
+
     Ok(node.compact())
+}
+
+pub struct HtmlView {
+    source: SharedString,
+    parsed: bool,
+    node: Option<element::Node>,
+}
+
+impl HtmlView {
+    pub fn new(source: impl Into<SharedString>) -> Self {
+        Self {
+            source: source.into(),
+            parsed: false,
+            node: None,
+        }
+    }
+
+    pub fn set_source(&mut self, source: impl Into<SharedString>, cx: &mut Context<Self>) {
+        self.source = source.into();
+        self.parsed = false;
+        self.node = None;
+        cx.notify();
+    }
+
+    fn parse_if_needed(&mut self) {
+        if !self.parsed {
+            self.node = parse_html(&self.source).ok();
+            self.parsed = true;
+        }
+    }
+}
+
+impl Render for HtmlView {
+    fn render(&mut self, _: &mut gpui::Window, _: &mut Context<'_, Self>) -> impl IntoElement {
+        self.parse_if_needed();
+
+        if let Some(node) = &self.node {
+            div().child(node.clone())
+        } else {
+            div()
+        }
+    }
 }
 
 fn attr_value(attrs: &RefCell<Vec<html5ever::Attribute>>, name: LocalName) -> Option<String> {
@@ -113,6 +162,193 @@ fn attr_width_height(
     (width, height)
 }
 
+fn parse_table_row(table: &mut Table, node: &Rc<Node>) {
+    let mut row = TableRow::default();
+    let mut count = 0;
+    for child in node.children.borrow().iter() {
+        match child.data {
+            NodeData::Element {
+                ref name,
+                ref attrs,
+                ..
+            } if name.local == local_name!("td") || name.local == local_name!("th") => {
+                if child.children.borrow().is_empty() {
+                    continue;
+                }
+
+                count += 1;
+                parse_table_cell(&mut row, child, attrs);
+            }
+            _ => {}
+        }
+    }
+
+    if count > 0 {
+        table.children.push(row);
+    }
+}
+
+fn parse_table_cell(
+    row: &mut element::TableRow,
+    node: &Rc<Node>,
+    attrs: &RefCell<Vec<html5ever::Attribute>>,
+) {
+    let mut paragraph = Paragraph::default();
+    for child in node.children.borrow().iter() {
+        parse_paragraph(&mut paragraph, child);
+    }
+    let width = attr_width_height(attrs).0;
+    let table_cell = element::TableCell {
+        children: paragraph,
+        width,
+    };
+    row.children.push(table_cell);
+}
+
+fn parse_paragraph(
+    paragraph: &mut Paragraph,
+    node: &Rc<Node>,
+) -> (String, Vec<(Range<usize>, InlineTextStyle)>) {
+    let mut text = String::new();
+    let mut marks = vec![];
+
+    match &node.data {
+        NodeData::Text { ref contents } => {
+            text.push_str(&contents.borrow().trim());
+            paragraph.push(element::TextNode {
+                text: text.clone(),
+                marks: vec![],
+            });
+        }
+        NodeData::Element { name, attrs, .. } => match name.local {
+            local_name!("em") | local_name!("i") => {
+                let mut child_paragraph = Paragraph::default();
+                for child in node.children.borrow().iter() {
+                    let (child_text, child_marks) = parse_paragraph(&mut child_paragraph, &child);
+                    text.push_str(&child_text);
+                    marks.extend(child_marks);
+                }
+                marks.push((
+                    0..text.len(),
+                    InlineTextStyle {
+                        italic: true,
+                        ..Default::default()
+                    },
+                ));
+                paragraph.push(element::TextNode {
+                    text: text.clone(),
+                    marks: marks.clone(),
+                });
+            }
+            local_name!("strong") | local_name!("b") => {
+                let mut child_paragraph = Paragraph::default();
+                for child in node.children.borrow().iter() {
+                    let (child_text, child_marks) = parse_paragraph(&mut child_paragraph, &child);
+                    text.push_str(&child_text);
+                    marks.extend(child_marks);
+                }
+                marks.push((
+                    0..text.len(),
+                    InlineTextStyle {
+                        bold: true,
+                        ..Default::default()
+                    },
+                ));
+                paragraph.push(element::TextNode {
+                    text: text.clone(),
+                    marks: marks.clone(),
+                });
+            }
+            local_name!("del") | local_name!("s") => {
+                let mut child_paragraph = Paragraph::default();
+                for child in node.children.borrow().iter() {
+                    let (child_text, child_marks) = parse_paragraph(&mut child_paragraph, &child);
+                    text.push_str(&child_text);
+                    marks.extend(child_marks);
+                }
+                marks.push((
+                    0..text.len(),
+                    InlineTextStyle {
+                        strikethrough: true,
+                        ..Default::default()
+                    },
+                ));
+                paragraph.push(element::TextNode {
+                    text: text.clone(),
+                    marks: marks.clone(),
+                });
+            }
+            local_name!("code") => {
+                let mut child_paragraph = Paragraph::default();
+                for child in node.children.borrow().iter() {
+                    let (child_text, child_marks) = parse_paragraph(&mut child_paragraph, &child);
+                    text.push_str(&child_text);
+                    marks.extend(child_marks);
+                }
+                marks.push((
+                    0..text.len(),
+                    InlineTextStyle {
+                        code: true,
+                        ..Default::default()
+                    },
+                ));
+                paragraph.push(element::TextNode {
+                    text: text.clone(),
+                    marks: marks.clone(),
+                });
+            }
+            local_name!("a") => {
+                let mut child_paragraph = Paragraph::default();
+                for child in node.children.borrow().iter() {
+                    let (child_text, child_marks) = parse_paragraph(&mut child_paragraph, &child);
+                    text.push_str(&child_text);
+                    marks.extend(child_marks);
+                }
+                marks.push((
+                    0..text.len(),
+                    InlineTextStyle {
+                        link: Some(element::LinkMark {
+                            url: attr_value(&attrs, local_name!("href")).unwrap().into(),
+                            title: attr_value(&attrs, local_name!("title")).map(Into::into),
+                        }),
+                        ..Default::default()
+                    },
+                ));
+                paragraph.push(element::TextNode {
+                    text: text.clone(),
+                    marks: marks.clone(),
+                });
+            }
+            local_name!("img") => {
+                let src = attr_value(&attrs, local_name!("src")).unwrap();
+                let alt = attr_value(&attrs, local_name!("alt"));
+                let title = attr_value(&attrs, local_name!("title"));
+                let (width, height) = attr_width_height(&attrs);
+
+                paragraph.set_image(ImageNode {
+                    url: src.into(),
+                    alt: alt.map(Into::into),
+                    width,
+                    height,
+                    title: title.map(Into::into),
+                });
+            }
+            _ => {
+                if cfg!(debug_assertions) {
+                    eprintln!("[html] unsupported node: {:#?}", node);
+                }
+            }
+        },
+        _ => {
+            if cfg!(debug_assertions) {
+                eprintln!("[html] unsupported node: {:#?}", node);
+            }
+        }
+    }
+
+    (text, marks)
+}
+
 impl From<Handle> for element::Node {
     fn from(node: Handle) -> Self {
         match &node.data {
@@ -157,6 +393,26 @@ impl From<Handle> for element::Node {
                         children.push(child.clone().into());
                     }
                     element::Node::Root(children)
+                }
+                local_name!("table") => {
+                    let mut table = Table::default();
+                    for child in node.children.borrow().iter() {
+                        match child.data {
+                            NodeData::Element { ref name, .. }
+                                if name.local == local_name!("tbody")
+                                    || name.local == local_name!("thead") =>
+                            {
+                                for sub_child in child.children.borrow().iter() {
+                                    parse_table_row(&mut table, &sub_child);
+                                }
+                            }
+                            _ => {
+                                parse_table_row(&mut table, &child);
+                            }
+                        }
+                    }
+
+                    element::Node::Table(table)
                 }
                 _ => {
                     let mut children: Vec<element::Node> = vec![];
