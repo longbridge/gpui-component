@@ -111,11 +111,11 @@ impl TileItem {
 }
 
 #[derive(Clone, Debug)]
-pub struct AnyDragItem {
+pub struct AnyDrag {
     pub value: Arc<dyn Any>,
 }
 
-impl AnyDragItem {
+impl AnyDrag {
     pub fn new(value: impl Any) -> Self {
         Self {
             value: Arc::new(value),
@@ -172,9 +172,9 @@ impl Panel for Tiles {
 }
 
 #[derive(Clone, Debug)]
-pub struct DragItemDropped(pub AnyDragItem);
+pub struct DragDrop(pub AnyDrag);
 
-impl EventEmitter<DragItemDropped> for Tiles {}
+impl EventEmitter<DragDrop> for Tiles {}
 
 impl Tiles {
     pub fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
@@ -896,8 +896,8 @@ impl Render for Tiles {
                         .absolute()
                         .size_full()
                     })
-                    .on_drop(cx.listener(move |_, item: &AnyDragItem, _, cx| {
-                        cx.emit(DragItemDropped(item.clone()));
+                    .on_drop(cx.listener(move |_, item: &AnyDrag, _, cx| {
+                        cx.emit(DragDrop(item.clone()));
                     })),
             )
             .on_mouse_up(
