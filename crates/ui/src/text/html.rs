@@ -27,10 +27,10 @@ pub(super) fn parse_html(source: &str) -> Result<element::Node, std::io::Error> 
         .read_from(&mut bytes)?;
 
     let node: element::Node = dom.document.into();
-
+    let node = node.compact();
     println!("----- dom: {:?}", node);
 
-    Ok(node.compact())
+    Ok(node)
 }
 
 pub struct HtmlView {
@@ -354,10 +354,10 @@ impl From<Handle> for element::Node {
         match &node.data {
             NodeData::Text { ref contents } => {
                 let text = contents.borrow().trim().to_string();
-                if text.len() > 0 {
-                    element::Node::Paragraph(text.into())
-                } else {
+                if text.is_empty() {
                     element::Node::Ignore
+                } else {
+                    element::Node::Paragraph(text.into())
                 }
             }
             NodeData::Element {
@@ -392,7 +392,10 @@ impl From<Handle> for element::Node {
                     for child in node.children.borrow().iter() {
                         children.push(child.clone().into());
                     }
-                    element::Node::Root(children)
+                    element::Node::Root {
+                        children,
+                        text: None,
+                    }
                 }
                 local_name!("table") => {
                     let mut table = Table::default();
@@ -422,7 +425,10 @@ impl From<Handle> for element::Node {
                     if children.is_empty() {
                         element::Node::Ignore
                     } else {
-                        element::Node::Root(children)
+                        element::Node::Root {
+                            children,
+                            text: None,
+                        }
                     }
                 }
             },
@@ -431,7 +437,10 @@ impl From<Handle> for element::Node {
                 for child in node.children.borrow().iter() {
                     children.push(child.clone().into());
                 }
-                element::Node::Root(children)
+                element::Node::Root {
+                    children,
+                    text: None,
+                }
             }
             NodeData::Doctype { .. } => element::Node::Ignore,
             NodeData::Comment { .. } => element::Node::Ignore,

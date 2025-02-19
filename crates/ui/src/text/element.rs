@@ -155,10 +155,14 @@ impl Paragraph {
 #[allow(unused)]
 #[derive(Debug, Clone, IntoElement, PartialEq)]
 pub enum Node {
-    Root(Vec<Node>),
+    Root {
+        text: Option<TextNode>,
+        children: Vec<Node>,
+    },
     Paragraph(Paragraph),
     Heading {
         level: u8,
+        text: Option<TextNode>,
         children: Paragraph,
     },
     Blockquote(Paragraph),
@@ -193,7 +197,11 @@ impl Node {
     /// Combine all children, omitting the empt parent nodes.
     pub(super) fn compact(&self) -> Node {
         match self {
-            Self::Root(children) => {
+            Self::Root { children, text } => {
+                if text.is_some() {
+                    return self.clone();
+                }
+
                 let children = children
                     .iter()
                     .map(|c| c.compact())
@@ -265,19 +273,15 @@ impl RenderOnce for Paragraph {
                     .map(|(range, _)| range.clone())
                     .collect::<Vec<_>>();
 
-                div()
-                    .w_auto()
-                    .whitespace_normal()
-                    .child(
-                        InteractiveText::new(element_id, styled_text).on_click(link_ranges, {
-                            let links = links.clone();
-                            move |ix, _, cx| {
-                                if let Some((_, link)) = &links.get(ix) {
-                                    cx.open_url(&link.url);
-                                }
+                InteractiveText::new(element_id, styled_text)
+                    .on_click(link_ranges, {
+                        let links = links.clone();
+                        move |ix, _, cx| {
+                            if let Some((_, link)) = &links.get(ix) {
+                                cx.open_url(&link.url);
                             }
-                        }),
-                    )
+                        }
+                    })
                     .into_any_element()
             }
             Self::Image { image, .. } => img(image.url)
@@ -459,9 +463,13 @@ impl Node {
         let mb = if in_list { rems(0.0) } else { rems(1.) };
 
         match self {
-            Node::Root(children) => v_flex().w_full().children(children).into_any_element(),
+            Node::Root { children, .. } => div().children(children).into_any_element(),
             Node::Paragraph(paragraph) => div().mb(mb).child(paragraph).into_any_element(),
-            Node::Heading { level, children } => {
+            Node::Heading {
+                level,
+                children,
+                text,
+            } => {
                 let (text_size, font_weight) = match level {
                     1 => (rems(2.), FontWeight::BOLD),
                     2 => (rems(1.5), FontWeight::SEMIBOLD),
@@ -477,6 +485,7 @@ impl Node {
                     .whitespace_normal()
                     .text_size(text_size)
                     .font_weight(font_weight)
+                    .when_some(text, |this, text| this.child(text.text))
                     .child(children)
                     .into_any_element()
             }
