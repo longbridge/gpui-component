@@ -11,7 +11,7 @@ use gpui::{
 };
 use html5ever::tendril::TendrilSink;
 use html5ever::{local_name, parse_document, LocalName, ParseOpts};
-use markup5ever_rcdom::{Handle, Node, NodeData, RcDom};
+use markup5ever_rcdom::{Node, NodeData, RcDom};
 
 use super::element::{self, ImageNode, InlineTextStyle, Paragraph, Table, TableRow};
 
@@ -26,9 +26,10 @@ pub(super) fn parse_html(source: &str) -> Result<element::Node, std::io::Error> 
         .from_utf8()
         .read_from(&mut bytes)?;
 
-    let node: element::Node = dom.document.into();
+    let mut inline_text_buf = String::new();
+    let node: element::Node = parse_node(&dom.document, &mut inline_text_buf);
     let node = node.compact();
-    println!("----- dom: {:?}", node);
+    // println!("----- dom: {:?}", node);
 
     Ok(node)
 }
@@ -215,10 +216,6 @@ fn parse_paragraph(
     match &node.data {
         NodeData::Text { ref contents } => {
             text.push_str(&contents.borrow().trim());
-            paragraph.push(element::TextNode {
-                text: text.clone(),
-                marks: vec![],
-            });
         }
         NodeData::Element { name, attrs, .. } => match name.local {
             local_name!("em") | local_name!("i") => {
@@ -349,103 +346,108 @@ fn parse_paragraph(
     (text, marks)
 }
 
-impl From<Handle> for element::Node {
-    fn from(node: Handle) -> Self {
-        match &node.data {
-            NodeData::Text { ref contents } => {
-                let text = contents.borrow().trim().to_string();
-                if text.is_empty() {
-                    element::Node::Ignore
-                } else {
-                    element::Node::Paragraph(text.into())
-                }
+fn parse_node(node: &Rc<Node>, inline_text_buf: &mut String) -> element::Node {
+    match node.data {
+        NodeData::Text { ref contents } => {
+            let text = contents.borrow().trim().to_string();
+            inline_text_buf.push_str(&text);
+
+            element::Node::Ignore
+        }
+        NodeData::Element {
+            ref name,
+            ref attrs,
+            ..
+        } => match name.local {
+            local_name!("br") => element::Node::Break,
+            local_name!("img") => {
+                let Some(src) = attr_value(attrs, local_name!("src")) else {
+                    if cfg!(debug_assertions) {
+                        eprintln!("[html] Image node missing src attribute");
+                    }
+                    return element::Node::Ignore;
+                };
+
+                let alt = attr_value(attrs, local_name!("alt"));
+                let title = attr_value(attrs, local_name!("title"));
+                let (width, height) = attr_width_height(attrs);
+
+                element::Node::Paragraph(Paragraph::Image {
+                    span: None,
+                    image: ImageNode {
+                        url: src.into(),
+                        alt: alt.map(Into::into),
+                        width,
+                        height,
+                        title: title.map(Into::into),
+                    },
+                })
             }
-            NodeData::Element {
-                ref name, attrs, ..
-            } => match name.local {
-                local_name!("br") => element::Node::Break,
-                local_name!("img") => {
-                    let Some(src) = attr_value(attrs, local_name!("src")) else {
-                        if cfg!(debug_assertions) {
-                            eprintln!("[html] Image node missing src attribute");
-                        }
-                        return element::Node::Ignore;
-                    };
-
-                    let alt = attr_value(attrs, local_name!("alt"));
-                    let title = attr_value(attrs, local_name!("title"));
-                    let (width, height) = attr_width_height(attrs);
-
-                    element::Node::Paragraph(Paragraph::Image {
-                        span: None,
-                        image: ImageNode {
-                            url: src.into(),
-                            alt: alt.map(Into::into),
-                            width,
-                            height,
-                            title: title.map(Into::into),
-                        },
-                    })
-                }
-                local_name!("div") => {
-                    let mut children = vec![];
-                    for child in node.children.borrow().iter() {
-                        children.push(child.clone().into());
-                    }
-                    element::Node::Root {
-                        children,
-                        text: None,
-                    }
-                }
-                local_name!("table") => {
-                    let mut table = Table::default();
-                    for child in node.children.borrow().iter() {
-                        match child.data {
-                            NodeData::Element { ref name, .. }
-                                if name.local == local_name!("tbody")
-                                    || name.local == local_name!("thead") =>
-                            {
-                                for sub_child in child.children.borrow().iter() {
-                                    parse_table_row(&mut table, &sub_child);
-                                }
-                            }
-                            _ => {
-                                parse_table_row(&mut table, &child);
-                            }
-                        }
-                    }
-
-                    element::Node::Table(table)
-                }
-                _ => {
-                    let mut children: Vec<element::Node> = vec![];
-                    for child in node.children.borrow().iter() {
-                        children.push(child.clone().into());
-                    }
-                    if children.is_empty() {
-                        element::Node::Ignore
-                    } else {
-                        element::Node::Root {
-                            children,
-                            text: None,
-                        }
-                    }
-                }
-            },
-            NodeData::Document => {
+            local_name!("div") => {
                 let mut children = vec![];
                 for child in node.children.borrow().iter() {
-                    children.push(child.clone().into());
+                    children.push(parse_node(child, inline_text_buf));
                 }
+                let text = inline_text_buf.clone();
+                inline_text_buf.clear();
+
                 element::Node::Root {
                     children,
-                    text: None,
+                    text: if text.is_empty() { None } else { Some(text) },
                 }
             }
-            NodeData::Doctype { .. } => element::Node::Ignore,
-            NodeData::Comment { .. } => element::Node::Ignore,
-            NodeData::ProcessingInstruction { .. } => element::Node::Ignore,
+            local_name!("table") => {
+                let mut table = Table::default();
+                for child in node.children.borrow().iter() {
+                    match child.data {
+                        NodeData::Element { ref name, .. }
+                            if name.local == local_name!("tbody")
+                                || name.local == local_name!("thead") =>
+                        {
+                            for sub_child in child.children.borrow().iter() {
+                                parse_table_row(&mut table, &sub_child);
+                            }
+                        }
+                        _ => {
+                            parse_table_row(&mut table, &child);
+                        }
+                    }
+                }
+
+                element::Node::Table(table)
+            }
+            _ => {
+                let mut children: Vec<element::Node> = vec![];
+                for child in node.children.borrow().iter() {
+                    children.push(parse_node(child, inline_text_buf));
+                }
+                if children.is_empty() {
+                    element::Node::Ignore
+                } else {
+                    let text = inline_text_buf.clone();
+                    inline_text_buf.clear();
+                    element::Node::Root {
+                        children,
+                        text: if text.is_empty() { None } else { Some(text) },
+                    }
+                }
+            }
+        },
+        NodeData::Document => {
+            let mut children = vec![];
+            for child in node.children.borrow().iter() {
+                children.push(parse_node(child, inline_text_buf));
+            }
+            let text = inline_text_buf.clone();
+            inline_text_buf.clear();
+            element::Node::Root {
+                children,
+                text: if text.is_empty() { None } else { Some(text) },
+            }
         }
+        NodeData::Doctype { .. } => element::Node::Ignore,
+        NodeData::Comment { .. } => element::Node::Ignore,
+        NodeData::ProcessingInstruction { .. } => element::Node::Ignore,
     }
 }
 

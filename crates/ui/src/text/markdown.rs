@@ -319,7 +319,6 @@ impl From<mdast::Node> for element::Node {
                 element::Node::Heading {
                     level: val.depth,
                     children: paragraph,
-                    text: None,
                 }
             }
             Node::Math(val) => element::Node::CodeBlock {

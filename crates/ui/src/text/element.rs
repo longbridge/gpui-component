@@ -7,7 +7,7 @@ use gpui::{
     Window,
 };
 
-use crate::{h_flex, v_flex, ActiveTheme as _, Icon, IconName};
+use crate::{h_flex, v_flex, ActiveTheme as _, Icon, IconName, StyledExt};
 
 use super::utils::list_item_prefix;
 
@@ -156,13 +156,12 @@ impl Paragraph {
 #[derive(Debug, Clone, IntoElement, PartialEq)]
 pub enum Node {
     Root {
-        text: Option<TextNode>,
+        text: Option<String>,
         children: Vec<Node>,
     },
     Paragraph(Paragraph),
     Heading {
         level: u8,
-        text: Option<TextNode>,
         children: Paragraph,
     },
     Blockquote(Paragraph),
@@ -463,13 +462,12 @@ impl Node {
         let mb = if in_list { rems(0.0) } else { rems(1.) };
 
         match self {
-            Node::Root { children, .. } => div().children(children).into_any_element(),
+            Node::Root { children, text } => div()
+                .when_some(text, |this, text| this.child(text))
+                .children(children)
+                .into_any_element(),
             Node::Paragraph(paragraph) => div().mb(mb).child(paragraph).into_any_element(),
-            Node::Heading {
-                level,
-                children,
-                text,
-            } => {
+            Node::Heading { level, children } => {
                 let (text_size, font_weight) = match level {
                     1 => (rems(2.), FontWeight::BOLD),
                     2 => (rems(1.5), FontWeight::SEMIBOLD),
@@ -485,7 +483,6 @@ impl Node {
                     .whitespace_normal()
                     .text_size(text_size)
                     .font_weight(font_weight)
-                    .when_some(text, |this, text| this.child(text.text))
                     .child(children)
                     .into_any_element()
             }
