@@ -297,9 +297,15 @@ impl From<mdast::Node> for element::Node {
                     children: paragraph,
                 }
             }
-            Node::Math(val) => element::Node::Paragraph(val.value.into()),
+            Node::Math(val) => element::Node::CodeBlock {
+                code: val.value.into(),
+                lang: Some("math".into()),
+            },
             Node::Html(val) => element::Node::Paragraph(val.value.into()),
-            Node::MdxFlowExpression(val) => element::Node::Paragraph(val.value.into()),
+            Node::MdxFlowExpression(val) => element::Node::CodeBlock {
+                code: val.value.into(),
+                lang: Some("mdx".into()),
+            },
             Node::Yaml(val) => element::Node::CodeBlock {
                 code: val.value.into(),
                 lang: Some("yaml".into()),
@@ -309,6 +315,7 @@ impl From<mdast::Node> for element::Node {
                 lang: Some("toml".into()),
             },
             Node::MdxJsxTextElement(val) => {
+                println!("MdxJsxTextElement: {:#?}", val);
                 let mut paragraph = Paragraph::default();
                 val.children.iter().for_each(|c| {
                     parse_paragraph(&mut paragraph, c);
@@ -316,6 +323,7 @@ impl From<mdast::Node> for element::Node {
                 element::Node::Paragraph(paragraph)
             }
             Node::MdxJsxFlowElement(val) => {
+                println!("MdxJsxFlowElement: {:#?}", val);
                 let mut paragraph = Paragraph::default();
                 val.children.iter().for_each(|c| {
                     parse_paragraph(&mut paragraph, c);

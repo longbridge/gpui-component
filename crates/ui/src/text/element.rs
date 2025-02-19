@@ -449,7 +449,7 @@ impl Node {
             Node::Blockquote(children) => div()
                 .w_full()
                 .mb(mb)
-                .bg(cx.theme().secondary)
+                .text_color(cx.theme().muted_foreground)
                 .border_l_3()
                 .border_color(cx.theme().secondary_active)
                 .px_4()
