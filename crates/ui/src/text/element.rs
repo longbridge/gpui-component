@@ -3,8 +3,8 @@ use std::ops::Range;
 use gpui::{
     div, img, prelude::FluentBuilder as _, px, relative, rems, App, DefiniteLength, ElementId,
     FontStyle, FontWeight, Half, HighlightStyle, InteractiveElement as _, InteractiveText,
-    IntoElement, Length, ParentElement, RenderOnce, SharedString, SharedUri, Styled, StyledText,
-    Window,
+    IntoElement, Length, ObjectFit, ParentElement, RenderOnce, SharedString, SharedUri, Styled,
+    StyledImage as _, StyledText, Window,
 };
 
 use crate::{h_flex, v_flex, ActiveTheme as _, Icon, IconName};
@@ -308,8 +308,9 @@ impl RenderOnce for Paragraph {
                     .into_any_element()
             }
             Self::Image { image, .. } => img(image.url)
+                .object_fit(ObjectFit::Contain)
+                .max_w(relative(1.))
                 .when_some(image.width, |this, width| this.w(width))
-                .when_some(image.height, |this, height| this.h(height))
                 .into_any_element(),
         }
     }

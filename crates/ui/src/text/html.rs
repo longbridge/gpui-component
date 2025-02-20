@@ -75,22 +75,22 @@ pub(super) fn parse_html(source: &str) -> Result<element::Node, std::io::Error> 
 }
 
 pub struct HtmlView {
-    source: SharedString,
+    text: SharedString,
     parsed: bool,
     node: Option<element::Node>,
 }
 
 impl HtmlView {
-    pub fn new(source: impl Into<SharedString>) -> Self {
+    pub fn new(raw: impl Into<SharedString>) -> Self {
         Self {
-            source: source.into(),
+            text: raw.into(),
             parsed: false,
             node: None,
         }
     }
 
-    pub fn set_source(&mut self, source: impl Into<SharedString>, cx: &mut Context<Self>) {
-        self.source = source.into();
+    pub fn set_text(&mut self, raw: impl Into<SharedString>, cx: &mut Context<Self>) {
+        self.text = raw.into();
         self.parsed = false;
         self.node = None;
         cx.notify();
@@ -98,7 +98,7 @@ impl HtmlView {
 
     fn parse_if_needed(&mut self) {
         if !self.parsed {
-            self.node = parse_html(&self.source).ok();
+            self.node = parse_html(&self.text).ok();
             self.parsed = true;
         }
     }

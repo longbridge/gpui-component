@@ -15,20 +15,20 @@ pub enum TextView {
 
 impl TextView {
     /// Create a new markdown text view.
-    pub fn markdown(source: impl Into<SharedString>, cx: &mut App) -> Self {
-        Self::Markdown(cx.new(|_| MarkdownView::new(source)))
+    pub fn markdown(raw: impl Into<SharedString>, cx: &mut App) -> Self {
+        Self::Markdown(cx.new(|_| MarkdownView::new(raw)))
     }
 
     /// Create a new html text view.
-    pub fn html(source: impl Into<SharedString>, cx: &mut App) -> Self {
-        Self::Html(cx.new(|_| HtmlView::new(source)))
+    pub fn html(raw: impl Into<SharedString>, cx: &mut App) -> Self {
+        Self::Html(cx.new(|_| HtmlView::new(raw)))
     }
 
-    /// Set the source of the text view.
-    pub fn set_source(&mut self, source: impl Into<SharedString>, cx: &mut App) {
+    /// Set the source text of the text view.
+    pub fn set_text(&mut self, raw: impl Into<SharedString>, cx: &mut App) {
         match self {
-            Self::Markdown(view) => view.update(cx, |this, cx| this.set_source(source, cx)),
-            Self::Html(view) => view.update(cx, |this, cx| this.set_source(source, cx)),
+            Self::Markdown(view) => view.update(cx, |this, cx| this.set_text(raw, cx)),
+            Self::Html(view) => view.update(cx, |this, cx| this.set_text(raw, cx)),
         }
     }
 }

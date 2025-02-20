@@ -31,23 +31,23 @@ use super::{
 /// - Add custom markdown syntax.
 /// - Complex styles cumstomization.
 pub(super) struct MarkdownView {
-    source: SharedString,
+    text: SharedString,
     parsed: bool,
     root: Option<Result<element::Node, markdown::message::Message>>,
 }
 
 impl MarkdownView {
-    pub(super) fn new(source: impl Into<SharedString>) -> Self {
+    pub(super) fn new(raw: impl Into<SharedString>) -> Self {
         Self {
-            source: source.into(),
+            text: raw.into(),
             parsed: false,
             root: None,
         }
     }
 
     /// Set the source of the markdown view.
-    pub(crate) fn set_source(&mut self, source: impl Into<SharedString>, cx: &mut Context<Self>) {
-        self.source = source.into();
+    pub(crate) fn set_text(&mut self, raw: impl Into<SharedString>, cx: &mut Context<Self>) {
+        self.text = raw.into();
         self.parsed = false;
         cx.notify();
     }
@@ -57,7 +57,7 @@ impl MarkdownView {
             return;
         }
 
-        self.root = Some(markdown::to_mdast(&self.source, &ParseOptions::gfm()).map(|n| n.into()));
+        self.root = Some(markdown::to_mdast(&self.text, &ParseOptions::gfm()).map(|n| n.into()));
         self.parsed = true;
     }
 }
