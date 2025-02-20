@@ -13,7 +13,9 @@ use html5ever::tendril::TendrilSink;
 use html5ever::{local_name, parse_document, LocalName, ParseOpts};
 use markup5ever_rcdom::{Node, NodeData, RcDom};
 
-use super::element::{self, ImageNode, InlineTextStyle, Paragraph, Table, TableRow};
+use super::element::{
+    self, ImageNode, InlineTextStyle, LinkMark, Paragraph, Table, TableRow, TextNode,
+};
 
 const BLOCK_ELEMENTS: [&str; 33] = [
     "html",
@@ -244,6 +246,25 @@ fn parse_table_cell(
     row.children.push(table_cell);
 }
 
+/// Trim text but leave at least one space.
+///
+/// - Before: " \r\n Hello world \t "
+/// - After: " Hello world "
+fn trim_text(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+
+    for (i, c) in text.chars().enumerate() {
+        if c.is_whitespace() {
+            if i > 0 && out.ends_with(' ') {
+                continue;
+            }
+        }
+        out.push(c);
+    }
+
+    out
+}
+
 fn parse_paragraph(
     paragraph: &mut Paragraph,
     node: &Rc<Node>,
@@ -251,11 +272,24 @@ fn parse_paragraph(
     let mut text = String::new();
     let mut marks = vec![];
 
+    /// Append new_text and new_marks to text and marks.
+    fn merge_child_text(
+        text: &mut String,
+        marks: &mut Vec<(Range<usize>, InlineTextStyle)>,
+        new_text: &str,
+        new_marks: &[(Range<usize>, InlineTextStyle)],
+    ) {
+        let offset = text.len();
+        text.push_str(new_text);
+        for (range, style) in new_marks {
+            marks.push((range.start + offset..range.end + offset, style.clone()));
+        }
+    }
+
     match &node.data {
         NodeData::Text { ref contents } => {
-            // Do no remove spaces
-            // TODO: maybe here need replace [\s]+ to " ".
-            text.push_str(&contents.borrow().trim());
+            let part = trim_text(&contents.borrow());
+            text.push_str(&part);
             paragraph.push_str(&text);
         }
         NodeData::Element { name, attrs, .. } => match name.local {
@@ -263,8 +297,7 @@ fn parse_paragraph(
                 let mut child_paragraph = Paragraph::default();
                 for child in node.children.borrow().iter() {
                     let (child_text, child_marks) = parse_paragraph(&mut child_paragraph, &child);
-                    text.push_str(&child_text.trim());
-                    marks.extend(child_marks);
+                    merge_child_text(&mut text, &mut marks, &child_text, &child_marks);
                 }
                 marks.push((
                     0..text.len(),
@@ -282,8 +315,7 @@ fn parse_paragraph(
                 let mut child_paragraph = Paragraph::default();
                 for child in node.children.borrow().iter() {
                     let (child_text, child_marks) = parse_paragraph(&mut child_paragraph, &child);
-                    text.push_str(&child_text.trim());
-                    marks.extend(child_marks);
+                    merge_child_text(&mut text, &mut marks, &child_text, &child_marks);
                 }
 
                 marks.push((
@@ -293,7 +325,7 @@ fn parse_paragraph(
                         ..Default::default()
                     },
                 ));
-                paragraph.push(element::TextNode {
+                paragraph.push(TextNode {
                     text: text.clone(),
                     marks: marks.clone(),
                 });
@@ -302,8 +334,7 @@ fn parse_paragraph(
                 let mut child_paragraph = Paragraph::default();
                 for child in node.children.borrow().iter() {
                     let (child_text, child_marks) = parse_paragraph(&mut child_paragraph, &child);
-                    text.push_str(&child_text.trim());
-                    marks.extend(child_marks);
+                    merge_child_text(&mut text, &mut marks, &child_text, &child_marks);
                 }
                 marks.push((
                     0..text.len(),
@@ -312,7 +343,7 @@ fn parse_paragraph(
                         ..Default::default()
                     },
                 ));
-                paragraph.push(element::TextNode {
+                paragraph.push(TextNode {
                     text: text.clone(),
                     marks: marks.clone(),
                 });
@@ -321,8 +352,7 @@ fn parse_paragraph(
                 let mut child_paragraph = Paragraph::default();
                 for child in node.children.borrow().iter() {
                     let (child_text, child_marks) = parse_paragraph(&mut child_paragraph, &child);
-                    text.push_str(&child_text.trim());
-                    marks.extend(child_marks);
+                    merge_child_text(&mut text, &mut marks, &child_text, &child_marks);
                 }
                 marks.push((
                     0..text.len(),
@@ -331,7 +361,7 @@ fn parse_paragraph(
                         ..Default::default()
                     },
                 ));
-                paragraph.push(element::TextNode {
+                paragraph.push(TextNode {
                     text: text.clone(),
                     marks: marks.clone(),
                 });
@@ -340,20 +370,20 @@ fn parse_paragraph(
                 let mut child_paragraph = Paragraph::default();
                 for child in node.children.borrow().iter() {
                     let (child_text, child_marks) = parse_paragraph(&mut child_paragraph, &child);
-                    text.push_str(&child_text.trim());
-                    marks.extend(child_marks);
+                    merge_child_text(&mut text, &mut marks, &child_text, &child_marks);
                 }
+
                 marks.push((
                     0..text.len(),
                     InlineTextStyle {
-                        link: Some(element::LinkMark {
+                        link: Some(LinkMark {
                             url: attr_value(&attrs, local_name!("href")).unwrap().into(),
                             title: attr_value(&attrs, local_name!("title")).map(Into::into),
                         }),
                         ..Default::default()
                     },
                 ));
-                paragraph.push(element::TextNode {
+                paragraph.push(TextNode {
                     text: text.clone(),
                     marks: marks.clone(),
                 });
@@ -370,7 +400,7 @@ fn parse_paragraph(
                 let title = attr_value(attrs, local_name!("title"));
                 let (width, height) = attr_width_height(attrs);
 
-                paragraph.set_image(element::ImageNode {
+                paragraph.set_image(ImageNode {
                     url: src.into(),
                     alt: alt.map(Into::into),
                     width,
@@ -383,8 +413,7 @@ fn parse_paragraph(
                 let mut child_paragraph = Paragraph::default();
                 for child in node.children.borrow().iter() {
                     let (child_text, child_marks) = parse_paragraph(&mut child_paragraph, &child);
-                    text.push_str(&child_text.trim());
-                    marks.extend(child_marks);
+                    merge_child_text(&mut text, &mut marks, &child_text, &child_marks);
                 }
                 paragraph.push(element::TextNode {
                     text: text.clone(),
@@ -396,8 +425,7 @@ fn parse_paragraph(
             let mut child_paragraph = Paragraph::default();
             for child in node.children.borrow().iter() {
                 let (child_text, child_marks) = parse_paragraph(&mut child_paragraph, &child);
-                text.push_str(&child_text.trim());
-                marks.extend(child_marks);
+                merge_child_text(&mut text, &mut marks, &child_text, &child_marks);
             }
             paragraph.push(element::TextNode {
                 text: text.clone(),
@@ -514,19 +542,6 @@ fn parse_node(node: &Rc<Node>, paragraph: &mut Paragraph) -> element::Node {
                     checked: None,
                 }
             }
-            local_name!("div") => {
-                let mut children = vec![];
-                for child in node.children.borrow().iter() {
-                    children.push(parse_node(child, paragraph));
-                }
-
-                if !paragraph.is_empty() {
-                    children.insert(0, element::Node::Paragraph(paragraph.clone()));
-                    paragraph.clear();
-                }
-
-                element::Node::Root { children }
-            }
             local_name!("table") => {
                 let mut table = Table::default();
                 for child in node.children.borrow().iter() {
@@ -604,8 +619,15 @@ mod tests {
 
     use crate::text::element::{Node, Paragraph};
 
+    use super::trim_text;
+
     #[test]
-    fn value_to_length() {
+    fn test_trim_text() {
+        assert_eq!(trim_text("  \n\tHello world \t\r "), " Hello world ",);
+    }
+
+    #[test]
+    fn test_value_to_length() {
         assert_eq!(super::value_to_length("100px"), Some(px(100.).into()));
         assert_eq!(super::value_to_length("100%"), Some(relative(1.)));
         assert_eq!(super::value_to_length("56%"), Some(relative(0.56)));

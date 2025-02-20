@@ -57,7 +57,9 @@ impl PartialEq for ImageNode {
 
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct TextNode {
+    /// The text content.
     pub text: String,
+    /// The text styles, each tuple contains the range of the text and the style.
     pub marks: Vec<(Range<usize>, InlineTextStyle)>,
 }
 
@@ -244,9 +246,12 @@ impl RenderOnce for Paragraph {
                 let mut offset = 0;
 
                 for text_node in children.into_iter() {
+                    let text_len = text_node.text.len();
                     text.push_str(&text_node.text);
 
                     for (range, style) in text_node.marks {
+                        let inner_range = (offset + range.start)..(offset + range.end);
+
                         let mut highlight = HighlightStyle::default();
                         if style.bold {
                             highlight.font_weight = Some(FontWeight::BOLD);
@@ -264,21 +269,19 @@ impl RenderOnce for Paragraph {
                             highlight.background_color = Some(cx.theme().accent);
                         }
 
-                        let new_range = (range.start + offset)..(range.end + offset);
-
                         if let Some(link_mark) = style.link {
                             highlight.color = Some(cx.theme().link);
                             highlight.underline = Some(gpui::UnderlineStyle {
                                 thickness: gpui::px(1.),
                                 ..Default::default()
                             });
-                            links.push((new_range.clone(), link_mark));
+                            links.push((inner_range.clone(), link_mark));
                         }
 
-                        offset += range.end - range.start;
-
-                        highlights.push((new_range, highlight));
+                        highlights.push((inner_range, highlight));
                     }
+
+                    offset += text_len;
                 }
 
                 let text_style = window.text_style();
