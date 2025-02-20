@@ -24,10 +24,12 @@ Here is a link to [Google](https://www.google.com), and another to [Rust](https:
 #### Paragraph and Text
 
 <div>
-<p>This is a paragraph inside a div element, have <a href="https://google.com">link</a>, <strong>bold</strong>, <em>italic</em>, and <code>code</code> text.</p>
-<div>
-    <p>This is second paragraph.</p>
-</div>
+    Here is a test in div.
+    <p>This is a paragraph inside a div element, have <a href="https://google.com">link</a>, <strong>bold</strong>, <em>italic</em>, and <code>code</code> text.</p>
+    <div>
+        <p>This is second paragraph.</p>
+    </div>
+    A text after div.
 </div>
 
 #### List

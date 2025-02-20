@@ -7,7 +7,7 @@ use gpui::{
     Window,
 };
 
-use crate::{h_flex, v_flex, ActiveTheme as _, Icon, IconName, StyledExt};
+use crate::{h_flex, v_flex, ActiveTheme as _, Icon, IconName};
 
 use super::utils::list_item_prefix;
 
@@ -191,6 +191,10 @@ pub enum Node {
 impl Node {
     fn is_ignore(&self) -> bool {
         matches!(self, Self::Ignore)
+    }
+
+    fn is_list_item(&self) -> bool {
+        matches!(self, Self::ListItem { .. })
     }
 
     /// Combine all children, omitting the empt parent nodes.
@@ -501,7 +505,10 @@ impl Node {
                 .children({
                     let mut items = Vec::with_capacity(children.len());
                     let list_state = list_state.unwrap_or_default();
-                    for (ix, item) in children.into_iter().enumerate() {
+                    let mut ix = 0;
+                    for item in children.into_iter() {
+                        let is_item = item.is_list_item();
+
                         items.push(Self::render_list_item(
                             item,
                             ix,
@@ -512,7 +519,11 @@ impl Node {
                             },
                             window,
                             cx,
-                        ))
+                        ));
+
+                        if is_item {
+                            ix += 1;
+                        }
                     }
                     items
                 })

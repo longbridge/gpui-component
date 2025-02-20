@@ -12,6 +12,7 @@ use gpui::{
 use html5ever::tendril::TendrilSink;
 use html5ever::{local_name, parse_document, LocalName, ParseOpts};
 use markup5ever_rcdom::{Node, NodeData, RcDom};
+use resvg::render_node;
 
 use super::element::{self, ImageNode, InlineTextStyle, Paragraph, Table, TableRow};
 
@@ -216,6 +217,10 @@ fn parse_paragraph(
     match &node.data {
         NodeData::Text { ref contents } => {
             text.push_str(&contents.borrow().trim());
+            paragraph.push(element::TextNode {
+                text: text.clone(),
+                marks: marks.clone(),
+            });
         }
         NodeData::Element { name, attrs, .. } => match name.local {
             local_name!("em") | local_name!("i") => {
@@ -350,9 +355,11 @@ fn parse_node(node: &Rc<Node>, inline_text_buf: &mut String) -> element::Node {
     match node.data {
         NodeData::Text { ref contents } => {
             let text = contents.borrow().trim().to_string();
-            inline_text_buf.push_str(&text);
-
-            element::Node::Ignore
+            if text.len() > 0 {
+                element::Node::Paragraph(text.into())
+            } else {
+                element::Node::Ignore
+            }
         }
         NodeData::Element {
             ref name,
@@ -360,6 +367,30 @@ fn parse_node(node: &Rc<Node>, inline_text_buf: &mut String) -> element::Node {
             ..
         } => match name.local {
             local_name!("br") => element::Node::Break,
+            local_name!("h1")
+            | local_name!("h2")
+            | local_name!("h3")
+            | local_name!("h4")
+            | local_name!("h5")
+            | local_name!("h6") => {
+                let level = name
+                    .local
+                    .chars()
+                    .last()
+                    .unwrap_or('6')
+                    .to_digit(10)
+                    .unwrap_or(6) as u8;
+
+                let mut paragraph = Paragraph::default();
+                for child in node.children.borrow().iter() {
+                    parse_paragraph(&mut paragraph, child);
+                }
+
+                element::Node::Heading {
+                    level,
+                    children: paragraph,
+                }
+            }
             local_name!("img") => {
                 let Some(src) = attr_value(attrs, local_name!("src")) else {
                     if cfg!(debug_assertions) {
@@ -382,6 +413,30 @@ fn parse_node(node: &Rc<Node>, inline_text_buf: &mut String) -> element::Node {
                         title: title.map(Into::into),
                     },
                 })
+            }
+            local_name!("ul") | local_name!("ol") => {
+                let ordered = name.local == local_name!("ol");
+
+                let mut children = vec![];
+                for child in node.children.borrow().iter() {
+                    children.push(parse_node(child, inline_text_buf));
+                }
+
+                element::Node::List { children, ordered }
+            }
+            local_name!("li") => {
+                let mut children = vec![];
+                for child in node.children.borrow().iter() {
+                    children.push(parse_node(child, inline_text_buf));
+                }
+
+                println!("li children: {:?}, text: {}", children, inline_text_buf);
+
+                element::Node::ListItem {
+                    children,
+                    spread: false,
+                    checked: None,
+                }
             }
             local_name!("div") => {
                 let mut children = vec![];
