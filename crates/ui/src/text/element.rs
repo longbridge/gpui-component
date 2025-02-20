@@ -111,6 +111,17 @@ pub struct TableCell {
 }
 
 impl Paragraph {
+    pub fn clear(&mut self) {
+        match self {
+            Self::Texts { children, .. } => children.clear(),
+            Self::Image { .. } => *self = Self::default(),
+        }
+    }
+
+    pub fn is_image(&self) -> bool {
+        matches!(self, Self::Image { .. })
+    }
+
     pub fn set_span(&mut self, span: Span) {
         match self {
             Self::Texts { span: s, .. } => *s = Some(span),
@@ -137,6 +148,13 @@ impl Paragraph {
         *self = Self::Image { span: None, image };
     }
 
+    pub fn is_empty(&self) -> bool {
+        match self {
+            Self::Texts { .. } => self.text_len() == 0,
+            Self::Image { .. } => false,
+        }
+    }
+
     /// Return length of children text.
     pub fn text_len(&self) -> usize {
         match self {
@@ -156,7 +174,6 @@ impl Paragraph {
 #[derive(Debug, Clone, IntoElement, PartialEq)]
 pub enum Node {
     Root {
-        text: Option<String>,
         children: Vec<Node>,
     },
     Paragraph(Paragraph),
@@ -200,11 +217,7 @@ impl Node {
     /// Combine all children, omitting the empt parent nodes.
     pub(super) fn compact(&self) -> Node {
         match self {
-            Self::Root { children, text } => {
-                if text.is_some() {
-                    return self.clone();
-                }
-
+            Self::Root { children } => {
                 let children = children
                     .iter()
                     .map(|c| c.compact())
@@ -466,10 +479,7 @@ impl Node {
         let mb = if in_list { rems(0.0) } else { rems(1.) };
 
         match self {
-            Node::Root { children, text } => div()
-                .when_some(text, |this, text| this.child(text))
-                .children(children)
-                .into_any_element(),
+            Node::Root { children } => div().children(children).into_any_element(),
             Node::Paragraph(paragraph) => div().mb(mb).child(paragraph).into_any_element(),
             Node::Heading { level, children } => {
                 let (text_size, font_weight) = match level {

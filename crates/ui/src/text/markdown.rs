@@ -269,10 +269,7 @@ impl From<mdast::Node> for element::Node {
         match value {
             Node::Root(val) => {
                 let children = val.children.into_iter().map(|c| c.into()).collect();
-                element::Node::Root {
-                    children,
-                    text: None,
-                }
+                element::Node::Root { children }
             }
             Node::Paragraph(val) => {
                 let mut paragraph = Paragraph::default();

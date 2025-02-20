@@ -12,25 +12,107 @@ use gpui::{
 use html5ever::tendril::TendrilSink;
 use html5ever::{local_name, parse_document, LocalName, ParseOpts};
 use markup5ever_rcdom::{Node, NodeData, RcDom};
-use resvg::render_node;
 
 use super::element::{self, ImageNode, InlineTextStyle, Paragraph, Table, TableRow};
+
+const BLOCK_ELEMENTS: [&str; 32] = [
+    "html",
+    "body",
+    "head",
+    "address",
+    "article",
+    "aside",
+    "blockquote",
+    "details",
+    "dialog",
+    "div",
+    "dl",
+    "fieldset",
+    "figcaption",
+    "figure",
+    "footer",
+    "form",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "header",
+    "hr",
+    "main",
+    "nav",
+    "ol",
+    "p",
+    "pre",
+    "section",
+    "table",
+    "ul",
+];
+
+fn is_whitespace(c: char) -> bool {
+    c == ' ' || c == '\t' || c == '\n' || c == '\r'
+}
+
+/// Remove unnecessary whitespaces in HTML.
+fn trim_whitespace_in_html(text: &str) -> String {
+    let mut result = String::with_capacity(text.len());
+    let mut in_tag = false;
+    let mut in_whitespace = false;
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        let next_c = chars.peek();
+
+        match c {
+            '<' => {
+                in_tag = true;
+                in_whitespace = false;
+                result.push(c);
+            }
+            '>' => {
+                in_tag = false;
+                in_whitespace = false;
+                result.push(c);
+            }
+            _ => {
+                if is_whitespace(c) {
+                    if in_tag {
+                        in_whitespace = true;
+                    } else if !in_whitespace {
+                        in_whitespace = true;
+                        if let Some(next_c) = next_c {
+                            if !is_whitespace(*next_c) {
+                                result.push(' ');
+                            }
+                        }
+                    }
+                } else {
+                    in_whitespace = false;
+                    result.push(c);
+                }
+            }
+        }
+    }
+
+    result
+}
 
 pub(super) fn parse_html(source: &str) -> Result<element::Node, std::io::Error> {
     let opts = ParseOpts {
         ..Default::default()
     };
-    let mut bytes = source.as_bytes();
+    let html = trim_whitespace_in_html(&source);
+    let mut bytes = html.as_bytes();
     // Ref
     // https://github.com/servo/html5ever/blob/main/rcdom/examples/print-rcdom.rs
     let dom = parse_document(RcDom::default(), opts)
         .from_utf8()
         .read_from(&mut bytes)?;
 
-    let mut inline_text_buf = String::new();
-    let node: element::Node = parse_node(&dom.document, &mut inline_text_buf);
+    let mut paragraph = Paragraph::default();
+    // NOTE: The outter paragraph is not used.
+    let node: element::Node = parse_node(&dom.document, &mut paragraph);
     let node = node.compact();
-    // println!("----- dom: {:?}", node);
 
     Ok(node)
 }
@@ -216,11 +298,10 @@ fn parse_paragraph(
 
     match &node.data {
         NodeData::Text { ref contents } => {
-            text.push_str(&contents.borrow().trim());
-            paragraph.push(element::TextNode {
-                text: text.clone(),
-                marks: marks.clone(),
-            });
+            // Do no remove spaces
+            // TODO: maybe here need replace [\s]+ to " ".
+            text.push_str(&contents.borrow());
+            paragraph.push_str(&text);
         }
         NodeData::Element { name, attrs, .. } => match name.local {
             local_name!("em") | local_name!("i") => {
@@ -249,6 +330,7 @@ fn parse_paragraph(
                     text.push_str(&child_text);
                     marks.extend(child_marks);
                 }
+
                 marks.push((
                     0..text.len(),
                     InlineTextStyle {
@@ -322,12 +404,18 @@ fn parse_paragraph(
                 });
             }
             local_name!("img") => {
-                let src = attr_value(&attrs, local_name!("src")).unwrap();
-                let alt = attr_value(&attrs, local_name!("alt"));
-                let title = attr_value(&attrs, local_name!("title"));
-                let (width, height) = attr_width_height(&attrs);
+                let Some(src) = attr_value(attrs, local_name!("src")) else {
+                    if cfg!(debug_assertions) {
+                        eprintln!("[html] Image node missing src attribute");
+                    }
+                    return (text, marks);
+                };
 
-                paragraph.set_image(ImageNode {
+                let alt = attr_value(attrs, local_name!("alt"));
+                let title = attr_value(attrs, local_name!("title"));
+                let (width, height) = attr_width_height(attrs);
+
+                paragraph.set_image(element::ImageNode {
                     url: src.into(),
                     alt: alt.map(Into::into),
                     width,
@@ -336,30 +424,45 @@ fn parse_paragraph(
                 });
             }
             _ => {
-                if cfg!(debug_assertions) {
-                    eprintln!("[html] unsupported node: {:#?}", node);
+                // All unknown tags to as text
+                let mut child_paragraph = Paragraph::default();
+                for child in node.children.borrow().iter() {
+                    let (child_text, child_marks) = parse_paragraph(&mut child_paragraph, &child);
+                    text.push_str(&child_text);
+                    marks.extend(child_marks);
                 }
+                paragraph.push(element::TextNode {
+                    text: text.clone(),
+                    marks: marks.clone(),
+                });
             }
         },
         _ => {
-            if cfg!(debug_assertions) {
-                eprintln!("[html] unsupported node: {:#?}", node);
+            let mut child_paragraph = Paragraph::default();
+            for child in node.children.borrow().iter() {
+                let (child_text, child_marks) = parse_paragraph(&mut child_paragraph, &child);
+                text.push_str(&child_text);
+                marks.extend(child_marks);
             }
+            paragraph.push(element::TextNode {
+                text: text.clone(),
+                marks: marks.clone(),
+            });
         }
     }
 
     (text, marks)
 }
 
-fn parse_node(node: &Rc<Node>, inline_text_buf: &mut String) -> element::Node {
+fn parse_node(node: &Rc<Node>, paragraph: &mut Paragraph) -> element::Node {
     match node.data {
         NodeData::Text { ref contents } => {
-            let text = contents.borrow().trim().to_string();
+            let text = contents.borrow().to_string();
             if text.len() > 0 {
-                element::Node::Paragraph(text.into())
-            } else {
-                element::Node::Ignore
+                paragraph.push_str(&text);
             }
+
+            element::Node::Ignore
         }
         NodeData::Element {
             ref name,
@@ -392,25 +495,19 @@ fn parse_node(node: &Rc<Node>, inline_text_buf: &mut String) -> element::Node {
                 }
             }
             local_name!("img") => {
-                let Some(src) = attr_value(attrs, local_name!("src")) else {
-                    if cfg!(debug_assertions) {
-                        eprintln!("[html] Image node missing src attribute");
-                    }
-                    return element::Node::Ignore;
-                };
-
-                let alt = attr_value(attrs, local_name!("alt"));
-                let title = attr_value(attrs, local_name!("title"));
-                let (width, height) = attr_width_height(attrs);
+                let src = attr_value(&attrs, local_name!("src")).unwrap();
+                let alt = attr_value(&attrs, local_name!("alt"));
+                let title = attr_value(&attrs, local_name!("title"));
+                let (width, height) = attr_width_height(&attrs);
 
                 element::Node::Paragraph(Paragraph::Image {
                     span: None,
                     image: ImageNode {
                         url: src.into(),
+                        title: title.map(Into::into),
                         alt: alt.map(Into::into),
                         width,
                         height,
-                        title: title.map(Into::into),
                     },
                 })
             }
@@ -419,7 +516,17 @@ fn parse_node(node: &Rc<Node>, inline_text_buf: &mut String) -> element::Node {
 
                 let mut children = vec![];
                 for child in node.children.borrow().iter() {
-                    children.push(parse_node(child, inline_text_buf));
+                    let mut child_paragraph = Paragraph::default();
+                    children.push(parse_node(child, &mut child_paragraph));
+                    if child_paragraph.text_len() > 0 {
+                        children.insert(0, element::Node::Paragraph(child_paragraph.clone()));
+                        child_paragraph.clear();
+                    }
+                }
+
+                if !paragraph.is_empty() {
+                    children.insert(0, element::Node::Paragraph(paragraph.clone()));
+                    paragraph.clear();
                 }
 
                 element::Node::List { children, ordered }
@@ -427,10 +534,18 @@ fn parse_node(node: &Rc<Node>, inline_text_buf: &mut String) -> element::Node {
             local_name!("li") => {
                 let mut children = vec![];
                 for child in node.children.borrow().iter() {
-                    children.push(parse_node(child, inline_text_buf));
+                    let mut child_paragraph = Paragraph::default();
+                    children.push(parse_node(child, &mut child_paragraph));
+                    if child_paragraph.text_len() > 0 {
+                        children.push(element::Node::Paragraph(child_paragraph.clone()));
+                        child_paragraph.clear();
+                    }
                 }
 
-                println!("li children: {:?}, text: {}", children, inline_text_buf);
+                if !paragraph.is_empty() {
+                    children.insert(0, element::Node::Paragraph(paragraph.clone()));
+                    paragraph.clear();
+                }
 
                 element::Node::ListItem {
                     children,
@@ -441,15 +556,15 @@ fn parse_node(node: &Rc<Node>, inline_text_buf: &mut String) -> element::Node {
             local_name!("div") => {
                 let mut children = vec![];
                 for child in node.children.borrow().iter() {
-                    children.push(parse_node(child, inline_text_buf));
+                    children.push(parse_node(child, paragraph));
                 }
-                let text = inline_text_buf.clone();
-                inline_text_buf.clear();
 
-                element::Node::Root {
-                    children,
-                    text: if text.is_empty() { None } else { Some(text) },
+                if !paragraph.is_empty() {
+                    children.insert(0, element::Node::Paragraph(paragraph.clone()));
+                    paragraph.clear();
                 }
+
+                element::Node::Root { children }
             }
             local_name!("table") => {
                 let mut table = Table::default();
@@ -472,18 +587,31 @@ fn parse_node(node: &Rc<Node>, inline_text_buf: &mut String) -> element::Node {
                 element::Node::Table(table)
             }
             _ => {
-                let mut children: Vec<element::Node> = vec![];
-                for child in node.children.borrow().iter() {
-                    children.push(parse_node(child, inline_text_buf));
-                }
-                if children.is_empty() {
-                    element::Node::Ignore
+                if BLOCK_ELEMENTS.contains(&name.local.trim()) {
+                    // All know block elements
+                    let mut children: Vec<element::Node> = vec![];
+                    for child in node.children.borrow().iter() {
+                        children.push(parse_node(child, paragraph));
+                    }
+                    if children.is_empty() {
+                        element::Node::Ignore
+                    } else {
+                        if !paragraph.is_empty() {
+                            children.push(element::Node::Paragraph(paragraph.clone()));
+                            paragraph.clear();
+                        }
+
+                        element::Node::Root { children }
+                    }
                 } else {
-                    let text = inline_text_buf.clone();
-                    inline_text_buf.clear();
-                    element::Node::Root {
-                        children,
-                        text: if text.is_empty() { None } else { Some(text) },
+                    // Others to as Inline
+                    parse_paragraph(paragraph, node);
+                    if paragraph.is_image() {
+                        let image = paragraph.clone();
+                        paragraph.clear();
+                        element::Node::Paragraph(image)
+                    } else {
+                        element::Node::Ignore
                     }
                 }
             }
@@ -491,14 +619,15 @@ fn parse_node(node: &Rc<Node>, inline_text_buf: &mut String) -> element::Node {
         NodeData::Document => {
             let mut children = vec![];
             for child in node.children.borrow().iter() {
-                children.push(parse_node(child, inline_text_buf));
+                children.push(parse_node(child, paragraph));
             }
-            let text = inline_text_buf.clone();
-            inline_text_buf.clear();
-            element::Node::Root {
-                children,
-                text: if text.is_empty() { None } else { Some(text) },
+
+            if !paragraph.is_empty() {
+                children.push(element::Node::Paragraph(paragraph.clone()));
+                paragraph.clear();
             }
+
+            element::Node::Root { children }
         }
         NodeData::Doctype { .. } => element::Node::Ignore,
         NodeData::Comment { .. } => element::Node::Ignore,
@@ -511,6 +640,20 @@ mod tests {
     use gpui::{px, relative};
 
     use crate::text::element::{Node, Paragraph};
+
+    #[test]
+    fn test_trim_whitespace_in_html() {
+        let html = r#"<div>
+            Hello
+            <p>  Hello World <span>Hello</span> 的  </p>
+            <p>  Hello World  </p>
+        </div>"#;
+        let result = super::trim_whitespace_in_html(html);
+        assert_eq!(
+            result,
+            r#"<div>Hello<p>Hello World <span>Hello</span> 的</p><p>Hello World</p></div>"#
+        );
+    }
 
     #[test]
     fn value_to_length() {
