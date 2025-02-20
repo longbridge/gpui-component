@@ -42,6 +42,7 @@ markdown = "1.0.0-alpha.22"
 html5ever =  "0.27"
 html5ever-atoms = "0.3.0"
 markup5ever_rcdom = "0.3.0"
+minify-html = "0.15.0"
 
 # Calendar
 chrono = "0.4.38"

@@ -15,7 +15,7 @@ use markup5ever_rcdom::{Node, NodeData, RcDom};
 
 use super::element::{self, ImageNode, InlineTextStyle, Paragraph, Table, TableRow};
 
-const BLOCK_ELEMENTS: [&str; 32] = [
+const BLOCK_ELEMENTS: [&str; 33] = [
     "html",
     "body",
     "head",
@@ -24,6 +24,7 @@ const BLOCK_ELEMENTS: [&str; 32] = [
     "aside",
     "blockquote",
     "details",
+    "summary",
     "dialog",
     "div",
     "dl",
@@ -50,64 +51,18 @@ const BLOCK_ELEMENTS: [&str; 32] = [
     "ul",
 ];
 
-fn is_whitespace(c: char) -> bool {
-    c == ' ' || c == '\t' || c == '\n' || c == '\r'
-}
-
-/// Remove unnecessary whitespaces in HTML.
-fn trim_whitespace_in_html(text: &str) -> String {
-    let mut result = String::with_capacity(text.len());
-    let mut in_tag = false;
-    let mut in_whitespace = false;
-    let mut chars = text.chars().peekable();
-    while let Some(c) = chars.next() {
-        let next_c = chars.peek();
-
-        match c {
-            '<' => {
-                in_tag = true;
-                in_whitespace = false;
-                result.push(c);
-            }
-            '>' => {
-                in_tag = false;
-                in_whitespace = false;
-                result.push(c);
-            }
-            _ => {
-                if is_whitespace(c) {
-                    if in_tag {
-                        in_whitespace = true;
-                    } else if !in_whitespace {
-                        in_whitespace = true;
-                        if let Some(next_c) = next_c {
-                            if !is_whitespace(*next_c) {
-                                result.push(' ');
-                            }
-                        }
-                    }
-                } else {
-                    in_whitespace = false;
-                    result.push(c);
-                }
-            }
-        }
-    }
-
-    result
-}
-
 pub(super) fn parse_html(source: &str) -> Result<element::Node, std::io::Error> {
     let opts = ParseOpts {
         ..Default::default()
     };
-    let html = trim_whitespace_in_html(&source);
-    let mut bytes = html.as_bytes();
+
+    let bytes = minify_html::minify(source.as_bytes(), &minify_html::Cfg::default());
+    let mut cursor = std::io::Cursor::new(bytes);
     // Ref
     // https://github.com/servo/html5ever/blob/main/rcdom/examples/print-rcdom.rs
     let dom = parse_document(RcDom::default(), opts)
         .from_utf8()
-        .read_from(&mut bytes)?;
+        .read_from(&mut cursor)?;
 
     let mut paragraph = Paragraph::default();
     // NOTE: The outter paragraph is not used.
@@ -300,7 +255,7 @@ fn parse_paragraph(
         NodeData::Text { ref contents } => {
             // Do no remove spaces
             // TODO: maybe here need replace [\s]+ to " ".
-            text.push_str(&contents.borrow());
+            text.push_str(&contents.borrow().trim());
             paragraph.push_str(&text);
         }
         NodeData::Element { name, attrs, .. } => match name.local {
@@ -308,7 +263,7 @@ fn parse_paragraph(
                 let mut child_paragraph = Paragraph::default();
                 for child in node.children.borrow().iter() {
                     let (child_text, child_marks) = parse_paragraph(&mut child_paragraph, &child);
-                    text.push_str(&child_text);
+                    text.push_str(&child_text.trim());
                     marks.extend(child_marks);
                 }
                 marks.push((
@@ -327,7 +282,7 @@ fn parse_paragraph(
                 let mut child_paragraph = Paragraph::default();
                 for child in node.children.borrow().iter() {
                     let (child_text, child_marks) = parse_paragraph(&mut child_paragraph, &child);
-                    text.push_str(&child_text);
+                    text.push_str(&child_text.trim());
                     marks.extend(child_marks);
                 }
 
@@ -347,7 +302,7 @@ fn parse_paragraph(
                 let mut child_paragraph = Paragraph::default();
                 for child in node.children.borrow().iter() {
                     let (child_text, child_marks) = parse_paragraph(&mut child_paragraph, &child);
-                    text.push_str(&child_text);
+                    text.push_str(&child_text.trim());
                     marks.extend(child_marks);
                 }
                 marks.push((
@@ -366,7 +321,7 @@ fn parse_paragraph(
                 let mut child_paragraph = Paragraph::default();
                 for child in node.children.borrow().iter() {
                     let (child_text, child_marks) = parse_paragraph(&mut child_paragraph, &child);
-                    text.push_str(&child_text);
+                    text.push_str(&child_text.trim());
                     marks.extend(child_marks);
                 }
                 marks.push((
@@ -385,7 +340,7 @@ fn parse_paragraph(
                 let mut child_paragraph = Paragraph::default();
                 for child in node.children.borrow().iter() {
                     let (child_text, child_marks) = parse_paragraph(&mut child_paragraph, &child);
-                    text.push_str(&child_text);
+                    text.push_str(&child_text.trim());
                     marks.extend(child_marks);
                 }
                 marks.push((
@@ -428,7 +383,7 @@ fn parse_paragraph(
                 let mut child_paragraph = Paragraph::default();
                 for child in node.children.borrow().iter() {
                     let (child_text, child_marks) = parse_paragraph(&mut child_paragraph, &child);
-                    text.push_str(&child_text);
+                    text.push_str(&child_text.trim());
                     marks.extend(child_marks);
                 }
                 paragraph.push(element::TextNode {
@@ -441,7 +396,7 @@ fn parse_paragraph(
             let mut child_paragraph = Paragraph::default();
             for child in node.children.borrow().iter() {
                 let (child_text, child_marks) = parse_paragraph(&mut child_paragraph, &child);
-                text.push_str(&child_text);
+                text.push_str(&child_text.trim());
                 marks.extend(child_marks);
             }
             paragraph.push(element::TextNode {
@@ -495,7 +450,13 @@ fn parse_node(node: &Rc<Node>, paragraph: &mut Paragraph) -> element::Node {
                 }
             }
             local_name!("img") => {
-                let src = attr_value(&attrs, local_name!("src")).unwrap();
+                let Some(src) = attr_value(attrs, local_name!("src")) else {
+                    if cfg!(debug_assertions) {
+                        eprintln!("[html] Image node missing src attribute");
+                    }
+                    return element::Node::Ignore;
+                };
+
                 let alt = attr_value(&attrs, local_name!("alt"));
                 let title = attr_value(&attrs, local_name!("title"));
                 let (width, height) = attr_width_height(&attrs);
@@ -593,19 +554,21 @@ fn parse_node(node: &Rc<Node>, paragraph: &mut Paragraph) -> element::Node {
                     for child in node.children.borrow().iter() {
                         children.push(parse_node(child, paragraph));
                     }
+
+                    if !paragraph.is_empty() {
+                        children.push(element::Node::Paragraph(paragraph.clone()));
+                        paragraph.clear();
+                    }
+
                     if children.is_empty() {
                         element::Node::Ignore
                     } else {
-                        if !paragraph.is_empty() {
-                            children.push(element::Node::Paragraph(paragraph.clone()));
-                            paragraph.clear();
-                        }
-
                         element::Node::Root { children }
                     }
                 } else {
                     // Others to as Inline
                     parse_paragraph(paragraph, node);
+
                     if paragraph.is_image() {
                         let image = paragraph.clone();
                         paragraph.clear();
@@ -640,20 +603,6 @@ mod tests {
     use gpui::{px, relative};
 
     use crate::text::element::{Node, Paragraph};
-
-    #[test]
-    fn test_trim_whitespace_in_html() {
-        let html = r#"<div>
-            Hello
-            <p>  Hello World <span>Hello</span> 的  </p>
-            <p>  Hello World  </p>
-        </div>"#;
-        let result = super::trim_whitespace_in_html(html);
-        assert_eq!(
-            result,
-            r#"<div>Hello<p>Hello World <span>Hello</span> 的</p><p>Hello World</p></div>"#
-        );
-    }
 
     #[test]
     fn value_to_length() {

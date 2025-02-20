@@ -52,9 +52,10 @@ mod tests {
         assert_eq!(list_item_prefix(6, true, 2), "g. ");
         assert_eq!(list_item_prefix(0, true, 1), "A. ");
         assert_eq!(list_item_prefix(0, true, 2), "a. ");
-        assert_eq!(list_item_prefix(0, false, 0), "● ");
-        assert_eq!(list_item_prefix(0, false, 1), "◦ ");
-        assert_eq!(list_item_prefix(0, false, 2), "▪ ");
-        assert_eq!(list_item_prefix(0, false, 3), "▪ ");
+        assert_eq!(list_item_prefix(0, false, 0), "▪ ");
+        assert_eq!(list_item_prefix(0, false, 1), "• ");
+        assert_eq!(list_item_prefix(0, false, 2), "◦ ");
+        assert_eq!(list_item_prefix(0, false, 3), "‣ ");
+        assert_eq!(list_item_prefix(0, false, 4), "⁃ ");
     }
 }
