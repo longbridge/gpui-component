@@ -564,8 +564,19 @@ fn parse_node(node: &Rc<Node>, paragraph: &mut Paragraph) -> element::Node {
             }
             _ => {
                 if BLOCK_ELEMENTS.contains(&name.local.trim()) {
-                    // All know block elements
                     let mut children: Vec<element::Node> = vec![];
+
+                    // Case:
+                    //
+                    // Hello <p>Inner text of block element</p> World
+
+                    // Insert before text as a node -- The "Hello"
+                    if !paragraph.is_empty() {
+                        children.insert(0, element::Node::Paragraph(paragraph.clone()));
+                        paragraph.clear();
+                    }
+
+                    // Inner of the block element -- The "Inner text of block element"
                     for child in node.children.borrow().iter() {
                         children.push(parse_node(child, paragraph));
                     }
