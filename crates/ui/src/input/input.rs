@@ -11,11 +11,12 @@ use unicode_segmentation::*;
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    actions, div, point, px, AnyElement, App, AppContext, Bounds, ClickEvent, ClipboardItem,
-    Context, Entity, EntityInputHandler, EventEmitter, FocusHandle, Focusable,
-    InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent, MouseButton, MouseDownEvent,
-    MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Rems, Render, ScrollHandle,
-    ScrollWheelEvent, SharedString, Styled as _, Subscription, UTF16Selection, Window, WrappedLine,
+    actions, div, point, px, relative, AnyElement, App, AppContext, Bounds, ClickEvent,
+    ClipboardItem, Context, DefiniteLength, Entity, EntityInputHandler, EventEmitter, FocusHandle,
+    Focusable, InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent, MouseButton,
+    MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Rems, Render,
+    ScrollHandle, ScrollWheelEvent, SharedString, Styled as _, Subscription, UTF16Selection,
+    Window, WrappedLine,
 };
 
 // TODO:
@@ -223,6 +224,8 @@ pub struct TextInput {
     pub(super) cleanable: bool,
     pub(super) size: Size,
     pub(super) rows: usize,
+    pub(super) width: Option<gpui::DefiniteLength>,
+    pub(super) height: Option<gpui::DefiniteLength>,
     pattern: Option<regex::Regex>,
     validate: Option<Box<dyn Fn(&str) -> bool + 'static>>,
     pub(crate) scroll_handle: ScrollHandle,
@@ -281,6 +284,8 @@ impl TextInput {
             prefix: None,
             suffix: None,
             size: Size::Medium,
+            width: None,
+            height: None,
             pattern: None,
             validate: None,
             rows: 2,
@@ -548,6 +553,30 @@ impl TextInput {
         self.suffix = Some(Box::new(move |window, cx| {
             builder(window, cx).into_any_element()
         }));
+        self
+    }
+
+    /// Set width full of the input (Multi-line only).
+    pub fn w_full(mut self) -> Self {
+        self.width = Some(relative(1.));
+        self
+    }
+
+    /// Set width of the input (Multi-line only).
+    pub fn w(mut self, width: impl Into<DefiniteLength>) -> Self {
+        self.width = Some(width.into());
+        self
+    }
+
+    /// Set full height of the input (Multi-line only).
+    pub fn h_full(mut self) -> Self {
+        self.height = Some(relative(1.));
+        self
+    }
+
+    /// Set height of the input (Multi-line only).
+    pub fn h(mut self, height: impl Into<DefiniteLength>) -> Self {
+        self.height = Some(height.into());
         self
     }
 
@@ -1638,7 +1667,11 @@ impl Render for TextInput {
             .input_py(self.size)
             .input_h(self.size)
             .cursor_text()
-            .when(self.multi_line, |this| this.h_auto())
+            .when(self.multi_line, |this| {
+                this.h_auto()
+                    .when_some(self.width, |this, width| this.w(width))
+                    .when_some(self.height, |this, height| this.h(height))
+            })
             .when(self.appearance, |this| {
                 this.bg(if self.disabled {
                     cx.theme().muted
