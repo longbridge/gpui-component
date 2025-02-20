@@ -249,6 +249,7 @@ impl RenderOnce for Paragraph {
                     let text_len = text_node.text.len();
                     text.push_str(&text_node.text);
 
+                    let mut node_highlights = vec![];
                     for (range, style) in text_node.marks {
                         let inner_range = (offset + range.start)..(offset + range.end);
 
@@ -275,11 +276,14 @@ impl RenderOnce for Paragraph {
                                 thickness: gpui::px(1.),
                                 ..Default::default()
                             });
+
                             links.push((inner_range.clone(), link_mark));
                         }
 
-                        highlights.push((inner_range, highlight));
+                        node_highlights.push((inner_range, highlight));
                     }
+
+                    highlights = gpui::combine_highlights(highlights, node_highlights).collect();
 
                     offset += text_len;
                 }

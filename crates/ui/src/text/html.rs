@@ -282,7 +282,7 @@ fn parse_paragraph(
         let offset = text.len();
         text.push_str(new_text);
         for (range, style) in new_marks {
-            marks.push((range.start + offset..range.end + offset, style.clone()));
+            marks.push((range.start + offset..new_text.len() + offset, style.clone()));
         }
     }
 
