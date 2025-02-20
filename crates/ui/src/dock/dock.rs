@@ -271,7 +271,8 @@ impl Dock {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.panel.add_panel(panel, &self.dock_area, window, cx);
+        self.panel
+            .add_panel(panel, &self.dock_area, None, window, cx);
         cx.notify();
     }
 

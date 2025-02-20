@@ -314,6 +314,7 @@ impl DockItem {
         &mut self,
         panel: Arc<dyn PanelView>,
         dock_area: &WeakEntity<DockArea>,
+        bounds: Option<Bounds<Pixels>>,
         window: &mut Window,
         cx: &mut App,
     ) {
@@ -342,7 +343,13 @@ impl DockItem {
                     stack_panel.add_panel(new_item.view(), None, dock_area.clone(), window, cx);
                 });
             }
-            Self::Tiles { .. } => {}
+            Self::Tiles { view, .. } => {
+                view.update(cx, |tiles, cx| {
+                    let bounds = bounds.unwrap_or_else(|| TileMeta::default().bounds);
+                    tiles.add_item(TileItem::new(panel.clone(), bounds), dock_area, window, cx);
+                    cx.notify();
+                });
+            }
             Self::Panel { .. } => {}
         }
     }
@@ -420,6 +427,11 @@ impl DockArea {
         this.subscribe_panel(&stack_panel, window, cx);
 
         this
+    }
+
+    /// Return the bounds of the dock area.
+    pub fn bounds(&self) -> Bounds<Pixels> {
+        self.bounds
     }
 
     /// Subscribe to the tiles item drag item drop event
@@ -649,6 +661,7 @@ impl DockArea {
         &mut self,
         panel: Arc<dyn PanelView>,
         placement: DockPlacement,
+        bounds: Option<Bounds<Pixels>>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -695,7 +708,7 @@ impl DockArea {
             }
             DockPlacement::Center => {
                 self.items
-                    .add_panel(panel, &cx.entity().downgrade(), window, cx);
+                    .add_panel(panel, &cx.entity().downgrade(), bounds, window, cx);
             }
         }
     }

@@ -61,7 +61,7 @@ pub use styled::*;
 pub use time::*;
 pub use title_bar::*;
 pub use virtual_list::{h_virtual_list, v_virtual_list, VirtualList};
-pub use window_border::{window_border, WindowBorder};
+pub use window_border::{window_border, window_paddings, WindowBorder};
 
 pub use colors::*;
 pub use icon::*;

@@ -446,7 +446,7 @@ impl StoryWorkspace {
         };
 
         self.dock_area.update(cx, |dock_area, cx| {
-            dock_area.add_panel(panel, action.0, window, cx);
+            dock_area.add_panel(panel, action.0, None, window, cx);
         });
     }
 
