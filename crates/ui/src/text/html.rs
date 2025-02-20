@@ -440,7 +440,7 @@ fn parse_paragraph(
 fn parse_node(node: &Rc<Node>, paragraph: &mut Paragraph) -> element::Node {
     match node.data {
         NodeData::Text { ref contents } => {
-            let text = contents.borrow().to_string();
+            let text = contents.borrow().trim_start().to_string();
             if text.len() > 0 {
                 paragraph.push_str(&text);
             }
@@ -459,6 +459,12 @@ fn parse_node(node: &Rc<Node>, paragraph: &mut Paragraph) -> element::Node {
             | local_name!("h4")
             | local_name!("h5")
             | local_name!("h6") => {
+                let mut children = vec![];
+                if !paragraph.is_empty() {
+                    children.push(element::Node::Paragraph(paragraph.clone()));
+                    paragraph.clear();
+                }
+
                 let level = name
                     .local
                     .chars()
@@ -472,12 +478,25 @@ fn parse_node(node: &Rc<Node>, paragraph: &mut Paragraph) -> element::Node {
                     parse_paragraph(&mut paragraph, child);
                 }
 
-                element::Node::Heading {
+                let heading = element::Node::Heading {
                     level,
                     children: paragraph,
+                };
+                if children.len() > 0 {
+                    children.push(heading);
+
+                    element::Node::Root { children }
+                } else {
+                    heading
                 }
             }
             local_name!("img") => {
+                let mut children = vec![];
+                if !paragraph.is_empty() {
+                    children.push(element::Node::Paragraph(paragraph.clone()));
+                    paragraph.clear();
+                }
+
                 let Some(src) = attr_value(attrs, local_name!("src")) else {
                     if cfg!(debug_assertions) {
                         eprintln!("[html] Image node missing src attribute");
@@ -489,7 +508,7 @@ fn parse_node(node: &Rc<Node>, paragraph: &mut Paragraph) -> element::Node {
                 let title = attr_value(&attrs, local_name!("title"));
                 let (width, height) = attr_width_height(&attrs);
 
-                element::Node::Paragraph(Paragraph::Image {
+                let image = Paragraph::Image {
                     span: None,
                     image: ImageNode {
                         url: src.into(),
@@ -498,27 +517,40 @@ fn parse_node(node: &Rc<Node>, paragraph: &mut Paragraph) -> element::Node {
                         width,
                         height,
                     },
-                })
+                };
+
+                if children.len() > 0 {
+                    children.push(element::Node::Paragraph(image));
+                    element::Node::Root { children }
+                } else {
+                    element::Node::Paragraph(image)
+                }
             }
             local_name!("ul") | local_name!("ol") => {
-                let ordered = name.local == local_name!("ol");
-
                 let mut children = vec![];
-                for child in node.children.borrow().iter() {
-                    let mut child_paragraph = Paragraph::default();
-                    children.push(parse_node(child, &mut child_paragraph));
-                    if child_paragraph.text_len() > 0 {
-                        children.insert(0, element::Node::Paragraph(child_paragraph.clone()));
-                        child_paragraph.clear();
-                    }
-                }
-
                 if !paragraph.is_empty() {
-                    children.insert(0, element::Node::Paragraph(paragraph.clone()));
+                    children.push(element::Node::Paragraph(paragraph.clone()));
                     paragraph.clear();
                 }
 
-                element::Node::List { children, ordered }
+                let ordered = name.local == local_name!("ol");
+
+                let mut list_children = vec![];
+                for child in node.children.borrow().iter() {
+                    let mut child_paragraph = Paragraph::default();
+                    list_children.push(parse_node(child, &mut child_paragraph));
+                }
+
+                let list = element::Node::List {
+                    children: list_children,
+                    ordered,
+                };
+                if children.len() > 0 {
+                    children.push(list);
+                    element::Node::Root { children }
+                } else {
+                    list
+                }
             }
             local_name!("li") => {
                 let mut children = vec![];
@@ -532,7 +564,7 @@ fn parse_node(node: &Rc<Node>, paragraph: &mut Paragraph) -> element::Node {
                 }
 
                 if !paragraph.is_empty() {
-                    children.insert(0, element::Node::Paragraph(paragraph.clone()));
+                    children.push(element::Node::Paragraph(paragraph.clone()));
                     paragraph.clear();
                 }
 
@@ -543,6 +575,12 @@ fn parse_node(node: &Rc<Node>, paragraph: &mut Paragraph) -> element::Node {
                 }
             }
             local_name!("table") => {
+                let mut children = vec![];
+                if !paragraph.is_empty() {
+                    children.push(element::Node::Paragraph(paragraph.clone()));
+                    paragraph.clear();
+                }
+
                 let mut table = Table::default();
                 for child in node.children.borrow().iter() {
                     match child.data {
@@ -560,7 +598,13 @@ fn parse_node(node: &Rc<Node>, paragraph: &mut Paragraph) -> element::Node {
                     }
                 }
 
-                element::Node::Table(table)
+                let table = element::Node::Table(table);
+                if children.len() > 0 {
+                    children.push(table);
+                    element::Node::Root { children }
+                } else {
+                    table
+                }
             }
             _ => {
                 if BLOCK_ELEMENTS.contains(&name.local.trim()) {
@@ -572,7 +616,7 @@ fn parse_node(node: &Rc<Node>, paragraph: &mut Paragraph) -> element::Node {
 
                     // Insert before text as a node -- The "Hello"
                     if !paragraph.is_empty() {
-                        children.insert(0, element::Node::Paragraph(paragraph.clone()));
+                        children.push(element::Node::Paragraph(paragraph.clone()));
                         paragraph.clear();
                     }
 
@@ -581,10 +625,10 @@ fn parse_node(node: &Rc<Node>, paragraph: &mut Paragraph) -> element::Node {
                         children.push(parse_node(child, paragraph));
                     }
 
-                    if !paragraph.is_empty() {
-                        children.push(element::Node::Paragraph(paragraph.clone()));
-                        paragraph.clear();
-                    }
+                    // if !paragraph.is_empty() {
+                    //     children.push(element::Node::Paragraph(paragraph.clone()));
+                    //     paragraph.clear();
+                    // }
 
                     if children.is_empty() {
                         element::Node::Ignore
