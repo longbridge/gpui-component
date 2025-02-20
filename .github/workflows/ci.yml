@@ -35,4 +35,5 @@ jobs:
           cargo clippy -- --deny warnings
           typos
       - name: Build test
-        run: cargo build
+        run: |
+          cargo test --all
