@@ -242,7 +242,7 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node) -> String {
                     text.push_str("\n");
                 } else {
                     if cfg!(debug_assertions) {
-                        eprintln!("[markdown] unsupprted inline html tag: {:#?}", el);
+                        eprintln!("[markdown] unsupported inline html tag: {:#?}", el);
                     }
                 }
             }

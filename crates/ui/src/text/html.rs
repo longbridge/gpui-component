@@ -67,7 +67,7 @@ pub(super) fn parse_html(source: &str) -> Result<element::Node, std::io::Error> 
         .read_from(&mut cursor)?;
 
     let mut paragraph = Paragraph::default();
-    // NOTE: The outter paragraph is not used.
+    // NOTE: The outer paragraph is not used.
     let node: element::Node = parse_node(&dom.document, &mut paragraph);
     let node = node.compact();
 
