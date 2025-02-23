@@ -189,7 +189,7 @@ impl DockItem {
     /// This items and metas should have the same length.
     pub fn tiles(
         items: Vec<DockItem>,
-        metas: Vec<TileMeta>,
+        metas: Vec<impl Into<TileMeta> + Copy>,
         dock_area: &WeakEntity<DockArea>,
         window: &mut Window,
         cx: &mut App,
@@ -201,7 +201,7 @@ impl DockItem {
             for (ix, item) in items.clone().into_iter().enumerate() {
                 match item {
                     DockItem::Tabs { view, .. } => {
-                        let meta: TileMeta = metas[ix];
+                        let meta: TileMeta = metas[ix].into();
                         let tile_item =
                             TileItem::new(Arc::new(view), meta.bounds).z_index(meta.z_index);
                         tiles.add_item(tile_item, dock_area, window, cx);
