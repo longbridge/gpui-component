@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use crate::{h_flex, v_flex, ActiveTheme, AxisExt, IconName};
+use crate::{h_flex, text::Text, v_flex, ActiveTheme, AxisExt, IconName};
 use gpui::{
     div, prelude::FluentBuilder, relative, svg, App, Axis, ElementId, InteractiveElement,
     IntoElement, ParentElement, RenderOnce, SharedString, StatefulInteractiveElement, Styled,
@@ -13,7 +13,7 @@ use gpui::{
 #[derive(IntoElement)]
 pub struct Radio {
     id: ElementId,
-    label: Option<SharedString>,
+    label: Option<Text>,
     checked: bool,
     disabled: bool,
     on_click: Option<Box<dyn Fn(&bool, &mut Window, &mut App) + 'static>>,
@@ -30,7 +30,7 @@ impl Radio {
         }
     }
 
-    pub fn label(mut self, label: impl Into<SharedString>) -> Self {
+    pub fn label(mut self, label: impl Into<Text>) -> Self {
         self.label = Some(label.into());
         self
     }
@@ -114,24 +114,6 @@ impl RenderOnce for Radio {
     }
 }
 
-impl From<&'static str> for Radio {
-    fn from(label: &'static str) -> Self {
-        Self::new(label).label(label)
-    }
-}
-
-impl From<SharedString> for Radio {
-    fn from(label: SharedString) -> Self {
-        Self::new(label.clone()).label(label)
-    }
-}
-
-impl From<String> for Radio {
-    fn from(label: String) -> Self {
-        Self::new(SharedString::from(label.clone())).label(SharedString::from(label))
-    }
-}
-
 /// A Radio group element.
 #[derive(IntoElement)]
 pub struct RadioGroup {
@@ -197,6 +179,24 @@ impl RadioGroup {
     pub fn children(mut self, children: impl IntoIterator<Item = impl Into<Radio>>) -> Self {
         self.radios.extend(children.into_iter().map(Into::into));
         self
+    }
+}
+
+impl From<&'static str> for Radio {
+    fn from(label: &'static str) -> Self {
+        Self::new(label).label(label)
+    }
+}
+
+impl From<SharedString> for Radio {
+    fn from(label: SharedString) -> Self {
+        Self::new(label.clone()).label(label)
+    }
+}
+
+impl From<String> for Radio {
+    fn from(label: String) -> Self {
+        Self::new(SharedString::from(label.clone())).label(SharedString::from(label))
     }
 }
 

@@ -9,7 +9,7 @@ use gpui::{
 
 use crate::{h_flex, v_flex, ActiveTheme as _, Icon, IconName};
 
-use super::utils::list_item_prefix;
+use super::{utils::list_item_prefix, TextViewStyle};
 
 #[allow(unused)]
 #[derive(Debug, Default, Clone, PartialEq)]
@@ -172,8 +172,10 @@ impl Paragraph {
     }
 }
 
+/// Ref:
+/// https://ui.shadcn.com/docs/components/typography
 #[allow(unused)]
-#[derive(Debug, Clone, IntoElement, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Node {
     Root {
         children: Vec<Node>,
@@ -317,7 +319,7 @@ impl RenderOnce for Paragraph {
 }
 
 #[derive(Default)]
-struct ListState {
+pub(crate) struct ListState {
     todo: bool,
     ordered: bool,
     depth: usize,
@@ -328,6 +330,7 @@ impl Node {
         item: Node,
         ix: usize,
         state: ListState,
+        text_view_style: &TextViewStyle,
         window: &mut Window,
         cx: &mut App,
     ) -> impl IntoElement {
@@ -373,24 +376,26 @@ impl Node {
                                                     }),
                                             )
                                         })
-                                        .child(child.render_node(
+                                        .child(child.render(
                                             Some(ListState {
                                                 depth: state.depth + 1,
                                                 ordered: state.ordered,
                                                 todo: checked.is_some(),
                                             }),
+                                            text_view_style,
                                             window,
                                             cx,
                                         )),
                                 );
                             }
                             Node::List { .. } => {
-                                items.push(div().ml(rems(1.)).child(child.render_node(
+                                items.push(div().ml(rems(1.)).child(child.render(
                                     Some(ListState {
                                         depth: state.depth + 1,
                                         ordered: state.ordered,
                                         todo: checked.is_some(),
                                     }),
+                                    text_view_style,
                                     window,
                                     cx,
                                 )))
@@ -477,17 +482,28 @@ impl Node {
         }
     }
 
-    fn render_node(
+    pub(crate) fn render(
         self,
         list_state: Option<ListState>,
+        text_view_style: &TextViewStyle,
         window: &mut Window,
         cx: &mut App,
     ) -> impl IntoElement {
         let in_list = list_state.is_some();
-        let mb = if in_list { rems(0.0) } else { rems(1.) };
+        let mb = if in_list {
+            rems(0.)
+        } else {
+            text_view_style.paragraph_gap
+        };
 
         match self {
-            Node::Root { children } => div().children(children).into_any_element(),
+            Node::Root { children } => div()
+                .children(
+                    children
+                        .into_iter()
+                        .map(|c| c.render(None, text_view_style, window, cx)),
+                )
+                .into_any_element(),
             Node::Paragraph(paragraph) => div().mb(mb).child(paragraph).into_any_element(),
             Node::Heading { level, children } => {
                 let (text_size, font_weight) = match level {
@@ -535,6 +551,7 @@ impl Node {
                                 todo: list_state.todo,
                                 depth: list_state.depth,
                             },
+                            text_view_style,
                             window,
                             cx,
                         ));
@@ -571,13 +588,5 @@ impl Node {
                 div().into_any_element()
             }
         }
-    }
-}
-
-/// Ref:
-/// https://ui.shadcn.com/docs/components/typography
-impl RenderOnce for Node {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        self.render_node(None, window, cx)
     }
 }

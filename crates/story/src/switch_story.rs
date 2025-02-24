@@ -9,6 +9,7 @@ use gpui_component::{
     label::Label,
     radio::{Radio, RadioGroup},
     switch::Switch,
+    text::TextView,
     v_flex, ActiveTheme, Disableable as _, Side, Sizable, StyledExt,
 };
 
@@ -203,12 +204,18 @@ impl Render for SwitchStory {
                                         v.check3 = !v.check3;
                                     })),
                             )
-                            .child(div().w(px(300.)).child(
-                                Checkbox::new("longlong-checkbox").label(
-                                    "The long long label text, \
-                                    it should ellipsis when the text is too long.",
+                            .child(
+                                div().w(px(300.)).child(
+                                    Checkbox::new("longlong-checkbox").label(
+                                        TextView::markdown(
+                                            "longlong-checkbox",
+                                            "The **long long label** text, \
+                                   it should ellipsis when the text is too long.",
+                                        )
+                                        .inline(),
+                                    ),
                                 ),
-                            )),
+                            ),
                     ),
                 )
                 .child(

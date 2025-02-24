@@ -12,6 +12,7 @@ use crate::v_flex;
 use super::{
     element::{self, ImageNode, InlineTextStyle, LinkMark, Paragraph, Span, Table, TableRow},
     html::parse_html,
+    TextViewStyle,
 };
 
 /// Markdown GFM renderer
@@ -30,9 +31,11 @@ use super::{
 /// - As a markdown editor.
 /// - Add custom markdown syntax.
 /// - Complex styles cumstomization.
+#[derive(Clone)]
 pub(super) struct MarkdownElement {
     id: ElementId,
     text: SharedString,
+    style: TextViewStyle,
 }
 
 impl MarkdownElement {
@@ -40,12 +43,19 @@ impl MarkdownElement {
         Self {
             id: id.into(),
             text: raw.into(),
+            style: TextViewStyle::default(),
         }
     }
 
     /// Set the source of the markdown view.
     pub(crate) fn text(mut self, raw: impl Into<SharedString>) -> Self {
         self.text = raw.into();
+        self
+    }
+
+    /// Set TextViewStyle.
+    pub(crate) fn style(mut self, style: impl Into<TextViewStyle>) -> Self {
+        self.style = style.into();
         self
     }
 }
@@ -106,7 +116,7 @@ impl Element for MarkdownElement {
 
             let mut el = div()
                 .map(|this| match root {
-                    Ok(node) => this.child(node),
+                    Ok(node) => this.child(node.render(None, &self.style, window, cx)),
                     Err(err) => this.child(
                         v_flex()
                             .gap_1()

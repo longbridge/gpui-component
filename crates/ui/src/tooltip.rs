@@ -1,17 +1,17 @@
 use gpui::{
     div, prelude::FluentBuilder, px, AnyElement, AnyView, App, AppContext, Context, IntoElement,
-    ParentElement, Render, SharedString, Styled, Window,
+    ParentElement, Render, Styled, Window,
 };
 
-use crate::ActiveTheme;
+use crate::{text::Text, ActiveTheme};
 
 pub struct Tooltip {
-    text: SharedString,
+    text: Text,
     element_builder: Option<Box<dyn Fn(&mut Window, &mut App) -> AnyElement>>,
 }
 
 impl Tooltip {
-    pub fn new(text: impl Into<SharedString>, _: &mut Window, cx: &mut App) -> AnyView {
+    pub fn new(text: impl Into<Text>, _: &mut Window, cx: &mut App) -> AnyView {
         cx.new(|_| Self {
             text: text.into(),
             element_builder: None,

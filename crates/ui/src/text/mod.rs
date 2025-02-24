@@ -1,4 +1,4 @@
-use gpui::{App, ElementId, IntoElement, RenderOnce, SharedString, Window};
+use gpui::{rems, App, ElementId, IntoElement, Rems, RenderOnce, SharedString, Window};
 use html::HtmlElement;
 use markdown::MarkdownElement;
 
@@ -7,9 +7,79 @@ mod html;
 mod markdown;
 mod utils;
 
+#[derive(IntoElement, Clone)]
+pub enum Text {
+    String(SharedString),
+    TextView(TextView),
+}
+
+impl From<SharedString> for Text {
+    fn from(s: SharedString) -> Self {
+        Self::String(s)
+    }
+}
+
+impl From<&str> for Text {
+    fn from(s: &str) -> Self {
+        Self::String(SharedString::from(s.to_string()))
+    }
+}
+
+impl From<String> for Text {
+    fn from(s: String) -> Self {
+        Self::String(s.into())
+    }
+}
+
+impl From<TextView> for Text {
+    fn from(e: TextView) -> Self {
+        Self::TextView(e)
+    }
+}
+
+impl RenderOnce for Text {
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        match self {
+            Self::String(s) => s.into_any_element(),
+            Self::TextView(e) => e.into_any_element(),
+        }
+    }
+}
+
+/// TextViewStyle used to customize the style for [`TextView`].
+#[derive(Copy, Clone)]
+pub struct TextViewStyle {
+    paragraph_gap: Rems,
+}
+
+impl Default for TextViewStyle {
+    fn default() -> Self {
+        Self {
+            paragraph_gap: rems(1.),
+        }
+    }
+}
+
+impl TextViewStyle {
+    /// Default style for inline text.
+    ///
+    /// This style has no paragraph gap.
+    pub fn inline() -> Self {
+        Self {
+            paragraph_gap: rems(0.),
+        }
+    }
+
+    /// Set paragraph gap, default is 1 rem.
+    pub fn paragraph_gap(mut self, gap: Rems) -> Self {
+        self.paragraph_gap = gap;
+        self
+    }
+}
+
 /// A text view that can render Markdown or HTML.
 #[allow(private_interfaces)]
-#[derive(IntoElement)]
+#[derive(IntoElement, Clone)]
 pub enum TextView {
     Markdown(MarkdownElement),
     Html(HtmlElement),
@@ -32,6 +102,19 @@ impl TextView {
             Self::Markdown(el) => Self::Markdown(el.text(raw)),
             Self::Html(el) => Self::Html(el.text(raw)),
         }
+    }
+
+    /// Set [`TextViewStyle`].
+    pub fn style(self, style: TextViewStyle) -> Self {
+        match self {
+            Self::Markdown(el) => Self::Markdown(el.style(style)),
+            Self::Html(el) => Self::Html(el.style(style)),
+        }
+    }
+
+    /// Set to use [`TextViewStyle::inline`].
+    pub fn inline(self) -> Self {
+        self.style(TextViewStyle::inline())
     }
 }
 

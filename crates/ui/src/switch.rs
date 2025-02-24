@@ -1,8 +1,8 @@
-use crate::{h_flex, ActiveTheme, Disableable, Side, Sizable, Size};
+use crate::{h_flex, text::Text, ActiveTheme, Disableable, Side, Sizable, Size};
 use gpui::{
     div, prelude::FluentBuilder as _, px, Animation, AnimationExt as _, AnyElement, App, Element,
     ElementId, GlobalElementId, InteractiveElement, IntoElement, LayoutId, ParentElement as _,
-    SharedString, Styled as _, Window,
+    Styled as _, Window,
 };
 use std::{cell::RefCell, rc::Rc, time::Duration};
 
@@ -10,7 +10,7 @@ pub struct Switch {
     id: ElementId,
     checked: bool,
     disabled: bool,
-    label: Option<SharedString>,
+    label: Option<Text>,
     label_side: Side,
     on_click: Option<Rc<dyn Fn(&bool, &mut Window, &mut App)>>,
     size: Size,
@@ -35,7 +35,7 @@ impl Switch {
         self
     }
 
-    pub fn label(mut self, label: impl Into<SharedString>) -> Self {
+    pub fn label(mut self, label: impl Into<Text>) -> Self {
         self.label = Some(label.into());
         self
     }
@@ -193,7 +193,7 @@ impl Element for Switch {
                                     ),
                                 ),
                         )
-                        .when_some(self.label.clone(), |this, label| {
+                        .when_some(self.label.take(), |this, label| {
                             this.child(div().child(label).map(|this| match self.size {
                                 Size::XSmall | Size::Small => this.text_sm(),
                                 _ => this.text_base(),

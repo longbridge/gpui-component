@@ -1,15 +1,14 @@
-use crate::{h_flex, v_flex, ActiveTheme, Disableable, IconName, Selectable};
+use crate::{h_flex, text::Text, v_flex, ActiveTheme, Disableable, IconName, Selectable};
 use gpui::{
     div, prelude::FluentBuilder as _, px, relative, svg, App, ElementId, InteractiveElement,
-    IntoElement, ParentElement, RenderOnce, SharedString, StatefulInteractiveElement as _,
-    Styled as _, Window,
+    IntoElement, ParentElement, RenderOnce, StatefulInteractiveElement as _, Styled as _, Window,
 };
 
 /// A Checkbox element.
 #[derive(IntoElement)]
 pub struct Checkbox {
     id: ElementId,
-    label: Option<SharedString>,
+    label: Option<Text>,
     checked: bool,
     disabled: bool,
     on_click: Option<Box<dyn Fn(&bool, &mut Window, &mut App) + 'static>>,
@@ -26,7 +25,7 @@ impl Checkbox {
         }
     }
 
-    pub fn label(mut self, label: impl Into<SharedString>) -> Self {
+    pub fn label(mut self, label: impl Into<Text>) -> Self {
         self.label = Some(label.into());
         self
     }
