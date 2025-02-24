@@ -7,7 +7,6 @@ resolver = "2"
 [workspace.dependencies]
 gpui-component = { path = "crates/ui" }
 story = { path = "crates/story" }
-
 gpui = { git = "https://github.com/huacnlee/zed.git", branch = "webview" }
 
 anyhow = "1"

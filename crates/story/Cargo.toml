@@ -10,7 +10,7 @@ charts-rs = "0.3"
 chrono = "0.4"
 fake = { version = "2.10.0", features = ["dummy"] }
 gpui.workspace = true
-gpui-component.workspace = true
+gpui-component = { workspace = true, features = ["webview"] }
 reqwest_client = { git = "https://github.com/huacnlee/zed.git", branch = "webview" }
 rand = "0.8"
 regex = "1"

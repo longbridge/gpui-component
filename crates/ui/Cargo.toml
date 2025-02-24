@@ -11,6 +11,9 @@ keywords = ["ui", "desktop", "application", "GPUI"]
 [lib]
 doctest = false
 
+[features]
+webview = ["dep:wry"]
+
 [dependencies]
 gpui.workspace = true
 anyhow = "1"
@@ -35,7 +38,7 @@ usvg = { version = "0.44.0", default-features = false, features = [
   "text",
 ] }
 uuid = "1.10"
-wry = "0.48.0"
+wry = { version = "0.48.0", optional = true }
 # Markdown Parser
 markdown = "1.0.0-alpha.22"
 # HTML Parser

@@ -48,10 +48,12 @@ pub mod tag;
 pub mod text;
 pub mod theme;
 pub mod tooltip;
+#[cfg(feature = "webview")]
 pub mod webview;
 
 use gpui::App;
 // re-export
+#[cfg(feature = "webview")]
 pub use wry;
 
 pub use crate::Disableable;
