@@ -2,9 +2,9 @@ use std::rc::Rc;
 
 use crate::{h_flex, text::Text, v_flex, ActiveTheme, AxisExt, IconName};
 use gpui::{
-    div, prelude::FluentBuilder, relative, svg, App, Axis, ElementId, InteractiveElement,
-    IntoElement, ParentElement, RenderOnce, SharedString, StatefulInteractiveElement, Styled,
-    Window,
+    div, prelude::FluentBuilder, relative, svg, App, Axis, Div, ElementId, InteractiveElement,
+    IntoElement, ParentElement, RenderOnce, SharedString, StatefulInteractiveElement,
+    StyleRefinement, Styled, Window,
 };
 
 /// A Radio element.
@@ -12,6 +12,7 @@ use gpui::{
 /// This is not included the Radio group implementation, you can manage the group by yourself.
 #[derive(IntoElement)]
 pub struct Radio {
+    base: Div,
     id: ElementId,
     label: Option<Text>,
     checked: bool,
@@ -23,6 +24,7 @@ impl Radio {
     pub fn new(id: impl Into<ElementId>) -> Self {
         Self {
             id: id.into(),
+            base: div(),
             label: None,
             checked: false,
             disabled: false,
@@ -51,6 +53,12 @@ impl Radio {
     }
 }
 
+impl Styled for Radio {
+    fn style(&mut self) -> &mut gpui::StyleRefinement {
+        self.base.style()
+    }
+}
+
 impl RenderOnce for Radio {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let color = if self.disabled {
@@ -60,12 +68,12 @@ impl RenderOnce for Radio {
         };
 
         // wrap a flex to patch for let Radio display inline
-        h_flex().child(
+        self.base.child(
             h_flex()
                 .id(self.id)
                 .gap_x_2()
                 .text_color(cx.theme().foreground)
-                .items_center()
+                .items_start()
                 .line_height(relative(1.))
                 .child(
                     div()
@@ -96,8 +104,7 @@ impl RenderOnce for Radio {
                     this.child(
                         div()
                             .size_full()
-                            .overflow_x_hidden()
-                            .text_ellipsis()
+                            .overflow_hidden()
                             .line_height(relative(1.))
                             .child(label),
                     )
@@ -117,6 +124,7 @@ impl RenderOnce for Radio {
 /// A Radio group element.
 #[derive(IntoElement)]
 pub struct RadioGroup {
+    style: StyleRefinement,
     radios: Vec<Radio>,
     layout: Axis,
     selected_index: Option<usize>,
@@ -127,6 +135,7 @@ pub struct RadioGroup {
 impl RadioGroup {
     fn new() -> Self {
         Self {
+            style: StyleRefinement::default(),
             on_change: None,
             layout: Axis::Vertical,
             selected_index: None,
@@ -182,6 +191,12 @@ impl RadioGroup {
     }
 }
 
+impl Styled for RadioGroup {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
 impl From<&'static str> for Radio {
     fn from(label: &'static str) -> Self {
         Self::new(label).label(label)
@@ -212,7 +227,10 @@ impl RenderOnce for RadioGroup {
             h_flex().flex_wrap()
         };
 
-        div().flex().child(
+        let mut container = div();
+        *container.style() = self.style;
+
+        container.child(
             base.gap_3()
                 .children(self.radios.into_iter().enumerate().map(|(ix, radio)| {
                     let checked = selected_ix == Some(ix);

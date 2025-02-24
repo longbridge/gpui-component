@@ -1,13 +1,14 @@
 use crate::{h_flex, text::Text, ActiveTheme, Disableable, Side, Sizable, Size};
 use gpui::{
-    div, prelude::FluentBuilder as _, px, Animation, AnimationExt as _, AnyElement, App, Element,
-    ElementId, GlobalElementId, InteractiveElement, IntoElement, LayoutId, ParentElement as _,
-    Styled as _, Window,
+    div, prelude::FluentBuilder as _, px, Animation, AnimationExt as _, AnyElement, App, Div,
+    Element, ElementId, GlobalElementId, InteractiveElement, IntoElement, LayoutId,
+    ParentElement as _, Styled, Window,
 };
 use std::{cell::RefCell, rc::Rc, time::Duration};
 
 pub struct Switch {
     id: ElementId,
+    base: Div,
     checked: bool,
     disabled: bool,
     label: Option<Text>,
@@ -21,6 +22,7 @@ impl Switch {
         let id: ElementId = id.into();
         Self {
             id: id.clone(),
+            base: div(),
             checked: false,
             disabled: false,
             label: None,
@@ -51,6 +53,12 @@ impl Switch {
     pub fn label_side(mut self, label_side: Side) -> Self {
         self.label_side = label_side;
         self
+    }
+}
+
+impl Styled for Switch {
+    fn style(&mut self) -> &mut gpui::StyleRefinement {
+        self.base.style()
     }
 }
 
@@ -98,14 +106,13 @@ impl Element for Switch {
     ) -> (LayoutId, Self::RequestLayoutState) {
         window.with_element_state::<SwitchState, _>(global_id.unwrap(), move |state, window| {
             let state = state.unwrap_or_default();
-
-            let theme = cx.theme();
             let checked = self.checked;
             let on_click = self.on_click.clone();
+            let style = self.base.style();
 
             let (bg, toggle_bg) = match self.checked {
-                true => (theme.primary, theme.background),
-                false => (theme.input, theme.background),
+                true => (cx.theme().primary, cx.theme().background),
+                false => (cx.theme().input, cx.theme().background),
             };
 
             let (bg, toggle_bg) = match self.disabled {
@@ -128,13 +135,15 @@ impl Element for Switch {
                 cx.theme().radius
             };
 
-            let mut element = div()
-                .flex()
+            let mut root = div();
+            *root.style() = style.clone();
+
+            let mut element = root
                 .child(
                     h_flex()
                         .id(self.id.clone())
-                        .items_center()
                         .gap_2()
+                        .items_start()
                         .when(self.label_side.is_left(), |this| this.flex_row_reverse())
                         .child(
                             // Switch Bar
@@ -146,7 +155,7 @@ impl Element for Switch {
                                 .flex()
                                 .items_center()
                                 .border(inset)
-                                .border_color(theme.transparent)
+                                .border_color(cx.theme().transparent)
                                 .bg(bg)
                                 .when(!self.disabled, |this| this.cursor_pointer())
                                 .child(

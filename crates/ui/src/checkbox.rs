@@ -1,15 +1,14 @@
-use crate::{
-    h_flex, text::Text, v_flex, ActiveTheme, Disableable, IconName, Selectable, StyledExt,
-};
+use crate::{h_flex, text::Text, v_flex, ActiveTheme, Disableable, IconName, Selectable};
 use gpui::{
-    div, prelude::FluentBuilder as _, px, relative, svg, App, ElementId, InteractiveElement,
-    IntoElement, ParentElement, RenderOnce, StatefulInteractiveElement as _, Styled as _, Window,
+    div, prelude::FluentBuilder as _, px, relative, svg, App, Div, ElementId, InteractiveElement,
+    IntoElement, ParentElement, RenderOnce, StatefulInteractiveElement as _, Styled, Window,
 };
 
 /// A Checkbox element.
 #[derive(IntoElement)]
 pub struct Checkbox {
     id: ElementId,
+    base: Div,
     label: Option<Text>,
     checked: bool,
     disabled: bool,
@@ -20,6 +19,7 @@ impl Checkbox {
     pub fn new(id: impl Into<ElementId>) -> Self {
         Self {
             id: id.into(),
+            base: div(),
             label: None,
             checked: false,
             disabled: false,
@@ -40,6 +40,12 @@ impl Checkbox {
     pub fn on_click(mut self, handler: impl Fn(&bool, &mut Window, &mut App) + 'static) -> Self {
         self.on_click = Some(Box::new(handler));
         self
+    }
+}
+
+impl Styled for Checkbox {
+    fn style(&mut self) -> &mut gpui::StyleRefinement {
+        self.base.style()
     }
 }
 
@@ -72,12 +78,11 @@ impl RenderOnce for Checkbox {
         };
         let radius = (cx.theme().radius / 2.).min(px(6.));
 
-        // wrap a flex to patch for let Checkbox display inline
-        div().flex().child(
+        self.base.child(
             h_flex()
                 .id(self.id)
                 .gap_2()
-                .items_center()
+                .items_start()
                 .line_height(relative(1.))
                 .text_color(cx.theme().foreground)
                 .child(
@@ -107,15 +112,7 @@ impl RenderOnce for Checkbox {
                 )
                 .map(|this| {
                     if let Some(label) = self.label {
-                        this.child(
-                            div()
-                                .flex_1()
-                                .truncate()
-                                .line_clamp(2)
-                                .debug_red()
-                                .line_height(relative(1.))
-                                .child(label),
-                        )
+                        this.child(div().size_full().line_height(relative(1.)).child(label))
                     } else {
                         this
                     }

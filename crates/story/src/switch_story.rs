@@ -1,5 +1,5 @@
 use gpui::{
-    div, px, App, AppContext, Context, Div, Entity, Focusable, IntoElement, ParentElement, Render,
+    px, App, AppContext, Context, Div, Entity, Focusable, IntoElement, ParentElement, Render,
     SharedString, Styled, Window,
 };
 
@@ -150,6 +150,7 @@ impl Render for SwitchStory {
                                 }))
                                 .child(
                                     Switch::new("switch3_1")
+                                        .w(px(200.))
                                         .label("Airplane Mode")
                                         .checked(true)
                                         .disabled(true)
@@ -204,21 +205,21 @@ impl Render for SwitchStory {
                                         v.check3 = !v.check3;
                                     })),
                             )
-                            .child(div().w(px(300.)).flex_shrink_0().overflow_hidden().child(
-                                Checkbox::new("longlong-checkbox").label(
-                                    "The **long long label** text, \
-                           it should ellipsis when the text is too long.",
-                                ),
+                            .child(Checkbox::new("longlong-checkbox").w(px(300.)).label(
+                                "The long long label text, \
+                                 it should wrap when the text is too long.",
                             ))
                             .child(
-                                Checkbox::new("longlong-markdown-checkbox").label(
-                                    TextView::markdown(
-                                        "longlong-markdown-checkbox",
-                                        "The **long long label** text used markdown, \
-                                   it should ellipsis when the text is too long.",
-                                    )
-                                    .inline(),
-                                ),
+                                Checkbox::new("longlong-markdown-checkbox")
+                                    .w(px(300.))
+                                    .label(
+                                        TextView::markdown(
+                                            "longlong-markdown-checkbox",
+                                            "The [long long label](https://github.com) text used markdown, \
+                                             it should wrap when the text is too long.",
+                                        )
+                                        .inline(),
+                                    ),
                             ),
                     ),
                 )
@@ -268,12 +269,14 @@ impl Render for SwitchStory {
                                     .disabled(true),
                             )
                             .child(
-                                div().w(px(200.)).child(
-                                    Radio::new("radio3")
-                                        .label("A long long long text radio label")
-                                        .checked(true)
-                                        .disabled(true),
-                                ),
+                                Radio::new("radio3")
+                                    .label(
+                                        "The long long label text, \
+                                         it should wrap when the text is too long.",
+                                    )
+                                    .w(px(300.))
+                                    .checked(true)
+                                    .disabled(true),
                             ),
                     ),
                 )
@@ -293,17 +296,26 @@ impl Render for SwitchStory {
                             ),
                         )
                         .child(
-                            section("Radio Group Vertical", cx).flex_1().child(
-                                RadioGroup::vertical()
-                                    .disabled(true)
-                                    .child(Radio::new("one1").label("United States"))
-                                    .child(Radio::new("one2").label("Canada"))
-                                    .child(Radio::new("one3").label("Mexico"))
-                                    .selected_index(self.radio_group_checked)
-                                    .on_change(cx.listener(|this, selected_ix: &usize, _, _| {
-                                        this.radio_group_checked = Some(*selected_ix);
-                                    })),
-                            ),
+                            section("Radio Group Vertical (With container style)", cx)
+                                .flex_1()
+                                .child(
+                                    RadioGroup::vertical()
+                                        .w(px(220.))
+                                        .p_2()
+                                        .border_1()
+                                        .border_color(cx.theme().border)
+                                        .rounded_md()
+                                        .disabled(true)
+                                        .child(Radio::new("one1").label("United States"))
+                                        .child(Radio::new("one2").label("Canada"))
+                                        .child(Radio::new("one3").label("Mexico"))
+                                        .selected_index(self.radio_group_checked)
+                                        .on_change(cx.listener(
+                                            |this, selected_ix: &usize, _, _| {
+                                                this.radio_group_checked = Some(*selected_ix);
+                                            },
+                                        )),
+                                ),
                         ),
                 ),
         )
