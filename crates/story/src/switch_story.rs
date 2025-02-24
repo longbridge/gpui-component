@@ -204,16 +204,20 @@ impl Render for SwitchStory {
                                         v.check3 = !v.check3;
                                     })),
                             )
+                            .child(div().w(px(300.)).flex_shrink_0().overflow_hidden().child(
+                                Checkbox::new("longlong-checkbox").label(
+                                    "The **long long label** text, \
+                           it should ellipsis when the text is too long.",
+                                ),
+                            ))
                             .child(
-                                div().w(px(300.)).child(
-                                    Checkbox::new("longlong-checkbox").label(
-                                        TextView::markdown(
-                                            "longlong-checkbox",
-                                            "The **long long label** text, \
+                                Checkbox::new("longlong-markdown-checkbox").label(
+                                    TextView::markdown(
+                                        "longlong-markdown-checkbox",
+                                        "The **long long label** text used markdown, \
                                    it should ellipsis when the text is too long.",
-                                        )
-                                        .inline(),
-                                    ),
+                                    )
+                                    .inline(),
                                 ),
                             ),
                     ),
