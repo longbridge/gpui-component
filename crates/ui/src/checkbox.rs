@@ -83,11 +83,11 @@ impl RenderOnce for Checkbox {
                 .child(
                     v_flex()
                         .relative()
+                        .size_4()
+                        .flex_shrink_0()
                         .border_1()
                         .border_color(color)
                         .rounded(radius)
-                        .size_4()
-                        .flex_shrink_0()
                         .map(|this| match self.checked {
                             false => this.bg(cx.theme().transparent),
                             _ => this.bg(color),
@@ -109,8 +109,10 @@ impl RenderOnce for Checkbox {
                     if let Some(label) = self.label {
                         this.child(
                             div()
-                                .w_full()
+                                .flex_1()
                                 .truncate()
+                                .line_clamp(2)
+                                .debug_red()
                                 .line_height(relative(1.))
                                 .child(label),
                         )
