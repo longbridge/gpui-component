@@ -5,13 +5,16 @@ use std::collections::HashMap;
 use std::ops::Range;
 use std::rc::Rc;
 
+use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    div, px, relative, Context, DefiniteLength, IntoElement, ParentElement as _, Render,
-    SharedString,
+    div, px, relative, AnyElement, DefiniteLength, Element, ElementId, IntoElement,
+    ParentElement as _, SharedString, Styled as _, Window,
 };
 use html5ever::tendril::TendrilSink;
 use html5ever::{local_name, parse_document, LocalName, ParseOpts};
 use markup5ever_rcdom::{Node, NodeData, RcDom};
+
+use crate::v_flex;
 
 use super::element::{
     self, ImageNode, InlineTextStyle, LinkMark, Paragraph, Table, TableRow, TextNode,
@@ -53,7 +56,7 @@ const BLOCK_ELEMENTS: [&str; 33] = [
     "ul",
 ];
 
-pub(super) fn parse_html(source: &str) -> Result<element::Node, std::io::Error> {
+pub(super) fn parse_html(source: &str) -> Result<element::Node, SharedString> {
     let opts = ParseOpts {
         ..Default::default()
     };
@@ -64,7 +67,8 @@ pub(super) fn parse_html(source: &str) -> Result<element::Node, std::io::Error> 
     // https://github.com/servo/html5ever/blob/main/rcdom/examples/print-rcdom.rs
     let dom = parse_document(RcDom::default(), opts)
         .from_utf8()
-        .read_from(&mut cursor)?;
+        .read_from(&mut cursor)
+        .map_err(|e| SharedString::from(format!("{:?}", e)))?;
 
     let mut paragraph = Paragraph::default();
     // NOTE: The outer paragraph is not used.
@@ -74,45 +78,115 @@ pub(super) fn parse_html(source: &str) -> Result<element::Node, std::io::Error> 
     Ok(node)
 }
 
-pub struct HtmlView {
+pub(super) struct HtmlElement {
+    id: ElementId,
     text: SharedString,
-    parsed: bool,
-    node: Option<element::Node>,
 }
 
-impl HtmlView {
-    pub fn new(raw: impl Into<SharedString>) -> Self {
+impl HtmlElement {
+    pub(super) fn new(id: impl Into<ElementId>, raw: impl Into<SharedString>) -> Self {
         Self {
+            id: id.into(),
             text: raw.into(),
-            parsed: false,
-            node: None,
         }
     }
 
-    pub fn set_text(&mut self, raw: impl Into<SharedString>, cx: &mut Context<Self>) {
+    /// Set the source of the markdown view.
+    pub(crate) fn text(mut self, raw: impl Into<SharedString>) -> Self {
         self.text = raw.into();
-        self.parsed = false;
-        self.node = None;
-        cx.notify();
-    }
-
-    fn parse_if_needed(&mut self) {
-        if !self.parsed {
-            self.node = parse_html(&self.text).ok();
-            self.parsed = true;
-        }
+        self
     }
 }
 
-impl Render for HtmlView {
-    fn render(&mut self, _: &mut gpui::Window, _: &mut Context<'_, Self>) -> impl IntoElement {
-        self.parse_if_needed();
+#[derive(Default)]
+pub struct HtmlState {
+    raw: SharedString,
+    root: Option<Result<element::Node, SharedString>>,
+}
 
-        if let Some(node) = &self.node {
-            div().child(node.clone())
-        } else {
-            div()
+impl HtmlState {
+    fn parse_if_needed(&mut self, new_text: SharedString) {
+        let is_changed = self.raw != new_text;
+
+        if self.root.is_some() && !is_changed {
+            return;
         }
+
+        self.raw = new_text;
+        self.root = Some(parse_html(&self.raw));
+    }
+}
+
+impl IntoElement for HtmlElement {
+    type Element = Self;
+
+    fn into_element(self) -> Self::Element {
+        self
+    }
+}
+
+impl Element for HtmlElement {
+    type RequestLayoutState = AnyElement;
+    type PrepaintState = ();
+
+    fn id(&self) -> Option<gpui::ElementId> {
+        Some(self.id.clone())
+    }
+
+    fn request_layout(
+        &mut self,
+        id: Option<&gpui::GlobalElementId>,
+        window: &mut Window,
+        cx: &mut gpui::App,
+    ) -> (gpui::LayoutId, Self::RequestLayoutState) {
+        window.with_element_state(id.unwrap(), |state, window| {
+            let mut state: HtmlState = state.unwrap_or_default();
+            state.parse_if_needed(self.text.clone());
+
+            let root = state
+                .root
+                .clone()
+                .expect("BUG: root should not None, maybe parse_if_needed issue.");
+
+            let mut el = div()
+                .map(|this| match root {
+                    Ok(node) => this.child(node),
+                    Err(err) => this.child(
+                        v_flex()
+                            .gap_1()
+                            .child("Error parsing HTML")
+                            .child(err.to_string()),
+                    ),
+                })
+                .into_any_element();
+
+            let layout_id = el.request_layout(window, cx);
+
+            ((layout_id, el), state)
+        })
+    }
+
+    fn prepaint(
+        &mut self,
+        _: Option<&gpui::GlobalElementId>,
+        _: gpui::Bounds<gpui::Pixels>,
+        request_layout: &mut Self::RequestLayoutState,
+        window: &mut Window,
+        cx: &mut gpui::App,
+    ) -> Self::PrepaintState {
+        request_layout.prepaint(window, cx);
+    }
+
+    fn paint(
+        &mut self,
+        _: Option<&gpui::GlobalElementId>,
+        _: gpui::Bounds<gpui::Pixels>,
+        request_layout: &mut Self::RequestLayoutState,
+        _: &mut Self::PrepaintState,
+        window: &mut Window,
+        cx: &mut gpui::App,
+    ) {
+        request_layout.paint(window, cx);
     }
 }
 

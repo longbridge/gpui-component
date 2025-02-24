@@ -1,6 +1,6 @@
 use gpui::{
-    div, prelude::FluentBuilder as _, Context, IntoElement, ParentElement, Render, SharedString,
-    Styled, Window,
+    div, prelude::FluentBuilder as _, AnyElement, Element, ElementId, IntoElement, ParentElement,
+    SharedString, Styled, Window,
 };
 use markdown::{
     mdast::{self, Node},
@@ -30,55 +30,119 @@ use super::{
 /// - As a markdown editor.
 /// - Add custom markdown syntax.
 /// - Complex styles cumstomization.
-pub(super) struct MarkdownView {
+pub(super) struct MarkdownElement {
+    id: ElementId,
     text: SharedString,
-    parsed: bool,
-    root: Option<Result<element::Node, markdown::message::Message>>,
 }
 
-impl MarkdownView {
-    pub(super) fn new(raw: impl Into<SharedString>) -> Self {
+impl MarkdownElement {
+    pub(super) fn new(id: impl Into<ElementId>, raw: impl Into<SharedString>) -> Self {
         Self {
+            id: id.into(),
             text: raw.into(),
-            parsed: false,
-            root: None,
         }
     }
 
     /// Set the source of the markdown view.
-    pub(crate) fn set_text(&mut self, raw: impl Into<SharedString>, cx: &mut Context<Self>) {
+    pub(crate) fn text(mut self, raw: impl Into<SharedString>) -> Self {
         self.text = raw.into();
-        self.parsed = false;
-        cx.notify();
-    }
-
-    fn parse_if_needed(&mut self) {
-        if self.parsed {
-            return;
-        }
-
-        self.root = Some(markdown::to_mdast(&self.text, &ParseOptions::gfm()).map(|n| n.into()));
-        self.parsed = true;
+        self
     }
 }
 
-impl Render for MarkdownView {
-    fn render(&mut self, _: &mut Window, _: &mut gpui::Context<'_, Self>) -> impl IntoElement {
-        self.parse_if_needed();
+#[derive(Default)]
+pub struct MarkdownState {
+    raw: SharedString,
+    root: Option<Result<element::Node, SharedString>>,
+}
 
-        let Some(root) = self.root.clone() else {
-            return div();
-        };
+impl MarkdownState {
+    fn parse_if_needed(&mut self, new_text: SharedString) {
+        let is_changed = self.raw != new_text;
 
-        div().map(|this| match root {
-            Ok(node) => this.child(node),
-            Err(err) => this.child(
-                v_flex()
-                    .gap_1()
-                    .child("Error parsing markdown")
-                    .child(err.to_string()),
-            ),
+        if self.root.is_some() && !is_changed {
+            return;
+        }
+
+        self.raw = new_text;
+        self.root = Some(
+            markdown::to_mdast(&self.raw, &ParseOptions::gfm())
+                .map(|n| n.into())
+                .map_err(|e| e.to_string().into()),
+        );
+    }
+}
+
+impl IntoElement for MarkdownElement {
+    type Element = Self;
+
+    fn into_element(self) -> Self::Element {
+        self
+    }
+}
+
+impl Element for MarkdownElement {
+    type RequestLayoutState = AnyElement;
+    type PrepaintState = ();
+
+    fn id(&self) -> Option<gpui::ElementId> {
+        Some(self.id.clone())
+    }
+
+    fn request_layout(
+        &mut self,
+        id: Option<&gpui::GlobalElementId>,
+        window: &mut Window,
+        cx: &mut gpui::App,
+    ) -> (gpui::LayoutId, Self::RequestLayoutState) {
+        window.with_element_state(id.unwrap(), |state, window| {
+            let mut state: MarkdownState = state.unwrap_or_default();
+            state.parse_if_needed(self.text.clone());
+
+            let root = state
+                .root
+                .clone()
+                .expect("BUG: root should not None, maybe parse_if_needed issue.");
+
+            let mut el = div()
+                .map(|this| match root {
+                    Ok(node) => this.child(node),
+                    Err(err) => this.child(
+                        v_flex()
+                            .gap_1()
+                            .child("Error parsing Markdown")
+                            .child(err.to_string()),
+                    ),
+                })
+                .into_any_element();
+
+            let layout_id = el.request_layout(window, cx);
+
+            ((layout_id, el), state)
         })
+    }
+
+    fn prepaint(
+        &mut self,
+        _: Option<&gpui::GlobalElementId>,
+        _: gpui::Bounds<gpui::Pixels>,
+        request_layout: &mut Self::RequestLayoutState,
+        window: &mut Window,
+        cx: &mut gpui::App,
+    ) -> Self::PrepaintState {
+        request_layout.prepaint(window, cx);
+    }
+
+    fn paint(
+        &mut self,
+        _: Option<&gpui::GlobalElementId>,
+        _: gpui::Bounds<gpui::Pixels>,
+        request_layout: &mut Self::RequestLayoutState,
+        _: &mut Self::PrepaintState,
+        window: &mut Window,
+        cx: &mut gpui::App,
+    ) {
+        request_layout.paint(window, cx);
     }
 }
 
@@ -378,18 +442,5 @@ impl From<mdast::Node> for element::Node {
                 element::Node::Unknown
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::MarkdownView;
-
-    #[test]
-    fn test_parse() {
-        let source = include_str!("../../../story/examples/markdown.md");
-        let mut renderer = MarkdownView::new(source);
-        renderer.parse_if_needed();
-        // println!("{:#?}", renderer.root);
     }
 }

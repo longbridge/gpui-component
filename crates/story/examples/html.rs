@@ -4,7 +4,6 @@ use story::Assets;
 
 pub struct Example {
     text_input: Entity<TextInput>,
-    text_view: Entity<TextView>,
     _subscribe: Subscription,
 }
 
@@ -18,15 +17,11 @@ impl Example {
                 .rows(50)
                 .placeholder("Input your HTML here...")
         });
-        let text_view = cx.new(|cx| TextView::html(EXAMPLE, cx));
 
         let _subscribe = cx.subscribe(
             &text_input,
-            |this, _, _: &gpui_component::input::InputEvent, cx| {
-                let new_text = this.text_input.read(cx).text();
-                this.text_view.update(cx, |view, cx| {
-                    view.set_text(new_text, cx);
-                });
+            |_, _, _: &gpui_component::input::InputEvent, cx| {
+                cx.notify();
             },
         );
 
@@ -36,7 +31,6 @@ impl Example {
 
         Self {
             text_input,
-            text_view,
             _subscribe,
         }
     }
@@ -70,7 +64,7 @@ impl Render for Example {
                     .p_5()
                     .flex_1()
                     .overflow_y_scroll()
-                    .child(self.text_view.clone()),
+                    .child(TextView::html("preview", self.text_input.read(cx).text())),
             )
     }
 }
