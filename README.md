@@ -62,6 +62,14 @@ gpui = { git = "https://github.com/huacnlee/zed.git", branch = "webview" }
 gpui-component = { git = "https://github.com/longbridge/gpui-component.git" }
 ```
 
+### WebView
+
+GPUI Component have `WebView` element based on [Wry](https://github.com/tauri-apps/wry), this is an optional feature, you can enable it by feature flag.
+
+```toml
+gpui-component = { git = "https://github.com/longbridge/gpui-component.git", features = ["webview"] }
+```
+
 More usage can be found in [story](https://github.com/longbridge/gpui-component/tree/main/crates/story) directory.
 
 ### Icons
