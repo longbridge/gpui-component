@@ -303,6 +303,10 @@ impl RenderOnce for Paragraph {
                         let links = links.clone();
                         move |ix, _, cx| {
                             if let Some((_, link)) = &links.get(ix) {
+                                // Stop propagation to prevent the parent element from handling the event.
+                                //
+                                // For example the text in a checkbox label, click link need avoid toggle check state.
+                                cx.stop_propagation();
                                 cx.open_url(&link.url);
                             }
                         }
