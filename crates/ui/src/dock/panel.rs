@@ -95,8 +95,7 @@ pub trait Panel: EventEmitter<PanelEvent> + Render + Focusable {
     /// This method will be called when the panel is active or inactive.
     ///
     /// The last_active_panel and current_active_panel will be touched when the panel is active.
-    #[allow(unused_variables)]
-    fn set_active(&self, active: bool, window: &Window, cx: &App) {}
+    fn set_active(&mut self, active: bool, window: &Window, cx: &App) {}
 
     /// Set zoomed state of the panel.
     ///
