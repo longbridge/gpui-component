@@ -232,12 +232,11 @@ impl RenderOnce for DescriptionList {
             None
         };
         let bordered = self.bordered && self.layout.is_horizontal();
-
-        let items_len = self.items.len();
         let columns = self.columns;
 
         // Group items by columns
         let rows = Self::group_item_rows(self.items, self.columns);
+        let rows_len = rows.len();
 
         v_flex()
             .gap(gap)
@@ -247,7 +246,7 @@ impl RenderOnce for DescriptionList {
                     .border_color(cx.theme().border)
             })
             .children(rows.into_iter().enumerate().map(|(ix, items)| {
-                let is_last = ix == items_len - 1;
+                let is_last = ix == rows_len - 1;
                 h_flex()
                     .when(bordered && !is_last, |this| {
                         this.border_b_1().border_color(cx.theme().border)

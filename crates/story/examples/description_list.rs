@@ -5,6 +5,7 @@ use gpui_component::{
     description_list::{DescriptionItem, DescriptionList},
     h_flex,
     popup_menu::PopupMenuExt as _,
+    text::TextView,
     v_flex, AxisExt, Sizable as _, Size,
 };
 use serde::Deserialize;
@@ -28,7 +29,7 @@ impl Example {
             ("Name", "GPUI Component", 1),
             (
                 "Description",
-                "UI components for building fantastic desktop application by using GPUI.",
+                "UI components for building fantastic desktop application by using [GPUI](https://gpui.rs).",
                 3,
             ),
             ("Version", "0.1.0", 1),
@@ -133,13 +134,13 @@ impl Render for Example {
                     .layout(self.layout)
                     .bordered(self.bordered)
                     .with_size(self.size)
-                    .children(self.items.clone().into_iter().map(|(label, value, span)| {
-                        DescriptionItem::Item {
+                    .children(self.items.clone().into_iter().enumerate().map(
+                        |(ix, (label, value, span))| DescriptionItem::Item {
                             label: label.into(),
-                            value: div().child(value).into_any_element(),
+                            value: TextView::markdown(ix, value).into_any_element(),
                             span,
-                        }
-                    })),
+                        },
+                    )),
             )
     }
 }
