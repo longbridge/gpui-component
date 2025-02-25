@@ -1,14 +1,35 @@
 use gpui::*;
-use gpui_component::{text::TextView, ActiveTheme as _};
+use gpui_component::{input::TextInput, text::TextView, ActiveTheme as _};
 use story::Assets;
 
-pub struct Example {}
+pub struct Example {
+    text_input: Entity<TextInput>,
+}
 
 const EXAMPLE: &str = include_str!("./markdown.md");
 
 impl Example {
-    pub fn new(_: &mut Window, _: &mut Context<Self>) -> Self {
-        Self {}
+    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let text_input = cx.new(|cx| {
+            TextInput::new(window, cx)
+                .multi_line()
+                .appearance(false)
+                .h_full()
+                .placeholder("Enter your Markdown here...")
+        });
+
+        let _subscribe = cx.subscribe(
+            &text_input,
+            |_, _, _: &gpui_component::input::InputEvent, cx| {
+                cx.notify();
+            },
+        );
+
+        _ = text_input.update(cx, |input, cx| {
+            input.set_text(EXAMPLE, window, cx);
+        });
+
+        Self { text_input }
     }
 
     fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
@@ -30,9 +51,7 @@ impl Render for Example {
                     .border_r_1()
                     .border_color(cx.theme().border)
                     .flex_1()
-                    .p_5()
-                    .overflow_y_scroll()
-                    .child(EXAMPLE),
+                    .child(self.text_input.clone()),
             )
             .child(
                 div()
@@ -42,7 +61,10 @@ impl Render for Example {
                     .p_5()
                     .flex_1()
                     .overflow_y_scroll()
-                    .child(TextView::markdown("preview", EXAMPLE)),
+                    .child(TextView::markdown(
+                        "preview",
+                        self.text_input.read(cx).text(),
+                    )),
             )
     }
 }

@@ -182,10 +182,14 @@ impl Render for StoryRoot {
         let modal_layer = Root::render_modal_layer(window, cx);
         let notification_layer = Root::render_notification_layer(window, cx);
 
-        v_flex()
+        div()
             .size_full()
-            .child(self.title_bar.clone())
-            .child(self.view.clone())
+            .child(
+                v_flex()
+                    .size_full()
+                    .child(self.title_bar.clone())
+                    .child(div().flex_1().overflow_hidden().child(self.view.clone())),
+            )
             .children(drawer_layer)
             .children(modal_layer)
             .child(div().absolute().top_8().children(notification_layer))
