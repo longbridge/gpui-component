@@ -218,7 +218,6 @@ impl Render for SwitchStory {
                                             "The [long long label](https://github.com) text used markdown, \
                                              it should wrap when the text is too long.",
                                         )
-                                        .inline(),
                                     ),
                             ),
                     ),
