@@ -1,6 +1,6 @@
 use gpui::{
-    div, prelude::FluentBuilder as _, px, relative, AnyElement, Axis, DefiniteLength, Empty,
-    IntoElement, ParentElement, RenderOnce, SharedString, Styled, Window,
+    div, prelude::FluentBuilder as _, px, AnyElement, Axis, DefiniteLength, Empty, IntoElement,
+    ParentElement, RenderOnce, SharedString, Styled, Window,
 };
 
 use crate::{h_flex, text::Text, v_flex, ActiveTheme as _, AxisExt, Sizable, Size};
@@ -232,7 +232,6 @@ impl RenderOnce for DescriptionList {
             None
         };
         let bordered = self.bordered && self.layout.is_horizontal();
-        let columns = self.columns;
 
         // Group items by columns
         let rows = Self::group_item_rows(self.items, self.columns);
@@ -240,6 +239,7 @@ impl RenderOnce for DescriptionList {
 
         v_flex()
             .gap(gap)
+            .overflow_hidden()
             .when(bordered, |this| {
                 this.rounded(padding_x)
                     .border_1()
@@ -252,12 +252,8 @@ impl RenderOnce for DescriptionList {
                         this.border_b_1().border_color(cx.theme().border)
                     })
                     .children({
-                        items.into_iter().map(|item| {
-                            let item_width = if let Some(span) = item._span() {
-                                relative(span as f32 / columns as f32)
-                            } else {
-                                relative(1.)
-                            };
+                        items.into_iter().enumerate().map(|(item_ix, item)| {
+                            let is_first_col = item_ix == 0;
 
                             match item {
                                 DescriptionItem::Item { label, value, .. } => {
@@ -268,7 +264,7 @@ impl RenderOnce for DescriptionList {
                                     };
 
                                     el.h_full()
-                                        .w(item_width)
+                                        .flex_1()
                                         .child(
                                             div()
                                                 .text_color(
@@ -284,6 +280,9 @@ impl RenderOnce for DescriptionList {
                                                         .flex_shrink_0()
                                                         .when(bordered, |this| {
                                                             this.border_r_1()
+                                                                .when(!is_first_col, |this| {
+                                                                    this.border_l_1()
+                                                                })
                                                                 .border_color(cx.theme().border)
                                                                 .bg(cx
                                                                     .theme()
@@ -294,7 +293,12 @@ impl RenderOnce for DescriptionList {
                                                 .child(label.clone()),
                                         )
                                         .child(
-                                            div().flex_1().px(padding_x).py(padding_y).child(value),
+                                            div()
+                                                .flex_1()
+                                                .px(padding_x)
+                                                .py(padding_y)
+                                                .overflow_hidden()
+                                                .child(value),
                                         )
                                 }
                                 _ => div().h(px(2.)),

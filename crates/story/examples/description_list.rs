@@ -29,7 +29,12 @@ impl Example {
             ("Name", "GPUI Component", 1),
             (
                 "Description",
-                "UI components for building fantastic desktop application by using [GPUI](https://gpui.rs).",
+                "UI components for building fantastic desktop application by using [GPUI](https://gpui.rs).\
+                \n\n \
+                Contains a lot of useful UI components, such as **Button**, **TextInput**, **Table**, **List**, **Dropdown**, **DatePicker** ... \
+                \n\n \
+                You can easily create your native desktop application by using GPUI Component.
+                ",
                 3,
             ),
             ("Version", "0.1.0", 1),
@@ -38,6 +43,16 @@ impl Example {
             (
                 "Repository",
                 "https://github.com/longbridge/gpui-component",
+                2,
+            ),
+            (
+                "Category",
+                "UI, Desktop, Framework",
+                1,
+            ),
+            (
+                "Platform",
+                "macOS, Windows, Linux",
                 1,
             ),
         ];
