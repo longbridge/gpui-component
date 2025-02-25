@@ -386,6 +386,7 @@ impl Node {
                                                 ordered: state.ordered,
                                                 todo: checked.is_some(),
                                             }),
+                                            true,
                                             text_view_style,
                                             window,
                                             cx,
@@ -399,6 +400,7 @@ impl Node {
                                         ordered: state.ordered,
                                         todo: checked.is_some(),
                                     }),
+                                    true,
                                     text_view_style,
                                     window,
                                     cx,
@@ -489,12 +491,13 @@ impl Node {
     pub(crate) fn render(
         self,
         list_state: Option<ListState>,
+        is_last_child: bool,
         text_view_style: &TextViewStyle,
         window: &mut Window,
         cx: &mut App,
     ) -> impl IntoElement {
         let in_list = list_state.is_some();
-        let mb = if in_list {
+        let mb = if in_list || is_last_child {
             rems(0.)
         } else {
             text_view_style.paragraph_gap
@@ -502,11 +505,14 @@ impl Node {
 
         match self {
             Node::Root { children } => div()
-                .children(
-                    children
-                        .into_iter()
-                        .map(|c| c.render(None, text_view_style, window, cx)),
-                )
+                .children({
+                    let children_len = children.len();
+
+                    children.into_iter().enumerate().map(move |(ix, c)| {
+                        let is_last_child = ix == children_len - 1;
+                        c.render(None, is_last_child, text_view_style, window, cx)
+                    })
+                })
                 .into_any_element(),
             Node::Paragraph(paragraph) => div().mb(mb).child(paragraph).into_any_element(),
             Node::Heading { level, children } => {

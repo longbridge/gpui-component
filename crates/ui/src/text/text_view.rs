@@ -64,15 +64,6 @@ impl Default for TextViewStyle {
 }
 
 impl TextViewStyle {
-    /// Default style for inline text.
-    ///
-    /// This style has no paragraph gap.
-    pub fn inline() -> Self {
-        Self {
-            paragraph_gap: rems(0.),
-        }
-    }
-
     /// Set paragraph gap, default is 1 rem.
     pub fn paragraph_gap(mut self, gap: Rems) -> Self {
         self.paragraph_gap = gap;
@@ -105,11 +96,6 @@ impl TextView {
             Self::Markdown(el) => Self::Markdown(el.style(style)),
             Self::Html(el) => Self::Html(el.style(style)),
         }
-    }
-
-    /// Set to use [`TextViewStyle::inline`].
-    pub fn inline(self) -> Self {
-        self.style(TextViewStyle::inline())
     }
 }
 
