@@ -472,7 +472,7 @@ impl Panel for StoryContainer {
         println!("panel: {} zoomed: {}", self.name, zoomed);
     }
 
-    fn set_active(&mut self, active: bool, _window: &Window, _cx: &App) {
+    fn set_active(&mut self, active: bool, _window: &mut Window, _cx: &mut App) {
         println!("panel: {} active: {}", self.name, active);
     }
 
