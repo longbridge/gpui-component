@@ -131,6 +131,7 @@ pub struct Tiles {
     dragging_initial_mouse: Point<Pixels>,
     dragging_initial_bounds: Bounds<Pixels>,
     resizing_index: Option<usize>,
+    active_index: Option<usize>,
     resizing_drag_data: Option<ResizeDrag>,
     bounds: Bounds<Pixels>,
     history: History<TileChange>,
@@ -190,6 +191,7 @@ impl Tiles {
             history: History::new().group_interval(std::time::Duration::from_millis(100)),
             scroll_state: Rc::new(Cell::new(ScrollbarState::default())),
             scroll_handle: ScrollHandle::default(),
+            active_index: None,
         }
     }
 
@@ -405,7 +407,11 @@ impl Tiles {
     }
 
     /// Bring the panel of target_index to front, returns (old_index, new_index) if successful
-    fn bring_to_front(&mut self, target_index: Option<usize>) -> Option<(usize, usize)> {
+    fn bring_to_front(
+        &mut self,
+        target_index: Option<usize>,
+        cx: &mut Context<Self>,
+    ) -> Option<(usize, usize)> {
         if let Some(old_index) = target_index {
             if old_index < self.panels.len() {
                 let item = self.panels.remove(old_index);
@@ -419,6 +425,7 @@ impl Tiles {
                     new_order: Some(new_index),
                     version: 0,
                 });
+                cx.notify();
                 return Some((old_index, new_index));
             }
         }
@@ -479,6 +486,24 @@ impl Tiles {
         cx.notify();
     }
 
+    /// Returns the active panel, if any.
+    pub fn active_panel(&self) -> Option<Arc<dyn PanelView>> {
+        let Some(active_index) = self.active_index else {
+            return None;
+        };
+
+        self.panels.get(active_index).map(|item| item.panel.clone())
+    }
+
+    fn set_active_index(&mut self, index: Option<usize>, cx: &mut Context<Self>) {
+        if self.active_index == index {
+            return;
+        }
+
+        self.active_index = index;
+        cx.notify();
+    }
+
     /// Produce a vector of AnyElement representing the three possible resize handles
     fn render_resize_handles(
         &mut self,
@@ -531,7 +556,8 @@ impl Tiles {
                                 last_bounds: panel_bounds,
                             };
                             this.update_resizing_drag(drag_data, window, cx);
-                            if let Some((_, new_ix)) = this.bring_to_front(this.resizing_index) {
+                            if let Some((_, new_ix)) = this.bring_to_front(this.resizing_index, cx)
+                            {
                                 this.resizing_index = Some(new_ix);
                             }
                         }
@@ -587,7 +613,8 @@ impl Tiles {
                                 last_bounds: panel_bounds,
                             };
                             this.update_resizing_drag(drag_data, window, cx);
-                            if let Some((_, new_ix)) = this.bring_to_front(this.resizing_index) {
+                            if let Some((_, new_ix)) = this.bring_to_front(this.resizing_index, cx)
+                            {
                                 this.resizing_index = Some(new_ix);
                             }
                         }
@@ -645,7 +672,8 @@ impl Tiles {
                                 last_bounds: panel_bounds,
                             };
                             this.update_resizing_drag(drag_data, window, cx);
-                            if let Some((_, new_ix)) = this.bring_to_front(this.resizing_index) {
+                            if let Some((_, new_ix)) = this.bring_to_front(this.resizing_index, cx)
+                            {
                                 this.resizing_index = Some(new_ix);
                             }
                         }
@@ -717,7 +745,7 @@ impl Tiles {
                     cx.listener(move |this, event: &MouseDownEvent, window, cx| {
                         let last_position = event.position;
                         this.update_initial_position(last_position, window, cx);
-                        if let Some((_, new_ix)) = this.bring_to_front(this.dragging_index) {
+                        if let Some((_, new_ix)) = this.bring_to_front(this.dragging_index, cx) {
                             this.dragging_index = Some(new_ix);
                         }
                     }),
@@ -780,10 +808,15 @@ impl Tiles {
             .h(item.bounds.size.height + px(1.))
             .overflow_hidden()
             .rounded(cx.theme().radius)
-            .when(cx.theme().tile_shadow, |this| this.shadow_md())
             .child(h_flex().size_full().child(panel_view))
             .children(self.render_resize_handles(window, cx, entity_id, &item, &is_occluded))
             .child(self.render_drag_bar(window, cx, entity_id, &item, &is_occluded))
+            .on_mouse_up(
+                MouseButton::Left,
+                cx.listener(move |this, _, _, cx| {
+                    this.set_active_index(Some(ix), cx);
+                }),
+            )
     }
 
     /// Handle the mouse up event to finalize drag or resize operations
@@ -927,7 +960,7 @@ impl Render for Tiles {
                     if this.resizing_index.is_none() && this.dragging_index.is_none() {
                         let position = event.position;
                         if let Some((index, _)) = this.find_at_position(position) {
-                            this.bring_to_front(Some(index));
+                            this.bring_to_front(Some(index), cx);
                             cx.notify();
                         }
                     }
