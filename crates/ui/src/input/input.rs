@@ -224,7 +224,6 @@ pub struct TextInput {
     pub(super) cleanable: bool,
     pub(super) size: Size,
     pub(super) rows: usize,
-    pub(super) width: Option<gpui::DefiniteLength>,
     pub(super) height: Option<gpui::DefiniteLength>,
     pattern: Option<regex::Regex>,
     validate: Option<Box<dyn Fn(&str) -> bool + 'static>>,
@@ -284,7 +283,6 @@ impl TextInput {
             prefix: None,
             suffix: None,
             size: Size::Medium,
-            width: None,
             height: None,
             pattern: None,
             validate: None,
@@ -553,18 +551,6 @@ impl TextInput {
         self.suffix = Some(Box::new(move |window, cx| {
             builder(window, cx).into_any_element()
         }));
-        self
-    }
-
-    /// Set width full of the input (Multi-line only).
-    pub fn w_full(mut self) -> Self {
-        self.width = Some(relative(1.));
-        self
-    }
-
-    /// Set width of the input (Multi-line only).
-    pub fn w(mut self, width: impl Into<DefiniteLength>) -> Self {
-        self.width = Some(width.into());
         self
     }
 
@@ -1669,7 +1655,6 @@ impl Render for TextInput {
             .cursor_text()
             .when(self.multi_line, |this| {
                 this.h_auto()
-                    .when_some(self.width, |this, width| this.w(width))
                     .when_some(self.height, |this, height| this.h(height))
             })
             .when(self.appearance, |this| {
