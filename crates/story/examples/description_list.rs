@@ -40,6 +40,7 @@ impl Example {
             ("Version", "0.1.0", 1),
             ("License", "Apache-2.0", 1),
             ("Author", "Longbridge", 1),
+            ("--", "--", 1),
             (
                 "Repository",
                 "https://github.com/longbridge/gpui-component",
@@ -150,10 +151,14 @@ impl Render for Example {
                     .bordered(self.bordered)
                     .with_size(self.size)
                     .children(self.items.clone().into_iter().enumerate().map(
-                        |(ix, (label, value, span))| DescriptionItem::Item {
-                            label: label.into(),
-                            value: TextView::markdown(ix, value).into_any_element(),
-                            span,
+                        |(ix, (label, value, span))| {
+                            if label == "--" {
+                                return DescriptionItem::Divider;
+                            }
+
+                            DescriptionItem::new(label)
+                                .value(TextView::markdown(ix, value).into_any_element())
+                                .span(span)
                         },
                     )),
             )

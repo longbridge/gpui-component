@@ -1,5 +1,5 @@
 use gpui::{
-    div, prelude::FluentBuilder as _, px, AnyElement, Axis, DefiniteLength, Empty, IntoElement,
+    div, prelude::FluentBuilder as _, px, AnyElement, App, Axis, DefiniteLength, IntoElement,
     ParentElement, RenderOnce, SharedString, Styled, Window,
 };
 
@@ -19,39 +19,69 @@ pub struct DescriptionList {
 /// Description item.
 pub enum DescriptionItem {
     Item {
-        label: Text,
-        value: AnyElement,
+        label: DescriptionText,
+        value: DescriptionText,
         span: usize,
     },
     Divider,
+}
+
+#[derive(IntoElement)]
+pub enum DescriptionText {
+    String(SharedString),
+    Text(Text),
+    AnyElement(AnyElement),
+}
+
+impl From<&str> for DescriptionText {
+    fn from(text: &str) -> Self {
+        DescriptionText::String(SharedString::from(text.to_string()))
+    }
+}
+
+impl From<Text> for DescriptionText {
+    fn from(text: Text) -> Self {
+        DescriptionText::Text(text)
+    }
+}
+
+impl From<AnyElement> for DescriptionText {
+    fn from(element: AnyElement) -> Self {
+        DescriptionText::AnyElement(element)
+    }
+}
+
+impl From<SharedString> for DescriptionText {
+    fn from(text: SharedString) -> Self {
+        DescriptionText::String(text)
+    }
+}
+
+impl RenderOnce for DescriptionText {
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        match self {
+            DescriptionText::String(text) => div().child(text).into_any_element(),
+            DescriptionText::Text(text) => text.into_any_element(),
+            DescriptionText::AnyElement(element) => element,
+        }
+    }
 }
 
 impl DescriptionItem {
     /// Create a new description item, with a label.
     ///
     /// The value is an empty element.
-    pub fn new(label: impl Into<Text>) -> Self {
+    pub fn new(label: impl Into<DescriptionText>) -> Self {
         DescriptionItem::Item {
             label: label.into(),
-            value: Empty.into_any_element(),
+            value: "".into(),
             span: 1,
         }
     }
 
-    /// Set the string value of the item.
-    ///
-    /// This method only works for [`DescriptionItem::Item`].
-    pub fn value(mut self, value: impl Into<SharedString>) -> Self {
-        let new_value: SharedString = value.into();
-        if let DescriptionItem::Item { value, .. } = &mut self {
-            *value = new_value.into_any_element();
-        }
-        self
-    }
-
     /// Set the element value of the item.
-    pub fn child(mut self, value: impl Into<AnyElement>) -> Self {
-        let new_value: AnyElement = value.into();
+    pub fn value(mut self, value: impl Into<DescriptionText>) -> Self {
+        let new_value = value.into();
         if let DescriptionItem::Item { value, .. } = &mut self {
             *value = new_value;
         }
@@ -69,7 +99,7 @@ impl DescriptionItem {
         self
     }
 
-    fn _label(&self) -> Option<&Text> {
+    fn _label(&self) -> Option<&DescriptionText> {
         match self {
             DescriptionItem::Item { label, .. } => Some(label),
             _ => None,
@@ -140,8 +170,8 @@ impl DescriptionList {
     /// Add a [`DescriptionItem::Item`] to the list.
     pub fn child(
         mut self,
-        label: impl Into<Text>,
-        value: impl Into<AnyElement>,
+        label: impl Into<DescriptionText>,
+        value: impl Into<DescriptionText>,
         span: usize,
     ) -> Self {
         self.items.push(DescriptionItem::Item {
@@ -206,13 +236,15 @@ impl Sizable for DescriptionList {
 
 impl RenderOnce for DescriptionList {
     fn render(self, _: &mut Window, cx: &mut gpui::App) -> impl gpui::IntoElement {
+        let base_gap = match self.size {
+            Size::XSmall | Size::Small => px(2.),
+            Size::Medium => px(4.),
+            Size::Large => px(8.),
+            _ => px(4.),
+        };
+
         let gap = if self.layout.is_vertical() {
-            match self.size {
-                Size::XSmall | Size::Small => px(2.),
-                Size::Medium => px(4.),
-                Size::Large => px(8.),
-                _ => px(4.),
-            }
+            base_gap
         } else {
             px(0.)
         };
@@ -289,7 +321,7 @@ impl RenderOnce for DescriptionList {
                                                         }),
                                                     None => this,
                                                 })
-                                                .child(label.clone()),
+                                                .child(label),
                                         )
                                         .child(
                                             div()
@@ -301,7 +333,9 @@ impl RenderOnce for DescriptionList {
                                                 .child(value),
                                         )
                                 }
-                                _ => div().h(px(2.)),
+                                _ => div().h_2().w_full().when(bordered, |this| {
+                                    this.bg(cx.theme().description_list_label)
+                                }),
                             }
                         })
                     })
