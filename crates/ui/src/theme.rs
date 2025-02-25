@@ -85,6 +85,10 @@ pub struct ThemeColor {
     pub danger_foreground: Hsla,
     /// Danger hover background color.
     pub danger_hover: Hsla,
+    /// Description List label background color.
+    pub description_list_label: Hsla,
+    /// Description List label foreground color.
+    pub description_list_label_foreground: Hsla,
     /// Drag border color.
     pub drag_border: Hsla,
     /// Drop target background color.
@@ -224,6 +228,8 @@ impl ThemeColor {
             danger_active: hsl(0.0, 84.2, 47.0),
             danger_foreground: hsl(0.0, 0.0, 98.0),
             danger_hover: hsl(0.0, 84.2, 65.0),
+            description_list_label: hsl(240.0, 5.9, 96.9),
+            description_list_label_foreground: hsl(240.0, 5.9, 10.0),
             drag_border: crate::blue_500(),
             drop_target: hsl(235.0, 30., 44.0).opacity(0.25),
             foreground: hsl(240.0, 10., 3.9),
@@ -301,6 +307,8 @@ impl ThemeColor {
             danger_active: hsl(0.0, 62.8, 20.6),
             danger_foreground: hsl(0.0, 0.0, 78.0),
             danger_hover: hsl(0.0, 62.8, 35.6),
+            description_list_label: hsl(240.0, 0., 13.0),
+            description_list_label_foreground: hsl(0.0, 0.0, 78.0),
             drag_border: crate::blue_500(),
             drop_target: hsl(235.0, 30., 44.0).opacity(0.1),
             foreground: hsl(0., 0., 78.),
@@ -483,6 +491,9 @@ impl Theme {
         self.sidebar_primary = self.sidebar_primary.apply(mask_color);
         self.sidebar_primary_foreground = self.sidebar_primary_foreground.apply(mask_color);
         self.tiles = self.tiles.apply(mask_color);
+        self.description_list_label = self.description_list_label.apply(mask_color);
+        self.description_list_label_foreground =
+            self.description_list_label_foreground.apply(mask_color);
     }
 
     /// Sync the theme with the system appearance

@@ -5,8 +5,8 @@ use crate::{
     ActiveTheme,
 };
 use gpui::{
-    div, px, App, Axis, Div, Edges, Element, ElementId, EntityId, FocusHandle, Pixels, Styled,
-    Window,
+    div, px, App, Axis, DefiniteLength, Div, Edges, Element, ElementId, EntityId, FocusHandle,
+    Pixels, Styled, Window,
 };
 use serde::{Deserialize, Serialize};
 
@@ -44,6 +44,18 @@ pub trait StyledExt: Styled + Sized {
     #[inline]
     fn v_flex(self) -> Self {
         self.flex().flex_col()
+    }
+
+    /// Apply paddings to the element.
+    fn paddings<L>(self, paddings: impl Into<Edges<L>>) -> Self
+    where
+        L: Into<DefiniteLength> + Clone + Default + std::fmt::Debug,
+    {
+        let paddings = paddings.into();
+        self.pt(paddings.top.into())
+            .pb(paddings.bottom.into())
+            .pl(paddings.left.into())
+            .pr(paddings.right.into())
     }
 
     /// Render a border with a width of 1px, color red

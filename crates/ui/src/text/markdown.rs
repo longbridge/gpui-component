@@ -34,7 +34,7 @@ use super::{
 #[derive(Clone)]
 pub(super) struct MarkdownElement {
     id: ElementId,
-    text: SharedString,
+    pub(super) text: SharedString,
     style: TextViewStyle,
 }
 

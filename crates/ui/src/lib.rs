@@ -19,6 +19,7 @@ pub mod checkbox;
 pub mod clipboard;
 pub mod color_picker;
 pub mod context_menu;
+pub mod description_list;
 pub mod divider;
 pub mod dock;
 pub mod drawer;

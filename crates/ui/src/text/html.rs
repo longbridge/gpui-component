@@ -82,7 +82,7 @@ pub(super) fn parse_html(source: &str) -> Result<element::Node, SharedString> {
 #[derive(Clone)]
 pub(super) struct HtmlElement {
     id: ElementId,
-    text: SharedString,
+    pub(super) text: SharedString,
     style: TextViewStyle,
 }
 
