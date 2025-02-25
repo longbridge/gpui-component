@@ -468,7 +468,7 @@ impl Panel for StoryContainer {
             .contains(&self.name)
     }
 
-    fn set_zoomed(&self, zoomed: bool, _window: &Window, _cx: &App) {
+    fn set_zoomed(&mut self, zoomed: bool, _window: &mut Window, _cx: &mut App) {
         println!("panel: {} zoomed: {}", self.name, zoomed);
     }
 

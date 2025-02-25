@@ -102,7 +102,7 @@ pub trait Panel: EventEmitter<PanelEvent> + Render + Focusable {
     /// This method will be called when the panel is zoomed or unzoomed.
     ///
     /// Only current Panel will touch this method.
-    fn set_zoomed(&self, zoomed: bool, window: &Window, cx: &App) {}
+    fn set_zoomed(&mut self, zoomed: bool, window: &mut Window, cx: &mut App) {}
 
     /// The addition popup menu of the panel, default is `None`.
     fn popup_menu(&self, this: PopupMenu, window: &Window, cx: &App) -> PopupMenu {
