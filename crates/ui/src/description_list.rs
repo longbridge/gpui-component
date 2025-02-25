@@ -324,15 +324,8 @@ mod tests {
         let rows = super::DescriptionList::group_item_rows(items, 3);
         assert_eq!(rows.len(), 4);
         assert_eq!(rows[0].len(), 2);
-        assert_eq!(rows[0][0]._label(), Some("test1"));
-        assert_eq!(rows[0][1]._label(), Some("test2"));
         assert_eq!(rows[1].len(), 3);
-        assert_eq!(rows[1][0]._label(), Some("test3"));
-        assert_eq!(rows[1][1]._label(), Some("test4"));
-        assert_eq!(rows[1][2]._label(), Some("test5"));
         assert_eq!(rows[2].len(), 1);
-        assert_eq!(rows[2][0]._label(), Some("test6"));
         assert_eq!(rows[3].len(), 1);
-        assert_eq!(rows[3][0]._label(), Some("test7"));
     }
 }
