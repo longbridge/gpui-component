@@ -1,5 +1,5 @@
 use gpui::*;
-use gpui_component::{input::TextInput, text::TextView, ActiveTheme as _};
+use gpui_component::{h_flex, input::TextInput, text::TextView, ActiveTheme as _};
 use story::Assets;
 
 pub struct Example {
@@ -14,8 +14,9 @@ impl Example {
         let text_input = cx.new(|cx| {
             TextInput::new(window, cx)
                 .multi_line()
-                .rows(50)
-                .placeholder("Input your HTML here...")
+                .appearance(false)
+                .h_full()
+                .placeholder("Enter your HTML here...")
         });
 
         let _subscribe = cx.subscribe(
@@ -42,9 +43,7 @@ impl Example {
 
 impl Render for Example {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        div()
-            .flex()
-            .flex_row()
+        h_flex()
             .h_full()
             .child(
                 div()
@@ -53,7 +52,6 @@ impl Render for Example {
                     .w_1_2()
                     .border_r_1()
                     .border_color(cx.theme().border)
-                    .flex_1()
                     .child(self.text_input.clone()),
             )
             .child(
@@ -62,7 +60,6 @@ impl Render for Example {
                     .h_full()
                     .w_1_2()
                     .p_5()
-                    .flex_1()
                     .overflow_y_scroll()
                     .child(TextView::html("preview", self.text_input.read(cx).text())),
             )

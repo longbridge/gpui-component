@@ -346,11 +346,19 @@ impl Element for TextElement {
         let mut style = Style::default();
         style.size.width = relative(1.).into();
         if self.input.read(cx).is_multi_line() {
-            style.size.height = relative(1.).into();
-            style.min_size.height = (input.rows.max(1) as f32 * window.line_height()).into();
+            style.flex_grow = 1.0;
+            if let Some(h) = input.height {
+                style.size.height = h.into();
+                style.min_size.height = window.line_height().into();
+            } else {
+                style.size.height = relative(1.).into();
+                style.min_size.height = (input.rows.max(1) as f32 * window.line_height()).into();
+            }
         } else {
+            // For single-line inputs, the minimum height should be the line height
             style.size.height = window.line_height().into();
         };
+
         (window.request_layout(style, [], cx), ())
     }
 

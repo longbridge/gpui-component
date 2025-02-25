@@ -69,7 +69,7 @@ impl InputStory {
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let input1 = cx.new(|cx| {
-            let mut input = TextInput::new(window, cx).cleanable();
+            let mut input = TextInput::new(window, cx).cleanable().h_full();
             input.set_text(
                 "Hello 世界，this is GPUI component, this is a long text.",
                 window,
@@ -387,7 +387,9 @@ impl Render for InputStory {
                                     .child(self.number_input2.clone()),
                             ),
                     )
-                    .child(section("Textarea", cx).child(self.textarea.clone()))
+                    .child(
+                        section("Textarea", cx).child(div().flex_1().child(self.textarea.clone())),
+                    )
                     .child(
                         section("Input State", cx)
                             .child(self.disabled_input.clone())

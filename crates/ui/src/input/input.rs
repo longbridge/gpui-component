@@ -1692,6 +1692,8 @@ impl Render for TextInput {
             .child(
                 div()
                     .id("TextElement")
+                    .w_full()
+                    .when(self.is_multi_line(), |this| this.h_full())
                     .flex_grow()
                     .overflow_x_hidden()
                     .child(TextElement::new(cx.entity().clone())),
