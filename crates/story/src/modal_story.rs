@@ -166,6 +166,7 @@ pub struct ModalStory {
     model_show_close: bool,
     model_padding: bool,
     model_keyboard: bool,
+    overlay_closeable: bool,
 }
 
 impl super::Story for ModalStory {
@@ -288,6 +289,7 @@ impl ModalStory {
             model_show_close: true,
             model_padding: true,
             model_keyboard: true,
+            overlay_closeable: true,
         }
     }
 
@@ -360,6 +362,7 @@ impl ModalStory {
         let overlay = self.modal_overlay;
         let modal_show_close = self.model_show_close;
         let modal_padding = self.model_padding;
+        let overlay_closeable = self.overlay_closeable;
         let input1 = self.input1.clone();
         let date_picker = self.date_picker.clone();
         let dropdown = self.dropdown.clone();
@@ -372,6 +375,7 @@ impl ModalStory {
                 .overlay(overlay)
                 .keyboard(keyboard)
                 .show_close(modal_show_close)
+                .overlay_closable(overlay_closeable)
                 .when(!modal_padding, |this| this.p(px(0.)))
                 .child(
                     v_flex()
@@ -466,6 +470,15 @@ impl Render for ModalStory {
                                     .checked(self.modal_overlay)
                                     .on_click(cx.listener(|view, _, _, cx| {
                                         view.modal_overlay = !view.modal_overlay;
+                                        cx.notify();
+                                    })),
+                            )
+                            .child(
+                                Checkbox::new("overlay-closeable")
+                                    .label("Overlay Closeable")
+                                    .checked(self.overlay_closeable)
+                                    .on_click(cx.listener(|view, _, _, cx| {
+                                        view.overlay_closeable = !view.overlay_closeable;
                                         cx.notify();
                                     })),
                             )

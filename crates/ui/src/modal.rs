@@ -91,6 +91,7 @@ pub struct Modal {
     overlay: bool,
     overlay_closable: bool,
     keyboard: bool,
+    moveable: bool,
 
     /// This will be change when open the modal, the focus handle is create when open the modal.
     pub(crate) focus_handle: FocusHandle,
@@ -143,6 +144,7 @@ impl Modal {
             button_props: ModalButtonProps::default(),
             show_close: true,
             overlay_closable: true,
+            moveable: false,
         }
     }
 
@@ -262,6 +264,12 @@ impl Modal {
         self
     }
 
+    /// Set whether to support mouse drag to move the modal, defaults to `false`.
+    pub fn moveable(mut self, moveable: bool) -> Self {
+        self.moveable = moveable;
+        self
+    }
+
     pub(crate) fn has_overlay(&self) -> bool {
         self.overlay
     }
@@ -357,11 +365,10 @@ impl RenderOnce for Modal {
             .snap_to_window()
             .child(
                 div()
-                    .occlude()
                     .w(view_size.width)
                     .h(view_size.height)
                     .when(self.overlay_visible, |this| {
-                        this.bg(overlay_color(self.overlay, window, cx))
+                        this.occlude().bg(overlay_color(self.overlay, window, cx))
                     })
                     .when(self.overlay_closable, |this| {
                         this.on_mouse_down(MouseButton::Left, {
