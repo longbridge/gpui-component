@@ -3,9 +3,9 @@ on:
   pull_request:
   push:
     branches:
-      - "*"
+      - '*'
     tags:
-      - "*"
+      - '*'
 
 jobs:
   test:
@@ -17,7 +17,7 @@ jobs:
       - name: Install system dependencies
         run: script/bootstrap
       - name: Machete
-        uses: bnjbvr/cargo-machete@main
+        uses: bnjbvr/cargo-machete@v0.7.0
       - name: Setup | Cache Cargo
         uses: actions/cache@v4
         with:
