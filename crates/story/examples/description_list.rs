@@ -89,7 +89,7 @@ impl Example {
 impl Render for Example {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
-            .id("exmaple")
+            .id("example")
             .on_action(cx.listener(Self::on_change_size))
             .p_4()
             .size_full()
