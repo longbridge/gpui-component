@@ -216,15 +216,13 @@ impl RenderOnce for DescriptionList {
         } else {
             px(0.)
         };
-        let (mut padding_x, padding_y) = match self.size {
+        // Only for Horizontal layout
+        let (padding_x, padding_y) = match self.size {
             Size::XSmall | Size::Small => (px(4.), px(2.)),
             Size::Medium => (px(8.), px(4.)),
             Size::Large => (px(12.), px(6.)),
             _ => (px(8.), px(4.)),
         };
-        if !self.layout.is_horizontal() {
-            padding_x = px(0.);
-        }
 
         let label_width = if self.layout.is_horizontal() {
             Some(self.label_width)
@@ -260,18 +258,19 @@ impl RenderOnce for DescriptionList {
                                     let el = if self.layout.is_vertical() {
                                         v_flex()
                                     } else {
-                                        h_flex()
+                                        h_flex().h_full()
                                     };
 
-                                    el.h_full()
-                                        .flex_1()
+                                    el.flex_1()
                                         .child(
                                             div()
+                                                .when(self.layout.is_horizontal(), |this| {
+                                                    this.h_full()
+                                                })
                                                 .text_color(
                                                     cx.theme().description_list_label_foreground,
                                                 )
                                                 .text_sm()
-                                                .h_full()
                                                 .map(|this| match label_width {
                                                     Some(label_width) => this
                                                         .w(label_width)
@@ -288,15 +287,16 @@ impl RenderOnce for DescriptionList {
                                                                     .theme()
                                                                     .description_list_label)
                                                         }),
-                                                    None => this.flex_1(),
+                                                    None => this,
                                                 })
                                                 .child(label.clone()),
                                         )
                                         .child(
                                             div()
                                                 .flex_1()
-                                                .px(padding_x)
-                                                .py(padding_y)
+                                                .when(self.layout.is_horizontal(), |this| {
+                                                    this.px(padding_x).py(padding_y)
+                                                })
                                                 .overflow_hidden()
                                                 .child(value),
                                         )
