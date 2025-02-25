@@ -15,11 +15,11 @@ use crate::{
 
 use super::{DockArea, Panel, PanelEvent, PanelInfo, PanelState, PanelView, TabPanel, TileMeta};
 use gpui::{
-    actions, canvas, div, point, prelude::FluentBuilder as _, px, size, AnyElement, App,
-    AppContext, Bounds, Context, DismissEvent, DragMoveEvent, Empty, EntityId, EventEmitter,
-    FocusHandle, Focusable, Half, InteractiveElement, IntoElement, MouseButton, MouseDownEvent,
-    MouseUpEvent, ParentElement, Pixels, Point, Render, ScrollHandle, Size,
-    StatefulInteractiveElement, Styled, WeakEntity, Window,
+    actions, canvas, div, point, px, size, AnyElement, App, AppContext, Bounds, Context,
+    DismissEvent, DragMoveEvent, Empty, EntityId, EventEmitter, FocusHandle, Focusable, Half,
+    InteractiveElement, IntoElement, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement,
+    Pixels, Point, Render, ScrollHandle, Size, StatefulInteractiveElement, Styled, WeakEntity,
+    Window,
 };
 
 actions!(tiles, [Undo, Redo,]);
