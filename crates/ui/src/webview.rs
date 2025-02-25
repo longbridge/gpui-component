@@ -38,11 +38,13 @@ impl WebView {
 
     pub fn show(&mut self) {
         let _ = self.webview.set_visible(true);
+        self.visible = true;
     }
 
     pub fn hide(&mut self) {
         _ = self.webview.focus_parent();
         _ = self.webview.set_visible(false);
+        self.visible = false;
     }
 
     pub fn visible(&self) -> bool {
