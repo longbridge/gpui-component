@@ -7,6 +7,8 @@ This is first paragraph, there have **BOLD**, _italic_, and ~strikethrough~, `co
 
 This is an additional demonstration paragraph in English demonstrating more content for [Markdown GFM](https://github.github.com/gfm/). It includes various stylistic elements and plain text.
 
+![Img](https://miro.medium.com/v2/resize:fit:1400/format:webp/1*WgEz5f3n3lD7MfC7NeQGOA.jpeg)
+
 ---
 
 这是一个中文演示段落，用于展示更多的 [Markdown GFM](https://github.github.com/gfm/) 内容。您可以在此尝试使用使用**粗体**、*斜体*和`代码`等样式。これは日本語のデモ段落です。Markdown の多言語サポートを示すためのテキストが含まれています。例えば、、**ボールド**、_イタリック_、および`コード`のスタイルなどを試すことができます。
@@ -16,6 +18,10 @@ This is an additional demonstration paragraph in English demonstrating more cont
 Here is a link to [Google](https://www.google.com), and another to [Rust](https://www.rust-lang.org).
 
 ### Images
+
+![](https://miro.medium.com/v2/resize:fit:1400/format:webp/0*fCBw3AjH4o9SO03D)
+
+#### SVG
 
 ![Rust](https://www.rust-lang.org/logos/rust-logo-blk.svg)
 
