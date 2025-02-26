@@ -229,20 +229,25 @@ pub enum Node {
         lang: Option<SharedString>,
     },
     Table(Table),
-    // <br>
-    Break,
+    Break {
+        html: bool,
+    },
     Divider,
     Ignore,
     Unknown,
 }
 
 impl Node {
-    fn is_ignore(&self) -> bool {
+    pub(super) fn is_ignore(&self) -> bool {
         matches!(self, Self::Ignore)
     }
 
-    fn is_list_item(&self) -> bool {
+    pub(super) fn is_list_item(&self) -> bool {
         matches!(self, Self::ListItem { .. })
+    }
+
+    pub(super) fn is_break(&self) -> bool {
+        matches!(self, Self::Break { .. })
     }
 
     /// Combine all children, omitting the empt parent nodes.
@@ -634,7 +639,7 @@ impl Node {
                 .h(px(2.))
                 .mb(mb)
                 .into_any_element(),
-            Node::Break => div().into_any_element(),
+            Node::Break { .. } => div().into_any_element(),
             Node::Ignore => div().into_any_element(),
             _ => {
                 if cfg!(debug_assertions) {
@@ -793,7 +798,13 @@ impl Node {
                     .join("\n");
                 format!("{}\n{}\n{}", header, alignments, rows)
             }
-            Node::Break => "\n".to_string(),
+            Node::Break { html } => {
+                if *html {
+                    "<br>".to_string()
+                } else {
+                    "\n".to_string()
+                }
+            }
             Node::Divider => "---".to_string(),
             Node::Ignore => "".to_string(),
             Node::Unknown => "".to_string(),

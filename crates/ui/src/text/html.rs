@@ -543,7 +543,7 @@ fn parse_node(node: &Rc<Node>, paragraph: &mut Paragraph) -> element::Node {
             ref attrs,
             ..
         } => match name.local {
-            local_name!("br") => element::Node::Break,
+            local_name!("br") => element::Node::Break { html: true },
             local_name!("h1")
             | local_name!("h2")
             | local_name!("h3")

@@ -65,11 +65,7 @@ impl MarkdownState {
         }
 
         self.raw = new_text;
-        self.root = Some(
-            markdown::to_mdast(&self.raw, &ParseOptions::gfm())
-                .map(|n| n.into())
-                .map_err(|e| e.to_string().into()),
-        );
+        self.root = Some(parse_markdown(&self.raw));
     }
 }
 
@@ -144,6 +140,13 @@ impl Element for MarkdownElement {
     ) {
         request_layout.paint(window, cx);
     }
+}
+
+/// Parse Markdown into a tree of nodes.
+fn parse_markdown(raw: &str) -> Result<element::Node, SharedString> {
+    markdown::to_mdast(&raw, &ParseOptions::gfm())
+        .map(|n| n.into())
+        .map_err(|e| e.to_string().into())
 }
 
 fn parse_table_row(table: &mut Table, node: &mdast::TableRow) {
@@ -302,8 +305,12 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node) -> String {
         }
         Node::Html(val) => match parse_html(&val.value) {
             Ok(el) => {
-                if el == element::Node::Break {
-                    text.push_str("\n");
+                if el.is_break() {
+                    text = "\n".to_owned();
+                    paragraph.push(element::TextNode {
+                        text: text.clone(),
+                        marks: vec![(0..text.len(), InlineTextStyle::default())],
+                    });
                 } else {
                     if cfg!(debug_assertions) {
                         eprintln!("[markdown] unsupported inline html tag: {:#?}", el);
@@ -366,7 +373,7 @@ impl From<mdast::Node> for element::Node {
                     checked: val.checked,
                 }
             }
-            Node::Break(_) => element::Node::Break,
+            Node::Break(_) => element::Node::Break { html: false },
             Node::Code(raw) => element::Node::CodeBlock {
                 code: raw.value.into(),
                 lang: raw.lang.map(|s| s.into()),
@@ -448,5 +455,20 @@ impl From<mdast::Node> for element::Node {
                 element::Node::Unknown
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_markdown;
+
+    #[test]
+    fn test_parse_br() {
+        let raw = "Row 1<br/>Row 2<br>[Link](https://github.com)";
+        let node = parse_markdown(&raw).unwrap();
+        assert_eq!(
+            node.to_markdown(),
+            "Row 1\nRow 2\n[Link](https://github.com)"
+        );
     }
 }
