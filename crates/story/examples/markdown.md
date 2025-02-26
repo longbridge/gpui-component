@@ -79,11 +79,11 @@ Here is a link to [Google](https://www.google.com), and another to [Rust](https:
 
 ### Table
 
-| Header 1 | Header 2 | Header 3                             | Header 4 |
-| -------- | -------- | ------------------------------------ | -------- |
-| Cell 0   | Cell 1   | This is a long cell with line break. | Cell 3   |
-| Row 2    | Row 2    | Row 2<br>[Link](https://github.com)  | Row 2    |
-| Row 3    | **Bold** | Row 3                                | Row 3    |
+| Header 1 | Centered | Header 3                             | Align Right |
+| -------- | :------: | ------------------------------------ | ----------: |
+| Cell 0   |  Cell 1  | This is a long cell with line break. |      Cell 3 |
+| Row 2    |  Row 2   | Row 2<br>[Link](https://github.com)  |       Row 2 |
+| Row 3    | **Bold** | Row 3                                |       Row 3 |
 
 #### Lists
 

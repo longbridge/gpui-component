@@ -6,6 +6,7 @@ use gpui::{
     IntoElement, Length, ObjectFit, ParentElement, RenderOnce, SharedString, SharedUri, Styled,
     StyledImage as _, StyledText, Window,
 };
+use markdown::mdast;
 
 use crate::{h_flex, v_flex, ActiveTheme as _, Icon, IconName};
 
@@ -99,6 +100,32 @@ impl From<String> for Paragraph {
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Table {
     pub children: Vec<TableRow>,
+    pub column_aligns: Vec<TableColumnAlign>,
+}
+
+impl Table {
+    pub(crate) fn column_align(&self, index: usize) -> TableColumnAlign {
+        self.column_aligns.get(index).copied().unwrap_or_default()
+    }
+}
+
+#[derive(Debug, Default, Copy, Clone, PartialEq)]
+pub enum TableColumnAlign {
+    #[default]
+    Left,
+    Center,
+    Right,
+}
+
+impl From<mdast::AlignKind> for TableColumnAlign {
+    fn from(value: mdast::AlignKind) -> Self {
+        match value {
+            mdast::AlignKind::None => TableColumnAlign::Left,
+            mdast::AlignKind::Left => TableColumnAlign::Left,
+            mdast::AlignKind::Center => TableColumnAlign::Center,
+            mdast::AlignKind::Right => TableColumnAlign::Right,
+        }
+    }
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
@@ -461,6 +488,7 @@ impl Node {
                                 .children({
                                     let mut cells = Vec::with_capacity(row.children.len());
                                     for (ix, cell) in row.children.iter().enumerate() {
+                                        let align = table.column_align(ix);
                                         let len = col_lens
                                             .get(ix)
                                             .copied()
@@ -470,6 +498,13 @@ impl Node {
                                         cells.push(
                                             div()
                                                 .id("cell")
+                                                .flex()
+                                                .when(align == TableColumnAlign::Center, |this| {
+                                                    this.justify_center()
+                                                })
+                                                .when(align == TableColumnAlign::Right, |this| {
+                                                    this.justify_end()
+                                                })
                                                 .w(Length::Definite(relative(len as f32)))
                                                 .px_2()
                                                 .py_1()

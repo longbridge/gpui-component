@@ -437,6 +437,12 @@ impl From<mdast::Node> for element::Node {
             Node::ThematicBreak(_) => element::Node::Divider,
             Node::Table(val) => {
                 let mut table = Table::default();
+                table.column_aligns = val
+                    .align
+                    .clone()
+                    .into_iter()
+                    .map(|align| align.into())
+                    .collect();
                 val.children.iter().for_each(|c| {
                     if let Node::TableRow(row) = c {
                         parse_table_row(&mut table, row);
