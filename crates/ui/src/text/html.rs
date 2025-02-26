@@ -62,7 +62,7 @@ pub(super) fn parse_html(source: &str) -> Result<element::Node, SharedString> {
         ..Default::default()
     };
 
-    let bytes = minify_html::minify(source.as_bytes(), &minify_html::Cfg::default());
+    let bytes = cleanup_html(&source);
     let mut cursor = std::io::Cursor::new(bytes);
     // Ref
     // https://github.com/servo/html5ever/blob/main/rcdom/examples/print-rcdom.rs
@@ -77,6 +77,12 @@ pub(super) fn parse_html(source: &str) -> Result<element::Node, SharedString> {
     let node = node.compact();
 
     Ok(node)
+}
+
+fn cleanup_html(source: &str) -> Vec<u8> {
+    let mut cfg = minify_html::Cfg::default();
+    cfg.keep_closing_tags = true;
+    minify_html::minify(source.as_bytes(), &cfg)
 }
 
 #[derive(Clone)]
@@ -334,6 +340,7 @@ fn parse_table_cell(
 ///
 /// - Before: " \r\n Hello world \t "
 /// - After: " Hello world "
+#[allow(dead_code)]
 fn trim_text(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
 
@@ -372,7 +379,7 @@ fn parse_paragraph(
 
     match &node.data {
         NodeData::Text { ref contents } => {
-            let part = trim_text(&contents.borrow());
+            let part = &contents.borrow();
             text.push_str(&part);
             paragraph.push_str(&text);
         }
@@ -524,7 +531,7 @@ fn parse_paragraph(
 fn parse_node(node: &Rc<Node>, paragraph: &mut Paragraph) -> element::Node {
     match node.data {
         NodeData::Text { ref contents } => {
-            let text = contents.borrow().trim_start().to_string();
+            let text = contents.borrow().to_string();
             if text.len() > 0 {
                 paragraph.push_str(&text);
             }
@@ -761,8 +768,71 @@ mod tests {
     use super::trim_text;
 
     #[test]
+    fn test_cleanup_html() {
+        let html = r#"<p>
+            and
+            <code>code</code>
+            text
+        </p>"#;
+        let cleaned = super::cleanup_html(html);
+        assert_eq!(
+            String::from_utf8(cleaned).unwrap(),
+            "<p>and <code>code</code> text</p>"
+        );
+
+        let html = r#"<p>
+            and
+            <em>   <code>code</code>   <i>italic</i>   </em>
+            text
+        </p>"#;
+        let cleaned = super::cleanup_html(html);
+        assert_eq!(
+            String::from_utf8(cleaned).unwrap(),
+            "<p>and <em> <code>code</code> <i>italic</i> </em> text</p>"
+        );
+    }
+
+    #[test]
     fn test_trim_text() {
         assert_eq!(trim_text("  \n\tHello world \t\r "), " Hello world ",);
+    }
+
+    #[test]
+    fn test_keep_spaces() {
+        let html = r#"<p>and <code>code</code> text</p>"#;
+        let node = super::parse_html(html).unwrap();
+        assert_eq!(node.to_markdown(), "and `code` text");
+
+        let html = r#"
+            <div>
+            <p>
+                and
+                <em>   <code>code</code>   <i>italic</i>   </em>
+                text
+            </p>
+            <p>
+                <img src="https://example.com/image.png" alt="Example" width="100" height="200" title="Example Image" />
+            </p>
+            <ul>
+                <li>Item 1</li>
+                <li>Item 2
+                </li>
+            </ul>
+            </div>
+        "#;
+        let node = super::parse_html(html).unwrap();
+        assert_eq!(
+            node.to_markdown(),
+            indoc::indoc! {r#"
+            and * code italic * text
+
+            ![Example](https://example.com/image.png "Example Image")
+
+            - Item 1
+            - Item 2
+            "#}
+            .trim()
+        );
     }
 
     #[test]

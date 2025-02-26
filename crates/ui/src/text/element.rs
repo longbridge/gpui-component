@@ -276,7 +276,14 @@ impl RenderOnce for Paragraph {
 
                 for text_node in children.into_iter() {
                     let text_len = text_node.text.len();
-                    text.push_str(&text_node.text);
+                    let part = if text.len() == 0 {
+                        // trim start for first text
+                        text_node.text.trim_start()
+                    } else {
+                        text_node.text.as_str()
+                    };
+
+                    text.push_str(part);
 
                     let mut node_highlights = vec![];
                     for (range, style) in text_node.marks {
@@ -642,26 +649,26 @@ impl Node {
 
 impl Paragraph {
     fn to_markdown(&self) -> String {
-        let text = match self {
+        let mut text = match self {
             Paragraph::Texts { children, .. } => children
                 .iter()
                 .map(|text_node| {
                     let mut text = text_node.text.clone();
                     for (range, style) in &text_node.marks {
                         if style.bold {
-                            text = format!("**{}**", &text[range.clone()]);
+                            text = format!("**{}**", &text_node.text[range.clone()]);
                         }
                         if style.italic {
-                            text = format!("*{}*", &text[range.clone()]);
+                            text = format!("*{}*", &text_node.text[range.clone()]);
                         }
                         if style.strikethrough {
-                            text = format!("~~{}~~", &text[range.clone()]);
+                            text = format!("~~{}~~", &text_node.text[range.clone()]);
                         }
                         if style.code {
-                            text = format!("`{}`", &text[range.clone()]);
+                            text = format!("`{}`", &text_node.text[range.clone()]);
                         }
                         if let Some(link) = &style.link {
-                            text = format!("[{}]({})", &text[range.clone()], link.url);
+                            text = format!("[{}]({})", &text_node.text[range.clone()], link.url);
                         }
                     }
                     text
@@ -678,7 +685,8 @@ impl Paragraph {
             }
         };
 
-        format!("{}\n", text)
+        text.push_str("\n\n");
+        text
     }
 }
 
@@ -693,7 +701,7 @@ impl Node {
                 .iter()
                 .map(|child| child.to_markdown())
                 .collect::<Vec<_>>()
-                .join("\n"),
+                .join("\n\n"),
             Node::Paragraph(paragraph) => paragraph.to_markdown(),
             Node::Heading { level, children } => {
                 let hashes = "#".repeat(*level as usize);
