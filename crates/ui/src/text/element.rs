@@ -489,6 +489,7 @@ impl Node {
                                     let mut cells = Vec::with_capacity(row.children.len());
                                     for (ix, cell) in row.children.iter().enumerate() {
                                         let align = table.column_align(ix);
+                                        let is_last_col = ix == row.children.len() - 1;
                                         let len = col_lens
                                             .get(ix)
                                             .copied()
@@ -508,6 +509,10 @@ impl Node {
                                                 .w(Length::Definite(relative(len as f32)))
                                                 .px_2()
                                                 .py_1()
+                                                .when(!is_last_col, |this| {
+                                                    this.border_r_1()
+                                                        .border_color(cx.theme().border)
+                                                })
                                                 .truncate()
                                                 .child(cell.children.clone()),
                                         )
