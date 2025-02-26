@@ -442,6 +442,11 @@ impl DockArea {
         self.bounds
     }
 
+    /// Return the items of the dock area.
+    pub fn items(&self) -> &DockItem {
+        &self.items
+    }
+
     /// Subscribe to the tiles item drag item drop event
     fn subscribe_tiles_item_drop(
         &mut self,

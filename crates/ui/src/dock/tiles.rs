@@ -13,7 +13,9 @@ use crate::{
     v_flex, ActiveTheme, Icon, IconName,
 };
 
-use super::{DockArea, Panel, PanelEvent, PanelInfo, PanelState, PanelView, TabPanel, TileMeta};
+use super::{
+    DockArea, Panel, PanelEvent, PanelInfo, PanelState, PanelView, StackPanel, TabPanel, TileMeta,
+};
 use gpui::{
     actions, canvas, div, point, px, size, AnyElement, App, AppContext, Bounds, Context,
     DismissEvent, DragMoveEvent, Empty, EntityId, EventEmitter, FocusHandle, Focusable, Half,
@@ -359,6 +361,11 @@ impl Tiles {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        assert!(
+            item.panel.view().downcast::<TabPanel>().is_ok(),
+            "only allows to add TabPanel type"
+        );
+
         self.panels.push(item.clone());
         window.defer(cx, {
             let panel = item.panel.clone();
@@ -487,12 +494,20 @@ impl Tiles {
     }
 
     /// Returns the active panel, if any.
-    pub fn active_panel(&self) -> Option<Arc<dyn PanelView>> {
+    pub fn active_panel(&self, cx: &App) -> Option<Arc<dyn PanelView>> {
         let Some(active_index) = self.active_index else {
             return None;
         };
 
-        self.panels.get(active_index).map(|item| item.panel.clone())
+        self.panels.get(active_index).and_then(|item| {
+            if let Ok(tab_panel) = item.panel.view().downcast::<TabPanel>() {
+                tab_panel.read(cx).active_panel(cx)
+            } else if let Ok(_) = item.panel.view().downcast::<StackPanel>() {
+                None
+            } else {
+                Some(item.panel.clone())
+            }
+        })
     }
 
     fn set_active_index(&mut self, index: Option<usize>, cx: &mut Context<Self>) {

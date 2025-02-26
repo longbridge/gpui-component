@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use crate::{button::Button, popup_menu::PopupMenu};
 use gpui::{
-    AnyElement, AnyView, App, Entity, EventEmitter, FocusHandle, Focusable, Global, Hsla,
+    AnyElement, AnyView, App, Entity, EntityId, EventEmitter, FocusHandle, Focusable, Global, Hsla,
     IntoElement, Render, SharedString, WeakEntity, Window,
 };
 
@@ -129,6 +129,7 @@ pub trait Panel: EventEmitter<PanelEvent> + Render + Focusable {
 #[allow(unused_variables)]
 pub trait PanelView: 'static + Send + Sync {
     fn panel_name(&self, cx: &App) -> &'static str;
+    fn panel_id(&self, cx: &App) -> EntityId;
     fn title(&self, window: &Window, cx: &App) -> AnyElement;
     fn title_style(&self, cx: &App) -> Option<TitleStyle>;
     fn closable(&self, cx: &App) -> bool;
@@ -147,6 +148,10 @@ pub trait PanelView: 'static + Send + Sync {
 impl<T: Panel> PanelView for Entity<T> {
     fn panel_name(&self, cx: &App) -> &'static str {
         self.read(cx).panel_name()
+    }
+
+    fn panel_id(&self, _: &App) -> EntityId {
+        self.entity_id()
     }
 
     fn title(&self, window: &Window, cx: &App) -> AnyElement {
