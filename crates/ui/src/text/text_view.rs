@@ -3,6 +3,21 @@ use gpui::{rems, App, ElementId, IntoElement, Rems, RenderOnce, SharedString, Wi
 use super::{html::HtmlElement, markdown::MarkdownElement};
 
 /// A text view that can render Markdown or HTML.
+///
+/// ## Goals
+///
+/// - Provide a rich text rendering component for such as Markdown or HTML,
+/// used to display rich text in GPUI application (e.g., Help messages, Release notes)
+/// - Support Markdown GFM and HTML (Simple HTML like Safari Reader Mode) for showing most common used markups.
+/// - Support Heading, Paragraph, Bold, Italic, StrikeThrough, Code, Link, Image, Blockquote, List, Table, HorizontalRule, CodeBlock ...
+///
+/// ## Not Goals
+///
+/// - Customization of the complex style (some simple styles will be supported)
+/// - As a Markdown editor or viewer (If you want to like this, you must fork your version).
+/// - As a HTML viewer, we not support CSS, we only support basic HTML tags for used to as a content reader.
+///
+/// See also [`MarkdownElement`], [`HtmlElement`]
 #[allow(private_interfaces)]
 #[derive(IntoElement, Clone)]
 pub enum TextView {

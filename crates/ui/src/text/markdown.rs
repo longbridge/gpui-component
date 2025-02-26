@@ -20,17 +20,7 @@ use super::{
 /// This is design goal is to be able to most common Markdown (GFM) features
 /// to let us to display rich text in our application.
 ///
-/// The goal:
-///
-/// - For used to help message.
-/// - For used to display like about page.
-/// - Some general style customization (Like base text size, line-height...).
-///
-/// Not in goal:
-///
-/// - As a markdown editor.
-/// - Add custom markdown syntax.
-/// - Complex styles cumstomization.
+/// See also [`super::TextView`]
 #[derive(Clone)]
 pub(super) struct MarkdownElement {
     id: ElementId,
