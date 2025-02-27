@@ -161,7 +161,7 @@ pub enum Matcher {
     /// Match declare days of the week.
     ///
     /// Matcher::DayOfWeek(vec![0, 6])
-    /// @ill match the days of the week that are Sunday and Saturday.
+    /// Will match the days of the week that are Sunday and Saturday.
     DayOfWeek(Vec<u32>),
     /// Match the included days, except for those before and after the interval.
     ///
@@ -481,7 +481,11 @@ impl Calendar {
                 }
             })
             .when(muted, |this| {
-                this.text_color(cx.theme().muted_foreground.opacity(0.3))
+                this.text_color(if disabled {
+                    cx.theme().muted_foreground.opacity(0.3)
+                } else {
+                    cx.theme().muted_foreground
+                })
             })
             .when(secondary_active, |this| {
                 this.bg(if muted {

@@ -96,7 +96,11 @@ impl CalendarStory {
                 window,
                 cx,
             );
-            picker.set_date(now, window, cx);
+            picker.set_date(
+                now.checked_sub_days(Days::new(1)).unwrap_or_default(),
+                window,
+                cx,
+            );
             picker
         });
         let date_picker_small = cx.new(|cx| {
