@@ -322,6 +322,8 @@ impl<T: Styled> StyleSized<T> for T {
         match size {
             Size::Large => self.py_5(),
             Size::Medium => self.py_2(),
+            Size::Small => self.py_1(),
+            Size::XSmall => self.py_0(),
             _ => self.py_1(),
         }
     }
@@ -331,6 +333,8 @@ impl<T: Styled> StyleSized<T> for T {
         match size {
             Size::Large => self.h_11(),
             Size::Medium => self.h_8(),
+            Size::Small => self.h(px(26.)),
+            Size::XSmall => self.h(px(20.)),
             _ => self.h(px(26.)),
         }
         .input_text_size(size)

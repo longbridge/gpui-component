@@ -31,12 +31,13 @@ struct ContainerPanel {
 
 #[derive(Clone, Serialize, Deserialize)]
 struct ContainerPanelState {
-    child_state: PanelState,
+    /// The state of the child panel.
+    child: PanelState,
 }
 
 impl ContainerPanelState {
-    fn new(child_state: PanelState) -> Self {
-        Self { child_state }
+    fn new(child: PanelState) -> Self {
+        Self { child }
     }
 
     fn to_value(&self) -> serde_json::Value {
@@ -57,7 +58,7 @@ impl ContainerPanel {
                 PanelInfo::Panel(panel_info) => {
                     let container_state =
                         ContainerPanelState::from_value(panel_info.clone()).unwrap();
-                    let child_state = container_state.child_state;
+                    let child_state = container_state.child;
                     let view = PanelRegistry::build_panel(
                         &child_state.panel_name,
                         dock_area,
@@ -76,8 +77,12 @@ impl ContainerPanel {
 
     fn new(panel: Arc<dyn PanelView>, window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| {
-            let search_input =
-                cx.new(|cx| TextInput::new(window, cx).small().placeholder("Search..."));
+            let search_input = cx.new(|cx| {
+                TextInput::new(window, cx)
+                    .xsmall()
+                    .appearance(false)
+                    .placeholder("Search...")
+            });
 
             Self {
                 panel,
@@ -96,10 +101,15 @@ impl Panel for ContainerPanel {
         self.panel.title(window, cx)
     }
 
-    fn title_suffix(&self, _: &mut Window, _: &mut App) -> Option<AnyElement> {
+    fn title_suffix(&self, _: &mut Window, cx: &mut App) -> Option<AnyElement> {
         Some(
             div()
                 .w_24()
+                .h_5()
+                .px_0p5()
+                .rounded_lg()
+                .border_1()
+                .border_color(cx.theme().input)
                 .child(self.search_input.clone())
                 .into_any_element(),
         )
