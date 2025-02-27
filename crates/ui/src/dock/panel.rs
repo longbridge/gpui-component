@@ -290,8 +290,8 @@ impl PanelRegistry {
     ) -> Box<dyn PanelView> {
         if let Some(view) = Self::global(cx)
             .items
-            .clone()
             .get(panel_name)
+            .cloned()
             .map(|f| f(dock_area, panel_state, panel_info, window, cx))
         {
             return view;
