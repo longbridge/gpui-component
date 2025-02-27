@@ -626,6 +626,7 @@ impl TabPanel {
                             )
                         }),
                 )
+                .children(panel.title_suffix(window, cx))
                 .child(
                     h_flex()
                         .flex_shrink_0()
@@ -747,6 +748,10 @@ impl TabPanel {
                     .bg(cx.theme().tab_bar)
                     .px_2()
                     .gap_1()
+                    .children(
+                        self.active_panel(cx)
+                            .and_then(|panel| panel.title_suffix(window, cx)),
+                    )
                     .child(self.render_toolbar(state, window, cx))
                     .when_some(right_dock_button, |this, btn| this.child(btn)),
             )

@@ -2,13 +2,13 @@ use std::{collections::HashMap, sync::Arc};
 
 use crate::{button::Button, popup_menu::PopupMenu};
 use gpui::{
-    AnyElement, AnyView, App, Entity, EntityId, EventEmitter, FocusHandle, Focusable, Global, Hsla,
-    IntoElement, Render, SharedString, WeakEntity, Window,
+    AnyElement, AnyView, App, AppContext as _, Entity, EntityId, EventEmitter, FocusHandle,
+    Focusable, Global, Hsla, IntoElement, Render, SharedString, WeakEntity, Window,
 };
 
 use rust_i18n::t;
 
-use super::{DockArea, PanelInfo, PanelState};
+use super::{invalid_panel::InvalidPanel, DockArea, PanelInfo, PanelState};
 
 pub enum PanelEvent {
     ZoomIn,
@@ -66,6 +66,13 @@ pub trait Panel: EventEmitter<PanelEvent> + Render + Focusable {
 
     /// The theme of the panel title, default is `None`.
     fn title_style(&self, cx: &App) -> Option<TitleStyle> {
+        None
+    }
+
+    /// The suffix of the panel title, default is `None`.
+    ///
+    /// This is used to add a suffix element to the panel title.
+    fn title_suffix(&self, window: &mut Window, cx: &mut App) -> Option<AnyElement> {
         None
     }
 
@@ -131,6 +138,7 @@ pub trait PanelView: 'static + Send + Sync {
     fn panel_name(&self, cx: &App) -> &'static str;
     fn panel_id(&self, cx: &App) -> EntityId;
     fn title(&self, window: &Window, cx: &App) -> AnyElement;
+    fn title_suffix(&self, window: &mut Window, cx: &mut App) -> Option<AnyElement>;
     fn title_style(&self, cx: &App) -> Option<TitleStyle>;
     fn closable(&self, cx: &App) -> bool;
     fn zoomable(&self, cx: &App) -> Option<PanelControl>;
@@ -156,6 +164,10 @@ impl<T: Panel> PanelView for Entity<T> {
 
     fn title(&self, window: &Window, cx: &App) -> AnyElement {
         self.read(cx).title(window, cx)
+    }
+
+    fn title_suffix(&self, window: &mut Window, cx: &mut App) -> Option<AnyElement> {
+        self.update(cx, |this, cx| this.title_suffix(window, cx))
     }
 
     fn title_style(&self, cx: &App) -> Option<TitleStyle> {
@@ -244,9 +256,48 @@ pub struct PanelRegistry {
     >,
 }
 impl PanelRegistry {
+    /// Initialize the panel registry.
+    pub(crate) fn init(cx: &mut App) {
+        if let None = cx.try_global::<PanelRegistry>() {
+            cx.set_global(PanelRegistry::new());
+        }
+    }
+
     pub fn new() -> Self {
         Self {
             items: HashMap::new(),
+        }
+    }
+
+    pub fn global(cx: &App) -> &Self {
+        cx.global::<PanelRegistry>()
+    }
+
+    pub fn global_mut(cx: &mut App) -> &mut Self {
+        cx.global_mut::<PanelRegistry>()
+    }
+
+    /// Build a panel by name.
+    ///
+    /// If not registered, return InvalidPanel.
+    pub fn build_panel(
+        panel_name: &str,
+        dock_area: WeakEntity<DockArea>,
+        panel_state: &PanelState,
+        panel_info: &PanelInfo,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Box<dyn PanelView> {
+        if let Some(view) = Self::global(cx)
+            .items
+            .clone()
+            .get(panel_name)
+            .map(|f| f(dock_area, panel_state, panel_info, window, cx))
+        {
+            return view;
+        } else {
+            // Show an invalid panel if the panel is not registered.
+            Box::new(cx.new(|cx| InvalidPanel::new(&panel_name, panel_state.clone(), window, cx)))
         }
     }
 }
@@ -264,11 +315,8 @@ where
         ) -> Box<dyn PanelView>
         + 'static,
 {
-    if let None = cx.try_global::<PanelRegistry>() {
-        cx.set_global(PanelRegistry::new());
-    }
-
-    cx.global_mut::<PanelRegistry>()
+    PanelRegistry::init(cx);
+    PanelRegistry::global_mut(cx)
         .items
         .insert(panel_name.to_string(), Arc::new(deserialize));
 }

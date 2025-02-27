@@ -1,10 +1,15 @@
 use anyhow::{Context as _, Result};
 use gpui::*;
 use gpui_component::{
-    dock::{DockArea, DockAreaState, DockEvent, DockItem},
-    ActiveTheme, Root, TitleBar,
+    dock::{
+        register_panel, DockArea, DockAreaState, DockEvent, DockItem, Panel, PanelEvent, PanelInfo,
+        PanelRegistry, PanelState, PanelView,
+    },
+    input::TextInput,
+    ActiveTheme, Root, Sizable, TitleBar,
 };
-use std::time::Duration;
+use serde::{Deserialize, Serialize};
+use std::{sync::Arc, time::Duration};
 use story::{Assets, ButtonStory, IconStory, StoryContainer};
 
 actions!(main_menu, [Quit]);
@@ -13,6 +18,114 @@ const TILES_DOCK_AREA: DockAreaTab = DockAreaTab {
     id: "story-tiles",
     version: 1,
 };
+
+/// A specification for a container panel for wrapping other panels to add some common functionality.
+///
+/// For example:
+///
+/// - Add a search bar to all panels.
+struct ContainerPanel {
+    panel: Arc<dyn PanelView>,
+    search_input: Entity<TextInput>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+struct ContainerPanelState {
+    child_state: PanelState,
+}
+
+impl ContainerPanelState {
+    fn new(child_state: PanelState) -> Self {
+        Self { child_state }
+    }
+
+    fn to_value(&self) -> serde_json::Value {
+        serde_json::to_value(self).unwrap()
+    }
+
+    fn from_value(value: serde_json::Value) -> Result<Self> {
+        serde_json::from_value(value).context("failed to deserialize ContainerPanelState")
+    }
+}
+
+impl ContainerPanel {
+    fn init(cx: &mut App) {
+        register_panel(
+            cx,
+            "ContainerPanel",
+            |dock_area, _, info, window, cx| match info {
+                PanelInfo::Panel(panel_info) => {
+                    let container_state =
+                        ContainerPanelState::from_value(panel_info.clone()).unwrap();
+                    let child_state = container_state.child_state;
+                    let view = PanelRegistry::build_panel(
+                        &child_state.panel_name,
+                        dock_area,
+                        &child_state,
+                        &child_state.info,
+                        window,
+                        cx,
+                    );
+
+                    Box::new(ContainerPanel::new(view.into(), window, cx))
+                }
+                _ => unreachable!(),
+            },
+        );
+    }
+
+    fn new(panel: Arc<dyn PanelView>, window: &mut Window, cx: &mut App) -> Entity<Self> {
+        cx.new(|cx| {
+            let search_input =
+                cx.new(|cx| TextInput::new(window, cx).small().placeholder("Search..."));
+
+            Self {
+                panel,
+                search_input,
+            }
+        })
+    }
+}
+
+impl Panel for ContainerPanel {
+    fn panel_name(&self) -> &'static str {
+        "ContainerPanel"
+    }
+
+    fn title(&self, window: &Window, cx: &App) -> AnyElement {
+        self.panel.title(window, cx)
+    }
+
+    fn title_suffix(&self, _: &mut Window, _: &mut App) -> Option<AnyElement> {
+        Some(
+            div()
+                .w_24()
+                .child(self.search_input.clone())
+                .into_any_element(),
+        )
+    }
+
+    fn dump(&self, cx: &App) -> PanelState {
+        let mut state = PanelState::new(self);
+        let panel_state = self.panel.dump(cx);
+        let json_value = ContainerPanelState::new(panel_state).to_value();
+        state.info = PanelInfo::panel(json_value);
+        state
+    }
+}
+
+impl EventEmitter<PanelEvent> for ContainerPanel {}
+impl Focusable for ContainerPanel {
+    fn focus_handle(&self, cx: &App) -> FocusHandle {
+        self.panel.focus_handle(cx)
+    }
+}
+
+impl Render for ContainerPanel {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        self.panel.view().clone()
+    }
+}
 
 actions!(workspace, [Open, CloseWindow]);
 
@@ -182,13 +295,21 @@ impl StoryTiles {
         DockItem::tiles(
             vec![
                 DockItem::tab(
-                    StoryContainer::panel::<ButtonStory>(window, cx),
+                    ContainerPanel::new(
+                        Arc::new(StoryContainer::panel::<ButtonStory>(window, cx)),
+                        window,
+                        cx,
+                    ),
                     dock_area,
                     window,
                     cx,
                 ),
                 DockItem::tab(
-                    StoryContainer::panel::<IconStory>(window, cx),
+                    ContainerPanel::new(
+                        Arc::new(StoryContainer::panel::<IconStory>(window, cx)),
+                        window,
+                        cx,
+                    ),
                     dock_area,
                     window,
                     cx,
@@ -292,6 +413,7 @@ fn main() {
     app.run(move |cx| {
         gpui_component::init(cx);
         story::init(cx);
+        ContainerPanel::init(cx);
 
         cx.on_action(quit);
 

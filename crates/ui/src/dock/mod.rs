@@ -22,7 +22,7 @@ pub use tab_panel::*;
 pub use tiles::*;
 
 pub fn init(cx: &mut App) {
-    cx.set_global(PanelRegistry::new());
+    PanelRegistry::init(cx);
 }
 
 actions!(dock, [ToggleZoom, ClosePanel]);
@@ -204,6 +204,12 @@ impl DockItem {
                         let meta: TileMeta = metas[ix].into();
                         let tile_item =
                             TileItem::new(Arc::new(view), meta.bounds).z_index(meta.z_index);
+                        tiles.add_item(tile_item, dock_area, window, cx);
+                    }
+                    DockItem::Panel { view } => {
+                        let meta: TileMeta = metas[ix].into();
+                        let tile_item =
+                            TileItem::new(view.clone(), meta.bounds).z_index(meta.z_index);
                         tiles.add_item(tile_item, dock_area, window, cx);
                     }
                     _ => {

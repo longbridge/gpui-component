@@ -2,9 +2,7 @@ use gpui::{point, px, size, App, AppContext, Axis, Bounds, Entity, Pixels, WeakE
 use itertools::Itertools as _;
 use serde::{Deserialize, Serialize};
 
-use super::{
-    invalid_panel::InvalidPanel, Dock, DockArea, DockItem, DockPlacement, Panel, PanelRegistry,
-};
+use super::{Dock, DockArea, DockItem, DockPlacement, Panel, PanelRegistry};
 
 /// Used to serialize and deserialize the DockArea
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
@@ -224,20 +222,14 @@ impl PanelState {
                 DockItem::tabs(items, Some(active_index), &dock_area, window, cx)
             }
             PanelInfo::Panel(_) => {
-                let view = if let Some(f) = cx
-                    .global::<PanelRegistry>()
-                    .items
-                    .get(&self.panel_name)
-                    .cloned()
-                {
-                    f(dock_area.clone(), self, &info, window, cx)
-                } else {
-                    // Show an invalid panel if the panel is not registered.
-                    Box::new(
-                        cx.new(|cx| InvalidPanel::new(&self.panel_name, self.clone(), window, cx)),
-                    )
-                };
-
+                let view = PanelRegistry::build_panel(
+                    &self.panel_name,
+                    dock_area.clone(),
+                    self,
+                    &info,
+                    window,
+                    cx,
+                );
                 DockItem::tabs(vec![view.into()], None, &dock_area, window, cx)
             }
             PanelInfo::Tiles { metas } => DockItem::tiles(items, metas, &dock_area, window, cx),
