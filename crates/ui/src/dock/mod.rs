@@ -368,6 +368,32 @@ impl DockItem {
         }
     }
 
+    /// Remove a panel from the dock item.
+    pub fn remove_panel(&self, panel: Arc<dyn PanelView>, window: &mut Window, cx: &mut App) {
+        match self {
+            DockItem::Tabs { view, .. } => {
+                view.update(cx, |tab_panel, cx| {
+                    tab_panel.remove_panel(panel, window, cx);
+                });
+            }
+            DockItem::Split { items, view, .. } => {
+                // For each child item, set collapsed state
+                for item in items {
+                    item.remove_panel(panel.clone(), window, cx);
+                }
+                view.update(cx, |split, cx| {
+                    split.remove_panel(panel, window, cx);
+                });
+            }
+            DockItem::Tiles { view, .. } => {
+                view.update(cx, |tiles, cx| {
+                    tiles.remove(panel, window, cx);
+                });
+            }
+            DockItem::Panel { .. } => {}
+        }
+    }
+
     pub fn set_collapsed(&self, collapsed: bool, window: &mut Window, cx: &mut App) {
         match self {
             DockItem::Tabs { view, .. } => {
@@ -674,8 +700,6 @@ impl DockArea {
     }
 
     /// Add a panel item to the dock area at the given placement.
-    ///
-    /// If the left, bottom, right dock is not present, it will set the dock at the placement.
     pub fn add_panel(
         &mut self,
         panel: Arc<dyn PanelView>,
@@ -730,6 +754,56 @@ impl DockArea {
                     .add_panel(panel, &cx.entity().downgrade(), bounds, window, cx);
             }
         }
+    }
+
+    /// Remove panel from the DockArea at the given placement.
+    pub fn remove_panel(
+        &mut self,
+        panel: Arc<dyn PanelView>,
+        placement: DockPlacement,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        match placement {
+            DockPlacement::Left => {
+                if let Some(dock) = self.left_dock.as_mut() {
+                    dock.update(cx, |dock, cx| {
+                        dock.remove_panel(panel, window, cx);
+                    });
+                }
+            }
+            DockPlacement::Right => {
+                if let Some(dock) = self.right_dock.as_mut() {
+                    dock.update(cx, |dock, cx| {
+                        dock.remove_panel(panel, window, cx);
+                    });
+                }
+            }
+            DockPlacement::Bottom => {
+                if let Some(dock) = self.bottom_dock.as_mut() {
+                    dock.update(cx, |dock, cx| {
+                        dock.remove_panel(panel, window, cx);
+                    });
+                }
+            }
+            DockPlacement::Center => {
+                self.items.remove_panel(panel, window, cx);
+            }
+        }
+        cx.notify();
+    }
+
+    /// Remove a panel from all docks.
+    pub fn remove_panel_from_all_docks(
+        &mut self,
+        panel: Arc<dyn PanelView>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.remove_panel(panel.clone(), DockPlacement::Center, window, cx);
+        self.remove_panel(panel.clone(), DockPlacement::Left, window, cx);
+        self.remove_panel(panel.clone(), DockPlacement::Right, window, cx);
+        self.remove_panel(panel.clone(), DockPlacement::Bottom, window, cx);
     }
 
     /// Load the state of the DockArea from the DockAreaState.

@@ -276,6 +276,17 @@ impl Dock {
         cx.notify();
     }
 
+    /// Remove item from the Dock.
+    pub fn remove_panel(
+        &mut self,
+        panel: Arc<dyn PanelView>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.panel.remove_panel(panel, window, cx);
+        cx.notify();
+    }
+
     fn render_resize_handle(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let axis = self.placement.axis();
         let view = cx.entity().clone();
