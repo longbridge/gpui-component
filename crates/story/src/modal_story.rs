@@ -166,7 +166,7 @@ pub struct ModalStory {
     model_show_close: bool,
     model_padding: bool,
     model_keyboard: bool,
-    overlay_closeable: bool,
+    overlay_closable: bool,
 }
 
 impl super::Story for ModalStory {
@@ -289,7 +289,7 @@ impl ModalStory {
             model_show_close: true,
             model_padding: true,
             model_keyboard: true,
-            overlay_closeable: true,
+            overlay_closable: true,
         }
     }
 
@@ -362,7 +362,7 @@ impl ModalStory {
         let overlay = self.modal_overlay;
         let modal_show_close = self.model_show_close;
         let modal_padding = self.model_padding;
-        let overlay_closeable = self.overlay_closeable;
+        let overlay_closable = self.overlay_closable;
         let input1 = self.input1.clone();
         let date_picker = self.date_picker.clone();
         let dropdown = self.dropdown.clone();
@@ -375,7 +375,7 @@ impl ModalStory {
                 .overlay(overlay)
                 .keyboard(keyboard)
                 .show_close(modal_show_close)
-                .overlay_closable(overlay_closeable)
+                .overlay_closable(overlay_closable)
                 .when(!modal_padding, |this| this.p(px(0.)))
                 .child(
                     v_flex()
@@ -474,11 +474,11 @@ impl Render for ModalStory {
                                     })),
                             )
                             .child(
-                                Checkbox::new("overlay-closeable")
-                                    .label("Overlay Closeable")
-                                    .checked(self.overlay_closeable)
+                                Checkbox::new("overlay-closable")
+                                    .label("Overlay Closable")
+                                    .checked(self.overlay_closable)
                                     .on_click(cx.listener(|view, _, _, cx| {
-                                        view.overlay_closeable = !view.overlay_closeable;
+                                        view.overlay_closable = !view.overlay_closable;
                                         cx.notify();
                                     })),
                             )
