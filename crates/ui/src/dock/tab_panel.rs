@@ -72,6 +72,8 @@ pub struct TabPanel {
     pub(crate) active_ix: usize,
     /// If this is true, the Panel closable will follow the active panel's closable,
     /// otherwise this TabPanel will not able to close
+    ///
+    /// This is used for Dock to limit the last TabPanel not able to close, see [`super::Dock::new`].
     pub(crate) closable: bool,
 
     tab_bar_scroll_handle: ScrollHandle,
