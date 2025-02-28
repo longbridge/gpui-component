@@ -391,7 +391,9 @@ impl Node {
                             Node::Paragraph(_) => {
                                 items.push(
                                     h_flex()
+                                        .relative()
                                         .items_start()
+                                        .content_start()
                                         .flex_1()
                                         .when(!state.todo && checked.is_none(), |this| {
                                             this.child(list_item_prefix(
@@ -405,6 +407,7 @@ impl Node {
                                             this.child(
                                                 div()
                                                     .flex()
+                                                    .mt(rems(0.4))
                                                     .mr_1p5()
                                                     .size(rems(0.875))
                                                     .items_center()
