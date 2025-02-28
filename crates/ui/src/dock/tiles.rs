@@ -361,10 +361,13 @@ impl Tiles {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        assert!(
-            item.panel.view().downcast::<TabPanel>().is_ok(),
-            "only allows to add TabPanel type"
-        );
+        let Ok(tab_panel) = item.panel.view().downcast::<TabPanel>() else {
+            panic!("only allows to add TabPanel type")
+        };
+
+        tab_panel.update(cx, |tab_panel, _| {
+            tab_panel.set_in_tiles(true);
+        });
 
         self.panels.push(item.clone());
         window.defer(cx, {

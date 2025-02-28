@@ -593,6 +593,7 @@ impl DockArea {
     }
 
     /// Determine if the dock area is locked.
+    #[inline]
     pub fn is_locked(&self) -> bool {
         self.locked
     }

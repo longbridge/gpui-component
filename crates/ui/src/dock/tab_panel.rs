@@ -81,6 +81,8 @@ pub struct TabPanel {
     collapsed: bool,
     /// When drag move, will get the placement of the panel to be split
     will_split_placement: Option<Placement>,
+    /// Is TabPanel used in Tiles.
+    in_tiles: bool,
 }
 
 impl Panel for TabPanel {
@@ -158,7 +160,13 @@ impl TabPanel {
             zoomed: false,
             collapsed: false,
             closable: true,
+            in_tiles: false,
         }
+    }
+
+    /// Mark the TabPanel as being used in Tiles.
+    pub(super) fn set_in_tiles(&mut self, in_tiles: bool) {
+        self.in_tiles = in_tiles;
     }
 
     pub(super) fn set_parent(&mut self, view: WeakEntity<StackPanel>) {
@@ -305,8 +313,8 @@ impl TabPanel {
     ) {
         self.detach_panel(panel, window, cx);
         self.remove_self_if_empty(window, cx);
+
         cx.emit(PanelEvent::ZoomOut);
-        cx.emit(PanelEvent::LayoutChanged);
     }
 
     fn detach_panel(
@@ -328,10 +336,10 @@ impl TabPanel {
             return;
         }
 
-        let tab_view = cx.entity().clone();
+        let tab_panel = Arc::new(cx.entity());
         if let Some(stack_panel) = self.stack_panel.as_ref() {
             _ = stack_panel.update(cx, |view, cx| {
-                view.remove_panel(Arc::new(tab_view), window, cx);
+                view.remove_panel(tab_panel, window, cx);
             });
         }
     }
@@ -1063,6 +1071,20 @@ impl TabPanel {
         if let Some(panel) = self.active_panel(cx) {
             self.remove_panel(panel, window, cx);
         }
+
+        // Remove self from the parent DockArea.
+        // This is ensure to remove from Tiles
+        if self.panels.is_empty() && self.in_tiles {
+            let tab_panel = Arc::new(cx.entity());
+            window.defer(cx, {
+                let dock_area = self.dock_area.clone();
+                move |window, cx| {
+                    _ = dock_area.update(cx, |this, cx| {
+                        this.remove_panel_from_all_docks(tab_panel, window, cx);
+                    });
+                }
+            });
+        }
     }
 }
 
@@ -1088,7 +1110,10 @@ impl Render for TabPanel {
             zoomable: self.zoomable(cx),
             active_panel,
         };
-        if !state.draggable {
+
+        // 1. When is the final panel in the dock, it will not able to close.
+        // 2. When is in the Tiles, it will always able to close (by active panel state).
+        if !state.draggable && !self.in_tiles {
             state.closable = false;
         }
 
