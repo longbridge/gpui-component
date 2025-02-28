@@ -37,8 +37,8 @@ Here is a link to [Google](https://www.google.com), and another to [Rust](https:
 
 ##### Bulleted List
 
-- Bullet 1
-- Bullet 2
+- Bullet 1, this is very long and needs to be wrapped to the next line, display should be wrapped to the next line as well.
+- Bullet 2, the second bullet item is also long and needs to be wrapped to the next line.
   - Bullet 2.1
     - Bullet 2.1.1
       - Bullet 2.1.1.1

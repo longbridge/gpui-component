@@ -391,7 +391,8 @@ impl Node {
                             Node::Paragraph(_) => {
                                 items.push(
                                     h_flex()
-                                        .items_center()
+                                        .items_start()
+                                        .flex_1()
                                         .when(!state.todo && checked.is_none(), |this| {
                                             this.child(list_item_prefix(
                                                 ix,
@@ -400,6 +401,7 @@ impl Node {
                                             ))
                                         })
                                         .when_some(checked, |this, checked| {
+                                            // Checkmark
                                             this.child(
                                                 div()
                                                     .flex()
@@ -419,16 +421,18 @@ impl Node {
                                                     }),
                                             )
                                         })
-                                        .child(child.render(
-                                            Some(ListState {
-                                                depth: state.depth + 1,
-                                                ordered: state.ordered,
-                                                todo: checked.is_some(),
-                                            }),
-                                            true,
-                                            text_view_style,
-                                            window,
-                                            cx,
+                                        .child(div().flex_1().overflow_hidden().child(
+                                            child.render(
+                                                Some(ListState {
+                                                    depth: state.depth + 1,
+                                                    ordered: state.ordered,
+                                                    todo: checked.is_some(),
+                                                }),
+                                                true,
+                                                text_view_style,
+                                                window,
+                                                cx,
+                                            ),
                                         )),
                                 );
                             }
