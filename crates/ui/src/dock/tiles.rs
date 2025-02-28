@@ -847,36 +847,40 @@ impl Tiles {
 
             // Handle dragging
             if let Some(index) = self.dragging_index {
-                let initial_bounds = self.dragging_initial_bounds;
-                let current_bounds = self.panels[index].bounds;
-                if initial_bounds.origin != current_bounds.origin
-                    || initial_bounds.size != current_bounds.size
-                {
-                    changes_to_push.push(TileChange {
-                        tile_id: self.panels[index].panel.view().entity_id(),
-                        old_bounds: Some(initial_bounds),
-                        new_bounds: Some(current_bounds),
-                        old_order: None,
-                        new_order: None,
-                        version: 0,
-                    });
-                }
-            }
-
-            // Handle resizing
-            if let Some(index) = self.resizing_index {
-                if let Some(drag_data) = &self.resizing_drag_data {
-                    let initial_bounds = drag_data.last_bounds;
-                    let current_bounds = self.panels[index].bounds;
-                    if initial_bounds.size != current_bounds.size {
+                if let Some(item) = self.panels.get(index) {
+                    let initial_bounds = self.dragging_initial_bounds;
+                    let current_bounds = item.bounds;
+                    if initial_bounds.origin != current_bounds.origin
+                        || initial_bounds.size != current_bounds.size
+                    {
                         changes_to_push.push(TileChange {
-                            tile_id: self.panels[index].panel.view().entity_id(),
+                            tile_id: item.panel.view().entity_id(),
                             old_bounds: Some(initial_bounds),
                             new_bounds: Some(current_bounds),
                             old_order: None,
                             new_order: None,
                             version: 0,
                         });
+                    }
+                }
+            }
+
+            // Handle resizing
+            if let Some(index) = self.resizing_index {
+                if let Some(drag_data) = &self.resizing_drag_data {
+                    if let Some(item) = self.panels.get(index) {
+                        let initial_bounds = drag_data.last_bounds;
+                        let current_bounds = item.bounds;
+                        if initial_bounds.size != current_bounds.size {
+                            changes_to_push.push(TileChange {
+                                tile_id: item.panel.view().entity_id(),
+                                old_bounds: Some(initial_bounds),
+                                new_bounds: Some(current_bounds),
+                                old_order: None,
+                                new_order: None,
+                                version: 0,
+                            });
+                        }
                     }
                 }
             }
