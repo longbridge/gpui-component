@@ -578,8 +578,10 @@ impl Node {
                     _ => (rems(1.), FontWeight::NORMAL),
                 };
 
+                let text_size = text_size.to_pixels(text_view_style.heading_base_font_size);
+
                 h_flex()
-                    .mb(rems(0.5))
+                    .mb(rems(0.3))
                     .whitespace_normal()
                     .text_size(text_size)
                     .font_weight(font_weight)

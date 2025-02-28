@@ -1,4 +1,4 @@
-use gpui::{rems, App, ElementId, IntoElement, Rems, RenderOnce, SharedString, Window};
+use gpui::{px, rems, App, ElementId, IntoElement, Pixels, Rems, RenderOnce, SharedString, Window};
 
 use super::{html::HtmlElement, markdown::MarkdownElement};
 
@@ -67,13 +67,17 @@ impl RenderOnce for Text {
 /// TextViewStyle used to customize the style for [`TextView`].
 #[derive(Copy, Clone)]
 pub struct TextViewStyle {
+    /// Gap of each paragraphs, default is 1 rem.
     pub paragraph_gap: Rems,
+    /// Base font size for headings, default is 14px.
+    pub heading_base_font_size: Pixels,
 }
 
 impl Default for TextViewStyle {
     fn default() -> Self {
         Self {
             paragraph_gap: rems(1.),
+            heading_base_font_size: px(14.),
         }
     }
 }
