@@ -10,7 +10,7 @@ use crate::{
     h_flex,
     history::{History, HistoryItem},
     scroll::{Scrollbar, ScrollbarState},
-    v_flex, ActiveTheme, Icon, IconName,
+    v_flex, ActiveTheme, Icon, IconName, StyledExt,
 };
 
 use super::{
@@ -750,7 +750,6 @@ impl Tiles {
         if !is_occluded(&drag_bar_bounds) {
             h_flex()
                 .id("drag-bar")
-                .cursor_grab()
                 .absolute()
                 .w_full()
                 .h(DRAG_BAR_HEIGHT)
