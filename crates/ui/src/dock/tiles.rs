@@ -10,7 +10,7 @@ use crate::{
     h_flex,
     history::{History, HistoryItem},
     scroll::{Scrollbar, ScrollbarState},
-    v_flex, ActiveTheme, Icon, IconName, StyledExt,
+    v_flex, ActiveTheme, Icon, IconName,
 };
 
 use super::{
