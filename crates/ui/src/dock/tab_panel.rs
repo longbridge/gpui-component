@@ -313,8 +313,8 @@ impl TabPanel {
     ) {
         self.detach_panel(panel, window, cx);
         self.remove_self_if_empty(window, cx);
-
         cx.emit(PanelEvent::ZoomOut);
+        cx.emit(PanelEvent::LayoutChanged);
     }
 
     fn detach_panel(
@@ -336,10 +336,10 @@ impl TabPanel {
             return;
         }
 
-        let tab_panel = Arc::new(cx.entity());
+        let tab_view = cx.entity().clone();
         if let Some(stack_panel) = self.stack_panel.as_ref() {
             _ = stack_panel.update(cx, |view, cx| {
-                view.remove_panel(tab_panel, window, cx);
+                view.remove_panel(Arc::new(tab_view), window, cx);
             });
         }
     }
