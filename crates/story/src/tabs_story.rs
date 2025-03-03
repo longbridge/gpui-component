@@ -83,7 +83,7 @@ impl Render for TabsStory {
                                 ),
                         )
                         .child(Tab::new("tab-account", "Account"))
-                        .child(Tab::new("tab-profile", "Profile"))
+                        .child(Tab::new("tab-profile", "Profile").disabled(true))
                         .child(Tab::new("tab-documents", "Documents"))
                         .child(Tab::new("tab-mail", "Mail"))
                         .child(Tab::new("tab-appearance", "Appearance"))
@@ -111,7 +111,7 @@ impl Render for TabsStory {
                             this.set_active_tab(*ix, window, cx);
                         }))
                         .child(Tab::new("tab-account", "Account"))
-                        .child(Tab::new("tab-profile", "Profile"))
+                        .child(Tab::new("tab-profile", "Profile").disabled(true))
                         .child(Tab::new("tab-documents", "Documents"))
                         .child(Tab::new("tab-mail", "Mail"))
                         .child(Tab::new("tab-appearance", "Appearance"))
@@ -128,7 +128,7 @@ impl Render for TabsStory {
                             this.set_active_tab(*ix, window, cx);
                         }))
                         .child(Tab::new("tab-account", "Account"))
-                        .child(Tab::new("tab-profile", "Profile"))
+                        .child(Tab::new("tab-profile", "Profile").disabled(true))
                         .child(Tab::new("tab-documents", "Documents"))
                         .child(Tab::new("tab-mail", "Mail"))
                         .child(Tab::new("tab-appearance", "Appearance"))

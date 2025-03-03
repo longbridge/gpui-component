@@ -1,9 +1,11 @@
+use std::sync::Arc;
+
 use crate::{ActiveTheme, Selectable};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    div, px, relative, AnyElement, App, Div, Edges, ElementId, Hsla, InteractiveElement,
-    IntoElement, ParentElement as _, Pixels, RenderOnce, Stateful, StatefulInteractiveElement,
-    Styled, Window,
+    div, px, relative, AnyElement, App, ClickEvent, Div, Edges, ElementId, Hsla,
+    InteractiveElement, IntoElement, ParentElement as _, Pixels, RenderOnce, Stateful,
+    StatefulInteractiveElement, Styled, Window,
 };
 
 #[derive(Debug, Clone, Default, Copy, PartialEq, Eq, Hash)]
@@ -81,7 +83,7 @@ impl TabVariant {
     fn hovered(&self, cx: &App) -> TabStyle {
         match self {
             TabVariant::Tab => TabStyle {
-                fg: cx.theme().foreground,
+                fg: cx.theme().tab_foreground,
                 bg: cx.theme().transparent,
                 borders: Edges {
                     top: px(1.),
@@ -93,13 +95,13 @@ impl TabVariant {
                 ..Default::default()
             },
             TabVariant::Pill => TabStyle {
-                fg: cx.theme().accent_foreground,
-                bg: cx.theme().accent,
+                fg: cx.theme().tab_foreground,
+                bg: cx.theme().transparent,
                 radius: cx.theme().radius,
                 ..Default::default()
             },
             TabVariant::Underline => TabStyle {
-                fg: cx.theme().accent_foreground,
+                fg: cx.theme().tab_foreground,
                 bg: cx.theme().transparent,
                 radius: px(0.),
                 inner_bg: cx.theme().accent,
@@ -153,7 +155,11 @@ impl TabVariant {
             TabVariant::Tab => TabStyle {
                 fg: cx.theme().muted_foreground,
                 bg: cx.theme().tab,
-                border_color: cx.theme().border,
+                border_color: if selected {
+                    cx.theme().border
+                } else {
+                    cx.theme().transparent
+                },
                 borders: Edges {
                     top: px(1.),
                     left: px(1.),
@@ -170,14 +176,17 @@ impl TabVariant {
                     cx.theme().tab
                 },
                 radius: cx.theme().radius,
-
                 ..Default::default()
             },
             TabVariant::Underline => TabStyle {
                 fg: cx.theme().muted_foreground,
                 bg: cx.theme().transparent,
                 radius: cx.theme().radius,
-                border_color: cx.theme().border,
+                border_color: if selected {
+                    cx.theme().border
+                } else {
+                    cx.theme().transparent
+                },
                 borders: Edges {
                     bottom: px(2.),
                     ..Default::default()
@@ -198,6 +207,7 @@ pub struct Tab {
     variant: TabVariant,
     disabled: bool,
     selected: bool,
+    on_click: Option<Arc<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>>,
 }
 
 impl Tab {
@@ -212,19 +222,23 @@ impl Tab {
             prefix: None,
             suffix: None,
             variant: TabVariant::default(),
+            on_click: None,
         }
     }
 
+    /// Set Tab Variant.
     pub fn variant(mut self, variant: TabVariant) -> Self {
         self.variant = variant;
         self
     }
 
+    /// Use Pill variant.
     pub fn pill(mut self) -> Self {
         self.variant = TabVariant::Pill;
         self
     }
 
+    /// Use Underline variant.
     pub fn underline(mut self) -> Self {
         self.variant = TabVariant::Underline;
         self
@@ -245,6 +259,15 @@ impl Tab {
     /// Set disabled state to the tab
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
+        self
+    }
+
+    /// Set the click handler for the tab.
+    pub fn on_click(
+        mut self,
+        on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.on_click = Some(Arc::new(on_click));
         self
     }
 }
@@ -333,5 +356,10 @@ impl RenderOnce for Tab {
                     }),
             )
             .when_some(self.suffix, |this, suffix| this.child(suffix))
+            .when(!self.disabled, |this| {
+                this.when_some(self.on_click.clone(), |this, on_click| {
+                    this.on_click(move |event, window, cx| on_click(event, window, cx))
+                })
+            })
     }
 }

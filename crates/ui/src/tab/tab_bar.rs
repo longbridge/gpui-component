@@ -41,16 +41,19 @@ impl TabBar {
         }
     }
 
+    /// Set the Tab variant, all children will inherit the variant.
     pub fn variant(mut self, variant: TabVariant) -> Self {
         self.variant = variant;
         self
     }
 
+    /// Set the Tab variant to Pill, all children will inherit the variant.
     pub fn pill(mut self) -> Self {
         self.variant = TabVariant::Pill;
         self
     }
 
+    /// Set the Tab variant to Underline, all children will inherit the variant.
     pub fn underline(mut self) -> Self {
         self.variant = TabVariant::Underline;
         self
@@ -74,16 +77,19 @@ impl TabBar {
         self
     }
 
+    /// Add children of the TabBar, all children will inherit the variant.
     pub fn children(mut self, children: impl IntoIterator<Item = Tab>) -> Self {
         self.children.extend(children);
         self
     }
 
+    /// Add child of the TabBar, tab will inherit the variant.
     pub fn child(mut self, child: Tab) -> Self {
         self.children.push(child);
         self
     }
 
+    /// Set the selected index of the TabBar.
     pub fn selected_index(mut self, index: usize) -> Self {
         self.selected_index = Some(index);
         self
@@ -96,6 +102,8 @@ impl TabBar {
     }
 
     /// Set the on_click callback of the TabBar, the first parameter is the index of the clicked tab.
+    ///
+    /// When this is set, the children's on_click will taked.
     pub fn on_click(mut self, on_click: impl Fn(&usize, &mut Window, &mut App) + 'static) -> Self {
         self.on_click = Some(Arc::new(on_click));
         self
