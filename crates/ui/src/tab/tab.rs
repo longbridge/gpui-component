@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{h_flex, ActiveTheme, Selectable, Sizable, Size, StyledExt};
+use crate::{ActiveTheme, Selectable, Sizable, Size, StyledExt};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     div, px, AnyElement, App, ClickEvent, Div, Edges, ElementId, Hsla, InteractiveElement,
@@ -501,6 +501,7 @@ impl RenderOnce for Tab {
         let inner_margins = self.variant.inner_margins(self.size);
         let inner_height = self.variant.inner_height(self.size);
         let height = self.variant.height(self.size);
+        let has_label = !self.label.is_empty();
 
         self.base
             .id(self.id)
@@ -541,10 +542,10 @@ impl RenderOnce for Tab {
                     .line_height(inner_height)
                     .paddings(inner_paddings)
                     .margins(inner_margins)
-                    .truncate()
+                    .text_ellipsis()
                     .flex_shrink_0()
-                    .when(!self.label.is_empty(), |this| this.child(self.label))
-                    .children(self.children)
+                    .when(has_label, |this| this.child(self.label))
+                    .when(!has_label, |this| this.children(self.children))
                     .bg(tab_style.inner_bg)
                     .rounded(tab_style.inner_radius)
                     .hover(|this| {
