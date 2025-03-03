@@ -45,6 +45,23 @@ impl Default for TabStyle {
 }
 
 impl TabVariant {
+    fn height(&self, size: Size) -> Pixels {
+        match size {
+            Size::Small | Size::XSmall => match self {
+                TabVariant::Tab => px(24.),
+                TabVariant::Pill => px(24.),
+                TabVariant::Segmented => px(24.),
+                TabVariant::Underline => px(30.),
+            },
+            _ => match self {
+                TabVariant::Tab => px(30.),
+                TabVariant::Pill => px(31.),
+                TabVariant::Segmented => px(30.),
+                TabVariant::Underline => px(38.),
+            },
+        }
+    }
+
     fn inner_height(&self, size: Size) -> Pixels {
         match size {
             Size::Small | Size::XSmall => match self {
@@ -123,6 +140,7 @@ impl TabVariant {
             _ => match self {
                 TabVariant::Underline => Edges {
                     bottom: px(4.),
+                    top: px(4.),
                     ..Default::default()
                 },
                 _ => Edges::all(px(0.)),
@@ -233,7 +251,7 @@ impl TabVariant {
                 ..Default::default()
             },
             TabVariant::Pill => TabStyle {
-                fg: cx.theme().accent_foreground,
+                fg: cx.theme().primary,
                 bg: cx.theme().transparent,
                 borders: Edges::all(px(1.)),
                 border_color: cx.theme().primary,
@@ -349,7 +367,6 @@ impl From<String> for Tab {
 
 impl From<SharedString> for Tab {
     fn from(label: SharedString) -> Self {
-        let label = SharedString::from(label);
         Self::new(label.clone(), label)
     }
 }
@@ -470,11 +487,7 @@ impl RenderOnce for Tab {
         let inner_paddings = self.variant.inner_paddings(self.size);
         let inner_margins = self.variant.inner_margins(self.size);
         let inner_height = self.variant.inner_height(self.size);
-
-        let height = match self.size {
-            Size::Small | Size::XSmall => px(24.),
-            _ => px(31.),
-        };
+        let height = self.variant.height(self.size);
 
         self.base
             .flex()

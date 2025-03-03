@@ -139,19 +139,19 @@ impl RenderOnce for TabBar {
         };
         let (bg, paddings, gap) = match self.variant {
             TabVariant::Tab => {
-                let padding = Edges::all(AbsoluteLength::Pixels(px(0.)));
+                let padding = Edges::all(px(0.));
                 (cx.theme().tab_bar, padding, px(0.))
             }
             TabVariant::Pill => {
-                let padding = Edges::all(AbsoluteLength::Rems(rems(0.25)));
+                let padding = Edges::all(px(0.));
                 (cx.theme().transparent, padding, default_gap)
             }
             TabVariant::Segmented => {
-                let padding = Edges::all(AbsoluteLength::Rems(rems(0.25)));
+                let padding = Edges::all(px(4.));
                 (cx.theme().accent, padding, default_gap / 2.)
             }
             TabVariant::Underline => {
-                let padding = Edges::all(AbsoluteLength::Pixels(px(0.)));
+                let padding = Edges::all(px(0.));
                 (cx.theme().transparent, padding, default_gap / 2.)
             }
         };
