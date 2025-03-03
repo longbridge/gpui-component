@@ -690,7 +690,8 @@ impl TabPanel {
                 }
 
                 Some(
-                    Tab::new(panel.title(window, cx))
+                    Tab::new("")
+                        .child(panel.title(window, cx))
                         .py_2()
                         .selected(active)
                         .disabled(disabled)

@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
-use crate::{ActiveTheme, Selectable, Sizable, Size, StyledExt};
+use crate::{h_flex, ActiveTheme, Selectable, Sizable, Size, StyledExt};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     div, px, AnyElement, App, ClickEvent, Div, Edges, ElementId, Hsla, InteractiveElement,
-    IntoElement, ParentElement as _, Pixels, RenderOnce, SharedString, StatefulInteractiveElement,
+    IntoElement, ParentElement, Pixels, RenderOnce, SharedString, StatefulInteractiveElement,
     Styled, Window,
 };
 
@@ -341,9 +341,10 @@ impl TabVariant {
 pub struct Tab {
     id: ElementId,
     base: Div,
-    label: AnyElement,
+    label: SharedString,
     prefix: Option<AnyElement>,
     suffix: Option<AnyElement>,
+    children: Vec<AnyElement>,
     variant: TabVariant,
     size: Size,
     disabled: bool,
@@ -372,11 +373,12 @@ impl From<SharedString> for Tab {
 }
 
 impl Tab {
-    pub fn new(label: impl IntoElement) -> Self {
+    pub fn new(label: impl Into<SharedString>) -> Self {
         Self {
             id: ElementId::Integer(0),
             base: div().gap_1(),
-            label: label.into_any_element(),
+            label: label.into(),
+            children: Vec::new(),
             disabled: false,
             selected: false,
             prefix: None,
@@ -442,6 +444,12 @@ impl Tab {
     ) -> Self {
         self.on_click = Some(Arc::new(on_click));
         self
+    }
+}
+
+impl ParentElement for Tab {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(elements);
     }
 }
 
@@ -528,14 +536,15 @@ impl RenderOnce for Tab {
             .text_sm()
             .when_some(self.prefix, |this, prefix| this.child(prefix))
             .child(
-                div()
+                h_flex()
                     .h(inner_height)
                     .line_height(inner_height)
                     .paddings(inner_paddings)
                     .margins(inner_margins)
                     .text_ellipsis()
                     .flex_shrink_0()
-                    .child(self.label)
+                    .when(!self.label.is_empty(), |this| this.child(self.label))
+                    .children(self.children)
                     .bg(tab_style.inner_bg)
                     .rounded(tab_style.inner_radius)
                     .hover(|this| {
