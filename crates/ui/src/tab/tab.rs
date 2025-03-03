@@ -139,8 +139,8 @@ impl TabVariant {
             },
             _ => match self {
                 TabVariant::Underline => Edges {
-                    bottom: px(4.),
-                    top: px(4.),
+                    top: px(5.),
+                    bottom: px(3.),
                     ..Default::default()
                 },
                 _ => Edges::all(px(0.)),
