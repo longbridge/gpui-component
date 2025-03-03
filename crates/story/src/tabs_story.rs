@@ -119,6 +119,23 @@ impl Render for TabsStory {
                 ),
             )
             .child(
+                section("Segmented Tabs", cx).child(
+                    TabBar::new("segmented-tabs")
+                        .w_full()
+                        .segmented()
+                        .selected_index(self.active_tab_ix)
+                        .on_click(cx.listener(|this, ix: &usize, window, cx| {
+                            this.set_active_tab(*ix, window, cx);
+                        }))
+                        .child(Tab::new("tab-account", "Account"))
+                        .child(Tab::new("tab-profile", "Profile").disabled(true))
+                        .child(Tab::new("tab-documents", "Documents"))
+                        .child(Tab::new("tab-mail", "Mail"))
+                        .child(Tab::new("tab-appearance", "Appearance"))
+                        .child(Tab::new("tab-settings", "Settings")),
+                ),
+            )
+            .child(
                 section("Underline Tabs", cx).child(
                     TabBar::new("underline-tabs")
                         .w_full()

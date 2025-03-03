@@ -58,6 +58,18 @@ pub trait StyledExt: Styled + Sized {
             .pr(paddings.right.into())
     }
 
+    /// Apply margins to the element.
+    fn margins<L>(self, margins: impl Into<Edges<L>>) -> Self
+    where
+        L: Into<DefiniteLength> + Clone + Default + std::fmt::Debug,
+    {
+        let margins = margins.into();
+        self.mt(margins.top.into())
+            .mb(margins.bottom.into())
+            .ml(margins.left.into())
+            .mr(margins.right.into())
+    }
+
     /// Render a border with a width of 1px, color red
     fn debug_red(self) -> Self {
         if cfg!(debug_assertions) {

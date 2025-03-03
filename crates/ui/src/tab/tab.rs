@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
-use crate::{ActiveTheme, Selectable};
+use crate::{ActiveTheme, Selectable, StyledExt};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    div, px, relative, AnyElement, App, ClickEvent, Div, Edges, ElementId, Hsla,
-    InteractiveElement, IntoElement, ParentElement as _, Pixels, RenderOnce, Stateful,
-    StatefulInteractiveElement, Styled, Window,
+    div, px, AnyElement, App, ClickEvent, Div, Edges, ElementId, Hsla, InteractiveElement,
+    IntoElement, ParentElement as _, Pixels, RenderOnce, Stateful, StatefulInteractiveElement,
+    Styled, Window,
 };
 
 #[derive(Debug, Clone, Default, Copy, PartialEq, Eq, Hash)]
@@ -13,6 +13,7 @@ pub enum TabVariant {
     #[default]
     Tab,
     Pill,
+    Segmented,
     Underline,
 }
 
@@ -44,6 +45,50 @@ impl Default for TabStyle {
 }
 
 impl TabVariant {
+    fn inner_height(&self) -> Pixels {
+        match self {
+            TabVariant::Tab => px(30.),
+            TabVariant::Pill => px(31.),
+            TabVariant::Segmented => px(30.),
+            TabVariant::Underline => px(25.),
+        }
+    }
+
+    fn inner_paddings(&self) -> Edges<Pixels> {
+        match self {
+            TabVariant::Tab => Edges {
+                left: px(12.),
+                right: px(12.),
+                ..Default::default()
+            },
+            TabVariant::Pill => Edges {
+                left: px(16.),
+                right: px(16.),
+                ..Default::default()
+            },
+            TabVariant::Segmented => Edges {
+                left: px(10.),
+                right: px(10.),
+                ..Default::default()
+            },
+            TabVariant::Underline => Edges {
+                left: px(12.),
+                right: px(12.),
+                ..Default::default()
+            },
+        }
+    }
+
+    fn inner_margins(&self) -> Edges<Pixels> {
+        match self {
+            TabVariant::Underline => Edges {
+                bottom: px(4.),
+                ..Default::default()
+            },
+            _ => Edges::all(px(0.)),
+        }
+    }
+
     fn normal(&self, cx: &App) -> TabStyle {
         match self {
             TabVariant::Tab => TabStyle {
@@ -59,6 +104,14 @@ impl TabVariant {
                 ..Default::default()
             },
             TabVariant::Pill => TabStyle {
+                fg: cx.theme().foreground,
+                bg: cx.theme().transparent,
+                borders: Edges::all(px(1.)),
+                border_color: cx.theme().border,
+                radius: px(99.),
+                ..Default::default()
+            },
+            TabVariant::Segmented => TabStyle {
                 fg: cx.theme().foreground,
                 bg: cx.theme().transparent,
                 radius: cx.theme().radius,
@@ -95,6 +148,14 @@ impl TabVariant {
                 ..Default::default()
             },
             TabVariant::Pill => TabStyle {
+                fg: cx.theme().accent_foreground,
+                bg: cx.theme().accent,
+                borders: Edges::all(px(1.)),
+                border_color: cx.theme().border,
+                radius: px(99.),
+                ..Default::default()
+            },
+            TabVariant::Segmented => TabStyle {
                 fg: cx.theme().tab_foreground,
                 bg: cx.theme().transparent,
                 radius: cx.theme().radius,
@@ -131,6 +192,14 @@ impl TabVariant {
                 ..Default::default()
             },
             TabVariant::Pill => TabStyle {
+                fg: cx.theme().accent_foreground,
+                bg: cx.theme().transparent,
+                borders: Edges::all(px(1.)),
+                border_color: cx.theme().primary,
+                radius: px(99.),
+                ..Default::default()
+            },
+            TabVariant::Segmented => TabStyle {
                 fg: cx.theme().tab_active_foreground,
                 bg: cx.theme().tab_active,
                 radius: cx.theme().radius,
@@ -169,6 +238,18 @@ impl TabVariant {
                 ..Default::default()
             },
             TabVariant::Pill => TabStyle {
+                fg: cx.theme().muted_foreground,
+                bg: cx.theme().transparent,
+                borders: Edges::all(px(1.)),
+                border_color: if selected {
+                    cx.theme().primary
+                } else {
+                    cx.theme().border
+                },
+                radius: px(99.),
+                ..Default::default()
+            },
+            TabVariant::Segmented => TabStyle {
                 fg: cx.theme().muted_foreground,
                 bg: if selected {
                     cx.theme().tab_active
@@ -235,6 +316,12 @@ impl Tab {
     /// Use Pill variant.
     pub fn pill(mut self) -> Self {
         self.variant = TabVariant::Pill;
+        self
+    }
+
+    /// Use Segmented variant.
+    pub fn segmented(mut self) -> Self {
+        self.variant = TabVariant::Segmented;
         self
     }
 
@@ -309,6 +396,9 @@ impl RenderOnce for Tab {
             tab_style = self.variant.disabled(self.selected, cx);
             hover_style = self.variant.disabled(self.selected, cx);
         }
+        let inner_paddings = self.variant.inner_paddings();
+        let inner_margins = self.variant.inner_margins();
+        let inner_height = self.variant.inner_height();
 
         self.base
             .flex()
@@ -318,6 +408,7 @@ impl RenderOnce for Tab {
             .overflow_hidden()
             .line_height(px(31.))
             .h(px(31.))
+            .overflow_hidden()
             .text_color(tab_style.fg)
             .bg(tab_style.bg)
             .border_l(tab_style.borders.left)
@@ -342,9 +433,10 @@ impl RenderOnce for Tab {
             .when_some(self.prefix, |this, prefix| this.child(prefix))
             .child(
                 div()
-                    .py_1p5()
-                    .px_3()
-                    .line_height(relative(1.))
+                    .h(inner_height)
+                    .line_height(inner_height)
+                    .paddings(inner_paddings)
+                    .margins(inner_margins)
                     .text_ellipsis()
                     .flex_shrink_0()
                     .child(self.label)

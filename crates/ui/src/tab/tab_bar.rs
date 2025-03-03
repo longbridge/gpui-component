@@ -53,6 +53,12 @@ impl TabBar {
         self
     }
 
+    /// Set the Tab variant to Segmented, all children will inherit the variant.
+    pub fn segmented(mut self) -> Self {
+        self.variant = TabVariant::Segmented;
+        self
+    }
+
     /// Set the Tab variant to Underline, all children will inherit the variant.
     pub fn underline(mut self) -> Self {
         self.variant = TabVariant::Underline;
@@ -118,18 +124,22 @@ impl Styled for TabBar {
 
 impl RenderOnce for TabBar {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let (bg, paddings) = match self.variant {
+        let (bg, paddings, gap) = match self.variant {
             TabVariant::Tab => {
                 let padding = Edges::all(AbsoluteLength::Pixels(px(0.)));
-                (cx.theme().tab_bar, padding)
+                (cx.theme().tab_bar, padding, px(0.))
             }
             TabVariant::Pill => {
                 let padding = Edges::all(AbsoluteLength::Rems(rems(0.25)));
-                (cx.theme().tab_bar, padding)
+                (cx.theme().transparent, padding, px(8.))
+            }
+            TabVariant::Segmented => {
+                let padding = Edges::all(AbsoluteLength::Rems(rems(0.25)));
+                (cx.theme().tab_bar, padding, px(8.))
             }
             TabVariant::Underline => {
                 let padding = Edges::all(AbsoluteLength::Pixels(px(0.)));
-                (cx.theme().transparent, padding)
+                (cx.theme().transparent, padding, px(8.))
             }
         };
 
@@ -157,9 +167,10 @@ impl RenderOnce for TabBar {
                     )
                 },
             )
-            .when(self.variant == TabVariant::Pill, |this| {
-                this.rounded(cx.theme().radius)
-            })
+            .when(
+                self.variant == TabVariant::Pill || self.variant == TabVariant::Segmented,
+                |this| this.rounded(cx.theme().radius),
+            )
             .when_some(self.prefix, |this, prefix| this.child(prefix))
             .child(
                 h_flex()
@@ -167,7 +178,7 @@ impl RenderOnce for TabBar {
                     .flex_grow()
                     .overflow_x_scroll()
                     .track_scroll(&self.scroll_handle)
-                    .gap_0p5()
+                    .gap(gap)
                     .children(
                         self.children
                             .into_iter()
