@@ -18,7 +18,7 @@ pub struct TabBar {
     prefix: Option<AnyElement>,
     suffix: Option<AnyElement>,
     children: SmallVec<[Tab; 2]>,
-    last_empty_space: Option<AnyElement>,
+    last_empty_space: AnyElement,
     selected_index: Option<usize>,
     variant: TabVariant,
     size: Size,
@@ -36,7 +36,7 @@ impl TabBar {
             suffix: None,
             variant: TabVariant::default(),
             size: Size::default(),
-            last_empty_space: None,
+            last_empty_space: div().w_3().into_any_element(),
             selected_index: None,
             on_click: None,
         }
@@ -105,7 +105,7 @@ impl TabBar {
 
     /// Set the last empty space element of the TabBar
     pub fn last_empty_space(mut self, last_empty_space: impl IntoElement) -> Self {
-        self.last_empty_space = Some(last_empty_space.into_any_element());
+        self.last_empty_space = last_empty_space.into_any_element();
         self
     }
 
@@ -158,9 +158,11 @@ impl RenderOnce for TabBar {
 
         self.base
             .group("tab-bar")
+            .w_full()
             .relative()
             .flex()
             .flex_none()
+            .flex_nowrap()
             .items_center()
             .bg(bg)
             .text_color(cx.theme().tab_foreground)
@@ -213,7 +215,7 @@ impl RenderOnce for TabBar {
                                     })
                             }),
                     )
-                    .children(self.last_empty_space),
+                    .child(self.last_empty_space),
             )
             .when_some(self.suffix, |this, suffix| this.child(suffix))
     }
