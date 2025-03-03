@@ -148,7 +148,7 @@ impl RenderOnce for TabBar {
             }
             TabVariant::Segmented => {
                 let padding = Edges::all(AbsoluteLength::Rems(rems(0.25)));
-                (cx.theme().tab_bar, padding, default_gap / 2.)
+                (cx.theme().accent, padding, default_gap / 2.)
             }
             TabVariant::Underline => {
                 let padding = Edges::all(AbsoluteLength::Pixels(px(0.)));

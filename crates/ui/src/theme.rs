@@ -214,7 +214,7 @@ pub struct ThemeColor {
 impl ThemeColor {
     pub fn light() -> Self {
         Self {
-            accent: hsl(240.0, 5.0, 96.0),
+            accent: hsl(240.0, 4.8, 93.9),
             accent_foreground: hsl(240.0, 5.9, 10.0),
             accordion: hsl(0.0, 0.0, 100.0),
             accordion_active: hsl(240.0, 5.9, 90.0),
@@ -274,7 +274,7 @@ impl ThemeColor {
             tab: gpui::transparent_black(),
             tab_active: hsl(0.0, 0.0, 100.0),
             tab_active_foreground: hsl(240.0, 10., 3.9),
-            tab_bar: hsl(240.0, 4.8, 93.9),
+            tab_bar: hsl(240.0, 4.8, 95.9),
             tab_foreground: hsl(240.0, 10., 3.9),
             table: hsl(0.0, 0.0, 100.),
             table_active: hsl(211.0, 97.0, 85.0).opacity(0.2),
@@ -353,7 +353,7 @@ impl ThemeColor {
             tab: gpui::transparent_black(),
             tab_active: hsl(0.0, 0.0, 8.0),
             tab_active_foreground: hsl(0., 0., 78.),
-            tab_bar: hsl(240.0, 0., 13.),
+            tab_bar: hsl(299.0, 0., 5.5),
             tab_foreground: hsl(0., 0., 78.),
             table: hsl(0.0, 0.0, 8.0),
             table_active: hsl(240.0, 3.7, 15.0).opacity(0.2),
