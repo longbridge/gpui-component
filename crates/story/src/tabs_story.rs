@@ -184,6 +184,8 @@ impl Render for TabsStory {
                 section("Underline Tabs", cx).child(
                     TabBar::new()
                         .w_full()
+                        .px_2()
+                        .mx_3()
                         .underline()
                         .with_size(self.size)
                         .selected_index(self.active_tab_ix)

@@ -57,7 +57,7 @@ impl TabVariant {
                 TabVariant::Tab => px(30.),
                 TabVariant::Pill => px(31.),
                 TabVariant::Segmented => px(30.),
-                TabVariant::Underline => px(38.),
+                TabVariant::Underline => px(36.),
             },
         }
     }
@@ -74,7 +74,7 @@ impl TabVariant {
                 TabVariant::Tab => px(30.),
                 TabVariant::Pill => px(31.),
                 TabVariant::Segmented => px(30.),
-                TabVariant::Underline => px(25.),
+                TabVariant::Underline => px(24.),
             },
         }
     }

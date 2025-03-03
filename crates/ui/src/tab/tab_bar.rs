@@ -3,8 +3,8 @@ use std::sync::Arc;
 use crate::{h_flex, ActiveTheme, Selectable, Sizable, Size, StyledExt};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    div, rems, AbsoluteLength, AnyElement, App, Div, Edges, IntoElement, ParentElement, RenderOnce,
-    ScrollHandle, StatefulInteractiveElement as _, Styled, Window,
+    div, AnyElement, App, Div, Edges, IntoElement, ParentElement, RenderOnce, ScrollHandle,
+    StatefulInteractiveElement as _, Styled, Window,
 };
 use gpui::{px, InteractiveElement};
 use smallvec::SmallVec;
@@ -163,7 +163,6 @@ impl RenderOnce for TabBar {
             .flex_none()
             .items_center()
             .bg(bg)
-            .paddings(paddings)
             .text_color(cx.theme().tab_foreground)
             .when(
                 self.variant == TabVariant::Underline || self.variant == TabVariant::Tab,
@@ -172,6 +171,7 @@ impl RenderOnce for TabBar {
                         div()
                             .id("border-b")
                             .absolute()
+                            .left_0()
                             .bottom_0()
                             .size_full()
                             .border_b_1()
@@ -191,6 +191,7 @@ impl RenderOnce for TabBar {
                     .overflow_x_scroll()
                     .track_scroll(&self.scroll_handle)
                     .gap(gap)
+                    .paddings(paddings)
                     .children(
                         self.children
                             .into_iter()
