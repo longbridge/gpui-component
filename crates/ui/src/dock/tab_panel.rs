@@ -650,7 +650,7 @@ impl TabPanel {
 
         let tabs_count = self.panels.len();
 
-        TabBar::new()
+        TabBar::new("tab-bar")
             .mt(-px(1.))
             .track_scroll(self.tab_bar_scroll_handle.clone())
             .when(

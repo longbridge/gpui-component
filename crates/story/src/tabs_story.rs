@@ -100,7 +100,7 @@ impl Render for TabsStory {
             )
             .child(
                 section("Tabs", cx).child(
-                    TabBar::new()
+                    TabBar::new("tabs")
                         .w_full()
                         .with_size(self.size)
                         .selected_index(self.active_tab_ix)
@@ -129,6 +129,8 @@ impl Render for TabsStory {
                         .child(Tab::new("tab-mail", "Mail"))
                         .child(Tab::new("tab-appearance", "Appearance"))
                         .child(Tab::new("tab-settings", "Settings"))
+                        .child(Tab::new("tab-about", "About"))
+                        .child(Tab::new("tab-license", "License"))
                         .suffix(
                             h_flex()
                                 .mx_1()
@@ -144,7 +146,7 @@ impl Render for TabsStory {
             )
             .child(
                 section("Pill Tabs", cx).child(
-                    TabBar::new()
+                    TabBar::new("pill-tabs")
                         .w_full()
                         .pill()
                         .with_size(self.size)
@@ -157,12 +159,14 @@ impl Render for TabsStory {
                         .child(Tab::new("tab-documents", "Documents"))
                         .child(Tab::new("tab-mail", "Mail"))
                         .child(Tab::new("tab-appearance", "Appearance"))
-                        .child(Tab::new("tab-settings", "Settings")),
+                        .child(Tab::new("tab-settings", "Settings"))
+                        .child(Tab::new("tab-about", "About"))
+                        .child(Tab::new("tab-license", "License")),
                 ),
             )
             .child(
                 section("Segmented Tabs", cx).child(
-                    TabBar::new()
+                    TabBar::new("segmented-tabs")
                         .w_full()
                         .segmented()
                         .with_size(self.size)
@@ -177,12 +181,14 @@ impl Render for TabsStory {
                             "Mail",
                             "Appearance",
                             "Settings",
+                            "About",
+                            "License",
                         ]),
                 ),
             )
             .child(
                 section("Underline Tabs", cx).child(
-                    TabBar::new()
+                    TabBar::new("underline-tabs")
                         .w_full()
                         .px_2()
                         .mx_3()
@@ -197,7 +203,9 @@ impl Render for TabsStory {
                         .child("Documents")
                         .child("Mail")
                         .child("Appearance")
-                        .child("Settings"),
+                        .child("Settings")
+                        .child("About")
+                        .child("License"),
                 ),
             )
     }

@@ -3,8 +3,8 @@ use std::sync::Arc;
 use crate::{h_flex, ActiveTheme, Selectable, Sizable, Size, StyledExt};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    div, AnyElement, App, Div, Edges, IntoElement, ParentElement, RenderOnce, ScrollHandle,
-    StatefulInteractiveElement as _, Styled, Window,
+    div, AnyElement, App, Div, Edges, ElementId, IntoElement, ParentElement, RenderOnce,
+    ScrollHandle, StatefulInteractiveElement as _, Styled, Window,
 };
 use gpui::{px, InteractiveElement};
 use smallvec::SmallVec;
@@ -13,8 +13,9 @@ use super::{Tab, TabVariant};
 
 #[derive(IntoElement)]
 pub struct TabBar {
+    id: ElementId,
     base: Div,
-    scroll_handle: ScrollHandle,
+    scroll_handle: Option<ScrollHandle>,
     prefix: Option<AnyElement>,
     suffix: Option<AnyElement>,
     children: SmallVec<[Tab; 2]>,
@@ -27,11 +28,12 @@ pub struct TabBar {
 
 impl TabBar {
     /// Create a new TabBar.
-    pub fn new() -> Self {
+    pub fn new(id: impl Into<ElementId>) -> Self {
         Self {
+            id: id.into(),
             base: div().px(px(-1.)),
             children: SmallVec::new(),
-            scroll_handle: ScrollHandle::new(),
+            scroll_handle: None,
             prefix: None,
             suffix: None,
             variant: TabVariant::default(),
@@ -68,7 +70,7 @@ impl TabBar {
 
     /// Track the scroll of the TabBar
     pub fn track_scroll(mut self, scroll_handle: ScrollHandle) -> Self {
-        self.scroll_handle = scroll_handle;
+        self.scroll_handle = Some(scroll_handle);
         self
     }
 
@@ -157,6 +159,7 @@ impl RenderOnce for TabBar {
         };
 
         self.base
+            .id(self.id)
             .group("tab-bar")
             .relative()
             .flex()
@@ -187,9 +190,11 @@ impl RenderOnce for TabBar {
             .child(
                 h_flex()
                     .id("tabs")
-                    .flex_grow()
+                    .flex_1()
                     .overflow_x_scroll()
-                    .track_scroll(&self.scroll_handle)
+                    .when_some(self.scroll_handle, |this, scroll_handle| {
+                        this.track_scroll(&scroll_handle)
+                    })
                     .gap(gap)
                     .paddings(paddings)
                     .children(
