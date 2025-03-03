@@ -331,7 +331,8 @@ impl RenderOnce for Paragraph {
 
                 let text_style = window.text_style();
                 let element_id: ElementId = span.unwrap_or_default().into();
-                let styled_text = StyledText::new(text).with_highlights(&text_style, highlights);
+                let styled_text =
+                    StyledText::new(text).with_default_highlights(&text_style, highlights);
                 let link_ranges = links
                     .iter()
                     .map(|(range, _)| range.clone())
