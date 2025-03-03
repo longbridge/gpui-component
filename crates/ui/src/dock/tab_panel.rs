@@ -650,7 +650,7 @@ impl TabPanel {
 
         let tabs_count = self.panels.len();
 
-        TabBar::new()
+        TabBar::new("tab-bar")
             .mt(-px(1.))
             .track_scroll(self.tab_bar_scroll_handle.clone())
             .when(
@@ -690,7 +690,7 @@ impl TabPanel {
                 }
 
                 Some(
-                    Tab::new(("tab", ix), panel.title(window, cx))
+                    Tab::new(panel.title(window, cx))
                         .py_2()
                         .selected(active)
                         .disabled(disabled)

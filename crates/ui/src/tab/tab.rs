@@ -4,8 +4,8 @@ use crate::{ActiveTheme, Selectable, Sizable, Size, StyledExt};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     div, px, AnyElement, App, ClickEvent, Div, Edges, ElementId, Hsla, InteractiveElement,
-    IntoElement, ParentElement as _, Pixels, RenderOnce, SharedString, Stateful,
-    StatefulInteractiveElement, Styled, Window,
+    IntoElement, ParentElement as _, Pixels, RenderOnce, SharedString, StatefulInteractiveElement,
+    Styled, Window,
 };
 
 #[derive(Debug, Clone, Default, Copy, PartialEq, Eq, Hash)]
@@ -340,7 +340,7 @@ impl TabVariant {
 #[derive(IntoElement)]
 pub struct Tab {
     id: ElementId,
-    base: Stateful<Div>,
+    base: Div,
     label: AnyElement,
     prefix: Option<AnyElement>,
     suffix: Option<AnyElement>,
@@ -354,29 +354,28 @@ pub struct Tab {
 impl From<&'static str> for Tab {
     fn from(label: &'static str) -> Self {
         let label = SharedString::from(label);
-        Self::new(label.clone(), label)
+        Self::new(label)
     }
 }
 
 impl From<String> for Tab {
     fn from(label: String) -> Self {
         let label = SharedString::from(label);
-        Self::new(label.clone(), label)
+        Self::new(label)
     }
 }
 
 impl From<SharedString> for Tab {
     fn from(label: SharedString) -> Self {
-        Self::new(label.clone(), label)
+        Self::new(label)
     }
 }
 
 impl Tab {
-    pub fn new(id: impl Into<ElementId>, label: impl IntoElement) -> Self {
-        let id: ElementId = id.into();
+    pub fn new(label: impl IntoElement) -> Self {
         Self {
-            id: id.clone(),
-            base: div().id(id).gap_1(),
+            id: ElementId::Integer(0),
+            base: div().gap_1(),
             label: label.into_any_element(),
             disabled: false,
             selected: false,
@@ -386,6 +385,12 @@ impl Tab {
             size: Size::default(),
             on_click: None,
         }
+    }
+
+    /// Set id to the tab.
+    pub fn id(mut self, id: impl Into<ElementId>) -> Self {
+        self.id = id.into();
+        self
     }
 
     /// Set Tab Variant.
@@ -490,6 +495,7 @@ impl RenderOnce for Tab {
         let height = self.variant.height(self.size);
 
         self.base
+            .id(self.id)
             .flex()
             .items_center()
             .flex_shrink_0()

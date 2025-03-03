@@ -100,8 +100,8 @@ impl Render for TabsStory {
                     })),
             )
             .child(
-                section("Tabs", cx).id("tab").child(
-                    TabBar::new()
+                section("Tabs", cx).child(
+                    TabBar::new("tabs")
                         .w_full()
                         .with_size(self.size)
                         .selected_index(self.active_tab_ix)
@@ -124,14 +124,14 @@ impl Render for TabsStory {
                                         .icon(IconName::ArrowRight),
                                 ),
                         )
-                        .child(Tab::new("tab-account", "Account"))
-                        .child(Tab::new("tab-profile", "Profile").disabled(true))
-                        .child(Tab::new("tab-documents", "Documents"))
-                        .child(Tab::new("tab-mail", "Mail"))
-                        .child(Tab::new("tab-appearance", "Appearance"))
-                        .child(Tab::new("tab-settings", "Settings"))
-                        .child(Tab::new("tab-about", "About"))
-                        .child(Tab::new("tab-license", "License"))
+                        .child(Tab::new("Account"))
+                        .child(Tab::new("Profile").disabled(true))
+                        .child(Tab::new("Documents"))
+                        .child(Tab::new("Mail"))
+                        .child(Tab::new("Appearance"))
+                        .child(Tab::new("Settings"))
+                        .child(Tab::new("About"))
+                        .child(Tab::new("License"))
                         .suffix(
                             h_flex()
                                 .mx_1()
@@ -146,8 +146,8 @@ impl Render for TabsStory {
                 ),
             )
             .child(
-                section("Pill Tabs", cx).id("pill").child(
-                    TabBar::new()
+                section("Pill Tabs", cx).child(
+                    TabBar::new("pill")
                         .w_full()
                         .pill()
                         .with_size(self.size)
@@ -155,19 +155,19 @@ impl Render for TabsStory {
                         .on_click(cx.listener(|this, ix: &usize, window, cx| {
                             this.set_active_tab(*ix, window, cx);
                         }))
-                        .child(Tab::new("tab-account", "Account"))
-                        .child(Tab::new("tab-profile", "Profile").disabled(true))
-                        .child(Tab::new("tab-documents", "Documents"))
-                        .child(Tab::new("tab-mail", "Mail"))
-                        .child(Tab::new("tab-appearance", "Appearance"))
-                        .child(Tab::new("tab-settings", "Settings"))
-                        .child(Tab::new("tab-about", "About"))
-                        .child(Tab::new("tab-license", "License")),
+                        .child(Tab::new("Account"))
+                        .child(Tab::new("Profile").disabled(true))
+                        .child(Tab::new("Documents"))
+                        .child(Tab::new("Mail"))
+                        .child(Tab::new("Appearance"))
+                        .child(Tab::new("Settings"))
+                        .child(Tab::new("About"))
+                        .child(Tab::new("License")),
                 ),
             )
             .child(
-                section("Segmented Tabs", cx).id("segmented").child(
-                    TabBar::new()
+                section("Segmented Tabs", cx).child(
+                    TabBar::new("segmented")
                         .w_full()
                         .segmented()
                         .with_size(self.size)
@@ -188,8 +188,8 @@ impl Render for TabsStory {
                 ),
             )
             .child(
-                section("Underline Tabs", cx).id("underline").child(
-                    TabBar::new()
+                section("Underline Tabs", cx).child(
+                    TabBar::new("underline")
                         .w_full()
                         .px_2()
                         .mx_3()
