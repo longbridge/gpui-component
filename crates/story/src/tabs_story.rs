@@ -99,8 +99,8 @@ impl Render for TabsStory {
                     })),
             )
             .child(
-                section("Normal Tabs", cx).child(
-                    TabBar::new("normal-tabs")
+                section("Tabs", cx).child(
+                    TabBar::new()
                         .w_full()
                         .with_size(self.size)
                         .selected_index(self.active_tab_ix)
@@ -143,8 +143,8 @@ impl Render for TabsStory {
                 ),
             )
             .child(
-                section("Pills Tabs", cx).child(
-                    TabBar::new("pills-tabs")
+                section("Pill Tabs", cx).child(
+                    TabBar::new()
                         .w_full()
                         .pill()
                         .with_size(self.size)
@@ -162,7 +162,7 @@ impl Render for TabsStory {
             )
             .child(
                 section("Segmented Tabs", cx).child(
-                    TabBar::new("segmented-tabs")
+                    TabBar::new()
                         .w_full()
                         .segmented()
                         .with_size(self.size)
@@ -170,17 +170,19 @@ impl Render for TabsStory {
                         .on_click(cx.listener(|this, ix: &usize, window, cx| {
                             this.set_active_tab(*ix, window, cx);
                         }))
-                        .child(Tab::new("tab-account", "Account"))
-                        .child(Tab::new("tab-profile", "Profile").disabled(true))
-                        .child(Tab::new("tab-documents", "Documents"))
-                        .child(Tab::new("tab-mail", "Mail"))
-                        .child(Tab::new("tab-appearance", "Appearance"))
-                        .child(Tab::new("tab-settings", "Settings")),
+                        .children(vec![
+                            "Account",
+                            "Profile",
+                            "Documents",
+                            "Mail",
+                            "Appearance",
+                            "Settings",
+                        ]),
                 ),
             )
             .child(
                 section("Underline Tabs", cx).child(
-                    TabBar::new("underline-tabs")
+                    TabBar::new()
                         .w_full()
                         .underline()
                         .with_size(self.size)
@@ -188,12 +190,12 @@ impl Render for TabsStory {
                         .on_click(cx.listener(|this, ix: &usize, window, cx| {
                             this.set_active_tab(*ix, window, cx);
                         }))
-                        .child(Tab::new("tab-account", "Account"))
-                        .child(Tab::new("tab-profile", "Profile").disabled(true))
-                        .child(Tab::new("tab-documents", "Documents"))
-                        .child(Tab::new("tab-mail", "Mail"))
-                        .child(Tab::new("tab-appearance", "Appearance"))
-                        .child(Tab::new("tab-settings", "Settings")),
+                        .child("Account")
+                        .child("Profile")
+                        .child("Documents")
+                        .child("Mail")
+                        .child("Appearance")
+                        .child("Settings"),
                 ),
             )
     }

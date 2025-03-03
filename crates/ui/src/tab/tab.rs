@@ -4,8 +4,8 @@ use crate::{ActiveTheme, Selectable, Sizable, Size, StyledExt};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     div, px, AnyElement, App, ClickEvent, Div, Edges, ElementId, Hsla, InteractiveElement,
-    IntoElement, ParentElement as _, Pixels, RenderOnce, Stateful, StatefulInteractiveElement,
-    Styled, Window,
+    IntoElement, ParentElement as _, Pixels, RenderOnce, SharedString, Stateful,
+    StatefulInteractiveElement, Styled, Window,
 };
 
 #[derive(Debug, Clone, Default, Copy, PartialEq, Eq, Hash)]
@@ -331,6 +331,27 @@ pub struct Tab {
     disabled: bool,
     selected: bool,
     on_click: Option<Arc<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>>,
+}
+
+impl From<&'static str> for Tab {
+    fn from(label: &'static str) -> Self {
+        let label = SharedString::from(label);
+        Self::new(label.clone(), label)
+    }
+}
+
+impl From<String> for Tab {
+    fn from(label: String) -> Self {
+        let label = SharedString::from(label);
+        Self::new(label.clone(), label)
+    }
+}
+
+impl From<SharedString> for Tab {
+    fn from(label: SharedString) -> Self {
+        let label = SharedString::from(label);
+        Self::new(label.clone(), label)
+    }
 }
 
 impl Tab {

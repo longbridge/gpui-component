@@ -3,8 +3,8 @@ use std::sync::Arc;
 use crate::{h_flex, ActiveTheme, Selectable, Sizable, Size, StyledExt};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    div, rems, AbsoluteLength, AnyElement, App, Div, Edges, ElementId, IntoElement, ParentElement,
-    RenderOnce, ScrollHandle, StatefulInteractiveElement as _, Styled, Window,
+    div, rems, AbsoluteLength, AnyElement, App, Div, Edges, IntoElement, ParentElement, RenderOnce,
+    ScrollHandle, StatefulInteractiveElement as _, Styled, Window,
 };
 use gpui::{px, InteractiveElement};
 use smallvec::SmallVec;
@@ -14,7 +14,6 @@ use super::{Tab, TabVariant};
 #[derive(IntoElement)]
 pub struct TabBar {
     base: Div,
-    id: ElementId,
     scroll_handle: ScrollHandle,
     prefix: Option<AnyElement>,
     suffix: Option<AnyElement>,
@@ -27,10 +26,10 @@ pub struct TabBar {
 }
 
 impl TabBar {
-    pub fn new(id: impl Into<ElementId>) -> Self {
+    /// Create a new TabBar.
+    pub fn new() -> Self {
         Self {
             base: div().px(px(-1.)),
-            id: id.into(),
             children: SmallVec::new(),
             scroll_handle: ScrollHandle::new(),
             prefix: None,
@@ -86,14 +85,15 @@ impl TabBar {
     }
 
     /// Add children of the TabBar, all children will inherit the variant.
-    pub fn children(mut self, children: impl IntoIterator<Item = Tab>) -> Self {
-        self.children.extend(children);
+    ///
+    pub fn children(mut self, children: impl IntoIterator<Item = impl Into<Tab>>) -> Self {
+        self.children.extend(children.into_iter().map(Into::into));
         self
     }
 
     /// Add child of the TabBar, tab will inherit the variant.
-    pub fn child(mut self, child: Tab) -> Self {
-        self.children.push(child);
+    pub fn child(mut self, child: impl Into<Tab>) -> Self {
+        self.children.push(child.into());
         self
     }
 
@@ -157,7 +157,6 @@ impl RenderOnce for TabBar {
         };
 
         self.base
-            .id(self.id)
             .group("tab-bar")
             .relative()
             .flex()
