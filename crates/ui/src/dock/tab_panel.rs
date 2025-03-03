@@ -720,7 +720,7 @@ impl TabPanel {
                         }),
                 )
             }))
-            .child(
+            .last_empty_space(
                 // empty space to allow move to last tab right
                 div()
                     .id("tab-bar-empty-space")

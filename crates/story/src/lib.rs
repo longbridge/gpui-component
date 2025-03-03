@@ -16,6 +16,7 @@ mod scrollable_story;
 mod sidebar_story;
 mod switch_story;
 mod table_story;
+mod tabs_story;
 mod text_story;
 mod title_bar;
 mod tooltip_story;
@@ -28,6 +29,7 @@ pub use button_story::ButtonStory;
 pub use calendar_story::CalendarStory;
 pub use dropdown_story::DropdownStory;
 pub use form_story::FormStory;
+pub use tabs_story::TabsStory;
 
 use gpui::{
     actions, div, impl_internal_actions, prelude::FluentBuilder as _, px, size, AnyElement,

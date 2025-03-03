@@ -172,6 +172,11 @@ impl Tab {
         }
     }
 
+    pub fn variant(mut self, variant: TabVariant) -> Self {
+        self.variant = variant;
+        self
+    }
+
     pub fn pill(mut self) -> Self {
         self.variant = TabVariant::Pill;
         self
@@ -252,6 +257,8 @@ impl RenderOnce for Tab {
             .border_t(tab_style.borders.top)
             .border_b(tab_style.borders.bottom)
             .border_color(tab_style.border_color)
+            .rounded(tab_style.radius)
+            .when(!tab_style.shadow, |this| this.shadow_sm())
             .when(!self.selected && !self.disabled, |this| {
                 this.hover(|this| {
                     this.text_color(hover_style.fg)
@@ -261,6 +268,7 @@ impl RenderOnce for Tab {
                         .border_t(hover_style.borders.top)
                         .border_b(hover_style.borders.bottom)
                         .border_color(hover_style.border_color)
+                        .rounded(tab_style.radius)
                 })
             })
             .text_sm()
