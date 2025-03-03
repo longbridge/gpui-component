@@ -675,6 +675,7 @@ impl TabPanel {
             )
             .on_click(cx.listener(move |view, ix: &usize, window, cx| {
                 view.set_active_ix(*ix, window, cx);
+                cx.notify();
             }))
             .children(self.panels.iter().enumerate().filter_map(|(ix, panel)| {
                 let mut active = state.active_panel.as_ref() == Some(panel);
