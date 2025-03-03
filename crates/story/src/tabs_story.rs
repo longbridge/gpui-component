@@ -1,11 +1,12 @@
 use gpui::{
-    App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render,
-    StatefulInteractiveElement, Styled, Window,
+    App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render, Styled, Window,
 };
 
 use gpui_component::{
+    button::{Button, ButtonVariants},
+    h_flex,
     tab::{Tab, TabBar},
-    v_flex,
+    v_flex, IconName, Sizable,
 };
 
 use crate::section;
@@ -60,39 +61,78 @@ impl Render for TabsStory {
             .child(
                 section("Normal Tabs", cx).child(
                     TabBar::new("normal-tabs")
+                        .w_full()
                         .selected_index(self.active_tab_ix)
                         .on_click(cx.listener(|this, ix: &usize, window, cx| {
                             this.set_active_tab(*ix, window, cx);
                         }))
-                        .child(Tab::new("tab-1", "Account"))
-                        .child(Tab::new("tab-2", "Profile"))
-                        .child(Tab::new("tab-3", "Settings")),
+                        .prefix(
+                            h_flex()
+                                .mx_1()
+                                .child(
+                                    Button::new("back")
+                                        .ghost()
+                                        .xsmall()
+                                        .icon(IconName::ArrowLeft),
+                                )
+                                .child(
+                                    Button::new("forward")
+                                        .ghost()
+                                        .xsmall()
+                                        .icon(IconName::ArrowRight),
+                                ),
+                        )
+                        .child(Tab::new("tab-account", "Account"))
+                        .child(Tab::new("tab-profile", "Profile"))
+                        .child(Tab::new("tab-documents", "Documents"))
+                        .child(Tab::new("tab-mail", "Mail"))
+                        .child(Tab::new("tab-appearance", "Appearance"))
+                        .child(Tab::new("tab-settings", "Settings"))
+                        .suffix(
+                            h_flex()
+                                .mx_1()
+                                .child(Button::new("inbox").ghost().xsmall().icon(IconName::Inbox))
+                                .child(
+                                    Button::new("more")
+                                        .ghost()
+                                        .xsmall()
+                                        .icon(IconName::Ellipsis),
+                                ),
+                        ),
                 ),
             )
             .child(
                 section("Pills Tabs", cx).child(
                     TabBar::new("pills-tabs")
+                        .w_full()
                         .pill()
                         .selected_index(self.active_tab_ix)
                         .on_click(cx.listener(|this, ix: &usize, window, cx| {
                             this.set_active_tab(*ix, window, cx);
                         }))
-                        .child(Tab::new("tab-1", "Account"))
-                        .child(Tab::new("tab-2", "Profile"))
-                        .child(Tab::new("tab-3", "Settings")),
+                        .child(Tab::new("tab-account", "Account"))
+                        .child(Tab::new("tab-profile", "Profile"))
+                        .child(Tab::new("tab-documents", "Documents"))
+                        .child(Tab::new("tab-mail", "Mail"))
+                        .child(Tab::new("tab-appearance", "Appearance"))
+                        .child(Tab::new("tab-settings", "Settings")),
                 ),
             )
             .child(
                 section("Underline Tabs", cx).child(
                     TabBar::new("underline-tabs")
+                        .w_full()
                         .underline()
                         .selected_index(self.active_tab_ix)
                         .on_click(cx.listener(|this, ix: &usize, window, cx| {
                             this.set_active_tab(*ix, window, cx);
                         }))
-                        .child(Tab::new("tab-1", "Account"))
-                        .child(Tab::new("tab-2", "Profile"))
-                        .child(Tab::new("tab-3", "Settings")),
+                        .child(Tab::new("tab-account", "Account"))
+                        .child(Tab::new("tab-profile", "Profile"))
+                        .child(Tab::new("tab-documents", "Documents"))
+                        .child(Tab::new("tab-mail", "Mail"))
+                        .child(Tab::new("tab-appearance", "Appearance"))
+                        .child(Tab::new("tab-settings", "Settings")),
                 ),
             )
     }

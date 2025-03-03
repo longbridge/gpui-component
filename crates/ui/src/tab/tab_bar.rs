@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
-use crate::{h_flex, ActiveTheme, Selectable};
+use crate::{h_flex, ActiveTheme, Selectable, StyledExt};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    div, AnyElement, App, Div, ElementId, IntoElement, ParentElement, RenderOnce, ScrollHandle,
-    StatefulInteractiveElement as _, Styled, Window,
+    div, rems, AbsoluteLength, AnyElement, App, Div, Edges, ElementId, IntoElement, ParentElement,
+    RenderOnce, ScrollHandle, StatefulInteractiveElement as _, Styled, Window,
 };
 use gpui::{px, InteractiveElement};
 use smallvec::SmallVec;
@@ -20,7 +20,7 @@ pub struct TabBar {
     suffix: Option<AnyElement>,
     children: SmallVec<[Tab; 2]>,
     last_empty_space: Option<AnyElement>,
-    selected_index: usize,
+    selected_index: Option<usize>,
     variant: TabVariant,
     on_click: Option<Arc<dyn Fn(&usize, &mut Window, &mut App) + 'static>>,
 }
@@ -36,7 +36,7 @@ impl TabBar {
             suffix: None,
             variant: TabVariant::default(),
             last_empty_space: None,
-            selected_index: 0,
+            selected_index: None,
             on_click: None,
         }
     }
@@ -85,7 +85,7 @@ impl TabBar {
     }
 
     pub fn selected_index(mut self, index: usize) -> Self {
-        self.selected_index = index;
+        self.selected_index = Some(index);
         self
     }
 
@@ -110,6 +110,21 @@ impl Styled for TabBar {
 
 impl RenderOnce for TabBar {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let (bg, paddings) = match self.variant {
+            TabVariant::Tab => {
+                let padding = Edges::all(AbsoluteLength::Pixels(px(0.)));
+                (cx.theme().tab_bar, padding)
+            }
+            TabVariant::Pill => {
+                let padding = Edges::all(AbsoluteLength::Rems(rems(0.25)));
+                (cx.theme().tab_bar, padding)
+            }
+            TabVariant::Underline => {
+                let padding = Edges::all(AbsoluteLength::Pixels(px(0.)));
+                (cx.theme().transparent, padding)
+            }
+        };
+
         self.base
             .id(self.id)
             .group("tab-bar")
@@ -117,17 +132,26 @@ impl RenderOnce for TabBar {
             .flex()
             .flex_none()
             .items_center()
-            .bg(cx.theme().tab_bar)
+            .bg(bg)
+            .paddings(paddings)
             .text_color(cx.theme().tab_foreground)
-            .child(
-                div()
-                    .id("border-b")
-                    .absolute()
-                    .bottom_0()
-                    .size_full()
-                    .border_b_1()
-                    .border_color(cx.theme().border),
+            .when(
+                self.variant == TabVariant::Underline || self.variant == TabVariant::Tab,
+                |this| {
+                    this.child(
+                        div()
+                            .id("border-b")
+                            .absolute()
+                            .bottom_0()
+                            .size_full()
+                            .border_b_1()
+                            .border_color(cx.theme().border),
+                    )
+                },
             )
+            .when(self.variant == TabVariant::Pill, |this| {
+                this.rounded(cx.theme().radius)
+            })
             .when_some(self.prefix, |this, prefix| this.child(prefix))
             .child(
                 h_flex()
@@ -135,6 +159,7 @@ impl RenderOnce for TabBar {
                     .flex_grow()
                     .overflow_x_scroll()
                     .track_scroll(&self.scroll_handle)
+                    .gap_0p5()
                     .children(
                         self.children
                             .into_iter()
@@ -142,7 +167,9 @@ impl RenderOnce for TabBar {
                             .map(move |(ix, child)| {
                                 child
                                     .variant(self.variant)
-                                    .selected(ix == self.selected_index)
+                                    .when_some(self.selected_index, |this, selected_ix| {
+                                        this.selected(selected_ix == ix)
+                                    })
                                     .when_some(self.on_click.clone(), move |this, on_click| {
                                         this.on_click(move |_, window, cx| {
                                             on_click(&ix, window, cx)

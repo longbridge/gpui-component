@@ -1,8 +1,9 @@
 use crate::{ActiveTheme, Selectable};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    div, px, AnyElement, App, Div, Edges, ElementId, Hsla, InteractiveElement, IntoElement,
-    ParentElement as _, Pixels, RenderOnce, Stateful, StatefulInteractiveElement, Styled, Window,
+    div, px, relative, AnyElement, App, Div, Edges, ElementId, Hsla, InteractiveElement,
+    IntoElement, ParentElement as _, Pixels, RenderOnce, Stateful, StatefulInteractiveElement,
+    Styled, Window,
 };
 
 #[derive(Debug, Clone, Default, Copy, PartialEq, Eq, Hash)]
@@ -13,6 +14,7 @@ pub enum TabVariant {
     Underline,
 }
 
+#[allow(dead_code)]
 struct TabStyle {
     borders: Edges<Pixels>,
     border_color: Hsla,
@@ -20,6 +22,8 @@ struct TabStyle {
     fg: Hsla,
     radius: Pixels,
     shadow: bool,
+    inner_bg: Hsla,
+    inner_radius: Pixels,
 }
 
 impl Default for TabStyle {
@@ -31,6 +35,8 @@ impl Default for TabStyle {
             fg: gpui::transparent_white(),
             radius: px(0.),
             shadow: false,
+            inner_bg: gpui::transparent_white(),
+            inner_radius: px(0.),
         }
     }
 }
@@ -40,7 +46,9 @@ impl TabVariant {
         match self {
             TabVariant::Tab => TabStyle {
                 fg: cx.theme().foreground,
+                bg: cx.theme().transparent,
                 borders: Edges {
+                    top: px(1.),
                     left: px(1.),
                     right: px(1.),
                     ..Default::default()
@@ -50,10 +58,21 @@ impl TabVariant {
             },
             TabVariant::Pill => TabStyle {
                 fg: cx.theme().foreground,
+                bg: cx.theme().transparent,
+                radius: cx.theme().radius,
                 ..Default::default()
             },
             TabVariant::Underline => TabStyle {
                 fg: cx.theme().foreground,
+                bg: cx.theme().transparent,
+                radius: px(0.),
+                inner_bg: cx.theme().transparent,
+                inner_radius: cx.theme().radius,
+                borders: Edges {
+                    bottom: px(2.),
+                    ..Default::default()
+                },
+                border_color: cx.theme().transparent,
                 ..Default::default()
             },
         }
@@ -63,7 +82,9 @@ impl TabVariant {
         match self {
             TabVariant::Tab => TabStyle {
                 fg: cx.theme().foreground,
+                bg: cx.theme().transparent,
                 borders: Edges {
+                    top: px(1.),
                     left: px(1.),
                     right: px(1.),
                     ..Default::default()
@@ -79,8 +100,15 @@ impl TabVariant {
             },
             TabVariant::Underline => TabStyle {
                 fg: cx.theme().accent_foreground,
-                bg: cx.theme().accent,
-                radius: cx.theme().radius,
+                bg: cx.theme().transparent,
+                radius: px(0.),
+                inner_bg: cx.theme().accent,
+                inner_radius: cx.theme().radius,
+                borders: Edges {
+                    bottom: px(2.),
+                    ..Default::default()
+                },
+                border_color: cx.theme().transparent,
                 ..Default::default()
             },
         }
@@ -92,6 +120,7 @@ impl TabVariant {
                 fg: cx.theme().tab_active_foreground,
                 bg: cx.theme().tab_active,
                 borders: Edges {
+                    top: px(1.),
                     left: px(1.),
                     right: px(1.),
                     ..Default::default()
@@ -107,9 +136,12 @@ impl TabVariant {
                 ..Default::default()
             },
             TabVariant::Underline => TabStyle {
-                fg: cx.theme().primary,
+                fg: cx.theme().tab_active_foreground,
                 bg: cx.theme().transparent,
-                radius: cx.theme().radius,
+                borders: Edges {
+                    bottom: px(2.),
+                    ..Default::default()
+                },
                 border_color: cx.theme().primary,
                 ..Default::default()
             },
@@ -122,6 +154,12 @@ impl TabVariant {
                 fg: cx.theme().muted_foreground,
                 bg: cx.theme().tab,
                 border_color: cx.theme().border,
+                borders: Edges {
+                    top: px(1.),
+                    left: px(1.),
+                    right: px(1.),
+                    ..Default::default()
+                },
                 ..Default::default()
             },
             TabVariant::Pill => TabStyle {
@@ -132,6 +170,7 @@ impl TabVariant {
                     cx.theme().tab
                 },
                 radius: cx.theme().radius,
+
                 ..Default::default()
             },
             TabVariant::Underline => TabStyle {
@@ -139,6 +178,10 @@ impl TabVariant {
                 bg: cx.theme().transparent,
                 radius: cx.theme().radius,
                 border_color: cx.theme().border,
+                borders: Edges {
+                    bottom: px(2.),
+                    ..Default::default()
+                },
                 ..Default::default()
             },
         }
@@ -162,7 +205,7 @@ impl Tab {
         let id: ElementId = id.into();
         Self {
             id: id.clone(),
-            base: div().id(id).gap_1().py_1p5().px_3().h(px(30.)),
+            base: div().id(id).gap_1(),
             label: label.into_any_element(),
             disabled: false,
             selected: false,
@@ -250,6 +293,8 @@ impl RenderOnce for Tab {
             .flex_shrink_0()
             .cursor_pointer()
             .overflow_hidden()
+            .line_height(px(31.))
+            .h(px(31.))
             .text_color(tab_style.fg)
             .bg(tab_style.bg)
             .border_l(tab_style.borders.left)
@@ -258,7 +303,6 @@ impl RenderOnce for Tab {
             .border_b(tab_style.borders.bottom)
             .border_color(tab_style.border_color)
             .rounded(tab_style.radius)
-            .when(!tab_style.shadow, |this| this.shadow_sm())
             .when(!self.selected && !self.disabled, |this| {
                 this.hover(|this| {
                     this.text_color(hover_style.fg)
@@ -273,7 +317,21 @@ impl RenderOnce for Tab {
             })
             .text_sm()
             .when_some(self.prefix, |this, prefix| this.child(prefix))
-            .child(div().text_ellipsis().child(self.label))
+            .child(
+                div()
+                    .py_1p5()
+                    .px_3()
+                    .line_height(relative(1.))
+                    .text_ellipsis()
+                    .flex_shrink_0()
+                    .child(self.label)
+                    .bg(tab_style.inner_bg)
+                    .rounded(tab_style.inner_radius)
+                    .hover(|this| {
+                        this.bg(hover_style.inner_bg)
+                            .rounded(hover_style.inner_radius)
+                    }),
+            )
             .when_some(self.suffix, |this, suffix| this.child(suffix))
     }
 }
