@@ -242,7 +242,7 @@ impl TabVariant {
             },
             TabVariant::Segmented => TabStyle {
                 fg: cx.theme().tab_active_foreground,
-                bg: cx.theme().tab_active,
+                bg: cx.theme().background,
                 radius: cx.theme().radius,
                 shadow: true,
                 ..Default::default()
@@ -293,9 +293,9 @@ impl TabVariant {
             TabVariant::Segmented => TabStyle {
                 fg: cx.theme().muted_foreground,
                 bg: if selected {
-                    cx.theme().tab_active
+                    cx.theme().background
                 } else {
-                    cx.theme().tab
+                    cx.theme().transparent
                 },
                 radius: cx.theme().radius,
                 ..Default::default()
@@ -472,6 +472,7 @@ impl RenderOnce for Tab {
             .border_b(tab_style.borders.bottom)
             .border_color(tab_style.border_color)
             .rounded(tab_style.radius)
+            .when(tab_style.shadow, |this| this.shadow_sm())
             .when(!self.selected && !self.disabled, |this| {
                 this.hover(|this| {
                     this.text_color(hover_style.fg)
