@@ -1,5 +1,6 @@
 use gpui::{
-    App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render, Styled, Window,
+    App, AppContext, Context, Entity, Focusable, InteractiveElement, IntoElement, ParentElement,
+    Render, Styled, Window,
 };
 
 use gpui_component::{
@@ -99,8 +100,8 @@ impl Render for TabsStory {
                     })),
             )
             .child(
-                section("Tabs", cx).child(
-                    TabBar::new("tabs")
+                section("Tabs", cx).id("tab").child(
+                    TabBar::new()
                         .w_full()
                         .with_size(self.size)
                         .selected_index(self.active_tab_ix)
@@ -145,8 +146,8 @@ impl Render for TabsStory {
                 ),
             )
             .child(
-                section("Pill Tabs", cx).child(
-                    TabBar::new("pill-tabs")
+                section("Pill Tabs", cx).id("pill").child(
+                    TabBar::new()
                         .w_full()
                         .pill()
                         .with_size(self.size)
@@ -165,8 +166,8 @@ impl Render for TabsStory {
                 ),
             )
             .child(
-                section("Segmented Tabs", cx).child(
-                    TabBar::new("segmented-tabs")
+                section("Segmented Tabs", cx).id("segmented").child(
+                    TabBar::new()
                         .w_full()
                         .segmented()
                         .with_size(self.size)
@@ -187,8 +188,8 @@ impl Render for TabsStory {
                 ),
             )
             .child(
-                section("Underline Tabs", cx).child(
-                    TabBar::new("underline-tabs")
+                section("Underline Tabs", cx).id("underline").child(
+                    TabBar::new()
                         .w_full()
                         .px_2()
                         .mx_3()

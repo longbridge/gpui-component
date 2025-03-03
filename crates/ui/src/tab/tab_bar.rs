@@ -3,8 +3,8 @@ use std::sync::Arc;
 use crate::{h_flex, ActiveTheme, Selectable, Sizable, Size, StyledExt};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    div, AnyElement, App, Div, Edges, ElementId, IntoElement, ParentElement, RenderOnce,
-    ScrollHandle, StatefulInteractiveElement as _, Styled, Window,
+    div, AnyElement, App, Div, Edges, IntoElement, ParentElement, RenderOnce, ScrollHandle,
+    StatefulInteractiveElement as _, Styled, Window,
 };
 use gpui::{px, InteractiveElement};
 use smallvec::SmallVec;
@@ -13,7 +13,6 @@ use super::{Tab, TabVariant};
 
 #[derive(IntoElement)]
 pub struct TabBar {
-    id: ElementId,
     base: Div,
     scroll_handle: Option<ScrollHandle>,
     prefix: Option<AnyElement>,
@@ -28,9 +27,8 @@ pub struct TabBar {
 
 impl TabBar {
     /// Create a new TabBar.
-    pub fn new(id: impl Into<ElementId>) -> Self {
+    pub fn new() -> Self {
         Self {
-            id: id.into(),
             base: div().px(px(-1.)),
             children: SmallVec::new(),
             scroll_handle: None,
@@ -159,7 +157,6 @@ impl RenderOnce for TabBar {
         };
 
         self.base
-            .id(self.id)
             .group("tab-bar")
             .relative()
             .flex()
