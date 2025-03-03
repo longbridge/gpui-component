@@ -673,9 +673,6 @@ impl TabPanel {
                     )
                 },
             )
-            .on_click(cx.listener(move |view, ix: &usize, window, cx| {
-                view.set_active_ix(*ix, window, cx);
-            }))
             .children(self.panels.iter().enumerate().filter_map(|(ix, panel)| {
                 let mut active = state.active_panel.as_ref() == Some(panel);
                 let disabled = self.collapsed;
@@ -696,7 +693,10 @@ impl TabPanel {
                         .selected(active)
                         .disabled(disabled)
                         .when(!disabled, |this| {
-                            this.when(state.draggable, |this| {
+                            this.on_click(cx.listener(move |view, _, window, cx| {
+                                view.set_active_ix(ix, window, cx);
+                            }))
+                            .when(state.draggable, |this| {
                                 this.on_drag(
                                     DragPanel::new(panel.clone(), view.clone()),
                                     |drag, _, _, cx| {
