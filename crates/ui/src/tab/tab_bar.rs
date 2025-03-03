@@ -111,7 +111,7 @@ impl TabBar {
 
     /// Set the on_click callback of the TabBar, the first parameter is the index of the clicked tab.
     ///
-    /// When this is set, the children's on_click will taked.
+    /// When this is set, the children's on_click will be ignored.
     pub fn on_click(mut self, on_click: impl Fn(&usize, &mut Window, &mut App) + 'static) -> Self {
         self.on_click = Some(Arc::new(on_click));
         self
