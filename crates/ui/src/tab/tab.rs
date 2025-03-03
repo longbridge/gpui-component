@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{ActiveTheme, Selectable, StyledExt};
+use crate::{ActiveTheme, Selectable, Sizable, Size, StyledExt};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     div, px, AnyElement, App, ClickEvent, Div, Edges, ElementId, Hsla, InteractiveElement,
@@ -45,47 +45,88 @@ impl Default for TabStyle {
 }
 
 impl TabVariant {
-    fn inner_height(&self) -> Pixels {
-        match self {
-            TabVariant::Tab => px(30.),
-            TabVariant::Pill => px(31.),
-            TabVariant::Segmented => px(30.),
-            TabVariant::Underline => px(25.),
-        }
-    }
-
-    fn inner_paddings(&self) -> Edges<Pixels> {
-        match self {
-            TabVariant::Tab => Edges {
-                left: px(12.),
-                right: px(12.),
-                ..Default::default()
+    fn inner_height(&self, size: Size) -> Pixels {
+        match size {
+            Size::Small | Size::XSmall => match self {
+                TabVariant::Tab => px(25.),
+                TabVariant::Pill => px(26.),
+                TabVariant::Segmented => px(26.),
+                TabVariant::Underline => px(22.),
             },
-            TabVariant::Pill => Edges {
-                left: px(16.),
-                right: px(16.),
-                ..Default::default()
-            },
-            TabVariant::Segmented => Edges {
-                left: px(10.),
-                right: px(10.),
-                ..Default::default()
-            },
-            TabVariant::Underline => Edges {
-                left: px(12.),
-                right: px(12.),
-                ..Default::default()
+            _ => match self {
+                TabVariant::Tab => px(30.),
+                TabVariant::Pill => px(31.),
+                TabVariant::Segmented => px(30.),
+                TabVariant::Underline => px(25.),
             },
         }
     }
 
-    fn inner_margins(&self) -> Edges<Pixels> {
-        match self {
-            TabVariant::Underline => Edges {
-                bottom: px(4.),
-                ..Default::default()
+    fn inner_paddings(&self, size: Size) -> Edges<Pixels> {
+        match size {
+            Size::Small | Size::XSmall => match self {
+                TabVariant::Tab => Edges {
+                    left: px(10.),
+                    right: px(10.),
+                    ..Default::default()
+                },
+                TabVariant::Pill => Edges {
+                    left: px(14.),
+                    right: px(14.),
+                    ..Default::default()
+                },
+                TabVariant::Segmented => Edges {
+                    left: px(8.),
+                    right: px(8.),
+                    ..Default::default()
+                },
+                TabVariant::Underline => Edges {
+                    left: px(10.),
+                    right: px(10.),
+                    ..Default::default()
+                },
             },
-            _ => Edges::all(px(0.)),
+            _ => match self {
+                TabVariant::Tab => Edges {
+                    left: px(12.),
+                    right: px(12.),
+                    ..Default::default()
+                },
+                TabVariant::Pill => Edges {
+                    left: px(16.),
+                    right: px(16.),
+                    ..Default::default()
+                },
+                TabVariant::Segmented => Edges {
+                    left: px(10.),
+                    right: px(10.),
+                    ..Default::default()
+                },
+                TabVariant::Underline => Edges {
+                    left: px(12.),
+                    right: px(12.),
+                    ..Default::default()
+                },
+            },
+        }
+    }
+
+    fn inner_margins(&self, size: Size) -> Edges<Pixels> {
+        match size {
+            Size::Small | Size::XSmall => match self {
+                TabVariant::Underline => Edges {
+                    bottom: px(2.),
+                    ..Default::default()
+                },
+                _ => Edges::all(px(0.)),
+            },
+            _ => match self {
+                TabVariant::Underline => Edges {
+                    bottom: px(4.),
+                    ..Default::default()
+                },
+                _ => Edges::all(px(0.)),
+            },
         }
     }
 
@@ -286,6 +327,7 @@ pub struct Tab {
     prefix: Option<AnyElement>,
     suffix: Option<AnyElement>,
     variant: TabVariant,
+    size: Size,
     disabled: bool,
     selected: bool,
     on_click: Option<Arc<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>>,
@@ -303,6 +345,7 @@ impl Tab {
             prefix: None,
             suffix: None,
             variant: TabVariant::default(),
+            size: Size::default(),
             on_click: None,
         }
     }
@@ -384,6 +427,13 @@ impl Styled for Tab {
     }
 }
 
+impl Sizable for Tab {
+    fn with_size(mut self, size: impl Into<Size>) -> Self {
+        self.size = size.into();
+        self
+    }
+}
+
 impl RenderOnce for Tab {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let mut tab_style = if self.selected {
@@ -396,9 +446,14 @@ impl RenderOnce for Tab {
             tab_style = self.variant.disabled(self.selected, cx);
             hover_style = self.variant.disabled(self.selected, cx);
         }
-        let inner_paddings = self.variant.inner_paddings();
-        let inner_margins = self.variant.inner_margins();
-        let inner_height = self.variant.inner_height();
+        let inner_paddings = self.variant.inner_paddings(self.size);
+        let inner_margins = self.variant.inner_margins(self.size);
+        let inner_height = self.variant.inner_height(self.size);
+
+        let height = match self.size {
+            Size::Small | Size::XSmall => px(24.),
+            _ => px(31.),
+        };
 
         self.base
             .flex()
@@ -406,8 +461,8 @@ impl RenderOnce for Tab {
             .flex_shrink_0()
             .cursor_pointer()
             .overflow_hidden()
-            .line_height(px(31.))
-            .h(px(31.))
+            .line_height(height)
+            .h(height)
             .overflow_hidden()
             .text_color(tab_style.fg)
             .bg(tab_style.bg)

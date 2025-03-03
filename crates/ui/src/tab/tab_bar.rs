@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{h_flex, ActiveTheme, Selectable, StyledExt};
+use crate::{h_flex, ActiveTheme, Selectable, Sizable, Size, StyledExt};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     div, rems, AbsoluteLength, AnyElement, App, Div, Edges, ElementId, IntoElement, ParentElement,
@@ -22,6 +22,7 @@ pub struct TabBar {
     last_empty_space: Option<AnyElement>,
     selected_index: Option<usize>,
     variant: TabVariant,
+    size: Size,
     on_click: Option<Arc<dyn Fn(&usize, &mut Window, &mut App) + 'static>>,
 }
 
@@ -35,6 +36,7 @@ impl TabBar {
             prefix: None,
             suffix: None,
             variant: TabVariant::default(),
+            size: Size::default(),
             last_empty_space: None,
             selected_index: None,
             on_click: None,
@@ -122,8 +124,19 @@ impl Styled for TabBar {
     }
 }
 
+impl Sizable for TabBar {
+    fn with_size(mut self, size: impl Into<Size>) -> Self {
+        self.size = size.into();
+        self
+    }
+}
+
 impl RenderOnce for TabBar {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let default_gap = match self.size {
+            Size::Small | Size::XSmall => px(8.),
+            _ => px(12.),
+        };
         let (bg, paddings, gap) = match self.variant {
             TabVariant::Tab => {
                 let padding = Edges::all(AbsoluteLength::Pixels(px(0.)));
@@ -131,15 +144,15 @@ impl RenderOnce for TabBar {
             }
             TabVariant::Pill => {
                 let padding = Edges::all(AbsoluteLength::Rems(rems(0.25)));
-                (cx.theme().transparent, padding, px(8.))
+                (cx.theme().transparent, padding, default_gap)
             }
             TabVariant::Segmented => {
                 let padding = Edges::all(AbsoluteLength::Rems(rems(0.25)));
-                (cx.theme().tab_bar, padding, px(8.))
+                (cx.theme().tab_bar, padding, default_gap / 2.)
             }
             TabVariant::Underline => {
                 let padding = Edges::all(AbsoluteLength::Pixels(px(0.)));
-                (cx.theme().transparent, padding, px(8.))
+                (cx.theme().transparent, padding, default_gap / 2.)
             }
         };
 
@@ -186,6 +199,7 @@ impl RenderOnce for TabBar {
                             .map(move |(ix, child)| {
                                 child
                                     .variant(self.variant)
+                                    .with_size(self.size)
                                     .when_some(self.selected_index, |this, selected_ix| {
                                         this.selected(selected_ix == ix)
                                     })
