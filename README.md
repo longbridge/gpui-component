@@ -36,7 +36,7 @@ UI components for building fantastic desktop application by using [GPUI](https:/
 - Sidebar
 - Breadcrumb
 - Badge
-- TextView (Markdown, Simple HTML) to native rendering.
+- TextView (Markdown, Simple HTML) to native rendering, syntax highlighting.
 
 ## Showcase
 
