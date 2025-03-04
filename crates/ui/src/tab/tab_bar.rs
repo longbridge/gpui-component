@@ -159,11 +159,8 @@ impl RenderOnce for TabBar {
 
         self.base
             .group("tab-bar")
-            .w_full()
             .relative()
             .flex()
-            .flex_none()
-            .flex_nowrap()
             .items_center()
             .bg(bg)
             .text_color(cx.theme().tab_foreground)
