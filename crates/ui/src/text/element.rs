@@ -561,9 +561,10 @@ impl Node {
 
         div()
             .mb(mb)
+            .p_3()
             .rounded(cx.theme().radius)
             .bg(cx.theme().secondary)
-            .p_3()
+            .font_family("Menlo, Monaco, Consolas, monospace")
             .text_size(rems(0.875))
             .relative()
             .child(text)
