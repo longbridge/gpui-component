@@ -635,7 +635,7 @@ impl Element for Scrollbar {
         let is_visible = self.state.get().is_scrollbar_visible()
            // always visible if enabled by `Theme` settings
            || cx.global_mut::<Theme>().scrollbar_show.is_always()
-           // `Theme` settings could be still overriden at `platform` level (e.g. on `Linux`)
+           // `Theme` settings could be still overridden at `platform` level (e.g. on `Linux`)
            || !cx.should_auto_hide_scrollbars();
         let is_hover_to_show = cx.theme().scrollbar_show.is_hover();
 
