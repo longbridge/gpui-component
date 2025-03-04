@@ -787,16 +787,20 @@ impl TabPanel {
         let is_render_in_tabs = self.panels.len() > 1 && self.inner_padding(cx);
 
         v_flex()
-            .id("tab-content")
             .group("")
-            .overflow_y_scroll()
-            .overflow_x_hidden()
             .flex_1()
             .when(is_render_in_tabs, |this| this.pt_2())
             .child(
-                active_panel
-                    .view()
-                    .cached(StyleRefinement::default().v_flex().size_full()),
+                div()
+                    .id("tab-content")
+                    .overflow_y_scroll()
+                    .overflow_x_hidden()
+                    .flex_1()
+                    .child(
+                        active_panel
+                            .view()
+                            .cached(StyleRefinement::default().v_flex().size_full()),
+                    ),
             )
             .when(state.droppable, |this| {
                 this.on_drag_move(cx.listener(Self::on_panel_drag_move))
