@@ -1,4 +1,8 @@
+use std::rc::Rc;
+
 use gpui::{px, rems, App, ElementId, IntoElement, Pixels, Rems, RenderOnce, SharedString, Window};
+
+use crate::highlighter::HighlightTheme;
 
 use super::{html::HtmlElement, markdown::MarkdownElement};
 
@@ -65,12 +69,14 @@ impl RenderOnce for Text {
 }
 
 /// TextViewStyle used to customize the style for [`TextView`].
-#[derive(Copy, Clone)]
+#[derive(Clone, PartialEq)]
 pub struct TextViewStyle {
     /// Gap of each paragraphs, default is 1 rem.
     pub paragraph_gap: Rems,
     /// Base font size for headings, default is 14px.
     pub heading_base_font_size: Pixels,
+    /// Highlight theme for code blocks. Default: [`HighlightTheme::default_light()`]
+    pub highlight_theme: Rc<HighlightTheme>,
 }
 
 impl Default for TextViewStyle {
@@ -78,6 +84,7 @@ impl Default for TextViewStyle {
         Self {
             paragraph_gap: rems(1.),
             heading_base_font_size: px(14.),
+            highlight_theme: Rc::new(HighlightTheme::default_light()),
         }
     }
 }

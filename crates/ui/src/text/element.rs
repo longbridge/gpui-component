@@ -199,6 +199,28 @@ impl Paragraph {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct CodeBlock {
+    code: SharedString,
+    lang: Option<SharedString>,
+    styles: Vec<(Range<usize>, HighlightStyle)>,
+}
+
+impl CodeBlock {
+    pub fn new(
+        code: SharedString,
+        lang: Option<SharedString>,
+        text_view_style: &TextViewStyle,
+    ) -> Self {
+        let highlight = Highlighter::new(
+            lang.as_ref().map(|v| v.as_ref()),
+            text_view_style.highlight_theme.as_ref(),
+        );
+        let styles = highlight.highlight(code.as_ref());
+        Self { code, lang, styles }
+    }
+}
+
 /// Ref:
 /// https://ui.shadcn.com/docs/components/typography
 #[allow(unused)]
@@ -224,10 +246,7 @@ pub enum Node {
         /// Whether the list item is checked, if None, it's not a checkbox
         checked: Option<bool>,
     },
-    CodeBlock {
-        code: SharedString,
-        lang: Option<SharedString>,
-    },
+    CodeBlock(CodeBlock),
     Table(Table),
     Break {
         html: bool,
@@ -549,16 +568,11 @@ impl Node {
     }
 
     fn render_codeblock(
-        lang: Option<SharedString>,
-        code: SharedString,
+        code_block: CodeBlock,
         mb: Rems,
-        cx: &App,
+        _: &mut Window,
+        cx: &mut App,
     ) -> AnyElement {
-        let lang = lang.as_ref().map(|l| l.as_ref()).unwrap_or("");
-        let mut highlighter = Highlighter::new(lang, cx);
-        let text =
-            StyledText::new(code.clone()).with_highlights(highlighter.highlight(code.as_ref(), cx));
-
         div()
             .mb(mb)
             .p_3()
@@ -567,7 +581,7 @@ impl Node {
             .font_family("Menlo, Monaco, Consolas, monospace")
             .text_size(rems(0.875))
             .relative()
-            .child(text)
+            .child(StyledText::new(code_block.code.clone()).with_highlights(code_block.styles))
             .into_any_element()
     }
 
@@ -657,7 +671,7 @@ impl Node {
                     items
                 })
                 .into_any_element(),
-            Node::CodeBlock { code, lang } => Self::render_codeblock(lang, code, mb, cx),
+            Node::CodeBlock(code_block) => Self::render_codeblock(code_block, mb, window, cx),
             Node::Table { .. } => Self::render_table(&self, window, cx).into_any_element(),
             Node::Divider => div()
                 .bg(cx.theme().border)
@@ -780,8 +794,12 @@ impl Node {
                         .join("\n")
                 )
             }
-            Node::CodeBlock { code, lang } => {
-                format!("```{}\n{}\n```", lang.clone().unwrap_or_default(), code)
+            Node::CodeBlock(code_block) => {
+                format!(
+                    "```{}\n{}\n```",
+                    code_block.lang.clone().unwrap_or_default(),
+                    code_block.code
+                )
             }
             Node::Table(table) => {
                 let header = table

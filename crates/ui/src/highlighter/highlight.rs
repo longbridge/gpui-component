@@ -1,60 +1,84 @@
-use std::collections::BTreeMap;
-use std::ops::Range;
-use std::sync::LazyLock;
-
-use gpui::{App, HighlightStyle, Hsla};
+use gpui::{HighlightStyle, Hsla, SharedString};
+use std::{
+    ops::Range,
+    sync::{Arc, LazyLock},
+};
 use syntect::{highlighting, parsing};
-
-use crate::ActiveTheme as _;
-use crate::ThemeMode;
 
 static SYNTAXES: LazyLock<parsing::SyntaxSet> =
     LazyLock::new(parsing::SyntaxSet::load_defaults_nonewlines);
 
-static THEMES: LazyLock<highlighting::ThemeSet> = LazyLock::new(|| {
-    let mut themes = BTreeMap::new();
-
-    let mut cursor = std::io::Cursor::new(include_bytes!("./themes/dark.tmTheme"));
-    let dark_theme = highlighting::ThemeSet::load_from_reader(&mut cursor).unwrap();
-    themes.insert("default-dark".to_string(), dark_theme);
-
+static DEFAULT_LIGHT: LazyLock<Arc<highlighting::Theme>> = LazyLock::new(|| {
     let mut cursor = std::io::Cursor::new(include_bytes!("./themes/light.tmTheme"));
-    let light_theme = highlighting::ThemeSet::load_from_reader(&mut cursor).unwrap();
-    themes.insert("default-light".to_string(), light_theme);
-
-    highlighting::ThemeSet { themes }
+    Arc::new(highlighting::ThemeSet::load_from_reader(&mut cursor).unwrap())
 });
+
+static DEFAULT_DARK: LazyLock<Arc<highlighting::Theme>> = LazyLock::new(|| {
+    let mut cursor = std::io::Cursor::new(include_bytes!("./themes/dark.tmTheme"));
+    Arc::new(highlighting::ThemeSet::load_from_reader(&mut cursor).unwrap())
+});
+
+/// Represents a theme for syntax highlighting.
+#[derive(Debug, Clone, PartialEq)]
+pub struct HighlightTheme {
+    name: SharedString,
+    inner: Arc<highlighting::Theme>,
+}
+
+impl HighlightTheme {
+    /// Default light theme.
+    pub fn default_light() -> Self {
+        Self {
+            name: "default-light".into(),
+            inner: DEFAULT_LIGHT.clone(),
+        }
+    }
+
+    /// Default dark theme.
+    pub fn default_dark() -> Self {
+        Self {
+            name: "default-dark".into(),
+            inner: DEFAULT_DARK.clone(),
+        }
+    }
+
+    /// Parse a theme from a string (tmTheme)
+    pub fn parse(name: &str, theme_str: &str) -> anyhow::Result<Self> {
+        let mut cursor = std::io::Cursor::new(theme_str);
+        let theme = highlighting::ThemeSet::load_from_reader(&mut cursor)?;
+
+        Ok(Self {
+            name: SharedString::from(name.to_string()),
+            inner: Arc::new(theme),
+        })
+    }
+}
 
 /// Inspired by the `iced` crate's `Highlighter` struct.
 ///
 /// https://github.com/iced-rs/iced/blob/master/highlighter/src/lib.rs#L24
-pub struct Highlighter {
+pub struct Highlighter<'a> {
     syntax: &'static parsing::SyntaxReference,
+    highlighter: highlighting::Highlighter<'a>,
 }
 
-/// Returns the default theme for the given theme mode.
-pub fn default_theme(mode: ThemeMode) -> highlighting::Theme {
-    if mode.is_dark() {
-        THEMES.themes["default-dark"].clone()
-    } else {
-        THEMES.themes["default-light"].clone()
-    }
-}
-
-impl Highlighter {
-    pub fn new(language: &str, _: &App) -> Self {
-        let syntax = SYNTAXES
-            .find_syntax_by_token(&language)
+impl<'a> Highlighter<'a> {
+    pub fn new(lang: Option<&str>, theme: &'a HighlightTheme) -> Self {
+        let syntax = lang
+            .and_then(|lang| SYNTAXES.find_syntax_by_token(&lang))
             .unwrap_or_else(|| SYNTAXES.find_syntax_plain_text());
+        let highlighter = highlighting::Highlighter::new(&theme.inner);
 
-        Self { syntax }
+        Self {
+            syntax,
+            highlighter,
+        }
     }
 
     /// Highlight a text and returns a vector of ranges and highlight styles
-    pub fn highlight(&mut self, text: &str, cx: &App) -> Vec<(Range<usize>, HighlightStyle)> {
+    pub fn highlight(&self, text: &str) -> Vec<(Range<usize>, HighlightStyle)> {
         let mut parser = parsing::ParseState::new(self.syntax);
         let mut stack = parsing::ScopeStack::new();
-        let highlighter = highlighting::Highlighter::new(&cx.theme().highlighter);
 
         let ops = parser.parse_line(text, &SYNTAXES).unwrap_or_default();
 
@@ -69,7 +93,7 @@ impl Highlighter {
             if range.is_empty() {
                 return None;
             } else {
-                let style_mod = highlighter.style_mod_for_stack(&stack.scopes);
+                let style_mod = self.highlighter.style_mod_for_stack(&stack.scopes);
                 let mut style = HighlightStyle::default();
                 style.color = style_mod.foreground.map(color_to_hsla);
                 style.background_color = style_mod.background.map(color_to_hsla);

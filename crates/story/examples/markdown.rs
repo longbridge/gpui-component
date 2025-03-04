@@ -1,5 +1,12 @@
+use std::rc::Rc;
+
 use gpui::*;
-use gpui_component::{input::TextInput, text::TextView, ActiveTheme as _};
+use gpui_component::{
+    highlighter::HighlightTheme,
+    input::TextInput,
+    text::{TextView, TextViewStyle},
+    ActiveTheme as _,
+};
 use story::Assets;
 
 pub struct Example {
@@ -39,6 +46,12 @@ impl Example {
 
 impl Render for Example {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = if cx.theme().mode.is_dark() {
+            HighlightTheme::default_dark()
+        } else {
+            HighlightTheme::default_light()
+        };
+
         div()
             .flex()
             .flex_row()
@@ -61,10 +74,14 @@ impl Render for Example {
                     .p_5()
                     .flex_1()
                     .overflow_y_scroll()
-                    .child(TextView::markdown(
-                        "preview",
-                        self.text_input.read(cx).text(),
-                    )),
+                    .child(
+                        TextView::markdown("preview", self.text_input.read(cx).text()).style(
+                            TextViewStyle {
+                                highlight_theme: Rc::new(theme),
+                                ..Default::default()
+                            },
+                        ),
+                    ),
             )
     }
 }

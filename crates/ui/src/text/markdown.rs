@@ -10,7 +10,9 @@ use markdown::{
 use crate::v_flex;
 
 use super::{
-    element::{self, ImageNode, InlineTextStyle, LinkMark, Paragraph, Span, Table, TableRow},
+    element::{
+        self, CodeBlock, ImageNode, InlineTextStyle, LinkMark, Paragraph, Span, Table, TableRow,
+    },
     html::parse_html,
     TextViewStyle,
 };
@@ -54,18 +56,20 @@ impl MarkdownElement {
 pub struct MarkdownState {
     raw: SharedString,
     root: Option<Result<element::Node, SharedString>>,
+    style: TextViewStyle,
 }
 
 impl MarkdownState {
-    fn parse_if_needed(&mut self, new_text: SharedString) {
-        let is_changed = self.raw != new_text;
+    fn parse_if_needed(&mut self, new_text: SharedString, style: &TextViewStyle) {
+        let is_changed = self.raw != new_text || self.style != *style;
 
         if self.root.is_some() && !is_changed {
             return;
         }
 
         self.raw = new_text;
-        self.root = Some(parse_markdown(&self.raw));
+        self.root = Some(parse_markdown(&self.raw, &style));
+        self.style = style.clone();
     }
 }
 
@@ -93,7 +97,7 @@ impl Element for MarkdownElement {
     ) -> (gpui::LayoutId, Self::RequestLayoutState) {
         window.with_element_state(id.unwrap(), |state, window| {
             let mut state: MarkdownState = state.unwrap_or_default();
-            state.parse_if_needed(self.text.clone());
+            state.parse_if_needed(self.text.clone(), &self.style);
 
             let root = state
                 .root
@@ -143,9 +147,9 @@ impl Element for MarkdownElement {
 }
 
 /// Parse Markdown into a tree of nodes.
-fn parse_markdown(raw: &str) -> Result<element::Node, SharedString> {
+fn parse_markdown(raw: &str, style: &TextViewStyle) -> Result<element::Node, SharedString> {
     markdown::to_mdast(&raw, &ParseOptions::gfm())
-        .map(|n| n.into())
+        .map(|n| ast_to_node(n, style))
         .map_err(|e| e.to_string().into())
 }
 
@@ -335,137 +339,144 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node) -> String {
     text
 }
 
-impl From<mdast::Node> for element::Node {
-    fn from(value: Node) -> Self {
-        match value {
-            Node::Root(val) => {
-                let children = val.children.into_iter().map(|c| c.into()).collect();
-                element::Node::Root { children }
-            }
-            Node::Paragraph(val) => {
-                let mut paragraph = Paragraph::default();
-                val.children.iter().for_each(|c| {
-                    parse_paragraph(&mut paragraph, c);
-                });
+fn ast_to_node(value: mdast::Node, style: &TextViewStyle) -> element::Node {
+    match value {
+        Node::Root(val) => {
+            let children = val
+                .children
+                .into_iter()
+                .map(|c| ast_to_node(c, style))
+                .collect();
+            element::Node::Root { children }
+        }
+        Node::Paragraph(val) => {
+            let mut paragraph = Paragraph::default();
+            val.children.iter().for_each(|c| {
+                parse_paragraph(&mut paragraph, c);
+            });
 
-                element::Node::Paragraph(paragraph)
-            }
-            Node::Blockquote(val) => {
-                let mut paragraph = Paragraph::default();
-                val.children.iter().for_each(|c| {
-                    parse_paragraph(&mut paragraph, c);
-                });
+            element::Node::Paragraph(paragraph)
+        }
+        Node::Blockquote(val) => {
+            let mut paragraph = Paragraph::default();
+            val.children.iter().for_each(|c| {
+                parse_paragraph(&mut paragraph, c);
+            });
 
-                element::Node::Blockquote(paragraph)
+            element::Node::Blockquote(paragraph)
+        }
+        Node::List(list) => {
+            let children = list
+                .children
+                .into_iter()
+                .map(|c| ast_to_node(c, style))
+                .collect();
+            element::Node::List {
+                ordered: list.ordered,
+                children,
             }
-            Node::List(list) => {
-                let children = list.children.into_iter().map(|c| c.into()).collect();
-                element::Node::List {
-                    ordered: list.ordered,
-                    children,
-                }
+        }
+        Node::ListItem(val) => {
+            let children = val
+                .children
+                .into_iter()
+                .map(|c| ast_to_node(c, style))
+                .collect();
+            element::Node::ListItem {
+                children,
+                spread: val.spread,
+                checked: val.checked,
             }
-            Node::ListItem(val) => {
-                let children = val.children.into_iter().map(|c| c.into()).collect();
-                element::Node::ListItem {
-                    children,
-                    spread: val.spread,
-                    checked: val.checked,
-                }
-            }
-            Node::Break(_) => element::Node::Break { html: false },
-            Node::Code(raw) => element::Node::CodeBlock {
-                code: raw.value.into(),
-                lang: raw.lang.map(|s| s.into()),
-            },
-            Node::Heading(val) => {
-                let mut paragraph = Paragraph::default();
-                val.children.iter().for_each(|c| {
-                    parse_paragraph(&mut paragraph, c);
-                });
+        }
+        Node::Break(_) => element::Node::Break { html: false },
+        Node::Code(raw) => element::Node::CodeBlock(CodeBlock::new(
+            raw.value.into(),
+            raw.lang.map(|s| s.into()),
+            style,
+        )),
+        Node::Heading(val) => {
+            let mut paragraph = Paragraph::default();
+            val.children.iter().for_each(|c| {
+                parse_paragraph(&mut paragraph, c);
+            });
 
-                element::Node::Heading {
-                    level: val.depth,
-                    children: paragraph,
-                }
+            element::Node::Heading {
+                level: val.depth,
+                children: paragraph,
             }
-            Node::Math(val) => element::Node::CodeBlock {
-                code: val.value.into(),
-                lang: Some("math".into()),
-            },
-            Node::Html(val) => match parse_html(&val.value) {
-                Ok(el) => el,
-                Err(err) => {
-                    if cfg!(debug_assertions) {
-                        eprintln!("[markdown] error parsing html: {:#?}", err);
-                    }
-
-                    element::Node::Paragraph(val.value.into())
-                }
-            },
-            Node::MdxFlowExpression(val) => element::Node::CodeBlock {
-                code: val.value.into(),
-                lang: Some("mdx".into()),
-            },
-            Node::Yaml(val) => element::Node::CodeBlock {
-                code: val.value.into(),
-                lang: Some("yaml".into()),
-            },
-            Node::Toml(val) => element::Node::CodeBlock {
-                code: val.value.into(),
-                lang: Some("toml".into()),
-            },
-            Node::MdxJsxTextElement(val) => {
-                println!("MdxJsxTextElement: {:#?}", val);
-                let mut paragraph = Paragraph::default();
-                val.children.iter().for_each(|c| {
-                    parse_paragraph(&mut paragraph, c);
-                });
-                element::Node::Paragraph(paragraph)
-            }
-            Node::MdxJsxFlowElement(val) => {
-                println!("MdxJsxFlowElement: {:#?}", val);
-                let mut paragraph = Paragraph::default();
-                val.children.iter().for_each(|c| {
-                    parse_paragraph(&mut paragraph, c);
-                });
-                element::Node::Paragraph(paragraph)
-            }
-            Node::ThematicBreak(_) => element::Node::Divider,
-            Node::Table(val) => {
-                let mut table = Table::default();
-                table.column_aligns = val
-                    .align
-                    .clone()
-                    .into_iter()
-                    .map(|align| align.into())
-                    .collect();
-                val.children.iter().for_each(|c| {
-                    if let Node::TableRow(row) = c {
-                        parse_table_row(&mut table, row);
-                    }
-                });
-
-                element::Node::Table(table)
-            }
-            _ => {
+        }
+        Node::Math(val) => element::Node::CodeBlock(CodeBlock::new(val.value.into(), None, style)),
+        Node::Html(val) => match parse_html(&val.value) {
+            Ok(el) => el,
+            Err(err) => {
                 if cfg!(debug_assertions) {
-                    eprintln!("[markdown] unsupported node: {:#?}", value);
+                    eprintln!("[markdown] error parsing html: {:#?}", err);
                 }
-                element::Node::Unknown
+
+                element::Node::Paragraph(val.value.into())
             }
+        },
+        Node::MdxFlowExpression(val) => {
+            element::Node::CodeBlock(CodeBlock::new(val.value.into(), Some("mdx".into()), style))
+        }
+        Node::Yaml(val) => {
+            element::Node::CodeBlock(CodeBlock::new(val.value.into(), Some("yml".into()), style))
+        }
+        Node::Toml(val) => {
+            element::Node::CodeBlock(CodeBlock::new(val.value.into(), Some("toml".into()), style))
+        }
+        Node::MdxJsxTextElement(val) => {
+            println!("MdxJsxTextElement: {:#?}", val);
+            let mut paragraph = Paragraph::default();
+            val.children.iter().for_each(|c| {
+                parse_paragraph(&mut paragraph, c);
+            });
+            element::Node::Paragraph(paragraph)
+        }
+        Node::MdxJsxFlowElement(val) => {
+            println!("MdxJsxFlowElement: {:#?}", val);
+            let mut paragraph = Paragraph::default();
+            val.children.iter().for_each(|c| {
+                parse_paragraph(&mut paragraph, c);
+            });
+            element::Node::Paragraph(paragraph)
+        }
+        Node::ThematicBreak(_) => element::Node::Divider,
+        Node::Table(val) => {
+            let mut table = Table::default();
+            table.column_aligns = val
+                .align
+                .clone()
+                .into_iter()
+                .map(|align| align.into())
+                .collect();
+            val.children.iter().for_each(|c| {
+                if let Node::TableRow(row) = c {
+                    parse_table_row(&mut table, row);
+                }
+            });
+
+            element::Node::Table(table)
+        }
+        _ => {
+            if cfg!(debug_assertions) {
+                eprintln!("[markdown] unsupported node: {:#?}", value);
+            }
+            element::Node::Unknown
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::text::TextViewStyle;
+
     use super::parse_markdown;
 
     #[test]
     fn test_parse_br() {
         let raw = "Row 1<br/>Row 2<br>[Link](https://github.com)";
-        let node = parse_markdown(&raw).unwrap();
+        let node = parse_markdown(&raw, &TextViewStyle::default()).unwrap();
         assert_eq!(
             node.to_markdown(),
             "Row 1\nRow 2\n[Link](https://github.com)"
