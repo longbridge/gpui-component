@@ -1,6 +1,6 @@
 use crate::{
     h_flex, indicator::Indicator, tooltip::Tooltip, ActiveTheme, Colorize as _, Disableable, Icon,
-    Selectable, Sizable, Size,
+    Selectable, Sizable, Size, StyleSized,
 };
 use gpui::{
     div, prelude::FluentBuilder as _, relative, AnyElement, App, ClickEvent, Corners, Div, Edges,
@@ -432,10 +432,11 @@ impl RenderOnce for Button {
                     .id("label")
                     .items_center()
                     .justify_center()
+                    .button_text_size(self.size)
                     .map(|this| match self.size {
-                        Size::XSmall => this.gap_1().text_xs(),
-                        Size::Small => this.gap_1().text_sm(),
-                        _ => this.gap_2().text_base(),
+                        Size::XSmall => this.gap_1(),
+                        Size::Small => this.gap_1(),
+                        _ => this.gap_2(),
                     })
                     .when(!self.loading, |this| {
                         this.when_some(self.icon, |this, icon| {

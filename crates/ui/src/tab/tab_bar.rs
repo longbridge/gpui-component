@@ -135,6 +135,7 @@ impl RenderOnce for TabBar {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let default_gap = match self.size {
             Size::Small | Size::XSmall => px(8.),
+            Size::Large => px(16.),
             _ => px(12.),
         };
         let (bg, paddings, gap) = match self.variant {

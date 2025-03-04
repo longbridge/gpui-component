@@ -47,11 +47,23 @@ impl Default for TabStyle {
 impl TabVariant {
     fn height(&self, size: Size) -> Pixels {
         match size {
-            Size::Small | Size::XSmall => match self {
+            Size::XSmall => match self {
+                TabVariant::Tab => px(22.),
+                TabVariant::Pill => px(20.),
+                TabVariant::Segmented => px(20.),
+                TabVariant::Underline => px(26.),
+            },
+            Size::Small => match self {
                 TabVariant::Tab => px(24.),
                 TabVariant::Pill => px(24.),
                 TabVariant::Segmented => px(24.),
                 TabVariant::Underline => px(30.),
+            },
+            Size::Large => match self {
+                TabVariant::Tab => px(36.),
+                TabVariant::Pill => px(36.),
+                TabVariant::Segmented => px(36.),
+                TabVariant::Underline => px(42.),
             },
             _ => match self {
                 TabVariant::Tab => px(30.),
@@ -64,11 +76,23 @@ impl TabVariant {
 
     fn inner_height(&self, size: Size) -> Pixels {
         match size {
-            Size::Small | Size::XSmall => match self {
-                TabVariant::Tab => px(25.),
-                TabVariant::Pill => px(26.),
-                TabVariant::Segmented => px(26.),
+            Size::XSmall => match self {
+                TabVariant::Tab => px(20.),
+                TabVariant::Pill => px(20.),
+                TabVariant::Segmented => px(20.),
+                TabVariant::Underline => px(20.),
+            },
+            Size::Small => match self {
+                TabVariant::Tab => px(24.),
+                TabVariant::Pill => px(24.),
+                TabVariant::Segmented => px(24.),
                 TabVariant::Underline => px(22.),
+            },
+            Size::Large => match self {
+                TabVariant::Tab => px(36.),
+                TabVariant::Pill => px(36.),
+                TabVariant::Segmented => px(36.),
+                TabVariant::Underline => px(30.),
             },
             _ => match self {
                 TabVariant::Tab => px(30.),
@@ -81,56 +105,33 @@ impl TabVariant {
 
     fn inner_paddings(&self, size: Size) -> Edges<Pixels> {
         match size {
-            Size::Small | Size::XSmall => match self {
-                TabVariant::Tab => Edges {
-                    left: px(10.),
-                    right: px(10.),
-                    ..Default::default()
-                },
-                TabVariant::Pill => Edges {
-                    left: px(14.),
-                    right: px(14.),
-                    ..Default::default()
-                },
-                TabVariant::Segmented => Edges {
-                    left: px(8.),
-                    right: px(8.),
-                    ..Default::default()
-                },
-                TabVariant::Underline => Edges {
-                    left: px(10.),
-                    right: px(10.),
-                    ..Default::default()
-                },
+            Size::XSmall => Edges {
+                left: px(8.),
+                right: px(8.),
+                ..Default::default()
             },
-            _ => match self {
-                TabVariant::Tab => Edges {
-                    left: px(12.),
-                    right: px(12.),
-                    ..Default::default()
-                },
-                TabVariant::Pill => Edges {
-                    left: px(16.),
-                    right: px(16.),
-                    ..Default::default()
-                },
-                TabVariant::Segmented => Edges {
-                    left: px(10.),
-                    right: px(10.),
-                    ..Default::default()
-                },
-                TabVariant::Underline => Edges {
-                    left: px(12.),
-                    right: px(12.),
-                    ..Default::default()
-                },
+            Size::Small => Edges {
+                left: px(12.),
+                right: px(12.),
+                ..Default::default()
+            },
+            Size::Large => Edges {
+                left: px(20.),
+                right: px(20.),
+                ..Default::default()
+            },
+            _ => Edges {
+                left: px(16.),
+                right: px(16.),
+                ..Default::default()
             },
         }
     }
 
     fn inner_margins(&self, size: Size) -> Edges<Pixels> {
         match size {
-            Size::Small | Size::XSmall => match self {
+            Size::XSmall => Edges::all(px(0.)),
+            Size::Small => match self {
                 TabVariant::Underline => Edges {
                     bottom: px(2.),
                     ..Default::default()
@@ -514,6 +515,11 @@ impl RenderOnce for Tab {
             .h(height)
             .overflow_hidden()
             .text_color(tab_style.fg)
+            .map(|this| match self.size {
+                Size::XSmall => this.text_xs(),
+                Size::Large => this.text_base(),
+                _ => this.text_sm(),
+            })
             .bg(tab_style.bg)
             .border_l(tab_style.borders.left)
             .border_r(tab_style.borders.right)
@@ -534,7 +540,6 @@ impl RenderOnce for Tab {
                         .rounded(tab_style.radius)
                 })
             })
-            .text_sm()
             .when_some(self.prefix, |this, prefix| this.child(prefix))
             .child(
                 div()
