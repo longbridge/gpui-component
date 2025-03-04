@@ -1,14 +1,15 @@
 use std::ops::Range;
 
 use gpui::{
-    div, img, prelude::FluentBuilder as _, px, relative, rems, App, DefiniteLength, ElementId,
-    FontStyle, FontWeight, Half, HighlightStyle, InteractiveElement as _, InteractiveText,
-    IntoElement, Length, ObjectFit, ParentElement, RenderOnce, SharedString, SharedUri, Styled,
-    StyledImage as _, StyledText, Window,
+    div, img, prelude::FluentBuilder as _, px, relative, rems, AnyElement, App, DefiniteLength,
+    ElementId, FontStyle, FontWeight, Half, HighlightStyle, InteractiveElement as _,
+    InteractiveText, IntoElement, Length, ObjectFit, ParentElement, Pixels, Rems, RenderOnce,
+    SharedString, SharedUri, Styled, StyledImage as _, StyledText, Window,
 };
+use image::Pixel;
 use markdown::mdast;
 
-use crate::{h_flex, v_flex, ActiveTheme as _, Icon, IconName};
+use crate::{h_flex, highlighter::Highlighter, v_flex, ActiveTheme as _, Icon, IconName};
 
 use super::{utils::list_item_prefix, TextViewStyle};
 
@@ -548,6 +549,28 @@ impl Node {
         }
     }
 
+    fn render_codeblock(
+        lang: Option<SharedString>,
+        code: SharedString,
+        mb: Rems,
+        cx: &App,
+    ) -> AnyElement {
+        let lang = lang.as_ref().map(|l| l.as_ref()).unwrap_or("");
+        let mut highlighter = Highlighter::new(lang, cx);
+        let text =
+            StyledText::new(code.clone()).with_highlights(highlighter.highlight(code.as_ref()));
+
+        div()
+            .mb(mb)
+            .rounded(cx.theme().radius)
+            .bg(cx.theme().secondary)
+            .p_3()
+            .text_size(rems(0.875))
+            .relative()
+            .child(text)
+            .into_any_element()
+    }
+
     pub(crate) fn render(
         self,
         list_state: Option<ListState>,
@@ -634,15 +657,7 @@ impl Node {
                     items
                 })
                 .into_any_element(),
-            Node::CodeBlock { code, .. } => div()
-                .mb(mb)
-                .rounded(cx.theme().radius)
-                .bg(cx.theme().secondary)
-                .p_3()
-                .text_size(rems(0.875))
-                .relative()
-                .child(code)
-                .into_any_element(),
+            Node::CodeBlock { code, lang } => Self::render_codeblock(lang, code, mb, cx),
             Node::Table { .. } => Self::render_table(&self, window, cx).into_any_element(),
             Node::Divider => div()
                 .bg(cx.theme().border)

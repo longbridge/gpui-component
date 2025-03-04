@@ -13,6 +13,7 @@ doctest = false
 
 [features]
 webview = ["dep:wry"]
+highlight = ["dep:syntect"]
 
 [dependencies]
 gpui.workspace = true
@@ -47,6 +48,7 @@ markup5ever_rcdom = "0.3.0"
 minify-html = "0.15.0"
 # Calendar
 chrono = "0.4.38"
+syntect = { version = "5.2", optional = true }
 
 [dev-dependencies]
 indoc = "2"
