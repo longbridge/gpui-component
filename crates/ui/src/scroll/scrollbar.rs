@@ -132,8 +132,10 @@ impl ScrollbarState {
     fn with_hovered_on_thumb(&self, axis: Option<ScrollbarAxis>) -> Self {
         let mut state = *self;
         state.hovered_on_thumb = axis;
-        if axis.is_some() {
-            state.last_scroll_time = Some(std::time::Instant::now());
+        if self.is_scrollbar_visible() {
+            if axis.is_some() {
+                state.last_scroll_time = Some(std::time::Instant::now());
+            }
         }
         state
     }

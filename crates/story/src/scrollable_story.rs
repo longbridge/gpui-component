@@ -202,7 +202,7 @@ impl Render for ScrollableStory {
             .gap_4()
             .child(self.render_buttons(cx))
             .child(
-                div().w_full().flex_1().child(
+                div().w_full().flex_1().min_h_64().child(
                     div().relative().size_full().child(
                         v_flex()
                             .id("test-0")
