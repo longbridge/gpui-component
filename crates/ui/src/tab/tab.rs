@@ -507,6 +507,7 @@ impl RenderOnce for Tab {
         self.base
             .id(self.id)
             .flex()
+            .flex_wrap()
             .items_center()
             .flex_shrink_0()
             .cursor_pointer()
