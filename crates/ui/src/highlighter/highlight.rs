@@ -1,72 +1,66 @@
+use std::collections::BTreeMap;
 use std::ops::Range;
 use std::sync::LazyLock;
 
-use gpui::App;
-use gpui::FontWeight;
-use gpui::HighlightStyle;
-use gpui::Hsla;
-use syntect::highlighting;
-use syntect::parsing;
+use gpui::{App, HighlightStyle, Hsla};
+use syntect::{highlighting, parsing};
 
-use crate::ActiveTheme;
+use crate::ActiveTheme as _;
+use crate::ThemeMode;
 
 static SYNTAXES: LazyLock<parsing::SyntaxSet> =
     LazyLock::new(parsing::SyntaxSet::load_defaults_nonewlines);
 
-static THEMES: LazyLock<highlighting::ThemeSet> =
-    LazyLock::new(highlighting::ThemeSet::load_defaults);
+static THEMES: LazyLock<highlighting::ThemeSet> = LazyLock::new(|| {
+    let mut themes = BTreeMap::new();
+
+    let mut cursor = std::io::Cursor::new(include_bytes!("./themes/dark.tmTheme"));
+    let dark_theme = highlighting::ThemeSet::load_from_reader(&mut cursor).unwrap();
+    themes.insert("default-dark".to_string(), dark_theme);
+
+    let mut cursor = std::io::Cursor::new(include_bytes!("./themes/light.tmTheme"));
+    let light_theme = highlighting::ThemeSet::load_from_reader(&mut cursor).unwrap();
+    themes.insert("default-light".to_string(), light_theme);
+
+    highlighting::ThemeSet { themes }
+});
 
 /// Inspired by the `iced` crate's `Highlighter` struct.
 ///
 /// https://github.com/iced-rs/iced/blob/master/highlighter/src/lib.rs#L24
 pub struct Highlighter {
     syntax: &'static parsing::SyntaxReference,
-    highlighter: highlighting::Highlighter<'static>,
+}
+
+/// Returns the default theme for the given theme mode.
+pub fn default_theme(mode: ThemeMode) -> highlighting::Theme {
+    if mode.is_dark() {
+        THEMES.themes["default-dark"].clone()
+    } else {
+        THEMES.themes["default-light"].clone()
+    }
 }
 
 impl Highlighter {
-    pub fn new(language: &str, cx: &App) -> Self {
+    pub fn new(language: &str, _: &App) -> Self {
         let syntax = SYNTAXES
             .find_syntax_by_token(&language)
             .unwrap_or_else(|| SYNTAXES.find_syntax_plain_text());
-        let highlighter = highlighting::Highlighter::new(&THEMES.themes[Self::default_theme(cx)]);
 
-        Self {
-            syntax,
-            highlighter,
-        }
-    }
-
-    fn default_theme(cx: &App) -> &'static str {
-        if cx.theme().mode.is_dark() {
-            "base16-ocean.dark"
-        } else {
-            "base16-ocean.light"
-        }
-    }
-
-    /// Update the highlighter with the current theme
-    ///
-    /// Call this method when theme changes
-    #[allow(dead_code)]
-    pub fn update(&mut self, cx: &App) {
-        let theme = Self::default_theme(cx);
-
-        // Update the highlighter with the current theme
-        self.highlighter = highlighting::Highlighter::new(&THEMES.themes[theme]);
+        Self { syntax }
     }
 
     /// Highlight a text and returns a vector of ranges and highlight styles
-    pub fn highlight(&mut self, text: &str) -> Vec<(Range<usize>, HighlightStyle)> {
+    pub fn highlight(&mut self, text: &str, cx: &App) -> Vec<(Range<usize>, HighlightStyle)> {
         let mut parser = parsing::ParseState::new(self.syntax);
         let mut stack = parsing::ScopeStack::new();
-        let highlighter = &self.highlighter;
+        let highlighter = highlighting::Highlighter::new(&cx.theme().highlighter);
 
-        let ops = parser.parse_line(line, &SYNTAXES).unwrap_or_default();
+        let ops = parser.parse_line(text, &SYNTAXES).unwrap_or_default();
 
         ScopeRangeIterator {
             ops,
-            line_length: line.len(),
+            line_length: text.len(),
             index: 0,
             last_str_index: 0,
         }
@@ -79,15 +73,6 @@ impl Highlighter {
                 let mut style = HighlightStyle::default();
                 style.color = style_mod.foreground.map(color_to_hsla);
                 style.background_color = style_mod.background.map(color_to_hsla);
-                if let Some(font_style) = style_mod.font_style {
-                    if font_style.contains(highlighting::FontStyle::BOLD) {
-                        style.font_weight = Some(FontWeight::BOLD);
-                    }
-                    if font_style.contains(highlighting::FontStyle::ITALIC) {
-                        style.font_style = Some(gpui::FontStyle::Italic);
-                    }
-                }
-
                 Some((range, style))
             }
         })

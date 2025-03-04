@@ -3,10 +3,9 @@ use std::ops::Range;
 use gpui::{
     div, img, prelude::FluentBuilder as _, px, relative, rems, AnyElement, App, DefiniteLength,
     ElementId, FontStyle, FontWeight, Half, HighlightStyle, InteractiveElement as _,
-    InteractiveText, IntoElement, Length, ObjectFit, ParentElement, Pixels, Rems, RenderOnce,
-    SharedString, SharedUri, Styled, StyledImage as _, StyledText, Window,
+    InteractiveText, IntoElement, Length, ObjectFit, ParentElement, Rems, RenderOnce, SharedString,
+    SharedUri, Styled, StyledImage as _, StyledText, Window,
 };
-use image::Pixel;
 use markdown::mdast;
 
 use crate::{h_flex, highlighter::Highlighter, v_flex, ActiveTheme as _, Icon, IconName};
@@ -558,7 +557,7 @@ impl Node {
         let lang = lang.as_ref().map(|l| l.as_ref()).unwrap_or("");
         let mut highlighter = Highlighter::new(lang, cx);
         let text =
-            StyledText::new(code.clone()).with_highlights(highlighter.highlight(code.as_ref()));
+            StyledText::new(code.clone()).with_highlights(highlighter.highlight(code.as_ref(), cx));
 
         div()
             .mb(mb)

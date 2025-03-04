@@ -4,7 +4,7 @@ use gpui::{
     hsla, point, px, App, BoxShadow, Global, Hsla, Pixels, SharedString, Window, WindowAppearance,
 };
 
-use crate::{scroll::ScrollbarShow, Colorize as _};
+use crate::{highlighter, scroll::ScrollbarShow, Colorize as _};
 
 pub fn init(cx: &mut App) {
     Theme::sync_system_appearance(None, cx);
@@ -387,6 +387,9 @@ pub struct Theme {
     pub tile_grid_size: Pixels,
     /// The shadow of the tile panel.
     pub tile_shadow: bool,
+
+    /// The highlighter theme.
+    pub highlighter: syntect::highlighting::Theme,
 }
 
 impl Deref for Theme {
@@ -531,6 +534,7 @@ impl Theme {
         let theme = cx.global_mut::<Theme>();
 
         theme.mode = mode;
+        theme.highlighter = highlighter::default_theme(mode);
         theme.colors = colors;
 
         if let Some(window) = window {
@@ -541,8 +545,9 @@ impl Theme {
 
 impl From<ThemeColor> for Theme {
     fn from(colors: ThemeColor) -> Self {
+        let mode = ThemeMode::default();
         Theme {
-            mode: ThemeMode::default(),
+            mode,
             transparent: Hsla::transparent_black(),
             font_size: px(16.),
             font_family: if cfg!(target_os = "macos") {
@@ -558,6 +563,7 @@ impl From<ThemeColor> for Theme {
             tile_grid_size: px(8.),
             tile_shadow: true,
             colors,
+            highlighter: highlighter::default_theme(mode),
         }
     }
 }

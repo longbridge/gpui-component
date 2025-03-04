@@ -11,6 +11,23 @@ This is an additional demonstration paragraph in English demonstrating more cont
 
 这是一个中文演示段落，用于展示更多的 [Markdown GFM](https://github.github.com/gfm/) 内容。您可以在此尝试使用使用**粗体**、*斜体*和`代码`等样式。これは日本語のデモ段落です。Markdown の多言語サポートを示すためのテキストが含まれています。例えば、、**ボールド**、_イタリック_、および`コード`のスタイルなどを試すことができます。
 
+### Code block
+
+```rust
+struct Repository {
+    /// Name of the repository.
+    name: String,
+}
+
+fn main() {
+    let _ = Repository {
+        name: "GPUI Component".to_string(),
+    };
+
+    println!("Hello, World!");
+}
+```
+
 ---
 
 ## Heading for [Links](https://www.google.com)
@@ -60,14 +77,6 @@ Here is a link to [Google](https://www.google.com), and another to [Rust](https:
 - [x] Task 1, a long long text task, this line is very long and needs to be wrapped to the next line, display should be wrapped to the next line as well.
 - [ ] Task 2, going to do something if there is a long text that needs to be wrapped to the next line.
 - [ ] Task 3
-
-#### Heading for Code
-
-```rust
-fn main() {
-    println!("Hello, World!");
-}
-```
 
 ### HTML
 
