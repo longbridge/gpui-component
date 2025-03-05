@@ -528,7 +528,7 @@ impl Render for PopupMenu {
         v_flex()
             .id("popup-menu")
             .key_context("PopupMenu")
-            .track_focus(&self.focus_handle)
+            // .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::select_next))
             .on_action(cx.listener(Self::select_prev))
             .on_action(cx.listener(Self::confirm))

@@ -156,7 +156,7 @@ impl Render for TabsStory {
                         }))
                         .child(Tab::new("Account"))
                         .child(Tab::new("Profile").disabled(true))
-                        .child(Tab::new("Documents"))
+                        .child(Tab::new("Documents & Files"))
                         .child(Tab::new("Mail"))
                         .child(Tab::new("Appearance"))
                         .child(Tab::new("Settings"))
@@ -174,16 +174,10 @@ impl Render for TabsStory {
                         .on_click(cx.listener(|this, ix: &usize, window, cx| {
                             this.set_active_tab(*ix, window, cx);
                         }))
-                        .children(vec![
-                            "Account",
-                            "Profile",
-                            "Documents",
-                            "Mail",
-                            "Appearance",
-                            "Settings",
-                            "About",
-                            "License",
-                        ]),
+                        .child(IconName::Bot)
+                        .child(IconName::Calendar)
+                        .child(IconName::Map)
+                        .children(vec!["Appearance", "Settings", "About", "License"]),
                 ),
             )
             .child(

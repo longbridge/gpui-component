@@ -148,8 +148,19 @@ impl RenderOnce for TabBar {
                 (cx.theme().transparent, padding, default_gap)
             }
             TabVariant::Segmented => {
-                let padding = Edges::all(px(4.));
-                (cx.theme().accent, padding, default_gap / 2.)
+                let padding_x = match self.size {
+                    Size::XSmall => px(3.),
+                    Size::Small => px(3.),
+                    Size::Large => px(6.),
+                    _ => px(4.),
+                };
+                let padding = Edges {
+                    left: padding_x,
+                    right: padding_x,
+                    ..Default::default()
+                };
+
+                (cx.theme().tab_bar, padding, px(2.))
             }
             TabVariant::Underline => {
                 let padding = Edges::all(px(0.));
