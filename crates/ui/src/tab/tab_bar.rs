@@ -224,7 +224,9 @@ impl RenderOnce for TabBar {
                                     })
                             }),
                     )
-                    .child(self.last_empty_space),
+                    .when(self.variant == TabVariant::Tab, |this| {
+                        this.child(self.last_empty_space)
+                    }),
             )
             .when_some(self.suffix, |this, suffix| this.child(suffix))
     }
