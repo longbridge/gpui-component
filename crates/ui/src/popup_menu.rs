@@ -107,7 +107,7 @@ pub struct PopupMenu {
     scroll_handle: ScrollHandle,
     scroll_state: Rc<Cell<ScrollbarState>>,
 
-    action_focus_handle: Option<FocusHandle>,
+    previous_focus_handle: Option<FocusHandle>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -128,7 +128,7 @@ impl PopupMenu {
 
             let menu = Self {
                 focus_handle,
-                action_focus_handle: None,
+                previous_focus_handle: window.focused(cx),
                 parent_menu: None,
                 menu_items: Vec::new(),
                 selected_index: None,
@@ -145,12 +145,6 @@ impl PopupMenu {
             };
             f(menu, window, cx)
         })
-    }
-
-    /// Bind the focus handle of the menu, when clicked, it will focus back to this handle and then dispatch the action
-    pub fn track_focus(mut self, focus_handle: &FocusHandle) -> Self {
-        self.action_focus_handle = Some(focus_handle.clone());
-        self
     }
 
     /// Set min width of the popup menu, default is 120px
@@ -255,27 +249,7 @@ impl PopupMenu {
     }
 
     fn wrap_handler(&self, action: Box<dyn Action>) -> Rc<dyn Fn(&mut Window, &mut App)> {
-        let action_focus_handle = self.action_focus_handle.clone();
-
         Rc::new(move |window, cx| {
-            window.activate_window();
-
-            // Focus back to the user expected focus handle
-            // Then the actions listened on that focus handle can be received
-            //
-            // For example:
-            //
-            // TabPanel
-            //   |- PopupMenu
-            //   |- PanelContent (actions are listened here)
-            //
-            // The `PopupMenu` and `PanelContent` are at the same level in the TabPanel
-            // If the actions are listened on the `PanelContent`,
-            // it can't receive the actions from the `PopupMenu`, unless we focus on `PanelContent`.
-            if let Some(handle) = action_focus_handle.as_ref() {
-                window.focus(&handle);
-            }
-
             window.dispatch_action(action.boxed_clone(), cx);
         })
     }
@@ -431,12 +405,17 @@ impl PopupMenu {
         }
     }
 
-    fn dismiss(&mut self, _: &Dismiss, _window: &mut Window, cx: &mut Context<Self>) {
+    fn dismiss(&mut self, _: &Dismiss, window: &mut Window, cx: &mut Context<Self>) {
         if self.active_submenu().is_some() {
             return;
         }
 
         cx.emit(DismissEvent);
+
+        // Focus back to the previous focused handle.
+        if let Some(previous_focus_handle) = self.previous_focus_handle.as_ref() {
+            window.focus(previous_focus_handle);
+        }
 
         let Some(parent_menu) = self.parent_menu.clone() else {
             return;
@@ -445,7 +424,7 @@ impl PopupMenu {
         // Dismiss parent menu, when this menu is dismissed
         _ = parent_menu.update(cx, |view, cx| {
             view.hovered_menu_ix = None;
-            view.dismiss(&Dismiss, _window, cx);
+            view.dismiss(&Dismiss, window, cx);
         });
     }
 

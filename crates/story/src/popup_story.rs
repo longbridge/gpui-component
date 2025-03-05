@@ -111,6 +111,9 @@ impl PopupStory {
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let form = Form::new(window, cx);
+
+        cx.focus_self(window);
+
         Self {
             form,
             focus_handle: cx.focus_handle(),

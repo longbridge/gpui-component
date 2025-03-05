@@ -483,8 +483,7 @@ impl Panel for StoryContainer {
     }
 
     fn popup_menu(&self, menu: PopupMenu, _window: &Window, _cx: &App) -> PopupMenu {
-        menu.track_focus(&self.focus_handle)
-            .menu("Info", Box::new(ShowPanelInfo))
+        menu.menu("Info", Box::new(ShowPanelInfo))
     }
 
     fn toolbar_buttons(&self, _window: &mut Window, _cx: &mut App) -> Option<Vec<Button>> {
