@@ -513,7 +513,7 @@ impl Theme {
         if cx.should_auto_hide_scrollbars() {
             cx.global_mut::<Theme>().scrollbar_show = ScrollbarShow::Scrolling;
         } else {
-            cx.global_mut::<Theme>().scrollbar_show = ScrollbarShow::Always;
+            cx.global_mut::<Theme>().scrollbar_show = ScrollbarShow::Hover;
         }
     }
 

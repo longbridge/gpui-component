@@ -4,7 +4,7 @@ use gpui_component::{
     button::{Button, ButtonVariants as _},
     dock::{DockArea, DockAreaState, DockEvent, DockItem, DockPlacement},
     popup_menu::PopupMenuExt,
-    IconName, Root, Sizable, Theme, TitleBar,
+    IconName, Root, Sizable
 };
 use serde::Deserialize;
 use std::{sync::Arc, time::Duration};

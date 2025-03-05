@@ -40,7 +40,7 @@ impl AppTitleBar {
         if cx.should_auto_hide_scrollbars() {
             Theme::global_mut(cx).scrollbar_show = ScrollbarShow::Scrolling;
         } else {
-            Theme::global_mut(cx).scrollbar_show = ScrollbarShow::Always;
+            Theme::global_mut(cx).scrollbar_show = ScrollbarShow::Hover;
         }
 
         let theme_color_picker = cx.new(|cx| {

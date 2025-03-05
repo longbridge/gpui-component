@@ -81,7 +81,7 @@ pub struct SelectRadius(usize);
 
 impl_internal_actions!(
     story,
-    [SelectLocale, SelectFont, SelectRadius, SelectScrollbarShow,]
+    [SelectLocale, SelectFont, SelectRadius, SelectScrollbarShow]
 );
 
 actions!(story, [Quit, Open, CloseWindow]);

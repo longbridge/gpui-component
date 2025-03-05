@@ -632,7 +632,8 @@ impl Element for Scrollbar {
         cx: &mut App,
     ) {
         let hitbox_bounds = prepaint.hitbox.bounds;
-        let is_visible = self.state.get().is_scrollbar_visible() || cx.theme().scrollbar_show.is_always();
+        let is_visible =
+            self.state.get().is_scrollbar_visible() || cx.theme().scrollbar_show.is_always();
         let is_hover_to_show = cx.theme().scrollbar_show.is_hover();
 
         // Update last_scroll_time when offset is changed.
