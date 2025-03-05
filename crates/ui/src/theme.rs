@@ -179,6 +179,8 @@ pub struct ThemeColor {
     pub tab_active_foreground: Hsla,
     /// TabBar background color.
     pub tab_bar: Hsla,
+    /// TabBar segmented background color.
+    pub tab_bar_segmented: Hsla,
     /// Tab text color.
     pub tab_foreground: Hsla,
     /// Table background color.
@@ -275,6 +277,7 @@ impl ThemeColor {
             tab_active: hsl(0.0, 0.0, 100.0),
             tab_active_foreground: hsl(240.0, 10., 3.9),
             tab_bar: hsl(240.0, 14.3, 95.9),
+            tab_bar_segmented: hsl(240.0, 14.3, 95.9),
             tab_foreground: hsl(240.0, 10., 33.9),
             table: hsl(0.0, 0.0, 100.),
             table_active: hsl(211.0, 97.0, 85.0).opacity(0.2),
@@ -354,6 +357,7 @@ impl ThemeColor {
             tab_active: hsl(0.0, 0.0, 8.0),
             tab_active_foreground: hsl(0., 0., 78.),
             tab_bar: hsl(299.0, 0., 5.5),
+            tab_bar_segmented: hsl(299.0, 0., 5.5),
             tab_foreground: hsl(0., 0., 78.),
             table: hsl(0.0, 0.0, 8.0),
             table_active: hsl(240.0, 3.7, 15.0).opacity(0.2),
@@ -457,6 +461,7 @@ impl Theme {
         self.tab_active = self.tab_active.apply(mask_color);
         self.tab_foreground = self.tab_foreground.apply(mask_color);
         self.tab_active_foreground = self.tab_active_foreground.apply(mask_color);
+        self.tab_bar_segmented = self.tab_bar_segmented.apply(mask_color);
         self.progress_bar = self.progress_bar.apply(mask_color);
         self.slider_bar = self.slider_bar.apply(mask_color);
         self.slider_thumb = self.slider_thumb.apply(mask_color);

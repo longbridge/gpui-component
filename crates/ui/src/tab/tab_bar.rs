@@ -152,7 +152,7 @@ impl RenderOnce for TabBar {
                     Size::XSmall => px(3.),
                     Size::Small => px(3.),
                     Size::Large => px(6.),
-                    _ => px(4.),
+                    _ => px(5.),
                 };
                 let padding = Edges {
                     left: padding_x,
@@ -160,7 +160,7 @@ impl RenderOnce for TabBar {
                     ..Default::default()
                 };
 
-                (cx.theme().tab_bar, padding, px(2.))
+                (cx.theme().tab_bar_segmented, padding, px(2.))
             }
             TabVariant::Underline => {
                 let padding = Edges::all(px(0.));

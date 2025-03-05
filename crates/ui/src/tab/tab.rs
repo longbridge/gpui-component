@@ -55,7 +55,7 @@ impl TabVariant {
                 TabVariant::Underline => px(30.),
                 _ => px(24.),
             },
-            Size::Large => px(42.),
+            Size::Large => px(36.),
             _ => match self {
                 TabVariant::Underline => px(36.),
                 _ => px(32.),
@@ -77,7 +77,7 @@ impl TabVariant {
             },
             Size::Large => match self {
                 TabVariant::Tab | TabVariant::Pill => px(36.),
-                TabVariant::Segmented => px(34.),
+                TabVariant::Segmented => px(28.),
                 TabVariant::Underline => px(30.),
             },
             _ => match self {
@@ -197,7 +197,7 @@ impl TabVariant {
             },
             TabVariant::Segmented => TabStyle {
                 fg: cx.theme().tab_foreground,
-                bg: cx.theme().tab_bar,
+                bg: cx.theme().transparent,
                 inner_bg: if selected {
                     cx.theme().background
                 } else {
@@ -246,7 +246,7 @@ impl TabVariant {
             },
             TabVariant::Segmented => TabStyle {
                 fg: cx.theme().tab_active_foreground,
-                bg: cx.theme().tab_bar,
+                bg: cx.theme().transparent,
                 inner_radius: cx.theme().radius,
                 inner_bg: cx.theme().background,
                 shadow: true,
@@ -565,7 +565,6 @@ impl RenderOnce for Tab {
                     .justify_center()
                     .overflow_hidden()
                     .margins(inner_margins)
-                    .text_ellipsis()
                     .flex_shrink_0()
                     .map(|this| match self.icon {
                         Some(icon) => {
@@ -573,7 +572,7 @@ impl RenderOnce for Tab {
                                 .child(icon.map(|this| match self.size {
                                     Size::XSmall => this.size_2p5(),
                                     Size::Small => this.size_3p5(),
-                                    Size::Large => this.size_5(),
+                                    Size::Large => this.size_4(),
                                     _ => this.size_4(),
                                 }))
                         }
