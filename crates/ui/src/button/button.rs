@@ -611,19 +611,16 @@ impl ButtonVariant {
     fn selected(&self, cx: &mut App) -> ButtonVariantStyle {
         let bg = match self {
             ButtonVariant::Primary => cx.theme().primary_active,
-            ButtonVariant::Secondary | ButtonVariant::Outline => cx.theme().secondary_active,
-            ButtonVariant::Ghost => {
-                if cx.theme().mode.is_dark() {
-                    cx.theme().secondary.lighten(0.2).opacity(0.8)
-                } else {
-                    cx.theme().secondary.darken(0.2).opacity(0.8)
-                }
+            ButtonVariant::Secondary | ButtonVariant::Outline | ButtonVariant::Ghost => {
+                cx.theme().secondary_active
             }
             ButtonVariant::Danger => cx.theme().danger_active,
             ButtonVariant::Link => cx.theme().transparent,
             ButtonVariant::Text => cx.theme().transparent,
             ButtonVariant::Custom(colors) => colors.active,
-        };
+        }
+        .opacity(0.5);
+
         let border = self.border_color(cx);
         let fg = match self {
             ButtonVariant::Link => cx.theme().link_active,

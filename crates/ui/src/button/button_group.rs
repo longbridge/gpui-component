@@ -15,13 +15,13 @@ pub struct ButtonGroup {
     pub base: Div,
     id: ElementId,
     children: Vec<Button>,
-    multiple: bool,
-    disabled: bool,
+    pub(super) multiple: bool,
+    pub(super) disabled: bool,
 
     // The button props
-    compact: Option<bool>,
-    variant: Option<ButtonVariant>,
-    size: Option<Size>,
+    pub(super) compact: Option<bool>,
+    pub(super) variant: Option<ButtonVariant>,
+    pub(super) size: Option<Size>,
 
     on_click: Option<Box<dyn Fn(&Vec<usize>, &mut Window, &mut App) + 'static>>,
 }
@@ -52,6 +52,12 @@ impl ButtonGroup {
     /// Adds a button as a child to the ButtonGroup.
     pub fn child(mut self, child: Button) -> Self {
         self.children.push(child.disabled(self.disabled));
+        self
+    }
+
+    /// Adds multiple buttons as children to the ButtonGroup.
+    pub fn children(mut self, children: impl IntoIterator<Item = Button>) -> Self {
+        self.children.extend(children);
         self
     }
 
