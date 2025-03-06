@@ -19,7 +19,7 @@ mod table_story;
 mod tabs_story;
 mod text_story;
 mod title_bar;
-mod toggle_button_story;
+mod toggle_story;
 mod tooltip_story;
 mod webview_story;
 
@@ -31,7 +31,7 @@ pub use calendar_story::CalendarStory;
 pub use dropdown_story::DropdownStory;
 pub use form_story::FormStory;
 pub use tabs_story::TabsStory;
-pub use toggle_button_story::ToggleButtonStory;
+pub use toggle_story::ToggleStory;
 
 use gpui::{
     actions, div, impl_internal_actions, prelude::FluentBuilder as _, px, size, AnyElement,

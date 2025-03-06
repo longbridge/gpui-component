@@ -1,13 +1,13 @@
 use gpui::*;
-use story::{Assets, ToggleButtonStory};
+use story::{Assets, ToggleStory};
 
 pub struct Example {
-    root: Entity<ToggleButtonStory>,
+    root: Entity<ToggleStory>,
 }
 
 impl Example {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let root = ToggleButtonStory::view(window, cx);
+        let root = ToggleStory::view(window, cx);
 
         Self { root }
     }
@@ -30,6 +30,6 @@ fn main() {
         story::init(cx);
         cx.activate(true);
 
-        story::create_new_window("Toggle Button Example", Example::view, cx);
+        story::create_new_window("Toggle Example", Example::view, cx);
     });
 }
