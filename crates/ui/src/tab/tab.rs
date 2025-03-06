@@ -188,8 +188,8 @@ impl TabVariant {
                 ..Default::default()
             },
             TabVariant::Pill => TabStyle {
-                fg: cx.theme().accent_foreground,
-                bg: cx.theme().accent,
+                fg: cx.theme().secondary_foreground,
+                bg: cx.theme().secondary_hover,
                 borders: Edges::all(px(1.)),
                 border_color: cx.theme().border,
                 radius: px(99.),
@@ -210,7 +210,7 @@ impl TabVariant {
                 fg: cx.theme().tab_foreground,
                 bg: cx.theme().transparent,
                 radius: px(0.),
-                inner_bg: cx.theme().accent,
+                inner_bg: cx.theme().secondary,
                 inner_radius: cx.theme().radius,
                 borders: Edges {
                     bottom: px(2.),
