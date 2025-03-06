@@ -52,8 +52,6 @@ impl Focusable for ToggleStory {
 
 impl Render for ToggleStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let checked = self.checked.clone();
-
         v_flex()
             .gap_6()
             .child(
@@ -82,6 +80,18 @@ impl Render for ToggleStory {
                                 }
                                 cx.notify();
                             })),
+                    )
+                    .child(
+                        Toggle::icon(IconName::Eye)
+                            .id("single-toggle-item-3")
+                            .large()
+                            .checked(self.single_toggle == 3)
+                            .on_change(cx.listener(|view, checked, _, cx| {
+                                if *checked {
+                                    view.single_toggle = 3;
+                                }
+                                cx.notify();
+                            })),
                     ),
             )
             .child(
@@ -89,10 +99,11 @@ impl Render for ToggleStory {
                     .gap_5()
                     .child(
                         ToggleGroup::new("toggle-button-group1")
-                            .child(Toggle::label("A").checked(checked[0]))
-                            .child(Toggle::label("B").checked(checked[1]))
-                            .child(Toggle::label("C").checked(checked[2]))
-                            .child(Toggle::label("D").checked(checked[3]))
+                            .child(Toggle::icon(IconName::Bell).checked(self.checked[0]))
+                            .child(Toggle::icon(IconName::Bot).checked(self.checked[1]))
+                            .child(Toggle::icon(IconName::Inbox).checked(self.checked[2]))
+                            .child(Toggle::icon(IconName::Check).checked(self.checked[3]))
+                            .child(Toggle::label("Other").checked(self.checked[4]))
                             .on_change(cx.listener(|view, checkeds: &Vec<bool>, _, cx| {
                                 view.checked[0] = checkeds[0];
                                 view.checked[1] = checkeds[1];
@@ -108,11 +119,13 @@ impl Render for ToggleStory {
                             .child(Toggle::icon(IconName::Bot).checked(self.checked[1]))
                             .child(Toggle::icon(IconName::Inbox).checked(self.checked[2]))
                             .child(Toggle::icon(IconName::Check).checked(self.checked[3]))
+                            .child(Toggle::label("Other").checked(self.checked[4]))
                             .on_change(cx.listener(|view, checkeds: &Vec<bool>, _, cx| {
                                 view.checked[0] = checkeds[0];
                                 view.checked[1] = checkeds[1];
                                 view.checked[2] = checkeds[2];
                                 view.checked[3] = checkeds[3];
+                                view.checked[4] = checkeds[4];
                                 cx.notify();
                             })),
                     )
@@ -123,11 +136,13 @@ impl Render for ToggleStory {
                             .child(Toggle::icon(IconName::Bot).checked(self.checked[1]))
                             .child(Toggle::icon(IconName::Inbox).checked(self.checked[2]))
                             .child(Toggle::icon(IconName::Check).checked(self.checked[3]))
+                            .child(Toggle::label("Other").checked(self.checked[4]))
                             .on_change(cx.listener(|view, checkeds: &Vec<bool>, _, cx| {
                                 view.checked[0] = checkeds[0];
                                 view.checked[1] = checkeds[1];
                                 view.checked[2] = checkeds[2];
                                 view.checked[3] = checkeds[3];
+                                view.checked[4] = checkeds[4];
                                 cx.notify();
                             })),
                     ),
@@ -138,15 +153,17 @@ impl Render for ToggleStory {
                     .child(
                         ToggleGroup::new("toggle-button-group2")
                             .outline()
-                            .child(Toggle::label("A").checked(checked[0]))
-                            .child(Toggle::label("B").checked(checked[1]))
-                            .child(Toggle::label("C").checked(checked[2]))
-                            .child(Toggle::label("D").checked(checked[3]))
+                            .child(Toggle::icon(IconName::Bell).checked(self.checked[0]))
+                            .child(Toggle::icon(IconName::Bot).checked(self.checked[1]))
+                            .child(Toggle::icon(IconName::Inbox).checked(self.checked[2]))
+                            .child(Toggle::icon(IconName::Check).checked(self.checked[3]))
+                            .child(Toggle::label("Other").checked(self.checked[4]))
                             .on_change(cx.listener(|view, checkeds: &Vec<bool>, _, cx| {
                                 view.checked[0] = checkeds[0];
                                 view.checked[1] = checkeds[1];
                                 view.checked[2] = checkeds[2];
                                 view.checked[3] = checkeds[3];
+                                view.checked[4] = checkeds[4];
                                 cx.notify();
                             })),
                     )
@@ -158,11 +175,13 @@ impl Render for ToggleStory {
                             .child(Toggle::icon(IconName::Bot).checked(self.checked[1]))
                             .child(Toggle::icon(IconName::Inbox).checked(self.checked[2]))
                             .child(Toggle::icon(IconName::Check).checked(self.checked[3]))
+                            .child(Toggle::label("Other").checked(self.checked[4]))
                             .on_change(cx.listener(|view, checkeds: &Vec<bool>, _, cx| {
                                 view.checked[0] = checkeds[0];
                                 view.checked[1] = checkeds[1];
                                 view.checked[2] = checkeds[2];
                                 view.checked[3] = checkeds[3];
+                                view.checked[4] = checkeds[4];
                                 cx.notify();
                             })),
                     )
@@ -174,11 +193,13 @@ impl Render for ToggleStory {
                             .child(Toggle::icon(IconName::Bot).checked(self.checked[1]))
                             .child(Toggle::icon(IconName::Inbox).checked(self.checked[2]))
                             .child(Toggle::icon(IconName::Check).checked(self.checked[3]))
+                            .child(Toggle::label("Other").checked(self.checked[4]))
                             .on_change(cx.listener(|view, checkeds: &Vec<bool>, _, cx| {
                                 view.checked[0] = checkeds[0];
                                 view.checked[1] = checkeds[1];
                                 view.checked[2] = checkeds[2];
                                 view.checked[3] = checkeds[3];
+                                view.checked[4] = checkeds[4];
                                 cx.notify();
                             })),
                     ),

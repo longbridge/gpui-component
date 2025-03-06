@@ -280,9 +280,11 @@ impl Sizable for Icon {
 impl RenderOnce for Icon {
     fn render(self, window: &mut Window, _cx: &mut App) -> impl IntoElement {
         let text_color = self.text_color.unwrap_or_else(|| window.text_style().color);
+        let text_size = window.text_style().font_size.to_pixels(window.rem_size());
 
         self.base
             .text_color(text_color)
+            .size(text_size)
             .when_some(self.size, |this, size| match size {
                 Size::Size(px) => this.size(px),
                 Size::XSmall => this.size_3(),
@@ -301,12 +303,14 @@ impl From<Icon> for AnyElement {
 }
 
 impl Render for Icon {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let text_color = self.text_color.unwrap_or_else(|| cx.theme().foreground);
+        let text_size = window.text_style().font_size.to_pixels(window.rem_size());
 
         svg()
             .flex_none()
             .text_color(text_color)
+            .size(text_size)
             .when_some(self.size, |this, size| match size {
                 Size::Size(px) => this.size(px),
                 Size::XSmall => this.size_3(),
