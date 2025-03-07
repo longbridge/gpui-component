@@ -1,15 +1,15 @@
 use crate::scroll::{Scrollbar, ScrollbarState};
-use crate::StyledExt;
 use crate::{
     button::Button, h_flex, list::ListItem, popover::Popover, v_flex, ActiveTheme, Icon, IconName,
     Selectable, Sizable as _,
 };
+use crate::{Kbd, StyledExt};
 use gpui::Subscription;
 use gpui::{
     actions, anchored, canvas, div, prelude::FluentBuilder, px, rems, Action, AnyElement, App,
     AppContext, Bounds, Context, Corner, DismissEvent, Edges, Entity, EventEmitter, FocusHandle,
-    Focusable, InteractiveElement, IntoElement, KeyBinding, Keystroke, ParentElement, Pixels,
-    Render, ScrollHandle, SharedString, StatefulInteractiveElement, Styled, WeakEntity, Window,
+    Focusable, InteractiveElement, IntoElement, KeyBinding, ParentElement, Pixels, Render,
+    ScrollHandle, SharedString, StatefulInteractiveElement, Styled, WeakEntity, Window,
 };
 use std::cell::Cell;
 use std::ops::Deref;
@@ -441,7 +441,7 @@ impl PopupMenu {
                     keybinding
                         .keystrokes()
                         .into_iter()
-                        .map(|key| key_shortcut(key.clone())),
+                        .map(|key| Kbd::format(key)),
                 );
 
                 return Some(el);
@@ -708,66 +708,5 @@ impl Render for PopupMenu {
                         )),
                 )
             })
-    }
-}
-
-/// Return the Platform specific keybinding string by KeyStroke
-pub fn key_shortcut(key: Keystroke) -> String {
-    if cfg!(target_os = "macos") {
-        return format!("{}", key);
-    }
-
-    let mut parts = vec![];
-    if key.modifiers.control {
-        parts.push("Ctrl");
-    }
-    if key.modifiers.alt {
-        parts.push("Alt");
-    }
-    if key.modifiers.platform {
-        parts.push("Win");
-    }
-    if key.modifiers.shift {
-        parts.push("Shift");
-    }
-
-    // Capitalize the first letter
-    let key = if let Some(first_c) = key.key.chars().next() {
-        format!("{}{}", first_c.to_uppercase(), &key.key[1..])
-    } else {
-        key.key.to_string()
-    };
-
-    parts.push(&key);
-    parts.join("+")
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_key_shortcut() {
-        use super::key_shortcut;
-        use gpui::Keystroke;
-
-        if cfg!(target_os = "windows") {
-            assert_eq!(key_shortcut(Keystroke::parse("a").unwrap()), "A");
-            assert_eq!(key_shortcut(Keystroke::parse("ctrl-a").unwrap()), "Ctrl+A");
-            assert_eq!(
-                key_shortcut(Keystroke::parse("ctrl-alt-a").unwrap()),
-                "Ctrl+Alt+A"
-            );
-            assert_eq!(
-                key_shortcut(Keystroke::parse("ctrl-alt-shift-a").unwrap()),
-                "Ctrl+Alt+Shift+A"
-            );
-            assert_eq!(
-                key_shortcut(Keystroke::parse("ctrl-alt-shift-win-a").unwrap()),
-                "Ctrl+Alt+Win+Shift+A"
-            );
-            assert_eq!(
-                key_shortcut(Keystroke::parse("ctrl-shift-backspace").unwrap()),
-                "Ctrl+Shift+Backspace"
-            );
-        }
     }
 }

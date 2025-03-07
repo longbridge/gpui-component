@@ -2,6 +2,7 @@ mod colors;
 mod event;
 mod focusable;
 mod icon;
+mod kbd;
 mod root;
 mod styled;
 mod svg_img;
@@ -70,6 +71,7 @@ pub use window_border::{window_border, window_paddings, WindowBorder};
 
 pub use colors::*;
 pub use icon::*;
+pub use kbd::*;
 pub use svg_img::*;
 pub use theme::*;
 

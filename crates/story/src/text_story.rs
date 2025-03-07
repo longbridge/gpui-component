@@ -1,6 +1,6 @@
 use gpui::{
-    div, px, rems, App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render,
-    SharedString, Styled, Window,
+    div, px, rems, App, AppContext, Context, Entity, Focusable, IntoElement, Keystroke,
+    ParentElement, Render, SharedString, Styled, Window,
 };
 
 use gpui_component::{
@@ -11,7 +11,7 @@ use gpui_component::{
     link::Link,
     red_500,
     tag::Tag,
-    v_flex, yellow_500, yellow_800, IconName, Sizable, StyledExt,
+    v_flex, yellow_500, yellow_800, IconName, Kbd, Sizable, StyledExt,
 };
 
 use crate::section;
@@ -217,6 +217,17 @@ impl Render for TextStory {
                                     .child("Custom"),
                             ),
                     ),
+            )
+            .child(
+                section("Kbd", cx).child(
+                    h_flex()
+                        .gap_2()
+                        .child(Kbd::new(Keystroke::parse("cmd-shift-p").unwrap()))
+                        .child(Kbd::new(Keystroke::parse("cmd-ctrl-t").unwrap()))
+                        .child(Kbd::new(Keystroke::parse("escape").unwrap()))
+                        .child(Kbd::new(Keystroke::parse("backspace").unwrap()))
+                        .child(Kbd::new(Keystroke::parse("enter").unwrap())),
+                ),
             )
     }
 }
