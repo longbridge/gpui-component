@@ -18,10 +18,7 @@ use serde::Deserialize;
 #[derive(Clone, PartialEq, Deserialize)]
 struct Info(usize);
 
-actions!(
-    popover_story,
-    [Copy, Paste, Cut, SearchAll, ToggleWindowMode]
-);
+actions!(popover_story, [Copy, Paste, Cut, SearchAll, ToggleCheck]);
 impl_internal_actions!(popover_story, [Info]);
 
 pub fn init(cx: &mut App) {
@@ -85,6 +82,7 @@ impl Render for Form {
 pub struct PopupStory {
     focus_handle: FocusHandle,
     form: Entity<Form>,
+    checked: bool,
     message: String,
 }
 
@@ -114,6 +112,7 @@ impl PopupStory {
 
         Self {
             form,
+            checked: true,
             focus_handle: cx.focus_handle(),
             message: "".to_string(),
         }
@@ -143,6 +142,12 @@ impl PopupStory {
         self.message = format!("You have clicked info: {}", info.0);
         cx.notify()
     }
+
+    fn on_action_toggle_check(&mut self, _: &ToggleCheck, _: &mut Window, cx: &mut Context<Self>) {
+        self.checked = !self.checked;
+        self.message = format!("You have clicked toggle check: {}", self.checked);
+        cx.notify()
+    }
 }
 
 impl Focusable for PopupStory {
@@ -154,6 +159,7 @@ impl Focusable for PopupStory {
 impl Render for PopupStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let form = self.form.clone();
+        let checked = self.checked;
 
         v_flex()
             .track_focus(&self.focus_handle)
@@ -162,6 +168,7 @@ impl Render for PopupStory {
             .on_action(cx.listener(Self::on_paste))
             .on_action(cx.listener(Self::on_search_all))
             .on_action(cx.listener(Self::on_action_info))
+            .on_action(cx.listener(Self::on_action_toggle_check))
             .p_4()
             .mb_5()
             .size_full()
@@ -173,6 +180,7 @@ impl Render for PopupStory {
                         .menu("Copy", Box::new(Copy))
                         .menu("Paste", Box::new(Paste))
                         .separator()
+                        .menu_with_check("Toggle Check", checked, Box::new(ToggleCheck))
                         .separator()
                         .submenu("Settings", window, cx, move |menu, _, _| {
                             menu.menu("Info 0", Box::new(Info(0)))
@@ -249,6 +257,8 @@ impl Render for PopupStory {
                                 this.menu("Copy", Box::new(Copy))
                                     .menu("Cut", Box::new(Cut))
                                     .menu("Paste", Box::new(Paste))
+                                    .separator()
+                                    .menu_with_check("Toggle Check", checked, Box::new(ToggleCheck))
                                     .separator()
                                     .menu_with_icon("Search", IconName::Search, Box::new(SearchAll))
                                     .separator()
