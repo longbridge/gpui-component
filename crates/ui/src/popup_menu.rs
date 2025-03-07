@@ -586,17 +586,20 @@ impl PopupMenu {
                                 (Corner::TopLeft, bounds.size.width + px(4.))
                             };
 
-                        let top =
-                            if bounds.origin.y + bounds.size.height > window.bounds().size.height {
-                                px(32.)
-                            } else {
-                                -px(4.)
-                            };
+                        let is_bottom_pos =
+                            bounds.origin.y + bounds.size.height > window.bounds().size.height;
 
                         this.child(
                             anchored()
                                 .anchor(anchor)
-                                .child(div().occlude().top(top).left(left).child(menu.clone()))
+                                .child(
+                                    div()
+                                        .occlude()
+                                        .when(is_bottom_pos, |this| this.bottom_0())
+                                        .when(!is_bottom_pos, |this| this.top(-px(4.)))
+                                        .left(left)
+                                        .child(menu.clone()),
+                                )
                                 .snap_to_window_with_margin(Edges::all(EDGE_PADDING)),
                         )
                     }),
