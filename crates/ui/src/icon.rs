@@ -187,6 +187,7 @@ impl RenderOnce for IconName {
 #[derive(IntoElement)]
 pub struct Icon {
     base: Svg,
+    style: StyleRefinement,
     path: SharedString,
     text_color: Option<Hsla>,
     size: Option<Size>,
@@ -197,6 +198,7 @@ impl Default for Icon {
     fn default() -> Self {
         Self {
             base: svg().flex_none().size_4(),
+            style: StyleRefinement::default(),
             path: "".into(),
             text_color: None,
             size: None,
@@ -261,7 +263,7 @@ impl Icon {
 
 impl Styled for Icon {
     fn style(&mut self) -> &mut StyleRefinement {
-        self.base.style()
+        &mut self.style
     }
 
     fn text_color(mut self, color: impl Into<Hsla>) -> Self {
@@ -281,10 +283,13 @@ impl RenderOnce for Icon {
     fn render(self, window: &mut Window, _cx: &mut App) -> impl IntoElement {
         let text_color = self.text_color.unwrap_or_else(|| window.text_style().color);
         let text_size = window.text_style().font_size.to_pixels(window.rem_size());
+        let has_base_size = self.style.size.width.is_some() || self.style.size.height.is_some();
 
-        self.base
-            .text_color(text_color)
-            .size(text_size)
+        let mut base = self.base;
+        *base.style() = self.style;
+
+        base.text_color(text_color)
+            .when(!has_base_size, |this| this.size(text_size))
             .when_some(self.size, |this, size| match size {
                 Size::Size(px) => this.size(px),
                 Size::XSmall => this.size_3(),
@@ -306,11 +311,13 @@ impl Render for Icon {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let text_color = self.text_color.unwrap_or_else(|| cx.theme().foreground);
         let text_size = window.text_style().font_size.to_pixels(window.rem_size());
+        let has_base_size = self.style.size.width.is_some() || self.style.size.height.is_some();
 
-        svg()
-            .flex_none()
-            .text_color(text_color)
-            .size(text_size)
+        let mut base = svg().flex_none();
+        *base.style() = self.style.clone();
+
+        base.text_color(text_color)
+            .when(!has_base_size, |this| this.size(text_size))
             .when_some(self.size, |this, size| match size {
                 Size::Size(px) => this.size(px),
                 Size::XSmall => this.size_3(),
