@@ -411,13 +411,21 @@ impl Global for Theme {}
 
 impl Theme {
     /// Returns the global theme reference
+    #[inline(always)]
     pub fn global(cx: &App) -> &Theme {
         cx.global::<Theme>()
     }
 
     /// Returns the global theme mutable reference
+    #[inline(always)]
     pub fn global_mut(cx: &mut App) -> &mut Theme {
         cx.global_mut::<Theme>()
+    }
+
+    /// Returns true if the theme is dark.
+    #[inline(always)]
+    pub fn is_dark(&self) -> bool {
+        self.mode.is_dark()
     }
 
     /// Apply a mask color to the theme.
@@ -576,7 +584,7 @@ pub enum ThemeMode {
 }
 
 impl ThemeMode {
-    #[inline]
+    #[inline(always)]
     pub fn is_dark(&self) -> bool {
         matches!(self, Self::Dark)
     }

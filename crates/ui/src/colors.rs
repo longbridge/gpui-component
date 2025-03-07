@@ -1,6 +1,6 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Display};
 
-use gpui::Hsla;
+use gpui::{Hsla, SharedString};
 use serde::{de::Error, Deserialize, Deserializer};
 
 use crate::hsl;
@@ -204,6 +204,44 @@ pub enum ColorName {
     Rose,
 }
 
+impl Display for ColorName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl From<&str> for ColorName {
+    fn from(value: &str) -> Self {
+        match value.to_lowercase().as_str() {
+            "gray" => ColorName::Gray,
+            "red" => ColorName::Red,
+            "orange" => ColorName::Orange,
+            "amber" => ColorName::Amber,
+            "yellow" => ColorName::Yellow,
+            "lime" => ColorName::Lime,
+            "green" => ColorName::Green,
+            "emerald" => ColorName::Emerald,
+            "teal" => ColorName::Teal,
+            "cyan" => ColorName::Cyan,
+            "sky" => ColorName::Sky,
+            "blue" => ColorName::Blue,
+            "indigo" => ColorName::Indigo,
+            "violet" => ColorName::Violet,
+            "purple" => ColorName::Purple,
+            "fuchsia" => ColorName::Fuchsia,
+            "pink" => ColorName::Pink,
+            "rose" => ColorName::Rose,
+            _ => ColorName::Gray,
+        }
+    }
+}
+
+impl From<SharedString> for ColorName {
+    fn from(value: SharedString) -> Self {
+        value.as_ref().into()
+    }
+}
+
 impl ColorName {
     /// Returns all available color names.
     pub fn all() -> [Self; 18] {
@@ -230,7 +268,10 @@ impl ColorName {
     }
 
     /// Returns the color for the given scale.
-    pub fn color(&self, scale: usize) -> Hsla {
+    ///
+    /// The `scale` is any of `[50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950]`
+    /// falls back to 500 if out of range.
+    pub fn scale(&self, scale: usize) -> Hsla {
         let colors = match self {
             ColorName::Gray => &DEFAULT_COLOR.gray,
             ColorName::Red => &DEFAULT_COLOR.red,
@@ -504,5 +545,21 @@ mod tests {
         assert_eq!(red.mix(blue, 0.5).to_hex(), "#FF00FF");
         assert_eq!(green.mix(red, 0.5).to_hex(), "#FFFF00");
         assert_eq!(blue.mix(yellow, 0.2).to_hex(), "#0098FF");
+    }
+
+    #[test]
+    fn test_color_name() {
+        assert_eq!(ColorName::Purple.to_string(), "Purple");
+        assert_eq!(format!("{}", ColorName::Green), "Green");
+        assert_eq!(format!("{:?}", ColorName::Yellow), "Yellow");
+
+        let color = ColorName::Green;
+        assert_eq!(color.scale(500).to_hex(), "#21C55E");
+        assert_eq!(color.scale(1500).to_hex(), "#21C55E");
+
+        for name in ColorName::all().iter() {
+            let name1: ColorName = name.to_string().as_str().into();
+            assert_eq!(name1, *name);
+        }
     }
 }

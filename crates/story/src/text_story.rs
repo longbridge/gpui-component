@@ -219,12 +219,14 @@ impl Render for TextStory {
                     ),
             )
             .child(
-                section("Colorize Tag", cx).child(
-                    h_flex().gap_2().flex_wrap().children(
-                        ColorName::all()
-                            .into_iter()
-                            .filter(|color| *color != ColorName::Gray)
-                            .map(|color| Tag::outline().color(color).child(format!("{:?}", color))),
+                section("Tag::color", cx).child(
+                    v_flex().gap_4().child(
+                        h_flex().gap_2().flex_wrap().children(
+                            ColorName::all()
+                                .into_iter()
+                                .filter(|color| *color != ColorName::Gray)
+                                .map(|color| Tag::color(color).child(color.to_string())),
+                        ),
                     ),
                 ),
             )

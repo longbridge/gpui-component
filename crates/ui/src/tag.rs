@@ -11,6 +11,7 @@ pub enum TagVariant {
     Primary,
     Secondary,
     Danger,
+    Color(ColorName),
     Custom {
         color: Hsla,
         foreground: Hsla,
@@ -25,6 +26,13 @@ impl TagVariant {
             Self::Secondary => cx.theme().secondary,
             Self::Outline => transparent_black(),
             Self::Danger => cx.theme().danger,
+            Self::Color(color) => {
+                if cx.theme().is_dark() {
+                    color.scale(950).opacity(0.5)
+                } else {
+                    color.scale(50)
+                }
+            }
             Self::Custom { color, .. } => *color,
         }
     }
@@ -35,6 +43,13 @@ impl TagVariant {
             Self::Secondary => cx.theme().secondary,
             Self::Outline => cx.theme().border,
             Self::Danger => cx.theme().danger,
+            Self::Color(color) => {
+                if cx.theme().is_dark() {
+                    color.scale(800).opacity(0.5)
+                } else {
+                    color.scale(200)
+                }
+            }
             Self::Custom { border, .. } => *border,
         }
     }
@@ -45,6 +60,13 @@ impl TagVariant {
             Self::Secondary => cx.theme().secondary_foreground,
             Self::Outline => cx.theme().foreground,
             Self::Danger => cx.theme().danger_foreground,
+            Self::Color(color) => {
+                if cx.theme().is_dark() {
+                    color.scale(300)
+                } else {
+                    color.scale(600)
+                }
+            }
             Self::Custom { foreground, .. } => *foreground,
         }
     }
@@ -58,16 +80,13 @@ pub struct Tag {
     base: Div,
     variant: TagVariant,
     size: Size,
-    color: Option<ColorName>,
 }
 impl Tag {
-    /// Create a new tag with default variant ([`TagVariant::Outline`]) and size ([`Size::Medium`]).
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self {
             base: div().flex().items_center().border_1(),
             variant: TagVariant::default(),
             size: Size::default(),
-            color: None,
         }
     }
 
@@ -107,10 +126,9 @@ impl Tag {
         })
     }
 
-    /// Set special color ([`ColorName`]) for the tag.
-    pub fn color(mut self, color: impl Into<ColorName>) -> Self {
-        self.color = Some(color.into());
-        self
+    /// Create a new tag with default variant ([`TagVariant::Color`]).
+    pub fn color(color: impl Into<ColorName>) -> Self {
+        Self::new().with_variant(TagVariant::Color(color.into()))
     }
 }
 impl Sizable for Tag {
@@ -126,21 +144,9 @@ impl ParentElement for Tag {
 }
 impl RenderOnce for Tag {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let mut bg = self.variant.bg(cx);
-        let mut fg = self.variant.fg(cx);
-        let mut border = self.variant.border(cx);
-
-        if let Some(color) = self.color {
-            if cx.theme().mode.is_dark() {
-                bg = color.color(950);
-                fg = color.color(400);
-                border = color.color(900);
-            } else {
-                bg = color.color(50);
-                fg = color.color(600);
-                border = color.color(200);
-            }
-        }
+        let bg = self.variant.bg(cx);
+        let fg = self.variant.fg(cx);
+        let border = self.variant.border(cx);
 
         self.base
             .line_height(relative(1.3))
