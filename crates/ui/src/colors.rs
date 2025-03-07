@@ -181,6 +181,85 @@ mod color_scales {
     }
 }
 
+/// Enum representing the available color names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ColorName {
+    Gray,
+    Red,
+    Orange,
+    Amber,
+    Yellow,
+    Lime,
+    Green,
+    Emerald,
+    Teal,
+    Cyan,
+    Sky,
+    Blue,
+    Indigo,
+    Violet,
+    Purple,
+    Fuchsia,
+    Pink,
+    Rose,
+}
+
+impl ColorName {
+    /// Returns all available color names.
+    pub fn all() -> [Self; 18] {
+        [
+            ColorName::Gray,
+            ColorName::Red,
+            ColorName::Orange,
+            ColorName::Amber,
+            ColorName::Yellow,
+            ColorName::Lime,
+            ColorName::Green,
+            ColorName::Emerald,
+            ColorName::Teal,
+            ColorName::Cyan,
+            ColorName::Sky,
+            ColorName::Blue,
+            ColorName::Indigo,
+            ColorName::Violet,
+            ColorName::Purple,
+            ColorName::Fuchsia,
+            ColorName::Pink,
+            ColorName::Rose,
+        ]
+    }
+
+    /// Returns the color for the given scale.
+    pub fn color(&self, scale: usize) -> Hsla {
+        let colors = match self {
+            ColorName::Gray => &DEFAULT_COLOR.gray,
+            ColorName::Red => &DEFAULT_COLOR.red,
+            ColorName::Orange => &DEFAULT_COLOR.orange,
+            ColorName::Amber => &DEFAULT_COLOR.amber,
+            ColorName::Yellow => &DEFAULT_COLOR.yellow,
+            ColorName::Lime => &DEFAULT_COLOR.lime,
+            ColorName::Green => &DEFAULT_COLOR.green,
+            ColorName::Emerald => &DEFAULT_COLOR.emerald,
+            ColorName::Teal => &DEFAULT_COLOR.teal,
+            ColorName::Cyan => &DEFAULT_COLOR.cyan,
+            ColorName::Sky => &DEFAULT_COLOR.sky,
+            ColorName::Blue => &DEFAULT_COLOR.blue,
+            ColorName::Indigo => &DEFAULT_COLOR.indigo,
+            ColorName::Violet => &DEFAULT_COLOR.violet,
+            ColorName::Purple => &DEFAULT_COLOR.purple,
+            ColorName::Fuchsia => &DEFAULT_COLOR.fuchsia,
+            ColorName::Pink => &DEFAULT_COLOR.pink,
+            ColorName::Rose => &DEFAULT_COLOR.rose,
+        };
+
+        if let Some(color) = colors.get(&scale) {
+            color.hsla
+        } else {
+            colors.get(&500).unwrap().hsla
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
 pub(crate) struct ShadcnColors {
     pub(crate) black: ShadcnColor,

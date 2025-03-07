@@ -11,7 +11,7 @@ use gpui_component::{
     link::Link,
     red_500,
     tag::Tag,
-    v_flex, yellow_500, yellow_800, IconName, Kbd, Sizable, StyledExt,
+    v_flex, yellow_500, yellow_800, ColorName, IconName, Kbd, Sizable, StyledExt,
 };
 
 use crate::section;
@@ -217,6 +217,16 @@ impl Render for TextStory {
                                     .child("Custom"),
                             ),
                     ),
+            )
+            .child(
+                section("Colorize Tag", cx).child(
+                    h_flex().gap_2().flex_wrap().children(
+                        ColorName::all()
+                            .into_iter()
+                            .filter(|color| *color != ColorName::Gray)
+                            .map(|color| Tag::outline().color(color).child(format!("{:?}", color))),
+                    ),
+                ),
             )
             .child(
                 section("Kbd", cx).child(
