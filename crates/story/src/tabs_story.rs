@@ -67,6 +67,8 @@ impl Render for TabsStory {
             .gap_6()
             .child(
                 ButtonGroup::new("toggle-size")
+                    .outline()
+                    .compact()
                     .child(
                         Button::new("xsmall")
                             .label("XSmall")

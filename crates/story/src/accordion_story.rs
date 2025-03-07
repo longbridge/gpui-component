@@ -4,7 +4,7 @@ use gpui::{
 };
 use gpui_component::{
     accordion::Accordion,
-    button::{Button, ButtonGroup},
+    button::{Button, ButtonGroup, ButtonVariants as _},
     checkbox::Checkbox,
     h_flex,
     switch::Switch,
@@ -72,6 +72,8 @@ impl Render for AccordionStory {
                     .gap_2()
                     .child(
                         ButtonGroup::new("toggle-size")
+                            .outline()
+                            .compact()
                             .child(
                                 Button::new("xsmall")
                                     .label("XSmall")
