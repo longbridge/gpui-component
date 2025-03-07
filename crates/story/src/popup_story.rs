@@ -11,7 +11,6 @@ use gpui_component::{
     input::TextInput,
     popover::{Popover, PopoverContent},
     popup_menu::PopupMenuExt,
-    switch::Switch,
     v_flex, ActiveTheme as _, ContextModal, IconName, Sizable,
 };
 use serde::Deserialize;
@@ -87,7 +86,6 @@ pub struct PopupStory {
     focus_handle: FocusHandle,
     form: Entity<Form>,
     message: String,
-    window_mode: bool,
 }
 
 impl super::Story for PopupStory {
@@ -118,7 +116,6 @@ impl PopupStory {
             form,
             focus_handle: cx.focus_handle(),
             message: "".to_string(),
-            window_mode: false,
         }
     }
 
@@ -126,27 +123,22 @@ impl PopupStory {
         self.message = "You have clicked copy".to_string();
         cx.notify()
     }
+
     fn on_cut(&mut self, _: &Cut, _: &mut Window, cx: &mut Context<Self>) {
         self.message = "You have clicked cut".to_string();
         cx.notify()
     }
+
     fn on_paste(&mut self, _: &Paste, _: &mut Window, cx: &mut Context<Self>) {
         self.message = "You have clicked paste".to_string();
         cx.notify()
     }
+
     fn on_search_all(&mut self, _: &SearchAll, _: &mut Window, cx: &mut Context<Self>) {
         self.message = "You have clicked search all".to_string();
         cx.notify()
     }
-    fn on_toggle_window_mode(
-        &mut self,
-        _: &ToggleWindowMode,
-        _: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.window_mode = !self.window_mode;
-        cx.notify()
-    }
+
     fn on_action_info(&mut self, info: &Info, _: &mut Window, cx: &mut Context<Self>) {
         self.message = format!("You have clicked info: {}", info.0);
         cx.notify()
@@ -162,7 +154,6 @@ impl Focusable for PopupStory {
 impl Render for PopupStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let form = self.form.clone();
-        let window_mode = self.window_mode;
 
         v_flex()
             .track_focus(&self.focus_handle)
@@ -170,7 +161,6 @@ impl Render for PopupStory {
             .on_action(cx.listener(Self::on_cut))
             .on_action(cx.listener(Self::on_paste))
             .on_action(cx.listener(Self::on_search_all))
-            .on_action(cx.listener(Self::on_toggle_window_mode))
             .on_action(cx.listener(Self::on_action_info))
             .p_4()
             .mb_5()
@@ -185,15 +175,10 @@ impl Render for PopupStory {
                         .separator()
                         .separator()
                         .submenu("Settings", window, cx, move |menu, _, _| {
-                            menu.menu_with_check(
-                                "Toggle Window Mode",
-                                window_mode,
-                                Box::new(ToggleWindowMode),
-                            )
-                            .separator()
-                            .menu("Info 0", Box::new(Info(0)))
-                            .menu("Item 1", Box::new(Info(1)))
-                            .menu("Item 2", Box::new(Info(2)))
+                            menu.menu("Info 0", Box::new(Info(0)))
+                                .separator()
+                                .menu("Item 1", Box::new(Info(1)))
+                                .menu("Item 2", Box::new(Info(2)))
                         })
                         .separator()
                         .menu("Search All", Box::new(SearchAll))
@@ -201,14 +186,6 @@ impl Render for PopupStory {
                 }
             })
             .gap_6()
-            .child(
-                Switch::new("switch-window-mode")
-                    .checked(window_mode)
-                    .label("Use Window Popover")
-                    .on_click(cx.listener(|this, checked, _, _| {
-                        this.window_mode = *checked;
-                    })),
-            )
             .child(
                 h_flex()
                     .items_center()
@@ -274,12 +251,6 @@ impl Render for PopupStory {
                                     .menu("Paste", Box::new(Paste))
                                     .separator()
                                     .menu_with_icon("Search", IconName::Search, Box::new(SearchAll))
-                                    .separator()
-                                    .menu_with_check(
-                                        "Window Mode",
-                                        window_mode,
-                                        Box::new(ToggleWindowMode),
-                                    )
                                     .separator()
                                     .menu_with_element(
                                         |_, cx| {
