@@ -490,12 +490,15 @@ impl PopupMenu {
         let max_width = self.max_width;
         let bounds = self.bounds;
         let has_icon = state.has_icon;
+        let hovered = self.hovered_menu_ix == Some(ix);
+        const EDGE_PADDING: Pixels = px(8.);
+        const INNER_PADDING: Pixels = px(4.);
 
-        let this = ListItem::new(("menu-item", ix))
+        let this = ListItem::new(ix)
             .relative()
             .text_sm()
             .py_0()
-            .px_1()
+            .px(INNER_PADDING)
             .rounded(state.radius)
             .items_center()
             .on_mouse_enter(cx.listener(move |this, _, _, cx| {
@@ -549,57 +552,55 @@ impl PopupMenu {
                             ),
                     )
             }
-            PopupMenuItem::Submenu { icon, label, menu } => this
-                .when(self.hovered_menu_ix == Some(ix), |this| this.selected(true))
-                .child(
-                    h_flex()
-                        .items_start()
-                        .child(
-                            h_flex()
-                                .size_full()
-                                .items_center()
-                                .gap_x_1()
-                                .children(Self::render_icon(has_icon, icon.clone(), window, cx))
-                                .child(
-                                    h_flex()
-                                        .flex_1()
-                                        .gap_2()
-                                        .items_center()
-                                        .justify_between()
-                                        .child(label.clone())
-                                        .child(IconName::ChevronRight),
-                                ),
-                        )
-                        .when_some(self.hovered_menu_ix, |this, hovered_ix| {
-                            let (anchor, left) =
-                                if window.bounds().size.width - bounds.origin.x < max_width {
-                                    (Corner::TopRight, -px(15.))
-                                } else {
-                                    (Corner::TopLeft, bounds.size.width - px(10.))
-                                };
-
-                            let top = if bounds.origin.y + bounds.size.height
-                                > window.bounds().size.height
-                            {
-                                px(32.)
+            PopupMenuItem::Submenu { icon, label, menu } => this.selected(hovered).child(
+                h_flex()
+                    .when(hovered, |this| {
+                        this.rounded(cx.theme().radius)
+                            .mx(-INNER_PADDING)
+                            .px(INNER_PADDING)
+                            .bg(cx.theme().accent)
+                            .text_color(cx.theme().accent_foreground)
+                    })
+                    .items_start()
+                    .child(
+                        h_flex()
+                            .size_full()
+                            .items_center()
+                            .gap_x_1()
+                            .children(Self::render_icon(has_icon, icon.clone(), window, cx))
+                            .child(
+                                h_flex()
+                                    .flex_1()
+                                    .gap_2()
+                                    .items_center()
+                                    .justify_between()
+                                    .child(label.clone())
+                                    .child(IconName::ChevronRight),
+                            ),
+                    )
+                    .when(hovered, |this| {
+                        let (anchor, left) =
+                            if window.bounds().size.width - bounds.origin.x < max_width {
+                                (Corner::TopRight, -px(12.))
                             } else {
-                                -px(10.)
+                                (Corner::TopLeft, bounds.size.width + px(4.))
                             };
 
-                            if hovered_ix == ix {
-                                this.child(
-                                    anchored()
-                                        .anchor(anchor)
-                                        .child(
-                                            div().occlude().top(top).left(left).child(menu.clone()),
-                                        )
-                                        .snap_to_window_with_margin(Edges::all(px(8.))),
-                                )
+                        let top =
+                            if bounds.origin.y + bounds.size.height > window.bounds().size.height {
+                                px(32.)
                             } else {
-                                this
-                            }
-                        }),
-                ),
+                                -px(4.)
+                            };
+
+                        this.child(
+                            anchored()
+                                .anchor(anchor)
+                                .child(div().occlude().top(top).left(left).child(menu.clone()))
+                                .snap_to_window_with_margin(Edges::all(EDGE_PADDING)),
+                        )
+                    }),
+            ),
         }
     }
 }
@@ -653,7 +654,7 @@ impl Render for PopupMenu {
             .p_1()
             .child(
                 div()
-                    .id("popup-menu-items")
+                    .id("items")
                     .when(self.scrollable, |this| {
                         this.max_h(max_height)
                             .overflow_y_scroll()
