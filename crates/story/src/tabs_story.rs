@@ -145,10 +145,52 @@ impl Render for TabsStory {
                 ),
             )
             .child(
+                section("Underline Tabs", cx).child(
+                    TabBar::new("underline")
+                        .w_full()
+                        .px_2()
+                        .mx_3()
+                        .underline()
+                        .with_size(self.size)
+                        .selected_index(self.active_tab_ix)
+                        .on_click(cx.listener(|this, ix: &usize, window, cx| {
+                            this.set_active_tab(*ix, window, cx);
+                        }))
+                        .child("Account")
+                        .child("Profile")
+                        .child("Documents")
+                        .child("Mail")
+                        .child("Appearance")
+                        .child("Settings")
+                        .child("About")
+                        .child("License"),
+                ),
+            )
+            .child(
                 section("Pill Tabs", cx).child(
                     TabBar::new("pill")
                         .w_full()
                         .pill()
+                        .with_size(self.size)
+                        .selected_index(self.active_tab_ix)
+                        .on_click(cx.listener(|this, ix: &usize, window, cx| {
+                            this.set_active_tab(*ix, window, cx);
+                        }))
+                        .child(Tab::new("Account"))
+                        .child(Tab::new("Profile").disabled(true))
+                        .child(Tab::new("Documents & Files"))
+                        .child(Tab::new("Mail"))
+                        .child(Tab::new("Appearance"))
+                        .child(Tab::new("Settings"))
+                        .child(Tab::new("About"))
+                        .child(Tab::new("License")),
+                ),
+            )
+            .child(
+                section("Outline Tabs", cx).child(
+                    TabBar::new("outline")
+                        .w_full()
+                        .outline()
                         .with_size(self.size)
                         .selected_index(self.active_tab_ix)
                         .on_click(cx.listener(|this, ix: &usize, window, cx| {
@@ -178,28 +220,6 @@ impl Render for TabsStory {
                         .child(IconName::Calendar)
                         .child(IconName::Map)
                         .children(vec!["Appearance", "Settings", "About", "License"]),
-                ),
-            )
-            .child(
-                section("Underline Tabs", cx).child(
-                    TabBar::new("underline")
-                        .w_full()
-                        .px_2()
-                        .mx_3()
-                        .underline()
-                        .with_size(self.size)
-                        .selected_index(self.active_tab_ix)
-                        .on_click(cx.listener(|this, ix: &usize, window, cx| {
-                            this.set_active_tab(*ix, window, cx);
-                        }))
-                        .child("Account")
-                        .child("Profile")
-                        .child("Documents")
-                        .child("Mail")
-                        .child("Appearance")
-                        .child("Settings")
-                        .child("About")
-                        .child("License"),
                 ),
             )
     }

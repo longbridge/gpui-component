@@ -12,6 +12,7 @@ use gpui::{
 pub enum TabVariant {
     #[default]
     Tab,
+    Outline,
     Pill,
     Segmented,
     Underline,
@@ -66,23 +67,23 @@ impl TabVariant {
     fn inner_height(&self, size: Size) -> Pixels {
         match size {
             Size::XSmall => match self {
-                TabVariant::Tab | TabVariant::Pill => px(20.),
+                TabVariant::Tab | TabVariant::Outline | TabVariant::Pill => px(20.),
                 TabVariant::Segmented => px(16.),
                 TabVariant::Underline => px(20.),
             },
             Size::Small => match self {
-                TabVariant::Tab | TabVariant::Pill => px(24.),
+                TabVariant::Tab | TabVariant::Outline | TabVariant::Pill => px(24.),
                 TabVariant::Segmented => px(20.),
                 TabVariant::Underline => px(22.),
             },
             Size::Large => match self {
-                TabVariant::Tab | TabVariant::Pill => px(36.),
+                TabVariant::Tab | TabVariant::Outline | TabVariant::Pill => px(36.),
                 TabVariant::Segmented => px(28.),
                 TabVariant::Underline => px(30.),
             },
             _ => match self {
                 TabVariant::Tab => px(30.),
-                TabVariant::Pill => px(26.),
+                TabVariant::Outline | TabVariant::Pill => px(26.),
                 TabVariant::Segmented => px(24.),
                 TabVariant::Underline => px(24.),
             },
@@ -143,11 +144,17 @@ impl TabVariant {
                 border_color: cx.theme().transparent,
                 ..Default::default()
             },
-            TabVariant::Pill => TabStyle {
+            TabVariant::Outline => TabStyle {
                 fg: cx.theme().tab_foreground,
                 bg: cx.theme().transparent,
                 borders: Edges::all(px(1.)),
                 border_color: cx.theme().border,
+                radius: px(99.),
+                ..Default::default()
+            },
+            TabVariant::Pill => TabStyle {
+                fg: cx.theme().foreground,
+                bg: cx.theme().transparent,
                 radius: px(99.),
                 ..Default::default()
             },
@@ -187,11 +194,17 @@ impl TabVariant {
                 border_color: cx.theme().transparent,
                 ..Default::default()
             },
-            TabVariant::Pill => TabStyle {
+            TabVariant::Outline => TabStyle {
                 fg: cx.theme().secondary_foreground,
                 bg: cx.theme().secondary_hover,
                 borders: Edges::all(px(1.)),
                 border_color: cx.theme().border,
+                radius: px(99.),
+                ..Default::default()
+            },
+            TabVariant::Pill => TabStyle {
+                fg: cx.theme().secondary_foreground,
+                bg: cx.theme().secondary_hover,
                 radius: px(99.),
                 ..Default::default()
             },
@@ -236,11 +249,17 @@ impl TabVariant {
                 border_color: cx.theme().border,
                 ..Default::default()
             },
-            TabVariant::Pill => TabStyle {
+            TabVariant::Outline => TabStyle {
                 fg: cx.theme().primary,
                 bg: cx.theme().transparent,
                 borders: Edges::all(px(1.)),
                 border_color: cx.theme().primary,
+                radius: px(99.),
+                ..Default::default()
+            },
+            TabVariant::Pill => TabStyle {
+                fg: cx.theme().primary_foreground,
+                bg: cx.theme().primary,
                 radius: px(99.),
                 ..Default::default()
             },
@@ -283,7 +302,7 @@ impl TabVariant {
                 },
                 ..Default::default()
             },
-            TabVariant::Pill => TabStyle {
+            TabVariant::Outline => TabStyle {
                 fg: cx.theme().muted_foreground,
                 bg: cx.theme().transparent,
                 borders: Edges::all(px(1.)),
@@ -291,6 +310,20 @@ impl TabVariant {
                     cx.theme().primary
                 } else {
                     cx.theme().border
+                },
+                radius: px(99.),
+                ..Default::default()
+            },
+            TabVariant::Pill => TabStyle {
+                fg: if selected {
+                    cx.theme().primary_foreground.opacity(0.5)
+                } else {
+                    cx.theme().muted_foreground
+                },
+                bg: if selected {
+                    cx.theme().primary.opacity(0.5)
+                } else {
+                    cx.theme().transparent
                 },
                 radius: px(99.),
                 ..Default::default()
@@ -422,6 +455,12 @@ impl Tab {
     /// Use Pill variant.
     pub fn pill(mut self) -> Self {
         self.variant = TabVariant::Pill;
+        self
+    }
+
+    /// Use outline variant.
+    pub fn outline(mut self) -> Self {
+        self.variant = TabVariant::Outline;
         self
     }
 

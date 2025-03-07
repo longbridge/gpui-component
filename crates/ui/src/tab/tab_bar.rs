@@ -54,6 +54,12 @@ impl TabBar {
         self
     }
 
+    /// Set the Tab variant to Outline, all children will inherit the variant.
+    pub fn outline(mut self) -> Self {
+        self.variant = TabVariant::Outline;
+        self
+    }
+
     /// Set the Tab variant to Segmented, all children will inherit the variant.
     pub fn segmented(mut self) -> Self {
         self.variant = TabVariant::Segmented;
@@ -143,9 +149,13 @@ impl RenderOnce for TabBar {
                 let padding = Edges::all(px(0.));
                 (cx.theme().tab_bar, padding, px(0.))
             }
-            TabVariant::Pill => {
+            TabVariant::Outline => {
                 let padding = Edges::all(px(0.));
                 (cx.theme().transparent, padding, default_gap)
+            }
+            TabVariant::Pill => {
+                let padding = Edges::all(px(0.));
+                (cx.theme().transparent, padding, px(4.))
             }
             TabVariant::Segmented => {
                 let padding_x = match self.size {
