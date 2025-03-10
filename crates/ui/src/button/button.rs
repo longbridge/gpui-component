@@ -618,8 +618,7 @@ impl ButtonVariant {
             ButtonVariant::Link => cx.theme().transparent,
             ButtonVariant::Text => cx.theme().transparent,
             ButtonVariant::Custom(colors) => colors.active,
-        }
-        .opacity(0.5);
+        };
 
         let border = self.border_color(cx);
         let fg = match self {
