@@ -602,14 +602,11 @@ impl Node {
 
         match self {
             Node::Root { children } => div()
-                .children({
-                    let children_len = children.len();
-
-                    children.into_iter().enumerate().map(move |(ix, c)| {
-                        let is_last_child = ix == children_len - 1;
-                        c.render(None, is_last_child, text_view_style, window, cx)
+                .children(
+                    children.into_iter().map(move |c| {
+                        c.render(None, false, text_view_style, window, cx)
                     })
-                })
+                )
                 .into_any_element(),
             Node::Paragraph(paragraph) => div().mb(mb).child(paragraph).into_any_element(),
             Node::Heading { level, children } => {

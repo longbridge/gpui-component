@@ -499,6 +499,7 @@ fn parse_paragraph(
                     title: title.map(Into::into),
                 });
             }
+
             _ => {
                 // All unknown tags to as text
                 let mut child_paragraph = Paragraph::default();
@@ -696,6 +697,24 @@ fn parse_node(node: &Rc<Node>, paragraph: &mut Paragraph) -> element::Node {
                 } else {
                     table
                 }
+            }
+            local_name!("blockquote") => {
+                let mut children = vec![];
+                if !paragraph.is_empty() {
+                    children.push(element::Node::Paragraph(paragraph.clone()));
+                    paragraph.clear();
+                }
+
+                let mut blockquote = Paragraph::default();
+                for (i, child) in node.children.borrow().iter().enumerate() {
+                    if i > 0 {
+                        blockquote.push_str("\n");
+                    }
+                    parse_paragraph(&mut blockquote, child);
+                }
+                children.push(element::Node::Blockquote(blockquote));
+
+                element::Node::Root { children: children }
             }
             _ => {
                 if BLOCK_ELEMENTS.contains(&name.local.trim()) {
