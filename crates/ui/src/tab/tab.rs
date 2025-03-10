@@ -92,16 +92,12 @@ impl TabVariant {
 
     /// Default px(12) to match panel px_3, See [`crate::dock::TabPanel`]
     fn inner_paddings(&self, size: Size) -> Edges<Pixels> {
-        let mut px = match size {
+        let px = match size {
             Size::XSmall => px(8.),
             Size::Small => px(10.),
             Size::Large => px(16.),
             _ => px(12.),
         };
-
-        if *self == TabVariant::Segmented {
-            px = px / 2.;
-        }
 
         Edges {
             left: px,
