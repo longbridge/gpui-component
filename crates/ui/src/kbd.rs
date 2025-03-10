@@ -57,6 +57,7 @@ impl RenderOnce for Kbd {
             .border_1()
             .border_color(cx.theme().border)
             .text_color(cx.theme().muted_foreground)
+            .bg(cx.theme().background)
             .py_0p5()
             .px_1()
             .rounded_md()
