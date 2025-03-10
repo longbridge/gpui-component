@@ -237,7 +237,8 @@ impl RenderOnce for TabBar {
                     .when(
                         self.suffix.is_some() && self.variant == TabVariant::Tab
                             || self.variant == TabVariant::Underline
-                            || self.variant == TabVariant::Pill,
+                            || self.variant == TabVariant::Pill
+                            || self.variant == TabVariant::Outline,
                         |this| this.child(self.last_empty_space),
                     ),
             )
