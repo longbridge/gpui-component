@@ -234,13 +234,9 @@ impl RenderOnce for TabBar {
                                     })
                             }),
                     )
-                    .when(
-                        self.suffix.is_some() && self.variant == TabVariant::Tab
-                            || self.variant == TabVariant::Underline
-                            || self.variant == TabVariant::Pill
-                            || self.variant == TabVariant::Outline,
-                        |this| this.child(self.last_empty_space),
-                    ),
+                    .when(self.suffix.is_some(), |this| {
+                        this.child(self.last_empty_space)
+                    }),
             )
             .when_some(self.suffix, |this, suffix| this.child(suffix))
     }
