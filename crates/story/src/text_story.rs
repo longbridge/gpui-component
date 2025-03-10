@@ -238,6 +238,7 @@ impl Render for TextStory {
                         .child(Kbd::new(Keystroke::parse("cmd-ctrl-t").unwrap()))
                         .child(Kbd::new(Keystroke::parse("escape").unwrap()))
                         .child(Kbd::new(Keystroke::parse("backspace").unwrap()))
+                        .child(Kbd::new(Keystroke::parse("/").unwrap()))
                         .child(Kbd::new(Keystroke::parse("enter").unwrap())),
                 ),
             )
