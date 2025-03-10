@@ -326,7 +326,7 @@ impl ThemeColor {
             list_head: hsl(0.0, 0.0, 8.0),
             list_hover: hsl(240.0, 3.7, 15.9),
             muted: hsl(240.0, 3.7, 15.9),
-            muted_foreground: hsl(240.0, 5.0, 64.9),
+            muted_foreground: hsl(240.0, 5.0, 34.),
             popover: hsl(0.0, 0.0, 10.),
             popover_foreground: hsl(0.0, 0.0, 78.0),
             primary: hsl(223.0, 0.0, 98.0),
