@@ -2024,7 +2024,6 @@ version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a3a6f9af55fb97ad673fb7a69533eb2f967648a06fa21f8c9bb2cd6d33975716"
 dependencies = [
- "fontconfig-parser",
  "log",
  "slotmap",
  "tinyvec",
