@@ -7,7 +7,7 @@ use gpui::{
     Stateful, StatefulInteractiveElement as _, Style, Styled, TitlebarOptions, Window,
 };
 
-pub const TITLE_BAR_HEIGHT: Pixels = px(35.);
+pub const TITLE_BAR_HEIGHT: Pixels = px(34.);
 #[cfg(target_os = "macos")]
 const TITLE_BAR_LEFT_PADDING: Pixels = px(80.);
 #[cfg(not(target_os = "macos"))]
