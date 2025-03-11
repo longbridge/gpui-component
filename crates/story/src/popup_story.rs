@@ -262,17 +262,30 @@ impl Render for PopupStory {
                                     .separator()
                                     .menu_with_icon("Search", IconName::Search, Box::new(SearchAll))
                                     .separator()
-                                    .menu_with_element(
-                                        |_, cx| {
-                                            v_flex().gap_1().child("Custom Element").child(
-                                                div()
-                                                    .text_sm()
-                                                    .text_color(cx.theme().muted_foreground)
-                                                    .child("THis is sub-title"),
-                                            )
-                                        },
-                                        Box::new(Info(0)),
-                                    )
+                                    .menu_element(Box::new(Info(0)), |_, cx| {
+                                        v_flex().child("Custom Element").child(
+                                            div()
+                                                .text_xs()
+                                                .text_color(cx.theme().muted_foreground)
+                                                .child("THis is sub-title"),
+                                        )
+                                    })
+                                    .menu_element_with_check(checked, Box::new(Info(0)), |_, cx| {
+                                        h_flex().gap_1().child("Custom Element").child(
+                                            div()
+                                                .text_xs()
+                                                .text_color(cx.theme().muted_foreground)
+                                                .child("checked"),
+                                        )
+                                    })
+                                    .menu_element_with_icon(IconName::Info, Box::new(Info(0)), |_, cx| {
+                                        h_flex().gap_1().child("Custom").child(
+                                            div()
+                                                .text_sm()
+                                                .text_color(cx.theme().muted_foreground)
+                                                .child("element"),
+                                        )
+                                    })
                                     .separator()
                                     .submenu("Links", window, cx, |menu, _, _| {
                                         menu.link_with_icon(

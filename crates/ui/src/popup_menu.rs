@@ -68,6 +68,7 @@ enum PopupMenuItem {
         handler: Rc<dyn Fn(&mut Window, &mut App)>,
     },
     ElementItem {
+        icon: Option<Icon>,
         render: Box<dyn Fn(&mut Window, &mut App) -> AnyElement + 'static>,
         handler: Rc<dyn Fn(&mut Window, &mut App)>,
     },
@@ -238,7 +239,16 @@ impl PopupMenu {
     }
 
     /// Add Menu Item with custom element render.
-    pub fn menu_with_element<F, E>(mut self, builder: F, action: Box<dyn Action>) -> Self
+    pub fn menu_element<F, E>(self, action: Box<dyn Action>, builder: F) -> Self
+    where
+        F: Fn(&mut Window, &mut App) -> E + 'static,
+        E: IntoElement,
+    {
+        self.menu_element_with_check(false, action, builder)
+    }
+
+    /// Add Menu Item with custom element render with icon.
+    pub fn menu_element_with_icon<F, E>(mut self, icon: impl Into<Icon>, action: Box<dyn Action>, builder: F) -> Self
     where
         F: Fn(&mut Window, &mut App) -> E + 'static,
         E: IntoElement,
@@ -246,7 +256,37 @@ impl PopupMenu {
         self.menu_items.push(PopupMenuItem::ElementItem {
             render: Box::new(move |window, cx| builder(window, cx).into_any_element()),
             handler: self.wrap_handler(action),
+            icon: Some(icon.into())
         });
+        self.has_icon = true;
+        self
+    }
+
+    /// Add Menu Item with custom element render with check state
+    pub fn menu_element_with_check<F, E>(
+        mut self,
+        checked: bool,
+        action: Box<dyn Action>,
+        builder: F,
+    ) -> Self
+    where
+        F: Fn(&mut Window, &mut App) -> E + 'static,
+        E: IntoElement,
+    {
+        if checked {
+            self.menu_items.push(PopupMenuItem::ElementItem {
+                render: Box::new(move |window, cx| builder(window, cx).into_any_element()),
+                handler: self.wrap_handler(action),
+                icon: Some(IconName::Check.into())
+            });
+            self.has_icon = true;
+        } else {
+            self.menu_items.push(PopupMenuItem::ElementItem {
+                render: Box::new(move |window, cx| builder(window, cx).into_any_element()),
+                handler: self.wrap_handler(action),
+                icon: None,
+            });
+        }
         self
     }
 
@@ -515,14 +555,14 @@ impl PopupMenu {
                     .my_0p5()
                     .bg(cx.theme().muted),
             ),
-            PopupMenuItem::ElementItem { render, .. } => this
+            PopupMenuItem::ElementItem { render, icon, .. } => this
                 .on_click(cx.listener(move |this, _, window, cx| this.on_click(ix, window, cx)))
                 .child(
                     h_flex()
                         .min_h(ITEM_HEIGHT)
                         .items_center()
                         .gap_x_1()
-                        .children(Self::render_icon(has_icon, None, window, cx))
+                        .children(Self::render_icon(has_icon, icon.clone(), window, cx))
                         .child((render)(window, cx)),
                 ),
             PopupMenuItem::Item {
