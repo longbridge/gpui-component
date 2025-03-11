@@ -38,6 +38,7 @@ impl NumberInput {
         let input = cx.new(|cx| {
             TextInput::new(window, cx)
                 .pattern(pattern)
+                .no_gap()
                 .appearance(false)
         });
 
