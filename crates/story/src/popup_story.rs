@@ -278,14 +278,18 @@ impl Render for PopupStory {
                                                 .child("checked"),
                                         )
                                     })
-                                    .menu_element_with_icon(IconName::Info, Box::new(Info(0)), |_, cx| {
-                                        h_flex().gap_1().child("Custom").child(
-                                            div()
-                                                .text_sm()
-                                                .text_color(cx.theme().muted_foreground)
-                                                .child("element"),
-                                        )
-                                    })
+                                    .menu_element_with_icon(
+                                        IconName::Info,
+                                        Box::new(Info(0)),
+                                        |_, cx| {
+                                            h_flex().gap_1().child("Custom").child(
+                                                div()
+                                                    .text_sm()
+                                                    .text_color(cx.theme().muted_foreground)
+                                                    .child("element"),
+                                            )
+                                        },
+                                    )
                                     .separator()
                                     .submenu("Links", window, cx, |menu, _, _| {
                                         menu.link_with_icon(
@@ -310,7 +314,7 @@ impl Render for PopupStory {
                                         Box::new(Info(i)),
                                     )
                                 }
-                                this
+                                this.min_w(px(100.))
                             }),
                     )
                     .child(self.message.clone()),

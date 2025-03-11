@@ -100,8 +100,8 @@ pub struct PopupMenu {
     menu_items: Vec<PopupMenuItem>,
     has_icon: bool,
     selected_index: Option<usize>,
-    min_width: Pixels,
-    max_width: Pixels,
+    min_width: Option<Pixels>,
+    max_width: Option<Pixels>,
     max_height: Option<Pixels>,
     hovered_menu_ix: Option<usize>,
     bounds: Bounds<Pixels>,
@@ -135,8 +135,8 @@ impl PopupMenu {
                 parent_menu: None,
                 menu_items: Vec::new(),
                 selected_index: None,
-                min_width: px(120.),
-                max_width: px(500.),
+                min_width: None,
+                max_width: None,
                 max_height: None,
                 has_icon: false,
                 hovered_menu_ix: None,
@@ -152,13 +152,13 @@ impl PopupMenu {
 
     /// Set min width of the popup menu, default is 120px
     pub fn min_w(mut self, width: impl Into<Pixels>) -> Self {
-        self.min_width = width.into();
+        self.min_width = Some(width.into());
         self
     }
 
     /// Set max width of the popup menu, default is 500px
     pub fn max_w(mut self, width: impl Into<Pixels>) -> Self {
-        self.max_width = width.into();
+        self.max_width = Some(width.into());
         self
     }
 
@@ -248,7 +248,12 @@ impl PopupMenu {
     }
 
     /// Add Menu Item with custom element render with icon.
-    pub fn menu_element_with_icon<F, E>(mut self, icon: impl Into<Icon>, action: Box<dyn Action>, builder: F) -> Self
+    pub fn menu_element_with_icon<F, E>(
+        mut self,
+        icon: impl Into<Icon>,
+        action: Box<dyn Action>,
+        builder: F,
+    ) -> Self
     where
         F: Fn(&mut Window, &mut App) -> E + 'static,
         E: IntoElement,
@@ -256,7 +261,7 @@ impl PopupMenu {
         self.menu_items.push(PopupMenuItem::ElementItem {
             render: Box::new(move |window, cx| builder(window, cx).into_any_element()),
             handler: self.wrap_handler(action),
-            icon: Some(icon.into())
+            icon: Some(icon.into()),
         });
         self.has_icon = true;
         self
@@ -277,7 +282,7 @@ impl PopupMenu {
             self.menu_items.push(PopupMenuItem::ElementItem {
                 render: Box::new(move |window, cx| builder(window, cx).into_any_element()),
                 handler: self.wrap_handler(action),
-                icon: Some(IconName::Check.into())
+                icon: Some(IconName::Check.into()),
             });
             self.has_icon = true;
         } else {
@@ -527,8 +532,8 @@ impl PopupMenu {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let max_width = self.max_width;
         let bounds = self.bounds;
+        let max_width = state.max_width;
         let has_icon = state.has_icon;
         let hovered = self.hovered_menu_ix == Some(ix);
         const EDGE_PADDING: Pixels = px(8.);
@@ -658,6 +663,7 @@ impl Focusable for PopupMenu {
 
 #[derive(Clone, Copy)]
 struct ItemState {
+    max_width: Pixels,
     radius: Pixels,
     has_icon: bool,
 }
@@ -674,8 +680,10 @@ impl Render for PopupMenu {
             },
             |height| height,
         );
+        let max_width = self.max_width.unwrap_or(px(500.));
 
         let item_state = ItemState {
+            max_width,
             radius: cx.theme().radius.min(px(8.)),
             has_icon: self.menu_items.iter().any(|item| item.has_icon()),
         };
@@ -706,9 +714,9 @@ impl Render for PopupMenu {
                     .child(
                         v_flex()
                             .gap_y_0p5()
-                            .min_w(self.min_width)
-                            .max_w(self.max_width)
                             .min_w(rems(8.))
+                            .when_some(self.min_width, |this, min_width| this.min_w(min_width))
+                            .max_w(max_width)
                             .child({
                                 canvas(
                                     move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds),
