@@ -243,13 +243,8 @@ impl RenderOnce for DescriptionList {
             _ => px(4.),
         };
 
-        let gap = if self.layout.is_vertical() {
-            base_gap
-        } else {
-            px(0.)
-        };
         // Only for Horizontal layout
-        let (padding_x, padding_y) = match self.size {
+        let (mut padding_x, mut padding_y) = match self.size {
             Size::XSmall | Size::Small => (px(4.), px(2.)),
             Size::Medium => (px(8.), px(4.)),
             Size::Large => (px(12.), px(6.)),
@@ -261,7 +256,11 @@ impl RenderOnce for DescriptionList {
         } else {
             None
         };
-        let bordered = self.bordered && self.layout.is_horizontal();
+        if !self.bordered {
+            padding_x = px(0.);
+            padding_y = px(0.);
+        }
+        let gap = if self.bordered { px(0.) } else { base_gap };
 
         // Group items by columns
         let rows = Self::group_item_rows(self.items, self.columns);
@@ -270,7 +269,7 @@ impl RenderOnce for DescriptionList {
         v_flex()
             .gap(gap)
             .overflow_hidden()
-            .when(bordered, |this| {
+            .when(self.bordered, |this| {
                 this.rounded(padding_x)
                     .border_1()
                     .border_color(cx.theme().border)
@@ -278,7 +277,7 @@ impl RenderOnce for DescriptionList {
             .children(rows.into_iter().enumerate().map(|(ix, items)| {
                 let is_last = ix == rows_len - 1;
                 h_flex()
-                    .when(bordered && !is_last, |this| {
+                    .when(self.bordered && !is_last, |this| {
                         this.border_b_1().border_color(cx.theme().border)
                     })
                     .children({
@@ -303,22 +302,25 @@ impl RenderOnce for DescriptionList {
                                                     cx.theme().description_list_label_foreground,
                                                 )
                                                 .text_sm()
+                                                .px(padding_x)
+                                                .py(padding_y)
+                                                .when(self.bordered, |this| {
+                                                    this.when(self.layout.is_horizontal(), |this| {
+                                                        this.border_r_1()
+                                                            .when(!is_first_col, |this| {
+                                                                this.border_l_1()
+                                                            })
+                                                    })
+                                                    .when(self.layout.is_vertical(), |this| {
+                                                        this.border_b_1()
+                                                    })
+                                                    .border_color(cx.theme().border)
+                                                    .bg(cx.theme().description_list_label)
+                                                })
                                                 .map(|this| match label_width {
-                                                    Some(label_width) => this
-                                                        .w(label_width)
-                                                        .px(padding_x)
-                                                        .py(padding_y)
-                                                        .flex_shrink_0()
-                                                        .when(bordered, |this| {
-                                                            this.border_r_1()
-                                                                .when(!is_first_col, |this| {
-                                                                    this.border_l_1()
-                                                                })
-                                                                .border_color(cx.theme().border)
-                                                                .bg(cx
-                                                                    .theme()
-                                                                    .description_list_label)
-                                                        }),
+                                                    Some(label_width) => {
+                                                        this.w(label_width).flex_shrink_0()
+                                                    }
                                                     None => this,
                                                 })
                                                 .child(label),
@@ -326,14 +328,13 @@ impl RenderOnce for DescriptionList {
                                         .child(
                                             div()
                                                 .flex_1()
-                                                .when(self.layout.is_horizontal(), |this| {
-                                                    this.px(padding_x).py(padding_y)
-                                                })
+                                                .px(padding_x)
+                                                .py(padding_y)
                                                 .overflow_hidden()
                                                 .child(value),
                                         )
                                 }
-                                _ => div().h_2().w_full().when(bordered, |this| {
+                                _ => div().h_2().w_full().when(self.bordered, |this| {
                                     this.bg(cx.theme().description_list_label)
                                 }),
                             }
