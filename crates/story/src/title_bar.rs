@@ -45,9 +45,9 @@ impl AppTitleBar {
 
         let theme_color_picker = cx.new(|cx| {
             let mut picker = ColorPicker::new("theme-color-picker", window, cx)
-                .xsmall()
+                .small()
                 .anchor(Corner::TopRight)
-                .label("Theme Color");
+                .icon(IconName::Palette);
             picker.set_value(cx.theme().primary, window, cx);
             picker
         });
@@ -122,8 +122,8 @@ impl Render for AppTitleBar {
                     .px_2()
                     .gap_2()
                     .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                    .child(self.theme_color_picker.clone())
                     .child((self.child.clone())(window, cx))
+                    .child(self.theme_color_picker.clone())
                     .child(
                         Button::new("theme-mode")
                             .map(|this| {

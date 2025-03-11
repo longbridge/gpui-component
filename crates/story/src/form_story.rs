@@ -5,6 +5,7 @@ use gpui::{
 use gpui_component::{
     button::{Button, ButtonGroup},
     checkbox::Checkbox,
+    color_picker::ColorPicker,
     date_picker::DatePicker,
     divider::Divider,
     form::{form_field, v_form},
@@ -20,6 +21,7 @@ pub struct FormStory {
     name_input: Entity<TextInput>,
     email_input: Entity<TextInput>,
     bio_input: Entity<TextInput>,
+    color_picker: Entity<ColorPicker>,
     subscribe_email: bool,
     date_picker: Entity<DatePicker>,
     layout: Axis,
@@ -51,6 +53,11 @@ impl FormStory {
             input.set_text("Jason Lee", window, cx);
             input
         });
+        let color_picker = cx.new(|cx| {
+            ColorPicker::new("color-picker-1", window, cx)
+                .small()
+                .label("Theme color")
+        });
 
         let email_input = cx.new(|cx| TextInput::new(window, cx).placeholder("Enter text here..."));
         let bio_input = cx.new(|cx| {
@@ -68,6 +75,7 @@ impl FormStory {
             email_input,
             bio_input,
             date_picker,
+            color_picker,
             subscribe_email: false,
             layout: Axis::Vertical,
             size: Size::default(),
@@ -197,6 +205,7 @@ impl Render for FormStory {
                                 })),
                         ),
                     )
+                    .child(form_field().child(self.color_picker.clone()))
                     .child(
                         form_field().child(
                             Checkbox::new("use-vertical-layout")

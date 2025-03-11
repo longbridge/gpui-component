@@ -6,12 +6,13 @@ use gpui::{
 };
 
 use crate::{
+    button::{Button, ButtonVariants},
     divider::Divider,
     h_flex,
     input::{InputEvent, TextInput},
     popover::Escape,
     tooltip::Tooltip,
-    v_flex, ActiveTheme as _, Colorize as _, Sizable, Size, StyleSized,
+    v_flex, ActiveTheme as _, Colorize as _, Icon, Selectable as _, Sizable, Size, StyleSized,
 };
 
 const KEY_CONTEXT: &'static str = "ColorPicker";
@@ -60,6 +61,7 @@ pub struct ColorPicker {
     featured_colors: Vec<Hsla>,
     hovered_color: Option<Hsla>,
     label: Option<SharedString>,
+    icon: Option<Icon>,
     size: Size,
     anchor: Corner,
     color_input: Entity<TextInput>,
@@ -114,6 +116,7 @@ impl ColorPicker {
             hovered_color: None,
             size: Size::Medium,
             label: None,
+            icon: None,
             anchor: Corner::TopLeft,
             color_input,
             open: false,
@@ -139,6 +142,15 @@ impl ColorPicker {
     /// Set the size of the color picker, default is `Size::Medium`.
     pub fn size(mut self, size: Size) -> Self {
         self.size = size;
+        self
+    }
+
+    /// Set the icon to the color picker button.
+    ///
+    /// If this is set the color picker button will display the icon.
+    /// Else it will display the square color of the current value.
+    pub fn icon(mut self, icon: impl Into<Icon>) -> Self {
+        self.icon = Some(icon.into());
         self
     }
 
@@ -314,24 +326,38 @@ impl Render for ColorPicker {
                     .items_center()
                     .input_text_size(self.size)
                     .line_height(relative(1.))
-                    .child(
-                        div()
-                            .id("color-picker-square")
-                            .bg(cx.theme().background)
-                            .border_1()
-                            .border_color(cx.theme().input)
-                            .rounded(cx.theme().radius)
-                            .bg(cx.theme().background)
-                            .shadow_sm()
-                            .overflow_hidden()
-                            .size_with(self.size)
-                            .when_some(self.value, |this, value| {
-                                this.bg(value).border_color(value.darken(0.3))
-                            })
-                            .tooltip(move |window, cx| {
-                                Tooltip::new(display_title.clone(), window, cx)
-                            }),
-                    )
+                    .when_some(self.icon.clone(), |this, icon| {
+                        this.child(
+                            Button::new("btn")
+                                .ghost()
+                                .selected(self.open)
+                                .with_size(self.size)
+                                .icon(icon.clone()),
+                        )
+                    })
+                    .when_none(&self.icon, |this| {
+                        this.child(
+                            div()
+                                .id("color-picker-square")
+                                .bg(cx.theme().background)
+                                .border_1()
+                                .border_color(cx.theme().input)
+                                .rounded(cx.theme().radius)
+                                .shadow_sm()
+                                .overflow_hidden()
+                                .size_with(self.size)
+                                .when_some(self.value, |this, value| {
+                                    this.bg(value)
+                                        .border_color(value.darken(0.3))
+                                        .when(self.open, |this| this.border_2())
+                                })
+                                .when(!display_title.is_empty(), |this| {
+                                    this.tooltip(move |window, cx| {
+                                        Tooltip::new(display_title.clone(), window, cx)
+                                    })
+                                }),
+                        )
+                    })
                     .when_some(self.label.clone(), |this, label| this.child(label))
                     .on_click(cx.listener(Self::toggle_picker))
                     .on_mouse_up_out(
