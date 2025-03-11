@@ -203,9 +203,11 @@ impl Element for Switch {
                                 ),
                         )
                         .when_some(self.label.take(), |this, label| {
-                            this.child(div().child(label).map(|this| match self.size {
-                                Size::XSmall | Size::Small => this.text_sm(),
-                                _ => this.text_base(),
+                            this.child(div().line_height(bg_height).child(label).map(|this| {
+                                match self.size {
+                                    Size::XSmall | Size::Small => this.text_sm(),
+                                    _ => this.text_base(),
+                                }
                             }))
                         })
                         .when_some(
