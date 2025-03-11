@@ -28,7 +28,7 @@ actions!(tiles, [Undo, Redo,]);
 
 const MINIMUM_SIZE: Size<Pixels> = size(px(100.), px(100.));
 const DRAG_BAR_HEIGHT: Pixels = px(30.);
-const HANDLE_SIZE: Pixels = px(12.0);
+const HANDLE_SIZE: Pixels = px(5.0);
 
 #[derive(Clone, PartialEq, Debug)]
 struct TileChange {
@@ -518,8 +518,8 @@ impl Tiles {
     ) -> Vec<AnyElement> {
         let panel_bounds = item.bounds;
         let right_handle_bounds = Bounds::new(
-            panel_bounds.origin + point(panel_bounds.size.width - HANDLE_SIZE.half(), px(0.0)),
-            size(HANDLE_SIZE.half(), panel_bounds.size.height),
+            panel_bounds.origin + point(panel_bounds.size.width - HANDLE_SIZE, px(0.0)),
+            size(HANDLE_SIZE, panel_bounds.size.height),
         );
 
         let bottom_handle_bounds = Bounds::new(
@@ -535,6 +535,7 @@ impl Tiles {
                 ),
             size(HANDLE_SIZE.half(), HANDLE_SIZE.half()),
         );
+        let handle_offset = -HANDLE_SIZE + px(1.);
 
         let mut elements = Vec::new();
 
@@ -542,10 +543,10 @@ impl Tiles {
         elements.push(if !is_occluded(&right_handle_bounds) {
             div()
                 .id("right-resize-handle")
-                .cursor_col_resize()
+                .cursor_ew_resize()
                 .absolute()
-                .top(px(0.0))
-                .right(-HANDLE_SIZE.half())
+                .top_0()
+                .right(handle_offset)
                 .w(HANDLE_SIZE)
                 .h(panel_bounds.size.height)
                 .on_mouse_down(
@@ -599,10 +600,10 @@ impl Tiles {
         elements.push(if !is_occluded(&bottom_handle_bounds) {
             div()
                 .id("bottom-resize-handle")
-                .cursor_row_resize()
+                .cursor_ns_resize()
                 .absolute()
                 .left(px(0.0))
-                .bottom(-HANDLE_SIZE.half())
+                .bottom(handle_offset)
                 .w(panel_bounds.size.width)
                 .h(HANDLE_SIZE)
                 .on_mouse_down(
@@ -652,64 +653,74 @@ impl Tiles {
         // Corner resize handle
         elements.push(if !is_occluded(&corner_handle_bounds) {
             div()
-                .id("corner-resize-handle")
-                .cursor_nwse_resize()
-                .absolute()
-                .right(px(3.))
-                .bottom(px(3.))
-                .size_3()
                 .child(
                     Icon::new(IconName::ResizeCorner)
                         .size_3()
+                        .absolute()
+                        .right(px(1.))
+                        .bottom(px(1.))
                         .text_color(cx.theme().muted_foreground.opacity(0.5)),
                 )
-                .rounded(cx.theme().radius)
-                .on_mouse_down(
-                    MouseButton::Left,
-                    cx.listener({
-                        move |this, event: &MouseDownEvent, window, cx| {
-                            let last_position = event.position;
-                            let drag_data = ResizeDrag {
-                                axis: ResizeAxis::Both,
-                                last_position,
-                                last_bounds: panel_bounds,
-                            };
-                            this.update_resizing_drag(drag_data, window, cx);
-                            if let Some((_, new_ix)) = this.bring_to_front(this.resizing_index, cx)
-                            {
-                                this.resizing_index = Some(new_ix);
-                            }
-                        }
-                    }),
-                )
-                .on_drag(DragResizing(entity_id), |drag, _, _, cx| {
-                    cx.stop_propagation();
-                    cx.new(|_| drag.clone())
-                })
-                .on_drag_move(cx.listener(
-                    move |this, e: &DragMoveEvent<DragResizing>, window, cx| match e.drag(cx) {
-                        DragResizing(id) => {
-                            if *id != entity_id {
-                                return;
-                            }
-
-                            if let Some(ref drag_data) = this.resizing_drag_data {
-                                if drag_data.axis != ResizeAxis::Both {
-                                    return;
+                .child(
+                    div()
+                        .id("corner-resize-handle")
+                        .cursor_nwse_resize()
+                        .absolute()
+                        .right(handle_offset)
+                        .bottom(handle_offset)
+                        .size_3()
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener({
+                                move |this, event: &MouseDownEvent, window, cx| {
+                                    let last_position = event.position;
+                                    let drag_data = ResizeDrag {
+                                        axis: ResizeAxis::Both,
+                                        last_position,
+                                        last_bounds: panel_bounds,
+                                    };
+                                    this.update_resizing_drag(drag_data, window, cx);
+                                    if let Some((_, new_ix)) =
+                                        this.bring_to_front(this.resizing_index, cx)
+                                    {
+                                        this.resizing_index = Some(new_ix);
+                                    }
                                 }
-                                let pos = e.event.position;
-                                let delta_x = pos.x - drag_data.last_position.x;
-                                let delta_y = pos.y - drag_data.last_position.y;
-                                let new_width = (drag_data.last_bounds.size.width + delta_x)
-                                    .max(MINIMUM_SIZE.width);
-                                let new_height = (drag_data.last_bounds.size.height + delta_y)
-                                    .max(MINIMUM_SIZE.height);
-                                this.resize_height(new_height, window, cx);
-                                this.resize_width(new_width, window, cx);
-                            }
-                        }
-                    },
-                ))
+                            }),
+                        )
+                        .on_drag(DragResizing(entity_id), |drag, _, _, cx| {
+                            cx.stop_propagation();
+                            cx.new(|_| drag.clone())
+                        })
+                        .on_drag_move(cx.listener(
+                            move |this, e: &DragMoveEvent<DragResizing>, window, cx| {
+                                match e.drag(cx) {
+                                    DragResizing(id) => {
+                                        if *id != entity_id {
+                                            return;
+                                        }
+
+                                        if let Some(ref drag_data) = this.resizing_drag_data {
+                                            if drag_data.axis != ResizeAxis::Both {
+                                                return;
+                                            }
+                                            let pos = e.event.position;
+                                            let delta_x = pos.x - drag_data.last_position.x;
+                                            let delta_y = pos.y - drag_data.last_position.y;
+                                            let new_width = (drag_data.last_bounds.size.width
+                                                + delta_x)
+                                                .max(MINIMUM_SIZE.width);
+                                            let new_height = (drag_data.last_bounds.size.height
+                                                + delta_y)
+                                                .max(MINIMUM_SIZE.height);
+                                            this.resize_height(new_height, window, cx);
+                                            this.resize_width(new_width, window, cx);
+                                        }
+                                    }
+                                }
+                            },
+                        )),
+                )
                 .into_any_element()
         } else {
             div().into_any_element()
@@ -809,9 +820,8 @@ impl Tiles {
             // More 1px to account for the border width when 2 panels are too close
             .w(item.bounds.size.width + px(1.))
             .h(item.bounds.size.height + px(1.))
-            .overflow_hidden()
             .rounded(cx.theme().radius)
-            .child(h_flex().size_full().child(panel_view))
+            .child(h_flex().overflow_hidden().size_full().child(panel_view))
             .children(self.render_resize_handles(window, cx, entity_id, &item, &is_occluded))
             .child(self.render_drag_bar(window, cx, entity_id, &item, &is_occluded))
             // Here must be mouse up for avoid conflict with Drag event
