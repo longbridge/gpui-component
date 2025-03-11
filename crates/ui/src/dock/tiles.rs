@@ -133,7 +133,6 @@ pub struct Tiles {
     dragging_initial_mouse: Point<Pixels>,
     dragging_initial_bounds: Bounds<Pixels>,
     resizing_index: Option<usize>,
-    active_index: Option<usize>,
     resizing_drag_data: Option<ResizeDrag>,
     bounds: Bounds<Pixels>,
     history: History<TileChange>,
@@ -193,7 +192,6 @@ impl Tiles {
             history: History::new().group_interval(std::time::Duration::from_millis(100)),
             scroll_state: Rc::new(Cell::new(ScrollbarState::default())),
             scroll_handle: ScrollHandle::default(),
-            active_index: None,
         }
     }
 
@@ -498,11 +496,7 @@ impl Tiles {
 
     /// Returns the active panel, if any.
     pub fn active_panel(&self, cx: &App) -> Option<Arc<dyn PanelView>> {
-        let Some(active_index) = self.active_index else {
-            return None;
-        };
-
-        self.panels.get(active_index).and_then(|item| {
+        self.panels.last().and_then(|item| {
             if let Ok(tab_panel) = item.panel.view().downcast::<TabPanel>() {
                 tab_panel.read(cx).active_panel(cx)
             } else if let Ok(_) = item.panel.view().downcast::<StackPanel>() {
@@ -511,15 +505,6 @@ impl Tiles {
                 Some(item.panel.clone())
             }
         })
-    }
-
-    fn set_active_index(&mut self, index: Option<usize>, cx: &mut Context<Self>) {
-        if self.active_index == index {
-            return;
-        }
-
-        self.active_index = index;
-        cx.notify();
     }
 
     /// Produce a vector of AnyElement representing the three possible resize handles
@@ -814,6 +799,7 @@ impl Tiles {
         };
 
         v_flex()
+            .occlude()
             .bg(cx.theme().background)
             .border_1()
             .border_color(cx.theme().border)
@@ -828,10 +814,11 @@ impl Tiles {
             .child(h_flex().size_full().child(panel_view))
             .children(self.render_resize_handles(window, cx, entity_id, &item, &is_occluded))
             .child(self.render_drag_bar(window, cx, entity_id, &item, &is_occluded))
+            // Here must be mouse up for avoid conflict with Drag event
             .on_mouse_up(
                 MouseButton::Left,
                 cx.listener(move |this, _, _, cx| {
-                    this.set_active_index(Some(ix), cx);
+                    this.bring_to_front(Some(ix), cx);
                 }),
             )
     }
