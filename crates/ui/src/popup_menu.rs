@@ -87,10 +87,6 @@ impl PopupMenuItem {
     fn is_separator(&self) -> bool {
         matches!(self, PopupMenuItem::Separator)
     }
-
-    fn has_icon(&self) -> bool {
-        matches!(self, PopupMenuItem::Item { icon: Some(_), .. })
-    }
 }
 
 pub struct PopupMenu {
@@ -534,7 +530,7 @@ impl PopupMenu {
     ) -> impl IntoElement {
         let bounds = self.bounds;
         let max_width = state.max_width;
-        let has_icon = state.has_icon;
+        let has_icon = self.has_icon;
         let hovered = self.hovered_menu_ix == Some(ix);
         const EDGE_PADDING: Pixels = px(8.);
         const INNER_PADDING: Pixels = px(4.);
@@ -665,7 +661,6 @@ impl Focusable for PopupMenu {
 struct ItemState {
     max_width: Pixels,
     radius: Pixels,
-    has_icon: bool,
 }
 
 impl Render for PopupMenu {
@@ -685,7 +680,6 @@ impl Render for PopupMenu {
         let item_state = ItemState {
             max_width,
             radius: cx.theme().radius.min(px(8.)),
-            has_icon: self.menu_items.iter().any(|item| item.has_icon()),
         };
 
         v_flex()
