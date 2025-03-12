@@ -21,6 +21,7 @@ pub struct DropdownButton {
 
     // The button props
     compact: Option<bool>,
+    outline: Option<bool>,
     variant: Option<ButtonVariant>,
     size: Option<Size>,
     rounded: ButtonRounded,
@@ -35,6 +36,7 @@ impl DropdownButton {
             popup_menu: None,
 
             compact: None,
+            outline: None,
             variant: None,
             size: None,
             rounded: ButtonRounded::Medium,
@@ -61,6 +63,11 @@ impl DropdownButton {
 
     pub fn compact(mut self) -> Self {
         self.compact = Some(true);
+        self
+    }
+
+    pub fn outline(mut self) -> Self {
+        self.outline = Some(true);
         self
     }
 }
@@ -104,6 +111,7 @@ impl RenderOnce for DropdownButton {
                         bottom: true,
                     })
                     .when_some(self.compact, |this, _| this.compact())
+                    .when_some(self.outline, |this, _| this.outline())
                     .when_some(self.size, |this, size| this.with_size(size))
                     .when_some(self.variant, |this, variant| this.with_variant(variant)),
             )
@@ -125,6 +133,7 @@ impl RenderOnce for DropdownButton {
                             bottom_right: true,
                         })
                         .when_some(self.compact, |this, _| this.compact())
+                        .when_some(self.outline, |this, _| this.outline())
                         .when_some(self.size, |this, size| this.with_size(size))
                         .when_some(self.variant, |this, variant| this.with_variant(variant))
                         .popup_menu_with_anchor(Corner::TopRight, move |this, window, cx| {
