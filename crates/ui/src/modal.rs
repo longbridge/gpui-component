@@ -11,7 +11,7 @@ use rust_i18n::t;
 use crate::{
     animation::cubic_bezier,
     button::{Button, ButtonVariant, ButtonVariants as _},
-    h_flex, v_flex, ActiveTheme as _, ContextModal, IconName, Sizable as _,
+    h_flex, v_flex, ActiveTheme as _, ContextModal, IconName, Sizable as _, StyledExt,
 };
 
 actions!(modal, [Escape, Enter]);
@@ -411,7 +411,9 @@ impl RenderOnce for Modal {
                             .w(self.width)
                             .when_some(self.max_width, |this, w| this.max_w(w))
                             .when_some(self.title, |this, title| {
-                                this.child(div().line_height(relative(1.)).child(title))
+                                this.child(
+                                    div().font_semibold().line_height(relative(1.)).child(title),
+                                )
                             })
                             .when(self.show_close, |this| {
                                 this.child(

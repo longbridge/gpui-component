@@ -187,6 +187,7 @@ impl RenderOnce for Drawer {
                                     .px_4()
                                     .py_2()
                                     .w_full()
+                                    .font_semibold()
                                     .child(self.title.unwrap_or(div().into_any_element()))
                                     .child(
                                         Button::new("close")
