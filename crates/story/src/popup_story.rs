@@ -225,7 +225,7 @@ impl Render for PopupStory {
                     )
                     .child(
                         Popover::new("info-top-right")
-                            .anchor(Corner::TopRight)
+                            // .anchor(Corner::TopRight)
                             .trigger(Button::new("info-top-right").label("Top Right"))
                             .content(|window, cx| {
                                 cx.new(|cx| {
@@ -327,13 +327,13 @@ impl Render for PopupStory {
                         .justify_between()
                         .child(
                             Popover::new("info-bottom-left")
-                                .anchor(Corner::BottomLeft)
+                                // .anchor(Corner::BottomLeft)
                                 .trigger(Button::new("pop").label("Popup with Form").w(px(300.)))
                                 .content(move |_, _| form.clone()),
                         )
                         .child(
                             Popover::new("info-bottom-right")
-                                .anchor(Corner::BottomRight)
+                                // .anchor(Corner::BottomRight)
                                 .mouse_button(MouseButton::Right)
                                 .trigger(Button::new("pop").label("Mouse Right Click").w(px(300.)))
                                 .content(|window, cx| {

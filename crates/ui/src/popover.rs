@@ -1,15 +1,16 @@
 use gpui::{
-    actions, anchored, deferred, div, prelude::FluentBuilder as _, px, AnyElement, App, Bounds,
-    Context, Corner, DismissEvent, DispatchPhase, Element, ElementId, Entity, EventEmitter,
-    FocusHandle, Focusable, GlobalElementId, Hitbox, InteractiveElement as _, IntoElement,
-    KeyBinding, LayoutId, ManagedView, MouseButton, MouseDownEvent, ParentElement, Pixels, Point,
-    Render, Style, StyleRefinement, Styled, Window,
+    actions, anchored, canvas, deferred, div, prelude::FluentBuilder as _, px, AnyElement, App,
+    Axis, Bounds, Context, Corner, DismissEvent, DispatchPhase, Element, ElementId, Entity,
+    EventEmitter, FocusHandle, Focusable, GlobalElementId, Hitbox, InteractiveElement as _,
+    IntoElement, KeyBinding, LayoutId, ManagedView, MouseButton, MouseDownEvent, ParentElement,
+    Pixels, Point, Render, Style, StyleRefinement, Styled, Window,
 };
 use std::{cell::RefCell, rc::Rc};
 
 use crate::{Selectable, StyledExt as _};
 
 const CONTEXT: &str = "Popover";
+const WINDOW_EDGE_MARGIN: Pixels = px(8.);
 
 actions!(popover, [Escape]);
 
@@ -91,6 +92,22 @@ where
         }
     }
 
+    /// The anchor point of the popover relative to the trigger element.
+    ///
+    /// Default: [`Corner::TopLeft`]
+    ///
+    /// The anchor you can imagine an arrow corner of the Popover.
+    ///
+    /// For example if use [`Corner::TopRight`]
+    ///
+    /// Then the Popover will placement on trigger element's bottom left corner, like this:
+    ///
+    ///  ```
+    ///                         [Trigger Button]
+    ///   |------------------------------------|
+    ///   |    Popover with Corner::TopRight   |
+    ///   |------------------------------------|
+    /// ```
     pub fn anchor(mut self, anchor: Corner) -> Self {
         self.anchor = anchor;
         self
@@ -102,6 +119,10 @@ where
         self
     }
 
+    /// Set the trigger element of the popover.
+    ///
+    /// The Trigger must impl [`Selectable`] trait,
+    /// used for display selected state when popover is open.
     pub fn trigger<T>(mut self, trigger: T) -> Self
     where
         T: Selectable + IntoElement + 'static,
@@ -119,12 +140,12 @@ where
 
     /// Set the content of the popover.
     ///
-    /// The `content` is a closure that returns an `AnyElement`.
-    pub fn content<C>(mut self, content: C) -> Self
+    /// The `builder` is a closure that returns an `AnyElement`.
+    pub fn content<C>(mut self, builder: C) -> Self
     where
         C: Fn(&mut Window, &mut App) -> Entity<M> + 'static,
     {
-        self.content = Some(Rc::new(content));
+        self.content = Some(Rc::new(builder));
         self
     }
 
@@ -147,8 +168,56 @@ where
         (trigger)(open, window, cx)
     }
 
-    fn resolved_corner(&self, bounds: Bounds<Pixels>) -> Point<Pixels> {
-        bounds.corner(match self.anchor {
+    fn resolved_corner(
+        &self,
+        trigger_bounds: Bounds<Pixels>,
+        content_bounds: Option<Bounds<Pixels>>,
+        window: &Window,
+    ) -> Point<Pixels> {
+        let mut anchor = self.anchor;
+
+        // Switch corner based on content bounds if it overflows the window bounds.
+        if let Some(content_bounds) = content_bounds {
+            let window_size =
+                window.bounds().size - gpui::size(WINDOW_EDGE_MARGIN, WINDOW_EDGE_MARGIN);
+
+            match anchor {
+                Corner::TopLeft => {
+                    if content_bounds.right() >= window_size.width {
+                        anchor = anchor.other_side_corner_along(Axis::Horizontal);
+                    };
+                    if content_bounds.bottom() >= window_size.height {
+                        anchor = anchor.other_side_corner_along(Axis::Vertical);
+                    };
+                }
+                Corner::TopRight => {
+                    if content_bounds.left() <= WINDOW_EDGE_MARGIN {
+                        anchor = anchor.other_side_corner_along(Axis::Horizontal);
+                    };
+                    if content_bounds.bottom() >= window_size.height {
+                        anchor = anchor.other_side_corner_along(Axis::Vertical);
+                    };
+                }
+                Corner::BottomLeft => {
+                    if content_bounds.right() >= window_size.width {
+                        anchor = anchor.other_side_corner_along(Axis::Horizontal);
+                    };
+                    if content_bounds.top() <= WINDOW_EDGE_MARGIN {
+                        anchor = anchor.other_side_corner_along(Axis::Vertical);
+                    };
+                }
+                Corner::BottomRight => {
+                    if content_bounds.left() <= WINDOW_EDGE_MARGIN {
+                        anchor = anchor.other_side_corner_along(Axis::Horizontal);
+                    };
+                    if content_bounds.top() <= WINDOW_EDGE_MARGIN {
+                        anchor = anchor.other_side_corner_along(Axis::Vertical);
+                    };
+                }
+            }
+        }
+
+        trigger_bounds.corner(match anchor {
             Corner::TopLeft => Corner::BottomLeft,
             Corner::TopRight => Corner::BottomRight,
             Corner::BottomLeft => Corner::TopLeft,
@@ -193,6 +262,7 @@ pub struct PopoverElementState<M> {
     content_view: Rc<RefCell<Option<Entity<M>>>>,
     /// Trigger bounds for positioning the popover.
     trigger_bounds: Option<Bounds<Pixels>>,
+    content_bounds: Rc<RefCell<Option<Bounds<Pixels>>>>,
 }
 
 impl<M> Default for PopoverElementState<M> {
@@ -204,6 +274,7 @@ impl<M> Default for PopoverElementState<M> {
             trigger_element: None,
             content_view: Rc::new(RefCell::new(None)),
             trigger_bounds: None,
+            content_bounds: Rc::new(RefCell::new(None)),
         }
     }
 }
@@ -255,39 +326,56 @@ impl<M: ManagedView> Element for Popover<M> {
                 if let Some(content_view) = element_state.content_view.borrow_mut().as_mut() {
                     is_open = true;
 
-                    let mut anchored = anchored()
-                        .snap_to_window_with_margin(px(8.))
-                        .anchor(view.anchor);
+                    let mut anchored = anchored().anchor(view.anchor);
                     if let Some(trigger_bounds) = element_state.trigger_bounds {
-                        anchored = anchored.position(view.resolved_corner(trigger_bounds));
+                        let content_bounds = element_state.content_bounds.borrow();
+                        anchored = anchored.position(view.resolved_corner(
+                            trigger_bounds,
+                            *content_bounds,
+                            window,
+                        ));
                     }
 
                     let mut element = {
                         let content_view_mut = element_state.content_view.clone();
                         let anchor = view.anchor;
                         let no_style = view.no_style;
+                        let content_bounds = element_state.content_bounds.clone();
+
                         deferred(
-                            anchored.child(
-                                div()
-                                    .size_full()
-                                    .occlude()
-                                    .when(!no_style, |this| this.popover_style(cx))
-                                    .map(|this| match anchor {
-                                        Corner::TopLeft | Corner::TopRight => this.top_1p5(),
-                                        Corner::BottomLeft | Corner::BottomRight => {
-                                            this.bottom_1p5()
-                                        }
-                                    })
-                                    .child(content_view.clone())
-                                    .when(!no_style, |this| {
-                                        this.on_mouse_down_out(move |_, window, _| {
-                                            // Update the element_state.content_view to `None`,
-                                            // so that the `paint`` method will not paint it.
-                                            *content_view_mut.borrow_mut() = None;
-                                            window.refresh();
+                            anchored
+                                .snap_to_window_with_margin(WINDOW_EDGE_MARGIN)
+                                .child(
+                                    div()
+                                        .size_full()
+                                        .occlude()
+                                        .when(!no_style, |this| this.popover_style(cx))
+                                        .map(|this| match anchor {
+                                            Corner::TopLeft | Corner::TopRight => this.top_1p5(),
+                                            Corner::BottomLeft | Corner::BottomRight => {
+                                                this.bottom_1p5()
+                                            }
                                         })
-                                    }),
-                            ),
+                                        .child(content_view.clone())
+                                        .when(!no_style, |this| {
+                                            this.on_mouse_down_out(move |_, window, _| {
+                                                // Update the element_state.content_view to `None`,
+                                                // so that the `paint`` method will not paint it.
+                                                *content_view_mut.borrow_mut() = None;
+                                                window.refresh();
+                                            })
+                                        })
+                                        .child(
+                                            canvas(
+                                                |_, _, _| {},
+                                                move |bounds, _, _, _| {
+                                                    content_bounds.borrow_mut().replace(bounds);
+                                                },
+                                            )
+                                            .size_full()
+                                            .absolute(),
+                                        ),
+                                ),
                         )
                         .with_priority(1)
                         .into_any()
