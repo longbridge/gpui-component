@@ -19,7 +19,8 @@ pub struct ButtonGroup {
     pub(super) disabled: bool,
 
     // The button props
-    pub(super) compact: Option<bool>,
+    pub(super) compact: bool,
+    pub(super) outline: bool,
     pub(super) variant: Option<ButtonVariant>,
     pub(super) size: Option<Size>,
 
@@ -42,7 +43,8 @@ impl ButtonGroup {
             id: id.into(),
             variant: None,
             size: None,
-            compact: None,
+            compact: false,
+            outline: false,
             multiple: false,
             disabled: false,
             on_click: None,
@@ -69,7 +71,13 @@ impl ButtonGroup {
 
     /// With the compact mode for the ButtonGroup.
     pub fn compact(mut self) -> Self {
-        self.compact = Some(true);
+        self.compact = true;
+        self
+    }
+
+    /// With the outline mode for the ButtonGroup.
+    pub fn outline(mut self) -> Self {
+        self.outline = true;
         self
     }
 
@@ -193,7 +201,8 @@ impl RenderOnce for ButtonGroup {
                         .stop_propagation(false)
                         .when_some(self.size, |this, size| this.with_size(size))
                         .when_some(self.variant, |this, variant| this.with_variant(variant))
-                        .when_some(self.compact, |this, _| this.compact())
+                        .when(self.compact, |this| this.compact())
+                        .when(self.outline, |this| this.outline())
                         .on_click(move |_, _, _| {
                             state.set(Some(child_index));
                         });

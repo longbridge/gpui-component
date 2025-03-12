@@ -4,7 +4,7 @@ use gpui::{
 };
 use gpui_component::{
     accordion::Accordion,
-    button::{Button, ButtonGroup, ButtonVariants as _},
+    button::{Button, ButtonGroup},
     checkbox::Checkbox,
     h_flex,
     switch::Switch,

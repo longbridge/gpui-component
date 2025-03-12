@@ -6,7 +6,7 @@ use gpui::{
     ParentElement, Pixels, Render, ScrollHandle, SharedString, Size, Styled, Window,
 };
 use gpui_component::{
-    button::{Button, ButtonGroup, ButtonVariants as _},
+    button::{Button, ButtonGroup},
     divider::Divider,
     gray_100, gray_800, h_flex,
     label::Label,

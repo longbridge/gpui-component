@@ -4,10 +4,9 @@ use gpui::{
 };
 
 use gpui_component::{
-    black,
     button::{Button, ButtonCustomVariant, ButtonGroup, ButtonVariants as _, DropdownButton},
     checkbox::Checkbox,
-    green_500, green_600, green_800, green_900, green_950, h_flex, v_flex, white, ActiveTheme,
+    green_600, green_700, green_800, green_950, h_flex, v_flex, white, ActiveTheme,
     Disableable as _, Icon, IconName, Selectable as _, Sizable as _, Theme,
 };
 
@@ -72,6 +71,33 @@ impl Render for ButtonStory {
         let selected = self.selected;
         let compact = self.compact;
         let toggle_multiple = self.toggle_multiple;
+
+        let custom_variant = ButtonCustomVariant::new(cx)
+            .color(if cx.theme().mode.is_dark() {
+                green_800()
+            } else {
+                green_600()
+            })
+            .foreground(if cx.theme().mode.is_dark() {
+                white()
+            } else {
+                white()
+            })
+            .border(if cx.theme().mode.is_dark() {
+                green_800()
+            } else {
+                green_700()
+            })
+            .hover(if cx.theme().mode.is_dark() {
+                green_800()
+            } else {
+                green_600()
+            })
+            .active(if cx.theme().mode.is_dark() {
+                green_950()
+            } else {
+                green_700()
+            });
 
         v_flex()
             .on_action(cx.listener(|this, _: &Disabled, _, _| this.disabled = !this.disabled))
@@ -166,16 +192,6 @@ impl Render for ButtonStory {
                                     .on_click(Self::on_click),
                             )
                             .child(
-                                Button::new("button-5")
-                                    .outline()
-                                    .label("Outline Button")
-                                    .disabled(disabled)
-                                    .selected(selected)
-                                    .loading(loading)
-                                    .when(compact, |this| this.compact())
-                                    .on_click(Self::on_click),
-                            )
-                            .child(
                                 Button::new("button-5-ghost")
                                     .ghost()
                                     .label("Ghost Button")
@@ -207,34 +223,7 @@ impl Render for ButtonStory {
                             )
                             .child(
                                 Button::new("button-6-custom")
-                                    .custom(
-                                        ButtonCustomVariant::new(cx)
-                                            .color(if cx.theme().mode.is_dark() {
-                                                green_900()
-                                            } else {
-                                                green_500()
-                                            })
-                                            .foreground(if cx.theme().mode.is_dark() {
-                                                white()
-                                            } else {
-                                                black()
-                                            })
-                                            .border(if cx.theme().mode.is_dark() {
-                                                green_800()
-                                            } else {
-                                                green_600()
-                                            })
-                                            .hover(if cx.theme().mode.is_dark() {
-                                                green_800()
-                                            } else {
-                                                green_500()
-                                            })
-                                            .active(if cx.theme().mode.is_dark() {
-                                                green_950()
-                                            } else {
-                                                green_600()
-                                            }),
-                                    )
+                                    .custom(custom_variant)
                                     .label("Custom Button")
                                     .disabled(disabled)
                                     .selected(selected)
@@ -327,6 +316,87 @@ impl Render for ButtonStory {
                                     .on_click(Self::on_click),
                             ),
                     ),
+            )
+            .child(
+                h_flex().gap_6().child(
+                    section("Outline Button", cx)
+                        .child(
+                            Button::new("button-outline-1")
+                                .primary()
+                                .outline()
+                                .label("Primary Button")
+                                .disabled(disabled)
+                                .selected(selected)
+                                .loading(loading)
+                                .when(compact, |this| this.compact())
+                                .on_click(Self::on_click),
+                        )
+                        .child(
+                            Button::new("button-outline-2")
+                                .outline()
+                                .label("Secondary Button")
+                                .disabled(disabled)
+                                .selected(selected)
+                                .loading(loading)
+                                .when(compact, |this| this.compact())
+                                .on_click(Self::on_click),
+                        )
+                        .child(
+                            Button::new("button-outline-4")
+                                .danger()
+                                .outline()
+                                .label("Danger Button")
+                                .disabled(disabled)
+                                .selected(selected)
+                                .loading(loading)
+                                .when(compact, |this| this.compact())
+                                .on_click(Self::on_click),
+                        )
+                        .child(
+                            Button::new("button-outline-6-custom")
+                                .outline()
+                                .custom(custom_variant)
+                                .label("Custom Button")
+                                .disabled(disabled)
+                                .selected(selected)
+                                .loading(loading)
+                                .when(compact, |this| this.compact())
+                                .on_click(Self::on_click),
+                        )
+                        .child(
+                            Button::new("button-outline-5-ghost")
+                                .ghost()
+                                .outline()
+                                .label("Ghost Button")
+                                .disabled(disabled)
+                                .selected(selected)
+                                .loading(loading)
+                                .when(compact, |this| this.compact())
+                                .on_click(Self::on_click),
+                        )
+                        .child(
+                            Button::new("button-outline-5-link")
+                                .link()
+                                .outline()
+                                .label("Link Button")
+                                .disabled(disabled)
+                                .selected(selected)
+                                .loading(loading)
+                                .when(compact, |this| this.compact())
+                                .on_click(Self::on_click),
+                        )
+                        .child(
+                            Button::new("button-outline-5-text")
+                                .text()
+                                .outline()
+                                .label("Text Button")
+                                .disabled(disabled)
+                                .selected(selected)
+                                .loading(loading)
+                                .when(compact, |this| this.compact())
+                                .on_click(Self::on_click),
+                        ),
+                ),
             )
             .child(
                 h_flex()
