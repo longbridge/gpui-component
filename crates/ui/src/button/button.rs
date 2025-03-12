@@ -475,7 +475,7 @@ struct ButtonVariantStyle {
 impl ButtonVariant {
     fn bg_color(&self, outline: bool, cx: &mut App) -> Hsla {
         if outline {
-            return cx.theme().transparent;
+            return cx.theme().background;
         }
 
         match self {
@@ -537,11 +537,7 @@ impl ButtonVariant {
         }
     }
 
-    fn shadow(&self, outline: bool, _: &App) -> bool {
-        if outline {
-            return false;
-        }
-
+    fn shadow(&self, _outline: bool, _: &App) -> bool {
         match self {
             ButtonVariant::Primary | ButtonVariant::Secondary | ButtonVariant::Danger => true,
             ButtonVariant::Custom(c) => c.shadow,
