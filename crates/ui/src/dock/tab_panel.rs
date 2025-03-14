@@ -14,7 +14,7 @@ use crate::{
     h_flex,
     popup_menu::{PopupMenu, PopupMenuExt},
     tab::{Tab, TabBar},
-    v_flex, ActiveTheme, AxisExt, IconName, Placement, Selectable, Sizable, StyledExt as _,
+    v_flex, ActiveTheme, AxisExt, IconName, Placement, Selectable, Sizable,
 };
 
 use super::{
@@ -799,7 +799,7 @@ impl TabPanel {
                     .child(
                         active_panel
                             .view()
-                            .cached(StyleRefinement::default().v_flex().size_full()),
+                            .cached(StyleRefinement::default().absolute().size_full()),
                     ),
             )
             .when(state.droppable, |this| {

@@ -371,7 +371,7 @@ impl Render for Dock {
             return div();
         }
 
-        let cache_style = StyleRefinement::default().v_flex().size_full();
+        let cache_style = StyleRefinement::default().absolute().size_full();
 
         div()
             .relative()
