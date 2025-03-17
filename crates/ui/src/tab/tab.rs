@@ -100,7 +100,7 @@ impl TabVariant {
         };
 
         if matches!(self, TabVariant::Underline) {
-            padding_x = px(0.);
+            padding_x = padding_x / 2.;
         }
 
         Edges {

@@ -186,7 +186,7 @@ impl RenderOnce for TabBar {
                     right: gap,
                     ..Default::default()
                 };
-                (cx.theme().transparent, padding, gap * 2.)
+                (cx.theme().transparent, padding, gap)
             }
         };
 
