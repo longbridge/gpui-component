@@ -1,7 +1,7 @@
 use gpui::{
-    actions, div, prelude::FluentBuilder as _, px, App, AppContext as _, Context, Entity,
-    FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding, ParentElement as _,
-    Render, SharedString, Styled, Window,
+    actions, div, prelude::FluentBuilder as _, px, App, AppContext as _, ClickEvent, Context,
+    Entity, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding,
+    ParentElement as _, Render, SharedString, Styled, Window,
 };
 use regex::Regex;
 
@@ -335,6 +335,28 @@ impl InputStory {
             input.set_masked(self.otp_masked, window, cx)
         });
     }
+
+    fn on_insert_text_to_textarea(
+        &mut self,
+        _: &ClickEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.textarea.update(cx, |input, cx| {
+            input.insert("Hello 你好", window, cx);
+        });
+    }
+
+    fn on_replace_text_to_textarea(
+        &mut self,
+        _: &ClickEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.textarea.update(cx, |input, cx| {
+            input.replace("Hello 你好", window, cx);
+        });
+    }
 }
 
 impl FocusableCycle for InputStory {
@@ -388,7 +410,32 @@ impl Render for InputStory {
                             ),
                     )
                     .child(
-                        section("Textarea", cx).child(div().flex_1().child(self.textarea.clone())),
+                        section("Textarea", cx).child(
+                            v_flex()
+                                .gap_2()
+                                .w_full()
+                                .child(self.textarea.clone())
+                                .child(
+                                    h_flex()
+                                        .gap_2()
+                                        .child(
+                                            Button::new("btn-insert-text")
+                                                .xsmall()
+                                                .label("Insert Text")
+                                                .on_click(
+                                                    cx.listener(Self::on_insert_text_to_textarea),
+                                                ),
+                                        )
+                                        .child(
+                                            Button::new("btn-replace-text")
+                                                .xsmall()
+                                                .label("Replace Text")
+                                                .on_click(
+                                                    cx.listener(Self::on_replace_text_to_textarea),
+                                                ),
+                                        ),
+                                ),
+                        ),
                     )
                     .child(
                         section("Input State", cx)

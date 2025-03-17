@@ -474,6 +474,35 @@ impl TextInput {
         cx.notify();
     }
 
+    /// Insert text at the current cursor position.
+    ///
+    /// And the cursor will be moved to the end of inserted text.
+    pub fn insert(
+        &mut self,
+        text: impl Into<SharedString>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let text: SharedString = text.into();
+        let range = self.range_to_utf16(&(self.cursor_offset()..self.cursor_offset()));
+        self.replace_text_in_range(Some(range), &text, window, cx);
+        self.selected_range = self.selected_range.end..self.selected_range.end;
+    }
+
+    /// Replace text at the current cursor position.
+    ///
+    /// And the cursor will be moved to the end of replaced text.
+    pub fn replace(
+        &mut self,
+        text: impl Into<SharedString>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let text: SharedString = text.into();
+        self.replace_text_in_range(None, &text, window, cx);
+        self.selected_range = self.selected_range.end..self.selected_range.end;
+    }
+
     fn replace_text(
         &mut self,
         text: impl Into<SharedString>,
