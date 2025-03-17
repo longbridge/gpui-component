@@ -112,17 +112,34 @@ impl TabVariant {
 
     fn inner_margins(&self, size: Size) -> Edges<Pixels> {
         match size {
-            Size::XSmall => Edges::all(px(0.)),
+            Size::XSmall => match self {
+                TabVariant::Underline => Edges {
+                    top: px(1.),
+                    bottom: px(2.),
+                    ..Default::default()
+                },
+                _ => Edges::all(px(0.)),
+            },
             Size::Small => match self {
                 TabVariant::Underline => Edges {
+                    top: px(2.),
                     bottom: px(3.),
+                    ..Default::default()
+                },
+                _ => Edges::all(px(0.)),
+            },
+            Size::Large => match self {
+                TabVariant::Underline => Edges {
+                    top: px(5.),
+                    bottom: px(6.),
                     ..Default::default()
                 },
                 _ => Edges::all(px(0.)),
             },
             _ => match self {
                 TabVariant::Underline => Edges {
-                    bottom: px(5.),
+                    top: px(3.),
+                    bottom: px(4.),
                     ..Default::default()
                 },
                 _ => Edges::all(px(0.)),
