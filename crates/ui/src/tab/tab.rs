@@ -221,7 +221,7 @@ impl TabVariant {
             },
             TabVariant::Pill => TabStyle {
                 fg: cx.theme().secondary_foreground,
-                bg: cx.theme().secondary_hover,
+                bg: cx.theme().secondary,
                 radius: px(99.),
                 ..Default::default()
             },
@@ -237,7 +237,7 @@ impl TabVariant {
                 ..Default::default()
             },
             TabVariant::Underline => TabStyle {
-                fg: cx.theme().tab_foreground.opacity(0.75),
+                fg: cx.theme().tab_foreground,
                 bg: cx.theme().transparent,
                 radius: px(0.),
                 inner_bg: cx.theme().transparent,
