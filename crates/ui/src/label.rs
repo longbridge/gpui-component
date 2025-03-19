@@ -11,7 +11,7 @@ pub struct Label {
     base: Div,
     label: SharedString,
     chars_count: usize,
-    marked: bool,
+    masked: bool,
 }
 
 impl Label {
@@ -22,12 +22,12 @@ impl Label {
             base: div().line_height(rems(1.25)),
             label,
             chars_count,
-            marked: false,
+            masked: false,
         }
     }
 
     pub fn masked(mut self, masked: bool) -> Self {
-        self.marked = masked;
+        self.masked = masked;
         self
     }
 }
@@ -40,7 +40,7 @@ impl Styled for Label {
 
 impl RenderOnce for Label {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let text = if self.marked {
+        let text = if self.masked {
             SharedString::from(MASKED.repeat(self.chars_count))
         } else {
             self.label
