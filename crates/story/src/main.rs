@@ -172,10 +172,10 @@ impl StoryWorkspace {
         cx: &mut Context<Self>,
     ) {
         let dock_area = dock_area.clone();
-        self._save_layout_task = Some(cx.spawn_in(window, |story, mut window| async move {
+        self._save_layout_task = Some(cx.spawn_in(window, async move |story, window| {
             Timer::after(Duration::from_secs(10)).await;
 
-            _ = story.update_in(&mut window, move |this, _, cx| {
+            _ = story.update_in(window, move |this, _, cx| {
                 let dock_area = dock_area.read(cx);
                 let state = dock_area.dump(cx);
 
@@ -219,9 +219,9 @@ impl StoryWorkspace {
             );
 
             let weak_dock_area = dock_area.downgrade();
-            cx.spawn_in(window, |this, mut window| async move {
+            cx.spawn_in(window, async move |this, window| {
                 if answer.await == Ok(0) {
-                    _ = this.update_in(&mut window, |_, window, cx| {
+                    _ = this.update_in(window, |_, window, cx| {
                         Self::reset_default_layout(weak_dock_area, window, cx);
                     });
                 }
@@ -378,7 +378,7 @@ impl StoryWorkspace {
 
         let window_bounds = Bounds::centered(None, window_size, cx);
 
-        cx.spawn(|mut cx| async move {
+        cx.spawn(async move |cx| {
             let options = WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(window_bounds)),
                 #[cfg(not(target_os = "linux"))]
@@ -401,7 +401,7 @@ impl StoryWorkspace {
             })?;
 
             window
-                .update(&mut cx, |_, window, cx| {
+                .update(cx, |_, window, cx| {
                     window.activate_window();
                     window.set_window_title("GPUI App");
                     cx.on_release(|_, cx| {
@@ -476,9 +476,9 @@ pub fn open_new(
 ) -> Task<()> {
     let task: Task<std::result::Result<WindowHandle<Root>, anyhow::Error>> =
         StoryWorkspace::new_local(cx);
-    cx.spawn(|mut cx| async move {
+    cx.spawn(async move |cx| {
         if let Some(root) = task.await.ok() {
-            root.update(&mut cx, |workspace, window, cx| init(workspace, window, cx))
+            root.update(cx, |workspace, window, cx| init(workspace, window, cx))
                 .expect("failed to init workspace");
         }
     })

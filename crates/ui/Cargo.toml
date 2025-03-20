@@ -22,7 +22,7 @@ itertools = "0.13.0"
 once_cell = "1.19.0"
 paste = "1"
 regex = "1"
-resvg = { version = "0.44.0", default-features = false, features = ["text"] }
+resvg = { version = "0.45.0", default-features = false, features = ["text"] }
 rust-embed.workspace = true
 rust-i18n = "3"
 serde = "1.0.203"
@@ -30,7 +30,7 @@ serde_json = "1"
 smallvec = "1.13.2"
 smol = "1"
 unicode-segmentation = "1.12.0"
-usvg = { version = "0.44.0", default-features = false, features = ["text"] }
+usvg = { version = "0.45.0", default-features = false, features = ["text"] }
 uuid = "1.10"
 wry = { version = "0.48.0", optional = true }
 # Markdown Parser

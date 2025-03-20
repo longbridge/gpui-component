@@ -759,8 +759,8 @@ where
                 return;
             }
 
-            self._load_more_task = cx.spawn_in(window, |view, mut window| async move {
-                _ = view.update_in(&mut window, |view, window, cx| {
+            self._load_more_task = cx.spawn_in(window, async move |view, window| {
+                _ = view.update_in(window, |view, window, cx| {
                     view.delegate.load_more(window, cx);
                 });
             });

@@ -131,7 +131,7 @@ impl Element for Clipboard {
                                 *copied.borrow_mut() = true;
 
                                 let copied = copied.clone();
-                                cx.spawn(|cx| async move {
+                                cx.spawn(async move |cx| {
                                     cx.background_executor().timer(Duration::from_secs(2)).await;
 
                                     *copied.borrow_mut() = false;

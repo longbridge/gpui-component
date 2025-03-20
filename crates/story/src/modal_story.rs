@@ -47,12 +47,12 @@ impl ListDelegate for ListItemDeletegate {
         cx: &mut Context<List<Self>>,
     ) -> Task<()> {
         let query = query.to_string();
-        cx.spawn(move |this, mut cx| async move {
+        cx.spawn(async move |this, cx| {
             // Simulate a slow search.
             let sleep = (0.05..0.1).fake();
             Timer::after(Duration::from_secs_f64(sleep)).await;
 
-            this.update(&mut cx, |this, cx| {
+            this.update(cx, |this, cx| {
                 this.delegate_mut().matches = this
                     .delegate()
                     .items

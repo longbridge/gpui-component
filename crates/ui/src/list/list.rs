@@ -331,10 +331,10 @@ where
                 self.set_querying(true, window, cx);
                 let search = self.delegate.perform_search(&text, window, cx);
 
-                self._search_task = cx.spawn_in(window, |this, mut window| async move {
+                self._search_task = cx.spawn_in(window, async move |this, window| {
                     search.await;
 
-                    _ = this.update_in(&mut window, |this, _, _| {
+                    _ = this.update_in(window, |this, _, _| {
                         this.vertical_scroll_handle
                             .scroll_to_item(0, ScrollStrategy::Top);
                         this.last_query = Some(text);
@@ -342,7 +342,7 @@ where
 
                     // Always wait 100ms to avoid flicker
                     Timer::after(Duration::from_millis(100)).await;
-                    _ = this.update_in(&mut window, |this, window, cx| {
+                    _ = this.update_in(window, |this, window, cx| {
                         this.set_querying(false, window, cx);
                     });
                 });
@@ -375,8 +375,8 @@ where
                 return;
             }
 
-            self._load_more_task = cx.spawn_in(window, |view, mut cx| async move {
-                _ = view.update_in(&mut cx, |view, window, cx| {
+            self._load_more_task = cx.spawn_in(window, async move |view, cx| {
+                _ = view.update_in(cx, |view, window, cx| {
                     view.delegate.load_more(window, cx);
                 });
             });

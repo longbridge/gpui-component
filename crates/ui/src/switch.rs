@@ -169,7 +169,7 @@ impl Element for Switch {
                                                     .map_or(false, |prev| prev != checked)
                                             {
                                                 let dur = Duration::from_secs_f64(0.15);
-                                                cx.spawn(|cx| async move {
+                                                cx.spawn(async move |cx| {
                                                     cx.background_executor().timer(dur).await;
 
                                                     *prev_checked.borrow_mut() = Some(checked);

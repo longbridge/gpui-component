@@ -216,11 +216,11 @@ impl ListDelegate for CompanyListDelegate {
     }
 
     fn load_more(&mut self, window: &mut Window, cx: &mut Context<List<Self>>) {
-        cx.spawn_in(window, |view, mut window| async move {
+        cx.spawn_in(window, async move |view, window| {
             // Simulate network request, delay 1s to load data.
             Timer::after(Duration::from_secs(1)).await;
 
-            _ = view.update_in(&mut window, move |view, window, cx| {
+            _ = view.update_in(window, move |view, window, cx| {
                 let query = view.delegate().query.clone();
                 view.delegate_mut()
                     .companies
@@ -304,8 +304,8 @@ impl ListStory {
             ];
 
         // Spawn a background to random refresh the list
-        cx.spawn(move |this, mut cx| async move {
-            this.update(&mut cx, |this, cx| {
+        cx.spawn(async move |this, cx| {
+            this.update(cx, |this, cx| {
                 this.company_list.update(cx, |picker, _| {
                     picker
                         .delegate_mut()

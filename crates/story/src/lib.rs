@@ -124,7 +124,7 @@ where
     let window_bounds = Bounds::centered(None, window_size, cx);
     let title = SharedString::from(title.to_string());
 
-    cx.spawn(|mut cx| async move {
+    cx.spawn(async move |cx| {
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(window_bounds)),
             titlebar: Some(TitleBar::title_bar_options()),
@@ -149,7 +149,7 @@ where
             .expect("failed to open window");
 
         window
-            .update(&mut cx, |_, window, _| {
+            .update(cx, |_, window, _| {
                 window.activate_window();
                 window.set_window_title(&title);
             })

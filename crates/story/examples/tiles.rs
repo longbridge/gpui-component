@@ -217,7 +217,7 @@ impl StoryTiles {
         cx: &mut Context<Self>,
     ) {
         let dock_area = dock_area.clone();
-        self._save_layout_task = Some(cx.spawn(|this, cx| async move {
+        self._save_layout_task = Some(cx.spawn(async move |this, cx| {
             Timer::after(Duration::from_secs(10)).await;
 
             let _ = cx.update(|cx| {
@@ -266,9 +266,9 @@ impl StoryTiles {
             );
 
             let weak_dock_area = dock_area.downgrade();
-            cx.spawn_in(window, |this, mut window| async move {
+            cx.spawn_in(window, async move |this, window| {
                 if answer.await == Ok(0) {
-                    _ = this.update_in(&mut window, |_, window, cx| {
+                    _ = this.update_in(window, |_, window, cx| {
                         Self::reset_default_layout(weak_dock_area, window, cx);
                     });
                 }
@@ -344,7 +344,7 @@ impl StoryTiles {
         }
         let window_bounds = Bounds::centered(None, window_size, cx);
 
-        cx.spawn(|mut cx| async move {
+        cx.spawn(async move |cx| {
             let options = WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(window_bounds)),
                 titlebar: Some(TitlebarOptions {
@@ -370,7 +370,7 @@ impl StoryTiles {
             })?;
 
             window
-                .update(&mut cx, |_, window, _| {
+                .update(cx, |_, window, _| {
                     window.activate_window();
                     window.set_window_title("Story Tiles");
                 })
@@ -387,9 +387,9 @@ pub fn open_new(
 ) -> Task<()> {
     let task: Task<std::result::Result<WindowHandle<Root>, anyhow::Error>> =
         StoryTiles::new_local(cx);
-    cx.spawn(|mut cx| async move {
+    cx.spawn(async move |cx| {
         if let Some(root) = task.await.ok() {
-            root.update(&mut cx, |workspace, window, cx| init(workspace, window, cx))
+            root.update(cx, |workspace, window, cx| init(workspace, window, cx))
                 .expect("failed to init workspace");
         }
     })

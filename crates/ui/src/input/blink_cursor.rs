@@ -51,10 +51,10 @@ impl BlinkCursor {
 
         // Schedule the next blink
         let epoch = self.next_epoch();
-        cx.spawn(|this, mut cx| async move {
+        cx.spawn(async move |this, cx| {
             Timer::after(INTERVAL).await;
             if let Some(this) = this.upgrade() {
-                this.update(&mut cx, |this, cx| this.blink(epoch, cx)).ok();
+                this.update(cx, |this, cx| this.blink(epoch, cx)).ok();
             }
         })
         .detach();
@@ -72,11 +72,11 @@ impl BlinkCursor {
 
         // delay 500ms to start the blinking
         let epoch = self.next_epoch();
-        cx.spawn(|this, mut cx| async move {
+        cx.spawn(async move |this, cx| {
             Timer::after(PAUSE_DELAY).await;
 
             if let Some(this) = this.upgrade() {
-                this.update(&mut cx, |this, cx| {
+                this.update(cx, |this, cx| {
                     this.paused = false;
                     this.blink(epoch, cx);
                 })

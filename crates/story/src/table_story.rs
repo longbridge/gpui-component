@@ -524,7 +524,7 @@ impl TableDelegate for StockTableDelegate {
     fn load_more(&mut self, _: &mut Window, cx: &mut Context<Table<Self>>) {
         self.loading = true;
 
-        cx.spawn(|view, cx| async move {
+        cx.spawn(async move |view, cx| {
             // Simulate network request, delay 1s to load data.
             Timer::after(Duration::from_secs(1)).await;
 
@@ -614,11 +614,11 @@ impl TableStory {
             .detach();
 
         // Spawn a background to random refresh the list
-        cx.spawn(move |this, mut cx| async move {
+        cx.spawn(async move |this, cx| {
             loop {
                 Timer::after(time::Duration::from_millis(33)).await;
 
-                this.update(&mut cx, |this, cx| {
+                this.update(cx, |this, cx| {
                     if !this.refresh_data {
                         return;
                     }
