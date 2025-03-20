@@ -2,9 +2,9 @@ use std::rc::Rc;
 
 use crate::{h_flex, text::Text, v_flex, ActiveTheme, AxisExt, IconName};
 use gpui::{
-    div, prelude::FluentBuilder, relative, svg, App, Axis, Div, ElementId, InteractiveElement,
-    IntoElement, ParentElement, RenderOnce, SharedString, StatefulInteractiveElement,
-    StyleRefinement, Styled, Window,
+    div, prelude::FluentBuilder, relative, svg, AnyElement, App, Axis, Div, ElementId,
+    InteractiveElement, IntoElement, ParentElement, RenderOnce, SharedString,
+    StatefulInteractiveElement, StyleRefinement, Styled, Window,
 };
 
 /// A Radio element.
@@ -15,6 +15,7 @@ pub struct Radio {
     base: Div,
     id: ElementId,
     label: Option<Text>,
+    children: Vec<AnyElement>,
     checked: bool,
     disabled: bool,
     on_click: Option<Box<dyn Fn(&bool, &mut Window, &mut App) + 'static>>,
@@ -26,6 +27,7 @@ impl Radio {
             id: id.into(),
             base: div(),
             label: None,
+            children: Vec::new(),
             checked: false,
             disabled: false,
             on_click: None,
@@ -56,6 +58,12 @@ impl Radio {
 impl Styled for Radio {
     fn style(&mut self) -> &mut gpui::StyleRefinement {
         self.base.style()
+    }
+}
+
+impl ParentElement for Radio {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(elements);
     }
 }
 
@@ -100,15 +108,22 @@ impl RenderOnce for Radio {
                                 }),
                         ),
                 )
-                .when_some(self.label, |this, label| {
-                    this.child(
-                        div()
-                            .size_full()
-                            .overflow_hidden()
-                            .line_height(relative(1.))
-                            .child(label),
-                    )
-                })
+                .child(
+                    v_flex()
+                        .w_full()
+                        .line_height(relative(1.2))
+                        .gap_1()
+                        .when_some(self.label, |this, label| {
+                            this.child(
+                                div()
+                                    .size_full()
+                                    .overflow_hidden()
+                                    .line_height(relative(1.))
+                                    .child(label),
+                            )
+                        })
+                        .children(self.children),
+                )
                 .when_some(
                     self.on_click.filter(|_| !self.disabled),
                     |this, on_click| {

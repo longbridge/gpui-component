@@ -1,5 +1,5 @@
 use gpui::{
-    px, App, AppContext, Context, Div, Entity, Focusable, IntoElement, ParentElement, Render,
+    div, px, App, AppContext, Context, Div, Entity, Focusable, IntoElement, ParentElement, Render,
     SharedString, Styled, Window,
 };
 
@@ -205,20 +205,27 @@ impl Render for SwitchStory {
                                         v.check3 = !v.check3;
                                     })),
                             )
-                            .child(Checkbox::new("longlong-checkbox").w(px(300.)).label(
-                                "The long long label text, \
-                                 it should wrap when the text is too long.",
-                            ))
+                            .child(
+                                Checkbox::new("longlong-checkbox")
+                                    .w(px(300.))
+                                    .label("The long long label text.")
+                                    .child(div().text_color(cx.theme().muted_foreground).child(
+                                        "This is a long long label text that \
+                                        should wrap when the text is too long.",
+                                    )),
+                            )
                             .child(
                                 Checkbox::new("longlong-markdown-checkbox")
                                     .w(px(300.))
-                                    .label(
+                                    .label("Label with description")
+                                    .child(div().text_color(cx.theme().muted_foreground).child(
                                         TextView::markdown(
                                             "longlong-markdown-checkbox",
-                                            "The [long long label](https://github.com) text used markdown, \
-                                             it should wrap when the text is too long.",
-                                        )
-                                    ),
+                                            "The [long long label](https://github.com) \
+                                            text used markdown, \
+                                            it should wrap when the text is too long.",
+                                        ),
+                                    )),
                             ),
                     ),
                 )
@@ -269,9 +276,11 @@ impl Render for SwitchStory {
                             )
                             .child(
                                 Radio::new("radio3")
-                                    .label(
-                                        "The long long label text, \
-                                         it should wrap when the text is too long.",
+                                    .label("The long long label text.")
+                                    .child(
+                                        div().text_color(cx.theme().muted_foreground).child(
+                                            "This line should wrap when the text is too long.",
+                                        ),
                                     )
                                     .w(px(300.))
                                     .checked(true)

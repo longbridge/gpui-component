@@ -1,7 +1,8 @@
 use crate::{h_flex, text::Text, v_flex, ActiveTheme, Disableable, IconName, Selectable};
 use gpui::{
-    div, prelude::FluentBuilder as _, px, relative, svg, App, Div, ElementId, InteractiveElement,
-    IntoElement, ParentElement, RenderOnce, StatefulInteractiveElement as _, Styled, Window,
+    div, prelude::FluentBuilder as _, px, relative, svg, AnyElement, App, Div, ElementId,
+    InteractiveElement, IntoElement, ParentElement, RenderOnce, StatefulInteractiveElement as _,
+    Styled, Window,
 };
 
 /// A Checkbox element.
@@ -10,6 +11,7 @@ pub struct Checkbox {
     id: ElementId,
     base: Div,
     label: Option<Text>,
+    children: Vec<AnyElement>,
     checked: bool,
     disabled: bool,
     on_click: Option<Box<dyn Fn(&bool, &mut Window, &mut App) + 'static>>,
@@ -21,6 +23,7 @@ impl Checkbox {
             id: id.into(),
             base: div(),
             label: None,
+            children: Vec::new(),
             checked: false,
             disabled: false,
             on_click: None,
@@ -63,6 +66,12 @@ impl Selectable for Checkbox {
 
     fn selected(self, selected: bool) -> Self {
         self.checked(selected)
+    }
+}
+
+impl ParentElement for Checkbox {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(elements);
     }
 }
 
@@ -110,13 +119,26 @@ impl RenderOnce for Checkbox {
                                 }),
                         ),
                 )
-                .map(|this| {
-                    if let Some(label) = self.label {
-                        this.child(div().size_full().line_height(relative(1.)).child(label))
-                    } else {
-                        this
-                    }
-                })
+                .child(
+                    v_flex()
+                        .w_full()
+                        .line_height(relative(1.2))
+                        .gap_1()
+                        .map(|this| {
+                            if let Some(label) = self.label {
+                                this.child(
+                                    div()
+                                        .size_full()
+                                        .text_color(cx.theme().foreground)
+                                        .line_height(relative(1.))
+                                        .child(label),
+                                )
+                            } else {
+                                this
+                            }
+                        })
+                        .children(self.children),
+                )
                 .when(self.disabled, |this| {
                     this.cursor_not_allowed()
                         .text_color(cx.theme().muted_foreground)
