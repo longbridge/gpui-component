@@ -704,8 +704,8 @@ impl DockArea {
         }
     }
 
-    /// Show or hide the toggle button.
-    pub fn show_toggle_button(&mut self, visible: bool) {
+    /// Set the visibility of the toggle button.
+    pub fn set_toggle_button_visible(&mut self, visible: bool, _: &mut Context<Self>) {
         self.toggle_button_visible = visible;
     }
 

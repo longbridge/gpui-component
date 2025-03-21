@@ -485,8 +485,8 @@ impl StoryWorkspace {
     ) {
         self.toggle_button_visible = !self.toggle_button_visible;
 
-        self.dock_area.update(cx, |dock_area, _| {
-            dock_area.show_toggle_button(self.toggle_button_visible);
+        self.dock_area.update(cx, |dock_area, cx| {
+            dock_area.set_toggle_button_visible(self.toggle_button_visible, cx);
         });
     }
 }

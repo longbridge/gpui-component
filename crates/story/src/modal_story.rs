@@ -576,14 +576,14 @@ impl Render for ModalStory {
                                     })),
                             )
                             .child(
-                                Button::new("show-drawer")
+                                Button::new("show-drawer-right")
                                     .label("Right Drawer...")
                                     .on_click(cx.listener(|this, _, window, cx| {
                                         this.open_drawer_at(Placement::Right, window, cx)
                                     })),
                             )
                             .child(
-                                Button::new("show-drawer")
+                                Button::new("show-drawer-bottom")
                                     .label("Bottom Drawer...")
                                     .on_click(cx.listener(|this, _, window, cx| {
                                         this.open_drawer_at(Placement::Bottom, window, cx)
