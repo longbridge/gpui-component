@@ -51,6 +51,8 @@ pub struct DockArea {
     /// The entity_id of the [`TabPanel`](TabPanel) where each toggle button should be displayed,
     toggle_button_panels: Edges<Option<EntityId>>,
 
+    /// Whether to show the toggle button.
+    toggle_button_visible: bool,
     /// The left dock of the dock_area.
     left_dock: Option<Entity<Dock>>,
     /// The bottom dock of the dock_area.
@@ -456,6 +458,7 @@ impl DockArea {
             items: dock_item,
             zoom_view: None,
             toggle_button_panels: Edges::default(),
+            toggle_button_visible: true,
             left_dock: None,
             right_dock: None,
             bottom_dock: None,
@@ -680,6 +683,7 @@ impl DockArea {
         }
     }
 
+    /// Toggle the dock at the given placement.
     pub fn toggle_dock(
         &self,
         placement: DockPlacement,
@@ -698,6 +702,11 @@ impl DockArea {
                 view.toggle_open(window, cx);
             })
         }
+    }
+
+    /// Show or hide the toggle button.
+    pub fn show_toggle_button(&mut self, visible: bool) {
+        self.toggle_button_visible = visible;
     }
 
     /// Add a panel item to the dock area at the given placement.

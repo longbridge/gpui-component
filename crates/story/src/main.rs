@@ -22,6 +22,7 @@ pub struct AddPanel(DockPlacement);
 pub struct TogglePanelVisible(SharedString);
 
 impl_internal_actions!(story, [AddPanel, TogglePanelVisible]);
+actions!(story, [ToggleDockToggleButton]);
 
 const MAIN_DOCK_AREA: DockAreaTab = DockAreaTab {
     id: "main-dock",
@@ -41,6 +42,7 @@ pub struct StoryWorkspace {
     title_bar: Entity<AppTitleBar>,
     dock_area: Entity<DockArea>,
     last_layout_state: Option<DockAreaState>,
+    toggle_button_visible: bool,
     _save_layout_task: Option<Task<()>>,
 }
 
@@ -122,6 +124,11 @@ impl StoryWorkspace {
                                     Box::new(AddPanel(DockPlacement::Bottom)),
                                 )
                                 .separator()
+                                .menu(
+                                    "Show / Hide Dock Toggle Button",
+                                    Box::new(ToggleDockToggleButton),
+                                )
+                                .separator()
                                 .menu_with_check(
                                     "Sidebar",
                                     !invisible_panels
@@ -133,7 +140,7 @@ impl StoryWorkspace {
                                     "Modal",
                                     !invisible_panels
                                         .read(cx)
-                                        .contains(&SharedString::from("SidebModalar")),
+                                        .contains(&SharedString::from("Modal")),
                                     Box::new(TogglePanelVisible(SharedString::from("Modal"))),
                                 )
                                 .menu_with_check(
@@ -161,6 +168,7 @@ impl StoryWorkspace {
             dock_area,
             title_bar,
             last_layout_state: None,
+            toggle_button_visible: true,
             _save_layout_task: None,
         }
     }
@@ -468,6 +476,19 @@ impl StoryWorkspace {
         });
         cx.notify();
     }
+
+    fn on_action_toggle_dock_toggle_button(
+        &mut self,
+        _: &ToggleDockToggleButton,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.toggle_button_visible = !self.toggle_button_visible;
+
+        self.dock_area.update(cx, |dock_area, _| {
+            dock_area.show_toggle_button(self.toggle_button_visible);
+        });
+    }
 }
 
 pub fn open_new(
@@ -494,6 +515,7 @@ impl Render for StoryWorkspace {
             .id("story-workspace")
             .on_action(cx.listener(Self::on_action_add_panel))
             .on_action(cx.listener(Self::on_action_toggle_panel_visible))
+            .on_action(cx.listener(Self::on_action_toggle_dock_toggle_button))
             .relative()
             .size_full()
             .flex()

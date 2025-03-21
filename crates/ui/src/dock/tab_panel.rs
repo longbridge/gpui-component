@@ -492,6 +492,9 @@ impl TabPanel {
         }
 
         let dock_area = self.dock_area.upgrade()?.read(cx);
+        if !dock_area.toggle_button_visible {
+            return None;
+        }
         if !dock_area.is_dock_collapsible(placement, cx) {
             return None;
         }
