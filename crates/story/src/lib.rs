@@ -36,7 +36,7 @@ pub use toggle_story::ToggleStory;
 use gpui::{
     actions, div, impl_internal_actions, prelude::FluentBuilder as _, px, size, AnyElement,
     AnyView, App, AppContext, Bounds, Context, Div, Entity, EventEmitter, Focusable, Global, Hsla,
-    InteractiveElement, IntoElement, ParentElement, Render, SharedString,
+    InteractiveElement, IntoElement, KeyBinding, ParentElement, Render, SharedString,
     StatefulInteractiveElement, Styled as _, Window, WindowBounds, WindowKind, WindowOptions,
 };
 pub use icon_story::IconStory;
@@ -86,7 +86,7 @@ impl_internal_actions!(
     [SelectLocale, SelectFont, SelectRadius, SelectScrollbarShow]
 );
 
-actions!(story, [Quit, Open, CloseWindow]);
+actions!(story, [Quit, Open, CloseWindow, ToggleSearch]);
 
 const PANEL_NAME: &str = "StoryContainer";
 
@@ -144,6 +144,7 @@ where
             .open_window(options, |window, cx| {
                 let view = crate_view_fn(window, cx);
                 let root = cx.new(|cx| StoryRoot::new(title.clone(), view, window, cx));
+
                 cx.new(|cx| Root::new(root.into(), window, cx))
             })
             .expect("failed to open window");
@@ -213,6 +214,8 @@ pub fn init(cx: &mut App) {
         reqwest_client::ReqwestClient::user_agent("gpui-component/story").unwrap(),
     );
     cx.set_http_client(http_client);
+
+    cx.bind_keys([KeyBinding::new("/", ToggleSearch, None)]);
 
     register_panel(cx, PANEL_NAME, |_, _, info, window, cx| {
         let story_state = match info {
@@ -372,6 +375,22 @@ impl StoryContainer {
             .id::<Info>();
         window.push_notification(note, cx);
     }
+
+    fn on_action_toggle_search(
+        &mut self,
+        _: &ToggleSearch,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        cx.propagate();
+
+        println!("------------- {:?}", window.focused(cx));
+
+        struct Search;
+        let note =
+            Notification::new(format!("You have toggled search on: {}", self.name)).id::<Search>();
+        window.push_notification(note, cx);
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -527,6 +546,7 @@ impl Render for StoryContainer {
             .overflow_y_scroll()
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::on_action_panel_info))
+            .on_action(cx.listener(Self::on_action_toggle_search))
             .when(self.description.len() > 0, |this| {
                 this.child(
                     div()

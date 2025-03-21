@@ -1392,13 +1392,8 @@ impl TextInput {
         });
     }
 
-    fn on_key_down_for_blink_cursor(
-        &mut self,
-        _: &KeyDownEvent,
-        _: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.pause_blink_cursor(cx)
+    fn on_key_down(&mut self, _: &KeyDownEvent, _: &mut Window, cx: &mut Context<Self>) {
+        self.pause_blink_cursor(cx);
     }
 
     pub(super) fn on_drag_move(
@@ -1692,7 +1687,7 @@ impl Render for TextInput {
             .on_action(cx.listener(Self::undo))
             .on_action(cx.listener(Self::redo))
             .on_action(cx.listener(Self::redo))
-            .on_key_down(cx.listener(Self::on_key_down_for_blink_cursor))
+            .on_key_down(cx.listener(Self::on_key_down))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_scroll_wheel(cx.listener(Self::on_scroll_wheel))

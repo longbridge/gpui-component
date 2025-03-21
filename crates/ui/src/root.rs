@@ -1,5 +1,6 @@
 use crate::{
     drawer::Drawer,
+    input::TextInput,
     modal::Modal,
     notification::{Notification, NotificationList},
     window_border, ActiveTheme, Placement,
@@ -47,6 +48,11 @@ pub trait ContextModal: Sized {
     fn clear_notifications(&mut self, cx: &mut App);
     /// Returns number of notifications.
     fn notifications(&mut self, cx: &mut App) -> Rc<Vec<Entity<Notification>>>;
+
+    /// Return current focused Input entity.
+    fn focused_input(&mut self, cx: &mut App) -> Option<Entity<TextInput>>;
+    /// Returns true if there is a focused Input entity.
+    fn has_focused_input(&mut self, cx: &mut App) -> bool;
 }
 
 impl ContextModal for Window {
@@ -160,6 +166,14 @@ impl ContextModal for Window {
         let entity = Root::read(self, cx).notification.clone();
         Rc::new(entity.read(cx).notifications())
     }
+
+    fn has_focused_input(&mut self, cx: &mut App) -> bool {
+        Root::read(self, cx).focused_input.is_some()
+    }
+
+    fn focused_input(&mut self, cx: &mut App) -> Option<Entity<TextInput>> {
+        Root::read(self, cx).focused_input.clone()
+    }
 }
 
 // impl<V> ContextModal for Context<'_, V> {
@@ -228,6 +242,7 @@ pub struct Root {
     previous_focus_handle: Option<FocusHandle>,
     active_drawer: Option<ActiveDrawer>,
     active_modals: Vec<ActiveModal>,
+    pub(super) focused_input: Option<Entity<TextInput>>,
     pub notification: Entity<NotificationList>,
     drawer_size: Option<DefiniteLength>,
     view: AnyView,
@@ -252,6 +267,7 @@ impl Root {
             previous_focus_handle: None,
             active_drawer: None,
             active_modals: Vec::new(),
+            focused_input: None,
             notification: cx.new(|cx| NotificationList::new(window, cx)),
             drawer_size: None,
             view,
