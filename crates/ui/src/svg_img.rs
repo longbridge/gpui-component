@@ -68,10 +68,10 @@ impl Clone for SvgImg {
     }
 }
 
-enum Image {}
+pub enum Image {}
 
 #[derive(Debug, Clone)]
-struct ImageSource {
+pub struct ImageSource {
     source: SvgSource,
     size: Size<Pixels>,
 }
@@ -152,7 +152,7 @@ impl Asset for Image {
 
 pub struct SvgImg {
     interactivity: Interactivity,
-    source: Option<SvgSource>,
+    source: Option<ImageSource>,
     size: Size<Pixels>,
 }
 
@@ -178,9 +178,17 @@ impl SvgImg {
         width: impl Into<Pixels>,
         height: impl Into<Pixels>,
     ) -> Self {
-        self.source = Some(source.into());
-        self.size = size(width.into(), height.into());
+        let size = size(width.into(), height.into());
+        self.size = size;
+        self.source = Some(ImageSource {
+            source: source.into(),
+            size,
+        });
         self
+    }
+
+    pub fn get_source(&self) -> Option<&ImageSource> {
+        self.source.as_ref()
     }
 }
 
@@ -213,9 +221,8 @@ impl Element for SvgImg {
                 });
 
         let source = self.source.clone();
-        let size = self.size;
         let data = if let Some(source) = source {
-            match window.use_asset::<Image>(&ImageSource { source, size }, cx) {
+            match window.use_asset::<Image>(&source, cx) {
                 Some(Ok(data)) => Some(data),
                 _ => None,
             }
