@@ -383,8 +383,9 @@ impl StoryContainer {
         cx: &mut Context<Self>,
     ) {
         cx.propagate();
-
-        println!("------------- {:?}", window.focused(cx));
+        if window.has_focused_input(cx) {
+            return;
+        }
 
         struct Search;
         let note =
