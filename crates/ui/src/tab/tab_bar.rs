@@ -6,8 +6,8 @@ use crate::{h_flex, ActiveTheme, IconName, Selectable, Sizable, Size, StyledExt}
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     div, impl_internal_actions, AnyElement, App, Corner, Div, Edges, ElementId, IntoElement,
-    ParentElement, RenderOnce, ScrollHandle, Stateful, StatefulInteractiveElement as _, Styled,
-    Window,
+    ParentElement, RenderOnce, ScrollHandle, Stateful, StatefulInteractiveElement as _,
+    StyleRefinement, Styled, Window,
 };
 use gpui::{px, InteractiveElement};
 use smallvec::SmallVec;
@@ -141,7 +141,7 @@ impl TabBar {
 }
 
 impl Styled for TabBar {
-    fn style(&mut self) -> &mut gpui::StyleRefinement {
+    fn style(&mut self) -> &mut StyleRefinement {
         self.base.style()
     }
 }
