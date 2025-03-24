@@ -140,8 +140,8 @@ impl DescriptionList {
     /// Set the width of the label, only works for horizontal layout.
     ///
     /// Default is `120px`.
-    pub fn label_width(mut self, label_width: DefiniteLength) -> Self {
-        self.label_width = label_width;
+    pub fn label_width(mut self, label_width: impl Into<DefiniteLength>) -> Self {
+        self.label_width = label_width.into();
         self
     }
 
