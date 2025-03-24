@@ -12,6 +12,7 @@ mod virtual_list;
 mod window_border;
 
 pub mod accordion;
+pub mod alert;
 pub mod animation;
 pub mod badge;
 pub mod breadcrumb;
