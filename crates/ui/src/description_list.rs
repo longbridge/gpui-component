@@ -289,7 +289,7 @@ impl RenderOnce for DescriptionList {
                                     let el = if self.layout.is_vertical() {
                                         v_flex()
                                     } else {
-                                        h_flex().h_full()
+                                        div().flex().flex_row().h_full()
                                     };
 
                                     el.flex_1()

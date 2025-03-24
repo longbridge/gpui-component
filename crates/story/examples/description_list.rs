@@ -52,7 +52,7 @@ impl Example {
                 1,
             ),
             (
-                "Platform",
+                "This is a long label for Platform",
                 "macOS, Windows, Linux",
                 1,
             ),
