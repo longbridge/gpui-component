@@ -279,37 +279,42 @@ impl Render for FontSizeSelector {
                     .ghost()
                     .icon(IconName::Settings2)
                     .popup_menu(move |this, _, _| {
-                        this.menu_with_check(
-                            "Font Large",
-                            font_size == 18,
-                            Box::new(SelectFont(18)),
-                        )
-                        .menu_with_check("Font Default", font_size == 16, Box::new(SelectFont(16)))
-                        .menu_with_check("Font Small", font_size == 14, Box::new(SelectFont(14)))
-                        .separator()
-                        .menu_with_check("Radius 8px", radius == 8, Box::new(SelectRadius(8)))
-                        .menu_with_check(
-                            "Radius 4px (default)",
-                            radius == 4,
-                            Box::new(SelectRadius(4)),
-                        )
-                        .menu_with_check("Radius 0px", radius == 0, Box::new(SelectRadius(0)))
-                        .separator()
-                        .menu_with_check(
-                            "Scrolling to show Scrollbar",
-                            scroll_show == ScrollbarShow::Scrolling,
-                            Box::new(SelectScrollbarShow(ScrollbarShow::Scrolling)),
-                        )
-                        .menu_with_check(
-                            "Hover to show Scrollbar",
-                            scroll_show == ScrollbarShow::Hover,
-                            Box::new(SelectScrollbarShow(ScrollbarShow::Hover)),
-                        )
-                        .menu_with_check(
-                            "Always show Scrollbar",
-                            scroll_show == ScrollbarShow::Always,
-                            Box::new(SelectScrollbarShow(ScrollbarShow::Always)),
-                        )
+                        this.scrollable()
+                            .max_h(px(480.))
+                            .label("Font Size")
+                            .menu_with_check("Large", font_size == 18, Box::new(SelectFont(18)))
+                            .menu_with_check(
+                                "Medium (default)",
+                                font_size == 16,
+                                Box::new(SelectFont(16)),
+                            )
+                            .menu_with_check("Small", font_size == 14, Box::new(SelectFont(14)))
+                            .separator()
+                            .label("Border Radius")
+                            .menu_with_check("8px", radius == 8, Box::new(SelectRadius(8)))
+                            .menu_with_check(
+                                "4px (default)",
+                                radius == 4,
+                                Box::new(SelectRadius(4)),
+                            )
+                            .menu_with_check("0px", radius == 0, Box::new(SelectRadius(0)))
+                            .separator()
+                            .label("Scrollbar")
+                            .menu_with_check(
+                                "Scrolling to show",
+                                scroll_show == ScrollbarShow::Scrolling,
+                                Box::new(SelectScrollbarShow(ScrollbarShow::Scrolling)),
+                            )
+                            .menu_with_check(
+                                "Hover to show",
+                                scroll_show == ScrollbarShow::Hover,
+                                Box::new(SelectScrollbarShow(ScrollbarShow::Hover)),
+                            )
+                            .menu_with_check(
+                                "Always show",
+                                scroll_show == ScrollbarShow::Always,
+                                Box::new(SelectScrollbarShow(ScrollbarShow::Always)),
+                            )
                     })
                     .anchor(Corner::TopRight),
             )
