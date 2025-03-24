@@ -510,7 +510,6 @@ impl Calendar {
 
     fn render_day(
         &self,
-        ix: usize,
         d: &NaiveDate,
         offset_month: usize,
         window: &mut Window,
@@ -530,7 +529,7 @@ impl Calendar {
             .map_or(false, |disabled| disabled.matched(&date));
 
         self.item_button(
-            ix,
+            d.ordinal() as usize,
             day.to_string(),
             is_active,
             is_in_range,
@@ -732,9 +731,8 @@ impl Calendar {
                             )
                             .children(days.iter().map(|week| {
                                 h_flex().gap_0p5().justify_between().children(
-                                    week.iter().enumerate().map(|(ix, d)| {
-                                        self.render_day(ix, d, offset_month, window, cx)
-                                    }),
+                                    week.iter()
+                                        .map(|d| self.render_day(d, offset_month, window, cx)),
                                 )
                             }))
                     }),
