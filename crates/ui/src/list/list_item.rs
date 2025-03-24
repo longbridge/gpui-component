@@ -143,6 +143,10 @@ impl RenderOnce for ListItem {
                     this.hover(|this| this.bg(cx.theme().list_hover))
                 })
             })
+            .when(self.disabled, |this| {
+                this.cursor_not_allowed()
+                    .text_color(cx.theme().muted_foreground)
+            })
             .child(
                 h_flex()
                     .w_full()

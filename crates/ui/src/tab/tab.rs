@@ -379,15 +379,15 @@ impl TabVariant {
 pub struct Tab {
     id: ElementId,
     base: Div,
-    label: SharedString,
+    pub(super) label: SharedString,
     icon: Option<Icon>,
     prefix: Option<AnyElement>,
     suffix: Option<AnyElement>,
     children: Vec<AnyElement>,
     variant: TabVariant,
     size: Size,
-    disabled: bool,
-    selected: bool,
+    pub(super) disabled: bool,
+    pub(super) selected: bool,
     on_click: Option<Arc<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>>,
 }
 

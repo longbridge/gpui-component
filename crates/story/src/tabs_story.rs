@@ -4,6 +4,7 @@ use gpui::{
 
 use gpui_component::{
     button::{Button, ButtonGroup, ButtonVariants},
+    checkbox::Checkbox,
     h_flex,
     tab::{Tab, TabBar},
     v_flex, IconName, Selectable as _, Sizable, Size,
@@ -15,6 +16,7 @@ pub struct TabsStory {
     focus_handle: gpui::FocusHandle,
     active_tab_ix: usize,
     size: Size,
+    menu: bool,
 }
 
 impl super::Story for TabsStory {
@@ -41,6 +43,7 @@ impl TabsStory {
             focus_handle: cx.focus_handle(),
             active_tab_ix: 0,
             size: Size::default(),
+            menu: false,
         }
     }
 
@@ -66,45 +69,59 @@ impl Render for TabsStory {
         v_flex()
             .gap_6()
             .child(
-                ButtonGroup::new("toggle-size")
-                    .outline()
-                    .compact()
+                h_flex()
+                    .gap_3()
                     .child(
-                        Button::new("xsmall")
-                            .label("XSmall")
-                            .selected(self.size == Size::XSmall),
+                        ButtonGroup::new("toggle-size")
+                            .outline()
+                            .compact()
+                            .child(
+                                Button::new("xsmall")
+                                    .label("XSmall")
+                                    .selected(self.size == Size::XSmall),
+                            )
+                            .child(
+                                Button::new("small")
+                                    .label("Small")
+                                    .selected(self.size == Size::Small),
+                            )
+                            .child(
+                                Button::new("medium")
+                                    .label("Medium")
+                                    .selected(self.size == Size::Medium),
+                            )
+                            .child(
+                                Button::new("large")
+                                    .label("Large")
+                                    .selected(self.size == Size::Large),
+                            )
+                            .on_click(cx.listener(|this, selecteds: &Vec<usize>, window, cx| {
+                                let size = match selecteds[0] {
+                                    0 => Size::XSmall,
+                                    1 => Size::Small,
+                                    2 => Size::Medium,
+                                    3 => Size::Large,
+                                    _ => unreachable!(),
+                                };
+                                this.set_size(size, window, cx);
+                            })),
                     )
                     .child(
-                        Button::new("small")
-                            .label("Small")
-                            .selected(self.size == Size::Small),
-                    )
-                    .child(
-                        Button::new("medium")
-                            .label("Medium")
-                            .selected(self.size == Size::Medium),
-                    )
-                    .child(
-                        Button::new("large")
-                            .label("Large")
-                            .selected(self.size == Size::Large),
-                    )
-                    .on_click(cx.listener(|this, selecteds: &Vec<usize>, window, cx| {
-                        let size = match selecteds[0] {
-                            0 => Size::XSmall,
-                            1 => Size::Small,
-                            2 => Size::Medium,
-                            3 => Size::Large,
-                            _ => unreachable!(),
-                        };
-                        this.set_size(size, window, cx);
-                    })),
+                        Checkbox::new("show-menu")
+                            .label("More menu")
+                            .checked(self.menu)
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.menu = !this.menu;
+                                cx.notify();
+                            })),
+                    ),
             )
             .child(
                 section("Tabs", cx).child(
                     TabBar::new("tabs")
                         .w_full()
                         .with_size(self.size)
+                        .with_menu(self.menu)
                         .selected_index(self.active_tab_ix)
                         .on_click(cx.listener(|this, ix: &usize, window, cx| {
                             this.set_active_tab(*ix, window, cx);
@@ -152,6 +169,7 @@ impl Render for TabsStory {
                         .w_full()
                         .underline()
                         .with_size(self.size)
+                        .with_menu(self.menu)
                         .selected_index(self.active_tab_ix)
                         .on_click(cx.listener(|this, ix: &usize, window, cx| {
                             this.set_active_tab(*ix, window, cx);
@@ -172,6 +190,7 @@ impl Render for TabsStory {
                         .w_full()
                         .pill()
                         .with_size(self.size)
+                        .with_menu(self.menu)
                         .selected_index(self.active_tab_ix)
                         .on_click(cx.listener(|this, ix: &usize, window, cx| {
                             this.set_active_tab(*ix, window, cx);
@@ -192,6 +211,7 @@ impl Render for TabsStory {
                         .w_full()
                         .outline()
                         .with_size(self.size)
+                        .with_menu(self.menu)
                         .selected_index(self.active_tab_ix)
                         .on_click(cx.listener(|this, ix: &usize, window, cx| {
                             this.set_active_tab(*ix, window, cx);
@@ -212,6 +232,7 @@ impl Render for TabsStory {
                         .w_full()
                         .segmented()
                         .with_size(self.size)
+                        .with_menu(self.menu)
                         .selected_index(self.active_tab_ix)
                         .on_click(cx.listener(|this, ix: &usize, window, cx| {
                             this.set_active_tab(*ix, window, cx);

@@ -1,15 +1,23 @@
 use std::sync::Arc;
 
-use crate::{h_flex, ActiveTheme, Selectable, Sizable, Size, StyledExt};
+use crate::button::{Button, ButtonVariants as _};
+use crate::popup_menu::PopupMenuExt as _;
+use crate::{h_flex, ActiveTheme, IconName, Selectable, Sizable, Size, StyledExt};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    div, AnyElement, App, Div, Edges, ElementId, IntoElement, ParentElement, RenderOnce,
-    ScrollHandle, Stateful, StatefulInteractiveElement as _, Styled, Window,
+    div, impl_internal_actions, AnyElement, App, Corner, Div, Edges, ElementId, IntoElement,
+    ParentElement, RenderOnce, ScrollHandle, Stateful, StatefulInteractiveElement as _, Styled,
+    Window,
 };
 use gpui::{px, InteractiveElement};
 use smallvec::SmallVec;
 
 use super::{Tab, TabVariant};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SelectTab(usize);
+
+impl_internal_actions!(tab_bar, [SelectTab]);
 
 #[derive(IntoElement)]
 pub struct TabBar {
@@ -22,6 +30,7 @@ pub struct TabBar {
     selected_index: Option<usize>,
     variant: TabVariant,
     size: Size,
+    menu: bool,
     on_click: Option<Arc<dyn Fn(&usize, &mut Window, &mut App) + 'static>>,
 }
 
@@ -39,6 +48,7 @@ impl TabBar {
             last_empty_space: div().w_3().into_any_element(),
             selected_index: None,
             on_click: None,
+            menu: false,
         }
     }
 
@@ -69,6 +79,12 @@ impl TabBar {
     /// Set the Tab variant to Underline, all children will inherit the variant.
     pub fn underline(mut self) -> Self {
         self.variant = TabVariant::Underline;
+        self
+    }
+
+    /// Enable or disable the popup menu for the TabBar
+    pub fn with_menu(mut self, menu: bool) -> Self {
+        self.menu = menu;
         self
     }
 
@@ -190,8 +206,19 @@ impl RenderOnce for TabBar {
             }
         };
 
+        let mut item_labels = Vec::new();
+        let selected_index = self.selected_index;
+
         self.base
             .group("tab-bar")
+            .on_action({
+                let on_click = self.on_click.clone();
+                move |action: &SelectTab, window: &mut Window, cx: &mut App| {
+                    if let Some(on_click) = on_click.clone() {
+                        on_click(&action.0, window, cx);
+                    }
+                }
+            })
             .relative()
             .flex()
             .items_center()
@@ -216,6 +243,7 @@ impl RenderOnce for TabBar {
                 self.variant == TabVariant::Pill || self.variant == TabVariant::Segmented,
                 |this| this.rounded(cx.theme().radius),
             )
+            .paddings(paddings)
             .when_some(self.prefix, |this, prefix| this.child(prefix))
             .child(
                 h_flex()
@@ -226,30 +254,45 @@ impl RenderOnce for TabBar {
                         this.track_scroll(&scroll_handle)
                     })
                     .gap(gap)
-                    .paddings(paddings)
-                    .children(
-                        self.children
-                            .into_iter()
-                            .enumerate()
-                            .map(move |(ix, child)| {
-                                child
-                                    .id(ix)
-                                    .variant(self.variant)
-                                    .with_size(self.size)
-                                    .when_some(self.selected_index, |this, selected_ix| {
-                                        this.selected(selected_ix == ix)
-                                    })
-                                    .when_some(self.on_click.clone(), move |this, on_click| {
-                                        this.on_click(move |_, window, cx| {
-                                            on_click(&ix, window, cx)
-                                        })
-                                    })
-                            }),
-                    )
-                    .when(self.suffix.is_some(), |this| {
+                    .children(self.children.into_iter().enumerate().map(|(ix, child)| {
+                        item_labels.push((child.label.clone(), child.disabled));
+                        child
+                            .id(ix)
+                            .variant(self.variant)
+                            .with_size(self.size)
+                            .when_some(self.selected_index, |this, selected_ix| {
+                                this.selected(selected_ix == ix)
+                            })
+                            .when_some(self.on_click.clone(), move |this, on_click| {
+                                this.on_click(move |_, window, cx| on_click(&ix, window, cx))
+                            })
+                    }))
+                    .when(self.suffix.is_some() || self.menu, |this| {
                         this.child(self.last_empty_space)
                     }),
             )
+            .when(self.menu, |this| {
+                this.child(
+                    Button::new("more")
+                        .xsmall()
+                        .ghost()
+                        .icon(IconName::ChevronDown)
+                        .popup_menu(move |mut this, _, _| {
+                            this = this.scrollable();
+                            for (ix, (label, disabled)) in item_labels.iter().enumerate() {
+                                this = this.menu_with_check_and_disabled(
+                                    label.clone(),
+                                    selected_index == Some(ix),
+                                    Box::new(SelectTab(ix)),
+                                    *disabled,
+                                );
+                            }
+
+                            this
+                        })
+                        .anchor(Corner::TopRight),
+                )
+            })
             .when_some(self.suffix, |this, suffix| this.child(suffix))
     }
 }
