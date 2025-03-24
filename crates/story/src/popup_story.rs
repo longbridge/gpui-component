@@ -258,6 +258,7 @@ impl Render for PopupStory {
                             .icon(IconName::Ellipsis)
                             .popup_menu(move |this, window, cx| {
                                 this.link("About", "https://github.com/longbridge/gpui-component")
+                                    .separator()
                                     .menu("Copy", Box::new(Copy))
                                     .menu("Cut", Box::new(Cut))
                                     .menu("Paste", Box::new(Paste))
