@@ -66,6 +66,7 @@ enum PopupMenuItem {
         icon: Option<Icon>,
         label: SharedString,
         disabled: bool,
+        is_link: bool,
         action: Option<Box<dyn Action>>,
         handler: Rc<dyn Fn(&mut Window, &mut App)>,
     },
@@ -107,6 +108,7 @@ pub struct PopupMenu {
     bounds: Bounds<Pixels>,
 
     scrollable: bool,
+    external_link_icon: bool,
     scroll_handle: ScrollHandle,
     scroll_state: Rc<Cell<ScrollbarState>>,
 
@@ -144,6 +146,7 @@ impl PopupMenu {
                 scrollable: false,
                 scroll_handle: ScrollHandle::default(),
                 scroll_state: Rc::new(Cell::new(ScrollbarState::default())),
+                external_link_icon: true,
                 _subscriptions,
             };
             f(menu, window, cx)
@@ -173,6 +176,12 @@ impl PopupMenu {
     /// NOTE: If this is true, the sub-menus will cannot be support.
     pub fn scrollable(mut self) -> Self {
         self.scrollable = true;
+        self
+    }
+
+    /// Set the menu to show external link icon, default is true.
+    pub fn external_link_icon(mut self, visible: bool) -> Self {
+        self.external_link_icon = visible;
         self
     }
 
@@ -216,6 +225,7 @@ impl PopupMenu {
             label: label.into(),
             disabled,
             action: None,
+            is_link: true,
             handler: Rc::new(move |_, cx| cx.open_url(&href)),
         });
         self
@@ -245,6 +255,7 @@ impl PopupMenu {
             label: label.into(),
             disabled,
             action: None,
+            is_link: true,
             handler: Rc::new(move |_, cx| cx.open_url(&href)),
         });
         self
@@ -499,6 +510,7 @@ impl PopupMenu {
             label: label.into(),
             disabled,
             action: Some(action.boxed_clone()),
+            is_link: false,
             handler: self.wrap_handler(action),
         });
         self
@@ -730,8 +742,10 @@ impl PopupMenu {
                 label,
                 action,
                 disabled,
+                is_link,
                 ..
             } => {
+                let show_link_icon = *is_link && self.external_link_icon;
                 let action = action.as_ref().map(|action| action.boxed_clone());
                 let key = Self::render_keybinding(action, window, cx);
 
@@ -753,7 +767,16 @@ impl PopupMenu {
                                 .gap_2()
                                 .items_center()
                                 .justify_between()
-                                .child(label.clone())
+                                .when(!show_link_icon, |this| this.child(label.clone()))
+                                .when(show_link_icon, |this| {
+                                    this.child(
+                                        h_flex().gap_1p5().child(label.clone()).child(
+                                            Icon::new(IconName::ExternalLink)
+                                                .text_sm()
+                                                .text_color(cx.theme().muted_foreground),
+                                        ),
+                                    )
+                                })
                                 .children(key),
                         ),
                 )

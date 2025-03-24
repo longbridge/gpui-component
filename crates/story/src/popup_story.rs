@@ -175,7 +175,9 @@ impl Render for PopupStory {
             .min_h(px(400.))
             .context_menu({
                 move |this, window, cx| {
-                    this.separator()
+                    this.external_link_icon(false)
+                        .link("About", "https://github.com/longbridge/gpui-component")
+                        .separator()
                         .menu("Cut", Box::new(Cut))
                         .menu("Copy", Box::new(Copy))
                         .menu("Paste", Box::new(Paste))
@@ -255,7 +257,8 @@ impl Render for PopupStory {
                         Button::new("popup-menu-1")
                             .icon(IconName::Ellipsis)
                             .popup_menu(move |this, window, cx| {
-                                this.menu("Copy", Box::new(Copy))
+                                this.link("About", "https://github.com/longbridge/gpui-component")
+                                    .menu("Copy", Box::new(Copy))
                                     .menu("Cut", Box::new(Cut))
                                     .menu("Paste", Box::new(Paste))
                                     .separator()
