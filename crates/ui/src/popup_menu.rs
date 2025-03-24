@@ -61,6 +61,7 @@ impl PopupMenuExt for Button {}
 
 enum PopupMenuItem {
     Separator,
+    Label(SharedString),
     Item {
         icon: Option<Icon>,
         label: SharedString,
@@ -188,6 +189,12 @@ impl PopupMenu {
         disabled: bool,
     ) -> Self {
         self.add_menu_item(label, None, action, disabled);
+        self
+    }
+
+    /// Add label
+    pub fn label(mut self, label: impl Into<SharedString>) -> Self {
+        self.menu_items.push(PopupMenuItem::Label(label.into()));
         self
     }
 
@@ -689,6 +696,14 @@ impl PopupMenu {
                     .mx_neg_1()
                     .my_0p5()
                     .bg(cx.theme().muted),
+            ),
+            PopupMenuItem::Label(label) => this.disabled(true).cursor_default().child(
+                h_flex()
+                    .cursor_default()
+                    .items_center()
+                    .gap_x_1()
+                    .children(Self::render_icon(has_icon, None, window, cx))
+                    .child(label.clone()),
             ),
             PopupMenuItem::ElementItem {
                 render,

@@ -180,6 +180,7 @@ impl Render for PopupStory {
                         .menu("Copy", Box::new(Copy))
                         .menu("Paste", Box::new(Paste))
                         .separator()
+                        .label("This is a label")
                         .menu_with_check("Toggle Check", checked, Box::new(ToggleCheck))
                         .separator()
                         .submenu("Settings", window, cx, move |menu, _, _| {
@@ -307,7 +308,10 @@ impl Render for PopupStory {
                         Button::new("popup-menu-11112")
                             .label("Scrollable Menu")
                             .popup_menu_with_anchor(Corner::TopRight, move |this, _, _| {
-                                let mut this = this.scrollable().max_h(px(300.));
+                                let mut this = this
+                                    .scrollable()
+                                    .max_h(px(300.))
+                                    .label(format!("Total {} items", 100));
                                 for i in 0..100 {
                                     this = this.menu(
                                         SharedString::from(format!("Item {}", i)),
