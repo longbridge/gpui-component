@@ -772,7 +772,7 @@ impl PopupMenu {
                                     this.child(
                                         h_flex().gap_1p5().child(label.clone()).child(
                                             Icon::new(IconName::ExternalLink)
-                                                .text_sm()
+                                                .xsmall()
                                                 .text_color(cx.theme().muted_foreground),
                                         ),
                                     )
