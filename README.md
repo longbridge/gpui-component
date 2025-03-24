@@ -38,6 +38,7 @@ UI components for building fantastic desktop application by using [GPUI](https:/
 - Badge
 - TextView (Markdown, Simple HTML) to native rendering, syntax highlighting.
 - Toggle, ToggleGroup
+- Alert
 
 ## Showcase
 
