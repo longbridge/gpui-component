@@ -95,6 +95,14 @@ pub struct ThemeColor {
     pub drop_target: Hsla,
     /// Default text color.
     pub foreground: Hsla,
+    /// Info background color.
+    pub info: Hsla,
+    /// Info active background color.
+    pub info_active: Hsla,
+    /// Info text color.
+    pub info_foreground: Hsla,
+    /// Info hover background color.
+    pub info_hover: Hsla,
     /// Border color for inputs such as Input, Dropdown, etc.
     pub input: Hsla,
     /// Link text color.
@@ -171,6 +179,14 @@ pub struct ThemeColor {
     pub slider_bar: Hsla,
     /// Slider thumb background color.
     pub slider_thumb: Hsla,
+    /// Success background color.
+    pub success: Hsla,
+    /// Success text color.
+    pub success_foreground: Hsla,
+    /// Success hover background color.
+    pub success_hover: Hsla,
+    /// Success active background color.
+    pub success_active: Hsla,
     /// Tab background color.
     pub tab: Hsla,
     /// Tab active background color.
@@ -205,6 +221,14 @@ pub struct ThemeColor {
     pub title_bar_border: Hsla,
     /// Background color for Tiles.
     pub tiles: Hsla,
+    /// Warning background color.
+    pub warning: Hsla,
+    /// Warning active background color.
+    pub warning_active: Hsla,
+    /// Warning hover background color.
+    pub warning_hover: Hsla,
+    /// Warning foreground color.
+    pub warning_foreground: Hsla,
     /// Window border color.
     ///
     /// # Platform specific:
@@ -226,15 +250,19 @@ impl ThemeColor {
             card: hsl(0.0, 0.0, 100.0),
             card_foreground: hsl(240.0, 10.0, 3.9),
             caret: hsl(240.0, 10., 3.9),
-            danger: hsl(0.0, 84.2, 60.2),
-            danger_active: hsl(0.0, 84.2, 47.0),
-            danger_foreground: hsl(0.0, 0.0, 98.0),
-            danger_hover: hsl(0.0, 84.2, 65.0),
+            danger: crate::red_500(),
+            danger_active: crate::red_600(),
+            danger_foreground: crate::red_50(),
+            danger_hover: crate::red_500().opacity(0.9),
             description_list_label: hsl(240.0, 5.9, 96.9),
             description_list_label_foreground: hsl(240.0, 5.9, 10.0),
             drag_border: crate::blue_500(),
             drop_target: hsl(235.0, 30., 44.0).opacity(0.25),
             foreground: hsl(240.0, 10., 3.9),
+            info: crate::sky_500(),
+            info_active: crate::sky_600(),
+            info_hover: crate::sky_500().opacity(0.9),
+            info_foreground: crate::sky_50(),
             input: hsl(240.0, 5.9, 90.0),
             link: hsl(221.0, 83.0, 53.0),
             link_active: hsl(221.0, 83.0, 53.0).darken(0.2),
@@ -273,6 +301,10 @@ impl ThemeColor {
             skeleton: hsl(223.0, 5.9, 10.0).opacity(0.1),
             slider_bar: hsl(223.0, 5.9, 10.0),
             slider_thumb: hsl(0.0, 0.0, 100.0),
+            success: crate::green_500(),
+            success_active: crate::green_600(),
+            success_hover: crate::green_500().opacity(0.9),
+            success_foreground: crate::gray_50(),
             tab: gpui::transparent_black(),
             tab_active: hsl(0.0, 0.0, 100.0),
             tab_active_foreground: hsl(240.0, 10., 3.9),
@@ -287,9 +319,13 @@ impl ThemeColor {
             table_head_foreground: hsl(240.0, 10., 3.9).opacity(0.7),
             table_hover: hsl(240.0, 4.8, 95.0),
             table_row_border: hsl(240.0, 7.7, 94.5),
+            tiles: hsl(0.0, 0.0, 95.),
             title_bar: hsl(0.0, 0.0, 100.),
             title_bar_border: hsl(240.0, 5.9, 90.0),
-            tiles: hsl(0.0, 0.0, 95.),
+            warning: crate::yellow_500(),
+            warning_active: crate::yellow_600(),
+            warning_hover: crate::yellow_500().opacity(0.9),
+            warning_foreground: crate::gray_50(),
             window_border: hsl(240.0, 5.9, 78.0),
         }
     }
@@ -306,15 +342,19 @@ impl ThemeColor {
             card: hsl(0.0, 0.0, 8.0),
             card_foreground: hsl(0.0, 0.0, 78.0),
             caret: hsl(0., 0., 78.),
-            danger: hsl(0.0, 62.8, 30.6),
-            danger_active: hsl(0.0, 62.8, 20.6),
-            danger_foreground: hsl(0.0, 0.0, 78.0),
-            danger_hover: hsl(0.0, 62.8, 35.6),
+            danger: crate::red_900(),
+            danger_active: crate::red_900().darken(0.2),
+            danger_foreground: crate::red_50(),
+            danger_hover: crate::red_900().opacity(0.9),
             description_list_label: hsl(240.0, 0., 13.0),
             description_list_label_foreground: hsl(0.0, 0.0, 78.0),
             drag_border: crate::blue_500(),
             drop_target: hsl(235.0, 30., 44.0).opacity(0.1),
             foreground: hsl(0., 0., 78.),
+            info: crate::sky_900(),
+            info_active: crate::sky_900().darken(0.2),
+            info_foreground: crate::sky_50(),
+            info_hover: crate::sky_900().opacity(0.8),
             input: hsl(240.0, 3.7, 15.9),
             link: hsl(221.0, 83.0, 53.0),
             link_active: hsl(221.0, 83.0, 53.0).darken(0.2),
@@ -353,6 +393,10 @@ impl ThemeColor {
             skeleton: hsla(223.0, 0.0, 98.0, 0.1),
             slider_bar: hsl(223.0, 0.0, 98.0),
             slider_thumb: hsl(0.0, 0.0, 8.0),
+            success: crate::green_900(),
+            success_active: crate::green_900().darken(0.2),
+            success_foreground: crate::green_50(),
+            success_hover: crate::green_900().opacity(0.8),
             tab: gpui::transparent_black(),
             tab_active: hsl(0.0, 0.0, 8.0),
             tab_active_foreground: hsl(0., 0., 78.),
@@ -367,9 +411,13 @@ impl ThemeColor {
             table_head_foreground: hsl(0., 0., 78.).opacity(0.7),
             table_hover: hsl(240.0, 3.7, 15.9).opacity(0.5),
             table_row_border: hsl(240.0, 3.7, 16.9).opacity(0.5),
+            tiles: hsl(0.0, 0.0, 5.0),
             title_bar: hsl(0., 0., 9.7),
             title_bar_border: hsl(240.0, 3.7, 15.9),
-            tiles: hsl(0.0, 0.0, 5.0),
+            warning: crate::yellow_900(),
+            warning_active: crate::yellow_900().darken(0.2),
+            warning_foreground: crate::yellow_50(),
+            warning_hover: crate::yellow_900().opacity(0.9),
             window_border: hsl(240.0, 3.7, 28.0),
         }
     }

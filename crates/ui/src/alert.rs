@@ -1,13 +1,43 @@
 use gpui::{
-    div, prelude::FluentBuilder as _, px, relative, App, IntoElement, ParentElement as _,
+    div, prelude::FluentBuilder as _, px, relative, App, Hsla, IntoElement, ParentElement as _,
     RenderOnce, SharedString, Styled, Window,
 };
 
 use crate::{h_flex, text::Text, ActiveTheme as _, Icon, IconName, Sizable, Size, StyledExt};
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum AlertVariant {
+    #[default]
+    Info,
+    Success,
+    Warning,
+    Error,
+}
+
+impl AlertVariant {
+    fn fg(&self, cx: &App) -> Hsla {
+        match self {
+            AlertVariant::Info => cx.theme().info,
+            AlertVariant::Success => cx.theme().success,
+            AlertVariant::Warning => cx.theme().warning,
+            AlertVariant::Error => cx.theme().danger,
+        }
+    }
+
+    fn color(&self, cx: &App) -> Hsla {
+        match self {
+            AlertVariant::Info => cx.theme().info,
+            AlertVariant::Success => cx.theme().success,
+            AlertVariant::Warning => cx.theme().warning,
+            AlertVariant::Error => cx.theme().danger,
+        }
+    }
+}
+
 /// Alert used to display a message to the user.
 #[derive(IntoElement)]
 pub struct Alert {
+    variant: AlertVariant,
     icon: Option<Icon>,
     title: Option<SharedString>,
     message: Text,
@@ -16,13 +46,48 @@ pub struct Alert {
 
 impl Alert {
     /// Create a new alert with the given message.
-    pub fn new(message: impl Into<Text>) -> Self {
+    fn new(message: impl Into<Text>) -> Self {
         Self {
+            variant: AlertVariant::default(),
             icon: None,
             title: None,
             message: message.into(),
             size: Size::default(),
         }
+    }
+
+    /// Create a new info [`AlertVariant::Info`] with the given message.
+    pub fn info(message: impl Into<Text>) -> Self {
+        Self::new(message)
+            .with_variant(AlertVariant::Info)
+            .icon(IconName::Info)
+    }
+
+    /// Create a new [`AlertVariant::Success`] alert with the given message.
+    pub fn success(message: impl Into<Text>) -> Self {
+        Self::new(message)
+            .with_variant(AlertVariant::Success)
+            .icon(IconName::CircleCheck)
+    }
+
+    /// Create a new [`AlertVariant::Warning`] alert with the given message.
+    pub fn warning(message: impl Into<Text>) -> Self {
+        Self::new(message)
+            .with_variant(AlertVariant::Warning)
+            .icon(IconName::TriangleAlert)
+    }
+
+    /// Create a new [`AlertVariant::Error`] alert with the given message.
+    pub fn error(message: impl Into<Text>) -> Self {
+        Self::new(message)
+            .with_variant(AlertVariant::Error)
+            .icon(IconName::CircleX)
+    }
+
+    /// Sets the [`AlertVariant`] of the alert.
+    pub fn with_variant(mut self, variant: AlertVariant) -> Self {
+        self.variant = variant;
+        self
     }
 
     /// Set the icon for the alert.
@@ -53,10 +118,14 @@ impl RenderOnce for Alert {
             _ => (cx.theme().radius * 2., px(16.), px(12.), px(8.)),
         };
 
+        let color = self.variant.color(cx);
+
         h_flex()
             .rounded(radius)
             .border_1()
-            .border_color(cx.theme().border)
+            .border_color(color)
+            .bg(color.opacity(0.08))
+            .text_color(self.variant.fg(cx))
             .px(padding_x)
             .py(padding_y)
             .gap(gap)

@@ -53,7 +53,7 @@ impl TabBar {
     }
 
     /// Set the Tab variant, all children will inherit the variant.
-    pub fn variant(mut self, variant: TabVariant) -> Self {
+    pub fn with_variant(mut self, variant: TabVariant) -> Self {
         self.variant = variant;
         self
     }
@@ -258,7 +258,7 @@ impl RenderOnce for TabBar {
                         item_labels.push((child.label.clone(), child.disabled));
                         child
                             .id(ix)
-                            .variant(self.variant)
+                            .with_variant(self.variant)
                             .with_size(self.size)
                             .when_some(self.selected_index, |this, selected_ix| {
                                 this.selected(selected_ix == ix)

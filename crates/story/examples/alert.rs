@@ -1,5 +1,5 @@
 use gpui::*;
-use gpui_component::{alert::Alert, v_flex, IconName};
+use gpui_component::{alert::Alert, v_flex};
 use story::Assets;
 
 pub struct Example {}
@@ -19,14 +19,27 @@ impl Render for Example {
         v_flex()
             .m_4()
             .gap_4()
-            .child(Alert::new("This is a info alert."))
+            .child(Alert::info("This is an info alert.").title("Info message"))
             .child(
-                Alert::new(
-                    "This is a warning alert with icon and title. \
+                Alert::success(
+                    "You have successfully submitted your form.\n\
+                    Thank you for your submission!",
+                )
+                .title("Submit Successful"),
+            )
+            .child(
+                Alert::warning(
+                    "This is a warning alert with icon and title.\n\
                     This is second line of text to test is the line-height is correct.",
                 )
-                .title("Warning!")
-                .icon(IconName::TriangleAlert),
+                .title("Warning!"),
+            )
+            .child(
+                Alert::error(
+                    "There was an error submitting your form.\n\
+                    Please try again later, if you still have issues, please contact support.",
+                )
+                .title("Error!"),
             )
     }
 }
@@ -38,6 +51,6 @@ fn main() {
         story::init(cx);
         cx.activate(true);
 
-        story::create_new_window("Markdown Example", Example::view, cx);
+        story::create_new_window("Alert Example", Example::view, cx);
     });
 }

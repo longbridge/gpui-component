@@ -464,7 +464,7 @@ impl Tab {
     }
 
     /// Set Tab Variant.
-    pub fn variant(mut self, variant: TabVariant) -> Self {
+    pub fn with_variant(mut self, variant: TabVariant) -> Self {
         self.variant = variant;
         self
     }
