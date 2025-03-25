@@ -1,6 +1,6 @@
 use gpui::{
-    div, prelude::FluentBuilder as _, px, relative, App, Hsla, IntoElement, ParentElement as _,
-    RenderOnce, SharedString, Styled, Window,
+    div, prelude::FluentBuilder as _, px, relative, App, Div, Hsla, IntoElement,
+    ParentElement as _, RenderOnce, SharedString, Styled, Window,
 };
 
 use crate::{h_flex, text::Text, ActiveTheme as _, Icon, IconName, Sizable, Size, StyledExt};
@@ -37,6 +37,7 @@ impl AlertVariant {
 /// Alert used to display a message to the user.
 #[derive(IntoElement)]
 pub struct Alert {
+    base: Div,
     variant: AlertVariant,
     icon: Option<Icon>,
     title: Option<SharedString>,
@@ -48,6 +49,7 @@ impl Alert {
     /// Create a new alert with the given message.
     fn new(message: impl Into<Text>) -> Self {
         Self {
+            base: div(),
             variant: AlertVariant::default(),
             icon: None,
             title: None,
@@ -110,6 +112,12 @@ impl Sizable for Alert {
     }
 }
 
+impl Styled for Alert {
+    fn style(&mut self) -> &mut gpui::StyleRefinement {
+        self.base.style()
+    }
+}
+
 impl RenderOnce for Alert {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let (radius, padding_x, padding_y, gap, line_height, icon_mt) = match self.size {
@@ -135,44 +143,46 @@ impl RenderOnce for Alert {
 
         let color = self.variant.color(cx);
 
-        h_flex()
-            .rounded(radius)
-            .border_1()
-            .border_color(color)
-            .bg(color.opacity(0.05))
-            .text_color(self.variant.fg(cx))
-            .px(padding_x)
-            .py(padding_y)
-            .gap(gap)
-            .overflow_hidden()
-            .items_start()
-            .map(|this| match self.size {
-                Size::Large => this.text_base(),
-                _ => this.text_sm(),
-            })
-            .line_height(relative(line_height))
-            .child(
-                div().mt(icon_mt).child(
-                    self.icon
-                        .unwrap_or(IconName::Info.into())
-                        .with_size(self.size)
-                        .flex_shrink_0(),
+        self.base.child(
+            h_flex()
+                .rounded(radius)
+                .border_1()
+                .border_color(color)
+                .bg(color.opacity(0.05))
+                .text_color(self.variant.fg(cx))
+                .px(padding_x)
+                .py(padding_y)
+                .gap(gap)
+                .overflow_hidden()
+                .items_start()
+                .map(|this| match self.size {
+                    Size::Large => this.text_base(),
+                    _ => this.text_sm(),
+                })
+                .line_height(relative(line_height))
+                .child(
+                    div().mt(icon_mt).child(
+                        self.icon
+                            .unwrap_or(IconName::Info.into())
+                            .with_size(self.size)
+                            .flex_shrink_0(),
+                    ),
+                )
+                .child(
+                    div()
+                        .overflow_hidden()
+                        .when_some(self.title, |this, title| {
+                            this.child(
+                                div()
+                                    .w_full()
+                                    .truncate()
+                                    .mb_1()
+                                    .font_semibold()
+                                    .child(title),
+                            )
+                        })
+                        .child(div().overflow_hidden().child(self.message)),
                 ),
-            )
-            .child(
-                div()
-                    .overflow_hidden()
-                    .when_some(self.title, |this, title| {
-                        this.child(
-                            div()
-                                .w_full()
-                                .truncate()
-                                .mb_1()
-                                .font_semibold()
-                                .child(title),
-                        )
-                    })
-                    .child(div().overflow_hidden().child(self.message)),
-            )
+        )
     }
 }
