@@ -3,9 +3,7 @@ use gpui::{
     RenderOnce, SharedString, Styled, Window,
 };
 
-use crate::{
-    h_flex, text::Text, v_flex, ActiveTheme as _, Icon, IconName, Sizable, Size, StyledExt,
-};
+use crate::{h_flex, text::Text, ActiveTheme as _, Icon, IconName, Sizable, Size, StyledExt};
 
 /// Alert used to display a message to the user.
 #[derive(IntoElement)]
@@ -50,9 +48,9 @@ impl Sizable for Alert {
 impl RenderOnce for Alert {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let (radius, padding_x, padding_y, gap) = match self.size {
-            Size::XSmall | Size::Small => (cx.theme().radius, px(12.), px(8.), px(4.)),
-            Size::Large => (cx.theme().radius * 3., px(20.), px(16.), px(8.)),
-            _ => (cx.theme().radius * 2., px(16.), px(12.), px(6.)),
+            Size::XSmall | Size::Small => (cx.theme().radius, px(12.), px(8.), px(6.)),
+            Size::Large => (cx.theme().radius * 3., px(20.), px(16.), px(12.)),
+            _ => (cx.theme().radius * 2., px(16.), px(12.), px(8.)),
         };
 
         h_flex()
@@ -61,29 +59,35 @@ impl RenderOnce for Alert {
             .border_color(cx.theme().border)
             .px(padding_x)
             .py(padding_y)
-            .gap(gap * 2.)
+            .gap(gap)
             .overflow_hidden()
             .items_start()
+            .text_sm()
             .child(
                 div()
-                    .when(self.title.is_none(), |this| this.mt_1())
+                    .when(self.title.is_none(), |this| this.mt(px(2.)))
                     .child(self.icon.unwrap_or(IconName::Info.into()).flex_shrink_0()),
             )
             .child(
-                v_flex()
-                    .flex_1()
-                    .gap(gap)
+                div()
+                    .overflow_hidden()
                     .when_some(self.title, |this, title| {
                         this.child(
                             div()
                                 .w_full()
                                 .truncate()
+                                .mb_2()
                                 .line_height(relative(1.))
                                 .font_semibold()
                                 .child(title),
                         )
                     })
-                    .child(div().child(self.message)),
+                    .child(
+                        div()
+                            .overflow_hidden()
+                            .line_height(relative(1.2))
+                            .child(self.message),
+                    ),
             )
     }
 }
