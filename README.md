@@ -7,38 +7,38 @@ UI components for building fantastic desktop application by using [GPUI](https:/
 
 ## Features
 
+- Accordion
+- Alert
+- Badge
+- Breadcrumb
+- Button, Link
+- Checkbox, Radio, Switch
+- ColorPicker
+- DatePicker, DateRangePicker, Calendar
+- Dock, Tiles
+- Drawer
+- Dropdown
+- Icon
+- Label
+- List
+- Menu
+- Modal
+- Notification
+- Popover
+- Progress & Indicator
+- Resizable
+- Sidebar
+- Skeleton
+- Slider
+- Table
+- Tabs
+- TextInput, TextArea, OtpInput
+- TextView (Markdown, Simple HTML) to native rendering, syntax highlighting.
 - Theming
 - TitleBar
-- Dock, Tiles
-- TextInput, TextArea, OtpInput
-- Button, Link
-- Label
-- Icon
-- Checkbox, Radio, Switch
-- Dropdown
-- Tabs
-- Notification
-- Tooltip
-- Popover
-- Resizable
-- Progress & Indicator
-- Slider
-- Skeleton
-- DatePicker, DateRangePicker, Calendar
-- ColorPicker
-- List
-- Table
-- Menu
-- Drawer
-- Modal
-- WebView
-- Accordion
-- Sidebar
-- Breadcrumb
-- Badge
-- TextView (Markdown, Simple HTML) to native rendering, syntax highlighting.
 - Toggle, ToggleGroup
-- Alert
+- Tooltip
+- WebView
 
 ## Showcase
 
