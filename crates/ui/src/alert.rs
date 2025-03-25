@@ -112,10 +112,25 @@ impl Sizable for Alert {
 
 impl RenderOnce for Alert {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let (radius, padding_x, padding_y, gap) = match self.size {
-            Size::XSmall | Size::Small => (cx.theme().radius, px(12.), px(8.), px(6.)),
-            Size::Large => (cx.theme().radius * 3., px(20.), px(16.), px(12.)),
-            _ => (cx.theme().radius * 2., px(16.), px(12.), px(8.)),
+        let (radius, padding_x, padding_y, gap, line_height, icon_mt) = match self.size {
+            Size::XSmall => (cx.theme().radius, px(12.), px(6.), px(6.), 1.2, px(2.5)),
+            Size::Small => (cx.theme().radius, px(12.), px(8.), px(6.), 1.2, px(1.5)),
+            Size::Large => (
+                cx.theme().radius * 3.,
+                px(20.),
+                px(16.),
+                px(12.),
+                1.4,
+                px(0.),
+            ),
+            _ => (
+                cx.theme().radius * 2.,
+                px(16.),
+                px(12.),
+                px(8.),
+                1.3,
+                px(1.),
+            ),
         };
 
         let color = self.variant.color(cx);
@@ -124,18 +139,25 @@ impl RenderOnce for Alert {
             .rounded(radius)
             .border_1()
             .border_color(color)
-            .bg(color.opacity(0.08))
+            .bg(color.opacity(0.05))
             .text_color(self.variant.fg(cx))
             .px(padding_x)
             .py(padding_y)
             .gap(gap)
             .overflow_hidden()
             .items_start()
-            .text_sm()
+            .map(|this| match self.size {
+                Size::Large => this.text_base(),
+                _ => this.text_sm(),
+            })
+            .line_height(relative(line_height))
             .child(
-                div()
-                    .when(self.title.is_none(), |this| this.mt(px(2.)))
-                    .child(self.icon.unwrap_or(IconName::Info.into()).flex_shrink_0()),
+                div().mt(icon_mt).child(
+                    self.icon
+                        .unwrap_or(IconName::Info.into())
+                        .with_size(self.size)
+                        .flex_shrink_0(),
+                ),
             )
             .child(
                 div()
@@ -145,18 +167,12 @@ impl RenderOnce for Alert {
                             div()
                                 .w_full()
                                 .truncate()
-                                .mb_2()
-                                .line_height(relative(1.))
+                                .mb_1()
                                 .font_semibold()
                                 .child(title),
                         )
                     })
-                    .child(
-                        div()
-                            .overflow_hidden()
-                            .line_height(relative(1.2))
-                            .child(self.message),
-                    ),
+                    .child(div().overflow_hidden().child(self.message)),
             )
     }
 }
