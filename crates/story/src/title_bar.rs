@@ -208,6 +208,11 @@ impl Render for LocaleSelector {
                             Box::new(SelectLocale("en".into())),
                         )
                         .menu_with_check(
+                            "Italian",
+                            locale == "it",
+                            Box::new(SelectLocale("it".into())),
+                        )
+                        .menu_with_check(
                             "简体中文",
                             locale == "zh-CN",
                             Box::new(SelectLocale("zh-CN".into())),
