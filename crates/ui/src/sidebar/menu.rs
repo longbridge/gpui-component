@@ -45,7 +45,11 @@ impl Collapsible for SidebarMenu {
 }
 impl RenderOnce for SidebarMenu {
     fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
-        v_flex().gap_2().children(self.items)
+        v_flex().gap_2().children(
+            self.items
+                .into_iter()
+                .map(|item| item.collapsed(self.collapsed)),
+        )
     }
 }
 
@@ -166,11 +170,12 @@ impl RenderOnce for SidebarMenuItem {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let is_submenu = self.is_submenu();
         let is_open = self.is_open();
+        let is_collapsed = self.collapsed;
 
         div()
             .w_full()
             .child(self.render_menu_item(window, cx))
-            .when(is_submenu && is_open, |this| {
+            .when(is_submenu && is_open && !is_collapsed, |this| {
                 this.child(
                     v_flex()
                         .border_l_1()
