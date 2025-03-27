@@ -96,7 +96,7 @@ impl Render for Example {
                 .title("Error!"),
             )
             .child(
-                Alert::info("Custom info alert with icon.")
+                Alert::info("Custom icon with info alert.")
                     .with_size(self.size)
                     .icon(IconName::Bell),
             )

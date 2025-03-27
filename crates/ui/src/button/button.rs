@@ -46,6 +46,21 @@ pub trait ButtonVariants: Sized {
         self.with_variant(ButtonVariant::Danger)
     }
 
+    /// With the warning style for the Button.
+    fn warning(self) -> Self {
+        self.with_variant(ButtonVariant::Warning)
+    }
+
+    /// With the success style for the Button.
+    fn success(self) -> Self {
+        self.with_variant(ButtonVariant::Success)
+    }
+
+    /// With the info style for the Button.
+    fn info(self) -> Self {
+        self.with_variant(ButtonVariant::Info)
+    }
+
     /// With the ghost style for the Button.
     fn ghost(self) -> Self {
         self.with_variant(ButtonVariant::Ghost)
@@ -116,6 +131,9 @@ pub enum ButtonVariant {
     Primary,
     Secondary,
     Danger,
+    Info,
+    Success,
+    Warning,
     Ghost,
     Link,
     Text,
@@ -482,6 +500,9 @@ impl ButtonVariant {
             ButtonVariant::Primary => cx.theme().primary,
             ButtonVariant::Secondary => cx.theme().secondary,
             ButtonVariant::Danger => cx.theme().danger,
+            ButtonVariant::Warning => cx.theme().warning,
+            ButtonVariant::Success => cx.theme().success,
+            ButtonVariant::Info => cx.theme().info,
             ButtonVariant::Ghost | ButtonVariant::Link | ButtonVariant::Text => {
                 cx.theme().transparent
             }
@@ -506,6 +527,27 @@ impl ButtonVariant {
                     cx.theme().danger_foreground
                 }
             }
+            ButtonVariant::Warning => {
+                if outline {
+                    cx.theme().warning
+                } else {
+                    cx.theme().warning_foreground
+                }
+            }
+            ButtonVariant::Success => {
+                if outline {
+                    cx.theme().success
+                } else {
+                    cx.theme().success_foreground
+                }
+            }
+            ButtonVariant::Info => {
+                if outline {
+                    cx.theme().info
+                } else {
+                    cx.theme().info_foreground
+                }
+            }
             ButtonVariant::Link => cx.theme().link,
             ButtonVariant::Text => cx.theme().foreground,
             ButtonVariant::Custom(colors) => {
@@ -523,6 +565,9 @@ impl ButtonVariant {
             ButtonVariant::Primary => cx.theme().primary,
             ButtonVariant::Secondary => cx.theme().border,
             ButtonVariant::Danger => cx.theme().danger,
+            ButtonVariant::Info => cx.theme().info,
+            ButtonVariant::Warning => cx.theme().warning,
+            ButtonVariant::Success => cx.theme().success,
             ButtonVariant::Ghost | ButtonVariant::Link | ButtonVariant::Text => {
                 cx.theme().transparent
             }
@@ -576,6 +621,27 @@ impl ButtonVariant {
                     cx.theme().secondary_hover
                 } else {
                     cx.theme().danger_hover
+                }
+            }
+            ButtonVariant::Warning => {
+                if outline {
+                    cx.theme().secondary_hover
+                } else {
+                    cx.theme().warning_hover
+                }
+            }
+            ButtonVariant::Success => {
+                if outline {
+                    cx.theme().secondary_hover
+                } else {
+                    cx.theme().success_hover
+                }
+            }
+            ButtonVariant::Info => {
+                if outline {
+                    cx.theme().secondary_hover
+                } else {
+                    cx.theme().info_hover
                 }
             }
             ButtonVariant::Ghost => {
@@ -638,6 +704,27 @@ impl ButtonVariant {
                     cx.theme().danger_active
                 }
             }
+            ButtonVariant::Warning => {
+                if outline {
+                    cx.theme().warning_active.opacity(0.1)
+                } else {
+                    cx.theme().warning_active
+                }
+            }
+            ButtonVariant::Success => {
+                if outline {
+                    cx.theme().success_active.opacity(0.1)
+                } else {
+                    cx.theme().success_active
+                }
+            }
+            ButtonVariant::Info => {
+                if outline {
+                    cx.theme().info_active.opacity(0.1)
+                } else {
+                    cx.theme().info_active
+                }
+            }
             ButtonVariant::Link => cx.theme().transparent,
             ButtonVariant::Text => cx.theme().transparent,
             ButtonVariant::Custom(colors) => {
@@ -671,6 +758,9 @@ impl ButtonVariant {
             ButtonVariant::Primary => cx.theme().primary_active,
             ButtonVariant::Secondary | ButtonVariant::Ghost => cx.theme().secondary_active,
             ButtonVariant::Danger => cx.theme().danger_active,
+            ButtonVariant::Warning => cx.theme().warning_active,
+            ButtonVariant::Success => cx.theme().success_active,
+            ButtonVariant::Info => cx.theme().info_active,
             ButtonVariant::Link => cx.theme().transparent,
             ButtonVariant::Text => cx.theme().transparent,
             ButtonVariant::Custom(colors) => colors.active,
@@ -701,6 +791,9 @@ impl ButtonVariant {
             }
             ButtonVariant::Primary => cx.theme().primary.opacity(0.15),
             ButtonVariant::Danger => cx.theme().danger.opacity(0.15),
+            ButtonVariant::Warning => cx.theme().warning.opacity(0.15),
+            ButtonVariant::Success => cx.theme().success.opacity(0.15),
+            ButtonVariant::Info => cx.theme().info.opacity(0.15),
             ButtonVariant::Secondary => cx.theme().secondary.opacity(1.5),
             ButtonVariant::Custom(style) => style.color.opacity(0.15),
         };

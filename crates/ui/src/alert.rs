@@ -148,7 +148,7 @@ impl RenderOnce for Alert {
                 .rounded(radius)
                 .border_1()
                 .border_color(color)
-                .bg(color.opacity(0.05))
+                .bg(color.opacity(0.1))
                 .text_color(self.variant.fg(cx))
                 .px(padding_x)
                 .py(padding_y)

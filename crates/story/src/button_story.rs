@@ -6,8 +6,8 @@ use gpui::{
 use gpui_component::{
     button::{Button, ButtonCustomVariant, ButtonGroup, ButtonVariants as _, DropdownButton},
     checkbox::Checkbox,
-    green_600, green_700, green_800, green_950, h_flex, v_flex, white, ActiveTheme,
-    Disableable as _, Icon, IconName, Selectable as _, Sizable as _, Theme,
+    h_flex, indigo, v_flex, white, ActiveTheme, Disableable as _, Icon, IconName, Selectable as _,
+    Sizable as _, Theme,
 };
 
 use crate::section;
@@ -74,9 +74,9 @@ impl Render for ButtonStory {
 
         let custom_variant = ButtonCustomVariant::new(cx)
             .color(if cx.theme().mode.is_dark() {
-                green_800()
+                indigo(800)
             } else {
-                green_600()
+                indigo(600)
             })
             .foreground(if cx.theme().mode.is_dark() {
                 white()
@@ -84,19 +84,19 @@ impl Render for ButtonStory {
                 white()
             })
             .border(if cx.theme().mode.is_dark() {
-                green_800()
+                indigo(800)
             } else {
-                green_700()
+                indigo(600)
             })
             .hover(if cx.theme().mode.is_dark() {
-                green_800()
+                indigo(900)
             } else {
-                green_600()
+                indigo(700)
             })
             .active(if cx.theme().mode.is_dark() {
-                green_950()
+                indigo(950)
             } else {
-                green_700()
+                indigo(700)
             });
 
         v_flex()
@@ -185,6 +185,36 @@ impl Render for ButtonStory {
                                 Button::new("button-4")
                                     .danger()
                                     .label("Danger Button")
+                                    .disabled(disabled)
+                                    .selected(selected)
+                                    .loading(loading)
+                                    .when(compact, |this| this.compact())
+                                    .on_click(Self::on_click),
+                            )
+                            .child(
+                                Button::new("button-4-warning")
+                                    .warning()
+                                    .label("Warning Button")
+                                    .disabled(disabled)
+                                    .selected(selected)
+                                    .loading(loading)
+                                    .when(compact, |this| this.compact())
+                                    .on_click(Self::on_click),
+                            )
+                            .child(
+                                Button::new("button-4-success")
+                                    .success()
+                                    .label("Success Button")
+                                    .disabled(disabled)
+                                    .selected(selected)
+                                    .loading(loading)
+                                    .when(compact, |this| this.compact())
+                                    .on_click(Self::on_click),
+                            )
+                            .child(
+                                Button::new("button-5-info")
+                                    .info()
+                                    .label("Info Button")
                                     .disabled(disabled)
                                     .selected(selected)
                                     .loading(loading)
@@ -342,10 +372,43 @@ impl Render for ButtonStory {
                                 .on_click(Self::on_click),
                         )
                         .child(
-                            Button::new("button-outline-4")
+                            Button::new("button-outline-4-danger")
                                 .danger()
                                 .outline()
                                 .label("Danger Button")
+                                .disabled(disabled)
+                                .selected(selected)
+                                .loading(loading)
+                                .when(compact, |this| this.compact())
+                                .on_click(Self::on_click),
+                        )
+                        .child(
+                            Button::new("button-outline-4-warning")
+                                .warning()
+                                .outline()
+                                .label("Warning Button")
+                                .disabled(disabled)
+                                .selected(selected)
+                                .loading(loading)
+                                .when(compact, |this| this.compact())
+                                .on_click(Self::on_click),
+                        )
+                        .child(
+                            Button::new("button-outline-4-success")
+                                .success()
+                                .outline()
+                                .label("Success Button")
+                                .disabled(disabled)
+                                .selected(selected)
+                                .loading(loading)
+                                .when(compact, |this| this.compact())
+                                .on_click(Self::on_click),
+                        )
+                        .child(
+                            Button::new("button-outline-5-info")
+                                .info()
+                                .outline()
+                                .label("Info Button")
                                 .disabled(disabled)
                                 .selected(selected)
                                 .loading(loading)
