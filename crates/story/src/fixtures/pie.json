@@ -1,6 +1,6 @@
 {
   "border_radius": 8,
-  "font_family": "Noto Sans",
+  "font_family": "PingFang SC",
   "height": 400,
   "inner_radius": 30,
   "legend_margin": {
@@ -17,7 +17,7 @@
       ]
     },
     {
-      "name": "rose 2",
+      "name": "玫",
       "data": [
         38
       ]
@@ -35,7 +35,7 @@
       ]
     },
     {
-      "name": "rose 5",
+      "name": "瑰",
       "data": [
         28
       ]
@@ -59,7 +59,7 @@
       ]
     }
   ],
-  "sub_title_text": "Sub Title",
+  "sub_title_text": "副標題",
   "theme": "light",
   "title_text": "Nightingale Chart",
   "type": "pie",

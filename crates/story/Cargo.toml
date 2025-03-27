@@ -11,14 +11,14 @@ chrono = "0.4"
 fake = { version = "2.10.0", features = ["dummy"] }
 gpui.workspace = true
 gpui-component = { workspace = true, features = ["webview"] }
-reqwest_client = { git = "https://github.com/huacnlee/zed.git", branch = "webview" }
 rand = "0.8"
+raw-window-handle = { version = "0.6", features = ["std"] }
 regex = "1"
-rust-embed.workspace = true
+reqwest_client = { git = "https://github.com/huacnlee/zed.git", branch = "webview" }
+rust-embed = "8.5.0"
 serde = "1"
 serde_json = "1"
 unindent = "0.2.3"
-raw-window-handle = { version = "0.6", features = ["std"] }
 
 [lints]
 workspace = true

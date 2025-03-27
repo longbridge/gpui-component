@@ -2661,7 +2661,6 @@ dependencies = [
  "paste",
  "regex",
  "resvg",
- "rust-embed",
  "rust-i18n",
  "serde",
  "serde_json",

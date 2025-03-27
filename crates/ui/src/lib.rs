@@ -78,15 +78,7 @@ pub use theme::*;
 
 use std::ops::Deref;
 
-use rust_embed::RustEmbed;
-
 rust_i18n::i18n!("locales", fallback = "en");
-
-#[derive(RustEmbed)]
-#[folder = "./assets"]
-#[include = "fonts/**/*"]
-#[exclude = "*.DS_Store"]
-pub struct Assets;
 
 /// Initialize the UI module.
 ///

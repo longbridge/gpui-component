@@ -5,13 +5,12 @@ default-members = ["crates/story"]
 resolver = "2"
 
 [workspace.dependencies]
+gpui = { git = "https://github.com/huacnlee/zed.git", branch = "webview" }
 gpui-component = { path = "crates/ui" }
 story = { path = "crates/story" }
-gpui = { git = "https://github.com/huacnlee/zed.git", branch = "webview" }
 
 anyhow = "1"
 log = "0.4"
-rust-embed = "8.5.0"
 serde = "1.0.203"
 serde_json = "1"
 smallvec = "1"

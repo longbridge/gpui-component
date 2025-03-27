@@ -14,15 +14,10 @@ use smallvec::SmallVec;
 
 use image::ImageBuffer;
 
-use crate::Assets;
-
 const SCALE: f32 = 2.;
-const FONT_PATH: &str = "fonts/NotoSans-Regular.ttf";
 static OPTIONS: LazyLock<usvg::Options> = LazyLock::new(|| {
     let mut options = usvg::Options::default();
-    if let Some(font_data) = Assets::get(FONT_PATH).map(|f| f.data) {
-        options.fontdb_mut().load_font_data(font_data.into());
-    }
+    options.fontdb_mut().load_system_fonts();
     options
 });
 
