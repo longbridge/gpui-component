@@ -170,7 +170,6 @@ impl Render for AccordionStory {
                                 "This is the third accordion content. It can be any view, like a text view or a button."
                             )
                     ) .on_toggle_click(cx.listener(|this, open_ixs: &[usize], window,cx| {
-                        println!("Toggle clicked {:?}", open_ixs);
                         this.toggle_accordion(open_ixs.to_vec(), window, cx);
                     })),
             )

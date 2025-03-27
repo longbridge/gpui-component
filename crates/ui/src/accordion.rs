@@ -102,7 +102,6 @@ impl RenderOnce for Accordion {
                             .on_toggle_click({
                                 let open_ixs = Rc::clone(&open_ixs);
                                 move |open, _, _| {
-                                    println!("Toggle clicked : {}", ix);
                                     let mut open_ixs = open_ixs.borrow_mut();
                                     if *open {
                                         if !is_multiple {
