@@ -263,7 +263,12 @@ impl InputStory {
     ) {
         match event {
             NumberInputEvent::Input(input_event) => match input_event {
-                InputEvent::Change(text) => println!("Change: {}", text),
+                InputEvent::Change(text) => {
+                    if let Ok(value) = text.parse::<i64>() {
+                        self.number_input1_value = value;
+                    }
+                    println!("Change: {}", text);
+                }
                 InputEvent::PressEnter => println!("PressEnter"),
                 InputEvent::Focus => println!("Focus"),
                 InputEvent::Blur => println!("Blur"),
@@ -294,7 +299,12 @@ impl InputStory {
     ) {
         match event {
             NumberInputEvent::Input(input_event) => match input_event {
-                InputEvent::Change(text) => println!("Change: {}", text),
+                InputEvent::Change(text) => {
+                    if let Ok(value) = text.parse::<u64>() {
+                        self.number_input2_value = value;
+                    }
+                    println!("Change: {}", text);
+                }
                 InputEvent::PressEnter => println!("PressEnter"),
                 InputEvent::Focus => println!("Focus"),
                 InputEvent::Blur => println!("Blur"),
