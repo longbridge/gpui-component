@@ -1,4 +1,4 @@
-use std::{cell::Cell, rc::Rc, sync::Arc};
+use std::{cell::RefCell, collections::HashSet, rc::Rc, sync::Arc};
 
 use gpui::{
     div, prelude::FluentBuilder as _, rems, AnyElement, App, Div, ElementId,
@@ -80,18 +80,8 @@ impl Sizable for Accordion {
 
 impl RenderOnce for Accordion {
     fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
-        let mut open_ixs: Vec<usize> = Vec::new();
-        let multiple = self.multiple;
-        let state = Rc::new(Cell::new(None));
-
-        self.children
-            .iter()
-            .enumerate()
-            .for_each(|(ix, accordion)| {
-                if accordion.open {
-                    open_ixs.push(ix);
-                }
-            });
+        let open_ixs = Rc::new(RefCell::new(HashSet::new()));
+        let is_multiple = self.multiple;
 
         self.base
             .id(self.id)
@@ -100,36 +90,38 @@ impl RenderOnce for Accordion {
                     .into_iter()
                     .enumerate()
                     .map(|(ix, accordion)| {
-                        let state = Rc::clone(&state);
+                        if accordion.open {
+                            open_ixs.borrow_mut().insert(ix);
+                        }
+
                         accordion
+                            .index(ix)
                             .with_size(self.size)
                             .bordered(self.bordered)
-                            .when(self.disabled, |this| this.disabled(true))
-                            .on_toggle_click(move |_, _, _| {
-                                state.set(Some(ix));
+                            .disabled(self.disabled)
+                            .on_toggle_click({
+                                let open_ixs = Rc::clone(&open_ixs);
+                                move |open, _, _| {
+                                    println!("Toggle clicked : {}", ix);
+                                    let mut open_ixs = open_ixs.borrow_mut();
+                                    if *open {
+                                        if !is_multiple {
+                                            open_ixs.clear();
+                                        }
+                                        open_ixs.insert(ix);
+                                    } else {
+                                        open_ixs.remove(&ix);
+                                    }
+                                }
                             })
                     }),
             )
             .when_some(
                 self.on_toggle_click.filter(|_| !self.disabled),
                 move |this, on_toggle_click| {
+                    let open_ixs = Rc::clone(&open_ixs);
                     this.on_click(move |_, window, cx| {
-                        let mut open_ixs = open_ixs.clone();
-                        if let Some(ix) = state.get() {
-                            if multiple {
-                                if let Some(pos) = open_ixs.iter().position(|&i| i == ix) {
-                                    open_ixs.remove(pos);
-                                } else {
-                                    open_ixs.push(ix);
-                                }
-                            } else {
-                                let was_open = open_ixs.iter().any(|&i| i == ix);
-                                open_ixs.clear();
-                                if !was_open {
-                                    open_ixs.push(ix);
-                                }
-                            }
-                        }
+                        let open_ixs: Vec<usize> = open_ixs.borrow().iter().map(|&ix| ix).collect();
 
                         on_toggle_click(&open_ixs, window, cx);
                     })
@@ -141,6 +133,7 @@ impl RenderOnce for Accordion {
 /// An Accordion is a vertically stacked list of items, each of which can be expanded to reveal the content associated with it.
 #[derive(IntoElement)]
 pub struct AccordionItem {
+    index: usize,
     icon: Option<Icon>,
     title: AnyElement,
     content: AnyElement,
@@ -154,6 +147,7 @@ pub struct AccordionItem {
 impl AccordionItem {
     pub fn new() -> Self {
         Self {
+            index: 0,
             icon: None,
             title: SharedString::default().into_any_element(),
             content: SharedString::default().into_any_element(),
@@ -163,6 +157,11 @@ impl AccordionItem {
             size: Size::default(),
             bordered: true,
         }
+    }
+
+    fn index(mut self, index: usize) -> Self {
+        self.index = index;
+        self
     }
 
     pub fn icon(mut self, icon: impl Into<Icon>) -> Self {
@@ -230,7 +229,7 @@ impl RenderOnce for AccordionItem {
             .text_size(text_size)
             .child(
                 h_flex()
-                    .id("accordion-title")
+                    .id(self.index)
                     .justify_between()
                     .map(|this| match self.size {
                         Size::XSmall => this.py_0().px_1p5(),
@@ -274,17 +273,14 @@ impl RenderOnce for AccordionItem {
                                 .xsmall()
                                 .text_color(cx.theme().muted_foreground),
                             )
-                    })
-                    .when_some(
-                        self.on_toggle_click.filter(|_| !self.disabled),
-                        |this, on_toggle_click| {
-                            this.on_click({
-                                move |_, window, cx| {
-                                    on_toggle_click(&!self.open, window, cx);
-                                }
+                            .when_some(self.on_toggle_click, |this, on_toggle_click| {
+                                this.on_click({
+                                    move |_, window, cx| {
+                                        on_toggle_click(&!self.open, window, cx);
+                                    }
+                                })
                             })
-                        },
-                    ),
+                    }),
             )
             .when(self.open, |this| {
                 this.child(
