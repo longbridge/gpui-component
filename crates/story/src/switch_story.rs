@@ -23,6 +23,8 @@ pub struct SwitchStory {
     check1: bool,
     check2: bool,
     check3: bool,
+    check4: bool,
+    check5: bool,
     radio_check1: bool,
     radio_check2: bool,
     radio_group_checked: Option<usize>,
@@ -56,9 +58,11 @@ impl SwitchStory {
             check1: false,
             check2: false,
             check3: true,
+            check4: false,
+            check5: false,
             radio_check1: false,
             radio_check2: true,
-            radio_group_checked: None,
+            radio_group_checked: Some(1),
         }
     }
 }
@@ -208,15 +212,20 @@ impl Render for SwitchStory {
                             .child(
                                 Checkbox::new("longlong-checkbox")
                                     .w(px(300.))
+                                    .checked(self.check4)
                                     .label("The long long label text.")
                                     .child(div().text_color(cx.theme().muted_foreground).child(
                                         "This is a long long label text that \
                                         should wrap when the text is too long.",
-                                    )),
+                                    ))
+                                    .on_click(cx.listener(|v, _, _, _| {
+                                        v.check4 = !v.check4;
+                                    })),
                             )
                             .child(
                                 Checkbox::new("longlong-markdown-checkbox")
                                     .w(px(300.))
+                                    .checked(self.check5)
                                     .label("Label with description")
                                     .child(div().text_color(cx.theme().muted_foreground).child(
                                         TextView::markdown(
@@ -225,7 +234,10 @@ impl Render for SwitchStory {
                                             text used markdown, \
                                             it should wrap when the text is too long.",
                                         ),
-                                    )),
+                                    ))
+                                    .on_click(cx.listener(|v, _, _, _| {
+                                        v.check5 = !v.check5;
+                                    })),
                             ),
                     ),
                 )
@@ -298,8 +310,9 @@ impl Render for SwitchStory {
                                 RadioGroup::horizontal()
                                     .children(["One", "Two", "Three"])
                                     .selected_index(self.radio_group_checked)
-                                    .on_change(cx.listener(|this, selected_ix: &usize, _, _| {
+                                    .on_change(cx.listener(|this, selected_ix: &usize, _, cx| {
                                         this.radio_group_checked = Some(*selected_ix);
+                                        cx.notify();
                                     })),
                             ),
                         )
@@ -319,8 +332,9 @@ impl Render for SwitchStory {
                                         .child(Radio::new("one3").label("Mexico"))
                                         .selected_index(self.radio_group_checked)
                                         .on_change(cx.listener(
-                                            |this, selected_ix: &usize, _, _| {
+                                            |this, selected_ix: &usize, _, cx| {
                                                 this.radio_group_checked = Some(*selected_ix);
+                                                cx.notify();
                                             },
                                         )),
                                 ),
