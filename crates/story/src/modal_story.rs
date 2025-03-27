@@ -686,7 +686,7 @@ impl Render for ModalStory {
                                     })),
                             )
                             .child(
-                                Button::new("show-notify-warning")
+                                Button::new("show-notify-with-title")
                                     .label("Notification with Title")
                                     .on_click(cx.listener(|_, _, window, cx| {
                                         struct TestNotification;
