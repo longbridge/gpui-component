@@ -85,40 +85,46 @@ pub trait ButtonVariants: Sized {
 impl ButtonCustomVariant {
     pub fn new(cx: &App) -> Self {
         Self {
-            color: cx.theme().secondary,
-            foreground: cx.theme().secondary_foreground,
-            border: cx.theme().border,
-            hover: cx.theme().secondary_hover,
-            active: cx.theme().secondary_active,
-            shadow: true,
+            color: cx.theme().transparent,
+            foreground: cx.theme().foreground,
+            border: cx.theme().transparent,
+            hover: cx.theme().transparent,
+            active: cx.theme().transparent,
+            shadow: false,
         }
     }
 
+    /// Set background color, default is transparent.
     pub fn color(mut self, color: Hsla) -> Self {
         self.color = color;
         self
     }
 
+    /// Set foreground color, default is theme foreground.
     pub fn foreground(mut self, color: Hsla) -> Self {
         self.foreground = color;
         self
     }
 
+    /// Set border color, default is transparent.
     pub fn border(mut self, color: Hsla) -> Self {
         self.border = color;
         self
     }
 
+    /// Set hover background color, default is transparent.
     pub fn hover(mut self, color: Hsla) -> Self {
         self.hover = color;
         self
     }
 
+    /// Set active background color, default is transparent.
     pub fn active(mut self, color: Hsla) -> Self {
         self.active = color;
         self
     }
 
+    /// Set shadow, default is false.
     pub fn shadow(mut self, shadow: bool) -> Self {
         self.shadow = shadow;
         self
