@@ -691,7 +691,13 @@ impl TabPanel {
 
                 Some(
                     Tab::new("")
-                        .child(panel.title(window, cx))
+                        .map(|this| {
+                            if let Some(tab_name) = panel.tab_name(cx) {
+                                this.child(tab_name)
+                            } else {
+                                this.child(panel.title(window, cx))
+                            }
+                        })
                         .py_2()
                         .selected(active)
                         .disabled(disabled)

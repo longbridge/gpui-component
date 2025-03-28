@@ -59,6 +59,13 @@ pub trait Panel: EventEmitter<PanelEvent> + Render + Focusable {
     /// Once you have defined a panel name, this must not be changed.
     fn panel_name(&self) -> &'static str;
 
+    /// The name of the tab of the panel, default is `None`.
+    ///
+    /// Used to display in the already collapsed tab panel.
+    fn tab_name(&self, cx: &App) -> Option<SharedString> {
+        None
+    }
+
     /// The title of the panel
     fn title(&self, window: &Window, cx: &App) -> AnyElement {
         SharedString::from(t!("Dock.Unnamed")).into_any_element()
@@ -137,6 +144,7 @@ pub trait Panel: EventEmitter<PanelEvent> + Render + Focusable {
 pub trait PanelView: 'static + Send + Sync {
     fn panel_name(&self, cx: &App) -> &'static str;
     fn panel_id(&self, cx: &App) -> EntityId;
+    fn tab_name(&self, cx: &App) -> Option<SharedString>;
     fn title(&self, window: &Window, cx: &App) -> AnyElement;
     fn title_suffix(&self, window: &mut Window, cx: &mut App) -> Option<AnyElement>;
     fn title_style(&self, cx: &App) -> Option<TitleStyle>;
@@ -160,6 +168,10 @@ impl<T: Panel> PanelView for Entity<T> {
 
     fn panel_id(&self, _: &App) -> EntityId {
         self.entity_id()
+    }
+
+    fn tab_name(&self, cx: &App) -> Option<SharedString> {
+        self.read(cx).tab_name(cx)
     }
 
     fn title(&self, window: &Window, cx: &App) -> AnyElement {
