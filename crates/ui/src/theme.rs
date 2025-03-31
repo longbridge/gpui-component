@@ -316,7 +316,7 @@ impl ThemeColor {
             table_active_border: hsl(211.0, 97.0, 85.0),
             table_even: hsl(240.0, 5.0, 96.0),
             table_head: hsl(0.0, 0.0, 100.),
-            table_head_foreground: hsl(240.0, 10., 3.9).opacity(0.7),
+            table_head_foreground: hsl(240.0, 5.0, 34.),
             table_hover: hsl(240.0, 4.8, 95.0),
             table_row_border: hsl(240.0, 7.7, 94.5),
             tiles: hsl(0.0, 0.0, 95.),
