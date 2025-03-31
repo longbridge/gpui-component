@@ -107,7 +107,7 @@ impl RenderOnce for WindowBorder {
                                             CursorStyle::ResizeUpRightDownLeft
                                         }
                                     },
-                                    &hitbox,
+                                    Some(&hitbox),
                                 );
                             },
                         )
