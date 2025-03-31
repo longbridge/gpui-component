@@ -68,7 +68,7 @@ enum ResizeSide {
 }
 
 #[derive(Clone)]
-pub struct DragResizing(EntityId, ResizeSide);
+pub struct DragResizing(EntityId);
 
 impl Render for DragResizing {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
@@ -78,16 +78,9 @@ impl Render for DragResizing {
 
 #[derive(Clone)]
 struct ResizeDrag {
-    axis: ResizeAxis,
+    side: ResizeSide,
     last_position: Point<Pixels>,
     last_bounds: Bounds<Pixels>,
-}
-
-#[derive(Clone, PartialEq)]
-enum ResizeAxis {
-    Horizontal,
-    Vertical,
-    Both,
 }
 
 /// TileItem is a moveable and resizable panel that can be added to a Tiles view.
@@ -572,7 +565,7 @@ impl Tiles {
                         move |this, event: &MouseDownEvent, window, cx| {
                             let last_position = event.position;
                             let drag_data = ResizeDrag {
-                                axis: ResizeAxis::Horizontal,
+                                side: ResizeSide::Left,
                                 last_position,
                                 last_bounds: panel_bounds,
                             };
@@ -584,23 +577,23 @@ impl Tiles {
                         }
                     }),
                 )
-                .on_drag(
-                    DragResizing(entity_id, ResizeSide::Left),
-                    |drag, _, _, cx| {
-                        cx.stop_propagation();
-                        cx.new(|_| drag.clone())
-                    },
-                )
+                .on_drag(DragResizing(entity_id), |drag, _, _, cx| {
+                    cx.stop_propagation();
+                    cx.new(|_| drag.clone())
+                })
                 .on_drag_move(cx.listener(
                     move |this, e: &DragMoveEvent<DragResizing>, window, cx| match e.drag(cx) {
-                        DragResizing(id, side) => {
-                            if *id != entity_id || *side != ResizeSide::Left {
+                        DragResizing(id) => {
+                            if *id != entity_id {
                                 return;
                             }
 
                             let Some(ref drag_data) = this.resizing_drag_data else {
                                 return;
                             };
+                            if drag_data.side != ResizeSide::Left {
+                                return;
+                            }
 
                             let pos = e.event.position;
                             let delta = drag_data.last_position.x - pos.x;
@@ -633,7 +626,7 @@ impl Tiles {
                         move |this, event: &MouseDownEvent, window, cx| {
                             let last_position = event.position;
                             let drag_data = ResizeDrag {
-                                axis: ResizeAxis::Horizontal,
+                                side: ResizeSide::Right,
                                 last_position,
                                 last_bounds: panel_bounds,
                             };
@@ -645,17 +638,14 @@ impl Tiles {
                         }
                     }),
                 )
-                .on_drag(
-                    DragResizing(entity_id, ResizeSide::Right),
-                    |drag, _, _, cx| {
-                        cx.stop_propagation();
-                        cx.new(|_| drag.clone())
-                    },
-                )
+                .on_drag(DragResizing(entity_id), |drag, _, _, cx| {
+                    cx.stop_propagation();
+                    cx.new(|_| drag.clone())
+                })
                 .on_drag_move(cx.listener(
                     move |this, e: &DragMoveEvent<DragResizing>, window, cx| match e.drag(cx) {
-                        DragResizing(id, side) => {
-                            if *id != entity_id || *side != ResizeSide::Right {
+                        DragResizing(id) => {
+                            if *id != entity_id {
                                 return;
                             }
 
@@ -663,9 +653,10 @@ impl Tiles {
                                 return;
                             };
 
-                            if drag_data.axis != ResizeAxis::Horizontal {
+                            if drag_data.side != ResizeSide::Right {
                                 return;
                             }
+
                             let pos = e.event.position;
                             let delta = pos.x - drag_data.last_position.x;
                             let new_width =
@@ -695,7 +686,7 @@ impl Tiles {
                         move |this, event: &MouseDownEvent, window, cx| {
                             let last_position = event.position;
                             let drag_data = ResizeDrag {
-                                axis: ResizeAxis::Vertical,
+                                side: ResizeSide::Top,
                                 last_position,
                                 last_bounds: panel_bounds,
                             };
@@ -707,23 +698,23 @@ impl Tiles {
                         }
                     }),
                 )
-                .on_drag(
-                    DragResizing(entity_id, ResizeSide::Top),
-                    |drag, _, _, cx| {
-                        cx.stop_propagation();
-                        cx.new(|_| drag.clone())
-                    },
-                )
+                .on_drag(DragResizing(entity_id), |drag, _, _, cx| {
+                    cx.stop_propagation();
+                    cx.new(|_| drag.clone())
+                })
                 .on_drag_move(cx.listener(
                     move |this, e: &DragMoveEvent<DragResizing>, window, cx| match e.drag(cx) {
-                        DragResizing(id, side) => {
-                            if *id != entity_id || *side != ResizeSide::Top {
+                        DragResizing(id) => {
+                            if *id != entity_id {
                                 return;
                             }
 
                             let Some(ref drag_data) = this.resizing_drag_data else {
                                 return;
                             };
+                            if drag_data.side != ResizeSide::Top {
+                                return;
+                            }
 
                             let pos = e.event.position;
                             let delta = drag_data.last_position.y - pos.y;
@@ -756,7 +747,7 @@ impl Tiles {
                         move |this, event: &MouseDownEvent, window, cx| {
                             let last_position = event.position;
                             let drag_data = ResizeDrag {
-                                axis: ResizeAxis::Vertical,
+                                side: ResizeSide::Bottom,
                                 last_position,
                                 last_bounds: panel_bounds,
                             };
@@ -768,23 +759,24 @@ impl Tiles {
                         }
                     }),
                 )
-                .on_drag(
-                    DragResizing(entity_id, ResizeSide::Bottom),
-                    |drag, _, _, cx| {
-                        cx.stop_propagation();
-                        cx.new(|_| drag.clone())
-                    },
-                )
+                .on_drag(DragResizing(entity_id), |drag, _, _, cx| {
+                    cx.stop_propagation();
+                    cx.new(|_| drag.clone())
+                })
                 .on_drag_move(cx.listener(
                     move |this, e: &DragMoveEvent<DragResizing>, window, cx| match e.drag(cx) {
-                        DragResizing(id, side) => {
-                            if *id != entity_id || *side != ResizeSide::Bottom {
+                        DragResizing(id) => {
+                            if *id != entity_id {
                                 return;
                             }
 
                             let Some(ref drag_data) = this.resizing_drag_data else {
                                 return;
                             };
+
+                            if drag_data.side != ResizeSide::Bottom {
+                                return;
+                            }
 
                             let pos = e.event.position;
                             let delta = pos.y - drag_data.last_position.y;
@@ -824,7 +816,7 @@ impl Tiles {
                                 move |this, event: &MouseDownEvent, window, cx| {
                                     let last_position = event.position;
                                     let drag_data = ResizeDrag {
-                                        axis: ResizeAxis::Both,
+                                        side: ResizeSide::BottomRight,
                                         last_position,
                                         last_bounds: panel_bounds,
                                     };
@@ -837,18 +829,15 @@ impl Tiles {
                                 }
                             }),
                         )
-                        .on_drag(
-                            DragResizing(entity_id, ResizeSide::BottomRight),
-                            |drag, _, _, cx| {
-                                cx.stop_propagation();
-                                cx.new(|_| drag.clone())
-                            },
-                        )
+                        .on_drag(DragResizing(entity_id), |drag, _, _, cx| {
+                            cx.stop_propagation();
+                            cx.new(|_| drag.clone())
+                        })
                         .on_drag_move(cx.listener(
                             move |this, e: &DragMoveEvent<DragResizing>, window, cx| {
                                 match e.drag(cx) {
-                                    DragResizing(id, side) => {
-                                        if *id != entity_id || *side != ResizeSide::BottomRight {
+                                    DragResizing(id) => {
+                                        if *id != entity_id {
                                             return;
                                         }
 
@@ -856,9 +845,10 @@ impl Tiles {
                                             return;
                                         };
 
-                                        if drag_data.axis != ResizeAxis::Both {
+                                        if drag_data.side != ResizeSide::BottomRight {
                                             return;
                                         }
+
                                         let pos = e.event.position;
                                         let delta_x = pos.x - drag_data.last_position.x;
                                         let delta_y = pos.y - drag_data.last_position.y;
