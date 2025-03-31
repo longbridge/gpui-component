@@ -520,6 +520,12 @@ impl TextInput {
         cx.notify();
     }
 
+    /// Set with masked state.
+    pub fn masked(mut self, masked: bool) -> Self {
+        self.masked = masked;
+        self
+    }
+
     /// Set the masked state of the input field.
     pub fn set_masked(&mut self, masked: bool, _: &mut Window, cx: &mut Context<Self>) {
         self.masked = masked;

@@ -33,7 +33,7 @@ pub struct InputStory {
     number_input1: Entity<NumberInput>,
     number_input2: Entity<NumberInput>,
     number_input2_value: u64,
-    mash_input: Entity<TextInput>,
+    mask_input: Entity<TextInput>,
     disabled_input: Entity<TextInput>,
     prefix_input1: Entity<TextInput>,
     suffix_input1: Entity<TextInput>,
@@ -138,8 +138,7 @@ impl InputStory {
             .detach();
 
         let mask_input = cx.new(|cx| {
-            let mut input = TextInput::new(window, cx).cleanable();
-            input.set_masked(true, window, cx);
+            let mut input = TextInput::new(window, cx).masked(true).cleanable();
             input.set_text("this-is-password", window, cx);
             input
         });
@@ -183,7 +182,7 @@ impl InputStory {
             number_input1_value,
             number_input2,
             number_input2_value: 0,
-            mash_input: mask_input,
+            mask_input,
             disabled_input: cx.new(|cx| {
                 let mut input = TextInput::new(window, cx);
                 input.set_text("This is disabled input", window, cx);
