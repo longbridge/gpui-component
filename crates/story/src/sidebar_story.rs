@@ -313,7 +313,7 @@ impl Render for SidebarStory {
                             for item in groups[0].iter() {
                                 let item = *item;
                                 items.push(
-                                    SidebarMenuItem::new(item.label())
+                                    SidebarMenuItem::new(item.label(), item.label())
                                         .icon(item.icon().into())
                                         .active(self.active_item == item)
                                         .children({
@@ -321,13 +321,12 @@ impl Render for SidebarStory {
                                                 Vec::with_capacity(item.items().len());
                                             for sub_item in item.items() {
                                                 sub_items.push(
-                                                    SidebarMenuItem::new(sub_item.label())
-                                                        .active(
-                                                            self.active_subitem == Some(sub_item),
-                                                        )
-                                                        .on_click(
-                                                            cx.listener(sub_item.handler(&item)),
-                                                        ),
+                                                    SidebarMenuItem::new(
+                                                        sub_item.label(),
+                                                        sub_item.label(),
+                                                    )
+                                                    .active(self.active_subitem == Some(sub_item))
+                                                    .on_click(cx.listener(sub_item.handler(&item))),
                                                 );
                                             }
                                             sub_items
@@ -343,7 +342,7 @@ impl Render for SidebarStory {
                             let mut items = Vec::with_capacity(groups[1].len());
                             for item in groups[1].iter() {
                                 items.push(
-                                    SidebarMenuItem::new(item.label())
+                                    SidebarMenuItem::new(item.label(), item.label())
                                         .icon(item.icon().into())
                                         .active(self.active_item == *item)
                                         .on_click(cx.listener(item.handler())),

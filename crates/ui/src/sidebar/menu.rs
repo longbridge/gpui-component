@@ -1,8 +1,8 @@
 use crate::{h_flex, v_flex, ActiveTheme as _, Collapsible, Icon, IconName, StyledExt};
 use gpui::{
-    div, percentage, prelude::FluentBuilder as _, App, ClickEvent, InteractiveElement as _,
-    IntoElement, ParentElement as _, RenderOnce, SharedString, StatefulInteractiveElement as _,
-    Styled as _, Window,
+    div, percentage, prelude::FluentBuilder as _, App, ClickEvent, ElementId,
+    InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, SharedString,
+    StatefulInteractiveElement as _, Styled as _, Window,
 };
 use std::rc::Rc;
 
@@ -56,6 +56,7 @@ impl RenderOnce for SidebarMenu {
 /// A sidebar menu item
 #[derive(IntoElement)]
 pub struct SidebarMenuItem {
+    id: ElementId,
     icon: Option<Icon>,
     label: SharedString,
     handler: Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>,
@@ -66,8 +67,9 @@ pub struct SidebarMenuItem {
 
 impl SidebarMenuItem {
     /// Create a new SidebarMenuItem with a label
-    pub fn new(label: impl Into<SharedString>) -> Self {
+    pub fn new(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Self {
         Self {
+            id: id.into(),
             icon: None,
             label: label.into(),
             handler: Rc::new(|_, _, _| {}),
@@ -129,7 +131,7 @@ impl SidebarMenuItem {
         let is_submenu = self.is_submenu();
 
         h_flex()
-            .id("sidebar-menu-item")
+            .id(self.id.clone())
             .overflow_hidden()
             .flex_shrink_0()
             .p_2()
