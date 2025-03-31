@@ -138,7 +138,10 @@ impl InputStory {
             .detach();
 
         let mask_input = cx.new(|cx| {
-            let mut input = TextInput::new(window, cx).masked(true).cleanable();
+            let mut input = TextInput::new(window, cx)
+                .masked(true)
+                .mask_toggle()
+                .cleanable();
             input.set_text("this-is-password", window, cx);
             input
         });
@@ -374,7 +377,7 @@ impl FocusableCycle for InputStory {
             self.input1.focus_handle(cx),
             self.input2.focus_handle(cx),
             self.disabled_input.focus_handle(cx),
-            self.mash_input.focus_handle(cx),
+            self.mask_input.focus_handle(cx),
             self.prefix_input1.focus_handle(cx),
             self.both_input1.focus_handle(cx),
             self.suffix_input1.focus_handle(cx),
@@ -449,7 +452,7 @@ impl Render for InputStory {
                     .child(
                         section("Input State", cx)
                             .child(self.disabled_input.clone())
-                            .child(self.mash_input.clone()),
+                            .child(self.mask_input.clone()),
                     ),
             )
             .child(

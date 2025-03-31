@@ -27,13 +27,14 @@ use super::change::Change;
 use super::element::TextElement;
 use super::number_input;
 
+use crate::button::{Button, ButtonVariants as _};
 use crate::history::History;
 use crate::indicator::Indicator;
 use crate::input::clear_button;
 use crate::scroll::{Scrollbar, ScrollbarAxis, ScrollbarState};
-use crate::Size;
 use crate::StyledExt;
 use crate::{ActiveTheme, Root};
+use crate::{IconName, Size};
 use crate::{Sizable, StyleSized};
 
 actions!(
@@ -220,6 +221,7 @@ pub struct TextInput {
     pub(super) selecting: bool,
     pub(super) disabled: bool,
     pub(super) masked: bool,
+    pub(super) mask_toggle: bool,
     pub(super) appearance: bool,
     pub(super) cleanable: bool,
     pub(super) size: Size,
@@ -279,6 +281,7 @@ impl TextInput {
             selecting: false,
             disabled: false,
             masked: false,
+            mask_toggle: false,
             appearance: true,
             cleanable: false,
             loading: false,
@@ -530,6 +533,12 @@ impl TextInput {
     pub fn set_masked(&mut self, masked: bool, _: &mut Window, cx: &mut Context<Self>) {
         self.masked = masked;
         cx.notify();
+    }
+
+    /// Set to enable toggle button for mask state.
+    pub fn mask_toggle(mut self) -> Self {
+        self.mask_toggle = true;
+        self
     }
 
     /// Set the prefix element of the input field.
@@ -1453,6 +1462,35 @@ impl TextInput {
             .map(|p| p.is_match(new_text))
             .unwrap_or(true)
     }
+
+    fn render_toggle_mask_button(
+        &self,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<impl IntoElement> {
+        if !self.mask_toggle {
+            return None;
+        }
+
+        Some(
+            Button::new("toggle-mask")
+                .icon(IconName::Eye)
+                .xsmall()
+                .ghost()
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(|this, _, window, cx| {
+                        this.set_masked(false, window, cx);
+                    }),
+                )
+                .on_mouse_up(
+                    MouseButton::Left,
+                    cx.listener(|this, _, window, cx| {
+                        this.set_masked(true, window, cx);
+                    }),
+                ),
+        )
+    }
 }
 
 impl Sizable for TextInput {
@@ -1648,8 +1686,8 @@ impl Render for TextInput {
         let focused = self.focus_handle.is_focused(window);
         let mut gap_x = match self.size {
             Size::Small => px(4.),
-            Size::Large => px(12.),
-            _ => px(8.),
+            Size::Large => px(8.),
+            _ => px(4.),
         };
         if self.no_gap {
             gap_x = px(0.);
@@ -1744,6 +1782,7 @@ impl Render for TextInput {
             .when(self.loading, |this| {
                 this.child(Indicator::new().color(cx.theme().muted_foreground))
             })
+            .children(self.render_toggle_mask_button(window, cx))
             .when(
                 self.cleanable && !self.loading && !self.text.is_empty() && self.is_single_line(),
                 |this| this.child(clear_button(cx).on_click(cx.listener(Self::clean))),

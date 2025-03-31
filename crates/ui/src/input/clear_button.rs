@@ -5,6 +5,7 @@ use crate::{
     ActiveTheme as _, Icon, IconName, Sizable as _,
 };
 
+#[inline]
 pub(crate) fn clear_button(cx: &App) -> Button {
     Button::new("clean")
         .icon(Icon::new(IconName::CircleX))
