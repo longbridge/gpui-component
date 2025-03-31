@@ -359,7 +359,6 @@ impl StoryWorkspace {
                     Arc::new(StoryContainer::panel::<ImageStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<IconStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<TooltipStory>(window, cx)),
-                    Arc::new(StoryContainer::panel::<ProgressStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<CalendarStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<ResizableStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<ScrollableStory>(window, cx)),
