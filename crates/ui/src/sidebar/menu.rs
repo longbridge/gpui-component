@@ -67,9 +67,9 @@ pub struct SidebarMenuItem {
 
 impl SidebarMenuItem {
     /// Create a new SidebarMenuItem with a label
-    pub fn new(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Self {
+    pub fn new(label: impl Into<SharedString>) -> Self {
         Self {
-            id: id.into(),
+            id: ElementId::Integer(0),
             icon: None,
             label: label.into(),
             handler: Rc::new(|_, _, _| {}),
@@ -82,6 +82,12 @@ impl SidebarMenuItem {
     /// Set the icon for the menu item
     pub fn icon(mut self, icon: Icon) -> Self {
         self.icon = Some(icon);
+        self
+    }
+
+    /// Set id to the menu item.
+    pub fn id(mut self, id: impl Into<ElementId>) -> Self {
+        self.id = id.into();
         self
     }
 
