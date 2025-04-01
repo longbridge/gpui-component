@@ -13,6 +13,11 @@ pub trait HistoryItem: Clone + PartialEq {
 /// This is now used in Input for undo/redo operations. You can also use this in
 /// your own models to keep track of changes, for example to track the tab
 /// history for prev/next features.
+///
+/// ## Use cases
+///
+/// - Undo/redo operations in Input
+/// - Tracking tab history for prev/next features
 #[derive(Debug)]
 pub struct History<I: HistoryItem> {
     undos: Vec<I>,
@@ -86,6 +91,7 @@ where
 
         if self.unique {
             self.undos.retain(|c| *c != item);
+            self.redos.retain(|c| *c != item);
         }
 
         let mut item = item;
@@ -250,6 +256,13 @@ mod tests {
         let changes = history.undo().unwrap();
         assert_eq!(changes.len(), 1);
         assert_eq!(changes[0].tab_index, 1);
+
+        assert_eq!(history.redos().len(), 1);
+        // Push duplicate, should be ignored
+        history.push(1.into());
+
+        assert_eq!(history.undos().len(), 3);
+        assert_eq!(history.redos().len(), 0);
 
         // Redo the last undone change
         let changes = history.redo().unwrap();
