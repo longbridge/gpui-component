@@ -204,6 +204,8 @@ impl Render for StoryRoot {
 impl Global for AppState {}
 
 pub fn init(cx: &mut App) {
+    #[cfg(target_os = "linux")]
+    gtk::init().unwrap();
     gpui_component::init(cx);
     AppState::init(cx);
     input_story::init(cx);

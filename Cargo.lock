@@ -6257,6 +6257,7 @@ dependencies = [
  "fake",
  "gpui",
  "gpui-component",
+ "gtk",
  "rand 0.8.5",
  "raw-window-handle",
  "regex",
