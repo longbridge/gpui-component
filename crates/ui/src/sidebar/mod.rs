@@ -206,7 +206,8 @@ impl<E: Collapsible + IntoElement> RenderOnce for Sidebar<E> {
                         .children(
                             self.content
                                 .into_iter()
-                                .map(|c| c.collapsed(self.collapsed)),
+                                .enumerate()
+                                .map(|(ix, c)| div().id(ix).child(c.collapsed(self.collapsed))),
                         )
                         .gap_2()
                         .scrollable(self.view_id, ScrollbarAxis::Vertical),
