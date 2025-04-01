@@ -48,7 +48,8 @@ impl RenderOnce for SidebarMenu {
         v_flex().gap_2().children(
             self.items
                 .into_iter()
-                .map(|item| item.collapsed(self.collapsed)),
+                .enumerate()
+                .map(|(ix, item)| item.id(ix).collapsed(self.collapsed)),
         )
     }
 }
@@ -86,7 +87,7 @@ impl SidebarMenuItem {
     }
 
     /// Set id to the menu item.
-    pub fn id(mut self, id: impl Into<ElementId>) -> Self {
+    fn id(mut self, id: impl Into<ElementId>) -> Self {
         self.id = id.into();
         self
     }
@@ -186,13 +187,19 @@ impl RenderOnce for SidebarMenuItem {
             .when(is_submenu && is_open && !is_collapsed, |this| {
                 this.child(
                     v_flex()
+                        .id("submenu")
                         .border_l_1()
                         .border_color(cx.theme().sidebar_border)
                         .gap_1()
                         .mx_3p5()
                         .px_2p5()
                         .py_0p5()
-                        .children(self.children),
+                        .children(
+                            self.children
+                                .into_iter()
+                                .enumerate()
+                                .map(|(ix, item)| item.id(ix)),
+                        ),
                 )
             })
     }
