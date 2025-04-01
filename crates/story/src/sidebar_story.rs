@@ -1,7 +1,6 @@
 use gpui::{
     div, impl_internal_actions, prelude::FluentBuilder, relative, App, AppContext, ClickEvent,
-    Context, ElementId, Entity, Focusable, IntoElement, ParentElement, Render, SharedString,
-    Styled, Window,
+    Context, Entity, Focusable, IntoElement, ParentElement, Render, SharedString, Styled, Window,
 };
 
 use gpui_component::{
@@ -311,29 +310,18 @@ impl Render for SidebarStory {
                     .child(
                         SidebarGroup::new("Platform").child(SidebarMenu::new().children({
                             let mut items = Vec::with_capacity(groups[0].len());
-                            for (ix, item) in groups[0].iter().enumerate() {
+                            for item in groups[0].iter() {
                                 let item = *item;
-                                let id =
-                                    ElementId::Name(SharedString::new(format!("item-{}", ix,)));
-
                                 items.push(
                                     SidebarMenuItem::new(item.label())
-                                        .id(id)
                                         .icon(item.icon().into())
                                         .active(self.active_item == item)
                                         .children({
                                             let mut sub_items =
                                                 Vec::with_capacity(item.items().len());
-                                            for (ix, sub_item) in
-                                                item.items().into_iter().enumerate()
-                                            {
-                                                let id = ElementId::Name(SharedString::new(
-                                                    format!("sub-item-{}", ix),
-                                                ));
-
+                                            for sub_item in item.items().into_iter() {
                                                 sub_items.push(
                                                     SidebarMenuItem::new(sub_item.label())
-                                                        .id(id)
                                                         .active(
                                                             self.active_subitem == Some(sub_item),
                                                         )
@@ -353,13 +341,9 @@ impl Render for SidebarStory {
                     .child(
                         SidebarGroup::new("Projects").child(SidebarMenu::new().children({
                             let mut items = Vec::with_capacity(groups[1].len());
-                            for (ix, item) in groups[1].iter().enumerate() {
-                                let id =
-                                    ElementId::Name(SharedString::new(format!("project-{}", ix)));
-
+                            for item in groups[1].iter() {
                                 items.push(
                                     SidebarMenuItem::new(item.label())
-                                        .id(id)
                                         .icon(item.icon().into())
                                         .active(self.active_item == *item)
                                         .on_click(cx.listener(item.handler())),
