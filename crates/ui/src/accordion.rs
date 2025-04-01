@@ -261,8 +261,7 @@ impl RenderOnce for AccordionItem {
                             .child(self.title),
                     )
                     .when(!self.disabled, |this| {
-                        this.cursor_pointer()
-                            .hover(|this| this.bg(cx.theme().accordion_hover))
+                        this.hover(|this| this.bg(cx.theme().accordion_hover))
                             .child(
                                 Icon::new(if self.open {
                                     IconName::ChevronUp

@@ -157,7 +157,7 @@ impl Element for Switch {
                                 .border(inset)
                                 .border_color(cx.theme().transparent)
                                 .bg(bg)
-                                .when(!self.disabled, |this| this.cursor_pointer())
+                                .when(self.disabled, |this| this.cursor_not_allowed())
                                 .child(
                                     // Switch Toggle
                                     div().rounded(radius).bg(toggle_bg).size(bar_width).map(

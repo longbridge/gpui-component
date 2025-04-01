@@ -130,11 +130,10 @@ impl RenderOnce for ListItem {
             .justify_between()
             .when(!self.disabled, |this| {
                 this.when_some(self.on_click, |this, on_click| {
-                    this.cursor_pointer()
-                        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                            cx.stop_propagation();
-                        })
-                        .on_click(on_click)
+                    this.on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                        cx.stop_propagation();
+                    })
+                    .on_click(on_click)
                 })
                 .when_some(self.on_mouse_enter, |this, on_mouse_enter| {
                     this.on_mouse_move(move |ev, window, cx| (on_mouse_enter)(ev, window, cx))

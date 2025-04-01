@@ -1,6 +1,6 @@
 use gpui::{
-    div, App, AppContext, Context, CursorStyle, Entity, Focusable, InteractiveElement,
-    ParentElement, Render, StatefulInteractiveElement, Styled, Window,
+    div, App, AppContext, Context, Entity, Focusable, InteractiveElement, ParentElement, Render,
+    StatefulInteractiveElement, Styled, Window,
 };
 
 use gpui_component::{
@@ -58,7 +58,6 @@ impl Render for TooltipStory {
             .gap_5()
             .child(
                 div()
-                    .cursor(CursorStyle::PointingHand)
                     .child(
                         Button::new("button")
                             .label("Hover me")
@@ -70,21 +69,18 @@ impl Render for TooltipStory {
             .child(
                 h_flex()
                     .justify_center()
-                    .cursor(CursorStyle::PointingHand)
                     .child(Label::new("Hover me"))
                     .id("tooltip-2")
                     .tooltip(|window, cx| Tooltip::new("This is a Label", window, cx)),
             )
             .child(
                 div()
-                    .cursor(CursorStyle::PointingHand)
                     .child(Checkbox::new("check").label("Remember me").checked(true))
                     .id("tooltip-3")
                     .tooltip(|window, cx| Tooltip::new("Checked!", window, cx)),
             )
             .child(
                 div()
-                    .cursor(CursorStyle::PointingHand)
                     .child(
                         Button::new("button")
                             .label("Hover me")

@@ -115,7 +115,6 @@ impl RenderOnce for Toggle {
             .flex_row()
             .items_center()
             .justify_center()
-            .cursor_pointer()
             .map(|this| match self.size {
                 Size::XSmall => this.min_w_5().h_5().px_0p5().text_xs(),
                 Size::Small => this.min_w_6().h_6().px_1().text_sm(),

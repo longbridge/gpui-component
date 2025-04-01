@@ -583,7 +583,7 @@ impl RenderOnce for Tab {
             .flex_wrap()
             .items_center()
             .flex_shrink_0()
-            .when(!self.disabled, |this| this.cursor_pointer())
+            .when(self.disabled, |this| this.cursor_not_allowed())
             .overflow_hidden()
             .h(height)
             .overflow_hidden()

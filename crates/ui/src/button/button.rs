@@ -358,7 +358,7 @@ impl RenderOnce for Button {
             .flex()
             .items_center()
             .justify_center()
-            .cursor_pointer()
+            .when(self.variant.is_link(), |this| this.cursor_pointer())
             .overflow_hidden()
             .when(cx.theme().shadow && normal_style.shadow, |this| {
                 this.shadow_sm()

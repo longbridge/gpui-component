@@ -218,22 +218,21 @@ impl ColorPicker {
             .border_1()
             .border_color(color.darken(0.1))
             .when(clickable, |this| {
-                this.cursor_pointer()
-                    .hover(|this| {
-                        this.border_color(color.darken(0.3))
-                            .bg(color.lighten(0.1))
-                            .shadow_sm()
-                    })
-                    .active(|this| this.border_color(color.darken(0.5)).bg(color.darken(0.2)))
-                    .on_mouse_move(cx.listener(move |view, _, _, cx| {
-                        view.hovered_color = Some(color);
-                        cx.notify();
-                    }))
-                    .on_click(cx.listener(move |view, _, window, cx| {
-                        view.update_value(Some(color), true, window, cx);
-                        view.open = false;
-                        cx.notify();
-                    }))
+                this.hover(|this| {
+                    this.border_color(color.darken(0.3))
+                        .bg(color.lighten(0.1))
+                        .shadow_sm()
+                })
+                .active(|this| this.border_color(color.darken(0.5)).bg(color.darken(0.2)))
+                .on_mouse_move(cx.listener(move |view, _, _, cx| {
+                    view.hovered_color = Some(color);
+                    cx.notify();
+                }))
+                .on_click(cx.listener(move |view, _, window, cx| {
+                    view.update_value(Some(color), true, window, cx);
+                    view.open = false;
+                    cx.notify();
+                }))
             })
     }
 
@@ -321,7 +320,6 @@ impl Render for ColorPicker {
             .child(
                 h_flex()
                     .id("color-picker-input")
-                    .cursor_pointer()
                     .gap_2()
                     .items_center()
                     .input_text_size(self.size)

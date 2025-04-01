@@ -62,7 +62,6 @@ impl RenderOnce for SidebarFooter {
             .p_2()
             .w_full()
             .justify_between()
-            .cursor_pointer()
             .rounded(cx.theme().radius)
             .hover(|this| {
                 this.bg(cx.theme().sidebar_accent)

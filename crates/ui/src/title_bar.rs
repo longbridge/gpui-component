@@ -153,7 +153,6 @@ impl RenderOnce for ControlIcon {
         div()
             .id(self.id())
             .flex()
-            .cursor_pointer()
             .w(TITLE_BAR_HEIGHT)
             .h_full()
             .justify_center()

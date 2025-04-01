@@ -165,7 +165,7 @@ pub enum Matcher {
     DayOfWeek(Vec<u32>),
     /// Match the included days, except for those before and after the interval.
     ///
-    /// Matcher::Interval(IntervalMatcher {     
+    /// Matcher::Interval(IntervalMatcher {
     ///   before: Some(NaiveDate::from_ymd(2020, 1, 2)),
     ///   after: Some(NaiveDate::from_ymd(2020, 1, 3)),
     /// })
@@ -477,7 +477,7 @@ impl Calendar {
                 if disabled {
                     this.cursor_not_allowed()
                 } else {
-                    this.cursor_pointer()
+                    this
                 }
             })
             .when(muted, |this| {

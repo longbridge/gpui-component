@@ -146,7 +146,6 @@ impl SidebarMenuItem {
             .items_center()
             .rounded(cx.theme().radius)
             .text_sm()
-            .cursor_pointer()
             .hover(|this| {
                 this.bg(cx.theme().sidebar_accent)
                     .text_color(cx.theme().sidebar_accent_foreground)

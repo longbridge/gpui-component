@@ -322,7 +322,6 @@ impl Render for DatePicker {
                     .border_color(cx.theme().input)
                     .rounded(cx.theme().radius)
                     .when(cx.theme().shadow, |this| this.shadow_sm())
-                    .cursor_pointer()
                     .overflow_hidden()
                     .input_text_size(self.size)
                     .when(is_focused, |this| this.focused_border(cx))

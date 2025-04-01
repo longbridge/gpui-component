@@ -247,11 +247,10 @@ impl Render for Notification {
                     .child(div().text_sm().child(self.message.clone())),
             )
             .when_some(self.on_click.clone(), |this, on_click| {
-                this.cursor_pointer()
-                    .on_click(cx.listener(move |view, event, window, cx| {
-                        view.dismiss(event, window, cx);
-                        on_click(event, window, cx);
-                    }))
+                this.on_click(cx.listener(move |view, event, window, cx| {
+                    view.dismiss(event, window, cx);
+                    on_click(event, window, cx);
+                }))
             })
             .when(!self.autohide, |this| {
                 this.child(

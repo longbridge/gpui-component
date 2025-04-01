@@ -1017,7 +1017,6 @@ where
         Some(
             div()
                 .id(("icon-sort", col_ix))
-                .cursor_pointer()
                 .p(px(2.))
                 .rounded(cx.theme().radius / 2.)
                 .map(|this| match is_on {
