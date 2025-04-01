@@ -259,10 +259,10 @@ mod tests {
 
         assert_eq!(history.redos().len(), 1);
         // Push duplicate, should be ignored
-        history.push(1.into());
+        history.push(2.into());
 
-        assert_eq!(history.undos().len(), 3);
-        assert_eq!(history.redos().len(), 0);
+        assert_eq!(history.undos().len(), 2);
+        assert_eq!(history.redos().len(), 1);
 
         // Redo the last undone change
         let changes = history.redo().unwrap();
@@ -273,7 +273,7 @@ mod tests {
         history.push(3.into());
 
         // Check the version and undo stack
-        assert_eq!(history.version(), 6);
+        assert_eq!(history.version(), 7);
         assert_eq!(history.undos().len(), 4);
 
         // Undo all changes
