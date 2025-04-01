@@ -15,7 +15,7 @@ use story::{
     AccordionStory, AppState, AppTitleBar, Assets, ButtonStory, CalendarStory, DropdownStory,
     FormStory, IconStory, ImageStory, InputStory, ListStory, ModalStory, Open, PopupStory,
     ProgressStory, Quit, ResizableStory, ScrollableStory, SidebarStory, StoryContainer,
-    SwitchStory, TableStory, TextStory, TooltipStory,
+    SwitchStory, TableStory, TextStory, TooltipStory, WebViewStory,
 };
 
 #[derive(Clone, PartialEq, Eq, Deserialize)]
@@ -368,7 +368,7 @@ impl StoryWorkspace {
                     Arc::new(StoryContainer::panel::<AccordionStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<SidebarStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<FormStory>(window, cx)),
-                    // Arc::new(StoryContainer::panel::<WebViewStory>(window, cx)),
+                    Arc::new(StoryContainer::panel::<WebViewStory>(window, cx)),
                 ],
                 None,
                 &dock_area,
@@ -455,7 +455,7 @@ impl StoryWorkspace {
             14 => Arc::new(StoryContainer::panel::<ResizableStory>(window, cx)),
             15 => Arc::new(StoryContainer::panel::<ScrollableStory>(window, cx)),
             16 => Arc::new(StoryContainer::panel::<AccordionStory>(window, cx)),
-            // 17 => Arc::new(StoryContainer::panel::<WebViewStory>(window, cx)),
+            17 => Arc::new(StoryContainer::panel::<WebViewStory>(window, cx)),
             _ => Arc::new(StoryContainer::panel::<ButtonStory>(window, cx)),
         };
 
