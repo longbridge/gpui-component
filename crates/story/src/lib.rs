@@ -228,9 +228,11 @@ pub fn init(cx: &mut App) {
         };
 
         let view = cx.new(|cx| {
-            let (title, description, closable, zoomable, story) = story_state.to_story(window, cx);
-            let mut container =
-                StoryContainer::new(window, cx).story(story, story_state.story_klass);
+            let (title, description, closable, zoomable, story, on_active) =
+                story_state.to_story(window, cx);
+            let mut container = StoryContainer::new(window, cx)
+                .story(story, story_state.story_klass)
+                .on_active(on_active);
 
             cx.on_focus_in(
                 &container.focus_handle,
@@ -281,6 +283,7 @@ pub struct StoryContainer {
     story_klass: Option<SharedString>,
     closable: bool,
     zoomable: Option<PanelControl>,
+    on_active: Option<fn(AnyView, bool, &mut Window, &mut App)>,
 }
 
 #[derive(Debug)]
@@ -307,6 +310,22 @@ pub trait Story: Focusable + Render {
         None
     }
     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable>;
+
+    fn on_active(&mut self, active: bool, window: &mut Window, cx: &mut App) {
+        let _ = active;
+        let _ = window;
+        let _ = cx;
+    }
+    fn on_active_any(view: AnyView, active: bool, window: &mut Window, cx: &mut App)
+    where
+        Self: 'static,
+    {
+        if let Some(story) = view.downcast::<Self>().ok() {
+            cx.update_entity(&story, |story, cx| {
+                story.on_active(active, window, cx);
+            });
+        }
+    }
 }
 
 impl EventEmitter<ContainerEvent> for StoryContainer {}
@@ -326,6 +345,7 @@ impl StoryContainer {
             story_klass: None,
             closable: true,
             zoomable: Some(PanelControl::default()),
+            on_active: None,
         }
     }
 
@@ -337,7 +357,9 @@ impl StoryContainer {
         let focus_handle = story.focus_handle(cx);
 
         let view = cx.new(|cx| {
-            let mut story = Self::new(window, cx).story(story.into(), story_klass);
+            let mut story = Self::new(window, cx)
+                .story(story.into(), story_klass)
+                .on_active(S::on_active_any);
             story.focus_handle = focus_handle;
             story.closable = S::closable();
             story.zoomable = S::zoomable();
@@ -363,6 +385,10 @@ impl StoryContainer {
     pub fn story(mut self, story: AnyView, story_klass: impl Into<SharedString>) -> Self {
         self.story = Some(story);
         self.story_klass = Some(story_klass.into());
+        self
+    }
+    pub fn on_active(mut self, on_active: fn(AnyView, bool, &mut Window, &mut App)) -> Self {
+        self.on_active = Some(on_active);
         self
     }
 
@@ -422,6 +448,7 @@ impl StoryState {
         bool,
         Option<PanelControl>,
         AnyView,
+        fn(AnyView, bool, &mut Window, &mut App),
     ) {
         macro_rules! story {
             ($klass:tt) => {
@@ -431,6 +458,7 @@ impl StoryState {
                     $klass::closable(),
                     $klass::zoomable(),
                     $klass::view(window, cx).into(),
+                    $klass::on_active_any,
                 )
             };
         }
@@ -502,8 +530,13 @@ impl Panel for StoryContainer {
         println!("panel: {} zoomed: {}", self.name, zoomed);
     }
 
-    fn set_active(&mut self, active: bool, _window: &mut Window, _cx: &mut App) {
+    fn set_active(&mut self, active: bool, _window: &mut Window, cx: &mut App) {
         println!("panel: {} active: {}", self.name, active);
+        if let Some(on_active) = self.on_active.clone() {
+            if let Some(story) = self.story.clone() {
+                on_active(story, active, _window, cx);
+            }
+        }
     }
 
     fn popup_menu(&self, menu: PopupMenu, _window: &Window, _cx: &App) -> PopupMenu {
