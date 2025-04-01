@@ -4,8 +4,11 @@ use gpui_component::{
     button::{Button, ButtonVariants as _},
     dock::{DockArea, DockAreaState, DockEvent, DockItem, DockPlacement},
     popup_menu::PopupMenuExt,
-    IconName, Root, Sizable, Theme, TitleBar,
+    IconName, Root, Sizable,
 };
+#[cfg(not(target_os = "linux"))]
+use gpui_component::{Theme, TitleBar};
+
 use serde::Deserialize;
 use std::{sync::Arc, time::Duration};
 use story::{
