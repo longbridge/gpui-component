@@ -319,7 +319,7 @@ impl Render for SidebarStory {
                                         .children({
                                             let mut sub_items =
                                                 Vec::with_capacity(item.items().len());
-                                            for sub_item in item.items().into_iter() {
+                                            for sub_item in item.items() {
                                                 sub_items.push(
                                                     SidebarMenuItem::new(sub_item.label())
                                                         .active(
