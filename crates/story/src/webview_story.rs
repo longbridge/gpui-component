@@ -9,7 +9,6 @@ use gpui_component::{
     webview::WebView,
     wry, ActiveTheme,
 };
-use raw_window_handle::HasWindowHandle;
 
 pub struct WebViewStory {
     focus_handle: FocusHandle,
@@ -39,9 +38,36 @@ impl WebViewStory {
         let focus_handle = cx.focus_handle();
 
         let webview = cx.new(|cx| {
-            let webview = wry::WebViewBuilder::new()
-                .build_as_child(&window.window_handle().expect("No window handle"))
-                .unwrap();
+            let builder = wry::WebViewBuilder::new();
+            #[cfg(not(any(
+                target_os = "windows",
+                target_os = "macos",
+                target_os = "ios",
+                target_os = "android"
+            )))]
+            let webview = {
+                use gtk::prelude::*;
+                use wry::WebViewBuilderExtUnix;
+                // borrowed from https://github.com/tauri-apps/wry/blob/dev/examples/gtk_multiwebview.rs
+                // doesn't work yet
+                // TODO: How to initialize this fixed?
+                let fixed = gtk::Fixed::builder().build();
+                fixed.show_all();
+                builder.build_gtk(&fixed).unwrap()
+            };
+            #[cfg(any(
+                target_os = "windows",
+                target_os = "macos",
+                target_os = "ios",
+                target_os = "android"
+            ))]
+            let webview = {
+                use raw_window_handle::HasWindowHandle;
+
+                let window_handle = window.window_handle().expect("No window handle");
+                builder.build_as_child(&window_handle).unwrap()
+            };
+
             WebView::new(webview, window, cx)
         });
 
