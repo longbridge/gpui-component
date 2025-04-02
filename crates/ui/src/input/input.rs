@@ -1037,19 +1037,24 @@ impl TextInput {
         &mut self,
         event: &ScrollWheelEvent,
         _window: &mut Window,
-        _cx: &mut Context<Self>,
+        cx: &mut Context<Self>,
     ) {
         let delta = event.delta.pixel_delta(self.last_line_height);
+        self.update_scroll_offset(Some(self.scroll_handle.offset() + delta), cx);
+    }
+
+    fn update_scroll_offset(&mut self, offset: Option<Point<Pixels>>, cx: &mut Context<Self>) {
+        let mut offset = offset.unwrap_or(self.scroll_handle.offset());
+
         let safe_y_range =
             (-self.scroll_size.height + self.input_bounds.size.height).min(px(0.0))..px(0.);
         let safe_x_range =
             (-self.scroll_size.width + self.input_bounds.size.width).min(px(0.0))..px(0.);
 
-        let mut offset = self.scroll_handle.offset() + delta;
         offset.y = offset.y.clamp(safe_y_range.start, safe_y_range.end);
         offset.x = offset.x.clamp(safe_x_range.start, safe_x_range.end);
-
         self.scroll_handle.set_offset(offset);
+        cx.notify();
     }
 
     fn show_character_palette(
@@ -1576,6 +1581,7 @@ impl EntityInputHandler for TextInput {
         self.selected_range = range.start + new_text.len()..range.start + new_text.len();
         self.marked_range.take();
         self.update_preferred_x_offset(cx);
+        self.update_scroll_offset(None, cx);
         cx.emit(InputEvent::Change(self.text.clone()));
         cx.notify();
     }
