@@ -362,6 +362,10 @@ impl RenderOnce for Modal {
                         this.occlude().bg(overlay_color(self.overlay, window, cx))
                     })
                     .when(self.overlay_closable, |this| {
+                        if !self.overlay_visible {
+                            return this;
+                        }
+
                         this.on_mouse_down(MouseButton::Left, {
                             let on_cancel = on_cancel.clone();
                             let on_close = on_close.clone();
