@@ -35,7 +35,11 @@ impl Panel for StackPanel {
     fn title(&self, _window: &gpui::Window, _cx: &gpui::App) -> gpui::AnyElement {
         "StackPanel".into_any_element()
     }
-
+    fn set_active(&mut self, active: bool, window: &mut Window, cx: &mut App) {
+        for panel in &self.panels {
+            panel.set_active(active, window, cx);
+        }
+    }
     fn dump(&self, cx: &App) -> PanelState {
         let sizes = self.panel_group.read(cx).sizes();
         let mut state = PanelState::new(self);

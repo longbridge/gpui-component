@@ -410,7 +410,7 @@ impl DockItem {
                 }
             }
             DockItem::Tiles { .. } => {}
-            DockItem::Panel { .. } => {}
+            DockItem::Panel { view } => view.set_active(!collapsed, window, cx),
         }
     }
 

@@ -347,10 +347,13 @@ impl TabPanel {
     pub(super) fn set_collapsed(
         &mut self,
         collapsed: bool,
-        _: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         self.collapsed = collapsed;
+        if let Some(panel) = self.panels.get(self.active_ix) {
+            panel.set_active(!collapsed, window, cx);
+        }
         cx.notify();
     }
 
