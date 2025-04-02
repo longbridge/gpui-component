@@ -209,6 +209,7 @@ pub fn init(cx: &mut App) {
     input_story::init(cx);
     dropdown_story::init(cx);
     popup_story::init(cx);
+    webview_story::init(cx);
 
     let http_client = std::sync::Arc::new(
         reqwest_client::ReqwestClient::user_agent("gpui-component/story").unwrap(),
