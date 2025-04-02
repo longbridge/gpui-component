@@ -10,7 +10,7 @@ use gpui_component::{
     wry, ActiveTheme,
 };
 
-pub fn init(cx: &mut App) {
+pub fn init(_: &mut App) {
     #[cfg(target_os = "linux")]
     gtk::init().unwrap();
 }
