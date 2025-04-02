@@ -736,9 +736,6 @@ where
                                         .border_color(cx.theme().border)
                                         .rounded(popup_radius)
                                         .shadow_md()
-                                        .on_mouse_down_out(|_, _, cx| {
-                                            cx.dispatch_action(&Cancel);
-                                        })
                                         .child(self.list.clone()),
                                 )
                                 .on_mouse_down_out(cx.listener(|this, _, window, cx| {
