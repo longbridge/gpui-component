@@ -3,7 +3,7 @@ use gpui::{
     InteractiveElement, IntoElement, ParentElement as _, Render, Styled, Window,
 };
 use gpui_component::{
-    button::{Button, ButtonGroup},
+    button::{Button, ButtonGroup, ButtonVariants},
     checkbox::Checkbox,
     color_picker::ColorPicker,
     date_picker::DatePicker,
@@ -131,6 +131,7 @@ impl Render for FormStory {
                     .child(
                         ButtonGroup::new("size")
                             .small()
+                            .outline()
                             .child(
                                 Button::new("large")
                                     .selected(self.size == Size::Large)
