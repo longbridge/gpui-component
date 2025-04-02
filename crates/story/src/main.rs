@@ -368,7 +368,6 @@ impl StoryWorkspace {
                     Arc::new(StoryContainer::panel::<AccordionStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<SidebarStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<FormStory>(window, cx)),
-                    Arc::new(StoryContainer::panel::<WebViewStory>(window, cx)),
                 ],
                 None,
                 &dock_area,
