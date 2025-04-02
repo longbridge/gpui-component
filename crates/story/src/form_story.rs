@@ -63,7 +63,8 @@ impl FormStory {
         let bio_input = cx.new(|cx| {
             let mut input = TextInput::new(window, cx)
                 .multi_line()
-                .rows(10)
+                .rows(5)
+                .max_rows(20)
                 .placeholder("Enter text here...");
             input.set_text("Hello 世界，this is GPUI component.", window, cx);
             input

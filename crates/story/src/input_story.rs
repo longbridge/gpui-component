@@ -1,7 +1,7 @@
 use gpui::{
     actions, div, prelude::FluentBuilder as _, px, App, AppContext as _, ClickEvent, Context,
     Entity, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding,
-    ParentElement as _, Render, SharedString, Styled, Window,
+    ParentElement as _, Render, SharedString, Styled, Subscription, Window,
 };
 use regex::Regex;
 
@@ -46,6 +46,8 @@ pub struct InputStory {
     otp_input_small: Entity<OtpInput>,
     otp_input_large: Entity<OtpInput>,
     opt_input_sized: Entity<OtpInput>,
+
+    _subscriptions: Vec<Subscription>,
 }
 
 impl super::Story for InputStory {
@@ -77,12 +79,8 @@ impl InputStory {
             );
             input
         });
-        cx.subscribe_in(&input1, window, Self::on_input_event)
-            .detach();
 
         let input2 = cx.new(|cx| TextInput::new(window, cx).placeholder("Enter text here..."));
-        cx.subscribe_in(&input2, window, Self::on_input_event)
-            .detach();
 
         let textarea = cx.new(|cx| {
             let mut input = TextInput::new(window, cx)
@@ -115,8 +113,6 @@ impl InputStory {
             );
             input
         });
-        cx.subscribe_in(&textarea, window, Self::on_input_event)
-            .detach();
 
         let number_input1_value = 1;
         let number_input1 = cx.new(|cx| {
@@ -124,8 +120,6 @@ impl InputStory {
             input.set_value(number_input1_value.to_string(), window, cx);
             input
         });
-        cx.subscribe_in(&number_input1, window, Self::on_number_input1_event)
-            .detach();
 
         let number_input2 = cx.new(|cx| {
             NumberInput::new(window, cx)
@@ -133,9 +127,6 @@ impl InputStory {
                 .pattern(Regex::new(r"^\d+$").unwrap(), window, cx)
                 .small()
         });
-
-        cx.subscribe_in(&number_input2, window, Self::on_number_input2_event)
-            .detach();
 
         let mask_input = cx.new(|cx| {
             let mut input = TextInput::new(window, cx)
@@ -168,14 +159,21 @@ impl InputStory {
         });
 
         let otp_input = cx.new(|cx| OtpInput::new(6, window, cx).masked(true));
-        cx.subscribe(&otp_input, |this, _, ev: &InputEvent, cx| match ev {
-            InputEvent::Change(text) => {
-                this.otp_value = Some(text.clone());
-                cx.notify();
-            }
-            _ => {}
-        })
-        .detach();
+
+        let _subscriptions = vec![
+            cx.subscribe_in(&input1, window, Self::on_input_event),
+            cx.subscribe_in(&input2, window, Self::on_input_event),
+            cx.subscribe_in(&textarea, window, Self::on_input_event),
+            cx.subscribe_in(&number_input1, window, Self::on_number_input1_event),
+            cx.subscribe_in(&number_input2, window, Self::on_number_input2_event),
+            cx.subscribe(&otp_input, |this, _, ev: &InputEvent, cx| match ev {
+                InputEvent::Change(text) => {
+                    this.otp_value = Some(text.clone());
+                    cx.notify();
+                }
+                _ => {}
+            }),
+        ];
 
         Self {
             input1,
@@ -230,6 +228,7 @@ impl InputStory {
                     .default_value("654321")
                     .with_size(px(55.))
             }),
+            _subscriptions,
         }
     }
 

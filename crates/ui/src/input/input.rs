@@ -226,6 +226,8 @@ pub struct TextInput {
     pub(super) cleanable: bool,
     pub(super) size: Size,
     pub(super) rows: usize,
+    pub(super) min_rows: usize,
+    pub(super) max_rows: Option<usize>,
     /// For special case, e.g.: NumberInput + - button
     pub(super) no_gap: bool,
     pub(super) height: Option<gpui::DefiniteLength>,
@@ -293,6 +295,8 @@ impl TextInput {
             pattern: None,
             validate: None,
             rows: 2,
+            min_rows: 2,
+            max_rows: None,
             last_layout: None,
             last_bounds: None,
             last_selected_range: None,
@@ -456,6 +460,19 @@ impl TextInput {
     /// default: 2
     pub fn rows(mut self, rows: usize) -> Self {
         self.rows = rows;
+        self.min_rows = rows;
+        self
+    }
+
+    /// Set the maximum number of rows for the multi-line Textarea.
+    ///
+    /// If max_rows is more than rows, then will enable auto-grow.
+    ///
+    /// This is only used when `multi_line` is set to true.
+    ///
+    /// default: None
+    pub fn max_rows(mut self, max_rows: usize) -> Self {
+        self.max_rows = Some(max_rows);
         self
     }
 
@@ -1001,6 +1018,23 @@ impl TextInput {
         }
 
         cx.emit(InputEvent::PressEnter);
+    }
+
+    fn check_to_auto_grow(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+        if !self.is_multi_line() {
+            return;
+        }
+        let Some(max_rows) = self.max_rows else {
+            return;
+        };
+
+        let changed_rows = ((self.scroll_size.height - self.input_bounds.size.height)
+            / self.last_line_height) as isize;
+
+        self.rows = (self.rows as isize + changed_rows)
+            .clamp(self.min_rows as isize, max_rows as isize)
+            .max(0) as usize;
+        cx.notify();
     }
 
     fn clean(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
@@ -1582,6 +1616,7 @@ impl EntityInputHandler for TextInput {
         self.marked_range.take();
         self.update_preferred_x_offset(cx);
         self.update_scroll_offset(None, cx);
+        self.check_to_auto_grow(window, cx);
         cx.emit(InputEvent::Change(self.text.clone()));
         cx.notify();
     }
