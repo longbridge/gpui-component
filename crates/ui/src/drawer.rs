@@ -17,11 +17,11 @@ use crate::{
     v_flex, ActiveTheme, IconName, Placement, Sizable, StyledExt as _,
 };
 
-actions!(drawer, [Escape]);
+actions!(drawer, [Cancel]);
 
 const CONTEXT: &str = "Drawer";
 pub fn init(cx: &mut App) {
-    cx.bind_keys([KeyBinding::new("escape", Escape, Some(CONTEXT))])
+    cx.bind_keys([KeyBinding::new("escape", Cancel, Some(CONTEXT))])
 }
 
 #[derive(IntoElement)]
@@ -154,7 +154,9 @@ impl RenderOnce for Drawer {
                             .track_focus(&self.focus_handle)
                             .on_action({
                                 let on_close = self.on_close.clone();
-                                move |_: &Escape, window, cx| {
+                                move |_: &Cancel, window, cx| {
+                                    cx.propagate();
+
                                     on_close(&ClickEvent::default(), window, cx);
                                     window.close_drawer(cx);
                                 }

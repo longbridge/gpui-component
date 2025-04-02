@@ -1,20 +1,18 @@
 use gpui::{
-    actions, anchored, deferred, div, prelude::FluentBuilder as _, px, AnyElement, App, Bounds,
-    Context, Corner, DismissEvent, DispatchPhase, Element, ElementId, Entity, EventEmitter,
-    FocusHandle, Focusable, GlobalElementId, Hitbox, InteractiveElement as _, IntoElement,
-    KeyBinding, LayoutId, ManagedView, MouseButton, MouseDownEvent, ParentElement, Pixels, Point,
-    Render, Style, StyleRefinement, Styled, Window,
+    anchored, deferred, div, prelude::FluentBuilder as _, px, AnyElement, App, Bounds, Context,
+    Corner, DismissEvent, DispatchPhase, Element, ElementId, Entity, EventEmitter, FocusHandle,
+    Focusable, GlobalElementId, Hitbox, InteractiveElement as _, IntoElement, KeyBinding, LayoutId,
+    ManagedView, MouseButton, MouseDownEvent, ParentElement, Pixels, Point, Render, Style,
+    StyleRefinement, Styled, Window,
 };
 use std::{cell::RefCell, rc::Rc};
 
-use crate::{Selectable, StyledExt as _};
+use crate::{list::Cancel, Selectable, StyledExt as _};
 
 const CONTEXT: &str = "Popover";
 
-actions!(popover, [Escape]);
-
 pub fn init(cx: &mut App) {
-    cx.bind_keys([KeyBinding::new("escape", Escape, Some(CONTEXT))])
+    cx.bind_keys([KeyBinding::new("escape", Cancel, Some(CONTEXT))])
 }
 
 pub struct PopoverContent {
@@ -55,7 +53,10 @@ impl Render for PopoverContent {
         div()
             .track_focus(&self.focus_handle)
             .key_context(CONTEXT)
-            .on_action(cx.listener(|_, _: &Escape, _, cx| cx.emit(DismissEvent)))
+            .on_action(cx.listener(|_, _: &Cancel, _, cx| {
+                cx.propagate();
+                cx.emit(DismissEvent);
+            }))
             .p_2()
             .when_some(self.max_width, |this, v| this.max_w(v))
             .child(self.content.clone()(window, cx))

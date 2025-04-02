@@ -10,7 +10,7 @@ use crate::{
     divider::Divider,
     h_flex,
     input::{InputEvent, TextInput},
-    popover::Escape,
+    list::Cancel,
     tooltip::Tooltip,
     v_flex, ActiveTheme as _, Colorize as _, Icon, Selectable as _, Sizable, Size, StyleSized,
 };
@@ -18,7 +18,7 @@ use crate::{
 const KEY_CONTEXT: &'static str = "ColorPicker";
 
 pub fn init(cx: &mut App) {
-    cx.bind_keys([KeyBinding::new("escape", Escape, Some(KEY_CONTEXT))])
+    cx.bind_keys([KeyBinding::new("escape", Cancel, Some(KEY_CONTEXT))])
 }
 
 #[derive(Clone)]
@@ -170,8 +170,9 @@ impl ColorPicker {
         self
     }
 
-    fn on_escape(&mut self, _: &Escape, _: &mut Window, cx: &mut Context<Self>) {
+    fn on_escape(&mut self, _: &Cancel, _: &mut Window, cx: &mut Context<Self>) {
         cx.propagate();
+
         self.open = false;
         cx.notify();
     }
@@ -360,7 +361,7 @@ impl Render for ColorPicker {
                     .on_click(cx.listener(Self::toggle_picker))
                     .on_mouse_up_out(
                         MouseButton::Left,
-                        cx.listener(|view, _, window, cx| view.on_escape(&Escape, window, cx)),
+                        cx.listener(|view, _, window, cx| view.on_escape(&Cancel, window, cx)),
                     )
                     .child(
                         canvas(

@@ -9,9 +9,9 @@ use rust_i18n::t;
 
 use crate::{
     button::{Button, ButtonVariants as _},
-    dropdown::Escape,
     h_flex,
     input::clear_button,
+    list::Cancel,
     v_flex, ActiveTheme, Icon, IconName, Sizable, Size, StyleSized as _, StyledExt as _,
 };
 
@@ -19,7 +19,7 @@ use super::calendar::{Calendar, CalendarEvent, Date, Matcher};
 
 pub fn init(cx: &mut App) {
     let context = Some("DatePicker");
-    cx.bind_keys([KeyBinding::new("escape", Escape, context)])
+    cx.bind_keys([KeyBinding::new("escape", Cancel, context)])
 }
 
 #[derive(Clone)]
@@ -208,7 +208,7 @@ impl DatePicker {
         cx.notify();
     }
 
-    fn escape(&mut self, _: &Escape, window: &mut Window, cx: &mut Context<Self>) {
+    fn escape(&mut self, _: &Cancel, window: &mut Window, cx: &mut Context<Self>) {
         self.focus_back_if_need(window, cx);
         self.open = false;
 
@@ -364,7 +364,7 @@ impl Render for DatePicker {
                                 .on_mouse_up_out(
                                     MouseButton::Left,
                                     cx.listener(|view, _, window, cx| {
-                                        view.escape(&Escape, window, cx);
+                                        view.escape(&Cancel, window, cx);
                                     }),
                                 )
                                 .child(
