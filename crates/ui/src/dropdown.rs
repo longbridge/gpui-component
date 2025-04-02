@@ -537,7 +537,7 @@ where
     }
 
     fn escape(&mut self, _: &Cancel, _: &mut Window, cx: &mut Context<Self>) {
-        if self.open {
+        if !self.open {
             cx.propagate();
         }
 

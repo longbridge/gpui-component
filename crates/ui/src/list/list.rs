@@ -397,9 +397,14 @@ where
     }
 
     fn on_action_cancel(&mut self, _: &Cancel, window: &mut Window, cx: &mut Context<Self>) {
+        if self.selected_index.is_none() {
+            cx.propagate();
+        }
+
         if self.reset_on_cancel {
             self.set_selected_index(None, window, cx);
         }
+
         self.delegate.cancel(window, cx);
         cx.emit(ListEvent::Cancel);
         cx.notify();

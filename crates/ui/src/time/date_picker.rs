@@ -209,6 +209,10 @@ impl DatePicker {
     }
 
     fn escape(&mut self, _: &Cancel, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.open {
+            cx.propagate();
+        }
+
         self.focus_back_if_need(window, cx);
         self.open = false;
 

@@ -15,10 +15,10 @@ use crate::{
     v_flex, ActiveTheme as _, Colorize as _, Icon, Selectable as _, Sizable, Size, StyleSized,
 };
 
-const KEY_CONTEXT: &'static str = "ColorPicker";
+const CONTEXT: &'static str = "ColorPicker";
 
 pub fn init(cx: &mut App) {
-    cx.bind_keys([KeyBinding::new("escape", Cancel, Some(KEY_CONTEXT))])
+    cx.bind_keys([KeyBinding::new("escape", Cancel, Some(CONTEXT))])
 }
 
 #[derive(Clone)]
@@ -73,7 +73,7 @@ pub struct ColorPicker {
 
 impl ColorPicker {
     pub fn new(id: impl Into<ElementId>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let color_input = cx.new(|cx| TextInput::new(window, cx).xsmall());
+        let color_input = cx.new(|cx| TextInput::new(window, cx).small());
 
         let _subscriptions = vec![cx.subscribe_in(
             &color_input,
@@ -171,7 +171,7 @@ impl ColorPicker {
     }
 
     fn on_escape(&mut self, _: &Cancel, _: &mut Window, cx: &mut Context<Self>) {
-        if self.open {
+        if !self.open {
             cx.propagate();
         }
 
@@ -317,7 +317,7 @@ impl Render for ColorPicker {
 
         div()
             .id(self.id.clone())
-            .key_context(KEY_CONTEXT)
+            .key_context(CONTEXT)
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::on_escape))
             .child(
@@ -361,10 +361,6 @@ impl Render for ColorPicker {
                     })
                     .when_some(self.label.clone(), |this, label| this.child(label))
                     .on_click(cx.listener(Self::toggle_picker))
-                    .on_mouse_up_out(
-                        MouseButton::Left,
-                        cx.listener(|view, _, window, cx| view.on_escape(&Cancel, window, cx)),
-                    )
                     .child(
                         canvas(
                             move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds),
@@ -397,7 +393,13 @@ impl Render for ColorPicker {
                                     .shadow_lg()
                                     .rounded(cx.theme().radius)
                                     .bg(cx.theme().background)
-                                    .child(self.render_colors(window, cx)),
+                                    .child(self.render_colors(window, cx))
+                                    .on_mouse_up_out(
+                                        MouseButton::Left,
+                                        cx.listener(|view, _, window, cx| {
+                                            view.on_escape(&Cancel, window, cx)
+                                        }),
+                                    ),
                             ),
                     )
                     .with_priority(1),
