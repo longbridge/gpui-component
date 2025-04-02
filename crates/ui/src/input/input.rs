@@ -922,13 +922,17 @@ impl TextInput {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let offset = self.start_of_line(window, cx);
+        let mut offset = self.start_of_line(window, cx);
+        if offset == self.cursor_offset() {
+            offset = offset.saturating_sub(1);
+        }
         self.replace_text_in_range(
             Some(self.range_to_utf16(&(offset..self.cursor_offset()))),
             "",
             window,
             cx,
         );
+
         self.pause_blink_cursor(cx);
     }
 
@@ -938,7 +942,10 @@ impl TextInput {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let offset = self.end_of_line(window, cx);
+        let mut offset = self.end_of_line(window, cx);
+        if offset == self.cursor_offset() {
+            offset = (offset + 1).clamp(0, self.text.len());
+        }
         self.replace_text_in_range(
             Some(self.range_to_utf16(&(self.cursor_offset()..offset))),
             "",
@@ -1137,6 +1144,7 @@ impl TextInput {
     ///
     /// Ensure the offset use self.next_boundary or self.previous_boundary to get the correct offset.
     fn move_to(&mut self, offset: usize, _: &mut Window, cx: &mut Context<Self>) {
+        let offset = offset.clamp(0, self.text.len());
         self.selected_range = offset..offset;
         self.pause_blink_cursor(cx);
         self.update_preferred_x_offset(cx);
@@ -1255,6 +1263,7 @@ impl TextInput {
     ///
     /// Ensure the offset use self.next_boundary or self.previous_boundary to get the correct offset.
     fn select_to(&mut self, offset: usize, _: &mut Window, cx: &mut Context<Self>) {
+        let offset = offset.clamp(0, self.text.len());
         if self.selection_reversed {
             self.selected_range.start = offset
         } else {
