@@ -10,6 +10,11 @@ use gpui_component::{
     wry, ActiveTheme,
 };
 
+pub fn init(cx: &mut App) {
+    #[cfg(target_os = "linux")]
+    gtk::init().unwrap();
+}
+
 pub struct WebViewStory {
     focus_handle: FocusHandle,
     webview: Entity<WebView>,
