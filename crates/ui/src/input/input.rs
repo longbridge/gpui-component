@@ -3,6 +3,7 @@
 //! Based on the `Input` example from the `gpui` crate.
 //! https://github.com/zed-industries/zed/blob/main/crates/gpui/examples/input.rs
 
+use serde::Deserialize;
 use smallvec::SmallVec;
 use std::cell::Cell;
 use std::ops::Range;
@@ -11,12 +12,12 @@ use unicode_segmentation::*;
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    actions, div, point, px, relative, AnyElement, App, AppContext, Bounds, ClickEvent,
-    ClipboardItem, Context, DefiniteLength, Entity, EntityInputHandler, EventEmitter, FocusHandle,
-    Focusable, InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent, MouseButton,
-    MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Rems, Render,
-    ScrollHandle, ScrollWheelEvent, SharedString, Styled as _, Subscription, UTF16Selection,
-    Window, WrappedLine,
+    actions, div, impl_internal_actions, point, px, relative, AnyElement, App, AppContext, Bounds,
+    ClickEvent, ClipboardItem, Context, DefiniteLength, Entity, EntityInputHandler, EventEmitter,
+    FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent,
+    MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point,
+    Rems, Render, ScrollHandle, ScrollWheelEvent, SharedString, Styled as _, Subscription,
+    UTF16Selection, Window, WrappedLine,
 };
 
 // TODO:
@@ -37,6 +38,14 @@ use crate::{ActiveTheme, Root};
 use crate::{IconName, Size};
 use crate::{Sizable, StyleSized};
 
+#[derive(Clone, PartialEq, Eq, Deserialize)]
+pub struct Enter {
+    /// Is confirm with secondary.
+    pub secondary: bool,
+}
+
+impl_internal_actions!(input, [Enter]);
+
 actions!(
     input,
     [
@@ -46,7 +55,6 @@ actions!(
         DeleteToEndOfLine,
         DeleteToPreviousWordStart,
         DeleteToNextWordEnd,
-        Enter,
         Up,
         Down,
         Left,
@@ -83,7 +91,7 @@ actions!(
 #[derive(Clone)]
 pub enum InputEvent {
     Change(SharedString),
-    PressEnter,
+    PressEnter { secondary: bool },
     Focus,
     Blur,
 }
@@ -106,7 +114,8 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("alt-delete", DeleteToNextWordEnd, Some(CONTEXT)),
         #[cfg(not(target_os = "macos"))]
         KeyBinding::new("ctrl-delete", DeleteToNextWordEnd, Some(CONTEXT)),
-        KeyBinding::new("enter", Enter, Some(CONTEXT)),
+        KeyBinding::new("enter", Enter { secondary: false }, Some(CONTEXT)),
+        KeyBinding::new("secondary-enter", Enter { secondary: true }, Some(CONTEXT)),
         KeyBinding::new("up", Up, Some(CONTEXT)),
         KeyBinding::new("down", Down, Some(CONTEXT)),
         KeyBinding::new("left", Left, Some(CONTEXT)),
@@ -987,7 +996,7 @@ impl TextInput {
         self.pause_blink_cursor(cx);
     }
 
-    fn enter(&mut self, _: &Enter, window: &mut Window, cx: &mut Context<Self>) {
+    fn enter(&mut self, action: &Enter, window: &mut Window, cx: &mut Context<Self>) {
         if self.is_multi_line() {
             let is_eof = self.selected_range.end == self.text.len();
             self.replace_text_in_range(None, "\n", window, cx);
@@ -1000,7 +1009,9 @@ impl TextInput {
             self.move_to(new_offset, window, cx);
         }
 
-        cx.emit(InputEvent::PressEnter);
+        cx.emit(InputEvent::PressEnter {
+            secondary: action.secondary,
+        });
     }
 
     fn clean(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {

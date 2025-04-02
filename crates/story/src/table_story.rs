@@ -660,7 +660,7 @@ impl TableStory {
     ) {
         match event {
             // Update when the user presses Enter or the input loses focus
-            InputEvent::PressEnter | InputEvent::Blur => {
+            InputEvent::PressEnter { .. } | InputEvent::Blur => {
                 let text = self.num_stocks_input.read(cx).text().to_string();
                 if let Ok(num) = text.parse::<usize>() {
                     self.table.update(cx, |table, _| {

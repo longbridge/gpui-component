@@ -173,9 +173,7 @@ where
         });
     }
 
-    fn confirm(&mut self, ix: usize, window: &mut Window, cx: &mut Context<List<Self>>) {
-        self.selected_index = Some(ix);
-
+    fn confirm(&mut self, _secondary: bool, window: &mut Window, cx: &mut Context<List<Self>>) {
         let selected_value = self
             .selected_index
             .and_then(|ix| self.delegate.get(ix))
@@ -521,7 +519,7 @@ where
             cx.notify();
         } else {
             self.list.focus_handle(cx).focus(window);
-            cx.dispatch_action(&list::Confirm);
+            cx.dispatch_action(&list::Confirm { secondary: false });
         }
     }
 

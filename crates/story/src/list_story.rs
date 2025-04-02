@@ -174,8 +174,8 @@ impl ListDelegate for CompanyListDelegate {
         Task::ready(())
     }
 
-    fn confirm(&mut self, ix: usize, window: &mut Window, cx: &mut Context<List<Self>>) {
-        self.confirmed_index = Some(ix);
+    fn confirm(&mut self, secondary: bool, window: &mut Window, cx: &mut Context<List<Self>>) {
+        println!("Confirmed with secondary: {}", secondary);
         window.dispatch_action(Box::new(SelectedCompany), cx);
     }
 

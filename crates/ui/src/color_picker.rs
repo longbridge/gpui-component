@@ -85,7 +85,7 @@ impl ColorPicker {
                         this.hovered_color = Some(color);
                     }
                 }
-                InputEvent::PressEnter => {
+                InputEvent::PressEnter { .. } => {
                     let val = this.color_input.read(cx).text();
                     if let Ok(color) = Hsla::parse_hex(&val) {
                         this.open = false;

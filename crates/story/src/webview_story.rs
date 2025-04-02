@@ -97,7 +97,7 @@ impl WebViewStory {
             cx.subscribe(
                 &address_input,
                 |this: &mut Self, input, event: &InputEvent, cx| match event {
-                    InputEvent::PressEnter => {
+                    InputEvent::PressEnter { .. } => {
                         let url = input.read(cx).text();
                         this.webview.update(cx, |view, _| {
                             view.load_url(&url);

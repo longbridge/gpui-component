@@ -250,7 +250,7 @@ impl InputStory {
     ) {
         match event {
             InputEvent::Change(text) => println!("Change: {}", text),
-            InputEvent::PressEnter => println!("PressEnter"),
+            InputEvent::PressEnter { secondary } => println!("PressEnter secondary: {}", secondary),
             InputEvent::Focus => println!("Focus"),
             InputEvent::Blur => println!("Blur"),
         };
@@ -271,7 +271,9 @@ impl InputStory {
                     }
                     println!("Change: {}", text);
                 }
-                InputEvent::PressEnter => println!("PressEnter"),
+                InputEvent::PressEnter { secondary } => {
+                    println!("PressEnter secondary: {}", secondary)
+                }
                 InputEvent::Focus => println!("Focus"),
                 InputEvent::Blur => println!("Blur"),
             },
@@ -307,7 +309,9 @@ impl InputStory {
                     }
                     println!("Change: {}", text);
                 }
-                InputEvent::PressEnter => println!("PressEnter"),
+                InputEvent::PressEnter { secondary } => {
+                    println!("PressEnter secondary: {}", secondary);
+                }
                 InputEvent::Focus => println!("Focus"),
                 InputEvent::Blur => println!("Blur"),
             },
