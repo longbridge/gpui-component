@@ -420,6 +420,11 @@ impl ModalStory {
                                             .title("Other Modal")
                                             .child("This is another modal.")
                                             .min_h(px(300.))
+                                            .overlay(overlay)
+                                            .keyboard(keyboard)
+                                            .show_close(modal_show_close)
+                                            .overlay_closable(overlay_closable)
+                                            .when(!modal_padding, |this| this.p(px(0.)))
                                     });
                                 },
                             ),
