@@ -34,6 +34,10 @@ pub trait ContextModal: Sized {
     fn open_modal<F>(&mut self, cx: &mut App, build: F)
     where
         F: Fn(Modal, &mut Window, &mut App) -> Modal + 'static;
+
+    /// Return active modal counts.
+    fn active_modal_counts(&mut self, cx: &mut App) -> usize;
+
     /// Return true, if there is an active Modal.
     fn has_active_modal(&mut self, cx: &mut App) -> bool;
 
@@ -118,8 +122,12 @@ impl ContextModal for Window {
         })
     }
 
+    fn active_modal_counts(&mut self, cx: &mut App) -> usize {
+        Root::read(self, cx).active_modals.len()
+    }
+
     fn has_active_modal(&mut self, cx: &mut App) -> bool {
-        Root::read(self, cx).active_modals.len() > 0
+        self.active_modal_counts(cx) > 0
     }
 
     fn close_modal(&mut self, cx: &mut App) {

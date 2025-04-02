@@ -362,7 +362,8 @@ impl RenderOnce for Modal {
                         this.occlude().bg(overlay_color(self.overlay, window, cx))
                     })
                     .when(self.overlay_closable, |this| {
-                        if !self.overlay_visible {
+                        // Only the last modal owns the `mouse down - close modal` event.
+                        if (self.layer_ix + 1) != window.active_modal_counts(cx) {
                             return this;
                         }
 
