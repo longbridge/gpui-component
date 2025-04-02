@@ -6,11 +6,11 @@ use gpui::{
 };
 
 use crate::{
+    actions::Cancel,
     button::{Button, ButtonVariants},
     divider::Divider,
     h_flex,
     input::{InputEvent, TextInput},
-    list::Cancel,
     tooltip::Tooltip,
     v_flex, ActiveTheme as _, Colorize as _, Icon, Selectable as _, Sizable, Size, StyleSized,
 };
@@ -171,7 +171,9 @@ impl ColorPicker {
     }
 
     fn on_escape(&mut self, _: &Cancel, _: &mut Window, cx: &mut Context<Self>) {
-        cx.propagate();
+        if self.open {
+            cx.propagate();
+        }
 
         self.open = false;
         cx.notify();

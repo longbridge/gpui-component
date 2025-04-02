@@ -8,10 +8,10 @@ use gpui::{
 use rust_i18n::t;
 
 use crate::{
+    actions::Cancel,
     button::{Button, ButtonVariants as _},
     h_flex,
     input::clear_button,
-    list::Cancel,
     v_flex, ActiveTheme, Icon, IconName, Sizable, Size, StyleSized as _, StyledExt as _,
 };
 

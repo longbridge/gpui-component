@@ -7,7 +7,7 @@ use gpui::{
 };
 use std::{cell::RefCell, rc::Rc};
 
-use crate::{list::Cancel, Selectable, StyledExt as _};
+use crate::{actions::Cancel, Selectable, StyledExt as _};
 
 const CONTEXT: &str = "Popover";
 

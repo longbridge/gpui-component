@@ -11,6 +11,8 @@ mod title_bar;
 mod virtual_list;
 mod window_border;
 
+pub(crate) mod actions;
+
 pub mod accordion;
 pub mod alert;
 pub mod animation;

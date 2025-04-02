@@ -1,6 +1,7 @@
 use std::{cell::Cell, ops::Range, rc::Rc, time::Duration};
 
 use crate::{
+    actions::{Cancel, SelectNext, SelectPrev},
     context_menu::ContextMenuExt,
     h_flex,
     popup_menu::PopupMenu,
@@ -18,16 +19,7 @@ use gpui::{
 
 mod loading;
 
-actions!(
-    table,
-    [
-        Cancel,
-        SelectPrev,
-        SelectNext,
-        SelectPrevColumn,
-        SelectNextColumn
-    ]
-);
+actions!(table, [SelectPrevColumn, SelectNextColumn]);
 
 pub fn init(cx: &mut App) {
     let context = Some("Table");

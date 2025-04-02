@@ -1,26 +1,25 @@
 use std::{rc::Rc, time::Duration};
 
 use gpui::{
-    actions, anchored, div, hsla, point, prelude::FluentBuilder, px, relative, Animation,
-    AnimationExt as _, AnyElement, App, Bounds, ClickEvent, Div, FocusHandle, Hsla,
-    InteractiveElement, IntoElement, KeyBinding, MouseButton, ParentElement, Pixels, Point,
-    RenderOnce, SharedString, Styled, Window,
+    anchored, div, hsla, point, prelude::FluentBuilder, px, relative, Animation, AnimationExt as _,
+    AnyElement, App, Bounds, ClickEvent, Div, FocusHandle, Hsla, InteractiveElement, IntoElement,
+    KeyBinding, MouseButton, ParentElement, Pixels, Point, RenderOnce, SharedString, Styled,
+    Window,
 };
 use rust_i18n::t;
 
 use crate::{
+    actions::{Cancel, Confirm},
     animation::cubic_bezier,
     button::{Button, ButtonVariant, ButtonVariants as _},
     h_flex, v_flex, ActiveTheme as _, ContextModal, IconName, Sizable as _, StyledExt,
 };
 
-actions!(modal, [Escape, Enter]);
-
 const CONTEXT: &str = "Modal";
 pub fn init(cx: &mut App) {
     cx.bind_keys([
-        KeyBinding::new("escape", Escape, Some(CONTEXT)),
-        KeyBinding::new("enter", Enter, Some(CONTEXT)),
+        KeyBinding::new("escape", Cancel, Some(CONTEXT)),
+        KeyBinding::new("enter", Confirm { secondary: false }, Some(CONTEXT)),
     ]);
 }
 
@@ -382,7 +381,7 @@ impl RenderOnce for Modal {
                                 this.on_action({
                                     let on_cancel = on_cancel.clone();
                                     let on_close = on_close.clone();
-                                    move |_: &Escape, window, cx| {
+                                    move |_: &Cancel, window, cx| {
                                         // FIXME:
                                         //
                                         // Here some Modal have no focus_handle, so it will not work will Escape key.
@@ -395,7 +394,7 @@ impl RenderOnce for Modal {
                                 .on_action({
                                     let on_ok = on_ok.clone();
                                     let on_close = on_close.clone();
-                                    move |_: &Enter, window, cx| {
+                                    move |_: &Confirm, window, cx| {
                                         if on_ok(&ClickEvent::default(), window, cx) {
                                             on_close(&ClickEvent::default(), window, cx);
                                             window.close_modal(cx);

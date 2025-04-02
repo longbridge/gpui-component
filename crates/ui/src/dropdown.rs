@@ -7,9 +7,10 @@ use gpui::{
 use rust_i18n::t;
 
 use crate::{
+    actions::{Cancel, Confirm, SelectNext, SelectPrev},
     h_flex,
     input::clear_button,
-    list::{self, Cancel, Confirm, List, ListDelegate, ListItem, SelectNext, SelectPrev},
+    list::{List, ListDelegate, ListItem},
     v_flex, ActiveTheme, Disableable as _, Icon, IconName, Sizable, Size, StyleSized, StyledExt,
 };
 
@@ -499,8 +500,9 @@ where
         if !self.open {
             return;
         }
+
         self.list.focus_handle(cx).focus(window);
-        cx.dispatch_action(&list::SelectPrev);
+        cx.propagate();
     }
 
     fn down(&mut self, _: &SelectNext, window: &mut Window, cx: &mut Context<Self>) {
@@ -509,7 +511,7 @@ where
         }
 
         self.list.focus_handle(cx).focus(window);
-        cx.dispatch_action(&list::SelectNext);
+        cx.propagate();
     }
 
     fn enter(&mut self, _: &Confirm, window: &mut Window, cx: &mut Context<Self>) {
@@ -535,8 +537,9 @@ where
     }
 
     fn escape(&mut self, _: &Cancel, _: &mut Window, cx: &mut Context<Self>) {
-        // Propagate the event to the parent view, for example to the Modal to support ESC to close.
-        cx.propagate();
+        if self.open {
+            cx.propagate();
+        }
 
         self.open = false;
         cx.notify();

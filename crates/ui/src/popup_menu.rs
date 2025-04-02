@@ -1,3 +1,4 @@
+use crate::actions::{Cancel, Confirm, SelectNext, SelectPrev};
 use crate::scroll::{Scrollbar, ScrollbarState};
 use crate::{
     button::Button, h_flex, list::ListItem, popover::Popover, v_flex, ActiveTheme, Icon, IconName,
@@ -6,24 +7,22 @@ use crate::{
 use crate::{Kbd, StyledExt};
 use gpui::Subscription;
 use gpui::{
-    actions, anchored, canvas, div, prelude::FluentBuilder, px, rems, Action, AnyElement, App,
-    AppContext, Bounds, Context, Corner, DismissEvent, Edges, Entity, EventEmitter, FocusHandle,
-    Focusable, InteractiveElement, IntoElement, KeyBinding, ParentElement, Pixels, Render,
-    ScrollHandle, SharedString, StatefulInteractiveElement, Styled, WeakEntity, Window,
+    anchored, canvas, div, prelude::FluentBuilder, px, rems, Action, AnyElement, App, AppContext,
+    Bounds, Context, Corner, DismissEvent, Edges, Entity, EventEmitter, FocusHandle, Focusable,
+    InteractiveElement, IntoElement, KeyBinding, ParentElement, Pixels, Render, ScrollHandle,
+    SharedString, StatefulInteractiveElement, Styled, WeakEntity, Window,
 };
 use std::cell::Cell;
 use std::ops::Deref;
 use std::rc::Rc;
-
-actions!(menu, [Confirm, Dismiss, SelectNext, SelectPrev]);
 
 const ITEM_HEIGHT: Pixels = px(26.);
 
 pub fn init(cx: &mut App) {
     let context = Some("PopupMenu");
     cx.bind_keys([
-        KeyBinding::new("enter", Confirm, context),
-        KeyBinding::new("escape", Dismiss, context),
+        KeyBinding::new("enter", Confirm { secondary: false }, context),
+        KeyBinding::new("escape", Cancel, context),
         KeyBinding::new("up", SelectPrev, context),
         KeyBinding::new("down", SelectNext, context),
     ]);
@@ -127,7 +126,7 @@ impl PopupMenu {
             let _subscriptions =
                 vec![
                     cx.on_blur(&focus_handle, window, |this: &mut PopupMenu, window, cx| {
-                        this.dismiss(&Dismiss, window, cx)
+                        this.dismiss(&Cancel, window, cx)
                     }),
                 ];
 
@@ -544,7 +543,7 @@ impl PopupMenu {
         cx.stop_propagation();
         window.prevent_default();
         self.selected_index = Some(ix);
-        self.confirm(&Confirm, window, cx);
+        self.confirm(&Confirm { secondary: false }, window, cx);
     }
 
     fn confirm(&mut self, _: &Confirm, window: &mut Window, cx: &mut Context<Self>) {
@@ -554,11 +553,11 @@ impl PopupMenu {
                 match item {
                     Some(PopupMenuItem::Item { handler, .. }) => {
                         handler(window, cx);
-                        self.dismiss(&Dismiss, window, cx)
+                        self.dismiss(&Cancel, window, cx)
                     }
                     Some(PopupMenuItem::ElementItem { handler, .. }) => {
                         handler(window, cx);
-                        self.dismiss(&Dismiss, window, cx)
+                        self.dismiss(&Cancel, window, cx)
                     }
                     _ => {}
                 }
@@ -601,7 +600,7 @@ impl PopupMenu {
         }
     }
 
-    fn dismiss(&mut self, _: &Dismiss, window: &mut Window, cx: &mut Context<Self>) {
+    fn dismiss(&mut self, _: &Cancel, window: &mut Window, cx: &mut Context<Self>) {
         if self.active_submenu().is_some() {
             return;
         }
@@ -620,7 +619,7 @@ impl PopupMenu {
         // Dismiss parent menu, when this menu is dismissed
         _ = parent_menu.update(cx, |view, cx| {
             view.hovered_menu_ix = None;
-            view.dismiss(&Dismiss, window, cx);
+            view.dismiss(&Cancel, window, cx);
         });
     }
 
@@ -883,9 +882,7 @@ impl Render for PopupMenu {
             .on_action(cx.listener(Self::select_prev))
             .on_action(cx.listener(Self::confirm))
             .on_action(cx.listener(Self::dismiss))
-            .on_mouse_down_out(
-                cx.listener(|this, _, window, cx| this.dismiss(&Dismiss, window, cx)),
-            )
+            .on_mouse_down_out(cx.listener(|this, _, window, cx| this.dismiss(&Cancel, window, cx)))
             .popover_style(cx)
             .text_color(cx.theme().popover_foreground)
             .relative()

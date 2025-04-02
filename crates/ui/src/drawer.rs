@@ -1,13 +1,14 @@
 use std::{rc::Rc, time::Duration};
 
 use gpui::{
-    actions, anchored, div, point, prelude::FluentBuilder as _, px, Animation, AnimationExt as _,
+    anchored, div, point, prelude::FluentBuilder as _, px, Animation, AnimationExt as _,
     AnyElement, App, ClickEvent, DefiniteLength, DismissEvent, Div, EventEmitter, FocusHandle,
     InteractiveElement as _, IntoElement, KeyBinding, MouseButton, ParentElement, Pixels,
     RenderOnce, Styled, Window,
 };
 
 use crate::{
+    actions::Cancel,
     button::{Button, ButtonVariants as _},
     h_flex,
     modal::overlay_color,
@@ -16,8 +17,6 @@ use crate::{
     title_bar::TITLE_BAR_HEIGHT,
     v_flex, ActiveTheme, IconName, Placement, Sizable, StyledExt as _,
 };
-
-actions!(drawer, [Cancel]);
 
 const CONTEXT: &str = "Drawer";
 pub fn init(cx: &mut App) {

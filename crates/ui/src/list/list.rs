@@ -1,6 +1,7 @@
 use std::time::Duration;
 use std::{cell::Cell, rc::Rc};
 
+use crate::actions::{Cancel, Confirm, SelectNext, SelectPrev};
 use crate::Icon;
 use crate::{
     input::{InputEvent, TextInput},
@@ -8,28 +9,15 @@ use crate::{
     v_flex, ActiveTheme, IconName, Size,
 };
 use gpui::{
-    actions, div, prelude::FluentBuilder, uniform_list, AnyElement, AppContext, Entity,
-    FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding, Length,
-    ListSizingBehavior, MouseButton, ParentElement, Render, SharedString, Styled, Task,
-    UniformListScrollHandle, Window,
+    div, prelude::FluentBuilder, uniform_list, AnyElement, AppContext, Entity, FocusHandle,
+    Focusable, InteractiveElement, IntoElement, KeyBinding, Length, ListSizingBehavior,
+    MouseButton, ParentElement, Render, SharedString, Styled, Task, UniformListScrollHandle,
+    Window,
 };
-use gpui::{
-    impl_internal_actions, px, App, Context, EventEmitter, MouseDownEvent, ScrollStrategy,
-    Subscription,
-};
-use serde::Deserialize;
+use gpui::{px, App, Context, EventEmitter, MouseDownEvent, ScrollStrategy, Subscription};
 use smol::Timer;
 
 use super::loading::Loading;
-
-#[derive(Clone, PartialEq, Eq, Deserialize)]
-pub struct Confirm {
-    /// Is confirm with secondary.
-    pub secondary: bool,
-}
-
-actions!(list, [Cancel, SelectPrev, SelectNext]);
-impl_internal_actions!(list, [Confirm]);
 
 pub fn init(cx: &mut App) {
     let context: Option<&str> = Some("List");
