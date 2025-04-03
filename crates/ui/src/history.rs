@@ -130,7 +130,7 @@ where
                 changes.push(change);
             }
 
-            self.redos.extend(changes.iter().rev().cloned());
+            self.redos.extend(changes.clone());
             Some(changes)
         } else {
             None
@@ -151,7 +151,7 @@ where
                 let change = self.redos.pop().unwrap();
                 changes.push(change);
             }
-            self.undos.extend(changes.iter().rev().cloned());
+            self.undos.extend(changes.clone());
             Some(changes)
         } else {
             None
