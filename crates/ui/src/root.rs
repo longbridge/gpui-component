@@ -35,9 +35,6 @@ pub trait ContextModal: Sized {
     where
         F: Fn(Modal, &mut Window, &mut App) -> Modal + 'static;
 
-    /// Return active modal counts.
-    fn active_modal_counts(&mut self, cx: &mut App) -> usize;
-
     /// Return true, if there is an active Modal.
     fn has_active_modal(&mut self, cx: &mut App) -> bool;
 
@@ -122,12 +119,8 @@ impl ContextModal for Window {
         })
     }
 
-    fn active_modal_counts(&mut self, cx: &mut App) -> usize {
-        Root::read(self, cx).active_modals.len()
-    }
-
     fn has_active_modal(&mut self, cx: &mut App) -> bool {
-        self.active_modal_counts(cx) > 0
+        Root::read(self, cx).active_modals.len() > 0
     }
 
     fn close_modal(&mut self, cx: &mut App) {
@@ -249,7 +242,7 @@ pub struct Root {
     /// When the Modal, Drawer closes, we will focus back to the previous view.
     previous_focus_handle: Option<FocusHandle>,
     active_drawer: Option<ActiveDrawer>,
-    active_modals: Vec<ActiveModal>,
+    pub(crate) active_modals: Vec<ActiveModal>,
     pub(super) focused_input: Option<Entity<TextInput>>,
     pub notification: Entity<NotificationList>,
     drawer_size: Option<DefiniteLength>,
@@ -264,7 +257,7 @@ struct ActiveDrawer {
 }
 
 #[derive(Clone)]
-struct ActiveModal {
+pub(crate) struct ActiveModal {
     focus_handle: FocusHandle,
     builder: Rc<dyn Fn(Modal, &mut Window, &mut App) -> Modal + 'static>,
 }
