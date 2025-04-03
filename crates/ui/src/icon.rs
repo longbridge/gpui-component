@@ -290,7 +290,8 @@ impl RenderOnce for Icon {
         let mut base = self.base;
         *base.style() = self.style;
 
-        base.text_color(text_color)
+        base.flex_shrink_0()
+            .text_color(text_color)
             .when(!has_base_size, |this| this.size(text_size))
             .when_some(self.size, |this, size| match size {
                 Size::Size(px) => this.size(px),
@@ -318,7 +319,8 @@ impl Render for Icon {
         let mut base = svg().flex_none();
         *base.style() = self.style.clone();
 
-        base.text_color(text_color)
+        base.flex_shrink_0()
+            .text_color(text_color)
             .when(!has_base_size, |this| this.size(text_size))
             .when_some(self.size, |this, size| match size {
                 Size::Size(px) => this.size(px),

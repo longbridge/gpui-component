@@ -33,6 +33,7 @@ impl Selectable for SidebarHeader {
         &self.id
     }
 }
+
 impl Collapsible for SidebarHeader {
     fn is_collapsed(&self) -> bool {
         self.collapsed

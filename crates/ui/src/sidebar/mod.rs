@@ -5,9 +5,8 @@ use crate::{
     v_flex, ActiveTheme, Collapsible, Icon, IconName, Side, Sizable, StyledExt,
 };
 use gpui::{
-    div, prelude::FluentBuilder, px, AnyElement, App, ClickEvent, Entity, EntityId,
-    InteractiveElement as _, IntoElement, ParentElement, Pixels, Render, RenderOnce, Styled,
-    Window,
+    div, prelude::FluentBuilder, px, AnyElement, App, ClickEvent, InteractiveElement as _,
+    IntoElement, ParentElement, Pixels, RenderOnce, Styled, Window,
 };
 use std::rc::Rc;
 
@@ -26,8 +25,6 @@ const COLLAPSED_WIDTH: Pixels = px(48.);
 /// A sidebar
 #[derive(IntoElement)]
 pub struct Sidebar<E: Collapsible + IntoElement + 'static> {
-    /// The parent view id
-    view_id: EntityId,
     content: Vec<E>,
     /// header view
     header: Option<AnyElement>,
@@ -41,9 +38,8 @@ pub struct Sidebar<E: Collapsible + IntoElement + 'static> {
 }
 
 impl<E: Collapsible + IntoElement> Sidebar<E> {
-    fn new(view_id: EntityId, side: Side) -> Self {
+    pub fn new(side: Side) -> Self {
         Self {
-            view_id,
             content: vec![],
             header: None,
             footer: None,
@@ -54,12 +50,12 @@ impl<E: Collapsible + IntoElement> Sidebar<E> {
         }
     }
 
-    pub fn left<V: Render + 'static>(view: &Entity<V>) -> Self {
-        Self::new(view.entity_id(), Side::Left)
+    pub fn left() -> Self {
+        Self::new(Side::Left)
     }
 
-    pub fn right<V: Render + 'static>(view: &Entity<V>) -> Self {
-        Self::new(view.entity_id(), Side::Right)
+    pub fn right() -> Self {
+        Self::new(Side::Right)
     }
 
     /// Set the width of the sidebar
@@ -117,7 +113,7 @@ pub struct SidebarToggleButton {
 impl SidebarToggleButton {
     fn new(side: Side) -> Self {
         Self {
-            btn: Button::new("sidebar-collapse").ghost().small(),
+            btn: Button::new("collapse").ghost().small(),
             collapsed: false,
             side,
             on_click: None,
@@ -181,7 +177,8 @@ impl RenderOnce for SidebarToggleButton {
 }
 
 impl<E: Collapsible + IntoElement> RenderOnce for Sidebar<E> {
-    fn render(mut self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(mut self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let view_id = window.current_view();
         v_flex()
             .id("sidebar")
             .w(self.width)
@@ -210,7 +207,7 @@ impl<E: Collapsible + IntoElement> RenderOnce for Sidebar<E> {
                                 .map(|(ix, c)| div().id(ix).child(c.collapsed(self.collapsed))),
                         )
                         .gap_2()
-                        .scrollable(self.view_id, ScrollbarAxis::Vertical),
+                        .scrollable(view_id, ScrollbarAxis::Vertical),
                 ),
             )
             .when_some(self.footer.take(), |this, footer| {

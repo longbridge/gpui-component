@@ -81,8 +81,8 @@ impl SidebarMenuItem {
     }
 
     /// Set the icon for the menu item
-    pub fn icon(mut self, icon: Icon) -> Self {
-        self.icon = Some(icon);
+    pub fn icon(mut self, icon: impl Into<Icon>) -> Self {
+        self.icon = Some(icon.into());
         self
     }
 
@@ -138,7 +138,7 @@ impl SidebarMenuItem {
         let is_submenu = self.is_submenu();
 
         h_flex()
-            .id(self.id.clone())
+            .id("item")
             .overflow_hidden()
             .flex_shrink_0()
             .p_2()
@@ -155,9 +155,12 @@ impl SidebarMenuItem {
                     .bg(cx.theme().sidebar_accent)
                     .text_color(cx.theme().sidebar_accent_foreground)
             })
-            .when_some(self.icon.clone(), |this, icon| this.child(icon.size_4()))
+            .when_some(self.icon.clone(), |this, icon| this.child(icon))
             .when(is_collapsed, |this| {
-                this.justify_center().size_7().mx_auto()
+                this.justify_center().when(is_active, |this| {
+                    this.bg(cx.theme().sidebar_accent)
+                        .text_color(cx.theme().sidebar_accent_foreground)
+                })
             })
             .when(!is_collapsed, |this| {
                 this.h_7()
@@ -181,6 +184,7 @@ impl RenderOnce for SidebarMenuItem {
         let is_collapsed = self.collapsed;
 
         div()
+            .id(self.id.clone())
             .w_full()
             .child(self.render_menu_item(window, cx))
             .when(is_submenu && is_open && !is_collapsed, |this| {

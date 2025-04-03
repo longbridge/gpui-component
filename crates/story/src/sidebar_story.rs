@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use gpui::{
     div, impl_internal_actions, prelude::FluentBuilder, relative, App, AppContext, ClickEvent,
     Context, Entity, Focusable, IntoElement, ParentElement, Render, SharedString, Styled, Window,
@@ -14,7 +16,7 @@ use gpui_component::{
         SidebarToggleButton,
     },
     switch::Switch,
-    v_flex, white, ActiveTheme, Collapsible, Icon, IconName, Side,
+    v_flex, white, ActiveTheme, Icon, IconName, Side,
 };
 use serde::Deserialize;
 
@@ -24,7 +26,8 @@ pub struct SelectCompany(SharedString);
 impl_internal_actions!(sidebar_story, [SelectCompany]);
 
 pub struct SidebarStory {
-    active_item: Item,
+    active_items: HashMap<Item, bool>,
+    last_active_item: Item,
     active_subitem: Option<SubItem>,
     collapsed: bool,
     side: Side,
@@ -37,8 +40,12 @@ impl SidebarStory {
     }
 
     fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
+        let mut active_items = HashMap::new();
+        active_items.insert(Item::Playground, true);
+
         Self {
-            active_item: Item::Playground,
+            active_items,
+            last_active_item: Item::Playground,
             active_subitem: None,
             collapsed: false,
             side: Side::Left,
@@ -61,7 +68,7 @@ impl SidebarStory {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 enum Item {
     Playground,
     Models,
@@ -121,8 +128,13 @@ impl Item {
     {
         let item = *self;
         move |this, _, _, cx| {
-            this.active_item = item;
-            this.active_subitem = None;
+            if this.active_items.contains_key(&item) {
+                this.active_items.remove(&item);
+            } else {
+                this.active_items.insert(item, true);
+            }
+
+            this.last_active_item = item;
             cx.notify();
         }
     }
@@ -176,7 +188,13 @@ impl SubItem {
         let item = *item;
         let subitem = *self;
         move |this, _, _, cx| {
-            this.active_item = item;
+            println!(
+                "Clicked on item: {}, child: {}",
+                item.label(),
+                subitem.label()
+            );
+            this.active_items.insert(item, true);
+            this.last_active_item = item;
             this.active_subitem = Some(subitem);
             cx.notify();
         }
@@ -219,12 +237,6 @@ impl Render for SidebarStory {
             ],
         ];
 
-        let sidebar = if self.side.is_left() {
-            Sidebar::left(&cx.entity())
-        } else {
-            Sidebar::right(&cx.entity())
-        };
-
         h_flex()
             .rounded(cx.theme().radius)
             .border_1()
@@ -232,11 +244,10 @@ impl Render for SidebarStory {
             .h_full()
             .when(self.side.is_right(), |this| this.flex_row_reverse())
             .child(
-                sidebar
+                Sidebar::new(self.side)
                     .collapsed(self.collapsed)
                     .header(
                         SidebarHeader::new()
-                            .collapsed(self.collapsed)
                             .w_full()
                             .child(
                                 div()
@@ -249,13 +260,13 @@ impl Render for SidebarStory {
                                     .size_8()
                                     .flex_shrink_0()
                                     .when(!self.collapsed, |this| {
-                                        this.child(Icon::new(IconName::GalleryVerticalEnd).size_4())
+                                        this.child(Icon::new(IconName::GalleryVerticalEnd))
                                     })
                                     .when(self.collapsed, |this| {
                                         this.size_4()
                                             .bg(cx.theme().transparent)
                                             .text_color(cx.theme().foreground)
-                                            .child(Icon::new(IconName::GalleryVerticalEnd).size_5())
+                                            .child(Icon::new(IconName::GalleryVerticalEnd))
                                     }),
                             )
                             .when(!self.collapsed, |this| {
@@ -291,9 +302,33 @@ impl Render for SidebarStory {
                                 )
                             }),
                     )
+                    .child(
+                        SidebarGroup::new("Platform").child(SidebarMenu::new().children(
+                            groups[0].iter().map(|item| {
+                                SidebarMenuItem::new(item.label())
+                                    .icon(item.icon())
+                                    .active(self.active_items.contains_key(item))
+                                    .children(item.items().into_iter().map(|sub_item| {
+                                        SidebarMenuItem::new(sub_item.label())
+                                            .active(self.active_subitem == Some(sub_item))
+                                            .on_click(cx.listener(sub_item.handler(&item)))
+                                    }))
+                                    .on_click(cx.listener(item.handler()))
+                            }),
+                        )),
+                    )
+                    .child(
+                        SidebarGroup::new("Projects").child(SidebarMenu::new().children(
+                            groups[1].iter().map(|item| {
+                                SidebarMenuItem::new(item.label())
+                                    .icon(item.icon())
+                                    .active(self.last_active_item == *item)
+                                    .on_click(cx.listener(item.handler()))
+                            }),
+                        )),
+                    )
                     .footer(
                         SidebarFooter::new()
-                            .collapsed(self.collapsed)
                             .justify_between()
                             .child(
                                 h_flex()
@@ -302,55 +337,8 @@ impl Render for SidebarStory {
                                     .when(!self.collapsed, |this| this.child("Jason Lee")),
                             )
                             .when(!self.collapsed, |this| {
-                                this.child(
-                                    Icon::new(IconName::ChevronsUpDown).size_4().flex_shrink_0(),
-                                )
+                                this.child(Icon::new(IconName::ChevronsUpDown).size_4())
                             }),
-                    )
-                    .child(
-                        SidebarGroup::new("Platform").child(SidebarMenu::new().children({
-                            let mut items = Vec::with_capacity(groups[0].len());
-                            for item in groups[0].iter() {
-                                let item = *item;
-                                items.push(
-                                    SidebarMenuItem::new(item.label())
-                                        .icon(item.icon().into())
-                                        .active(self.active_item == item)
-                                        .children({
-                                            let mut sub_items =
-                                                Vec::with_capacity(item.items().len());
-                                            for sub_item in item.items() {
-                                                sub_items.push(
-                                                    SidebarMenuItem::new(sub_item.label())
-                                                        .active(
-                                                            self.active_subitem == Some(sub_item),
-                                                        )
-                                                        .on_click(
-                                                            cx.listener(sub_item.handler(&item)),
-                                                        ),
-                                                );
-                                            }
-                                            sub_items
-                                        })
-                                        .on_click(cx.listener(item.handler())),
-                                );
-                            }
-                            items
-                        })),
-                    )
-                    .child(
-                        SidebarGroup::new("Projects").child(SidebarMenu::new().children({
-                            let mut items = Vec::with_capacity(groups[1].len());
-                            for item in groups[1].iter() {
-                                items.push(
-                                    SidebarMenuItem::new(item.label())
-                                        .icon(item.icon().into())
-                                        .active(self.active_item == *item)
-                                        .on_click(cx.listener(item.handler())),
-                                );
-                            }
-                            items
-                        })),
                     ),
             )
             .child(
@@ -379,12 +367,12 @@ impl Render for SidebarStory {
                                 Breadcrumb::new()
                                     .item(BreadcrumbItem::new("0", "Home").on_click(cx.listener(
                                         |this, _, _, cx| {
-                                            this.active_item = Item::Playground;
+                                            this.last_active_item = Item::Playground;
                                             cx.notify();
                                         },
                                     )))
                                     .item(
-                                        BreadcrumbItem::new("1", self.active_item.label())
+                                        BreadcrumbItem::new("1", self.last_active_item.label())
                                             .on_click(cx.listener(|this, _, _, cx| {
                                                 this.active_subitem = None;
                                                 cx.notify();
