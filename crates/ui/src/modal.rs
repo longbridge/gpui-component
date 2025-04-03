@@ -12,7 +12,7 @@ use crate::{
     actions::{Cancel, Confirm},
     animation::cubic_bezier,
     button::{Button, ButtonVariant, ButtonVariants as _},
-    h_flex, v_flex, ActiveTheme as _, ContextModal, IconName, Sizable as _, StyledExt,
+    h_flex, v_flex, ActiveTheme as _, ContextModal, IconName, Root, Sizable as _, StyledExt,
 };
 
 const CONTEXT: &str = "Modal";
@@ -363,7 +363,7 @@ impl RenderOnce for Modal {
                     })
                     .when(self.overlay_closable, |this| {
                         // Only the last modal owns the `mouse down - close modal` event.
-                        if (self.layer_ix + 1) != window.active_modal_counts(cx) {
+                        if (self.layer_ix + 1) != Root::read(window, cx).active_modals.len() {
                             return this;
                         }
 
