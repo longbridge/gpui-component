@@ -293,6 +293,7 @@ impl RenderOnce for DescriptionList {
                                     };
 
                                     el.flex_1()
+                                        .overflow_x_hidden()
                                         .child(
                                             div()
                                                 .when(self.layout.is_horizontal(), |this| {
