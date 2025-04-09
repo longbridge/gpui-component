@@ -195,8 +195,9 @@ impl Render for SwitchStory {
                             ))
                             .child(
                                 Checkbox::new("check2")
+                                    .small()
                                     .checked(self.check2)
-                                    .label("Subscribe to newsletter")
+                                    .label("订阅新闻通讯")
                                     .on_click(cx.listener(|v, _, _, _| {
                                         v.check2 = !v.check2;
                                     })),
@@ -211,6 +212,7 @@ impl Render for SwitchStory {
                             )
                             .child(
                                 Checkbox::new("longlong-checkbox")
+                                    .large()
                                     .w(px(300.))
                                     .checked(self.check4)
                                     .label("The long long label text.")

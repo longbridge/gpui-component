@@ -1,6 +1,8 @@
-use crate::{h_flex, text::Text, v_flex, ActiveTheme, Disableable, IconName, Selectable};
+use crate::{
+    h_flex, text::Text, v_flex, ActiveTheme, Disableable, IconName, Selectable, Sizable, Size,
+};
 use gpui::{
-    div, prelude::FluentBuilder as _, px, relative, svg, AnyElement, App, Div, ElementId,
+    div, prelude::FluentBuilder as _, px, relative, rems, svg, AnyElement, App, Div, ElementId,
     InteractiveElement, IntoElement, ParentElement, RenderOnce, StatefulInteractiveElement as _,
     Styled, Window,
 };
@@ -14,6 +16,7 @@ pub struct Checkbox {
     children: Vec<AnyElement>,
     checked: bool,
     disabled: bool,
+    size: Size,
     on_click: Option<Box<dyn Fn(&bool, &mut Window, &mut App) + 'static>>,
 }
 
@@ -26,6 +29,7 @@ impl Checkbox {
             children: Vec::new(),
             checked: false,
             disabled: false,
+            size: Size::default(),
             on_click: None,
         }
     }
@@ -75,6 +79,13 @@ impl ParentElement for Checkbox {
     }
 }
 
+impl Sizable for Checkbox {
+    fn with_size(mut self, size: impl Into<Size>) -> Self {
+        self.size = size.into();
+        self
+    }
+}
+
 impl RenderOnce for Checkbox {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let (color, icon_color) = if self.disabled {
@@ -94,10 +105,23 @@ impl RenderOnce for Checkbox {
                 .items_start()
                 .line_height(relative(1.))
                 .text_color(cx.theme().foreground)
+                .map(|this| match self.size {
+                    Size::XSmall => this.text_xs(),
+                    Size::Small => this.text_sm(),
+                    Size::Medium => this.text_base(),
+                    Size::Large => this.text_lg(),
+                    _ => this,
+                })
                 .child(
                     v_flex()
                         .relative()
-                        .size_4()
+                        .map(|this| match self.size {
+                            Size::XSmall => this.size_3(),
+                            Size::Small => this.size_3p5(),
+                            Size::Medium => this.size_4(),
+                            Size::Large => this.size(rems(1.125)),
+                            _ => this.size_4(),
+                        })
                         .flex_shrink_0()
                         .border_1()
                         .border_color(color)
