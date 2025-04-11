@@ -355,6 +355,7 @@ impl RenderOnce for Button {
 
         self.base
             .id(self.id)
+            .cursor_default()
             .flex()
             .items_center()
             .justify_center()

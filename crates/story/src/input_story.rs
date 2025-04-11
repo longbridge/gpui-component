@@ -11,7 +11,7 @@ use gpui_component::{
     checkbox::Checkbox,
     h_flex,
     input::{InputEvent, NumberInput, NumberInputEvent, OtpInput, StepAction, TextInput},
-    v_flex, FocusableCycle, IconName, Sizable,
+    v_flex, FocusableCycle, Icon, IconName, Sizable,
 };
 
 actions!(input_story, [Tab, TabPrev]);
@@ -139,21 +139,33 @@ impl InputStory {
 
         let prefix_input1 = cx.new(|cx| {
             TextInput::new(window, cx)
-                .prefix(|_, _| div().child(IconName::Search).ml_3())
+                .prefix(|_, _| div().child(Icon::new(IconName::Search).small()).ml_3())
                 .placeholder("Search some thing...")
                 .cleanable()
         });
         let suffix_input1 = cx.new(|cx| {
             TextInput::new(window, cx)
-                .suffix(|_, _| div().child(IconName::Info).mr_3())
+                .suffix(|_, _| {
+                    Button::new("info")
+                        .ghost()
+                        .icon(IconName::Info)
+                        .xsmall()
+                        .mr_3()
+                })
                 .placeholder("This input only support [a-zA-Z0-9] characters.")
                 .pattern(regex::Regex::new(r"^[a-zA-Z0-9]*$").unwrap())
                 .cleanable()
         });
         let both_input1 = cx.new(|cx| {
             TextInput::new(window, cx)
-                .prefix(|_, _| div().child(IconName::Search).ml_3())
-                .suffix(|_, _| div().child(IconName::Info).mr_3())
+                .prefix(|_, _| div().child(Icon::new(IconName::Search).small()).ml_3())
+                .suffix(|_, _| {
+                    Button::new("info")
+                        .ghost()
+                        .icon(IconName::Info)
+                        .xsmall()
+                        .mr_3()
+                })
                 .cleanable()
                 .placeholder("This input have prefix and suffix.")
         });

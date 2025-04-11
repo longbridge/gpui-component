@@ -15,6 +15,7 @@ use gpui::{
     Window,
 };
 use gpui::{px, App, Context, EventEmitter, MouseDownEvent, ScrollStrategy, Subscription};
+use rust_i18n::t;
 use smol::Timer;
 
 use super::loading::Loading;
@@ -173,7 +174,7 @@ where
             TextInput::new(window, cx)
                 .appearance(false)
                 .prefix(|_, cx| Icon::new(IconName::Search).text_color(cx.theme().muted_foreground))
-                .placeholder("Search...")
+                .placeholder(t!("List.search_placeholder"))
                 .cleanable()
         });
 

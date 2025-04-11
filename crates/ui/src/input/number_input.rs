@@ -164,8 +164,8 @@ impl Render for NumberInput {
         // Sync size to input at first.
         self.sync_size_to_input_if_needed(window, cx);
         let btn_size = match self.size {
-            Size::XSmall | Size::Small => Size::XSmall,
-            _ => Size::Small,
+            Size::XSmall | Size::Small => Size::Size(px(16.)),
+            _ => Size::XSmall,
         };
 
         h_flex()

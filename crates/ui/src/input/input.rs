@@ -33,7 +33,7 @@ use crate::history::History;
 use crate::indicator::Indicator;
 use crate::input::clear_button;
 use crate::scroll::{Scrollbar, ScrollbarAxis, ScrollbarState};
-use crate::StyledExt;
+use crate::{h_flex, StyledExt};
 use crate::{ActiveTheme, Root};
 use crate::{IconName, Size};
 use crate::{Sizable, StyleSized};
@@ -1756,6 +1756,13 @@ impl Render for TextInput {
 
         let prefix = self.prefix.as_ref().map(|build| build(window, cx));
         let suffix = self.suffix.as_ref().map(|build| build(window, cx));
+        let show_clear_button =
+            self.cleanable && !self.loading && !self.text.is_empty() && self.is_single_line();
+        let bg = if self.disabled {
+            cx.theme().muted
+        } else {
+            cx.theme().background
+        };
 
         div()
             .flex()
@@ -1815,40 +1822,45 @@ impl Render for TextInput {
                     .when_some(self.height, |this, height| this.h(height))
             })
             .when(self.appearance, |this| {
-                this.bg(if self.disabled {
-                    cx.theme().muted
-                } else {
-                    cx.theme().background
-                })
-                .border_color(cx.theme().input)
-                .border_1()
-                .rounded(cx.theme().radius)
-                .when(cx.theme().shadow, |this| this.shadow_sm())
-                .when(focused, |this| this.focused_border(cx))
+                this.bg(bg)
+                    .border_color(cx.theme().input)
+                    .border_1()
+                    .rounded(cx.theme().radius)
+                    .when(cx.theme().shadow, |this| this.shadow_sm())
+                    .when(focused, |this| this.focused_border(cx))
             })
             .when(prefix.is_none(), |this| this.input_pl(self.size))
-            .when(suffix.is_none(), |this| this.input_pr(self.size))
-            .children(prefix)
-            .gap(gap_x)
+            .input_pr(self.size)
             .items_center()
+            .gap(gap_x)
+            .children(prefix)
             .child(
                 div()
-                    .id("TextElement")
+                    .id("text-element")
                     .flex_1()
                     .when(self.is_multi_line(), |this| this.h_full())
                     .flex_grow()
                     .overflow_x_hidden()
                     .child(TextElement::new(cx.entity().clone())),
             )
-            .when(self.loading, |this| {
-                this.child(Indicator::new().color(cx.theme().muted_foreground))
-            })
-            .children(self.render_toggle_mask_button(window, cx))
-            .when(
-                self.cleanable && !self.loading && !self.text.is_empty() && self.is_single_line(),
-                |this| this.child(clear_button(cx).on_click(cx.listener(Self::clean))),
+            .child(
+                h_flex()
+                    .id("suffix")
+                    .absolute()
+                    .gap(gap_x)
+                    .bg(bg)
+                    .items_center()
+                    .when(suffix.is_none(), |this| this.pr_1())
+                    .right_0()
+                    .when(self.loading, |this| {
+                        this.child(Indicator::new().color(cx.theme().muted_foreground))
+                    })
+                    .children(self.render_toggle_mask_button(window, cx))
+                    .when(show_clear_button, |this| {
+                        this.child(clear_button(cx).on_click(cx.listener(Self::clean)))
+                    })
+                    .children(suffix),
             )
-            .children(suffix)
             .when(self.is_multi_line(), |this| {
                 let entity_id = cx.entity().entity_id();
                 if self.last_layout.is_some() {
