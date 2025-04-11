@@ -353,8 +353,8 @@ impl Render for ColorPicker {
                                         .when(self.open, |this| this.border_2())
                                 })
                                 .when(!display_title.is_empty(), |this| {
-                                    this.tooltip(move |window, cx| {
-                                        Tooltip::new(display_title.clone(), window, cx)
+                                    this.tooltip(move |_, cx| {
+                                        cx.new(|_| Tooltip::new(display_title.clone())).into()
                                     })
                                 }),
                         )

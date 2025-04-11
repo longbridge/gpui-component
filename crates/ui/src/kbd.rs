@@ -1,22 +1,59 @@
-use gpui::{div, relative, IntoElement, Keystroke, ParentElement as _, RenderOnce, Styled as _};
+use gpui::{
+    div, relative, Action, App, IntoElement, KeyContext, Keystroke, ParentElement as _, RenderOnce,
+    Styled as _, Window,
+};
 
 use crate::ActiveTheme;
 
 /// A key binding tag
-#[derive(IntoElement)]
+#[derive(IntoElement, Clone, Debug)]
 pub struct Kbd {
     stroke: gpui::Keystroke,
+    appearance: bool,
 }
 
 impl From<Keystroke> for Kbd {
     fn from(stroke: Keystroke) -> Self {
-        Self { stroke }
+        Self {
+            stroke,
+            appearance: true,
+        }
     }
 }
 
 impl Kbd {
     pub fn new(stroke: Keystroke) -> Self {
-        Self { stroke }
+        Self {
+            stroke,
+            appearance: true,
+        }
+    }
+
+    /// Set the appearance of the keybinding.
+    pub fn appearance(mut self, appearance: bool) -> Self {
+        self.appearance = appearance;
+        self
+    }
+
+    /// Return the first keybinding for the given action and context.
+    pub fn binding_for_action(
+        action: &dyn Action,
+        context: Option<&str>,
+        window: &Window,
+    ) -> Option<Self> {
+        let key_context = context.and_then(|context| KeyContext::parse(context).ok());
+        let bindings = match key_context {
+            Some(context) => window.bindings_for_action_in_context(action, context),
+            None => window.bindings_for_action(action),
+        };
+
+        bindings.first().and_then(|binding| {
+            if let Some(key) = binding.keystrokes().first() {
+                Some(Self::new(key.clone()))
+            } else {
+                None
+            }
+        })
     }
 
     /// Return the Platform specific keybinding string by KeyStroke
@@ -53,6 +90,10 @@ impl Kbd {
 
 impl RenderOnce for Kbd {
     fn render(self, _: &mut gpui::Window, cx: &mut gpui::App) -> impl gpui::IntoElement {
+        if !self.appearance {
+            return Self::format(&self.stroke).into_any_element();
+        }
+
         div()
             .border_1()
             .border_color(cx.theme().border)
@@ -66,6 +107,7 @@ impl RenderOnce for Kbd {
             .line_height(relative(1.))
             .text_xs()
             .child(Self::format(&self.stroke))
+            .into_any_element()
     }
 }
 

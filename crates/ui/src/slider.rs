@@ -203,7 +203,7 @@ impl Slider {
             .border_color(cx.theme().slider_bar.opacity(0.9))
             .when(cx.theme().shadow, |this| this.shadow_md())
             .bg(cx.theme().slider_thumb)
-            .tooltip(move |window, cx| Tooltip::new(format!("{}", value), window, cx))
+            .tooltip(move |window, cx| Tooltip::new(format!("{}", value)).build(window, cx))
     }
 
     fn on_mouse_down(

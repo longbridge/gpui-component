@@ -623,15 +623,15 @@ impl PopupMenu {
         });
     }
 
-    fn render_keybinding(
+    fn render_key_binding(
         action: Option<Box<dyn Action>>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<impl IntoElement> {
         if let Some(action) = action {
-            if let Some(keybinding) = window.bindings_for_action(action.deref()).first() {
+            if let Some(key_binding) = window.bindings_for_action(action.deref()).first() {
                 let el = div().text_color(cx.theme().muted_foreground).children(
-                    keybinding
+                    key_binding
                         .keystrokes()
                         .into_iter()
                         .map(|key| Kbd::format(key)),
@@ -746,7 +746,7 @@ impl PopupMenu {
             } => {
                 let show_link_icon = *is_link && self.external_link_icon;
                 let action = action.as_ref().map(|action| action.boxed_clone());
-                let key = Self::render_keybinding(action, window, cx);
+                let key = Self::render_key_binding(action, window, cx);
 
                 this.when(!disabled, |this| {
                     this.on_click(
