@@ -1,6 +1,6 @@
 use crate::{
     h_flex, indicator::Indicator, tooltip::Tooltip, ActiveTheme, Colorize as _, Disableable, Icon,
-    Selectable, Sizable, Size, StyleSized,
+    Kbd, Selectable, Sizable, Size, StyleSized,
 };
 use gpui::{
     div, prelude::FluentBuilder as _, relative, AnyElement, App, ClickEvent, Corners, Div, Edges,
@@ -184,6 +184,7 @@ pub struct Button {
     size: Size,
     compact: bool,
     tooltip: Option<SharedString>,
+    key_binding: Option<Kbd>,
     on_click: Option<Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>>,
     pub(crate) stop_propagation: bool,
     loading: bool,
@@ -211,6 +212,7 @@ impl Button {
             border_edges: Edges::all(true),
             size: Size::Medium,
             tooltip: None,
+            key_binding: None,
             on_click: None,
             stop_propagation: true,
             loading: false,
@@ -260,6 +262,12 @@ impl Button {
     /// Set the tooltip of the button.
     pub fn tooltip(mut self, tooltip: impl Into<SharedString>) -> Self {
         self.tooltip = Some(tooltip.into());
+        self
+    }
+
+    /// Set KeyBinding information for the tooltip.
+    pub fn key_binding(mut self, kbd: Option<impl Into<Kbd>>) -> Self {
+        self.key_binding = kbd.map(|kbd| kbd.into());
         self
     }
 
@@ -483,7 +491,11 @@ impl RenderOnce for Button {
             })
             .when(self.loading, |this| this.bg(normal_style.bg.opacity(0.8)))
             .when_some(self.tooltip.clone(), |this, tooltip| {
-                this.tooltip(move |window, cx| Tooltip::new(tooltip.clone(), window, cx))
+                this.tooltip(move |window, cx| {
+                    Tooltip::new(tooltip.clone())
+                        .key_binding(self.key_binding.clone())
+                        .build(window, cx)
+                })
             })
     }
 }
