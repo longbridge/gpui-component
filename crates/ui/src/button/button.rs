@@ -1,6 +1,8 @@
+use std::rc::Rc;
+
 use crate::{
     h_flex, indicator::Indicator, tooltip::Tooltip, ActiveTheme, Colorize as _, Disableable, Icon,
-    Kbd, Selectable, Sizable, Size, StyleSized,
+    Selectable, Sizable, Size, StyleSized,
 };
 use gpui::{
     div, prelude::FluentBuilder as _, relative, Action, AnyElement, App, ClickEvent, Corners, Div,
@@ -183,8 +185,10 @@ pub struct Button {
     border_edges: Edges<bool>,
     size: Size,
     compact: bool,
-    tooltip: Option<SharedString>,
-    key_binding: Option<Kbd>,
+    tooltip: Option<(
+        SharedString,
+        Option<(Rc<Box<dyn Action>>, Option<SharedString>)>,
+    )>,
     on_click: Option<Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>>,
     pub(crate) stop_propagation: bool,
     loading: bool,
@@ -212,7 +216,6 @@ impl Button {
             border_edges: Edges::all(true),
             size: Size::Medium,
             tooltip: None,
-            key_binding: None,
             on_click: None,
             stop_propagation: true,
             loading: false,
@@ -261,7 +264,7 @@ impl Button {
 
     /// Set the tooltip of the button.
     pub fn tooltip(mut self, tooltip: impl Into<SharedString>) -> Self {
-        self.tooltip = Some(tooltip.into());
+        self.tooltip = Some((tooltip.into(), None));
         self
     }
 
@@ -270,10 +273,14 @@ impl Button {
         tooltip: impl Into<SharedString>,
         action: &dyn Action,
         context: Option<&str>,
-        window: &Window,
     ) -> Self {
-        self.tooltip = Some(tooltip.into());
-        self.key_binding = Kbd::binding_for_action(action, context, window);
+        self.tooltip = Some((
+            tooltip.into(),
+            Some((
+                Rc::new(action.boxed_clone()),
+                context.map(|c| c.to_string().into()),
+            )),
+        ));
         self
     }
 
@@ -497,10 +504,15 @@ impl RenderOnce for Button {
                     .children(self.children)
             })
             .when(self.loading, |this| this.bg(normal_style.bg.opacity(0.8)))
-            .when_some(self.tooltip, |this, tooltip| {
+            .when_some(self.tooltip, |this, (tooltip, action)| {
                 this.tooltip(move |window, cx| {
                     Tooltip::new(tooltip.clone())
-                        .key_binding(self.key_binding.clone())
+                        .when_some(action.clone(), |this, (action, context)| {
+                            this.action(
+                                action.boxed_clone().as_ref(),
+                                context.as_ref().map(|c| c.as_ref()),
+                            )
+                        })
                         .build(window, cx)
                 })
             })

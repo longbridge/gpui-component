@@ -1,6 +1,6 @@
 use gpui::{
-    div, prelude::FluentBuilder, px, AnyElement, AnyView, App, AppContext, Context, IntoElement,
-    ParentElement, Render, Styled, Window,
+    div, prelude::FluentBuilder, px, Action, AnyElement, AnyView, App, AppContext, Context,
+    IntoElement, ParentElement, Render, SharedString, Styled, Window,
 };
 
 use crate::{h_flex, text::Text, ActiveTheme, Kbd};
@@ -13,6 +13,7 @@ enum TooltipContext {
 pub struct Tooltip {
     content: TooltipContext,
     key_binding: Option<Kbd>,
+    action: Option<(Box<dyn Action>, Option<SharedString>)>,
 }
 
 impl Tooltip {
@@ -21,6 +22,7 @@ impl Tooltip {
         Self {
             content: TooltipContext::Text(text.into()),
             key_binding: None,
+            action: None,
         }
     }
 
@@ -32,15 +34,22 @@ impl Tooltip {
     {
         Self {
             key_binding: None,
+            action: None,
             content: TooltipContext::Element(Box::new(move |window, cx| {
                 builder(window, cx).into_any_element()
             })),
         }
     }
 
+    /// Set Action to display key binding information for the tooltip if it exists.
+    pub fn action(mut self, action: &dyn Action, context: Option<&str>) -> Self {
+        self.action = Some((action.boxed_clone(), context.map(SharedString::new)));
+        self
+    }
+
     /// Set KeyBinding information for the tooltip.
-    pub(crate) fn key_binding(mut self, kbd: Option<impl Into<Kbd>>) -> Self {
-        self.key_binding = kbd.map(Into::into);
+    pub fn key_binding(mut self, key_binding: Option<Kbd>) -> Self {
+        self.key_binding = key_binding;
         self
     }
 
@@ -54,6 +63,20 @@ impl FluentBuilder for Tooltip {}
 
 impl Render for Tooltip {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let key_binding = if let Some(key_binding) = &self.key_binding {
+            Some(key_binding.clone())
+        } else {
+            if let Some((action, context)) = &self.action {
+                Kbd::binding_for_action(
+                    action.as_ref(),
+                    context.as_ref().map(|s| s.as_ref()),
+                    window,
+                )
+            } else {
+                None
+            }
+        };
+
         div().child(
             // Wrap in a child, to ensure the left margin is applied to the tooltip
             h_flex()
@@ -77,7 +100,7 @@ impl Render for Tooltip {
                         TooltipContext::Element(ref builder) => this.child(builder(window, cx)),
                     }))
                 })
-                .when_some(self.key_binding.clone(), |this, kbd| {
+                .when_some(key_binding, |this, kbd| {
                     this.child(
                         div()
                             .text_xs()

@@ -1,6 +1,6 @@
 use gpui::{
     actions, div, App, AppContext, Context, Entity, Focusable, InteractiveElement, KeyBinding,
-    ParentElement, Render, StatefulInteractiveElement, Styled, Window,
+    Keystroke, ParentElement, Render, StatefulInteractiveElement, Styled, Window,
 };
 
 use gpui_component::{
@@ -10,7 +10,7 @@ use gpui_component::{
     h_flex,
     label::Label,
     tooltip::Tooltip,
-    v_flex, ActiveTheme, IconName,
+    v_flex, ActiveTheme, IconName, Kbd,
 };
 
 actions!(tooltip, [Info]);
@@ -56,7 +56,7 @@ impl Focusable for TooltipStory {
 impl Render for TooltipStory {
     fn render(
         &mut self,
-        window: &mut gpui::Window,
+        _: &mut gpui::Window,
         _cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
         v_flex()
@@ -75,7 +75,6 @@ impl Render for TooltipStory {
                         "This is a tooltip with Action for display keybinding.",
                         &Info,
                         Some("Tooltip"),
-                        window,
                     )),
             )
             .child(
@@ -83,13 +82,21 @@ impl Render for TooltipStory {
                     .justify_center()
                     .child(Label::new("Hover me"))
                     .id("tooltip-2")
-                    .tooltip(|window, cx| Tooltip::new("This is a Label").build(window, cx)),
+                    .tooltip(|window, cx| {
+                        Tooltip::new("This is a Label")
+                            .action(&Info, Some("Tooltip"))
+                            .build(window, cx)
+                    }),
             )
             .child(
                 div()
                     .child(Checkbox::new("check").label("Remember me").checked(true))
                     .id("tooltip-3")
-                    .tooltip(|window, cx| Tooltip::new("Checked!").build(window, cx)),
+                    .tooltip(|window, cx| {
+                        Tooltip::new("Checked!")
+                            .key_binding(Some(Kbd::new(Keystroke::parse("cmd-shift-u").unwrap())))
+                            .build(window, cx)
+                    }),
             )
             .child(
                 div()
