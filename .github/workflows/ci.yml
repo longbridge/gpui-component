@@ -3,18 +3,27 @@ on:
   pull_request:
   push:
     branches:
-      - '*'
+      - "*"
     tags:
-      - '*'
+      - "*"
 
 jobs:
   test:
     name: Test
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
-    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            run_on: macos-latest
+          - target: x86_64-windows-msvc
+            run_on: windows-latest
+    runs-on: ${{ matrix.run_on }}
     steps:
       - uses: actions/checkout@v4
       - name: Install system dependencies
+        if: ${{ matrix.run_on != 'windows-latest' }}
         run: script/bootstrap
       - name: Machete
         uses: bnjbvr/cargo-machete@main
@@ -27,7 +36,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ubuntu-test-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: test-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
       - name: Install Tools
         run: cargo install typos-cli || echo "typos-cli already installed"
       - name: Lint
