@@ -67,20 +67,10 @@ impl Kbd {
         const DIVIDER: &str = "+";
 
         let mut parts = vec![];
-        if key.modifiers.platform {
-            #[cfg(target_os = "macos")]
-            parts.push("⌘");
 
-            #[cfg(not(target_os = "macos"))]
-            parts.push("Win");
-        }
-        if key.modifiers.shift {
-            #[cfg(target_os = "macos")]
-            parts.push("⇧");
+        // The key map order in macOS is: ⌃⌥⇧⌘
+        // And in Windows is: Ctrl+Alt+Shift+Win
 
-            #[cfg(not(target_os = "macos"))]
-            parts.push("Shift");
-        }
         if key.modifiers.control {
             #[cfg(target_os = "macos")]
             parts.push("⌃");
@@ -88,6 +78,7 @@ impl Kbd {
             #[cfg(not(target_os = "macos"))]
             parts.push("Ctrl");
         }
+
         if key.modifiers.alt {
             #[cfg(target_os = "macos")]
             parts.push("⌥");
@@ -96,10 +87,26 @@ impl Kbd {
             parts.push("Alt");
         }
 
+        if key.modifiers.shift {
+            #[cfg(target_os = "macos")]
+            parts.push("⇧");
+
+            #[cfg(not(target_os = "macos"))]
+            parts.push("Shift");
+        }
+
+        if key.modifiers.platform {
+            #[cfg(target_os = "macos")]
+            parts.push("⌘");
+
+            #[cfg(not(target_os = "macos"))]
+            parts.push("Win");
+        }
+
         let mut keys = String::new();
 
         for key in key.key.split("-") {
-            if parts.len() > 0 || keys.len() > 0 {
+            if parts.len() > 0 && keys.len() > 0 {
                 keys.push_str(DIVIDER);
             }
 
@@ -169,6 +176,7 @@ impl Kbd {
                 }
             }
         }
+
         parts.push(&keys);
         parts.join(DIVIDER)
     }
@@ -208,6 +216,10 @@ mod tests {
             assert_eq!(Kbd::format(&Keystroke::parse("a").unwrap()), "A");
             assert_eq!(Kbd::format(&Keystroke::parse("ctrl-a").unwrap()), "Ctrl+A");
             assert_eq!(
+                Kbd::format(&Keystroke::parse("shift-space").unwrap()),
+                "Shift+Space"
+            );
+            assert_eq!(
                 Kbd::format(&Keystroke::parse("ctrl-alt-a").unwrap()),
                 "Ctrl+Alt+A"
             );
@@ -217,11 +229,19 @@ mod tests {
             );
             assert_eq!(
                 Kbd::format(&Keystroke::parse("ctrl-alt-shift-win-a").unwrap()),
-                "Ctrl+Alt+Win+Shift+A"
+                "Ctrl+Alt+Shift+Win+A"
             );
             assert_eq!(
                 Kbd::format(&Keystroke::parse("ctrl-shift-backspace").unwrap()),
                 "Ctrl+Shift+Backspace"
+            );
+            assert_eq!(
+                Kbd::format(&Keystroke::parse("alt-delete").unwrap()),
+                "Alt+Delete"
+            );
+            assert_eq!(
+                Kbd::format(&Keystroke::parse("alt-tab").unwrap()),
+                "Alt+Tab"
             );
         } else {
             assert_eq!(Kbd::format(&Keystroke::parse("cmd-a").unwrap()), "⌘A");
@@ -242,10 +262,10 @@ mod tests {
                 Kbd::format(&Keystroke::parse("shift-space").unwrap()),
                 "⇧Space"
             );
-            assert_eq!(Kbd::format(&Keystroke::parse("cmd-ctrl-a").unwrap()), "⌘⌃A");
+            assert_eq!(Kbd::format(&Keystroke::parse("cmd-ctrl-a").unwrap()), "⌃⌘A");
             assert_eq!(
                 Kbd::format(&Keystroke::parse("cmd-alt-backspace").unwrap()),
-                "⌘⌥⌫"
+                "⌥⌘⌫"
             );
             assert_eq!(
                 Kbd::format(&Keystroke::parse("shift-delete").unwrap()),
@@ -253,11 +273,11 @@ mod tests {
             );
             assert_eq!(
                 Kbd::format(&Keystroke::parse("cmd-ctrl-shift-a").unwrap()),
-                "⌘⇧⌃A"
+                "⌃⇧⌘A"
             );
             assert_eq!(
                 Kbd::format(&Keystroke::parse("cmd-ctrl-shift-alt-a").unwrap()),
-                "⌘⇧⌃⌥A"
+                "⌃⌥⇧⌘A"
             );
         }
     }
