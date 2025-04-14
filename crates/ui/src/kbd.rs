@@ -212,38 +212,7 @@ mod tests {
         use super::Kbd;
         use gpui::Keystroke;
 
-        if cfg!(target_os = "windows") {
-            assert_eq!(Kbd::format(&Keystroke::parse("a").unwrap()), "A");
-            assert_eq!(Kbd::format(&Keystroke::parse("ctrl-a").unwrap()), "Ctrl+A");
-            assert_eq!(
-                Kbd::format(&Keystroke::parse("shift-space").unwrap()),
-                "Shift+Space"
-            );
-            assert_eq!(
-                Kbd::format(&Keystroke::parse("ctrl-alt-a").unwrap()),
-                "Ctrl+Alt+A"
-            );
-            assert_eq!(
-                Kbd::format(&Keystroke::parse("ctrl-alt-shift-a").unwrap()),
-                "Ctrl+Alt+Shift+A"
-            );
-            assert_eq!(
-                Kbd::format(&Keystroke::parse("ctrl-alt-shift-win-a").unwrap()),
-                "Ctrl+Alt+Shift+Win+A"
-            );
-            assert_eq!(
-                Kbd::format(&Keystroke::parse("ctrl-shift-backspace").unwrap()),
-                "Ctrl+Shift+Backspace"
-            );
-            assert_eq!(
-                Kbd::format(&Keystroke::parse("alt-delete").unwrap()),
-                "Alt+Delete"
-            );
-            assert_eq!(
-                Kbd::format(&Keystroke::parse("alt-tab").unwrap()),
-                "Alt+Tab"
-            );
-        } else {
+        if cfg!(target_os = "macos") {
             assert_eq!(Kbd::format(&Keystroke::parse("cmd-a").unwrap()), "⌘A");
             assert_eq!(Kbd::format(&Keystroke::parse("cmd-enter").unwrap()), "⌘⏎");
             assert_eq!(
@@ -278,6 +247,37 @@ mod tests {
             assert_eq!(
                 Kbd::format(&Keystroke::parse("cmd-ctrl-shift-alt-a").unwrap()),
                 "⌃⌥⇧⌘A"
+            );
+        } else {
+            assert_eq!(Kbd::format(&Keystroke::parse("a").unwrap()), "A");
+            assert_eq!(Kbd::format(&Keystroke::parse("ctrl-a").unwrap()), "Ctrl+A");
+            assert_eq!(
+                Kbd::format(&Keystroke::parse("shift-space").unwrap()),
+                "Shift+Space"
+            );
+            assert_eq!(
+                Kbd::format(&Keystroke::parse("ctrl-alt-a").unwrap()),
+                "Ctrl+Alt+A"
+            );
+            assert_eq!(
+                Kbd::format(&Keystroke::parse("ctrl-alt-shift-a").unwrap()),
+                "Ctrl+Alt+Shift+A"
+            );
+            assert_eq!(
+                Kbd::format(&Keystroke::parse("ctrl-alt-shift-win-a").unwrap()),
+                "Ctrl+Alt+Shift+Win+A"
+            );
+            assert_eq!(
+                Kbd::format(&Keystroke::parse("ctrl-shift-backspace").unwrap()),
+                "Ctrl+Shift+Backspace"
+            );
+            assert_eq!(
+                Kbd::format(&Keystroke::parse("alt-delete").unwrap()),
+                "Alt+Delete"
+            );
+            assert_eq!(
+                Kbd::format(&Keystroke::parse("alt-tab").unwrap()),
+                "Alt+Tab"
             );
         }
     }
