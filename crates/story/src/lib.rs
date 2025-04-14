@@ -36,8 +36,9 @@ pub use toggle_story::ToggleStory;
 use gpui::{
     actions, div, impl_internal_actions, prelude::FluentBuilder as _, px, size, AnyElement,
     AnyView, App, AppContext, Bounds, Context, Div, Entity, EventEmitter, Focusable, Global, Hsla,
-    InteractiveElement, IntoElement, KeyBinding, ParentElement, Render, SharedString,
-    StatefulInteractiveElement, Styled as _, Window, WindowBounds, WindowKind, WindowOptions,
+    InteractiveElement, IntoElement, KeyBinding, Menu, MenuItem, ParentElement, Render,
+    SharedString, StatefulInteractiveElement, Styled as _, Window, WindowBounds, WindowKind,
+    WindowOptions,
 };
 pub use icon_story::IconStory;
 pub use image_story::ImageStory;
@@ -210,13 +211,21 @@ pub fn init(cx: &mut App) {
     dropdown_story::init(cx);
     popup_story::init(cx);
     webview_story::init(cx);
+    tooltip_story::init(cx);
 
     let http_client = std::sync::Arc::new(
         reqwest_client::ReqwestClient::user_agent("gpui-component/story").unwrap(),
     );
     cx.set_http_client(http_client);
 
-    cx.bind_keys([KeyBinding::new("/", ToggleSearch, None)]);
+    cx.bind_keys([
+        KeyBinding::new("/", ToggleSearch, None),
+        KeyBinding::new("cmd-q", Quit, None),
+    ]);
+
+    cx.on_action(|_: &Quit, cx: &mut App| {
+        cx.quit();
+    });
 
     register_panel(cx, PANEL_NAME, |_, _, info, window, cx| {
         let story_state = match info {
@@ -250,6 +259,30 @@ pub fn init(cx: &mut App) {
         });
         Box::new(view)
     });
+
+    use gpui_component::input::{Copy, Cut, Paste, Redo, Undo};
+    cx.set_menus(vec![
+        Menu {
+            name: "GPUI App".into(),
+            items: vec![MenuItem::action("Quit", Quit)],
+        },
+        Menu {
+            name: "Edit".into(),
+            items: vec![
+                MenuItem::os_action("Undo", Undo, gpui::OsAction::Undo),
+                MenuItem::os_action("Redo", Redo, gpui::OsAction::Redo),
+                MenuItem::separator(),
+                MenuItem::os_action("Cut", Cut, gpui::OsAction::Cut),
+                MenuItem::os_action("Copy", Copy, gpui::OsAction::Copy),
+                MenuItem::os_action("Paste", Paste, gpui::OsAction::Paste),
+            ],
+        },
+        Menu {
+            name: "Window".into(),
+            items: vec![],
+        },
+    ]);
+    cx.activate(true);
 }
 
 actions!(story, [ShowPanelInfo]);

@@ -39,7 +39,7 @@ impl Tooltip {
     }
 
     /// Set KeyBinding information for the tooltip.
-    pub fn key_binding(mut self, kbd: Option<impl Into<Kbd>>) -> Self {
+    pub(crate) fn key_binding(mut self, kbd: Option<impl Into<Kbd>>) -> Self {
         self.key_binding = kbd.map(Into::into);
         self
     }
@@ -54,7 +54,6 @@ impl FluentBuilder for Tooltip {}
 
 impl Render for Tooltip {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        println!("---------- kbd: {:?}", self.key_binding);
         div().child(
             // Wrap in a child, to ensure the left margin is applied to the tooltip
             h_flex()
@@ -67,21 +66,26 @@ impl Render for Tooltip {
                 .border_color(cx.theme().border)
                 .shadow_md()
                 .rounded(px(6.))
+                .justify_between()
                 .py_0p5()
                 .px_2()
                 .text_sm()
-                .gap_2()
+                .gap_3()
                 .map(|this| {
                     this.child(div().map(|this| match self.content {
                         TooltipContext::Text(ref text) => this.child(text.clone()),
                         TooltipContext::Element(ref builder) => this.child(builder(window, cx)),
                     }))
                 })
-                .child(
-                    div()
-                        .text_xs()
-                        .children(self.key_binding.clone().map(|kbd| kbd.appearance(false))),
-                ),
+                .when_some(self.key_binding.clone(), |this, kbd| {
+                    this.child(
+                        div()
+                            .text_xs()
+                            .flex_shrink_0()
+                            .text_color(cx.theme().muted_foreground)
+                            .child(kbd.appearance(false)),
+                    )
+                }),
         )
     }
 }

@@ -14,8 +14,8 @@ use std::{sync::Arc, time::Duration};
 use story::{
     AccordionStory, AppState, AppTitleBar, Assets, ButtonStory, CalendarStory, DropdownStory,
     FormStory, IconStory, ImageStory, InputStory, ListStory, ModalStory, Open, PopupStory,
-    ProgressStory, Quit, ResizableStory, ScrollableStory, SidebarStory, StoryContainer,
-    SwitchStory, TableStory, TextStory, TooltipStory, WebViewStory,
+    ProgressStory, ResizableStory, ScrollableStory, SidebarStory, StoryContainer, SwitchStory,
+    TableStory, TextStory, TooltipStory, WebViewStory,
 };
 
 #[derive(Clone, PartialEq, Eq, Deserialize)]
@@ -38,12 +38,12 @@ const STATE_FILE: &str = "target/layout.json";
 const STATE_FILE: &str = "layout.json";
 
 pub fn init(cx: &mut App) {
-    cx.bind_keys([KeyBinding::new("cmd-q", Quit, None)]);
-
     cx.on_action(|_action: &Open, _cx: &mut App| {});
 
     gpui_component::init(cx);
     story::init(cx);
+
+    cx.activate(true);
 }
 
 pub struct StoryWorkspace {
@@ -534,44 +534,14 @@ impl Render for StoryWorkspace {
 }
 
 fn main() {
-    use gpui_component::input::{Copy, Cut, Paste, Redo, Undo};
-
     let app = Application::new().with_assets(Assets);
 
     app.run(move |cx| {
         init(cx);
-
-        cx.on_action(quit);
-        cx.set_menus(vec![
-            Menu {
-                name: "GPUI App".into(),
-                items: vec![MenuItem::action("Quit", Quit)],
-            },
-            Menu {
-                name: "Edit".into(),
-                items: vec![
-                    MenuItem::os_action("Undo", Undo, gpui::OsAction::Undo),
-                    MenuItem::os_action("Redo", Redo, gpui::OsAction::Redo),
-                    MenuItem::separator(),
-                    MenuItem::os_action("Cut", Cut, gpui::OsAction::Cut),
-                    MenuItem::os_action("Copy", Copy, gpui::OsAction::Copy),
-                    MenuItem::os_action("Paste", Paste, gpui::OsAction::Paste),
-                ],
-            },
-            Menu {
-                name: "Window".into(),
-                items: vec![],
-            },
-        ]);
-        cx.activate(true);
 
         open_new(cx, |_, _, _| {
             // do something
         })
         .detach();
     });
-}
-
-fn quit(_: &Quit, cx: &mut App) {
-    cx.quit();
 }

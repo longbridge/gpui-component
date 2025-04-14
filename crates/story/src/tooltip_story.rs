@@ -1,5 +1,5 @@
 use gpui::{
-    div, App, AppContext, Context, Entity, Focusable, InteractiveElement, KeyBinding,
+    actions, div, App, AppContext, Context, Entity, Focusable, InteractiveElement, KeyBinding,
     ParentElement, Render, StatefulInteractiveElement, Styled, Window,
 };
 
@@ -10,10 +10,14 @@ use gpui_component::{
     h_flex,
     label::Label,
     tooltip::Tooltip,
-    v_flex, ActiveTheme, IconName, Kbd,
+    v_flex, ActiveTheme, IconName,
 };
 
-use crate::{Quit, ToggleSearch};
+actions!(tooltip, [Info]);
+
+pub fn init(cx: &mut App) {
+    cx.bind_keys([KeyBinding::new("ctrl-shift-delete", Info, Some("Tooltip"))]);
+}
 
 pub struct TooltipStory {
     focus_handle: gpui::FocusHandle,
@@ -59,15 +63,20 @@ impl Render for TooltipStory {
             .p_4()
             .gap_5()
             .child(
-                div()
+                h_flex()
+                    .gap_3()
                     .child(
-                        Button::new("button")
+                        Button::new("btn0")
                             .label("Search")
-                            .key_binding(Kbd::binding_for_action(&ToggleSearch, None, window))
-                            .with_variant(ButtonVariant::Primary),
+                            .with_variant(ButtonVariant::Primary)
+                            .tooltip("This is a search Button."),
                     )
-                    .id("tooltip-1")
-                    .tooltip(|window, cx| Tooltip::new("This is a Button").build(window, cx)),
+                    .child(Button::new("btn1").label("Info").tooltip_with_action(
+                        "This is a tooltip with Action for display keybinding.",
+                        &Info,
+                        Some("Tooltip"),
+                        window,
+                    )),
             )
             .child(
                 h_flex()
@@ -85,7 +94,7 @@ impl Render for TooltipStory {
             .child(
                 div()
                     .child(
-                        Button::new("button")
+                        Button::new("btn3")
                             .label("Hover me")
                             .with_variant(ButtonVariant::Primary),
                     )

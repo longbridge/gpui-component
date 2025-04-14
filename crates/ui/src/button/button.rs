@@ -3,8 +3,8 @@ use crate::{
     Kbd, Selectable, Sizable, Size, StyleSized,
 };
 use gpui::{
-    div, prelude::FluentBuilder as _, relative, AnyElement, App, ClickEvent, Corners, Div, Edges,
-    ElementId, Hsla, InteractiveElement, IntoElement, MouseButton, ParentElement, Pixels,
+    div, prelude::FluentBuilder as _, relative, Action, AnyElement, App, ClickEvent, Corners, Div,
+    Edges, ElementId, Hsla, InteractiveElement, IntoElement, MouseButton, ParentElement, Pixels,
     RenderOnce, SharedString, StatefulInteractiveElement as _, Styled, Window,
 };
 
@@ -265,9 +265,15 @@ impl Button {
         self
     }
 
-    /// Set KeyBinding information for the tooltip.
-    pub fn key_binding(mut self, kbd: Option<impl Into<Kbd>>) -> Self {
-        self.key_binding = kbd.map(|kbd| kbd.into());
+    pub fn tooltip_with_action(
+        mut self,
+        tooltip: impl Into<SharedString>,
+        action: &dyn Action,
+        context: Option<&str>,
+        window: &Window,
+    ) -> Self {
+        self.tooltip = Some(tooltip.into());
+        self.key_binding = Kbd::binding_for_action(action, context, window);
         self
     }
 
@@ -490,7 +496,7 @@ impl RenderOnce for Button {
                     .children(self.children)
             })
             .when(self.loading, |this| this.bg(normal_style.bg.opacity(0.8)))
-            .when_some(self.tooltip.clone(), |this, tooltip| {
+            .when_some(self.tooltip, |this, tooltip| {
                 this.tooltip(move |window, cx| {
                     Tooltip::new(tooltip.clone())
                         .key_binding(self.key_binding.clone())

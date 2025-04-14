@@ -1,5 +1,5 @@
 use gpui::{
-    div, relative, Action, App, IntoElement, KeyContext, Keystroke, ParentElement as _, RenderOnce,
+    div, relative, Action, IntoElement, KeyContext, Keystroke, ParentElement as _, RenderOnce,
     Styled as _, Window,
 };
 
@@ -57,34 +57,120 @@ impl Kbd {
     }
 
     /// Return the Platform specific keybinding string by KeyStroke
+    ///
+    /// macOS: https://support.apple.com/en-us/HT201236
+    /// Windows: https://support.microsoft.com/en-us/windows/keyboard-shortcuts-in-windows-dcc61a57-8ff0-cffe-9796-cb9706c75eec
     pub fn format(key: &Keystroke) -> String {
-        if cfg!(target_os = "macos") {
-            return format!("{}", key);
-        }
+        #[cfg(target_os = "macos")]
+        const DIVIDER: &str = "";
+        #[cfg(not(target_os = "macos"))]
+        const DIVIDER: &str = "+";
 
         let mut parts = vec![];
-        if key.modifiers.control {
-            parts.push("Ctrl");
-        }
-        if key.modifiers.alt {
-            parts.push("Alt");
-        }
         if key.modifiers.platform {
+            #[cfg(target_os = "macos")]
+            parts.push("⌘");
+
+            #[cfg(not(target_os = "macos"))]
             parts.push("Win");
         }
         if key.modifiers.shift {
+            #[cfg(target_os = "macos")]
+            parts.push("⇧");
+
+            #[cfg(not(target_os = "macos"))]
             parts.push("Shift");
         }
+        if key.modifiers.control {
+            #[cfg(target_os = "macos")]
+            parts.push("⌃");
 
-        // Capitalize the first letter
-        let key = if let Some(first_c) = key.key.chars().next() {
-            format!("{}{}", first_c.to_uppercase(), &key.key[1..])
-        } else {
-            key.key.to_string()
-        };
+            #[cfg(not(target_os = "macos"))]
+            parts.push("Ctrl");
+        }
+        if key.modifiers.alt {
+            #[cfg(target_os = "macos")]
+            parts.push("⌥");
 
-        parts.push(&key);
-        parts.join("+")
+            #[cfg(not(target_os = "macos"))]
+            parts.push("Alt");
+        }
+
+        let mut keys = String::new();
+
+        for key in key.key.split("-") {
+            if parts.len() > 0 || keys.len() > 0 {
+                keys.push_str(DIVIDER);
+            }
+
+            match key {
+                #[cfg(target_os = "macos")]
+                "ctrl" => keys.push('⌃'),
+                #[cfg(not(target_os = "macos"))]
+                "ctrl" => keys.push_str("Ctrl"),
+                #[cfg(target_os = "macos")]
+                "alt" => keys.push('⌥'),
+                #[cfg(not(target_os = "macos"))]
+                "alt" => keys.push_str("Alt"),
+                #[cfg(target_os = "macos")]
+                "shift" => keys.push('⇧'),
+                #[cfg(not(target_os = "macos"))]
+                "shift" => keys.push_str("Shift"),
+                #[cfg(target_os = "macos")]
+                "cmd" => keys.push('⌘'),
+                #[cfg(not(target_os = "macos"))]
+                "cmd" => keys.push_str("Win"),
+                #[cfg(target_os = "macos")]
+                "space" => keys.push_str("Space"),
+                #[cfg(target_os = "macos")]
+                "backspace" => keys.push('⌫'),
+                #[cfg(not(target_os = "macos"))]
+                "backspace" => keys.push_str("Backspace"),
+                #[cfg(target_os = "macos")]
+                "delete" => keys.push('⌫'),
+                #[cfg(not(target_os = "macos"))]
+                "delete" => keys.push_str("Delete"),
+                #[cfg(target_os = "macos")]
+                "escape" => keys.push('⎋'),
+                #[cfg(not(target_os = "macos"))]
+                "escape" => keys.push_str("Esc"),
+                #[cfg(target_os = "macos")]
+                "enter" => keys.push('⏎'),
+                #[cfg(not(target_os = "macos"))]
+                "enter" => keys.push_str("Enter"),
+                "pagedown" => keys.push_str("Page Down"),
+                "pageup" => keys.push_str("Page Up"),
+                #[cfg(target_os = "macos")]
+                "left" => keys.push('←'),
+                #[cfg(not(target_os = "macos"))]
+                "left" => keys.push_str("Left"),
+                #[cfg(target_os = "macos")]
+                "right" => keys.push('→'),
+                #[cfg(not(target_os = "macos"))]
+                "right" => keys.push_str("Right"),
+                #[cfg(target_os = "macos")]
+                "up" => keys.push('↑'),
+                #[cfg(not(target_os = "macos"))]
+                "up" => keys.push_str("Up"),
+                #[cfg(target_os = "macos")]
+                "down" => keys.push('↓'),
+                #[cfg(not(target_os = "macos"))]
+                "down" => keys.push_str("Down"),
+                _ => {
+                    if key.len() == 1 {
+                        keys.push_str(&key.to_uppercase());
+                    } else {
+                        if let Some(first_char) = key.chars().next() {
+                            keys.push_str(&format!("{}{}", first_char.to_uppercase(), &key[1..]));
+                        } else {
+                            keys.push_str(&key);
+                        }
+                    }
+                }
+            }
+        }
+        parts.push(&keys);
+        parts.join(DIVIDER)
     }
 }
 
@@ -139,14 +225,39 @@ mod tests {
             );
         } else {
             assert_eq!(Kbd::format(&Keystroke::parse("cmd-a").unwrap()), "⌘A");
-            assert_eq!(Kbd::format(&Keystroke::parse("cmd-ctrl-a").unwrap()), "^⌘A");
+            assert_eq!(Kbd::format(&Keystroke::parse("cmd-enter").unwrap()), "⌘⏎");
+            assert_eq!(
+                Kbd::format(&Keystroke::parse("secondary-f12").unwrap()),
+                "⌘F12"
+            );
+            assert_eq!(
+                Kbd::format(&Keystroke::parse("shift-pagedown").unwrap()),
+                "⇧Page Down"
+            );
+            assert_eq!(
+                Kbd::format(&Keystroke::parse("shift-pageup").unwrap()),
+                "⇧Page Up"
+            );
+            assert_eq!(
+                Kbd::format(&Keystroke::parse("shift-space").unwrap()),
+                "⇧Space"
+            );
+            assert_eq!(Kbd::format(&Keystroke::parse("cmd-ctrl-a").unwrap()), "⌘⌃A");
+            assert_eq!(
+                Kbd::format(&Keystroke::parse("cmd-alt-backspace").unwrap()),
+                "⌘⌥⌫"
+            );
+            assert_eq!(
+                Kbd::format(&Keystroke::parse("shift-delete").unwrap()),
+                "⇧⌫"
+            );
             assert_eq!(
                 Kbd::format(&Keystroke::parse("cmd-ctrl-shift-a").unwrap()),
-                "^⌘⇧A"
+                "⌘⇧⌃A"
             );
             assert_eq!(
                 Kbd::format(&Keystroke::parse("cmd-ctrl-shift-alt-a").unwrap()),
-                "^⌥⌘⇧A"
+                "⌘⇧⌃⌥A"
             );
         }
     }
