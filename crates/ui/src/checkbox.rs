@@ -135,7 +135,13 @@ impl RenderOnce for Checkbox {
                                 .absolute()
                                 .top_px()
                                 .left_px()
-                                .size_3()
+                                .map(|this| match self.size {
+                                    Size::XSmall => this.size_2(),
+                                    Size::Small => this.size_2p5(),
+                                    Size::Medium => this.size_3(),
+                                    Size::Large => this.size_3p5(),
+                                    _ => this.size_3(),
+                                })
                                 .text_color(icon_color)
                                 .map(|this| match self.checked {
                                     true => this.path(IconName::Check.path()),
