@@ -25,7 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install system dependencies
-        if: ${{ matrix.run_on == 'macos-latest' }}
+        if: ${{ matrix.run_on != 'windows-latest' }}
         run: script/bootstrap
       - name: Machete
         if: ${{ matrix.run_on == 'macos-latest' }}
