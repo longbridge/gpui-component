@@ -17,6 +17,8 @@ jobs:
         include:
           - target: aarch64-apple-darwin
             run_on: macos-latest
+          - target: x86_64-linux-gnu
+            run_on: ubuntu-latest
           - target: x86_64-windows-msvc
             run_on: windows-latest
     runs-on: ${{ matrix.run_on }}
