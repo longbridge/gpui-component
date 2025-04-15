@@ -677,7 +677,12 @@ impl TextInput {
     }
 
     /// Set the regular expression pattern of the input field with reference.
-    pub fn set_pattern(&mut self, pattern: regex::Regex) {
+    pub fn set_pattern(
+        &mut self,
+        pattern: regex::Regex,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) {
         self.pattern = Some(pattern);
     }
 

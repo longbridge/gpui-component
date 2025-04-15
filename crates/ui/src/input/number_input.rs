@@ -82,8 +82,14 @@ impl NumberInput {
         });
     }
 
-    pub fn pattern(self, pattern: regex::Regex, _: &mut Window, cx: &mut Context<Self>) -> Self {
-        self.input.update(cx, |input, _| input.set_pattern(pattern));
+    pub fn pattern(
+        self,
+        pattern: regex::Regex,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        self.input
+            .update(cx, |input, cx| input.set_pattern(pattern, window, cx));
         self
     }
 
