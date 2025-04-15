@@ -6,6 +6,7 @@ use gpui::{
 };
 
 use gpui_component::{
+    badge::Badge,
     blue_500,
     breadcrumb::{Breadcrumb, BreadcrumbItem},
     divider::Divider,
@@ -16,7 +17,7 @@ use gpui_component::{
         SidebarToggleButton,
     },
     switch::Switch,
-    v_flex, white, ActiveTheme, Icon, IconName, Side,
+    v_flex, white, ActiveTheme, Icon, IconName, Side, Sizable,
 };
 use serde::Deserialize;
 
@@ -32,6 +33,7 @@ pub struct SidebarStory {
     collapsed: bool,
     side: Side,
     focus_handle: gpui::FocusHandle,
+    checked: bool,
 }
 
 impl SidebarStory {
@@ -50,6 +52,7 @@ impl SidebarStory {
             collapsed: false,
             side: Side::Left,
             focus_handle: cx.focus_handle(),
+            checked: false,
         }
     }
 
@@ -308,22 +311,43 @@ impl Render for SidebarStory {
                                 SidebarMenuItem::new(item.label())
                                     .icon(item.icon())
                                     .active(self.active_items.contains_key(item))
-                                    .children(item.items().into_iter().map(|sub_item| {
-                                        SidebarMenuItem::new(sub_item.label())
-                                            .active(self.active_subitem == Some(sub_item))
-                                            .on_click(cx.listener(sub_item.handler(&item)))
-                                    }))
+                                    .children(item.items().into_iter().enumerate().map(
+                                        |(ix, sub_item)| {
+                                            SidebarMenuItem::new(sub_item.label())
+                                                .active(self.active_subitem == Some(sub_item))
+                                                .when(ix == 0, |this| {
+                                                    this.suffix(
+                                                        Switch::new("switch")
+                                                            .xsmall()
+                                                            .checked(self.checked)
+                                                            .on_click(cx.listener(
+                                                                |this, checked, _, _| {
+                                                                    this.checked = *checked
+                                                                },
+                                                            )),
+                                                    )
+                                                })
+                                                .on_click(cx.listener(sub_item.handler(&item)))
+                                        },
+                                    ))
                                     .on_click(cx.listener(item.handler()))
                             }),
                         )),
                     )
                     .child(
                         SidebarGroup::new("Projects").child(SidebarMenu::new().children(
-                            groups[1].iter().map(|item| {
+                            groups[1].iter().enumerate().map(|(ix, item)| {
                                 SidebarMenuItem::new(item.label())
                                     .icon(item.icon())
                                     .active(self.last_active_item == *item)
-                                    .on_click(cx.listener(item.handler()))
+                                    .when(ix == 0, |this| {
+                                        this.suffix(
+                                            Badge::new().dot().count(1).child(
+                                                div().p_0p5().child(Icon::new(IconName::Bell)),
+                                            ),
+                                        )
+                                    })
+                                    .when(ix == 1, |this| this.suffix(IconName::Settings2))
                             }),
                         )),
                     )

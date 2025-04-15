@@ -187,6 +187,8 @@ pub struct ThemeColor {
     pub success_hover: Hsla,
     /// Success active background color.
     pub success_active: Hsla,
+    /// Switch background color.
+    pub switch: Hsla,
     /// Tab background color.
     pub tab: Hsla,
     /// Tab active background color.
@@ -292,7 +294,7 @@ impl ThemeColor {
             secondary_hover: hsl(240.0, 5.9, 98.),
             selection: hsl(211.0, 97.0, 85.0),
             sidebar: hsl(0.0, 0.0, 98.0),
-            sidebar_accent: hsl(240.0, 4.8, 92.),
+            sidebar_accent: hsl(240.0, 4.8, 95.9),
             sidebar_accent_foreground: hsl(240.0, 5.9, 10.0),
             sidebar_border: hsl(220.0, 13.0, 91.0),
             sidebar_foreground: hsl(240.0, 5.3, 26.1),
@@ -305,6 +307,7 @@ impl ThemeColor {
             success_active: crate::green_600(),
             success_hover: crate::green_500().opacity(0.9),
             success_foreground: crate::gray_50(),
+            switch: hsl(240.0, 5.9, 90.0),
             tab: gpui::transparent_black(),
             tab_active: hsl(0.0, 0.0, 100.0),
             tab_active_foreground: hsl(240.0, 10., 3.9),
@@ -397,6 +400,7 @@ impl ThemeColor {
             success_active: crate::green_800().darken(0.2),
             success_foreground: crate::green_50(),
             success_hover: crate::green_800().opacity(0.8),
+            switch: hsl(0., 0., 31.),
             tab: gpui::transparent_black(),
             tab_active: hsl(0.0, 0.0, 8.0),
             tab_active_foreground: hsl(0., 0., 78.),

@@ -112,7 +112,7 @@ impl Element for Switch {
 
             let (bg, toggle_bg) = match self.checked {
                 true => (cx.theme().primary, cx.theme().background),
-                false => (cx.theme().input, cx.theme().background),
+                false => (cx.theme().switch, cx.theme().background),
             };
 
             let (bg, toggle_bg) = match self.disabled {

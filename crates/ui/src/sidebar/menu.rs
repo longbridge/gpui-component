@@ -1,6 +1,6 @@
 use crate::{h_flex, v_flex, ActiveTheme as _, Collapsible, Icon, IconName, StyledExt};
 use gpui::{
-    div, percentage, prelude::FluentBuilder as _, App, ClickEvent, ElementId,
+    div, percentage, prelude::FluentBuilder as _, AnyElement, App, ClickEvent, ElementId,
     InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, SharedString,
     StatefulInteractiveElement as _, Styled as _, Window,
 };
@@ -64,6 +64,7 @@ pub struct SidebarMenuItem {
     active: bool,
     collapsed: bool,
     children: Vec<Self>,
+    suffix: Option<AnyElement>,
 }
 
 impl SidebarMenuItem {
@@ -77,6 +78,7 @@ impl SidebarMenuItem {
             active: false,
             collapsed: false,
             children: Vec::new(),
+            suffix: None,
         }
     }
 
@@ -118,6 +120,12 @@ impl SidebarMenuItem {
         self
     }
 
+    /// Set the suffix for the menu item.
+    pub fn suffix(mut self, suffix: impl IntoElement) -> Self {
+        self.suffix = Some(suffix.into_any_element());
+        self
+    }
+
     fn is_submenu(&self) -> bool {
         self.children.len() > 0
     }
@@ -129,64 +137,71 @@ impl SidebarMenuItem {
             false
         }
     }
+}
 
-    fn render_menu_item(&self, _: &Window, cx: &App) -> impl IntoElement {
+impl RenderOnce for SidebarMenuItem {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let handler = self.handler.clone();
         let is_collapsed = self.collapsed;
         let is_active = self.active;
         let is_open = self.is_open();
         let is_submenu = self.is_submenu();
 
-        h_flex()
-            .id("item")
-            .overflow_hidden()
-            .flex_shrink_0()
-            .p_2()
-            .gap_2()
-            .items_center()
-            .rounded(cx.theme().radius)
-            .text_sm()
-            .hover(|this| {
-                this.bg(cx.theme().sidebar_accent)
-                    .text_color(cx.theme().sidebar_accent_foreground)
-            })
-            .when(is_active && !is_submenu, |this| {
-                this.font_medium()
-                    .bg(cx.theme().sidebar_accent)
-                    .text_color(cx.theme().sidebar_accent_foreground)
-            })
-            .when_some(self.icon.clone(), |this, icon| this.child(icon))
-            .when(is_collapsed, |this| {
-                this.justify_center().when(is_active, |this| {
-                    this.bg(cx.theme().sidebar_accent)
-                        .text_color(cx.theme().sidebar_accent_foreground)
-                })
-            })
-            .when(!is_collapsed, |this| {
-                this.h_7()
-                    .child(div().flex_1().child(self.label.clone()))
-                    .when(is_submenu, |this| {
-                        this.child(
-                            Icon::new(IconName::ChevronRight)
-                                .size_4()
-                                .when(is_open, |this| this.rotate(percentage(90. / 360.))),
-                        )
-                    })
-            })
-            .on_click(move |ev, window, cx| handler(ev, window, cx))
-    }
-}
-
-impl RenderOnce for SidebarMenuItem {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let is_submenu = self.is_submenu();
-        let is_open = self.is_open();
-        let is_collapsed = self.collapsed;
-
         div()
             .id(self.id.clone())
             .w_full()
-            .child(self.render_menu_item(window, cx))
+            .child(
+                h_flex()
+                    .size_full()
+                    .id("item")
+                    .overflow_x_hidden()
+                    .flex_shrink_0()
+                    .p_2()
+                    .gap_x_2()
+                    .rounded(cx.theme().radius)
+                    .text_sm()
+                    .hover(|this| {
+                        this.bg(cx.theme().sidebar_accent)
+                            .text_color(cx.theme().sidebar_accent_foreground)
+                    })
+                    .when(is_active && !is_submenu, |this| {
+                        this.font_medium()
+                            .bg(cx.theme().sidebar_accent)
+                            .text_color(cx.theme().sidebar_accent_foreground)
+                    })
+                    .when_some(self.icon.clone(), |this, icon| this.child(icon))
+                    .when(is_collapsed, |this| {
+                        this.justify_center().when(is_active, |this| {
+                            this.bg(cx.theme().sidebar_accent)
+                                .text_color(cx.theme().sidebar_accent_foreground)
+                        })
+                    })
+                    .when(!is_collapsed, |this| {
+                        this.h_7()
+                            .child(
+                                h_flex()
+                                    .flex_1()
+                                    .gap_x_2()
+                                    .justify_between()
+                                    .overflow_x_hidden()
+                                    .child(
+                                        h_flex()
+                                            .flex_1()
+                                            .overflow_x_hidden()
+                                            .child(self.label.clone()),
+                                    )
+                                    .when_some(self.suffix, |this, suffix| this.child(suffix)),
+                            )
+                            .when(is_submenu, |this| {
+                                this.child(
+                                    Icon::new(IconName::ChevronRight)
+                                        .size_4()
+                                        .when(is_open, |this| this.rotate(percentage(90. / 360.))),
+                                )
+                            })
+                    })
+                    .on_click(move |ev, window, cx| handler(ev, window, cx)),
+            )
             .when(is_submenu && is_open && !is_collapsed, |this| {
                 this.child(
                     v_flex()
@@ -194,8 +209,8 @@ impl RenderOnce for SidebarMenuItem {
                         .border_l_1()
                         .border_color(cx.theme().sidebar_border)
                         .gap_1()
-                        .mx_3p5()
-                        .px_2p5()
+                        .ml_3p5()
+                        .pl_2p5()
                         .py_0p5()
                         .children(
                             self.children

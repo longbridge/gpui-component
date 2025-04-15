@@ -149,26 +149,28 @@ impl RenderOnce for Checkbox {
                                 }),
                         ),
                 )
-                .child(
-                    v_flex()
-                        .w_full()
-                        .line_height(relative(1.2))
-                        .gap_1()
-                        .map(|this| {
-                            if let Some(label) = self.label {
-                                this.child(
-                                    div()
-                                        .size_full()
-                                        .text_color(cx.theme().foreground)
-                                        .line_height(relative(1.))
-                                        .child(label),
-                                )
-                            } else {
-                                this
-                            }
-                        })
-                        .children(self.children),
-                )
+                .when(self.label.is_some() || !self.children.is_empty(), |this| {
+                    this.child(
+                        v_flex()
+                            .w_full()
+                            .line_height(relative(1.2))
+                            .gap_1()
+                            .map(|this| {
+                                if let Some(label) = self.label {
+                                    this.child(
+                                        div()
+                                            .size_full()
+                                            .text_color(cx.theme().foreground)
+                                            .line_height(relative(1.))
+                                            .child(label),
+                                    )
+                                } else {
+                                    this
+                                }
+                            })
+                            .children(self.children),
+                    )
+                })
                 .when(self.disabled, |this| {
                     this.cursor_not_allowed()
                         .text_color(cx.theme().muted_foreground)
@@ -177,6 +179,7 @@ impl RenderOnce for Checkbox {
                     self.on_click.filter(|_| !self.disabled),
                     |this, on_click| {
                         this.on_click(move |_, window, cx| {
+                            cx.stop_propagation();
                             let checked = !self.checked;
                             on_click(&checked, window, cx);
                         })
