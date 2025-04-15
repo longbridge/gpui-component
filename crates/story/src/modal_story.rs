@@ -257,6 +257,11 @@ impl ModalStory {
         let list = cx.new(|cx| {
             let mut list = List::new(delegate, window, cx);
             list.focus(window, cx);
+            if let Some(query_input) = list.query_input() {
+                query_input.update(cx, |input, cx| {
+                    input.set_placeholder("Pickup your country...", window, cx);
+                })
+            }
             list
         });
 

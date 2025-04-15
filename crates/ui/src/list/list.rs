@@ -245,6 +245,11 @@ where
         self.query_input = Some(query_input);
     }
 
+    /// Get the query input entity.
+    pub fn query_input(&self) -> Option<&Entity<TextInput>> {
+        self.query_input.as_ref()
+    }
+
     pub fn delegate(&self) -> &D {
         &self.delegate
     }

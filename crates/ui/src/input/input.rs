@@ -646,8 +646,14 @@ impl TextInput {
     }
 
     /// Set the placeholder text of the input field with reference.
-    pub fn set_placeholder(&mut self, placeholder: impl Into<SharedString>) {
+    pub fn set_placeholder(
+        &mut self,
+        placeholder: impl Into<SharedString>,
+        _: &Window,
+        cx: &mut Context<Self>,
+    ) {
         self.placeholder = placeholder.into();
+        cx.notify();
     }
 
     /// Set true to show the clear button when the input field is not empty.
