@@ -161,12 +161,16 @@ impl RenderOnce for SidebarMenuItem {
                     .rounded(cx.theme().radius)
                     .text_sm()
                     .hover(|this| {
+                        if is_active {
+                            return this;
+                        }
+
                         this.bg(cx.theme().sidebar_accent)
                             .text_color(cx.theme().sidebar_accent_foreground)
                     })
                     .when(is_active && !is_submenu, |this| {
                         this.font_medium()
-                            .bg(cx.theme().sidebar_accent)
+                            .bg(cx.theme().accent)
                             .text_color(cx.theme().sidebar_accent_foreground)
                     })
                     .when_some(self.icon.clone(), |this, icon| this.child(icon))
