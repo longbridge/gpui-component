@@ -565,6 +565,7 @@ impl Theme {
     /// Sync the theme with the system appearance
     pub fn sync_system_appearance(window: Option<&mut Window>, cx: &mut App) {
         // Better use window.appearance() for avoid error on Linux.
+        // https://github.com/longbridge/gpui-component/issues/104
         let appearance = window
             .as_ref()
             .map(|window| window.appearance())
