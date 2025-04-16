@@ -306,9 +306,9 @@ pub fn section(title: impl IntoElement, cx: &App) -> Div {
 
 pub struct StoryContainer {
     focus_handle: gpui::FocusHandle,
-    name: SharedString,
-    title_bg: Option<Hsla>,
-    description: SharedString,
+    pub name: SharedString,
+    pub title_bg: Option<Hsla>,
+    pub description: SharedString,
     width: Option<gpui::Pixels>,
     height: Option<gpui::Pixels>,
     story: Option<AnyView>,
@@ -323,7 +323,7 @@ pub enum ContainerEvent {
     Close,
 }
 
-pub trait Story: Focusable + Render {
+pub trait Story: Focusable + Render + Sized {
     fn klass() -> &'static str {
         std::any::type_name::<Self>().split("::").last().unwrap()
     }
@@ -419,6 +419,7 @@ impl StoryContainer {
         self.story_klass = Some(story_klass.into());
         self
     }
+
     pub fn on_active(mut self, on_active: fn(AnyView, bool, &mut Window, &mut App)) -> Self {
         self.on_active = Some(on_active);
         self
@@ -615,17 +616,6 @@ impl Render for StoryContainer {
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::on_action_panel_info))
             .on_action(cx.listener(Self::on_action_toggle_search))
-            .when(self.description.len() > 0, |this| {
-                this.child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .gap_4()
-                        .p_4()
-                        .child(Label::new(self.description.clone()).text_size(px(16.0)))
-                        .child(Divider::horizontal().label("This is a divider")),
-                )
-            })
             .when_some(self.story.clone(), |this, story| {
                 this.child(
                     v_flex()

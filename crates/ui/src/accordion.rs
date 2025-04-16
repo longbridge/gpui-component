@@ -222,8 +222,8 @@ impl RenderOnce for AccordionItem {
             .overflow_hidden()
             .when(self.bordered, |this| {
                 this.border_1()
-                    .border_color(cx.theme().border)
                     .rounded(cx.theme().radius)
+                    .border_color(cx.theme().border)
             })
             .text_size(text_size)
             .child(
@@ -243,6 +243,9 @@ impl RenderOnce for AccordionItem {
                                 .border_b_1()
                                 .border_color(cx.theme().border)
                         })
+                    })
+                    .when(!self.bordered, |this| {
+                        this.border_b_1().border_color(cx.theme().border)
                     })
                     .child(
                         h_flex()

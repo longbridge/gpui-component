@@ -158,451 +158,441 @@ impl Render for ButtonStory {
                     ),
             )
             .child(
-                h_flex()
-                    .gap_6()
+                section("Normal Button", cx)
                     .child(
-                        section("Normal Button", cx)
-                            .child(
-                                Button::new("button-1")
-                                    .primary()
-                                    .label("Primary Button")
-                                    .disabled(disabled)
-                                    .selected(selected)
-                                    .loading(loading)
-                                    .when(compact, |this| this.compact())
-                                    .on_click(Self::on_click),
-                            )
-                            .child(
-                                Button::new("button-2")
-                                    .label("Secondary Button")
-                                    .disabled(disabled)
-                                    .selected(selected)
-                                    .loading(loading)
-                                    .when(compact, |this| this.compact())
-                                    .on_click(Self::on_click),
-                            )
-                            .child(
-                                Button::new("button-4")
-                                    .danger()
-                                    .label("Danger Button")
-                                    .disabled(disabled)
-                                    .selected(selected)
-                                    .loading(loading)
-                                    .when(compact, |this| this.compact())
-                                    .on_click(Self::on_click),
-                            )
-                            .child(
-                                Button::new("button-4-warning")
-                                    .warning()
-                                    .label("Warning Button")
-                                    .disabled(disabled)
-                                    .selected(selected)
-                                    .loading(loading)
-                                    .when(compact, |this| this.compact())
-                                    .on_click(Self::on_click),
-                            )
-                            .child(
-                                Button::new("button-4-success")
-                                    .success()
-                                    .label("Success Button")
-                                    .disabled(disabled)
-                                    .selected(selected)
-                                    .loading(loading)
-                                    .when(compact, |this| this.compact())
-                                    .on_click(Self::on_click),
-                            )
-                            .child(
-                                Button::new("button-5-info")
-                                    .info()
-                                    .label("Info Button")
-                                    .disabled(disabled)
-                                    .selected(selected)
-                                    .loading(loading)
-                                    .when(compact, |this| this.compact())
-                                    .on_click(Self::on_click),
-                            )
-                            .child(
-                                Button::new("button-5-ghost")
-                                    .ghost()
-                                    .label("Ghost Button")
-                                    .disabled(disabled)
-                                    .selected(selected)
-                                    .loading(loading)
-                                    .when(compact, |this| this.compact())
-                                    .on_click(Self::on_click),
-                            )
-                            .child(
-                                Button::new("button-5-link")
-                                    .link()
-                                    .label("Link Button")
-                                    .disabled(disabled)
-                                    .selected(selected)
-                                    .loading(loading)
-                                    .when(compact, |this| this.compact())
-                                    .on_click(Self::on_click),
-                            )
-                            .child(
-                                Button::new("button-5-text")
-                                    .text()
-                                    .label("Text Button")
-                                    .disabled(disabled)
-                                    .selected(selected)
-                                    .loading(loading)
-                                    .when(compact, |this| this.compact())
-                                    .on_click(Self::on_click),
-                            )
-                            .child(
-                                Button::new("button-6-custom")
-                                    .custom(custom_variant)
-                                    .label("Custom Button")
-                                    .disabled(disabled)
-                                    .selected(selected)
-                                    .loading(loading)
-                                    .when(compact, |this| this.compact())
-                                    .on_click(Self::on_click),
-                            ),
+                        Button::new("button-1")
+                            .primary()
+                            .label("Primary Button")
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
                     )
                     .child(
-                        section("Button with Icon", cx)
-                            .child(
-                                Button::new("button-icon-1")
-                                    .primary()
-                                    .label("Confirm")
-                                    .icon(IconName::Check)
-                                    .disabled(disabled)
-                                    .selected(selected)
-                                    .loading(loading)
-                                    .when(compact, |this| this.compact())
-                                    .on_click(Self::on_click),
-                            )
-                            .child(
-                                Button::new("button-icon-2")
-                                    .label("Abort")
-                                    .icon(IconName::Close)
-                                    .disabled(disabled)
-                                    .selected(selected)
-                                    .loading(loading)
-                                    .when(compact, |this| this.compact())
-                                    .on_click(Self::on_click),
-                            )
-                            .child(
-                                Button::new("button-icon-3")
-                                    .label("Maximize")
-                                    .icon(Icon::new(IconName::Maximize))
-                                    .disabled(disabled)
-                                    .selected(selected)
-                                    .loading(loading)
-                                    .when(compact, |this| this.compact())
-                                    .on_click(Self::on_click),
-                            )
-                            .child(
-                                Button::new("button-icon-4")
-                                    .primary()
-                                    .child(
-                                        h_flex()
-                                            .items_center()
-                                            .gap_2()
-                                            .child("Custom Child")
-                                            .child(IconName::ChevronDown)
-                                            .child(IconName::Eye),
-                                    )
-                                    .disabled(disabled)
-                                    .selected(selected)
-                                    .loading(loading)
-                                    .when(compact, |this| this.compact())
-                                    .on_click(Self::on_click),
-                            )
-                            .child(
-                                Button::new("button-icon-5-ghost")
-                                    .ghost()
-                                    .icon(IconName::Check)
-                                    .label("Confirm")
-                                    .disabled(disabled)
-                                    .selected(selected)
-                                    .loading(loading)
-                                    .when(compact, |this| this.compact())
-                                    .on_click(Self::on_click),
-                            )
-                            .child(
-                                Button::new("button-icon-6-link")
-                                    .link()
-                                    .icon(IconName::Check)
-                                    .label("Link")
-                                    .disabled(disabled)
-                                    .selected(selected)
-                                    .loading(loading)
-                                    .when(compact, |this| this.compact())
-                                    .on_click(Self::on_click),
-                            )
-                            .child(
-                                Button::new("button-icon-6-text")
-                                    .text()
-                                    .icon(IconName::Check)
-                                    .label("Text Button")
-                                    .disabled(disabled)
-                                    .selected(selected)
-                                    .loading(loading)
-                                    .when(compact, |this| this.compact())
-                                    .on_click(Self::on_click),
-                            ),
+                        Button::new("button-2")
+                            .label("Secondary Button")
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
+                    )
+                    .child(
+                        Button::new("button-4")
+                            .danger()
+                            .label("Danger Button")
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
+                    )
+                    .child(
+                        Button::new("button-4-warning")
+                            .warning()
+                            .label("Warning Button")
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
+                    )
+                    .child(
+                        Button::new("button-4-success")
+                            .success()
+                            .label("Success Button")
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
+                    )
+                    .child(
+                        Button::new("button-5-info")
+                            .info()
+                            .label("Info Button")
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
+                    )
+                    .child(
+                        Button::new("button-5-ghost")
+                            .ghost()
+                            .label("Ghost Button")
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
+                    )
+                    .child(
+                        Button::new("button-5-link")
+                            .link()
+                            .label("Link Button")
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
+                    )
+                    .child(
+                        Button::new("button-5-text")
+                            .text()
+                            .label("Text Button")
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
+                    )
+                    .child(
+                        Button::new("button-6-custom")
+                            .custom(custom_variant)
+                            .label("Custom Button")
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
                     ),
             )
             .child(
-                h_flex().gap_6().child(
-                    section("Outline Button", cx)
-                        .child(
-                            Button::new("button-outline-1")
-                                .primary()
-                                .outline()
-                                .label("Primary Button")
-                                .disabled(disabled)
-                                .selected(selected)
-                                .loading(loading)
-                                .when(compact, |this| this.compact())
-                                .on_click(Self::on_click),
-                        )
-                        .child(
-                            Button::new("button-outline-2")
-                                .outline()
-                                .label("Secondary Button")
-                                .disabled(disabled)
-                                .selected(selected)
-                                .loading(loading)
-                                .when(compact, |this| this.compact())
-                                .on_click(Self::on_click),
-                        )
-                        .child(
-                            Button::new("button-outline-4-danger")
-                                .danger()
-                                .outline()
-                                .label("Danger Button")
-                                .disabled(disabled)
-                                .selected(selected)
-                                .loading(loading)
-                                .when(compact, |this| this.compact())
-                                .on_click(Self::on_click),
-                        )
-                        .child(
-                            Button::new("button-outline-4-warning")
-                                .warning()
-                                .outline()
-                                .label("Warning Button")
-                                .disabled(disabled)
-                                .selected(selected)
-                                .loading(loading)
-                                .when(compact, |this| this.compact())
-                                .on_click(Self::on_click),
-                        )
-                        .child(
-                            Button::new("button-outline-4-success")
-                                .success()
-                                .outline()
-                                .label("Success Button")
-                                .disabled(disabled)
-                                .selected(selected)
-                                .loading(loading)
-                                .when(compact, |this| this.compact())
-                                .on_click(Self::on_click),
-                        )
-                        .child(
-                            Button::new("button-outline-5-info")
-                                .info()
-                                .outline()
-                                .label("Info Button")
-                                .disabled(disabled)
-                                .selected(selected)
-                                .loading(loading)
-                                .when(compact, |this| this.compact())
-                                .on_click(Self::on_click),
-                        )
-                        .child(
-                            Button::new("button-outline-6-custom")
-                                .outline()
-                                .custom(custom_variant)
-                                .label("Custom Button")
-                                .disabled(disabled)
-                                .selected(selected)
-                                .loading(loading)
-                                .when(compact, |this| this.compact())
-                                .on_click(Self::on_click),
-                        )
-                        .child(
-                            Button::new("button-outline-5-ghost")
-                                .ghost()
-                                .outline()
-                                .label("Ghost Button")
-                                .disabled(disabled)
-                                .selected(selected)
-                                .loading(loading)
-                                .when(compact, |this| this.compact())
-                                .on_click(Self::on_click),
-                        )
-                        .child(
-                            Button::new("button-outline-5-link")
-                                .link()
-                                .outline()
-                                .label("Link Button")
-                                .disabled(disabled)
-                                .selected(selected)
-                                .loading(loading)
-                                .when(compact, |this| this.compact())
-                                .on_click(Self::on_click),
-                        )
-                        .child(
-                            Button::new("button-outline-5-text")
-                                .text()
-                                .outline()
-                                .label("Text Button")
-                                .disabled(disabled)
-                                .selected(selected)
-                                .loading(loading)
-                                .when(compact, |this| this.compact())
-                                .on_click(Self::on_click),
-                        ),
-                ),
-            )
-            .child(
-                h_flex()
-                    .gap_6()
+                section("Button with Icon", cx)
                     .child(
-                        section("Small Size", cx)
-                            .child(
-                                Button::new("button-6")
-                                    .label("Primary Button")
-                                    .icon(IconName::Check)
-                                    .primary()
-                                    .small()
-                                    .loading(true)
-                                    .disabled(disabled)
-                                    .selected(selected)
-                                    .loading(loading)
-                                    .when(compact, |this| this.compact())
-                                    .on_click(Self::on_click),
-                            )
-                            .child(
-                                Button::new("button-7")
-                                    .label("Secondary Button")
-                                    .small()
-                                    .disabled(disabled)
-                                    .selected(selected)
-                                    .loading(loading)
-                                    .when(compact, |this| this.compact())
-                                    .on_click(Self::on_click),
-                            )
-                            .child(
-                                Button::new("button-8")
-                                    .label("Danger Button")
-                                    .danger()
-                                    .small()
-                                    .disabled(disabled)
-                                    .selected(selected)
-                                    .loading(loading)
-                                    .when(compact, |this| this.compact())
-                                    .on_click(Self::on_click),
-                            )
-                            .child(
-                                Button::new("button-8-outline")
-                                    .label("Outline Button")
-                                    .outline()
-                                    .small()
-                                    .disabled(disabled)
-                                    .selected(selected)
-                                    .loading(loading)
-                                    .when(compact, |this| this.compact())
-                                    .on_click(Self::on_click),
-                            )
-                            .child(
-                                Button::new("button-8-ghost")
-                                    .label("Ghost Button")
-                                    .ghost()
-                                    .small()
-                                    .disabled(disabled)
-                                    .selected(selected)
-                                    .loading(loading)
-                                    .when(compact, |this| this.compact())
-                                    .on_click(Self::on_click),
-                            )
-                            .child(
-                                Button::new("button-8-link")
-                                    .label("Link Button")
-                                    .link()
-                                    .small()
-                                    .disabled(disabled)
-                                    .selected(selected)
-                                    .loading(loading)
-                                    .when(compact, |this| this.compact())
-                                    .on_click(Self::on_click),
-                            ),
+                        Button::new("button-icon-1")
+                            .primary()
+                            .label("Confirm")
+                            .icon(IconName::Check)
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
                     )
                     .child(
-                        section("XSmall Size", cx)
+                        Button::new("button-icon-2")
+                            .label("Abort")
+                            .icon(IconName::Close)
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
+                    )
+                    .child(
+                        Button::new("button-icon-3")
+                            .label("Maximize")
+                            .icon(Icon::new(IconName::Maximize))
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
+                    )
+                    .child(
+                        Button::new("button-icon-4")
+                            .primary()
                             .child(
-                                Button::new("button-xs-1")
-                                    .label("Primary Button")
-                                    .primary()
-                                    .icon(IconName::Check)
-                                    .xsmall()
-                                    .disabled(disabled)
-                                    .selected(selected)
-                                    .loading(loading)
-                                    .when(compact, |this| this.compact())
-                                    .on_click(Self::on_click),
+                                h_flex()
+                                    .items_center()
+                                    .gap_2()
+                                    .child("Custom Child")
+                                    .child(IconName::ChevronDown)
+                                    .child(IconName::Eye),
                             )
-                            .child(
-                                Button::new("button-xs-2")
-                                    .label("Secondary Button")
-                                    .xsmall()
-                                    .loading(true)
-                                    .disabled(disabled)
-                                    .selected(selected)
-                                    .loading(loading)
-                                    .when(compact, |this| this.compact())
-                                    .on_click(Self::on_click),
-                            )
-                            .child(
-                                Button::new("button-xs-3")
-                                    .label("Danger Button")
-                                    .danger()
-                                    .xsmall()
-                                    .disabled(disabled)
-                                    .selected(selected)
-                                    .loading(loading)
-                                    .when(compact, |this| this.compact())
-                                    .on_click(Self::on_click),
-                            )
-                            .child(
-                                Button::new("button-xs-3-ghost")
-                                    .label("Ghost Button")
-                                    .ghost()
-                                    .xsmall()
-                                    .disabled(disabled)
-                                    .selected(selected)
-                                    .loading(loading)
-                                    .when(compact, |this| this.compact())
-                                    .on_click(Self::on_click),
-                            )
-                            .child(
-                                Button::new("button-xs-3-outline")
-                                    .label("Outline Button")
-                                    .outline()
-                                    .xsmall()
-                                    .disabled(disabled)
-                                    .selected(selected)
-                                    .loading(loading)
-                                    .when(compact, |this| this.compact())
-                                    .on_click(Self::on_click),
-                            )
-                            .child(
-                                Button::new("button-xs-3-link")
-                                    .label("Link Button")
-                                    .link()
-                                    .xsmall()
-                                    .disabled(disabled)
-                                    .selected(selected)
-                                    .loading(loading)
-                                    .when(compact, |this| this.compact())
-                                    .on_click(Self::on_click),
-                            ),
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
+                    )
+                    .child(
+                        Button::new("button-icon-5-ghost")
+                            .ghost()
+                            .icon(IconName::Check)
+                            .label("Confirm")
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
+                    )
+                    .child(
+                        Button::new("button-icon-6-link")
+                            .link()
+                            .icon(IconName::Check)
+                            .label("Link")
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
+                    )
+                    .child(
+                        Button::new("button-icon-6-text")
+                            .text()
+                            .icon(IconName::Check)
+                            .label("Text Button")
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
+                    ),
+            )
+            .child(
+                section("Outline Button", cx)
+                    .child(
+                        Button::new("button-outline-1")
+                            .primary()
+                            .outline()
+                            .label("Primary Button")
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
+                    )
+                    .child(
+                        Button::new("button-outline-2")
+                            .outline()
+                            .label("Secondary Button")
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
+                    )
+                    .child(
+                        Button::new("button-outline-4-danger")
+                            .danger()
+                            .outline()
+                            .label("Danger Button")
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
+                    )
+                    .child(
+                        Button::new("button-outline-4-warning")
+                            .warning()
+                            .outline()
+                            .label("Warning Button")
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
+                    )
+                    .child(
+                        Button::new("button-outline-4-success")
+                            .success()
+                            .outline()
+                            .label("Success Button")
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
+                    )
+                    .child(
+                        Button::new("button-outline-5-info")
+                            .info()
+                            .outline()
+                            .label("Info Button")
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
+                    )
+                    .child(
+                        Button::new("button-outline-6-custom")
+                            .outline()
+                            .custom(custom_variant)
+                            .label("Custom Button")
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
+                    )
+                    .child(
+                        Button::new("button-outline-5-ghost")
+                            .ghost()
+                            .outline()
+                            .label("Ghost Button")
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
+                    )
+                    .child(
+                        Button::new("button-outline-5-link")
+                            .link()
+                            .outline()
+                            .label("Link Button")
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
+                    )
+                    .child(
+                        Button::new("button-outline-5-text")
+                            .text()
+                            .outline()
+                            .label("Text Button")
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
+                    ),
+            )
+            .child(
+                section("Small Size", cx)
+                    .child(
+                        Button::new("button-6")
+                            .label("Primary Button")
+                            .icon(IconName::Check)
+                            .primary()
+                            .small()
+                            .loading(true)
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
+                    )
+                    .child(
+                        Button::new("button-7")
+                            .label("Secondary Button")
+                            .small()
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
+                    )
+                    .child(
+                        Button::new("button-8")
+                            .label("Danger Button")
+                            .danger()
+                            .small()
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
+                    )
+                    .child(
+                        Button::new("button-8-outline")
+                            .label("Outline Button")
+                            .outline()
+                            .small()
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
+                    )
+                    .child(
+                        Button::new("button-8-ghost")
+                            .label("Ghost Button")
+                            .ghost()
+                            .small()
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
+                    )
+                    .child(
+                        Button::new("button-8-link")
+                            .label("Link Button")
+                            .link()
+                            .small()
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
+                    ),
+            )
+            .child(
+                section("XSmall Size", cx)
+                    .child(
+                        Button::new("button-xs-1")
+                            .label("Primary Button")
+                            .primary()
+                            .icon(IconName::Check)
+                            .xsmall()
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
+                    )
+                    .child(
+                        Button::new("button-xs-2")
+                            .label("Secondary Button")
+                            .xsmall()
+                            .loading(true)
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
+                    )
+                    .child(
+                        Button::new("button-xs-3")
+                            .label("Danger Button")
+                            .danger()
+                            .xsmall()
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
+                    )
+                    .child(
+                        Button::new("button-xs-3-ghost")
+                            .label("Ghost Button")
+                            .ghost()
+                            .xsmall()
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
+                    )
+                    .child(
+                        Button::new("button-xs-3-outline")
+                            .label("Outline Button")
+                            .outline()
+                            .xsmall()
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
+                    )
+                    .child(
+                        Button::new("button-xs-3-link")
+                            .label("Link Button")
+                            .link()
+                            .xsmall()
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
                     ),
             )
             .child(

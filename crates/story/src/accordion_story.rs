@@ -1,6 +1,6 @@
 use gpui::{
-    App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement as _,
-    Render, Styled as _, Window,
+    prelude::FluentBuilder as _, App, AppContext, Context, Entity, FocusHandle, Focusable,
+    IntoElement, ParentElement as _, Render, Styled as _, Window,
 };
 use gpui_component::{
     accordion::Accordion,
@@ -17,12 +17,17 @@ pub struct AccordionStory {
     bordered: bool,
     disabled: bool,
     multiple: bool,
+    show_icon: bool,
     focus_handle: FocusHandle,
 }
 
 impl super::Story for AccordionStory {
     fn title() -> &'static str {
         "Accordion"
+    }
+
+    fn description() -> &'static str {
+        "The accordion uses collapse internally to make it collapsible."
     }
 
     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
@@ -37,11 +42,12 @@ impl AccordionStory {
 
     fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
-            bordered: true,
-            open_ixs: Vec::new(),
+            bordered: false,
+            open_ixs: vec![0, 1, 2],
             size: Size::default(),
             disabled: false,
-            multiple: false,
+            multiple: true,
+            show_icon: false,
             focus_handle: cx.focus_handle(),
         }
     }
@@ -66,7 +72,7 @@ impl Focusable for AccordionStory {
 impl Render for AccordionStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
-            .gap_3()
+            .gap_5()
             .child(
                 h_flex()
                     .items_center()
@@ -116,7 +122,15 @@ impl Render for AccordionStory {
                                 cx.notify();
                             })),
                     )
-
+                    .child(
+                        Checkbox::new("show_icon")
+                            .label("Show Icon")
+                            .checked(self.show_icon)
+                            .on_click(cx.listener(|this, checked, _, cx| {
+                                this.show_icon = *checked;
+                                cx.notify();
+                            })),
+                    )
                     .child(
                         Checkbox::new("disabled")
                             .label("Disabled")
@@ -142,34 +156,42 @@ impl Render for AccordionStory {
                     .with_size(self.size)
                     .disabled(self.disabled)
                     .multiple(self.multiple)
-                    .item(|this|
+                    .item(|this| {
                         this.open(self.open_ixs.contains(&0))
-                            .icon(IconName::Info)
-                            .title("This is first accordion")
-                            .content("Hello")
-                    )
-                   .item(|this|
+                            .when(self.show_icon, |this| this.icon(IconName::Info))
+                            .title("Is it accessible?")
+                            .content("Yes. It adheres to the WAI-ARIA design pattern.")
+                    })
+                    .item(|this| {
                         this.open(self.open_ixs.contains(&1))
-                            .icon(IconName::Inbox)
-                            .title("This is second accordion")
+                            .when(self.show_icon, |this| this.icon(IconName::Inbox))
+                            .title("Is it styled with complex elements?")
                             .content(
                                 v_flex()
-                                    .gap_2()
+                                    .gap_4()
                                     .child(
                                         "We can put any view here, like a v_flex with a text view",
                                     )
-                                    .child(Switch::new("switch1").label("Switch"))
-                                    .child(Checkbox::new("checkbox1").label("Or a Checkbox")),
+                                    .child(
+                                        h_flex()
+                                            .gap_4()
+                                            .child(Switch::new("switch1").label("Switch"))
+                                            .child(
+                                                Checkbox::new("checkbox1").label("Or a Checkbox"),
+                                            ),
+                                    ),
                             )
-                    )
-                     .item(|this|
+                    })
+                    .item(|this| {
                         this.open(self.open_ixs.contains(&2))
-                            .icon(IconName::Moon)
+                            .when(self.show_icon, |this| this.icon(IconName::Moon))
                             .title("This is third accordion")
                             .content(
-                                "This is the third accordion content. It can be any view, like a text view or a button."
+                                "This is the third accordion content. \
+                                It can be any view, like a text view or a button.",
                             )
-                    ) .on_toggle_click(cx.listener(|this, open_ixs: &[usize], window,cx| {
+                    })
+                    .on_toggle_click(cx.listener(|this, open_ixs: &[usize], window, cx| {
                         this.toggle_accordion(open_ixs.to_vec(), window, cx);
                     })),
             )

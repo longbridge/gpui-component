@@ -13,6 +13,8 @@ use gpui_component::{
     v_flex, ActiveTheme, IconName, Kbd,
 };
 
+use crate::Story;
+
 actions!(tooltip, [Info]);
 
 pub fn init(cx: &mut App) {
@@ -35,7 +37,7 @@ impl TooltipStory {
     }
 }
 
-impl super::Story for TooltipStory {
+impl Story for TooltipStory {
     fn title() -> &'static str {
         "Tooltip"
     }
@@ -48,11 +50,13 @@ impl super::Story for TooltipStory {
         None
     }
 }
+
 impl Focusable for TooltipStory {
     fn focus_handle(&self, _: &gpui::App) -> gpui::FocusHandle {
         self.focus_handle.clone()
     }
 }
+
 impl Render for TooltipStory {
     fn render(
         &mut self,
