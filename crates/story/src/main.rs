@@ -4,7 +4,7 @@ use gpui_component::{
     button::{Button, ButtonVariants as _},
     dock::{DockArea, DockAreaState, DockEvent, DockItem, DockPlacement},
     popup_menu::PopupMenuExt,
-    IconName, Root, Sizable,
+    IconName, Root, Sizable, Theme,
 };
 #[cfg(not(target_os = "linux"))]
 use gpui_component::{Theme, TitleBar};
@@ -61,9 +61,6 @@ struct DockAreaTab {
 
 impl StoryWorkspace {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        // There will crash on Linux.
-        // https://github.com/longbridge/gpui-component/issues/104
-        #[cfg(not(target_os = "linux"))]
         window
             .observe_window_appearance(|window, cx| {
                 Theme::sync_system_appearance(Some(window), cx);

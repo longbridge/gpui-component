@@ -3,6 +3,7 @@ use std::ops::{Deref, DerefMut};
 use gpui::{
     hsla, point, px, App, BoxShadow, Global, Hsla, Pixels, SharedString, Window, WindowAppearance,
 };
+use serde::{Deserialize, Serialize};
 
 use crate::{scroll::ScrollbarShow, Colorize as _};
 
@@ -563,14 +564,13 @@ impl Theme {
 
     /// Sync the theme with the system appearance
     pub fn sync_system_appearance(window: Option<&mut Window>, cx: &mut App) {
-        match cx.window_appearance() {
-            WindowAppearance::Dark | WindowAppearance::VibrantDark => {
-                Self::change(ThemeMode::Dark, window, cx)
-            }
-            WindowAppearance::Light | WindowAppearance::VibrantLight => {
-                Self::change(ThemeMode::Light, window, cx)
-            }
-        }
+        // Better use window.appearance() for avoid error on Linux.
+        let appearance = window
+            .as_ref()
+            .map(|window| window.appearance())
+            .unwrap_or_else(|| cx.window_appearance());
+
+        Self::change(appearance, window, cx);
     }
 
     /// Sync the Scrollbar showing behavior with the system
@@ -582,7 +582,8 @@ impl Theme {
         }
     }
 
-    pub fn change(mode: ThemeMode, window: Option<&mut Window>, cx: &mut App) {
+    pub fn change(mode: impl Into<ThemeMode>, window: Option<&mut Window>, cx: &mut App) {
+        let mode = mode.into();
         let colors = match mode {
             ThemeMode::Light => ThemeColor::light(),
             ThemeMode::Dark => ThemeColor::dark(),
@@ -628,7 +629,8 @@ impl From<ThemeColor> for Theme {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, PartialOrd, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, PartialOrd, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ThemeMode {
     Light,
     #[default]
@@ -639,5 +641,14 @@ impl ThemeMode {
     #[inline(always)]
     pub fn is_dark(&self) -> bool {
         matches!(self, Self::Dark)
+    }
+}
+
+impl From<WindowAppearance> for ThemeMode {
+    fn from(appearance: WindowAppearance) -> Self {
+        match appearance {
+            WindowAppearance::Dark | WindowAppearance::VibrantDark => Self::Dark,
+            WindowAppearance::Light | WindowAppearance::VibrantLight => Self::Light,
+        }
     }
 }
