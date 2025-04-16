@@ -9,6 +9,8 @@ mod image_story;
 mod input_story;
 mod list_story;
 mod modal_story;
+mod number_input_story;
+mod otp_input_story;
 mod popup_story;
 mod progress_story;
 mod resizable_story;
@@ -18,21 +20,13 @@ mod switch_story;
 mod table_story;
 mod tabs_story;
 mod text_story;
+mod textarea_story;
 mod title_bar;
 mod toggle_story;
 mod tooltip_story;
 mod webview_story;
 
 pub use assets::Assets;
-
-pub use accordion_story::AccordionStory;
-pub use button_story::ButtonStory;
-pub use calendar_story::CalendarStory;
-pub use dropdown_story::DropdownStory;
-pub use form_story::FormStory;
-pub use tabs_story::TabsStory;
-pub use toggle_story::ToggleStory;
-
 use gpui::{
     actions, div, impl_internal_actions, prelude::FluentBuilder as _, px, size, AnyElement,
     AnyView, App, AppContext, Bounds, Context, Div, Entity, EventEmitter, Focusable, Global, Hsla,
@@ -40,11 +34,19 @@ use gpui::{
     SharedString, StatefulInteractiveElement, Styled as _, Window, WindowBounds, WindowKind,
     WindowOptions,
 };
+
+pub use accordion_story::AccordionStory;
+pub use button_story::ButtonStory;
+pub use calendar_story::CalendarStory;
+pub use dropdown_story::DropdownStory;
+pub use form_story::FormStory;
 pub use icon_story::IconStory;
 pub use image_story::ImageStory;
 pub use input_story::InputStory;
 pub use list_story::ListStory;
 pub use modal_story::ModalStory;
+pub use number_input_story::NumberInputStory;
+pub use otp_input_story::OtpInputStory;
 pub use popup_story::PopupStory;
 pub use progress_story::ProgressStory;
 pub use resizable_story::ResizableStory;
@@ -53,17 +55,18 @@ use serde::{Deserialize, Serialize};
 pub use sidebar_story::SidebarStory;
 pub use switch_story::SwitchStory;
 pub use table_story::TableStory;
+pub use tabs_story::TabsStory;
 pub use text_story::TextStory;
+pub use textarea_story::TextareaStory;
 pub use title_bar::AppTitleBar;
+pub use toggle_story::ToggleStory;
 pub use tooltip_story::TooltipStory;
 pub use webview_story::WebViewStory;
 
 use gpui_component::{
     button::Button,
-    divider::Divider,
     dock::{register_panel, Panel, PanelControl, PanelEvent, PanelInfo, PanelState, TitleStyle},
     h_flex,
-    label::Label,
     notification::Notification,
     popup_menu::PopupMenu,
     scroll::ScrollbarShow,
@@ -208,10 +211,13 @@ pub fn init(cx: &mut App) {
     gpui_component::init(cx);
     AppState::init(cx);
     input_story::init(cx);
+    number_input_story::init(cx);
+    textarea_story::init(cx);
     dropdown_story::init(cx);
     popup_story::init(cx);
     webview_story::init(cx);
     tooltip_story::init(cx);
+    otp_input_story::init(cx);
 
     let http_client = std::sync::Arc::new(
         reqwest_client::ReqwestClient::user_agent("gpui-component/story").unwrap(),
@@ -293,6 +299,7 @@ pub fn section(title: impl IntoElement, cx: &App) -> Div {
 
     h_flex()
         .items_center()
+        .justify_center()
         .gap_4()
         .p_4()
         .w_full()
@@ -300,7 +307,6 @@ pub fn section(title: impl IntoElement, cx: &App) -> Div {
         .border_1()
         .border_color(theme.border)
         .flex_wrap()
-        .justify_around()
         .child(div().flex_none().w_full().child(title))
 }
 

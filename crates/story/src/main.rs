@@ -1,9 +1,7 @@
 use gpui::{prelude::*, *};
 use gpui_component::{
-    blue_500,
-    breadcrumb::{Breadcrumb, BreadcrumbItem},
-    h_flex,
-    sidebar::{Sidebar, SidebarHeader, SidebarMenu, SidebarMenuItem},
+    blue_500, h_flex,
+    sidebar::{Sidebar, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuItem},
     v_flex, ActiveTheme as _, Icon, IconName,
 };
 use story::*;
@@ -22,6 +20,9 @@ impl Gallery {
             StoryContainer::panel::<IconStory>(window, cx),
             StoryContainer::panel::<ImageStory>(window, cx),
             StoryContainer::panel::<InputStory>(window, cx),
+            StoryContainer::panel::<NumberInputStory>(window, cx),
+            StoryContainer::panel::<OtpInputStory>(window, cx),
+            StoryContainer::panel::<TextareaStory>(window, cx),
             StoryContainer::panel::<ModalStory>(window, cx),
             StoryContainer::panel::<PopupStory>(window, cx),
             StoryContainer::panel::<ProgressStory>(window, cx),
@@ -49,7 +50,7 @@ impl Gallery {
 }
 
 impl Render for Gallery {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let active_story = self.stories[self.active_index].clone();
         let story_name = active_story.read(cx).name.clone();
         let description = active_story.read(cx).description.clone();
@@ -103,15 +104,15 @@ impl Render for Gallery {
                             }),
                     )
                     .child(
-                        SidebarMenu::new().children(self.stories.iter().enumerate().map(
-                            |(ix, story)| {
+                        SidebarGroup::new("Components").child(SidebarMenu::new().children(
+                            self.stories.iter().enumerate().map(|(ix, story)| {
                                 SidebarMenuItem::new(story.read(cx).name.clone())
                                     .active(self.active_index == ix)
                                     .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
                                         this.active_index = ix;
                                         cx.notify();
                                     }))
-                            },
+                            }),
                         )),
                     ),
             )

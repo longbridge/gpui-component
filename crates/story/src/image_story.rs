@@ -3,6 +3,8 @@ use gpui::{
 };
 use gpui_component::{dock::PanelControl, h_flex, v_flex, SvgImg};
 
+use crate::section;
+
 const GOOGLE_LOGO: &str = include_str!("./fixtures/google.svg");
 const PIE_JSON: &str = include_str!("./fixtures/pie.json");
 
@@ -16,6 +18,10 @@ pub struct ImageStory {
 impl super::Story for ImageStory {
     fn title() -> &'static str {
         "Image"
+    }
+
+    fn description() -> &'static str {
+        "Image and SVG image supported."
     }
 
     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
@@ -54,22 +60,22 @@ impl Render for ImageStory {
     fn render(
         &mut self,
         _window: &mut gpui::Window,
-        _cx: &mut gpui::Context<Self>,
+        cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
         v_flex()
             .gap_4()
             .size_full()
-            .items_start()
             .child(
-                h_flex()
-                    .size_full()
-                    .child(self.google_logo.clone().size(px(300.)).flex_grow())
-                    .child(self.google_logo.clone().size(px(300.)).flex_grow())
+                section("SVG Image", cx)
+                    .child(self.google_logo.clone().size(px(100.)).flex_grow())
+                    .child(self.google_logo.clone().size(px(100.)).flex_grow())
                     .child(self.google_logo.clone().size_80().flex_grow())
                     .child(self.google_logo.clone().size_12().flex_grow())
-                    .child(self.google_logo.clone().size(px(300.))),
+                    .child(self.google_logo.clone().size(px(100.))),
             )
-            .child(self.inbox_img.clone().flex_shrink_0().size(px(64.)))
-            .child(self.pie_chart.clone().flex_shrink_0().w_full().h(px(400.)))
+            .child(
+                section("Chart (by chart-rs)", cx)
+                    .child(self.pie_chart.clone().flex_shrink_0().w_full().h(px(400.))),
+            )
     }
 }

@@ -169,8 +169,6 @@ impl Render for PopupStory {
             .on_action(cx.listener(Self::on_search_all))
             .on_action(cx.listener(Self::on_action_info))
             .on_action(cx.listener(Self::on_action_toggle_check))
-            .p_4()
-            .mb_5()
             .size_full()
             .min_h(px(400.))
             .context_menu({
