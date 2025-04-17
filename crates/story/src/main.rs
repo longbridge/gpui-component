@@ -13,7 +13,7 @@ pub struct Gallery {
     active_index: Option<usize>,
     collapsed: bool,
     search_input: Entity<TextInput>,
-    _subscribtions: Vec<Subscription>,
+    _subscriptions: Vec<Subscription>,
 }
 
 impl Gallery {
@@ -24,7 +24,7 @@ impl Gallery {
                 .cleanable()
                 .placeholder("Search...")
         });
-        let _subscribtions = vec![cx.subscribe(&search_input, |this, _, _, cx| {
+        let _subscriptions = vec![cx.subscribe(&search_input, |this, _, _, cx| {
             this.active_group_index = None;
             this.active_index = None;
             cx.notify()
@@ -80,7 +80,7 @@ impl Gallery {
             active_group_index: Some(0),
             active_index: Some(0),
             collapsed: false,
-            _subscribtions,
+            _subscriptions,
         }
     }
 
