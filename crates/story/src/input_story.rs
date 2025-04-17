@@ -73,7 +73,7 @@ impl InputStory {
             TextInput::new(window, cx)
                 .placeholder("Enter text and clear it by pressing ESC")
                 .cleanable()
-                .clean_by_escape()
+                .clean_on_escape()
         });
 
         let mask_input = cx.new(|cx| {

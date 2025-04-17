@@ -85,7 +85,7 @@ actions!(
         MoveToPreviousWord,
         MoveToNextWord,
         TextChanged,
-        Clean
+        Escape
     ]
 );
 
@@ -117,7 +117,7 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("ctrl-delete", DeleteToNextWordEnd, Some(CONTEXT)),
         KeyBinding::new("enter", Enter { secondary: false }, Some(CONTEXT)),
         KeyBinding::new("secondary-enter", Enter { secondary: true }, Some(CONTEXT)),
-        KeyBinding::new("escape", Clean, Some(CONTEXT)),
+        KeyBinding::new("escape", Escape, Some(CONTEXT)),
         KeyBinding::new("up", Up, Some(CONTEXT)),
         KeyBinding::new("down", Down, Some(CONTEXT)),
         KeyBinding::new("left", Left, Some(CONTEXT)),
@@ -235,7 +235,7 @@ pub struct TextInput {
     pub(super) mask_toggle: bool,
     pub(super) appearance: bool,
     pub(super) cleanable: bool,
-    pub(super) clean_by_escape: bool,
+    pub(super) clean_on_escape: bool,
     pub(super) size: Size,
     pub(super) rows: usize,
     pub(super) min_rows: usize,
@@ -298,7 +298,7 @@ impl TextInput {
             mask_toggle: false,
             appearance: true,
             cleanable: false,
-            clean_by_escape: false,
+            clean_on_escape: false,
             loading: false,
             prefix: None,
             suffix: None,
@@ -666,9 +666,9 @@ impl TextInput {
         self
     }
 
-    /// Set true to clear the input by pressing Escape key when the input field is not empty.
-    pub fn clean_by_escape(mut self) -> Self {
-        self.clean_by_escape = true;
+    /// Set true to clear the input by pressing Escape key.
+    pub fn clean_on_escape(mut self) -> Self {
+        self.clean_on_escape = true;
         self
     }
 
@@ -1073,8 +1073,11 @@ impl TextInput {
         self.replace_text("", window, cx);
     }
 
-    fn on_clean(&mut self, _: &Clean, window: &mut Window, cx: &mut Context<Self>) {
-        self.clean(window, cx);
+    fn escape(&mut self, _: &Escape, window: &mut Window, cx: &mut Context<Self>) {
+        self.unselect(window, cx);
+        if self.clean_on_escape {
+            self.clean(window, cx);
+        }
     }
 
     fn on_mouse_down(
@@ -1802,6 +1805,7 @@ impl Render for TextInput {
                     .on_action(cx.listener(Self::delete_previous_word))
                     .on_action(cx.listener(Self::delete_next_word))
                     .on_action(cx.listener(Self::enter))
+                    .on_action(cx.listener(Self::escape))
             })
             .on_action(cx.listener(Self::left))
             .on_action(cx.listener(Self::right))
@@ -1833,9 +1837,6 @@ impl Render for TextInput {
             .on_action(cx.listener(Self::undo))
             .on_action(cx.listener(Self::redo))
             .on_action(cx.listener(Self::redo))
-            .when(self.clean_by_escape, |this| {
-                this.on_action(cx.listener(Self::on_clean))
-            })
             .on_key_down(cx.listener(Self::on_key_down))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
