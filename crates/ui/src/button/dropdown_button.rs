@@ -1,6 +1,6 @@
 use gpui::{
-    prelude::FluentBuilder, App, Context, Corner, Corners, Div, Edges, ElementId, IntoElement,
-    ParentElement, RenderOnce, Styled, Window,
+    prelude::FluentBuilder, App, Context, Corner, Corners, Div, Edges, ElementId,
+    InteractiveElement as _, IntoElement, ParentElement, RenderOnce, Styled, Window,
 };
 
 use crate::{
@@ -94,53 +94,55 @@ impl ButtonVariants for DropdownButton {
 
 impl RenderOnce for DropdownButton {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        self.base.when_some(self.button, |this, button| {
-            this.child(
-                button
-                    .rounded(self.rounded)
-                    .border_corners(Corners {
-                        top_left: true,
-                        top_right: false,
-                        bottom_left: true,
-                        bottom_right: false,
-                    })
-                    .border_edges(Edges {
-                        left: true,
-                        top: true,
-                        right: true,
-                        bottom: true,
-                    })
-                    .when_some(self.compact, |this, _| this.compact())
-                    .when_some(self.outline, |this, _| this.outline())
-                    .when_some(self.size, |this, size| this.with_size(size))
-                    .when_some(self.variant, |this, variant| this.with_variant(variant)),
-            )
-            .when_some(self.popup_menu, |this, popup_menu| {
+        self.base
+            .id(self.id)
+            .when_some(self.button, |this, button| {
                 this.child(
-                    Button::new(self.id)
-                        .icon(IconName::ChevronDown)
+                    button
                         .rounded(self.rounded)
+                        .border_corners(Corners {
+                            top_left: true,
+                            top_right: false,
+                            bottom_left: true,
+                            bottom_right: false,
+                        })
                         .border_edges(Edges {
-                            left: false,
+                            left: true,
                             top: true,
                             right: true,
                             bottom: true,
                         })
-                        .border_corners(Corners {
-                            top_left: false,
-                            top_right: true,
-                            bottom_left: false,
-                            bottom_right: true,
-                        })
                         .when_some(self.compact, |this, _| this.compact())
                         .when_some(self.outline, |this, _| this.outline())
                         .when_some(self.size, |this, size| this.with_size(size))
-                        .when_some(self.variant, |this, variant| this.with_variant(variant))
-                        .popup_menu_with_anchor(Corner::TopRight, move |this, window, cx| {
-                            popup_menu(this, window, cx)
-                        }),
+                        .when_some(self.variant, |this, variant| this.with_variant(variant)),
                 )
+                .when_some(self.popup_menu, |this, popup_menu| {
+                    this.child(
+                        Button::new("btn")
+                            .icon(IconName::ChevronDown)
+                            .rounded(self.rounded)
+                            .border_edges(Edges {
+                                left: false,
+                                top: true,
+                                right: true,
+                                bottom: true,
+                            })
+                            .border_corners(Corners {
+                                top_left: false,
+                                top_right: true,
+                                bottom_left: false,
+                                bottom_right: true,
+                            })
+                            .when_some(self.compact, |this, _| this.compact())
+                            .when_some(self.outline, |this, _| this.outline())
+                            .when_some(self.size, |this, size| this.with_size(size))
+                            .when_some(self.variant, |this, variant| this.with_variant(variant))
+                            .popup_menu_with_anchor(Corner::TopRight, move |this, window, cx| {
+                                popup_menu(this, window, cx)
+                            }),
+                    )
+                })
             })
-        })
     }
 }

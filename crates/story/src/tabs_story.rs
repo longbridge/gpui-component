@@ -117,7 +117,7 @@ impl Render for TabsStory {
                     ),
             )
             .child(
-                section("Tabs", cx).child(
+                section("Tabs").child(
                     TabBar::new("tabs")
                         .w_full()
                         .with_size(self.size)
@@ -164,7 +164,7 @@ impl Render for TabsStory {
                 ),
             )
             .child(
-                section("Underline Tabs", cx).child(
+                section("Underline Tabs").child(
                     TabBar::new("underline")
                         .w_full()
                         .underline()
@@ -185,7 +185,7 @@ impl Render for TabsStory {
                 ),
             )
             .child(
-                section("Pill Tabs", cx).child(
+                section("Pill Tabs").child(
                     TabBar::new("pill")
                         .w_full()
                         .pill()
@@ -206,7 +206,7 @@ impl Render for TabsStory {
                 ),
             )
             .child(
-                section("Outline Tabs", cx).child(
+                section("Outline Tabs").child(
                     TabBar::new("outline")
                         .w_full()
                         .outline()
@@ -227,7 +227,7 @@ impl Render for TabsStory {
                 ),
             )
             .child(
-                section("Segmented Tabs", cx).child(
+                section("Segmented Tabs").child(
                     TabBar::new("segmented")
                         .w_full()
                         .segmented()

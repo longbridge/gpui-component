@@ -108,7 +108,6 @@ impl Render for ButtonStory {
             .child(
                 h_flex()
                     .gap_3()
-                    .child("State")
                     .child(
                         Checkbox::new("disabled-button")
                             .label("Disabled")
@@ -158,7 +157,8 @@ impl Render for ButtonStory {
                     ),
             )
             .child(
-                section("Normal Button", cx)
+                section("Normal Button")
+                    .max_w_lg()
                     .child(
                         Button::new("button-1")
                             .primary()
@@ -247,20 +247,10 @@ impl Render for ButtonStory {
                             .loading(loading)
                             .when(compact, |this| this.compact())
                             .on_click(Self::on_click),
-                    )
-                    .child(
-                        Button::new("button-6-custom")
-                            .custom(custom_variant)
-                            .label("Custom Button")
-                            .disabled(disabled)
-                            .selected(selected)
-                            .loading(loading)
-                            .when(compact, |this| this.compact())
-                            .on_click(Self::on_click),
                     ),
             )
             .child(
-                section("Button with Icon", cx)
+                section("Button with Icon")
                     .child(
                         Button::new("button-icon-1")
                             .primary()
@@ -344,7 +334,8 @@ impl Render for ButtonStory {
                     ),
             )
             .child(
-                section("Outline Button", cx)
+                section("Outline Button")
+                    .max_w_lg()
                     .child(
                         Button::new("button-outline-1")
                             .primary()
@@ -411,17 +402,6 @@ impl Render for ButtonStory {
                             .on_click(Self::on_click),
                     )
                     .child(
-                        Button::new("button-outline-6-custom")
-                            .outline()
-                            .custom(custom_variant)
-                            .label("Custom Button")
-                            .disabled(disabled)
-                            .selected(selected)
-                            .loading(loading)
-                            .when(compact, |this| this.compact())
-                            .on_click(Self::on_click),
-                    )
-                    .child(
                         Button::new("button-outline-5-ghost")
                             .ghost()
                             .outline()
@@ -456,7 +436,7 @@ impl Render for ButtonStory {
                     ),
             )
             .child(
-                section("Small Size", cx)
+                section("Small Size")
                     .child(
                         Button::new("button-6")
                             .label("Primary Button")
@@ -526,7 +506,7 @@ impl Render for ButtonStory {
                     ),
             )
             .child(
-                section("XSmall Size", cx)
+                section("XSmall Size")
                     .child(
                         Button::new("button-xs-1")
                             .label("Primary Button")
@@ -596,89 +576,125 @@ impl Render for ButtonStory {
                     ),
             )
             .child(
-                section("Button Group", cx)
+                section("Custom Button")
                     .child(
-                        ButtonGroup::new("button-group")
-                            .small()
+                        Button::new("button-6-custom")
+                            .custom(custom_variant)
+                            .label("Custom Button")
                             .disabled(disabled)
-                            .child(
-                                Button::new("button-one")
-                                    .label("One")
-                                    .disabled(disabled)
-                                    .selected(selected)
-                                    .when(compact, |this| this.compact())
-                                    .on_click(Self::on_click),
-                            )
-                            .child(
-                                Button::new("button-two")
-                                    .label("Two")
-                                    .disabled(disabled)
-                                    .selected(selected)
-                                    .when(compact, |this| this.compact())
-                                    .on_click(Self::on_click),
-                            )
-                            .child(
-                                Button::new("button-three")
-                                    .label("Three")
-                                    .disabled(disabled)
-                                    .selected(selected)
-                                    .when(compact, |this| this.compact())
-                                    .on_click(Self::on_click),
-                            ),
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
                     )
                     .child(
-                        h_flex()
-                            .gap_2()
-                            .child(
-                                Checkbox::new("multiple-button")
-                                    .label("Multiple")
-                                    .checked(toggle_multiple)
-                                    .on_click(cx.listener(|view, _, _, cx| {
-                                        view.toggle_multiple = !view.toggle_multiple;
-                                        cx.notify();
-                                    })),
-                            )
-                            .child(
-                                ButtonGroup::new("toggle-button-group")
-                                    .primary()
-                                    .compact()
-                                    .multiple(toggle_multiple)
-                                    .child(
-                                        Button::new("disabled-toggle-button")
-                                            .label("Disabled")
-                                            .selected(disabled),
-                                    )
-                                    .child(
-                                        Button::new("loading-toggle-button")
-                                            .label("Loading")
-                                            .selected(loading),
-                                    )
-                                    .child(
-                                        Button::new("selected-toggle-button")
-                                            .label("Selected")
-                                            .selected(selected),
-                                    )
-                                    .child(
-                                        Button::new("compact-toggle-button")
-                                            .label("Compact")
-                                            .selected(compact),
-                                    )
-                                    .on_click(cx.listener(|view, selected: &Vec<usize>, _, cx| {
-                                        view.disabled = selected.contains(&0);
-                                        view.loading = selected.contains(&1);
-                                        view.selected = selected.contains(&2);
-                                        view.compact = selected.contains(&3);
-                                        cx.notify();
-                                    })),
-                            ),
+                        Button::new("button-outline-6-custom")
+                            .outline()
+                            .custom(custom_variant)
+                            .label("Outline Button")
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
+                    )
+                    .child(
+                        Button::new("button-outline-6-custom-1")
+                            .outline()
+                            .icon(IconName::Bell)
+                            .custom(custom_variant)
+                            .label("Icon Button")
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
                     ),
             )
             .child(
-                section("Dropdown Button", cx)
+                section("Button Group").child(
+                    ButtonGroup::new("button-group")
+                        .small()
+                        .disabled(disabled)
+                        .child(
+                            Button::new("button-one")
+                                .label("One")
+                                .disabled(disabled)
+                                .selected(selected)
+                                .when(compact, |this| this.compact())
+                                .on_click(Self::on_click),
+                        )
+                        .child(
+                            Button::new("button-two")
+                                .label("Two")
+                                .disabled(disabled)
+                                .selected(selected)
+                                .when(compact, |this| this.compact())
+                                .on_click(Self::on_click),
+                        )
+                        .child(
+                            Button::new("button-three")
+                                .label("Three")
+                                .disabled(disabled)
+                                .selected(selected)
+                                .when(compact, |this| this.compact())
+                                .on_click(Self::on_click),
+                        ),
+                ),
+            )
+            .child(
+                section(
+                    h_flex().gap_2().child("Toggle Button Group").child(
+                        Checkbox::new("multiple-button")
+                            .text_sm()
+                            .label("Multiple")
+                            .checked(toggle_multiple)
+                            .on_click(cx.listener(|view, _, _, cx| {
+                                view.toggle_multiple = !view.toggle_multiple;
+                                cx.notify();
+                            })),
+                    ),
+                )
+                .child(
+                    ButtonGroup::new("toggle-button-group")
+                        .primary()
+                        .compact()
+                        .multiple(toggle_multiple)
+                        .child(
+                            Button::new("disabled-toggle-button")
+                                .label("Disabled")
+                                .selected(disabled),
+                        )
+                        .child(
+                            Button::new("loading-toggle-button")
+                                .label("Loading")
+                                .selected(loading),
+                        )
+                        .child(
+                            Button::new("selected-toggle-button")
+                                .label("Selected")
+                                .selected(selected),
+                        )
+                        .child(
+                            Button::new("compact-toggle-button")
+                                .label("Compact")
+                                .selected(compact),
+                        )
+                        .on_click(cx.listener(|view, selected: &Vec<usize>, _, cx| {
+                            view.disabled = selected.contains(&0);
+                            view.loading = selected.contains(&1);
+                            view.selected = selected.contains(&2);
+                            view.compact = selected.contains(&3);
+                            cx.notify();
+                        })),
+                ),
+            )
+            .child(
+                section("Dropdown Button")
                     .child(
                         DropdownButton::new("dropdown-button1")
                             .small()
-                            .button(Button::new("dropdown-button-button1").label("Click Me"))
+                            .button(Button::new("btn").label("Click Me"))
                             .popup_menu(move |this, _, _| {
                                 this.menu("Disabled", Box::new(Disabled))
                                     .menu("Loading", Box::new(Loading))
@@ -687,8 +703,19 @@ impl Render for ButtonStory {
                             }),
                     )
                     .child(
-                        DropdownButton::new("dropdown-button")
-                            .button(Button::new("dropdown-button-button").label("Click Me"))
+                        DropdownButton::new("dropdown-button2")
+                            .button(Button::new("btn").label("Click Me"))
+                            .popup_menu(move |this, _, _| {
+                                this.menu("Disabled", Box::new(Disabled))
+                                    .menu("Loading", Box::new(Loading))
+                                    .menu("Selected", Box::new(Selected))
+                                    .menu("Compact", Box::new(Compact))
+                            }),
+                    )
+                    .child(
+                        DropdownButton::new("dropdown-button3")
+                            .outline()
+                            .button(Button::new("btn").label("Outline Dropdown"))
                             .popup_menu(move |this, _, _| {
                                 this.menu("Disabled", Box::new(Disabled))
                                     .menu("Loading", Box::new(Loading))
@@ -698,7 +725,7 @@ impl Render for ButtonStory {
                     ),
             )
             .child(
-                section("Icon Button", cx)
+                section("Icon Button")
                     .child(
                         Button::new("icon-button-primary")
                             .icon(IconName::Search)
@@ -758,7 +785,7 @@ impl Render for ButtonStory {
                     ),
             )
             .child(
-                section("Icon Button", cx)
+                section("Icon Button")
                     .child(
                         Button::new("icon-button-4")
                             .icon(IconName::Info)

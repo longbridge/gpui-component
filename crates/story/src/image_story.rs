@@ -1,7 +1,7 @@
 use gpui::{
     px, App, AppContext, Entity, FocusHandle, Focusable, ParentElement as _, Render, Styled, Window,
 };
-use gpui_component::{dock::PanelControl, h_flex, v_flex, SvgImg};
+use gpui_component::{dock::PanelControl, v_flex, SvgImg};
 
 use crate::section;
 
@@ -11,8 +11,6 @@ const PIE_JSON: &str = include_str!("./fixtures/pie.json");
 pub struct ImageStory {
     focus_handle: gpui::FocusHandle,
     google_logo: SvgImg,
-    pie_chart: SvgImg,
-    inbox_img: SvgImg,
 }
 
 impl super::Story for ImageStory {
@@ -35,13 +33,9 @@ impl super::Story for ImageStory {
 
 impl ImageStory {
     pub fn new(_: &mut Window, cx: &mut App) -> Self {
-        let chart = charts_rs::PieChart::from_json(PIE_JSON).unwrap();
-
         Self {
             focus_handle: cx.focus_handle(),
             google_logo: SvgImg::new().source(GOOGLE_LOGO.as_bytes(), px(300.), px(300.)),
-            pie_chart: SvgImg::new().source(chart.svg().unwrap().as_bytes(), px(600.), px(400.)),
-            inbox_img: SvgImg::new().source("icons/inbox.svg", px(24.), px(24.)),
         }
     }
 
@@ -60,22 +54,15 @@ impl Render for ImageStory {
     fn render(
         &mut self,
         _window: &mut gpui::Window,
-        cx: &mut gpui::Context<Self>,
+        _: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
-        v_flex()
-            .gap_4()
-            .size_full()
-            .child(
-                section("SVG Image", cx)
-                    .child(self.google_logo.clone().size(px(100.)).flex_grow())
-                    .child(self.google_logo.clone().size(px(100.)).flex_grow())
-                    .child(self.google_logo.clone().size_80().flex_grow())
-                    .child(self.google_logo.clone().size_12().flex_grow())
-                    .child(self.google_logo.clone().size(px(100.))),
-            )
-            .child(
-                section("Chart (by chart-rs)", cx)
-                    .child(self.pie_chart.clone().flex_shrink_0().w_full().h(px(400.))),
-            )
+        v_flex().gap_4().size_full().child(
+            section("SVG Image")
+                .child(self.google_logo.clone().size(px(100.)).flex_grow())
+                .child(self.google_logo.clone().size(px(100.)).flex_grow())
+                .child(self.google_logo.clone().size_80().flex_grow())
+                .child(self.google_logo.clone().size_12().flex_grow())
+                .child(self.google_logo.clone().size(px(100.))),
+        )
     }
 }

@@ -11,6 +11,8 @@ use gpui_component::{
     v_flex, IconName, Selectable, Sizable, Size,
 };
 
+use crate::section;
+
 pub struct AccordionStory {
     open_ixs: Vec<usize>,
     size: Size,
@@ -151,19 +153,20 @@ impl Render for AccordionStory {
                     ),
             )
             .child(
-                Accordion::new("test")
-                    .bordered(self.bordered)
-                    .with_size(self.size)
-                    .disabled(self.disabled)
-                    .multiple(self.multiple)
-                    .item(|this| {
-                        this.open(self.open_ixs.contains(&0))
-                            .when(self.show_icon, |this| this.icon(IconName::Info))
-                            .title("Is it accessible?")
-                            .content("Yes. It adheres to the WAI-ARIA design pattern.")
-                    })
-                    .item(|this| {
-                        this.open(self.open_ixs.contains(&1))
+                section("Normal").max_w_md().child(
+                    Accordion::new("test")
+                        .bordered(self.bordered)
+                        .with_size(self.size)
+                        .disabled(self.disabled)
+                        .multiple(self.multiple)
+                        .item(|this| {
+                            this.open(self.open_ixs.contains(&0))
+                                .when(self.show_icon, |this| this.icon(IconName::Info))
+                                .title("Is it accessible?")
+                                .content("Yes. It adheres to the WAI-ARIA design pattern.")
+                        })
+                        .item(|this| {
+                            this.open(self.open_ixs.contains(&1))
                             .when(self.show_icon, |this| this.icon(IconName::Inbox))
                             .title("Is it styled with complex elements?")
                             .content(
@@ -181,19 +184,20 @@ impl Render for AccordionStory {
                                             ),
                                     ),
                             )
-                    })
-                    .item(|this| {
-                        this.open(self.open_ixs.contains(&2))
-                            .when(self.show_icon, |this| this.icon(IconName::Moon))
-                            .title("This is third accordion")
-                            .content(
-                                "This is the third accordion content. \
+                        })
+                        .item(|this| {
+                            this.open(self.open_ixs.contains(&2))
+                                .when(self.show_icon, |this| this.icon(IconName::Moon))
+                                .title("This is third accordion")
+                                .content(
+                                    "This is the third accordion content. \
                                 It can be any view, like a text view or a button.",
-                            )
-                    })
-                    .on_toggle_click(cx.listener(|this, open_ixs: &[usize], window, cx| {
-                        this.toggle_accordion(open_ixs.to_vec(), window, cx);
-                    })),
+                                )
+                        })
+                        .on_toggle_click(cx.listener(|this, open_ixs: &[usize], window, cx| {
+                            this.toggle_accordion(open_ixs.to_vec(), window, cx);
+                        })),
+                ),
             )
     }
 }

@@ -1,19 +1,16 @@
 use gpui::{
-    actions, div, prelude::FluentBuilder as _, px, App, AppContext as _, ClickEvent, Context,
-    Entity, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding,
-    ParentElement as _, Render, SharedString, Styled, Subscription, Window,
+    actions, prelude::FluentBuilder as _, px, App, AppContext as _, Context, Entity, FocusHandle,
+    Focusable, InteractiveElement, IntoElement, KeyBinding, ParentElement as _, Render,
+    SharedString, Styled, Subscription, Window,
 };
-use regex::Regex;
-
-use crate::section;
 use gpui_component::{
-    button::{Button, ButtonVariant, ButtonVariants as _},
     checkbox::Checkbox,
     h_flex,
-    input::{InputEvent, NumberInput, NumberInputEvent, OtpInput, StepAction, TextInput},
-    v_flex, FocusableCycle, Icon, IconName, Sizable,
+    input::{InputEvent, OtpInput},
+    v_flex, FocusableCycle, Sizable, StyledExt,
 };
 
+use crate::section;
 actions!(input_story, [Tab, TabPrev]);
 
 const CONTEXT: &str = "OtpInputStory";
@@ -110,21 +107,6 @@ impl OtpInputStory {
         self.cycle_focus(false, window, cx);
     }
 
-    fn on_input_event(
-        &mut self,
-        _: &Entity<TextInput>,
-        event: &InputEvent,
-        _window: &mut Window,
-        _cx: &mut Context<Self>,
-    ) {
-        match event {
-            InputEvent::Change(text) => println!("Change: {}", text),
-            InputEvent::PressEnter { secondary } => println!("PressEnter secondary: {}", secondary),
-            InputEvent::Focus => println!("Focus"),
-            InputEvent::Blur => println!("Blur"),
-        };
-    }
-
     fn toggle_opt_masked(&mut self, _: &bool, window: &mut Window, cx: &mut Context<Self>) {
         self.otp_masked = !self.otp_masked;
         self.otp_input.update(cx, |input, cx| {
@@ -161,33 +143,29 @@ impl Render for OtpInputStory {
             .on_action(cx.listener(Self::tab))
             .on_action(cx.listener(Self::tab_prev))
             .size_full()
-            .justify_start()
-            .gap_3()
+            .gap_5()
             .child(
-                section(
-                    h_flex()
-                        .items_center()
-                        .justify_between()
-                        .child("OTP Input")
-                        .child(
-                            Checkbox::new("otp-mask")
-                                .label("Masked")
-                                .checked(self.otp_masked)
-                                .on_click(cx.listener(Self::toggle_opt_masked)),
-                        ),
-                    cx,
-                )
-                .child(
-                    v_flex()
-                        .gap_3()
-                        .child(self.otp_input_small.clone())
-                        .child(self.otp_input.clone())
-                        .when_some(self.otp_value.clone(), |this, otp| {
-                            this.child(format!("Your OTP: {}", otp))
-                        })
-                        .child(self.otp_input_large.clone())
-                        .child(self.opt_input_sized.clone()),
-                ),
+                h_flex()
+                    .items_center()
+                    .justify_between()
+                    .child("OTP Input")
+                    .child(
+                        Checkbox::new("otp-mask")
+                            .label("Masked")
+                            .checked(self.otp_masked)
+                            .on_click(cx.listener(Self::toggle_opt_masked)),
+                    ),
             )
+            .child(
+                section("Normal")
+                    .v_flex()
+                    .child(self.otp_input.clone())
+                    .when_some(self.otp_value.clone(), |this, otp| {
+                        this.child(format!("Your OTP: {}", otp))
+                    }),
+            )
+            .child(section("Small").child(self.otp_input_small.clone()))
+            .child(section("Large").child(self.otp_input_large.clone()))
+            .child(section("With Size").child(self.opt_input_sized.clone()))
     }
 }

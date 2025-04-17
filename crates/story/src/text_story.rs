@@ -62,7 +62,7 @@ impl Render for TextStory {
         v_flex()
             .gap_6()
             .child(
-                section("Label", cx)
+                section("Label")
                     .items_start()
                     .child(
                         v_flex()
@@ -93,7 +93,7 @@ impl Render for TextStory {
                 h_flex()
                     .gap_3()
                     .child(
-                        section("Link", cx).child(
+                        section("Link").child(
                             h_flex()
                                 .items_start()
                                 .gap_3()
@@ -131,7 +131,7 @@ impl Render for TextStory {
                         ),
                     )
                     .child(
-                        section("Clipboard", cx).child(
+                        section("Clipboard").child(
                             h_flex()
                                 .w_full()
                                 .gap_4()
@@ -167,7 +167,7 @@ impl Render for TextStory {
                     ),
             )
             .child(
-                section("Maksed Label", cx).child(
+                section("Maksed Label").child(
                     v_flex()
                         .w_full()
                         .gap_4()
@@ -191,7 +191,7 @@ impl Render for TextStory {
                 ),
             )
             .child(
-                section("Tag", cx)
+                section("Tag")
                     .child(
                         h_flex()
                             .gap_2()
@@ -219,7 +219,7 @@ impl Render for TextStory {
                     ),
             )
             .child(
-                section("Tag::color", cx).child(
+                section("Tag::color").child(
                     v_flex().gap_4().child(
                         h_flex().gap_2().flex_wrap().children(
                             ColorName::all()
@@ -231,7 +231,7 @@ impl Render for TextStory {
                 ),
             )
             .child(
-                section("Kbd", cx).child(
+                section("Kbd").child(
                     h_flex()
                         .gap_2()
                         .child(Kbd::new(Keystroke::parse("cmd-shift-p").unwrap()))

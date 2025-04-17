@@ -1,18 +1,10 @@
 use gpui::{
-    actions, div, prelude::FluentBuilder as _, px, App, AppContext as _, ClickEvent, Context,
-    Entity, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding,
-    ParentElement as _, Render, SharedString, Styled, Subscription, Window,
+    actions, App, AppContext as _, ClickEvent, Context, Entity, FocusHandle, Focusable,
+    InteractiveElement, IntoElement, KeyBinding, ParentElement as _, Render, Styled, Window,
 };
-use regex::Regex;
 
 use crate::section;
-use gpui_component::{
-    button::{Button, ButtonVariant, ButtonVariants as _},
-    checkbox::Checkbox,
-    h_flex,
-    input::{InputEvent, NumberInput, NumberInputEvent, OtpInput, StepAction, TextInput},
-    v_flex, FocusableCycle, Icon, IconName, Sizable,
-};
+use gpui_component::{button::Button, h_flex, input::TextInput, v_flex, FocusableCycle, Sizable};
 
 actions!(input_story, [Tab, TabPrev]);
 
@@ -96,21 +88,6 @@ impl TextareaStory {
         self.cycle_focus(false, window, cx);
     }
 
-    fn on_input_event(
-        &mut self,
-        _: &Entity<TextInput>,
-        event: &InputEvent,
-        _window: &mut Window,
-        _cx: &mut Context<Self>,
-    ) {
-        match event {
-            InputEvent::Change(text) => println!("Change: {}", text),
-            InputEvent::PressEnter { secondary } => println!("PressEnter secondary: {}", secondary),
-            InputEvent::Focus => println!("Focus"),
-            InputEvent::Blur => println!("Blur"),
-        };
-    }
-
     fn on_insert_text_to_textarea(
         &mut self,
         _: &ClickEvent,
@@ -135,7 +112,7 @@ impl TextareaStory {
 }
 
 impl FocusableCycle for TextareaStory {
-    fn cycle_focus_handles(&self, _: &mut Window, cx: &mut App) -> Vec<FocusHandle> {
+    fn cycle_focus_handles(&self, _: &mut Window, _: &mut App) -> Vec<FocusHandle> {
         [].to_vec()
     }
 }
@@ -156,7 +133,7 @@ impl Render for TextareaStory {
             .justify_start()
             .gap_3()
             .child(
-                section("Textarea", cx).child(
+                section("Textarea").child(
                     v_flex()
                         .gap_2()
                         .w_full()

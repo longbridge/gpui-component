@@ -6,7 +6,6 @@ version = "0.1.0"
 
 [dependencies]
 anyhow.workspace = true
-charts-rs = "0.3"
 chrono = "0.4"
 fake = { version = "2.10.0", features = ["dummy"] }
 gpui.workspace = true

@@ -1,17 +1,16 @@
 use gpui::{
-    actions, div, prelude::FluentBuilder as _, px, App, AppContext as _, ClickEvent, Context,
-    Entity, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding,
-    ParentElement as _, Render, SharedString, Styled, Subscription, Window,
+    actions, div, prelude::FluentBuilder as _, px, App, AppContext as _, Context, Entity,
+    FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding, ParentElement as _,
+    Render, SharedString, Styled, Subscription, Window,
 };
-use regex::Regex;
 
 use crate::section;
 use gpui_component::{
     button::{Button, ButtonVariant, ButtonVariants as _},
     checkbox::Checkbox,
     h_flex,
-    input::{InputEvent, NumberInput, NumberInputEvent, OtpInput, StepAction, TextInput},
-    v_flex, FocusableCycle, Icon, IconName, Sizable,
+    input::{InputEvent, OtpInput, TextInput},
+    v_flex, FocusableCycle, Icon, IconName, Sizable, StyledExt,
 };
 
 actions!(input_story, [Tab, TabPrev]);
@@ -259,51 +258,33 @@ impl Render for InputStory {
             .justify_start()
             .gap_3()
             .child(
-                section("Normal Input", cx)
+                section("Normal Input")
+                    .v_flex()
+                    .max_w_md()
                     .child(self.input1.clone())
                     .child(self.input2.clone()),
             )
             .child(
-                section("Input State", cx)
+                section("Input State")
+                    .v_flex()
+                    .max_w_md()
                     .child(self.disabled_input.clone())
                     .child(self.mask_input.clone()),
             )
             .child(
-                section("Prefix and Suffix", cx)
+                section("Prefix and Suffix")
+                    .v_flex()
+                    .max_w_md()
                     .child(self.prefix_input1.clone())
                     .child(self.both_input1.clone())
                     .child(self.suffix_input1.clone()),
             )
             .child(
-                section("Input Size", cx)
+                section("Input Size")
+                    .v_flex()
+                    .max_w_md()
                     .child(self.large_input.clone())
                     .child(self.small_input.clone()),
-            )
-            .child(
-                section(
-                    h_flex()
-                        .items_center()
-                        .justify_between()
-                        .child("OTP Input")
-                        .child(
-                            Checkbox::new("otp-mask")
-                                .label("Masked")
-                                .checked(self.otp_masked)
-                                .on_click(cx.listener(Self::toggle_opt_masked)),
-                        ),
-                    cx,
-                )
-                .child(
-                    v_flex()
-                        .gap_3()
-                        .child(self.otp_input_small.clone())
-                        .child(self.otp_input.clone())
-                        .when_some(self.otp_value.clone(), |this, otp| {
-                            this.child(format!("Your OTP: {}", otp))
-                        })
-                        .child(self.otp_input_large.clone())
-                        .child(self.opt_input_sized.clone()),
-                ),
             )
             .child(
                 h_flex()

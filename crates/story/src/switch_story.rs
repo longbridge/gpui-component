@@ -183,7 +183,7 @@ impl Render for SwitchStory {
                         ),
                 )
                 .child(
-                    section("Checkbox", cx).child(
+                    section("Checkbox").child(
                         h_flex()
                             .w_full()
                             .items_start()
@@ -244,7 +244,7 @@ impl Render for SwitchStory {
                     ),
                 )
                 .child(
-                    section("Disabled Checkbox", cx).child(
+                    section("Disabled Checkbox").child(
                         h_flex()
                             .w_full()
                             .items_center()
@@ -264,7 +264,7 @@ impl Render for SwitchStory {
                     ),
                 )
                 .child(
-                    section("Radio", cx).child(
+                    section("Radio").child(
                         h_flex()
                             .w_full()
                             .gap_4()
@@ -308,7 +308,7 @@ impl Render for SwitchStory {
                         .gap_4()
                         .w_full()
                         .child(
-                            section("Radio Group", cx).flex_1().child(
+                            section("Radio Group").flex_1().child(
                                 RadioGroup::horizontal()
                                     .children(["One", "Two", "Three"])
                                     .selected_index(self.radio_group_checked)
@@ -319,7 +319,7 @@ impl Render for SwitchStory {
                             ),
                         )
                         .child(
-                            section("Radio Group Vertical (With container style)", cx)
+                            section("Radio Group Vertical (With container style)")
                                 .flex_1()
                                 .child(
                                     RadioGroup::vertical()

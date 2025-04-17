@@ -1,11 +1,11 @@
 use gpui::{
-    px, rems, App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement,
-    Render, Styled, Window,
+    App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement, Render,
+    Styled, Window,
 };
 use gpui_component::{
     button::{Button, ButtonVariant, ButtonVariants},
     dock::PanelControl,
-    gray_500, green_500, h_flex, red_500, v_flex, ActiveTheme as _, Icon, IconName,
+    gray_500, green_500, h_flex, red_500, v_flex, Icon, IconName,
 };
 
 use crate::section;
@@ -55,14 +55,18 @@ impl Render for IconStory {
         v_flex()
             .gap_4()
             .child(
-                section("Icon", cx)
+                section("Icon")
+                    .text_lg()
                     .child(IconName::Info)
                     .child(IconName::Map)
                     .child(IconName::Bot)
-                    .child(IconName::GitHub),
+                    .child(IconName::GitHub)
+                    .child(IconName::Calendar)
+                    .child(IconName::Globe)
+                    .child(IconName::Heart),
             )
             .child(
-                section("Color Icon", cx)
+                section("Color Icon")
                     .child(
                         Icon::new(IconName::Maximize)
                             .size_6()
@@ -71,7 +75,7 @@ impl Render for IconStory {
                     .child(Icon::new(IconName::Minimize).size_6().text_color(red_500())),
             )
             .child(
-                section("Icon Button", cx).child(
+                section("Icon Button").child(
                     h_flex()
                         .gap_4()
                         .child(
@@ -89,15 +93,6 @@ impl Render for IconStory {
                                 .icon(Icon::new(IconName::Heart).text_color(green_500()).size_6())
                                 .with_variant(ButtonVariant::Ghost),
                         ),
-                ),
-            )
-            .child(
-                section("Filled Icon", cx).child(
-                    Icon::new(IconName::Plus)
-                        .size(rems(3.))
-                        .bg(cx.theme().primary)
-                        .text_color(cx.theme().primary_foreground)
-                        .rounded(px(32.)),
                 ),
             )
     }

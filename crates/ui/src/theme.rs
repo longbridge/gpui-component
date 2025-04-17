@@ -18,7 +18,7 @@ pub trait ActiveTheme {
 }
 
 impl ActiveTheme for App {
-    #[inline]
+    #[inline(always)]
     fn theme(&self) -> &Theme {
         Theme::global(self)
     }

@@ -6,7 +6,7 @@ use regex::Regex;
 
 use crate::section;
 use gpui_component::{
-    input::{InputEvent, NumberInput, NumberInputEvent, StepAction, TextInput},
+    input::{InputEvent, NumberInput, NumberInputEvent, StepAction},
     v_flex, FocusableCycle, Sizable,
 };
 
@@ -88,21 +88,6 @@ impl NumberInputStory {
 
     fn tab_prev(&mut self, _: &TabPrev, window: &mut Window, cx: &mut Context<Self>) {
         self.cycle_focus(false, window, cx);
-    }
-
-    fn on_input_event(
-        &mut self,
-        _: &Entity<TextInput>,
-        event: &InputEvent,
-        _window: &mut Window,
-        _cx: &mut Context<Self>,
-    ) {
-        match event {
-            InputEvent::Change(text) => println!("Change: {}", text),
-            InputEvent::PressEnter { secondary } => println!("PressEnter secondary: {}", secondary),
-            InputEvent::Focus => println!("Focus"),
-            InputEvent::Blur => println!("Blur"),
-        };
     }
 
     fn on_number_input1_event(
@@ -187,7 +172,7 @@ impl NumberInputStory {
 }
 
 impl FocusableCycle for NumberInputStory {
-    fn cycle_focus_handles(&self, _: &mut Window, cx: &mut App) -> Vec<FocusHandle> {
+    fn cycle_focus_handles(&self, _: &mut Window, _cx: &mut App) -> Vec<FocusHandle> {
         [].to_vec()
     }
 }
@@ -207,7 +192,7 @@ impl Render for NumberInputStory {
             .size_full()
             .justify_start()
             .gap_3()
-            .child(section("Nomral Size", cx).child(self.number_input1.clone()))
-            .child(section("Small Size", cx).child(self.number_input2.clone()))
+            .child(section("Nomral Size").child(self.number_input1.clone()))
+            .child(section("Small Size").child(self.number_input2.clone()))
     }
 }

@@ -28,10 +28,10 @@ mod webview_story;
 
 pub use assets::Assets;
 use gpui::{
-    actions, div, impl_internal_actions, prelude::FluentBuilder as _, px, size, AnyElement,
+    actions, div, impl_internal_actions, prelude::FluentBuilder as _, px, rems, size, AnyElement,
     AnyView, App, AppContext, Bounds, Context, Div, Entity, EventEmitter, Focusable, Global, Hsla,
-    InteractiveElement, IntoElement, KeyBinding, Menu, MenuItem, ParentElement, Render,
-    SharedString, StatefulInteractiveElement, Styled as _, Window, WindowBounds, WindowKind,
+    InteractiveElement, IntoElement, KeyBinding, Menu, MenuItem, ParentElement, Render, RenderOnce,
+    SharedString, StatefulInteractiveElement, Styled, Window, WindowBounds, WindowKind,
     WindowOptions,
 };
 
@@ -70,7 +70,7 @@ use gpui_component::{
     notification::Notification,
     popup_menu::PopupMenu,
     scroll::ScrollbarShow,
-    v_flex, ActiveTheme, ContextModal, IconName, Root, TitleBar,
+    v_flex, ActiveTheme, ContextModal, IconName, Root, StyledExt, TitleBar,
 };
 
 #[derive(Clone, PartialEq, Eq, Deserialize)]
@@ -293,21 +293,84 @@ pub fn init(cx: &mut App) {
 
 actions!(story, [ShowPanelInfo]);
 
-pub fn section(title: impl IntoElement, cx: &App) -> Div {
-    use gpui_component::ActiveTheme;
-    let theme = cx.theme();
+#[derive(IntoElement)]
+struct StorySection {
+    base: Div,
+    title: AnyElement,
+    children: Vec<AnyElement>,
+}
 
-    h_flex()
-        .items_center()
-        .justify_center()
-        .gap_4()
-        .p_4()
-        .w_full()
-        .rounded(cx.theme().radius)
-        .border_1()
-        .border_color(theme.border)
-        .flex_wrap()
-        .child(div().flex_none().w_full().child(title))
+impl StorySection {
+    #[allow(unused)]
+    fn max_w_md(mut self) -> Self {
+        self.base = self.base.max_w(rems(48.));
+        self
+    }
+
+    #[allow(unused)]
+    fn max_w_lg(mut self) -> Self {
+        self.base = self.base.max_w(rems(64.));
+        self
+    }
+
+    #[allow(unused)]
+    fn max_w_xl(mut self) -> Self {
+        self.base = self.base.max_w(rems(80.));
+        self
+    }
+
+    #[allow(unused)]
+    fn max_w_2xl(mut self) -> Self {
+        self.base = self.base.max_w(rems(96.));
+        self
+    }
+}
+
+impl ParentElement for StorySection {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(elements);
+    }
+}
+
+impl Styled for StorySection {
+    fn style(&mut self) -> &mut gpui::StyleRefinement {
+        self.base.style()
+    }
+}
+
+impl RenderOnce for StorySection {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        v_flex()
+            .gap_2()
+            .mb_5()
+            .w_full()
+            .child(
+                h_flex()
+                    .justify_between()
+                    .w_full()
+                    .gap_4()
+                    .child(self.title),
+            )
+            .child(
+                div()
+                    .p_4()
+                    .border_1()
+                    .border_color(cx.theme().border)
+                    .rounded_lg()
+                    .v_flex()
+                    .items_center()
+                    .justify_center()
+                    .child(self.base.gap_4().w_full().children(self.children)),
+            )
+    }
+}
+
+pub(crate) fn section(title: impl IntoElement) -> StorySection {
+    StorySection {
+        title: title.into_any_element(),
+        base: h_flex().flex_wrap().justify_center().items_center(),
+        children: vec![],
+    }
 }
 
 pub struct StoryContainer {
