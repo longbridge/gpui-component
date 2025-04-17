@@ -1,9 +1,5 @@
 use gpui::*;
-use gpui_component::{
-    alert::Alert,
-    button::{Button, ButtonGroup},
-    v_flex, IconName, Selectable as _, Sizable as _, Size,
-};
+
 use story::{AlertStory, Assets};
 
 pub struct Example {
