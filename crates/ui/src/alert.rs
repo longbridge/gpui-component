@@ -143,8 +143,9 @@ impl RenderOnce for Alert {
 
         let color = self.variant.color(cx);
 
-        self.base.child(
+        self.base.flex_1().child(
             h_flex()
+                .w_full()
                 .rounded(radius)
                 .border_1()
                 .border_color(color)

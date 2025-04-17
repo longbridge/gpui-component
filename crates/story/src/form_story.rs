@@ -30,7 +30,11 @@ pub struct FormStory {
 
 impl super::Story for FormStory {
     fn title() -> &'static str {
-        "FormStory"
+        "Form"
+    }
+
+    fn description() -> &'static str {
+        "Form to collect multiple inputs."
     }
 
     fn closable() -> bool {

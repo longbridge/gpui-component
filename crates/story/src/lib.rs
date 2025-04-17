@@ -1,5 +1,7 @@
 mod accordion_story;
+mod alert_story;
 mod assets;
+mod badge_story;
 mod button_story;
 mod calendar_story;
 mod checkbox_story;
@@ -44,6 +46,8 @@ use gpui::{
 };
 
 pub use accordion_story::AccordionStory;
+pub use alert_story::AlertStory;
+pub use badge_story::BadgeStory;
 pub use button_story::ButtonStory;
 pub use calendar_story::CalendarStory;
 pub use checkbox_story::CheckboxStory;

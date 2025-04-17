@@ -16,9 +16,13 @@ impl Gallery {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let stories = vec![
             StoryContainer::panel::<AccordionStory>(window, cx),
+            StoryContainer::panel::<AlertStory>(window, cx),
+            StoryContainer::panel::<BadgeStory>(window, cx),
             StoryContainer::panel::<ButtonStory>(window, cx),
             StoryContainer::panel::<CheckboxStory>(window, cx),
+            StoryContainer::panel::<DropdownStory>(window, cx),
             StoryContainer::panel::<DrawerStory>(window, cx),
+            StoryContainer::panel::<FormStory>(window, cx),
             StoryContainer::panel::<IconStory>(window, cx),
             StoryContainer::panel::<ImageStory>(window, cx),
             StoryContainer::panel::<InputStory>(window, cx),

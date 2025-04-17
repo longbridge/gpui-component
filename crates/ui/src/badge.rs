@@ -70,8 +70,8 @@ impl RenderOnce for Badge {
                                 self.count.to_string()
                             };
 
-                            this.top(px(-2.))
-                                .right_neg_1p5()
+                            this.top(px(-3.))
+                                .right(-px(3. * count.len() as f32))
                                 .py_0p5()
                                 .px_0p5()
                                 .min_w_3p5()

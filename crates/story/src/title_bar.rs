@@ -140,15 +140,13 @@ impl Render for AppTitleBar {
                     .child(self.locale_selector.clone())
                     .child(self.font_size_selector.clone())
                     .child(
-                        Badge::new().dot().count(1).child(
-                            Button::new("github")
-                                .icon(IconName::GitHub)
-                                .small()
-                                .ghost()
-                                .on_click(|_, _, cx| {
-                                    cx.open_url("https://github.com/longbridge/gpui-component")
-                                }),
-                        ),
+                        Button::new("github")
+                            .icon(IconName::GitHub)
+                            .small()
+                            .ghost()
+                            .on_click(|_, _, cx| {
+                                cx.open_url("https://github.com/longbridge/gpui-component")
+                            }),
                     )
                     .child(
                         div().relative().child(

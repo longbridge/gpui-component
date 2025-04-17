@@ -9,6 +9,8 @@ use gpui_component::{
     h_flex, v_flex, ActiveTheme, FocusableCycle, IconName, Sizable,
 };
 
+use crate::section;
+
 actions!(dropdown_story, [Tab, TabPrev]);
 
 const CONTEXT: &str = "DropdownStory";
@@ -107,7 +109,6 @@ impl DropdownStory {
         let fruit_dropdown = cx.new(|cx| {
             Dropdown::new("dropdown-fruits", fruits, None, window, cx)
                 .icon(IconName::Search)
-                .width(px(200.))
                 .menu_width(px(320.))
         });
 
@@ -247,23 +248,38 @@ impl Render for DropdownStory {
                     })),
             )
             .child(
-                h_flex()
-                    .w_full()
-                    .items_center()
-                    .gap_4()
-                    .child(self.country_dropdown.clone())
+                section("Dropdown")
+                    .max_w_128()
+                    .child(self.country_dropdown.clone()),
+            )
+            .child(
+                section("Searchable")
+                    .max_w_128()
                     .child(self.fruit_dropdown.clone()),
             )
             .child(
-                v_flex()
-                    .w_full()
-                    .items_center()
-                    .p_10()
-                    .rounded(cx.theme().radius)
-                    .bg(cx.theme().card)
-                    .border_1()
-                    .border_color(cx.theme().border)
-                    .gap_4()
+                section("Disabled")
+                    .max_w_128()
+                    .child(self.disabled_dropdown.clone()),
+            )
+            .child(
+                section("With preview label")
+                    .max_w_128()
+                    .child(self.simple_dropdown1.clone()),
+            )
+            .child(
+                section("Searchable Dropdown")
+                    .max_w_128()
+                    .child(self.simple_dropdown2.clone()),
+            )
+            .child(
+                section("Empty Items")
+                    .max_w_128()
+                    .child(self.simple_dropdown3.clone()),
+            )
+            .child(
+                section("Values")
+                    .max_w_md()
                     .child(format!(
                         "Country: {:?}",
                         self.country_dropdown.read(cx).selected_value()
@@ -281,16 +297,6 @@ impl Render for DropdownStory {
                         self.simple_dropdown2.read(cx).selected_value()
                     ))
                     .child("This is other text."),
-            )
-            .child(
-                h_flex()
-                    .items_center()
-                    .w_128()
-                    .gap_2()
-                    .child(self.simple_dropdown1.clone())
-                    .child(self.simple_dropdown2.clone())
-                    .child(self.simple_dropdown3.clone())
-                    .child(self.disabled_dropdown.clone()),
             )
     }
 }
