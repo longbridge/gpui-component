@@ -1,5 +1,5 @@
 /target
 .DS_Store
-/layout.json
+/docks.json
 .vscode
 index.scip

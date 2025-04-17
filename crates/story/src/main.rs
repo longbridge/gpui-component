@@ -1,6 +1,6 @@
 use gpui::{prelude::*, *};
 use gpui_component::{
-    blue_500, h_flex,
+    h_flex,
     sidebar::{Sidebar, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuItem},
     v_flex, ActiveTheme as _, Icon, IconName,
 };
@@ -47,7 +47,7 @@ impl Gallery {
 
         Self {
             stories,
-            active_index: 0,
+            active_index: 1,
             collapsed: false,
         }
     }
@@ -78,8 +78,8 @@ impl Render for Gallery {
                                     .items_center()
                                     .justify_center()
                                     .rounded(cx.theme().radius)
-                                    .bg(blue_500())
-                                    .text_color(white())
+                                    .bg(cx.theme().primary)
+                                    .text_color(cx.theme().primary_foreground)
                                     .size_8()
                                     .flex_shrink_0()
                                     .when(!self.collapsed, |this| {
@@ -90,7 +90,8 @@ impl Render for Gallery {
                                             .bg(cx.theme().transparent)
                                             .text_color(cx.theme().foreground)
                                             .child(Icon::new(IconName::GalleryVerticalEnd))
-                                    }),
+                                    })
+                                    .rounded_lg(),
                             )
                             .when(!self.collapsed, |this| {
                                 this.child(
@@ -103,11 +104,6 @@ impl Render for Gallery {
                                         .text_ellipsis()
                                         .child("GPUI Component")
                                         .child(div().child("Gallery").text_xs()),
-                                )
-                            })
-                            .when(!self.collapsed, |this| {
-                                this.child(
-                                    Icon::new(IconName::ChevronsUpDown).size_4().flex_shrink_0(),
                                 )
                             }),
                     )
