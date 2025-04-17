@@ -28,6 +28,7 @@ impl Gallery {
                     StoryContainer::panel::<BadgeStory>(window, cx),
                     StoryContainer::panel::<ButtonStory>(window, cx),
                     StoryContainer::panel::<CheckboxStory>(window, cx),
+                    StoryContainer::panel::<ClipboardStory>(window, cx),
                     StoryContainer::panel::<DropdownStory>(window, cx),
                     StoryContainer::panel::<DrawerStory>(window, cx),
                     StoryContainer::panel::<FormStory>(window, cx),

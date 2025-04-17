@@ -217,83 +217,86 @@ impl RenderOnce for AccordionItem {
             _ => rems(1.0),
         };
 
-        v_flex()
-            .bg(cx.theme().accordion)
-            .overflow_hidden()
-            .when(self.bordered, |this| {
-                this.border_1()
-                    .rounded(cx.theme().radius)
-                    .border_color(cx.theme().border)
-            })
-            .text_size(text_size)
-            .child(
-                h_flex()
-                    .id(self.index)
-                    .justify_between()
-                    .map(|this| match self.size {
-                        Size::XSmall => this.py_0().px_1p5(),
-                        Size::Small => this.py_0p5().px_2(),
-                        Size::Large => this.py_1p5().px_4(),
-                        _ => this.py_1().px_3(),
-                    })
-                    .when(self.open, |this| {
-                        this.when(self.bordered, |this| {
-                            this.bg(cx.theme().accordion_active)
-                                .text_color(cx.theme().foreground)
-                                .border_b_1()
-                                .border_color(cx.theme().border)
-                        })
-                    })
-                    .when(!self.bordered, |this| {
-                        this.border_b_1().border_color(cx.theme().border)
-                    })
-                    .child(
-                        h_flex()
-                            .items_center()
-                            .map(|this| match self.size {
-                                Size::XSmall => this.gap_1(),
-                                Size::Small => this.gap_1(),
-                                _ => this.gap_2(),
-                            })
-                            .when_some(self.icon, |this, icon| {
-                                this.child(
-                                    icon.with_size(self.size)
-                                        .text_color(cx.theme().muted_foreground),
-                                )
-                            })
-                            .child(self.title),
-                    )
-                    .when(!self.disabled, |this| {
-                        this.hover(|this| this.bg(cx.theme().accordion_hover))
-                            .child(
-                                Icon::new(if self.open {
-                                    IconName::ChevronUp
-                                } else {
-                                    IconName::ChevronDown
-                                })
-                                .xsmall()
-                                .text_color(cx.theme().muted_foreground),
-                            )
-                            .when_some(self.on_toggle_click, |this, on_toggle_click| {
-                                this.on_click({
-                                    move |_, window, cx| {
-                                        on_toggle_click(&!self.open, window, cx);
-                                    }
-                                })
-                            })
-                    }),
-            )
-            .when(self.open, |this| {
-                this.child(
-                    div()
+        div().flex_1().child(
+            v_flex()
+                .w_full()
+                .bg(cx.theme().accordion)
+                .overflow_hidden()
+                .when(self.bordered, |this| {
+                    this.border_1()
+                        .rounded(cx.theme().radius)
+                        .border_color(cx.theme().border)
+                })
+                .text_size(text_size)
+                .child(
+                    h_flex()
+                        .id(self.index)
+                        .justify_between()
                         .map(|this| match self.size {
-                            Size::XSmall => this.p_1p5(),
-                            Size::Small => this.p_2(),
-                            Size::Large => this.p_4(),
-                            _ => this.p_3(),
+                            Size::XSmall => this.py_0().px_1p5(),
+                            Size::Small => this.py_0p5().px_2(),
+                            Size::Large => this.py_1p5().px_4(),
+                            _ => this.py_1().px_3(),
                         })
-                        .child(self.content),
+                        .when(self.open, |this| {
+                            this.when(self.bordered, |this| {
+                                this.bg(cx.theme().accordion_active)
+                                    .text_color(cx.theme().foreground)
+                                    .border_b_1()
+                                    .border_color(cx.theme().border)
+                            })
+                        })
+                        .when(!self.bordered, |this| {
+                            this.border_b_1().border_color(cx.theme().border)
+                        })
+                        .child(
+                            h_flex()
+                                .items_center()
+                                .map(|this| match self.size {
+                                    Size::XSmall => this.gap_1(),
+                                    Size::Small => this.gap_1(),
+                                    _ => this.gap_2(),
+                                })
+                                .when_some(self.icon, |this, icon| {
+                                    this.child(
+                                        icon.with_size(self.size)
+                                            .text_color(cx.theme().muted_foreground),
+                                    )
+                                })
+                                .child(self.title),
+                        )
+                        .when(!self.disabled, |this| {
+                            this.hover(|this| this.bg(cx.theme().accordion_hover))
+                                .child(
+                                    Icon::new(if self.open {
+                                        IconName::ChevronUp
+                                    } else {
+                                        IconName::ChevronDown
+                                    })
+                                    .xsmall()
+                                    .text_color(cx.theme().muted_foreground),
+                                )
+                                .when_some(self.on_toggle_click, |this, on_toggle_click| {
+                                    this.on_click({
+                                        move |_, window, cx| {
+                                            on_toggle_click(&!self.open, window, cx);
+                                        }
+                                    })
+                                })
+                        }),
                 )
-            })
+                .when(self.open, |this| {
+                    this.child(
+                        div()
+                            .map(|this| match self.size {
+                                Size::XSmall => this.p_1p5(),
+                                Size::Small => this.p_2(),
+                                Size::Large => this.p_4(),
+                                _ => this.p_3(),
+                            })
+                            .child(self.content),
+                    )
+                }),
+        )
     }
 }
