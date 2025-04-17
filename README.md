@@ -87,7 +87,7 @@ You can add icons that you need in your project.
 
 If you want to see the demo, here is a some demo applications.
 
-- [gpui-app-windows.zip](https://github.com/user-attachments/files/17396296/gpui-app-windows.zip) - Updated at 2024/10/16
+- [gallery-app-windows.zip](https://github.com/user-attachments/files/19796209/gallery.zip) - Updated at 2025/04/17
 
 ## Development
 
