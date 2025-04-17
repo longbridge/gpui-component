@@ -9,7 +9,7 @@ use gpui_component::{
     button::{Button, ButtonVariant, ButtonVariants as _},
     h_flex,
     input::{InputEvent, TextInput},
-    v_flex, FocusableCycle, Icon, IconName, Sizable, StyledExt,
+    v_flex, FocusableCycle, Icon, IconName, Sizable,
 };
 
 actions!(input_story, [Tab, TabPrev]);
@@ -72,6 +72,7 @@ impl InputStory {
         let input_esc = cx.new(|cx| {
             TextInput::new(window, cx)
                 .placeholder("Enter text and clear it by pressing ESC")
+                .cleanable()
                 .clean_by_escape()
         });
 
@@ -210,7 +211,6 @@ impl Render for InputStory {
             .gap_3()
             .child(
                 section("Normal Input")
-                    .v_flex()
                     .max_w_md()
                     .child(self.input1.clone())
                     .child(self.input2.clone())
@@ -218,14 +218,12 @@ impl Render for InputStory {
             )
             .child(
                 section("Input State")
-                    .v_flex()
                     .max_w_md()
                     .child(self.disabled_input.clone())
                     .child(self.mask_input.clone()),
             )
             .child(
                 section("Prefix and Suffix")
-                    .v_flex()
                     .max_w_md()
                     .child(self.prefix_input1.clone())
                     .child(self.both_input1.clone())
@@ -233,7 +231,6 @@ impl Render for InputStory {
             )
             .child(
                 section("Input Size")
-                    .v_flex()
                     .max_w_md()
                     .child(self.large_input.clone())
                     .child(self.small_input.clone()),
