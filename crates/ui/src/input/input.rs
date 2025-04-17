@@ -13,11 +13,11 @@ use unicode_segmentation::*;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     actions, div, impl_internal_actions, point, px, relative, AnyElement, App, AppContext, Bounds,
-    ClickEvent, ClipboardItem, Context, DefiniteLength, Entity, EntityInputHandler, EventEmitter,
-    FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent,
-    MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point,
-    Rems, Render, ScrollHandle, ScrollWheelEvent, SharedString, Styled as _, Subscription,
-    UTF16Selection, Window, WrappedLine,
+    ClipboardItem, Context, DefiniteLength, Entity, EntityInputHandler, EventEmitter, FocusHandle,
+    Focusable, InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent, MouseButton,
+    MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Rems, Render,
+    ScrollHandle, ScrollWheelEvent, SharedString, Styled as _, Subscription, UTF16Selection,
+    Window, WrappedLine,
 };
 
 // TODO:
@@ -1059,7 +1059,7 @@ impl TextInput {
         cx.notify();
     }
 
-    fn clean(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
+    fn clean(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.replace_text("", window, cx);
     }
 
@@ -1486,8 +1486,16 @@ impl TextInput {
         });
     }
 
-    fn on_key_down(&mut self, _: &KeyDownEvent, _: &mut Window, cx: &mut Context<Self>) {
+    fn on_key_down(
+        &mut self,
+        key_event: &KeyDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.pause_blink_cursor(cx);
+        if self.cleanable && key_event.keystroke.key.as_str() == "escape" {
+            self.clean(window, cx);
+        };
     }
 
     pub(super) fn on_drag_move(
@@ -1868,7 +1876,11 @@ impl Render for TextInput {
                     })
                     .children(self.render_toggle_mask_button(window, cx))
                     .when(show_clear_button, |this| {
-                        this.child(clear_button(cx).on_click(cx.listener(Self::clean)))
+                        this.child(
+                            clear_button(cx).on_click(cx.listener(|view, _, window, cx| {
+                                view.clean(window, cx);
+                            })),
+                        )
                     })
                     .children(suffix),
             )
