@@ -165,12 +165,12 @@ impl RenderOnce for SidebarMenuItem {
                             return this;
                         }
 
-                        this.bg(cx.theme().sidebar_accent)
+                        this.bg(cx.theme().accent)
                             .text_color(cx.theme().sidebar_accent_foreground)
                     })
                     .when(is_active && !is_submenu, |this| {
                         this.font_medium()
-                            .bg(cx.theme().accent)
+                            .bg(cx.theme().sidebar_accent)
                             .text_color(cx.theme().sidebar_accent_foreground)
                     })
                     .when_some(self.icon.clone(), |this, icon| this.child(icon))

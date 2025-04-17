@@ -1,4 +1,6 @@
-use crate::{h_flex, text::Text, tooltip::Tooltip, ActiveTheme, Disableable, Side, Sizable, Size};
+use crate::{
+    h_flex, text::Text, tooltip::Tooltip, ActiveTheme, Colorize, Disableable, Side, Sizable, Size,
+};
 use gpui::{
     div, prelude::FluentBuilder as _, px, Animation, AnimationExt as _, AnyElement, App, Div,
     Element, ElementId, GlobalElementId, InteractiveElement, IntoElement, LayoutId,
@@ -123,7 +125,13 @@ impl Element for Switch {
             };
 
             let (bg, toggle_bg) = match self.disabled {
-                true => (bg.opacity(0.3), toggle_bg.opacity(0.8)),
+                true => {
+                    if self.checked {
+                        (cx.theme().muted.darken(0.05), toggle_bg.opacity(0.8))
+                    } else {
+                        (cx.theme().muted, toggle_bg.opacity(0.8))
+                    }
+                }
                 false => (bg, toggle_bg),
             };
 
@@ -172,8 +180,12 @@ impl Element for Switch {
                                 })
                                 .child(
                                     // Switch Toggle
-                                    div().rounded(radius).bg(toggle_bg).size(bar_width).map(
-                                        |this| {
+                                    div()
+                                        .rounded(radius)
+                                        .bg(toggle_bg)
+                                        .shadow_md()
+                                        .size(bar_width)
+                                        .map(|this| {
                                             let prev_checked = state.prev_checked.clone();
                                             if !self.disabled
                                                 && prev_checked
@@ -210,8 +222,7 @@ impl Element for Switch {
                                                 let x = if checked { max_x } else { px(0.) };
                                                 this.left(x).into_any_element()
                                             }
-                                        },
-                                    ),
+                                        }),
                                 ),
                         )
                         .when_some(self.label.take(), |this, label| {
