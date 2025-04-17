@@ -193,7 +193,7 @@ impl Render for NumberInputStory {
             .justify_start()
             .gap_3()
             .child(
-                section("Nomral Size")
+                section("Normal Size")
                     .max_w_md()
                     .child(self.number_input1.clone()),
             )
