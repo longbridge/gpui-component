@@ -7,7 +7,8 @@ use gpui_component::{
 use story::*;
 
 pub struct Gallery {
-    stories: Vec<Entity<StoryContainer>>,
+    stories: Vec<(&'static str, Vec<Entity<StoryContainer>>)>,
+    active_group_index: usize,
     active_index: usize,
     collapsed: bool,
 }
@@ -15,43 +16,53 @@ pub struct Gallery {
 impl Gallery {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let stories = vec![
-            StoryContainer::panel::<AccordionStory>(window, cx),
-            StoryContainer::panel::<AlertStory>(window, cx),
-            StoryContainer::panel::<BadgeStory>(window, cx),
-            StoryContainer::panel::<ButtonStory>(window, cx),
-            StoryContainer::panel::<CheckboxStory>(window, cx),
-            StoryContainer::panel::<DropdownStory>(window, cx),
-            StoryContainer::panel::<DrawerStory>(window, cx),
-            StoryContainer::panel::<FormStory>(window, cx),
-            StoryContainer::panel::<IconStory>(window, cx),
-            StoryContainer::panel::<ImageStory>(window, cx),
-            StoryContainer::panel::<InputStory>(window, cx),
-            StoryContainer::panel::<KbdStory>(window, cx),
-            StoryContainer::panel::<LabelStory>(window, cx),
-            StoryContainer::panel::<ListStory>(window, cx),
-            StoryContainer::panel::<MenuStory>(window, cx),
-            StoryContainer::panel::<ModalStory>(window, cx),
-            StoryContainer::panel::<NotificationStory>(window, cx),
-            StoryContainer::panel::<NumberInputStory>(window, cx),
-            StoryContainer::panel::<OtpInputStory>(window, cx),
-            StoryContainer::panel::<PopoverStory>(window, cx),
-            StoryContainer::panel::<ProgressStory>(window, cx),
-            StoryContainer::panel::<RadioStory>(window, cx),
-            StoryContainer::panel::<ResizableStory>(window, cx),
-            StoryContainer::panel::<ScrollableStory>(window, cx),
-            StoryContainer::panel::<SidebarStory>(window, cx),
-            StoryContainer::panel::<SliderStory>(window, cx),
-            StoryContainer::panel::<SwitchStory>(window, cx),
-            StoryContainer::panel::<TableStory>(window, cx),
-            StoryContainer::panel::<TabsStory>(window, cx),
-            StoryContainer::panel::<TagStory>(window, cx),
-            StoryContainer::panel::<TextareaStory>(window, cx),
-            StoryContainer::panel::<TooltipStory>(window, cx),
+            (
+                "Getting Started",
+                vec![StoryContainer::panel::<WelcomeStory>(window, cx)],
+            ),
+            (
+                "Components",
+                vec![
+                    StoryContainer::panel::<AccordionStory>(window, cx),
+                    StoryContainer::panel::<AlertStory>(window, cx),
+                    StoryContainer::panel::<BadgeStory>(window, cx),
+                    StoryContainer::panel::<ButtonStory>(window, cx),
+                    StoryContainer::panel::<CheckboxStory>(window, cx),
+                    StoryContainer::panel::<DropdownStory>(window, cx),
+                    StoryContainer::panel::<DrawerStory>(window, cx),
+                    StoryContainer::panel::<FormStory>(window, cx),
+                    StoryContainer::panel::<IconStory>(window, cx),
+                    StoryContainer::panel::<ImageStory>(window, cx),
+                    StoryContainer::panel::<InputStory>(window, cx),
+                    StoryContainer::panel::<KbdStory>(window, cx),
+                    StoryContainer::panel::<LabelStory>(window, cx),
+                    StoryContainer::panel::<ListStory>(window, cx),
+                    StoryContainer::panel::<MenuStory>(window, cx),
+                    StoryContainer::panel::<ModalStory>(window, cx),
+                    StoryContainer::panel::<NotificationStory>(window, cx),
+                    StoryContainer::panel::<NumberInputStory>(window, cx),
+                    StoryContainer::panel::<OtpInputStory>(window, cx),
+                    StoryContainer::panel::<PopoverStory>(window, cx),
+                    StoryContainer::panel::<ProgressStory>(window, cx),
+                    StoryContainer::panel::<RadioStory>(window, cx),
+                    StoryContainer::panel::<ResizableStory>(window, cx),
+                    StoryContainer::panel::<ScrollableStory>(window, cx),
+                    StoryContainer::panel::<SidebarStory>(window, cx),
+                    StoryContainer::panel::<SliderStory>(window, cx),
+                    StoryContainer::panel::<SwitchStory>(window, cx),
+                    StoryContainer::panel::<TableStory>(window, cx),
+                    StoryContainer::panel::<TabsStory>(window, cx),
+                    StoryContainer::panel::<TagStory>(window, cx),
+                    StoryContainer::panel::<TextareaStory>(window, cx),
+                    StoryContainer::panel::<TooltipStory>(window, cx),
+                ],
+            ),
         ];
 
         Self {
             stories,
-            active_index: 1,
+            active_group_index: 0,
+            active_index: 0,
             collapsed: false,
         }
     }
@@ -63,7 +74,9 @@ impl Gallery {
 
 impl Render for Gallery {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let active_story = self.stories[self.active_index].clone();
+        let active_group = &self.stories[self.active_group_index];
+        let stories = &active_group.1;
+        let active_story = stories[self.active_index].clone();
         let story_name = active_story.read(cx).name.clone();
         let description = active_story.read(cx).description.clone();
 
@@ -111,18 +124,26 @@ impl Render for Gallery {
                                 )
                             }),
                     )
-                    .child(
-                        SidebarGroup::new("Components").child(SidebarMenu::new().children(
-                            self.stories.iter().enumerate().map(|(ix, story)| {
-                                SidebarMenuItem::new(story.read(cx).name.clone())
-                                    .active(self.active_index == ix)
-                                    .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
-                                        this.active_index = ix;
-                                        cx.notify();
-                                    }))
-                            }),
-                        )),
-                    ),
+                    .children(self.stories.iter().enumerate().map(
+                        |(group_ix, (group_name, stories))| {
+                            SidebarGroup::new(*group_name).child(SidebarMenu::new().children(
+                                stories.iter().enumerate().map(|(ix, story)| {
+                                    SidebarMenuItem::new(story.read(cx).name.clone())
+                                        .active(
+                                            self.active_group_index == group_ix
+                                                && self.active_index == ix,
+                                        )
+                                        .on_click(cx.listener(
+                                            move |this, _: &ClickEvent, _, cx| {
+                                                this.active_group_index = group_ix;
+                                                this.active_index = ix;
+                                                cx.notify();
+                                            },
+                                        ))
+                                }),
+                            ))
+                        },
+                    )),
             )
             .child(
                 v_flex()

@@ -35,6 +35,7 @@ mod title_bar;
 mod toggle_story;
 mod tooltip_story;
 mod webview_story;
+mod welcome_story;
 
 pub use assets::Assets;
 use gpui::{
@@ -82,6 +83,7 @@ pub use title_bar::AppTitleBar;
 pub use toggle_story::ToggleStory;
 pub use tooltip_story::TooltipStory;
 pub use webview_story::WebViewStory;
+pub use welcome_story::WelcomeStory;
 
 use gpui_component::{
     button::Button,
