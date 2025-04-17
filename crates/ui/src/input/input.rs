@@ -1859,7 +1859,7 @@ impl Render for TextInput {
                     .id("suffix")
                     .absolute()
                     .gap(gap_x)
-                    .bg(bg)
+                    .when(self.appearance, |this| this.bg(bg))
                     .items_center()
                     .when(suffix.is_none(), |this| this.pr_1())
                     .right_0()

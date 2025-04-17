@@ -9,8 +9,8 @@ use story::*;
 
 pub struct Gallery {
     stories: Vec<(&'static str, Vec<Entity<StoryContainer>>)>,
-    active_group_index: usize,
-    active_index: usize,
+    active_group_index: Option<usize>,
+    active_index: Option<usize>,
     collapsed: bool,
     search_input: Entity<TextInput>,
     _subscribtions: Vec<Subscription>,
@@ -21,11 +21,12 @@ impl Gallery {
         let search_input = cx.new(|cx| {
             TextInput::new(window, cx)
                 .appearance(false)
+                .cleanable()
                 .placeholder("Search...")
         });
         let _subscribtions = vec![cx.subscribe(&search_input, |this, _, _, cx| {
-            this.active_group_index = 0;
-            this.active_index = 0;
+            this.active_group_index = None;
+            this.active_index = None;
             cx.notify()
         })];
         let stories = vec![
@@ -76,8 +77,8 @@ impl Gallery {
         Self {
             search_input,
             stories,
-            active_group_index: 0,
-            active_index: 0,
+            active_group_index: Some(0),
+            active_index: Some(0),
             collapsed: false,
             _subscribtions,
         }
@@ -90,30 +91,37 @@ impl Gallery {
 
 impl Render for Gallery {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let active_group = &self.stories.get(self.active_group_index);
-        let active_story = active_group.and_then(|group| group.1.get(self.active_index));
+        let query = self.search_input.read(cx).text().trim().to_lowercase();
+
+        let stories: Vec<_> = self
+            .stories
+            .iter()
+            .filter_map(|(name, items)| {
+                let filtered_items: Vec<_> = items
+                    .iter()
+                    .filter(|story| story.read(cx).name.to_lowercase().contains(&query))
+                    .cloned()
+                    .collect();
+
+                if !filtered_items.is_empty() {
+                    Some((name, filtered_items))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        let active_group = self.active_group_index.and_then(|index| stories.get(index));
+        let active_story = self
+            .active_index
+            .and(active_group)
+            .and_then(|group| group.1.get(self.active_index.unwrap()));
         let (story_name, description) =
             if let Some(story) = active_story.as_ref().map(|story| story.read(cx)) {
                 (story.name.clone(), story.description.clone())
             } else {
                 ("".into(), "".into())
             };
-
-        let query = self.search_input.read(cx).text().trim().to_lowercase();
-
-        let stories = self.stories.iter().filter_map(|(name, items)| {
-            let filtered_items: Vec<_> = items
-                .iter()
-                .filter(|story| story.read(cx).name.to_lowercase().contains(&query))
-                .cloned()
-                .collect();
-
-            if name.to_lowercase().contains(&query) || !filtered_items.is_empty() {
-                Some((name, filtered_items))
-            } else {
-                None
-            }
-        });
 
         h_flex()
             .id("gallery-container")
@@ -159,32 +167,38 @@ impl Render for Gallery {
                                                 .overflow_hidden()
                                                 .text_ellipsis()
                                                 .child("GPUI Component")
-                                                .child(div().child("Gallery").text_xs()),
+                                                .child(
+                                                    div()
+                                                        .text_color(cx.theme().muted_foreground)
+                                                        .child("Gallery")
+                                                        .text_xs(),
+                                                ),
                                         )
                                     }),
                             )
                             .child(
                                 div()
-                                    .bg(cx.theme().input)
+                                    .bg(cx.theme().sidebar_border)
+                                    .px_1()
                                     .rounded_full()
                                     .flex_1()
                                     .mx_1()
                                     .child(self.search_input.clone()),
                             ),
                     )
-                    .children(stories.into_iter().enumerate().map(
+                    .children(stories.clone().into_iter().enumerate().map(
                         |(group_ix, (group_name, sub_stories))| {
                             SidebarGroup::new(*group_name).child(SidebarMenu::new().children(
                                 sub_stories.iter().enumerate().map(|(ix, story)| {
                                     SidebarMenuItem::new(story.read(cx).name.clone())
                                         .active(
-                                            self.active_group_index == group_ix
-                                                && self.active_index == ix,
+                                            self.active_group_index == Some(group_ix)
+                                                && self.active_index == Some(ix),
                                         )
                                         .on_click(cx.listener(
                                             move |this, _: &ClickEvent, _, cx| {
-                                                this.active_group_index = group_ix;
-                                                this.active_index = ix;
+                                                this.active_group_index = Some(group_ix);
+                                                this.active_index = Some(ix);
                                                 cx.notify();
                                             },
                                         ))
