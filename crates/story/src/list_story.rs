@@ -170,7 +170,6 @@ impl ListDelegate for CompanyListDelegate {
             .filter(|company| company.name.to_lowercase().contains(&query.to_lowercase()))
             .cloned()
             .collect();
-
         Task::ready(())
     }
 
@@ -277,7 +276,7 @@ impl ListStory {
         let delegate = CompanyListDelegate {
             matched_companies: companies.clone(),
             companies,
-            selected_index: None,
+            selected_index: Some(0),
             confirmed_index: None,
             query: "".to_string(),
             loading: false,

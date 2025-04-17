@@ -339,6 +339,12 @@ where
                 self.set_querying(true, window, cx);
                 let search = self.delegate.perform_search(&text, window, cx);
 
+                if self.delegate.items_count(cx) > 0 {
+                    self.set_selected_index(Some(0), window, cx);
+                } else {
+                    self.set_selected_index(None, window, cx);
+                }
+
                 self._search_task = cx.spawn_in(window, async move |this, window| {
                     search.await;
 
