@@ -225,49 +225,56 @@ impl Render for Slider {
             Axis::Vertical => self.percentage * self.bounds.size.height,
         };
 
-        h_flex()
+        div()
             .id("slider")
-            .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
-            .when(self.axis.is_horizontal(), |this| {
-                this.items_center().h_6().w_full()
-            })
+            .flex_1()
             .when(self.axis.is_vertical(), |this| {
-                this.justify_center().w_6().h_full()
+                this.flex().items_center().justify_center()
             })
-            .flex_shrink_0()
             .child(
-                div()
-                    .id("slider-bar")
-                    .relative()
-                    .when(self.axis.is_horizontal(), |this| this.w_full().h_1p5())
-                    .when(self.axis.is_vertical(), |this| this.h_full().w_1p5())
-                    .bg(cx.theme().slider_bar.opacity(0.2))
-                    .active(|this| this.bg(cx.theme().slider_bar.opacity(0.4)))
-                    .rounded(px(3.))
+                h_flex()
+                    .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
+                    .when(self.axis.is_horizontal(), |this| {
+                        this.items_center().h_6().w_full()
+                    })
+                    .when(self.axis.is_vertical(), |this| {
+                        this.justify_center().w_6().h_full()
+                    })
+                    .flex_shrink_0()
                     .child(
                         div()
-                            .absolute()
-                            .when(!self.reverse, |this| this.top_0().left_0())
-                            .when(self.reverse, |this| this.bottom_0().right_0())
-                            .when(self.axis.is_horizontal(), |this| {
-                                this.h_full().w(thumb_bar_size)
-                            })
-                            .when(self.axis.is_vertical(), |this| {
-                                this.w_full().h(thumb_bar_size)
-                            })
-                            .bg(cx.theme().slider_bar)
-                            .rounded_full(),
-                    )
-                    .child(self.render_thumb(thumb_bar_size, window, cx))
-                    .child({
-                        let view = cx.entity().clone();
-                        canvas(
-                            move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds),
-                            |_, _, _, _| {},
-                        )
-                        .absolute()
-                        .size_full()
-                    }),
+                            .id("slider-bar")
+                            .relative()
+                            .when(self.axis.is_horizontal(), |this| this.w_full().h_1p5())
+                            .when(self.axis.is_vertical(), |this| this.h_full().w_1p5())
+                            .bg(cx.theme().slider_bar.opacity(0.2))
+                            .active(|this| this.bg(cx.theme().slider_bar.opacity(0.4)))
+                            .rounded(px(3.))
+                            .child(
+                                div()
+                                    .absolute()
+                                    .when(!self.reverse, |this| this.top_0().left_0())
+                                    .when(self.reverse, |this| this.bottom_0().right_0())
+                                    .when(self.axis.is_horizontal(), |this| {
+                                        this.h_full().w(thumb_bar_size)
+                                    })
+                                    .when(self.axis.is_vertical(), |this| {
+                                        this.w_full().h(thumb_bar_size)
+                                    })
+                                    .bg(cx.theme().slider_bar)
+                                    .rounded_full(),
+                            )
+                            .child(self.render_thumb(thumb_bar_size, window, cx))
+                            .child({
+                                let view = cx.entity().clone();
+                                canvas(
+                                    move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds),
+                                    |_, _, _, _| {},
+                                )
+                                .absolute()
+                                .size_full()
+                            }),
+                    ),
             )
     }
 }

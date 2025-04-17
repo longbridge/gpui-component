@@ -1,16 +1,10 @@
 use gpui::{
-    div, px, App, AppContext, Context, Div, Entity, Focusable, IntoElement, ParentElement, Render,
+    px, App, AppContext, Context, Div, Entity, Focusable, IntoElement, ParentElement, Render,
     SharedString, Styled, Window,
 };
 
 use gpui_component::{
-    checkbox::Checkbox,
-    h_flex,
-    label::Label,
-    radio::{Radio, RadioGroup},
-    switch::Switch,
-    text::TextView,
-    v_flex, ActiveTheme, Disableable as _, Side, Sizable, StyledExt,
+    h_flex, label::Label, switch::Switch, v_flex, ActiveTheme, Disableable as _, Side, Sizable,
 };
 
 use crate::section;
@@ -20,14 +14,6 @@ pub struct SwitchStory {
     switch1: bool,
     switch2: bool,
     switch3: bool,
-    check1: bool,
-    check2: bool,
-    check3: bool,
-    check4: bool,
-    check5: bool,
-    radio_check1: bool,
-    radio_check2: bool,
-    radio_group_checked: Option<usize>,
 }
 
 impl super::Story for SwitchStory {
@@ -36,7 +22,7 @@ impl super::Story for SwitchStory {
     }
 
     fn description() -> &'static str {
-        "Switch, Radio, Checkbox components testing and examples"
+        "A control that allows the user to toggle between checked and not checked."
     }
 
     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
@@ -55,14 +41,6 @@ impl SwitchStory {
             switch1: true,
             switch2: false,
             switch3: true,
-            check1: false,
-            check2: false,
-            check3: true,
-            check4: false,
-            check5: false,
-            radio_check1: false,
-            radio_check2: true,
-            radio_group_checked: Some(1),
         }
     }
 }
@@ -82,8 +60,6 @@ impl Render for SwitchStory {
         }
 
         fn card(cx: &Context<SwitchStory>) -> Div {
-            let theme = cx.theme();
-
             h_flex()
                 .items_center()
                 .gap_4()
@@ -91,7 +67,7 @@ impl Render for SwitchStory {
                 .w_full()
                 .rounded(cx.theme().radius)
                 .border_1()
-                .border_color(theme.border)
+                .border_color(cx.theme().border)
         }
 
         v_flex().gap_6().child(
@@ -141,206 +117,32 @@ impl Render for SwitchStory {
                         ),
                 )
                 .child(
-                    card(cx)
-                        .v_flex()
-                        .items_start()
-                        .child(title("Disabled Switches"))
+                    section("Disabled")
+                        .child(Switch::new("switch3").disabled(true).on_click(|v, _, _| {
+                            println!("Switch value changed: {:?}", v);
+                        }))
                         .child(
-                            h_flex()
-                                .items_center()
-                                .gap_6()
-                                .child(Switch::new("switch3").disabled(true).on_click(|v, _, _| {
-                                    println!("Switch value changed: {:?}", v);
-                                }))
-                                .child(
-                                    Switch::new("switch3_1")
-                                        .w(px(200.))
-                                        .label("Airplane Mode")
-                                        .checked(true)
-                                        .disabled(true)
-                                        .on_click(|ev, _, _| {
-                                            println!("Switch value changed: {:?}", ev);
-                                        }),
-                                ),
-                        ),
-                )
-                .child(
-                    card(cx)
-                        .v_flex()
-                        .items_start()
-                        .child(title("Small Switches"))
-                        .child(
-                            h_flex().items_center().gap_6().child(
-                                Switch::new("switch3")
-                                    .checked(self.switch3)
-                                    .label("Small Size")
-                                    .small()
-                                    .on_click(cx.listener(move |view, checked, _, cx| {
-                                        view.switch3 = *checked;
-                                        cx.notify();
-                                    })),
-                            ),
-                        ),
-                )
-                .child(
-                    section("Checkbox").child(
-                        h_flex()
-                            .w_full()
-                            .items_start()
-                            .gap_6()
-                            .child(Checkbox::new("check1").checked(self.check1).on_click(
-                                cx.listener(|v, _, _, _| {
-                                    v.check1 = !v.check1;
+                            Switch::new("switch3_1")
+                                .w(px(200.))
+                                .label("Airplane Mode")
+                                .checked(true)
+                                .disabled(true)
+                                .on_click(|ev, _, _| {
+                                    println!("Switch value changed: {:?}", ev);
                                 }),
-                            ))
-                            .child(
-                                Checkbox::new("check2")
-                                    .small()
-                                    .checked(self.check2)
-                                    .label("订阅新闻通讯")
-                                    .on_click(cx.listener(|v, _, _, _| {
-                                        v.check2 = !v.check2;
-                                    })),
-                            )
-                            .child(
-                                Checkbox::new("check3")
-                                    .checked(self.check3)
-                                    .label("Remember me")
-                                    .on_click(cx.listener(|v, _, _, _| {
-                                        v.check3 = !v.check3;
-                                    })),
-                            )
-                            .child(
-                                Checkbox::new("longlong-checkbox")
-                                    .large()
-                                    .w(px(300.))
-                                    .checked(self.check4)
-                                    .label("The long long label text.")
-                                    .child(div().text_color(cx.theme().muted_foreground).child(
-                                        "This is a long long label text that \
-                                        should wrap when the text is too long.",
-                                    ))
-                                    .on_click(cx.listener(|v, _, _, _| {
-                                        v.check4 = !v.check4;
-                                    })),
-                            )
-                            .child(
-                                Checkbox::new("longlong-markdown-checkbox")
-                                    .w(px(300.))
-                                    .checked(self.check5)
-                                    .label("Label with description")
-                                    .child(div().text_color(cx.theme().muted_foreground).child(
-                                        TextView::markdown(
-                                            "longlong-markdown-checkbox",
-                                            "The [long long label](https://github.com) \
-                                            text used markdown, \
-                                            it should wrap when the text is too long.",
-                                        ),
-                                    ))
-                                    .on_click(cx.listener(|v, _, _, _| {
-                                        v.check5 = !v.check5;
-                                    })),
-                            ),
-                    ),
-                )
-                .child(
-                    section("Disabled Checkbox").child(
-                        h_flex()
-                            .w_full()
-                            .items_center()
-                            .gap_6()
-                            .child(
-                                Checkbox::new("check3")
-                                    .label("Disabled Checked")
-                                    .checked(true)
-                                    .disabled(true),
-                            )
-                            .child(
-                                Checkbox::new("check3_1")
-                                    .label("Disabled Unchecked")
-                                    .checked(false)
-                                    .disabled(true),
-                            ),
-                    ),
-                )
-                .child(
-                    section("Radio").child(
-                        h_flex()
-                            .w_full()
-                            .gap_4()
-                            .items_start()
-                            .child(Radio::new("radio1").checked(self.radio_check1).on_click(
-                                cx.listener(|this, v, _, _| {
-                                    this.radio_check1 = *v;
-                                }),
-                            ))
-                            .child(
-                                Radio::new("radio2")
-                                    .label("Radio")
-                                    .checked(self.radio_check2)
-                                    .on_click(cx.listener(|this, v, _, _| {
-                                        this.radio_check2 = *v;
-                                    })),
-                            )
-                            .child(
-                                Radio::new("radio3")
-                                    .label("Disabled Radio")
-                                    .checked(true)
-                                    .disabled(true),
-                            )
-                            .child(
-                                Radio::new("radio3")
-                                    .label("The long long label text.")
-                                    .child(
-                                        div().text_color(cx.theme().muted_foreground).child(
-                                            "This line should wrap when the text is too long.",
-                                        ),
-                                    )
-                                    .w(px(300.))
-                                    .checked(true)
-                                    .disabled(true),
-                            ),
-                    ),
-                )
-                .child(
-                    h_flex()
-                        .items_start()
-                        .gap_4()
-                        .w_full()
-                        .child(
-                            section("Radio Group").flex_1().child(
-                                RadioGroup::horizontal()
-                                    .children(["One", "Two", "Three"])
-                                    .selected_index(self.radio_group_checked)
-                                    .on_change(cx.listener(|this, selected_ix: &usize, _, cx| {
-                                        this.radio_group_checked = Some(*selected_ix);
-                                        cx.notify();
-                                    })),
-                            ),
-                        )
-                        .child(
-                            section("Radio Group Vertical (With container style)")
-                                .flex_1()
-                                .child(
-                                    RadioGroup::vertical()
-                                        .w(px(220.))
-                                        .p_2()
-                                        .border_1()
-                                        .border_color(cx.theme().border)
-                                        .rounded_md()
-                                        .disabled(true)
-                                        .child(Radio::new("one1").label("United States"))
-                                        .child(Radio::new("one2").label("Canada"))
-                                        .child(Radio::new("one3").label("Mexico"))
-                                        .selected_index(self.radio_group_checked)
-                                        .on_change(cx.listener(
-                                            |this, selected_ix: &usize, _, cx| {
-                                                this.radio_group_checked = Some(*selected_ix);
-                                                cx.notify();
-                                            },
-                                        )),
-                                ),
                         ),
+                )
+                .child(
+                    section("Small Size").child(
+                        Switch::new("switch3")
+                            .checked(self.switch3)
+                            .label("Small Size")
+                            .small()
+                            .on_click(cx.listener(move |view, checked, _, cx| {
+                                view.switch3 = *checked;
+                                cx.notify();
+                            })),
+                    ),
                 ),
         )
     }

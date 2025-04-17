@@ -209,6 +209,10 @@ impl super::Story for SidebarStory {
         "Sidebar"
     }
 
+    fn description() -> &'static str {
+        "A composable, themeable and customizable sidebar component."
+    }
+
     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
         Self::view(window, cx)
     }

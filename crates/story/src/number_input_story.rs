@@ -192,7 +192,15 @@ impl Render for NumberInputStory {
             .size_full()
             .justify_start()
             .gap_3()
-            .child(section("Nomral Size").child(self.number_input1.clone()))
-            .child(section("Small Size").child(self.number_input2.clone()))
+            .child(
+                section("Nomral Size")
+                    .max_w_md()
+                    .child(self.number_input1.clone()),
+            )
+            .child(
+                section("Small Size")
+                    .max_w_md()
+                    .child(self.number_input2.clone()),
+            )
     }
 }

@@ -6,7 +6,6 @@ use gpui_component::{dock::PanelControl, v_flex, SvgImg};
 use crate::section;
 
 const GOOGLE_LOGO: &str = include_str!("./fixtures/google.svg");
-const PIE_JSON: &str = include_str!("./fixtures/pie.json");
 
 pub struct ImageStory {
     focus_handle: gpui::FocusHandle,

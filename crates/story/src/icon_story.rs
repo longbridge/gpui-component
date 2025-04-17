@@ -51,7 +51,7 @@ impl Focusable for IconStory {
 }
 
 impl Render for IconStory {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .gap_4()
             .child(

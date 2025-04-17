@@ -11,9 +11,9 @@ use serde::Deserialize;
 use std::{sync::Arc, time::Duration};
 use story::{
     AccordionStory, AppState, AppTitleBar, Assets, ButtonStory, CalendarStory, DropdownStory,
-    FormStory, IconStory, ImageStory, InputStory, ListStory, ModalStory, Open, PopupStory,
-    ProgressStory, ResizableStory, ScrollableStory, SidebarStory, StoryContainer, SwitchStory,
-    TableStory, TextStory, TooltipStory, WebViewStory,
+    FormStory, IconStory, ImageStory, InputStory, LabelStory, ListStory, ModalStory, Open,
+    PopoverStory, ProgressStory, ResizableStory, ScrollableStory, SidebarStory, StoryContainer,
+    SwitchStory, TableStory, TooltipStory, WebViewStory,
 };
 
 #[derive(Clone, PartialEq, Eq, Deserialize)]
@@ -348,9 +348,9 @@ impl StoryWorkspace {
                     Arc::new(StoryContainer::panel::<ButtonStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<InputStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<DropdownStory>(window, cx)),
-                    Arc::new(StoryContainer::panel::<TextStory>(window, cx)),
+                    Arc::new(StoryContainer::panel::<LabelStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<ModalStory>(window, cx)),
-                    Arc::new(StoryContainer::panel::<PopupStory>(window, cx)),
+                    Arc::new(StoryContainer::panel::<PopoverStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<SwitchStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<ProgressStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<TableStory>(window, cx)),
@@ -435,9 +435,9 @@ impl StoryWorkspace {
             0 => Arc::new(StoryContainer::panel::<ButtonStory>(window, cx)),
             1 => Arc::new(StoryContainer::panel::<InputStory>(window, cx)),
             2 => Arc::new(StoryContainer::panel::<DropdownStory>(window, cx)),
-            3 => Arc::new(StoryContainer::panel::<TextStory>(window, cx)),
+            3 => Arc::new(StoryContainer::panel::<LabelStory>(window, cx)),
             4 => Arc::new(StoryContainer::panel::<ModalStory>(window, cx)),
-            5 => Arc::new(StoryContainer::panel::<PopupStory>(window, cx)),
+            5 => Arc::new(StoryContainer::panel::<PopoverStory>(window, cx)),
             6 => Arc::new(StoryContainer::panel::<SwitchStory>(window, cx)),
             7 => Arc::new(StoryContainer::panel::<ProgressStory>(window, cx)),
             8 => Arc::new(StoryContainer::panel::<TableStory>(window, cx)),

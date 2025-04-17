@@ -16,18 +16,18 @@ use gpui_component::{
 
 use crate::section;
 
-pub struct TextStory {
+pub struct LabelStory {
     focus_handle: gpui::FocusHandle,
     masked: bool,
 }
 
-impl super::Story for TextStory {
+impl super::Story for LabelStory {
     fn title() -> &'static str {
-        "Text"
+        "Label"
     }
 
     fn description() -> &'static str {
-        "The text render testing and examples"
+        "Label used to display text or other content."
     }
 
     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
@@ -35,7 +35,7 @@ impl super::Story for TextStory {
     }
 }
 
-impl TextStory {
+impl LabelStory {
     pub(crate) fn new(_: &mut Window, cx: &mut App) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
@@ -52,12 +52,12 @@ impl TextStory {
         println!("Check value changed: {}", checked);
     }
 }
-impl Focusable for TextStory {
+impl Focusable for LabelStory {
     fn focus_handle(&self, _: &gpui::App) -> gpui::FocusHandle {
         self.focus_handle.clone()
     }
 }
-impl Render for TextStory {
+impl Render for LabelStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .gap_6()

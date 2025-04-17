@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use crate::{h_flex, text::Text, v_flex, ActiveTheme, AxisExt, IconName};
+use crate::{h_flex, text::Text, v_flex, ActiveTheme, AxisExt, IconName, StyledExt};
 use gpui::{
     div, prelude::FluentBuilder, relative, svg, AnyElement, App, Axis, Div, ElementId,
     InteractiveElement, IntoElement, ParentElement, RenderOnce, SharedString,
@@ -60,6 +60,12 @@ impl Styled for Radio {
         self.base.style()
     }
 }
+impl InteractiveElement for Radio {
+    fn interactivity(&mut self) -> &mut gpui::Interactivity {
+        self.base.interactivity()
+    }
+}
+impl StatefulInteractiveElement for Radio {}
 
 impl ParentElement for Radio {
     fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
@@ -76,8 +82,9 @@ impl RenderOnce for Radio {
         };
 
         // wrap a flex to patch for let Radio display inline
-        self.base.child(
-            h_flex()
+        div().child(
+            self.base
+                .h_flex()
                 .id(self.id)
                 .gap_x_2()
                 .text_color(cx.theme().foreground)
@@ -150,7 +157,7 @@ pub struct RadioGroup {
 impl RadioGroup {
     fn new() -> Self {
         Self {
-            style: StyleRefinement::default(),
+            style: StyleRefinement::default().flex_1(),
             on_change: None,
             layout: Axis::Vertical,
             selected_index: None,
@@ -239,7 +246,7 @@ impl RenderOnce for RadioGroup {
         let base = if self.layout.is_vertical() {
             v_flex()
         } else {
-            h_flex().flex_wrap()
+            h_flex().w_full().flex_wrap()
         };
 
         let mut container = div();

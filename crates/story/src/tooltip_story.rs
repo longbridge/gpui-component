@@ -1,6 +1,6 @@
 use gpui::{
     actions, div, App, AppContext, Context, Entity, Focusable, InteractiveElement, KeyBinding,
-    Keystroke, ParentElement, Render, StatefulInteractiveElement, Styled, Window,
+    ParentElement, Render, StatefulInteractiveElement, Styled, Window,
 };
 
 use gpui_component::{
@@ -8,12 +8,13 @@ use gpui_component::{
     checkbox::Checkbox,
     dock::PanelControl,
     h_flex,
-    label::Label,
+    radio::Radio,
+    switch::Switch,
     tooltip::Tooltip,
-    v_flex, ActiveTheme, IconName, Kbd,
+    v_flex, ActiveTheme, IconName,
 };
 
-use crate::Story;
+use crate::{section, Story};
 
 actions!(tooltip, [Info]);
 
@@ -67,8 +68,7 @@ impl Render for TooltipStory {
             .p_4()
             .gap_5()
             .child(
-                h_flex()
-                    .gap_3()
+                section("Tooltip for Button")
                     .child(
                         Button::new("btn0")
                             .label("Search")
@@ -79,52 +79,61 @@ impl Render for TooltipStory {
                         "This is a tooltip with Action for display keybinding.",
                         &Info,
                         Some("Tooltip"),
-                    )),
+                    ))
+                    .child(
+                        div()
+                            .child(Button::new("btn3").label("Hover me"))
+                            .id("tooltip-4")
+                            .tooltip(|window, cx| {
+                                Tooltip::element(|_, cx| {
+                                    h_flex()
+                                        .gap_x_1()
+                                        .child(IconName::Info)
+                                        .child(
+                                            div()
+                                                .child("Muted Foreground")
+                                                .text_color(cx.theme().muted_foreground),
+                                        )
+                                        .child(div().child("Danger").text_color(cx.theme().danger))
+                                        .child(IconName::ArrowUp)
+                                })
+                                .build(window, cx)
+                            }),
+                    ),
             )
             .child(
-                h_flex()
-                    .justify_center()
-                    .child(Label::new("Hover me"))
-                    .id("tooltip-2")
-                    .tooltip(|window, cx| {
+                section("Label Tooltip").child(div().child("Hover me").id("tooltip-2").tooltip(
+                    |window, cx| {
                         Tooltip::new("This is a Label")
                             .action(&Info, Some("Tooltip"))
                             .build(window, cx)
-                    }),
+                    },
+                )),
             )
             .child(
-                div()
-                    .child(Checkbox::new("check").label("Remember me").checked(true))
-                    .id("tooltip-3")
-                    .tooltip(|window, cx| {
-                        Tooltip::new("Checked!")
-                            .key_binding(Some(Kbd::new(Keystroke::parse("cmd-shift-u").unwrap())))
-                            .build(window, cx)
-                    }),
+                section("Checkbox Tooltip").child(
+                    Checkbox::new("check")
+                        .label("Remember me")
+                        .checked(true)
+                        .tooltip(|window, cx| Tooltip::new("This is a checkbox").build(window, cx)),
+                ),
             )
             .child(
-                div()
-                    .child(
-                        Button::new("btn3")
-                            .label("Hover me")
-                            .with_variant(ButtonVariant::Primary),
-                    )
-                    .id("tooltip-4")
-                    .tooltip(|window, cx| {
-                        Tooltip::element(|_, cx| {
-                            h_flex()
-                                .gap_x_1()
-                                .child(IconName::Info)
-                                .child(
-                                    div()
-                                        .child("Muted Foreground")
-                                        .text_color(cx.theme().muted_foreground),
-                                )
-                                .child(div().child("Danger").text_color(cx.theme().danger))
-                                .child(IconName::ArrowUp)
-                        })
-                        .build(window, cx)
-                    }),
+                section("Radio Tooltip").child(
+                    Radio::new("radio")
+                        .label("Radio with tooltip")
+                        .checked(true)
+                        .tooltip(|window, cx| {
+                            Tooltip::new("This is a radio button").build(window, cx)
+                        }),
+                ),
+            )
+            .child(
+                section("Switch Tooltip").child(
+                    Switch::new("switch")
+                        .checked(true)
+                        .tooltip("This is a switch"),
+                ),
             )
     }
 }

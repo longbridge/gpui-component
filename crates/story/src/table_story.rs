@@ -789,7 +789,7 @@ impl Render for TableStory {
             .on_action(cx.listener(Self::on_change_size))
             .size_full()
             .text_sm()
-            .gap_2()
+            .gap_4()
             .child(
                 h_flex()
                     .items_center()
@@ -929,6 +929,7 @@ impl Render for TableStory {
                 h_flex().items_center().gap_2().child(
                     h_flex()
                         .items_center()
+                        .justify_between()
                         .gap_1()
                         .child(Label::new("Number of Stocks:"))
                         .child(

@@ -1,17 +1,15 @@
 use gpui::{
     actions, div, impl_internal_actions, px, App, AppContext, Context, Corner, DismissEvent,
     Element, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement,
-    KeyBinding, MouseButton, ParentElement as _, Render, SharedString, Styled as _, Window,
+    KeyBinding, MouseButton, ParentElement as _, Render, Styled as _, Window,
 };
 use gpui_component::{
     button::{Button, ButtonVariants as _},
-    context_menu::ContextMenuExt,
     divider::Divider,
     h_flex,
     input::TextInput,
     popover::{Popover, PopoverContent},
-    popup_menu::PopupMenuExt,
-    v_flex, ActiveTheme as _, ContextModal, IconName, Sizable,
+    v_flex, ContextModal, Sizable,
 };
 use serde::Deserialize;
 
@@ -79,16 +77,16 @@ impl Render for Form {
     }
 }
 
-pub struct PopupStory {
+pub struct PopoverStory {
     focus_handle: FocusHandle,
     form: Entity<Form>,
     checked: bool,
     message: String,
 }
 
-impl super::Story for PopupStory {
+impl super::Story for PopoverStory {
     fn title() -> &'static str {
-        "Popup"
+        "Popover"
     }
 
     fn description() -> &'static str {
@@ -100,7 +98,7 @@ impl super::Story for PopupStory {
     }
 }
 
-impl PopupStory {
+impl PopoverStory {
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| Self::new(window, cx))
     }
@@ -150,16 +148,15 @@ impl PopupStory {
     }
 }
 
-impl Focusable for PopupStory {
+impl Focusable for PopoverStory {
     fn focus_handle(&self, _cx: &App) -> FocusHandle {
         self.focus_handle.clone()
     }
 }
 
-impl Render for PopupStory {
+impl Render for PopoverStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let form = self.form.clone();
-        let checked = self.checked;
 
         v_flex()
             .track_focus(&self.focus_handle)
@@ -171,29 +168,6 @@ impl Render for PopupStory {
             .on_action(cx.listener(Self::on_action_toggle_check))
             .size_full()
             .min_h(px(400.))
-            .context_menu({
-                move |this, window, cx| {
-                    this.external_link_icon(false)
-                        .link("About", "https://github.com/longbridge/gpui-component")
-                        .separator()
-                        .menu("Cut", Box::new(Cut))
-                        .menu("Copy", Box::new(Copy))
-                        .menu("Paste", Box::new(Paste))
-                        .separator()
-                        .label("This is a label")
-                        .menu_with_check("Toggle Check", checked, Box::new(ToggleCheck))
-                        .separator()
-                        .submenu("Settings", window, cx, move |menu, _, _| {
-                            menu.menu("Info 0", Box::new(Info(0)))
-                                .separator()
-                                .menu("Item 1", Box::new(Info(1)))
-                                .menu("Item 2", Box::new(Info(2)))
-                        })
-                        .separator()
-                        .menu("Search All", Box::new(SearchAll))
-                        .separator()
-                }
-            })
             .gap_6()
             .child(
                 h_flex()
@@ -248,84 +222,6 @@ impl Render for PopupStory {
                             }),
                     ),
             )
-            .child(
-                h_flex()
-                    .gap_3()
-                    .child(
-                        Button::new("popup-menu-1")
-                            .icon(IconName::Ellipsis)
-                            .popup_menu(move |this, window, cx| {
-                                this.link("About", "https://github.com/longbridge/gpui-component")
-                                    .separator()
-                                    .menu("Copy", Box::new(Copy))
-                                    .menu("Cut", Box::new(Cut))
-                                    .menu("Paste", Box::new(Paste))
-                                    .separator()
-                                    .menu_with_check("Toggle Check", checked, Box::new(ToggleCheck))
-                                    .separator()
-                                    .menu_with_icon("Search", IconName::Search, Box::new(SearchAll))
-                                    .separator()
-                                    .menu_element(Box::new(Info(0)), |_, cx| {
-                                        v_flex().child("Custom Element").child(
-                                            div()
-                                                .text_xs()
-                                                .text_color(cx.theme().muted_foreground)
-                                                .child("THis is sub-title"),
-                                        )
-                                    })
-                                    .menu_element_with_check(checked, Box::new(Info(0)), |_, cx| {
-                                        h_flex().gap_1().child("Custom Element").child(
-                                            div()
-                                                .text_xs()
-                                                .text_color(cx.theme().muted_foreground)
-                                                .child("checked"),
-                                        )
-                                    })
-                                    .menu_element_with_icon(
-                                        IconName::Info,
-                                        Box::new(Info(0)),
-                                        |_, cx| {
-                                            h_flex().gap_1().child("Custom").child(
-                                                div()
-                                                    .text_sm()
-                                                    .text_color(cx.theme().muted_foreground)
-                                                    .child("element"),
-                                            )
-                                        },
-                                    )
-                                    .separator()
-                                    .submenu("Links", window, cx, |menu, _, _| {
-                                        menu.link_with_icon(
-                                            "GitHub Repository",
-                                            IconName::GitHub,
-                                            "https://github.com/longbridge/gpui-component",
-                                        )
-                                        .separator()
-                                        .link("GPUI", "https://gpui.rs")
-                                        .link("Zed", "https://zed.dev")
-                                    })
-                            }),
-                    )
-                    .child(
-                        Button::new("popup-menu-11112")
-                            .label("Scrollable Menu")
-                            .popup_menu_with_anchor(Corner::TopRight, move |this, _, _| {
-                                let mut this = this
-                                    .scrollable()
-                                    .max_h(px(300.))
-                                    .label(format!("Total {} items", 100));
-                                for i in 0..100 {
-                                    this = this.menu(
-                                        SharedString::from(format!("Item {}", i)),
-                                        Box::new(Info(i)),
-                                    )
-                                }
-                                this.min_w(px(100.))
-                            }),
-                    )
-                    .child(self.message.clone()),
-            )
-            .child("Right click to open ContextMenu")
             .child(
                 div().absolute().bottom_4().left_0().w_full().h_10().child(
                     h_flex()

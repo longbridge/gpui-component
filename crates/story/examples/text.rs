@@ -1,13 +1,13 @@
 use gpui::*;
-use story::{Assets, TextStory};
+use story::{Assets, LabelStory};
 
 pub struct Example {
-    root: Entity<TextStory>,
+    root: Entity<LabelStory>,
 }
 
 impl Example {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let root = TextStory::view(window, cx);
+        let root = LabelStory::view(window, cx);
 
         Self { root }
     }

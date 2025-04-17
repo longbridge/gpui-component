@@ -2,24 +2,32 @@ mod accordion_story;
 mod assets;
 mod button_story;
 mod calendar_story;
+mod checkbox_story;
+mod drawer_story;
 mod dropdown_story;
 mod form_story;
 mod icon_story;
 mod image_story;
 mod input_story;
+mod kbd_story;
+mod label_story;
 mod list_story;
+mod menu_story;
 mod modal_story;
+mod notification_story;
 mod number_input_story;
 mod otp_input_story;
-mod popup_story;
+mod popover_story;
 mod progress_story;
+mod radio_story;
 mod resizable_story;
 mod scrollable_story;
 mod sidebar_story;
+mod slider_story;
 mod switch_story;
 mod table_story;
 mod tabs_story;
-mod text_story;
+mod tag_story;
 mod textarea_story;
 mod title_bar;
 mod toggle_story;
@@ -38,25 +46,33 @@ use gpui::{
 pub use accordion_story::AccordionStory;
 pub use button_story::ButtonStory;
 pub use calendar_story::CalendarStory;
+pub use checkbox_story::CheckboxStory;
+pub use drawer_story::DrawerStory;
 pub use dropdown_story::DropdownStory;
 pub use form_story::FormStory;
 pub use icon_story::IconStory;
 pub use image_story::ImageStory;
 pub use input_story::InputStory;
+pub use kbd_story::KbdStory;
+pub use label_story::LabelStory;
 pub use list_story::ListStory;
+pub use menu_story::MenuStory;
 pub use modal_story::ModalStory;
+pub use notification_story::NotificationStory;
 pub use number_input_story::NumberInputStory;
 pub use otp_input_story::OtpInputStory;
-pub use popup_story::PopupStory;
+pub use popover_story::PopoverStory;
 pub use progress_story::ProgressStory;
+pub use radio_story::RadioStory;
 pub use resizable_story::ResizableStory;
 pub use scrollable_story::ScrollableStory;
 use serde::{Deserialize, Serialize};
 pub use sidebar_story::SidebarStory;
+pub use slider_story::SliderStory;
 pub use switch_story::SwitchStory;
 pub use table_story::TableStory;
 pub use tabs_story::TabsStory;
-pub use text_story::TextStory;
+pub use tag_story::TagStory;
 pub use textarea_story::TextareaStory;
 pub use title_bar::AppTitleBar;
 pub use toggle_story::ToggleStory;
@@ -65,6 +81,7 @@ pub use webview_story::WebViewStory;
 
 use gpui_component::{
     button::Button,
+    context_menu::ContextMenuExt,
     dock::{register_panel, Panel, PanelControl, PanelEvent, PanelInfo, PanelState, TitleStyle},
     h_flex,
     notification::Notification,
@@ -214,7 +231,8 @@ pub fn init(cx: &mut App) {
     number_input_story::init(cx);
     textarea_story::init(cx);
     dropdown_story::init(cx);
-    popup_story::init(cx);
+    popover_story::init(cx);
+    menu_story::init(cx);
     webview_story::init(cx);
     tooltip_story::init(cx);
     otp_input_story::init(cx);
@@ -364,6 +382,8 @@ impl RenderOnce for StorySection {
             )
     }
 }
+
+impl ContextMenuExt for StorySection {}
 
 pub(crate) fn section(title: impl IntoElement) -> StorySection {
     StorySection {
@@ -574,13 +594,13 @@ impl StoryState {
             "InputStory" => story!(InputStory),
             "ListStory" => story!(ListStory),
             "ModalStory" => story!(ModalStory),
-            "PopupStory" => story!(PopupStory),
+            "PopoverStory" => story!(PopoverStory),
             "ProgressStory" => story!(ProgressStory),
             "ResizableStory" => story!(ResizableStory),
             "ScrollableStory" => story!(ScrollableStory),
             "SwitchStory" => story!(SwitchStory),
             "TableStory" => story!(TableStory),
-            "TextStory" => story!(TextStory),
+            "LabelStory" => story!(LabelStory),
             "TooltipStory" => story!(TooltipStory),
             "WebViewStory" => story!(WebViewStory),
             "AccordionStory" => story!(AccordionStory),

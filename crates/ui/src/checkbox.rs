@@ -1,10 +1,11 @@
 use crate::{
-    h_flex, text::Text, v_flex, ActiveTheme, Disableable, IconName, Selectable, Sizable, Size,
+    text::Text, v_flex, ActiveTheme, Disableable, IconName, Selectable, Sizable, Size,
+    StyledExt as _,
 };
 use gpui::{
     div, prelude::FluentBuilder as _, px, relative, rems, svg, AnyElement, App, Div, ElementId,
-    InteractiveElement, IntoElement, ParentElement, RenderOnce, StatefulInteractiveElement as _,
-    Styled, Window,
+    InteractiveElement, IntoElement, ParentElement, RenderOnce, StatefulInteractiveElement, Styled,
+    Window,
 };
 
 /// A Checkbox element.
@@ -49,6 +50,13 @@ impl Checkbox {
         self
     }
 }
+
+impl InteractiveElement for Checkbox {
+    fn interactivity(&mut self) -> &mut gpui::Interactivity {
+        self.base.interactivity()
+    }
+}
+impl StatefulInteractiveElement for Checkbox {}
 
 impl Styled for Checkbox {
     fn style(&mut self) -> &mut gpui::StyleRefinement {
@@ -98,9 +106,10 @@ impl RenderOnce for Checkbox {
         };
         let radius = (cx.theme().radius / 2.).min(px(6.));
 
-        self.base.child(
-            h_flex()
+        div().child(
+            self.base
                 .id(self.id)
+                .h_flex()
                 .gap_2()
                 .items_start()
                 .line_height(relative(1.))

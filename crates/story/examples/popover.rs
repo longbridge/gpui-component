@@ -1,13 +1,13 @@
 use gpui::*;
-use story::{Assets, PopupStory};
+use story::{Assets, PopoverStory};
 
 pub struct Example {
-    story: Entity<PopupStory>,
+    story: Entity<PopoverStory>,
 }
 
 impl Example {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let story = PopupStory::view(window, cx);
+        let story = PopoverStory::view(window, cx);
 
         Self { story }
     }
@@ -30,6 +30,6 @@ fn main() {
         story::init(cx);
         cx.activate(true);
 
-        story::create_new_window("Popup Example", Example::view, cx);
+        story::create_new_window("Popover Example", Example::view, cx);
     });
 }
