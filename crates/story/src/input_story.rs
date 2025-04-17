@@ -26,6 +26,7 @@ pub fn init(cx: &mut App) {
 pub struct InputStory {
     input1: Entity<TextInput>,
     input2: Entity<TextInput>,
+    input_esc: Entity<TextInput>,
     mask_input: Entity<TextInput>,
     disabled_input: Entity<TextInput>,
     prefix_input1: Entity<TextInput>,
@@ -68,6 +69,11 @@ impl InputStory {
         });
 
         let input2 = cx.new(|cx| TextInput::new(window, cx).placeholder("Enter text here..."));
+        let input_esc = cx.new(|cx| {
+            TextInput::new(window, cx)
+                .placeholder("Enter text and clear it by pressing ESC")
+                .clean_by_escape()
+        });
 
         let mask_input = cx.new(|cx| {
             let mut input = TextInput::new(window, cx)
@@ -119,6 +125,7 @@ impl InputStory {
         Self {
             input1,
             input2,
+            input_esc,
             mask_input,
             disabled_input: cx.new(|cx| {
                 let mut input = TextInput::new(window, cx);
@@ -173,6 +180,7 @@ impl FocusableCycle for InputStory {
         [
             self.input1.focus_handle(cx),
             self.input2.focus_handle(cx),
+            self.input_esc.focus_handle(cx),
             self.disabled_input.focus_handle(cx),
             self.mask_input.focus_handle(cx),
             self.prefix_input1.focus_handle(cx),
@@ -205,7 +213,8 @@ impl Render for InputStory {
                     .v_flex()
                     .max_w_md()
                     .child(self.input1.clone())
-                    .child(self.input2.clone()),
+                    .child(self.input2.clone())
+                    .child(self.input_esc.clone()),
             )
             .child(
                 section("Input State")

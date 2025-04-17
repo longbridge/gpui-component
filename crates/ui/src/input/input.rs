@@ -85,6 +85,7 @@ actions!(
         MoveToPreviousWord,
         MoveToNextWord,
         TextChanged,
+        Clean
     ]
 );
 
@@ -116,6 +117,7 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("ctrl-delete", DeleteToNextWordEnd, Some(CONTEXT)),
         KeyBinding::new("enter", Enter { secondary: false }, Some(CONTEXT)),
         KeyBinding::new("secondary-enter", Enter { secondary: true }, Some(CONTEXT)),
+        KeyBinding::new("escape", Clean, Some(CONTEXT)),
         KeyBinding::new("up", Up, Some(CONTEXT)),
         KeyBinding::new("down", Down, Some(CONTEXT)),
         KeyBinding::new("left", Left, Some(CONTEXT)),
@@ -233,6 +235,7 @@ pub struct TextInput {
     pub(super) mask_toggle: bool,
     pub(super) appearance: bool,
     pub(super) cleanable: bool,
+    pub(super) clean_by_escape: bool,
     pub(super) size: Size,
     pub(super) rows: usize,
     pub(super) min_rows: usize,
@@ -295,6 +298,7 @@ impl TextInput {
             mask_toggle: false,
             appearance: true,
             cleanable: false,
+            clean_by_escape: false,
             loading: false,
             prefix: None,
             suffix: None,
@@ -659,6 +663,12 @@ impl TextInput {
     /// Set true to show the clear button when the input field is not empty.
     pub fn cleanable(mut self) -> Self {
         self.cleanable = true;
+        self
+    }
+
+    /// Set true to clear the input by pressing Escape key when the input field is not empty.
+    pub fn clean_by_escape(mut self) -> Self {
+        self.clean_by_escape = true;
         self
     }
 
@@ -1061,6 +1071,10 @@ impl TextInput {
 
     fn clean(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.replace_text("", window, cx);
+    }
+
+    fn on_clean(&mut self, _: &Clean, window: &mut Window, cx: &mut Context<Self>) {
+        self.clean(window, cx);
     }
 
     fn on_mouse_down(
@@ -1486,16 +1500,8 @@ impl TextInput {
         });
     }
 
-    fn on_key_down(
-        &mut self,
-        key_event: &KeyDownEvent,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    fn on_key_down(&mut self, _: &KeyDownEvent, _: &mut Window, cx: &mut Context<Self>) {
         self.pause_blink_cursor(cx);
-        if self.cleanable && key_event.keystroke.key.as_str() == "escape" {
-            self.clean(window, cx);
-        };
     }
 
     pub(super) fn on_drag_move(
@@ -1827,6 +1833,9 @@ impl Render for TextInput {
             .on_action(cx.listener(Self::undo))
             .on_action(cx.listener(Self::redo))
             .on_action(cx.listener(Self::redo))
+            .when(self.clean_by_escape, |this| {
+                this.on_action(cx.listener(Self::on_clean))
+            })
             .on_key_down(cx.listener(Self::on_key_down))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
