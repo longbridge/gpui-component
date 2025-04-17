@@ -82,7 +82,7 @@ impl WebViewStory {
             input
         });
 
-        let url = address_input.read(cx).text();
+        let url = address_input.read(cx).text().clone();
         webview.update(cx, |view, _| {
             view.load_url(&url);
         });
@@ -98,7 +98,7 @@ impl WebViewStory {
                 &address_input,
                 |this: &mut Self, input, event: &InputEvent, cx| match event {
                     InputEvent::PressEnter { .. } => {
-                        let url = input.read(cx).text();
+                        let url = input.read(cx).text().clone();
                         this.webview.update(cx, |view, _| {
                             view.load_url(&url);
                         });

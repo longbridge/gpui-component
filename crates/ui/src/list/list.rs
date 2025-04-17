@@ -11,8 +11,7 @@ use crate::{
 use gpui::{
     div, prelude::FluentBuilder, uniform_list, AnyElement, AppContext, Entity, FocusHandle,
     Focusable, InteractiveElement, IntoElement, KeyBinding, Length, ListSizingBehavior,
-    MouseButton, ParentElement, Render, SharedString, Styled, Task, UniformListScrollHandle,
-    Window,
+    MouseButton, ParentElement, Render, Styled, Task, UniformListScrollHandle, Window,
 };
 use gpui::{px, App, Context, EventEmitter, MouseDownEvent, ScrollStrategy, Subscription};
 use rust_i18n::t;
@@ -276,19 +275,6 @@ where
 
     pub fn selected_index(&self) -> Option<usize> {
         self.selected_index
-    }
-
-    /// Set the query_input text
-    pub fn set_query(&mut self, query: &str, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(query_input) = &self.query_input {
-            let query = query.to_owned();
-            query_input.update(cx, |input, cx| input.set_text(query, window, cx))
-        }
-    }
-
-    /// Get the query_input text
-    pub fn query(&self, _: &mut Window, cx: &mut Context<Self>) -> Option<SharedString> {
-        self.query_input.as_ref().map(|input| input.read(cx).text())
     }
 
     fn render_scrollbar(&self, _: &mut Window, cx: &mut Context<Self>) -> Option<impl IntoElement> {

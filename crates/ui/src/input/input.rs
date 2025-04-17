@@ -699,8 +699,8 @@ impl TextInput {
     }
 
     /// Return the text of the input field.
-    pub fn text(&self) -> SharedString {
-        self.text.clone()
+    pub fn text(&self) -> &SharedString {
+        &self.text
     }
 
     pub fn disabled(&self) -> bool {
