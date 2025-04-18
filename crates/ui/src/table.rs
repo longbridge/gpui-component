@@ -575,13 +575,17 @@ where
     }
 
     fn action_select_prev(&mut self, _: &SelectPrev, _: &mut Window, cx: &mut Context<Self>) {
-        let mut selected_row = self.selected_row.unwrap_or(0);
         let rows_count = self.delegate.rows_count(cx);
+        if rows_count < 1 {
+            return;
+        }
+
+        let mut selected_row = self.selected_row.unwrap_or(0);
         if selected_row > 0 {
-            selected_row = selected_row - 1;
+            selected_row = selected_row.saturating_sub(1);
         } else {
             if self.delegate.can_loop_select(cx) {
-                selected_row = rows_count - 1;
+                selected_row = rows_count.saturating_sub(1);
             }
         }
 
@@ -589,14 +593,22 @@ where
     }
 
     fn action_select_next(&mut self, _: &SelectNext, _: &mut Window, cx: &mut Context<Self>) {
-        let mut selected_row = self.selected_row.unwrap_or(0);
-        if selected_row < self.delegate.rows_count(cx) - 1 {
-            selected_row += 1;
-        } else {
-            if self.delegate.can_loop_select(cx) {
-                selected_row = 0;
-            }
+        let rows_count = self.delegate.rows_count(cx);
+        if rows_count < 1 {
+            return;
         }
+
+        let selected_row = match self.selected_row {
+            Some(selected_row) if selected_row < rows_count.saturating_sub(1) => selected_row + 1,
+            Some(selected_row) => {
+                if self.delegate.can_loop_select(cx) {
+                    0
+                } else {
+                    selected_row
+                }
+            }
+            _ => 0,
+        };
 
         self.set_selected_row(selected_row, cx);
     }
@@ -610,10 +622,10 @@ where
         let mut selected_col = self.selected_col.unwrap_or(0);
         let cols_count = self.delegate.cols_count(cx);
         if selected_col > 0 {
-            selected_col -= 1;
+            selected_col = selected_col.saturating_sub(1);
         } else {
             if self.delegate.can_loop_select(cx) {
-                selected_col = cols_count - 1;
+                selected_col = cols_count.saturating_sub(1);
             }
         }
         self.set_selected_col(selected_col, cx);
@@ -626,7 +638,7 @@ where
         cx: &mut Context<Self>,
     ) {
         let mut selected_col = self.selected_col.unwrap_or(0);
-        if selected_col < self.delegate.cols_count(cx) - 1 {
+        if selected_col < self.delegate.cols_count(cx).saturating_sub(1) {
             selected_col += 1;
         } else {
             if self.delegate.can_loop_select(cx) {
@@ -1555,7 +1567,10 @@ where
 
                                         if visible_range.end > rows_count {
                                             table.scroll_to_row(
-                                                std::cmp::min(visible_range.start, rows_count - 1),
+                                                std::cmp::min(
+                                                    visible_range.start,
+                                                    rows_count.saturating_sub(1),
+                                                ),
                                                 cx,
                                             );
                                         }
