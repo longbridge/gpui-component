@@ -213,8 +213,7 @@ impl Render for InputStory {
                 section("Normal Input")
                     .max_w_md()
                     .child(self.input1.clone())
-                    .child(self.input2.clone())
-                    .child(self.input_esc.clone()),
+                    .child(self.input2.clone()),
             )
             .child(
                 section("Input State")
@@ -234,6 +233,11 @@ impl Render for InputStory {
                     .max_w_md()
                     .child(self.large_input.clone())
                     .child(self.small_input.clone()),
+            )
+            .child(
+                section("Cleanable and ESC to clean")
+                    .max_w_md()
+                    .child(self.input_esc.clone()),
             )
             .child(
                 h_flex()

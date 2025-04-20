@@ -1074,7 +1074,10 @@ impl TextInput {
     }
 
     fn escape(&mut self, _: &Escape, window: &mut Window, cx: &mut Context<Self>) {
-        self.unselect(window, cx);
+        if self.selected_range.len() > 0 {
+            return self.unselect(window, cx);
+        }
+
         if self.clean_on_escape {
             self.clean(window, cx);
         }
