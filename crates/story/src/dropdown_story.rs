@@ -103,13 +103,14 @@ impl DropdownStory {
             "Banana".into(),
             "Grape".into(),
             "Pineapple".into(),
-            "Watermelon & This is a longlonglonglonglonglonglonglonglong title".into(),
+            "Watermelon & This is a long long long long long long long long long title".into(),
             "Avocado".into(),
         ]);
         let fruit_dropdown = cx.new(|cx| {
             Dropdown::new("dropdown-fruits", fruits, None, window, cx)
                 .icon(IconName::Search)
-                .menu_width(px(320.))
+                .width(px(320.))
+                .menu_width(px(400.))
         });
 
         cx.new(|cx| {
@@ -278,25 +279,27 @@ impl Render for DropdownStory {
                     .child(self.simple_dropdown3.clone()),
             )
             .child(
-                section("Values")
-                    .max_w_md()
-                    .child(format!(
-                        "Country: {:?}",
-                        self.country_dropdown.read(cx).selected_value()
-                    ))
-                    .child(format!(
-                        "fruit: {:?}",
-                        self.fruit_dropdown.read(cx).selected_value()
-                    ))
-                    .child(format!(
-                        "UI: {:?}",
-                        self.simple_dropdown1.read(cx).selected_value()
-                    ))
-                    .child(format!(
-                        "Language: {:?}",
-                        self.simple_dropdown2.read(cx).selected_value()
-                    ))
-                    .child("This is other text."),
+                section("Selected Values").max_w_lg().child(
+                    v_flex()
+                        .gap_3()
+                        .child(format!(
+                            "Country: {:?}",
+                            self.country_dropdown.read(cx).selected_value()
+                        ))
+                        .child(format!(
+                            "fruit: {:?}",
+                            self.fruit_dropdown.read(cx).selected_value()
+                        ))
+                        .child(format!(
+                            "UI: {:?}",
+                            self.simple_dropdown1.read(cx).selected_value()
+                        ))
+                        .child(format!(
+                            "Language: {:?}",
+                            self.simple_dropdown2.read(cx).selected_value()
+                        ))
+                        .child("This is other text."),
+                ),
             )
     }
 }

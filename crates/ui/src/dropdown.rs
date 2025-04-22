@@ -552,7 +552,7 @@ where
 
     fn display_title(&self, _: &Window, cx: &App) -> impl IntoElement {
         let title = if let Some(selected_index) = &self.selected_index(cx) {
-            let title = self
+            let mut title = self
                 .list
                 .read(cx)
                 .delegate()
@@ -561,9 +561,11 @@ where
                 .map(|item| item.title().to_string())
                 .unwrap_or_default();
 
-            h_flex()
-                .when_some(self.title_prefix.clone(), |this, prefix| this.child(prefix))
-                .child(title.clone())
+            if let Some(prefix) = self.title_prefix.as_ref() {
+                title = format!("{}{}", prefix, title);
+            }
+
+            div().child(title.clone())
         } else {
             div().text_color(cx.theme().accent_foreground).child(
                 self.placeholder
@@ -636,7 +638,7 @@ where
             .input_text_size(self.size)
             .child(
                 div()
-                    .id("dropdown-input")
+                    .id(ElementId::Name(format!("{}-input", self.id).into()))
                     .relative()
                     .flex()
                     .items_center()
@@ -674,6 +676,8 @@ where
                                 div()
                                     .w_full()
                                     .overflow_hidden()
+                                    .whitespace_nowrap()
+                                    .truncate()
                                     .child(self.display_title(window, cx)),
                             )
                             .when(show_clean, |this| {
