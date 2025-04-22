@@ -95,7 +95,7 @@ use gpui_component::{
     notification::Notification,
     popup_menu::PopupMenu,
     scroll::ScrollbarShow,
-    v_flex, ActiveTheme, ContextModal, IconName, Root, StyledExt, TitleBar,
+    v_flex, ActiveTheme, ContextModal, IconName, Root, TitleBar,
 };
 
 #[derive(Clone, PartialEq, Eq, Deserialize)]
@@ -400,7 +400,6 @@ pub(crate) fn section(title: impl IntoElement) -> StorySection {
             .justify_center()
             .items_center()
             .w_full()
-            .overflow_hidden()
             .gap_4(),
         children: vec![],
     }
