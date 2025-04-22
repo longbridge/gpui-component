@@ -91,6 +91,7 @@ impl ContextModal for Window {
 
     fn close_drawer(&mut self, cx: &mut App) {
         Root::update(self, cx, |root, window, cx| {
+            root.focused_input = None;
             root.active_drawer = None;
             root.focus_back(window, cx);
             cx.notify();
@@ -125,6 +126,7 @@ impl ContextModal for Window {
 
     fn close_modal(&mut self, cx: &mut App) {
         Root::update(self, cx, move |root, window, cx| {
+            root.focused_input = None;
             root.active_modals.pop();
 
             if let Some(top_modal) = root.active_modals.last() {
@@ -140,6 +142,7 @@ impl ContextModal for Window {
 
     fn close_all_modals(&mut self, cx: &mut App) {
         Root::update(self, cx, |root, window, cx| {
+            root.focused_input = None;
             root.active_modals.clear();
             root.focus_back(window, cx);
             cx.notify();
