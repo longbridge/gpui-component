@@ -1079,8 +1079,10 @@ impl TextInput {
         }
 
         if self.clean_on_escape {
-            self.clean(window, cx);
+            return self.clean(window, cx);
         }
+
+        cx.propagate();
     }
 
     fn on_mouse_down(
