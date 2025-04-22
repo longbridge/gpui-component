@@ -1478,12 +1478,7 @@ impl TextInput {
         self.focus_handle.is_focused(window) && self.blink_cursor.read(cx).visible()
     }
 
-    fn on_focus(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let input_entity = cx.entity();
-        Root::update(window, cx, |root, _, _| {
-            root.focused_input = Some(input_entity)
-        });
-
+    fn on_focus(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         self.blink_cursor.update(cx, |cursor, cx| {
             cursor.start(cx);
         });
@@ -1491,10 +1486,6 @@ impl TextInput {
     }
 
     fn on_blur(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        Root::update(window, cx, |root, _, _| {
-            root.focused_input = None;
-        });
-
         self.unselect(window, cx);
         self.blink_cursor.update(cx, |cursor, cx| {
             cursor.stop(cx);

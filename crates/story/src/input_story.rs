@@ -9,7 +9,7 @@ use gpui_component::{
     button::{Button, ButtonVariant, ButtonVariants as _},
     h_flex,
     input::{InputEvent, TextInput},
-    v_flex, FocusableCycle, Icon, IconName, Sizable,
+    v_flex, ContextModal, FocusableCycle, Icon, IconName, Root, Sizable,
 };
 
 actions!(input_story, [Tab, TabPrev]);
@@ -200,7 +200,7 @@ impl Focusable for InputStory {
 }
 
 impl Render for InputStory {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .key_context(CONTEXT)
             .id("input-story")
@@ -238,6 +238,16 @@ impl Render for InputStory {
                 section("Cleanable and ESC to clean")
                     .max_w_md()
                     .child(self.input_esc.clone()),
+            )
+            .child(
+                section("Focused Input")
+                    .max_w_md()
+                    .whitespace_normal()
+                    .overflow_hidden()
+                    .child(div().child(format!(
+                        "Value: {:?}",
+                        window.focused_input(cx).map(|input| input.read(cx).text())
+                    ))),
             )
             .child(
                 h_flex()
