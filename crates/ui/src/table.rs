@@ -652,17 +652,20 @@ where
     /// Scroll table when mouse position is near the edge of the table bounds.
     fn scroll_table_by_col_resizing(
         &mut self,
-        pos: Point<Pixels>,
+        mouse_position: Point<Pixels>,
         col_group: ColGroup,
-        _window: &mut Window,
-        _cx: &mut Context<Self>,
     ) {
+        // Do nothing if pos out of the table bounds right for avoid scroll to the right.
+        if mouse_position.x > self.bounds.right() {
+            return;
+        }
+
         let mut offset = self.horizontal_scroll_handle.offset();
         let col_bounds = col_group.bounds;
 
-        if pos.x < self.bounds.left() && col_bounds.right() < self.bounds.left() + px(20.) {
+        if mouse_position.x < self.bounds.left() && col_bounds.right() < self.bounds.left() + px(20.) {
             offset.x += px(1.);
-        } else if pos.x > self.bounds.right() && col_bounds.right() > self.bounds.right() - px(20.)
+        } else if mouse_position.x > self.bounds.right() && col_bounds.right() > self.bounds.right() - px(20.)
         {
             offset.x -= px(1.);
         }
@@ -973,8 +976,6 @@ where
                             view.scroll_table_by_col_resizing(
                                 e.event.position,
                                 col_group,
-                                window,
-                                cx,
                             );
                         }
                     };
