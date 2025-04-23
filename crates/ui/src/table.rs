@@ -344,7 +344,7 @@ pub trait TableDelegate: Sized + 'static {
 
     /// Render the last empty column, default to empty.
     fn render_last_empty_col(&mut self, window: &mut Window, cx: &mut Context<Table<Self>>) -> Div {
-        h_flex().w_5().h_full().flex_shrink_0()
+        h_flex().w_3().h_full().flex_shrink_0()
     }
 
     /// Called when the visible range of the rows changed.
