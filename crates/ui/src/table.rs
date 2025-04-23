@@ -6,7 +6,7 @@ use crate::{
     h_flex,
     popup_menu::PopupMenu,
     scroll::{self, ScrollableMask, Scrollbar, ScrollbarState},
-    v_flex, ActiveTheme, Icon, IconName, Sizable, Size, StyleSized as _,
+    v_flex, ActiveTheme, Icon, IconName, Sizable, Size, StyleSized as _, StyledExt,
 };
 use gpui::{
     actions, canvas, div, prelude::FluentBuilder, px, uniform_list, App, AppContext, Axis, Bounds,
@@ -1237,6 +1237,7 @@ where
         if row_ix < rows_count {
             self.delegate
                 .render_tr(row_ix, window, cx)
+                .h_flex()
                 .w_full()
                 .h(self.size.table_row_height())
                 .border_b_1()
@@ -1380,6 +1381,7 @@ where
             // Render fake rows to fill the rest table space
             self.delegate
                 .render_tr(row_ix, window, cx)
+                .h_flex()
                 .w_full()
                 .h_full()
                 .border_t_1()
