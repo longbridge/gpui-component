@@ -473,13 +473,6 @@ impl Calendar {
                 _ => this.size_9().rounded(cx.theme().radius * 2.),
             })
             .justify_center()
-            .map(|this| {
-                if disabled {
-                    this.cursor_not_allowed()
-                } else {
-                    this
-                }
-            })
             .when(muted, |this| {
                 this.text_color(if disabled {
                     cx.theme().muted_foreground.opacity(0.3)

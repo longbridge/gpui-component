@@ -172,7 +172,6 @@ impl Element for Switch {
                                 .border(inset)
                                 .border_color(cx.theme().transparent)
                                 .bg(bg)
-                                .when(self.disabled, |this| this.cursor_not_allowed())
                                 .when_some(self.tooltip.clone(), |this, tooltip| {
                                     this.tooltip(move |window, cx| {
                                         Tooltip::new(tooltip.clone()).build(window, cx)

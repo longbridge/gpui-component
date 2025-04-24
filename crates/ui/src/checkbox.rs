@@ -181,8 +181,7 @@ impl RenderOnce for Checkbox {
                     )
                 })
                 .when(self.disabled, |this| {
-                    this.cursor_not_allowed()
-                        .text_color(cx.theme().muted_foreground)
+                    this.text_color(cx.theme().muted_foreground)
                 })
                 .when_some(
                     self.on_click.filter(|_| !self.disabled),

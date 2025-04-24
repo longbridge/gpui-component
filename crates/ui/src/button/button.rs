@@ -469,8 +469,7 @@ impl RenderOnce for Button {
             )
             .when(self.disabled, |this| {
                 let disabled_style = style.disabled(self.outline, cx);
-                this.cursor_not_allowed()
-                    .bg(disabled_style.bg)
+                this.bg(disabled_style.bg)
                     .text_color(disabled_style.fg)
                     .border_color(disabled_style.border)
                     .shadow_none()

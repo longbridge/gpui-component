@@ -575,8 +575,7 @@ where
         };
 
         title.when(self.disabled, |this| {
-            this.cursor_not_allowed()
-                .text_color(cx.theme().muted_foreground)
+            this.text_color(cx.theme().muted_foreground)
         })
     }
 }
@@ -648,13 +647,7 @@ where
                     .border_color(cx.theme().input)
                     .rounded(cx.theme().radius)
                     .when(cx.theme().shadow, |this| this.shadow_sm())
-                    .map(|this| {
-                        if self.disabled {
-                            this.cursor_not_allowed()
-                        } else {
-                            this
-                        }
-                    })
+                    .map(|this| if self.disabled { this } else { this })
                     .overflow_hidden()
                     .input_text_size(self.size)
                     .map(|this| match self.width {
@@ -701,15 +694,12 @@ where
                                     }
                                 };
 
-                                this.child(
-                                    Icon::new(icon)
-                                        .xsmall()
-                                        .text_color(match self.disabled {
-                                            true => cx.theme().muted_foreground.opacity(0.5),
-                                            false => cx.theme().muted_foreground,
-                                        })
-                                        .when(self.disabled, |this| this.cursor_not_allowed()),
-                                )
+                                this.child(Icon::new(icon).xsmall().text_color(
+                                    match self.disabled {
+                                        true => cx.theme().muted_foreground.opacity(0.5),
+                                        false => cx.theme().muted_foreground,
+                                    },
+                                ))
                             }),
                     )
                     .child(
