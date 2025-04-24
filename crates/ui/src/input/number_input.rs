@@ -147,6 +147,7 @@ impl Focusable for NumberInput {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum StepAction {
     Decrement,
     Increment,
