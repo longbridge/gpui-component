@@ -232,6 +232,7 @@ impl RenderOnce for AccordionItem {
                     h_flex()
                         .id(self.index)
                         .justify_between()
+                        .gap_3()
                         .map(|this| match self.size {
                             Size::XSmall => this.py_0().px_1p5(),
                             Size::Small => this.py_0p5().px_2(),
