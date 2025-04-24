@@ -143,8 +143,7 @@ impl RenderOnce for ListItem {
                 })
             })
             .when(self.disabled, |this| {
-                this.cursor_not_allowed()
-                    .text_color(cx.theme().muted_foreground)
+                this.text_color(cx.theme().muted_foreground)
             })
             .child(
                 h_flex()

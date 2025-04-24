@@ -169,6 +169,8 @@ impl Render for MenuStory {
                                     },
                                 )
                                 .separator()
+                                .menu_with_disabled("Disabled Item", Box::new(Info(0)), true)
+                                .separator()
                                 .submenu("Links", window, cx, |menu, _, _| {
                                     menu.link_with_icon(
                                         "GitHub Repository",
