@@ -1,7 +1,7 @@
 use gpui::{prelude::*, *};
 use gpui_component::{
     h_flex,
-    input::TextInput,
+    input::{InputEvent, TextInput},
     sidebar::{Sidebar, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuItem},
     v_flex, ActiveTheme as _, Icon, IconName,
 };
@@ -24,10 +24,13 @@ impl Gallery {
                 .cleanable()
                 .placeholder("Search...")
         });
-        let _subscriptions = vec![cx.subscribe(&search_input, |this, _, _, cx| {
-            this.active_group_index = None;
-            this.active_index = None;
-            cx.notify()
+        let _subscriptions = vec![cx.subscribe(&search_input, |this, _, e, cx| match e {
+            InputEvent::Change(_) => {
+                this.active_group_index = Some(0);
+                this.active_index = Some(0);
+                cx.notify()
+            }
+            _ => {}
         })];
         let stories = vec![
             (
