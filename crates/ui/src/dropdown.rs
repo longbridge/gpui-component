@@ -43,6 +43,12 @@ pub fn init(cx: &mut App) {
 pub trait DropdownItem {
     type Value: Clone;
     fn title(&self) -> SharedString;
+    /// Customize the display title used to selected item in Dropdown Input.
+    ///
+    /// If return None, the title will be used.
+    fn display_title(&self) -> Option<AnyElement> {
+        None
+    }
     fn value(&self) -> &Self::Value;
 }
 
@@ -248,9 +254,6 @@ pub struct Dropdown<D: DropdownDelegate + 'static> {
     title_prefix: Option<SharedString>,
     selected_value: Option<<D::Item as DropdownItem>::Value>,
     empty: Option<Box<dyn Fn(&Window, &App) -> AnyElement + 'static>>,
-    title: Option<
-        Box<dyn Fn(&<D as DropdownDelegate>::Item, &Window, &App) -> SharedString + 'static>,
-    >,
     width: Length,
     menu_width: Length,
     /// Store the bounds of the input
@@ -376,7 +379,6 @@ where
             cleanable: false,
             title_prefix: None,
             empty: None,
-            title: None,
             width: Length::Auto,
             menu_width: Length::Auto,
             bounds: Bounds::default(),
@@ -443,14 +445,6 @@ where
         F: Fn(&Window, &App) -> E + 'static,
     {
         self.empty = Some(Box::new(move |window, cx| f(window, cx).into_any_element()));
-        self
-    }
-
-    pub fn title<F>(mut self, f: F) -> Self
-    where
-        F: Fn(&<D as DropdownDelegate>::Item, &Window, &App) -> SharedString + 'static,
-    {
-        self.title = Some(Box::new(f));
         self
     }
 
@@ -562,39 +556,49 @@ where
         cx.emit(DropdownEvent::Confirm(None));
     }
 
-    fn display_title(&self, window: &Window, cx: &App) -> impl IntoElement {
-        let title = if let Some(selected_index) = &self.selected_index(cx) {
-            let mut title = self
-                .list
-                .read(cx)
-                .delegate()
-                .delegate
-                .get(*selected_index)
-                .map(|item| {
-                    if let Some(f) = self.title.as_ref() {
-                        f(item, window, cx)
-                    } else {
-                        item.title()
-                    }
-                })
-                .unwrap_or_default();
-
-            if let Some(prefix) = self.title_prefix.as_ref() {
-                title = format!("{}{}", prefix, title).into();
-            }
-
-            div().child(title.clone())
-        } else {
-            div().text_color(cx.theme().accent_foreground).child(
+    /// Returns the title element for the dropdown input.
+    fn display_title(&self, _: &Window, cx: &App) -> impl IntoElement {
+        let default_title = div()
+            .text_color(cx.theme().accent_foreground)
+            .child(
                 self.placeholder
                     .clone()
                     .unwrap_or_else(|| t!("Dropdown.placeholder").into()),
             )
+            .when(self.disabled, |this| {
+                this.text_color(cx.theme().muted_foreground)
+            });
+
+        let Some(selected_index) = &self.selected_index(cx) else {
+            return default_title.into();
         };
 
-        title.when(self.disabled, |this| {
-            this.text_color(cx.theme().muted_foreground)
-        })
+        let Some(title) = self
+            .list
+            .read(cx)
+            .delegate()
+            .delegate
+            .get(*selected_index)
+            .map(|item| {
+                if let Some(el) = item.display_title() {
+                    el
+                } else {
+                    if let Some(prefix) = self.title_prefix.as_ref() {
+                        format!("{}{}", prefix, item.title()).into_any_element()
+                    } else {
+                        item.title().into_any_element()
+                    }
+                }
+            })
+        else {
+            return default_title.into();
+        };
+
+        div()
+            .when(self.disabled, |this| {
+                this.text_color(cx.theme().muted_foreground)
+            })
+            .child(title)
     }
 }
 

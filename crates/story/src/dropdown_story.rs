@@ -42,6 +42,10 @@ impl DropdownItem for Country {
         self.name.clone()
     }
 
+    fn display_title(&self) -> Option<gpui::AnyElement> {
+        Some(format!("{} ({})", self.name, self.code).into_any_element())
+    }
+
     fn value(&self) -> &Self::Value {
         &self.code
     }
