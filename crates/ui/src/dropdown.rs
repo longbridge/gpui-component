@@ -570,7 +570,7 @@ where
             });
 
         let Some(selected_index) = &self.selected_index(cx) else {
-            return default_title.into();
+            return default_title;
         };
 
         let Some(title) = self
@@ -591,7 +591,7 @@ where
                 }
             })
         else {
-            return default_title.into();
+            return default_title;
         };
 
         div()
