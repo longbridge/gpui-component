@@ -6,6 +6,7 @@ mod button_story;
 mod calendar_story;
 mod checkbox_story;
 mod clipboard_story;
+mod date_picker_story;
 mod drawer_story;
 mod dropdown_story;
 mod form_story;
@@ -54,6 +55,7 @@ pub use button_story::ButtonStory;
 pub use calendar_story::CalendarStory;
 pub use checkbox_story::CheckboxStory;
 pub use clipboard_story::ClipboardStory;
+pub use date_picker_story::DatePickerStory;
 pub use drawer_story::DrawerStory;
 pub use dropdown_story::DropdownStory;
 pub use form_story::FormStory;
@@ -380,6 +382,7 @@ impl RenderOnce for StorySection {
             .child(
                 v_flex()
                     .p_4()
+                    .overflow_x_hidden()
                     .border_1()
                     .border_color(cx.theme().border)
                     .rounded_lg()
