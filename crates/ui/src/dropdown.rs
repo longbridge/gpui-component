@@ -248,6 +248,9 @@ pub struct Dropdown<D: DropdownDelegate + 'static> {
     title_prefix: Option<SharedString>,
     selected_value: Option<<D::Item as DropdownItem>::Value>,
     empty: Option<Box<dyn Fn(&Window, &App) -> AnyElement + 'static>>,
+    title: Option<
+        Box<dyn Fn(&<D as DropdownDelegate>::Item, &Window, &App) -> SharedString + 'static>,
+    >,
     width: Length,
     menu_width: Length,
     /// Store the bounds of the input
@@ -373,6 +376,7 @@ where
             cleanable: false,
             title_prefix: None,
             empty: None,
+            title: None,
             width: Length::Auto,
             menu_width: Length::Auto,
             bounds: Bounds::default(),
@@ -439,6 +443,14 @@ where
         F: Fn(&Window, &App) -> E + 'static,
     {
         self.empty = Some(Box::new(move |window, cx| f(window, cx).into_any_element()));
+        self
+    }
+
+    pub fn title<F>(mut self, f: F) -> Self
+    where
+        F: Fn(&<D as DropdownDelegate>::Item, &Window, &App) -> SharedString + 'static,
+    {
+        self.title = Some(Box::new(f));
         self
     }
 
@@ -550,7 +562,7 @@ where
         cx.emit(DropdownEvent::Confirm(None));
     }
 
-    fn display_title(&self, _: &Window, cx: &App) -> impl IntoElement {
+    fn display_title(&self, window: &Window, cx: &App) -> impl IntoElement {
         let title = if let Some(selected_index) = &self.selected_index(cx) {
             let mut title = self
                 .list
@@ -558,11 +570,17 @@ where
                 .delegate()
                 .delegate
                 .get(*selected_index)
-                .map(|item| item.title().to_string())
+                .map(|item| {
+                    if let Some(f) = self.title.as_ref() {
+                        f(item, window, cx)
+                    } else {
+                        item.title()
+                    }
+                })
                 .unwrap_or_default();
 
             if let Some(prefix) = self.title_prefix.as_ref() {
-                title = format!("{}{}", prefix, title);
+                title = format!("{}{}", prefix, title).into();
             }
 
             div().child(title.clone())
