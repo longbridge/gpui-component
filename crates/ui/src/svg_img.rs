@@ -5,9 +5,9 @@ use std::{
 };
 
 use gpui::{
-    px, size, App, Asset, Bounds, Element, ElementId, GlobalElementId, Hitbox, ImageCacheError,
-    InteractiveElement, Interactivity, IntoElement, IsZero, Pixels, RenderImage, SharedString,
-    Size, StyleRefinement, Styled, Window,
+    hash, px, size, App, Asset, Bounds, Element, ElementId, GlobalElementId, Hitbox,
+    ImageCacheError, InteractiveElement, Interactivity, IntoElement, IsZero, Pixels, RenderImage,
+    SharedString, Size, StyleRefinement, Styled, Window,
 };
 use image::Frame;
 use smallvec::SmallVec;
@@ -15,6 +15,9 @@ use smallvec::SmallVec;
 use image::ImageBuffer;
 
 const SCALE: f32 = 2.;
+
+struct SvgImgState(Option<(u64, Arc<RenderImage>)>);
+
 static OPTIONS: LazyLock<usvg::Options> = LazyLock::new(|| {
     let mut options = usvg::Options::default();
     options.fontdb_mut().load_system_fonts();
@@ -155,9 +158,11 @@ impl SvgImg {
     /// Create a new svg image element.
     ///
     /// The `src_width` and `src_height` are the original width and height of the svg image.
-    pub fn new() -> Self {
+    pub fn new(id: impl Into<ElementId>) -> Self {
+        let mut interactivity = Interactivity::default();
+        interactivity.element_id = Some(id.into());
         Self {
-            interactivity: Interactivity::default(),
+            interactivity,
             source: None,
             size: Size::default(),
         }
@@ -214,18 +219,37 @@ impl Element for SvgImg {
                 .request_layout(global_id, window, cx, |style, window, cx| {
                     window.request_layout(style, None, cx)
                 });
+        let global_id = global_id.unwrap();
 
-        let source = self.source.clone();
-        let data = if let Some(source) = source {
-            match window.use_asset::<Image>(&source, cx) {
-                Some(Ok(data)) => Some(data),
-                _ => None,
+        window.with_element_state::<SvgImgState, _>(global_id, |state, window| {
+            match (state, &self.source) {
+                (_, None) => ((layout_id, None), SvgImgState(None)),
+                (Some(SvgImgState(Some((prev_hash, image)))), Some(source))
+                    if hash(source) == prev_hash =>
+                {
+                    (
+                        (layout_id, Some(image.clone())),
+                        SvgImgState(Some((prev_hash, image))),
+                    )
+                }
+                (state, Some(source)) => {
+                    if let Some(SvgImgState(Some((_, prev_image)))) = state {
+                        // Drop the previous image from the cache
+                        _ = window.drop_image(prev_image);
+                    }
+
+                    let image = window
+                        .use_asset::<Image>(&source, cx)
+                        .transpose()
+                        .ok()
+                        .flatten();
+                    (
+                        (layout_id, image.clone()),
+                        SvgImgState(image.map(|image| (hash(source), image))),
+                    )
+                }
             }
-        } else {
-            None
-        };
-
-        (layout_id, data)
+        })
     }
 
     fn prepaint(

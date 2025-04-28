@@ -1,5 +1,6 @@
 use gpui::{
-    px, App, AppContext, Entity, FocusHandle, Focusable, ParentElement as _, Render, Styled, Window,
+    px, App, AppContext, ElementId, Entity, FocusHandle, Focusable, ParentElement as _, Render,
+    Styled, Window,
 };
 use gpui_component::{dock::PanelControl, v_flex, SvgImg};
 
@@ -9,7 +10,6 @@ const GOOGLE_LOGO: &str = include_str!("./fixtures/google.svg");
 
 pub struct ImageStory {
     focus_handle: gpui::FocusHandle,
-    google_logo: SvgImg,
 }
 
 impl super::Story for ImageStory {
@@ -34,7 +34,6 @@ impl ImageStory {
     pub fn new(_: &mut Window, cx: &mut App) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
-            google_logo: SvgImg::new().source(GOOGLE_LOGO.as_bytes(), px(300.), px(300.)),
         }
     }
 
@@ -57,11 +56,15 @@ impl Render for ImageStory {
     ) -> impl gpui::IntoElement {
         v_flex().gap_4().size_full().child(
             section("SVG Image")
-                .child(self.google_logo.clone().size(px(100.)).flex_grow())
-                .child(self.google_logo.clone().size(px(100.)).flex_grow())
-                .child(self.google_logo.clone().size_80().flex_grow())
-                .child(self.google_logo.clone().size_12().flex_grow())
-                .child(self.google_logo.clone().size(px(100.))),
+                .child(svg_img("logo1").size(px(100.)).flex_grow())
+                .child(svg_img("logo2").size(px(100.)).flex_grow())
+                .child(svg_img("logo3").size_80().flex_grow())
+                .child(svg_img("logo4").size_12().flex_grow())
+                .child(svg_img("logo5").size(px(100.))),
         )
     }
+}
+
+fn svg_img(id: impl Into<ElementId>) -> SvgImg {
+    SvgImg::new("logo").source(GOOGLE_LOGO.as_bytes(), px(300.), px(300.))
 }
