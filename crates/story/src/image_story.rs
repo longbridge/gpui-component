@@ -66,5 +66,5 @@ impl Render for ImageStory {
 }
 
 fn svg_img(id: impl Into<ElementId>) -> SvgImg {
-    SvgImg::new("logo").source(GOOGLE_LOGO.as_bytes(), px(300.), px(300.))
+    SvgImg::new(id).source(GOOGLE_LOGO.as_bytes(), px(300.), px(300.))
 }
