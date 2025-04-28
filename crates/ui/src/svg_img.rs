@@ -58,6 +58,8 @@ impl From<&'static str> for SvgSource {
 
 impl Clone for SvgImg {
     fn clone(&self) -> Self {
+        let mut interactivity = Interactivity::default();
+        interactivity.element_id = self.interactivity.element_id.clone();
         Self {
             interactivity: Interactivity::default(),
             source: self.source.clone(),
