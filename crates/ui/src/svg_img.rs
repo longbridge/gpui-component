@@ -58,9 +58,8 @@ impl From<&'static str> for SvgSource {
 
 impl Clone for SvgImg {
     fn clone(&self) -> Self {
-        let mut interactivity = Interactivity::default();
-        interactivity.element_id = self.interactivity.element_id.clone();
         Self {
+            id: self.id.clone(),
             interactivity: Interactivity::default(),
             source: self.source.clone(),
             size: self.size,
@@ -151,6 +150,7 @@ impl Asset for Image {
 }
 
 pub struct SvgImg {
+    id: ElementId,
     interactivity: Interactivity,
     source: Option<ImageSource>,
     size: Size<Pixels>,
@@ -161,10 +161,9 @@ impl SvgImg {
     ///
     /// The `src_width` and `src_height` are the original width and height of the svg image.
     pub fn new(id: impl Into<ElementId>) -> Self {
-        let mut interactivity = Interactivity::default();
-        interactivity.element_id = Some(id.into());
         Self {
-            interactivity,
+            id: id.into(),
+            interactivity: Interactivity::default(),
             source: None,
             size: Size::default(),
         }
@@ -207,7 +206,7 @@ impl Element for SvgImg {
     type PrepaintState = (Option<Hitbox>, Option<Arc<RenderImage>>);
 
     fn id(&self) -> Option<ElementId> {
-        self.interactivity.element_id.clone()
+        Some(self.id.clone())
     }
 
     fn request_layout(
