@@ -1,14 +1,18 @@
 use gpui::{
-    img, px, App, AppContext, ElementId, Entity, FocusHandle, Focusable, ParentElement as _,
-    Render, Styled, Window,
+    img, App, AppContext, ClickEvent, ElementId, Entity, FocusHandle, Focusable,
+    ParentElement as _, Render, Styled, Window,
 };
-use gpui_component::{dock::PanelControl, v_flex, SvgImg};
+use gpui_component::{button::Button, dock::PanelControl, v_flex, SvgImg};
 
 use crate::section;
 
-const GOOGLE_LOGO: &str = include_str!("./fixtures/google.svg");
+const SVG_ITEMS: &[&str] = &[
+    include_str!("./fixtures/google.svg"),
+    include_str!("./fixtures/color-wheel.svg"),
+];
 
 pub struct ImageStory {
+    svg_index: usize,
     focus_handle: gpui::FocusHandle,
 }
 
@@ -33,12 +37,17 @@ impl super::Story for ImageStory {
 impl ImageStory {
     pub fn new(_: &mut Window, cx: &mut App) -> Self {
         Self {
+            svg_index: 0,
             focus_handle: cx.focus_handle(),
         }
     }
 
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| Self::new(window, cx))
+    }
+
+    fn svg_img(&self, id: impl Into<ElementId>) -> SvgImg {
+        SvgImg::new(id, SVG_ITEMS[self.svg_index].as_bytes())
     }
 }
 
@@ -52,22 +61,29 @@ impl Render for ImageStory {
     fn render(
         &mut self,
         _window: &mut gpui::Window,
-        _: &mut gpui::Context<Self>,
+        cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
         v_flex()
             .gap_4()
             .size_full()
-            .child(section("SVG 160px").child(svg_img("logo1").size_40().flex_grow()))
-            .child(section("SVG 80px").child(svg_img("logo3").size_20().flex_grow()))
-            .child(section("SVG 48px").child(svg_img("logo4").size_12().flex_grow()))
+            .child(
+                Button::new("switch")
+                    .label("Switch SVG")
+                    .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
+                        this.svg_index += 1;
+                        if this.svg_index >= SVG_ITEMS.len() {
+                            this.svg_index = 0;
+                        }
+                        cx.notify();
+                    })),
+            )
+            .child(section("SVG 160px").child(self.svg_img("logo1").size_40().flex_grow()))
+            .child(section("SVG 80px").child(self.svg_img("logo3").size_20().flex_grow()))
+            .child(section("SVG 48px").child(self.svg_img("logo4").size_12().flex_grow()))
             .child(
                 section("SVG from img 40px").child(
                     img("https://pub.lbkrs.com/files/202503/vEnnmgUM6bo362ya/sdk.svg").h_24(),
                 ),
             )
     }
-}
-
-fn svg_img(id: impl Into<ElementId>) -> SvgImg {
-    SvgImg::new(id).source(GOOGLE_LOGO.as_bytes(), px(300.), px(300.))
 }
