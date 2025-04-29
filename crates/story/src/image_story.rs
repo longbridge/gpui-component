@@ -1,6 +1,6 @@
 use gpui::{
-    px, App, AppContext, ElementId, Entity, FocusHandle, Focusable, ParentElement as _, Render,
-    Styled, Window,
+    img, px, App, AppContext, ElementId, Entity, FocusHandle, Focusable, ParentElement as _,
+    Render, Styled, Window,
 };
 use gpui_component::{dock::PanelControl, v_flex, SvgImg};
 
@@ -54,14 +54,17 @@ impl Render for ImageStory {
         _window: &mut gpui::Window,
         _: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
-        v_flex().gap_4().size_full().child(
-            section("SVG Image")
-                .child(svg_img("logo1").size(px(100.)).flex_grow())
-                .child(svg_img("logo2").size(px(100.)).flex_grow())
-                .child(svg_img("logo3").size_80().flex_grow())
-                .child(svg_img("logo4").size_12().flex_grow())
-                .child(svg_img("logo5").size(px(100.))),
-        )
+        v_flex()
+            .gap_4()
+            .size_full()
+            .child(section("SVG 160px").child(svg_img("logo1").size_40().flex_grow()))
+            .child(section("SVG 80px").child(svg_img("logo3").size_20().flex_grow()))
+            .child(section("SVG 48px").child(svg_img("logo4").size_12().flex_grow()))
+            .child(
+                section("SVG from img 40px").child(
+                    img("https://pub.lbkrs.com/files/202503/vEnnmgUM6bo362ya/sdk.svg").h_24(),
+                ),
+            )
     }
 }
 

@@ -220,8 +220,8 @@ impl Element for SvgImg {
                 .request_layout(global_id, window, cx, |style, window, cx| {
                     window.request_layout(style, None, cx)
                 });
-        let global_id = global_id.unwrap();
 
+        let global_id = global_id.unwrap();
         window.with_element_state::<SvgImgState, _>(global_id, |state, window| {
             match (state, &self.source) {
                 (_, None) => ((layout_id, None), SvgImgState(None)),
