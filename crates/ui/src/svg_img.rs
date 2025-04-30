@@ -238,7 +238,7 @@ impl Element for SvgImg {
                         } else {
                             // Drop the texture of previous image.
                             if let Some(Ok(prev_image)) = prev_task.now_or_never() {
-                                _ = window.drop_image(prev_image);
+                                // _ = window.drop_image(prev_image);
                             }
                         }
                     }
