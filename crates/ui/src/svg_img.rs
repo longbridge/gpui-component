@@ -196,7 +196,11 @@ fn load_svg(
     task
 }
 
-struct SvgImgState(Option<(u64, Shared<Task<Result<Arc<RenderImage>, ImageCacheError>>>)>);
+struct SvgImgState {
+    hash: u64,
+    image: Option<Arc<RenderImage>>,
+    task: Shared<Task<Result<Arc<RenderImage>, ImageCacheError>>>,
+}
 
 impl Element for SvgImg {
     type RequestLayoutState = Option<Arc<RenderImage>>;
@@ -223,22 +227,25 @@ impl Element for SvgImg {
         let source = &self.source;
         let source_hash = hash(source);
 
-        window.with_element_state::<SvgImgState, _>(global_id, |state, window| {
+        window.with_element_state::<Option<SvgImgState>, _>(global_id, |state, window| {
             match state {
-                Some(mut state) => {
-                    if let Some((prev_hash, prev_task)) = state.0.take() {
-                        if source_hash == prev_hash {
+                Some(state) => {
+                    // Try to keep the previous image if it's still loading.
+                    let mut prev_image = None;
+                    if let Some(state) = state {
+                        prev_image = state.image.clone();
+                        if source_hash == state.hash {
                             return (
                                 (
                                     layout_id,
-                                    prev_task.clone().now_or_never().transpose().ok().flatten(),
+                                    state.task.clone().now_or_never().transpose().ok().flatten(),
                                 ),
-                                SvgImgState(Some((prev_hash, prev_task))),
+                                Some(state),
                             );
                         } else {
                             // Drop the texture of previous image.
-                            if let Some(Ok(prev_image)) = prev_task.now_or_never() {
-                                // _ = window.drop_image(prev_image);
+                            if let Some(Ok(old_image)) = state.task.now_or_never() {
+                                _ = window.drop_image(old_image);
                             }
                         }
                     }
@@ -250,10 +257,14 @@ impl Element for SvgImg {
                             layout_id,
                             task.clone().now_or_never().transpose().ok().flatten(),
                         ),
-                        SvgImgState(Some((source_hash, task))),
+                        Some(SvgImgState {
+                            hash: source_hash,
+                            image: prev_image,
+                            task,
+                        }),
                     )
                 }
-                None => ((layout_id, None), SvgImgState(None)),
+                None => ((layout_id, None), None),
             }
         })
     }
