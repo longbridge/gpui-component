@@ -232,48 +232,35 @@ impl Element for SvgImg {
                 Some(state) => {
                     // Try to keep the previous image if it's still loading.
                     let mut prev_image = None;
-                    if let Some(state) = state {
+                    if let Some(mut state) = state {
                         prev_image = state.image.clone();
                         if source_hash == state.hash {
-                            return (
-                                (
-                                    layout_id,
-                                    state
-                                        .task
-                                        .clone()
-                                        .now_or_never()
-                                        .transpose()
-                                        .ok()
-                                        .flatten()
-                                        .or(state.image.clone()),
-                                ),
-                                Some(state),
-                            );
-                        } else {
-                            // Drop the texture of previous image on next frame.
-                            if let Some(Ok(old_image)) = state.task.now_or_never() {
-                                window.on_next_frame(|window, _| {
-                                    _ = window.drop_image(old_image);
-                                });
-                            }
-                        }
-                    }
-
-                    let task = load_svg(source, window, cx);
-
-                    (
-                        (
-                            layout_id,
-                            task.clone()
+                            state.image = state
+                                .task
+                                .clone()
                                 .now_or_never()
                                 .transpose()
                                 .ok()
                                 .flatten()
-                                .or(prev_image.clone()),
-                        ),
+                                .or(state.image);
+
+                            return ((layout_id, state.image.clone()), Some(state));
+                        }
+                    }
+
+                    let task = load_svg(source, window, cx);
+                    let mut image = task.clone().now_or_never().transpose().ok().flatten();
+                    if let Some(new_image) = image.as_ref() {
+                        _ = window.drop_image(new_image.clone());
+                    } else {
+                        image = prev_image;
+                    }
+
+                    (
+                        (layout_id, image.clone()),
                         Some(SvgImgState {
                             hash: source_hash,
-                            image: prev_image,
+                            image,
                             task,
                         }),
                     )
