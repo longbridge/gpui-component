@@ -95,13 +95,13 @@ impl Slider {
         cx.notify();
     }
 
-    fn update_thumb_pos(&mut self) {
-        self.percentage = self.value.clamp(self.min, self.max) / self.max;
-    }
-
     /// Get the value of the slider.
     pub fn value(&self) -> f32 {
         self.value
+    }
+
+    fn update_thumb_pos(&mut self) {
+        self.percentage = self.value.clamp(self.min, self.max) / self.max;
     }
 
     /// Update value by mouse position

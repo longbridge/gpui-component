@@ -343,7 +343,11 @@ pub trait TableDelegate: Sized + 'static {
     fn load_more(&mut self, window: &mut Window, cx: &mut Context<Table<Self>>) {}
 
     /// Render the last empty column, default to empty.
-    fn render_last_empty_col(&mut self, window: &mut Window, cx: &mut Context<Table<Self>>) -> Div {
+    fn render_last_empty_col(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Table<Self>>,
+    ) -> impl IntoElement {
         h_flex().w_3().h_full().flex_shrink_0()
     }
 
@@ -650,11 +654,7 @@ where
     }
 
     /// Scroll table when mouse position is near the edge of the table bounds.
-    fn scroll_table_by_col_resizing(
-        &mut self,
-        mouse_position: Point<Pixels>,
-        col_group: ColGroup,
-    ) {
+    fn scroll_table_by_col_resizing(&mut self, mouse_position: Point<Pixels>, col_group: ColGroup) {
         // Do nothing if pos out of the table bounds right for avoid scroll to the right.
         if mouse_position.x > self.bounds.right() {
             return;
@@ -663,9 +663,12 @@ where
         let mut offset = self.horizontal_scroll_handle.offset();
         let col_bounds = col_group.bounds;
 
-        if mouse_position.x < self.bounds.left() && col_bounds.right() < self.bounds.left() + px(20.) {
+        if mouse_position.x < self.bounds.left()
+            && col_bounds.right() < self.bounds.left() + px(20.)
+        {
             offset.x += px(1.);
-        } else if mouse_position.x > self.bounds.right() && col_bounds.right() > self.bounds.right() - px(20.)
+        } else if mouse_position.x > self.bounds.right()
+            && col_bounds.right() > self.bounds.right() - px(20.)
         {
             offset.x -= px(1.);
         }
@@ -973,10 +976,7 @@ where
                             );
 
                             // scroll the table if the drag is near the edge
-                            view.scroll_table_by_col_resizing(
-                                e.event.position,
-                                col_group,
-                            );
+                            view.scroll_table_by_col_resizing(e.event.position, col_group);
                         }
                     };
                 }),

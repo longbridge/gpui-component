@@ -134,9 +134,20 @@ impl ColorPicker {
         self
     }
 
+    /// Set default color value.
+    pub fn default_value(mut self, value: Hsla) -> Self {
+        self.value = Some(value);
+        self
+    }
+
     /// Set current color value.
     pub fn set_value(&mut self, value: Hsla, window: &mut Window, cx: &mut Context<Self>) {
         self.update_value(Some(value), false, window, cx)
+    }
+
+    /// Get current color value.
+    pub fn value(&self) -> Option<Hsla> {
+        self.value
     }
 
     /// Set the size of the color picker, default is `Size::Medium`.

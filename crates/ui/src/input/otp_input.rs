@@ -92,7 +92,7 @@ impl OtpInput {
 
     /// Return the value of the OTP Input.
     pub fn value(&self) -> &SharedString {
-        self.value
+        &self.value
     }
 
     /// Set masked to true use masked input.

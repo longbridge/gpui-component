@@ -72,7 +72,7 @@ impl TagVariant {
     }
 }
 
-/// Tag is a small status indicator for UI elements.
+/// Tag is a small status indicator.
 ///
 /// Only support: Medium, Small
 #[derive(IntoElement)]
