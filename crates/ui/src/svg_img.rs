@@ -250,9 +250,11 @@ impl Element for SvgImg {
                                 Some(state),
                             );
                         } else {
-                            // Drop the texture of previous image.
+                            // Drop the texture of previous image on next frame.
                             if let Some(Ok(old_image)) = state.task.now_or_never() {
-                                _ = window.drop_image(old_image);
+                                window.on_next_frame(|window, _| {
+                                    _ = window.drop_image(old_image);
+                                });
                             }
                         }
                     }
