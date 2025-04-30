@@ -42,6 +42,7 @@ minify-html = "0.15.0"
 chrono = "0.4.38"
 syntect = { version = "5.2", features = ["plist-load"] }
 schemars = "0.8.22"
+futures-util = "0.3.31"
 
 [dev-dependencies]
 indoc = "2"
