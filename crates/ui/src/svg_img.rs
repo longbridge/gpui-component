@@ -316,8 +316,8 @@ impl Element for SvgImg {
                     bounds.size.height / size.height
                 };
 
-                let ratio = ratio.min(px(1.0));
-                let new_size = size.map(|dim| dim * ratio);
+                let ratio = ratio.0.min(1.0);
+                let new_size = size.map(|dim| px(dim) * ratio);
 
                 let new_origin = gpui::Point {
                     x: bounds.origin.x + px(((bounds.size.width - new_size.width) / 2.).into()),
