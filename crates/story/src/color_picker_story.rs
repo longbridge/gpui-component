@@ -45,7 +45,7 @@ impl ColorPickerStory {
 
         let _subscriptions = vec![cx.subscribe(&color_picker, |this, _, ev, _| match ev {
             ColorPickerEvent::Change(color) => {
-                this.selected_color = color.clone();
+                this.selected_color = *color;
                 println!("Color changed to: {:?}", color);
             }
         })];
