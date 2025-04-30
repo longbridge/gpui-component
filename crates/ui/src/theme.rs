@@ -431,7 +431,7 @@ impl ThemeColor {
 
 #[derive(Debug, Clone)]
 pub struct Theme {
-    colors: ThemeColor,
+    pub colors: ThemeColor,
 
     pub mode: ThemeMode,
     pub font_family: SharedString,
