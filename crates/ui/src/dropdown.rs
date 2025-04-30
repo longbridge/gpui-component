@@ -600,6 +600,16 @@ where
             })
             .child(title)
     }
+
+    /// Set the items for the dropdown.
+    pub fn set_items(&mut self, items: D, _: &mut Window, cx: &mut Context<Self>)
+    where
+        D: DropdownDelegate + 'static,
+    {
+        self.list.update(cx, |list, _| {
+            list.delegate_mut().delegate = items;
+        });
+    }
 }
 
 impl<D> Sizable for Dropdown<D>

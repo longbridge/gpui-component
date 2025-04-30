@@ -138,21 +138,24 @@ impl DropdownStory {
                     .title_prefix("UI: ")
                 }),
                 simple_dropdown2: cx.new(|cx| {
-                    Dropdown::new(
-                        "string-list2",
+                    let mut dropdown =
+                        Dropdown::new("string-list2", SearchableVec::new(vec![]), None, window, cx)
+                            .small()
+                            .placeholder("Language")
+                            .title_prefix("Language: ");
+
+                    dropdown.set_items(
                         SearchableVec::new(vec![
                             "Rust".into(),
                             "Go".into(),
                             "C++".into(),
                             "JavaScript".into(),
                         ]),
-                        None,
                         window,
                         cx,
-                    )
-                    .small()
-                    .placeholder("Language")
-                    .title_prefix("Language: ")
+                    );
+
+                    dropdown
                 }),
                 simple_dropdown3: cx.new(|cx| {
                     Dropdown::new("string-list3", Vec::<SharedString>::new(), None, window, cx)
