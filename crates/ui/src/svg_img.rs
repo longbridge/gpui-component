@@ -238,7 +238,14 @@ impl Element for SvgImg {
                             return (
                                 (
                                     layout_id,
-                                    state.task.clone().now_or_never().transpose().ok().flatten(),
+                                    state
+                                        .task
+                                        .clone()
+                                        .now_or_never()
+                                        .transpose()
+                                        .ok()
+                                        .flatten()
+                                        .or(state.image.clone()),
                                 ),
                                 Some(state),
                             );
@@ -252,13 +259,16 @@ impl Element for SvgImg {
 
                     let task = load_svg(source, window, cx);
 
-                    // If task is loaded, set the image
-                    if let Some(Ok(image)) = task.clone().now_or_never() {
-                        prev_image = Some(image);
-                    }
-
                     (
-                        (layout_id, prev_image.clone()),
+                        (
+                            layout_id,
+                            task.clone()
+                                .now_or_never()
+                                .transpose()
+                                .ok()
+                                .flatten()
+                                .or(prev_image.clone()),
+                        ),
                         Some(SvgImgState {
                             hash: source_hash,
                             image: prev_image,
