@@ -514,7 +514,6 @@ impl Element for TextElement {
         }
 
         // And reset focused_input when next_frame start
-
         window.on_next_frame({
             let input_view = self.input.clone();
             move |window, cx| {
