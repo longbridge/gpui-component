@@ -201,7 +201,7 @@ impl Element for Switch {
                                                 this.with_animation(
                                                     ElementId::NamedInteger(
                                                         "move".into(),
-                                                        checked as usize,
+                                                        checked as u64,
                                                     ),
                                                     Animation::new(dur),
                                                     move |this, delta| {

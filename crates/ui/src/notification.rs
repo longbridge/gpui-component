@@ -270,7 +270,7 @@ impl Render for Notification {
                 )
             })
             .with_animation(
-                ElementId::NamedInteger("slide-down".into(), closing as usize),
+                ElementId::NamedInteger("slide-down".into(), closing as u64),
                 Animation::new(Duration::from_secs_f64(0.15))
                     .with_easing(cubic_bezier(0.4, 0., 0.2, 1.)),
                 move |this, delta| {
