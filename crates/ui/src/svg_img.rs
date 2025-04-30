@@ -181,7 +181,6 @@ fn load_svg(
     let fut = AssetLogger::<SvgImageLoader>::load(source.clone(), cx);
     let task = cx.background_executor().spawn(fut).shared();
 
-    let entity = window.current_view();
     window
         .spawn(cx, {
             let task = task.clone();
