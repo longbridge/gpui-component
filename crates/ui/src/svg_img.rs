@@ -265,7 +265,17 @@ impl Element for SvgImg {
                         }),
                     )
                 }
-                None => ((layout_id, None), None),
+                None => {
+                    let task = load_svg(source, window, cx);
+                    (
+                        (layout_id, None),
+                        Some(SvgImgState {
+                            hash: source_hash,
+                            image: None,
+                            task,
+                        }),
+                    )
+                }
             }
         })
     }
