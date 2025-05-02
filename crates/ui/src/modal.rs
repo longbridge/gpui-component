@@ -316,11 +316,13 @@ impl RenderOnce for Modal {
 
                         move |_, window, cx| {
                             if let Some(on_ok) = &on_ok {
-                                if on_ok(&ClickEvent::default(), window, cx) {
-                                    on_close(&ClickEvent::default(), window, cx);
-                                    window.close_modal(cx);
+                                if !on_ok(&ClickEvent::default(), window, cx) {
+                                    return;
                                 }
                             }
+
+                            on_close(&ClickEvent::default(), window, cx);
+                            window.close_modal(cx);
                         }
                     })
                     .into_any_element()
@@ -342,10 +344,12 @@ impl RenderOnce for Modal {
                         let on_cancel = on_cancel.clone();
                         let on_close = on_close.clone();
                         move |_, window, cx| {
-                            if on_cancel(&ClickEvent::default(), window, cx) {
-                                on_close(&ClickEvent::default(), window, cx);
-                                window.close_modal(cx);
+                            if !on_cancel(&ClickEvent::default(), window, cx) {
+                                return;
                             }
+
+                            on_close(&ClickEvent::default(), window, cx);
+                            window.close_modal(cx);
                         }
                     })
                     .into_any_element()

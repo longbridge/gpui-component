@@ -327,6 +327,24 @@ impl Render for ModalStory {
                                     });
                                 })),
                         ),
+                    )
+                    .child(
+                        section("Alert Modal").child(
+                            Button::new("alert-modal")
+                                .label("Alert")
+                                .on_click(cx.listener(|_, _, window, cx| {
+                                    window.open_modal(cx, |modal, _, _| {
+                                        modal
+                                            .confirm()
+                                            .child("You are successfully logged in.")
+                                            .alert()
+                                            .on_close(|_, window, cx| {
+                                                window
+                                                    .push_notification("You have pressed Ok.", cx);
+                                            })
+                                    });
+                                })),
+                        ),
                     ),
             )
     }
