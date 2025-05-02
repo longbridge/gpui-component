@@ -173,9 +173,20 @@ impl Modal {
         self
     }
 
-    /// Set to use confirm modal, with OK and CANCEL buttons.
+    /// Set to use confirm modal, with OK and Cancel buttons.
+    ///
+    /// See also [`Self::alert`]
     pub fn confirm(self) -> Self {
         self.footer(|ok, cancel, window, cx| vec![cancel(window, cx), ok(window, cx)])
+            .overlay_closable(false)
+            .show_close(false)
+    }
+
+    /// Set to as a alter modal, with OK button.
+    ///
+    /// See also [`Self::confirm`]
+    pub fn alert(self) -> Self {
+        self.footer(|ok, _, window, cx| vec![ok(window, cx)])
             .overlay_closable(false)
             .show_close(false)
     }
@@ -187,6 +198,8 @@ impl Modal {
     }
 
     /// Sets the callback for when the modal is closed.
+    ///
+    /// Called after [`Self::on_ok`] or [`Self::on_cancel`] callback.
     pub fn on_close(
         mut self,
         on_close: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
