@@ -100,7 +100,7 @@ impl From<Bounds<Pixels>> for TileMeta {
 pub enum PanelInfo {
     #[serde(rename = "stack")]
     Stack {
-        sizes: Vec<Pixels>,
+        flexes: Vec<f32>,
         axis: usize, // 0 for horizontal, 1 for vertical
     },
     #[serde(rename = "tabs")]
@@ -112,9 +112,9 @@ pub enum PanelInfo {
 }
 
 impl PanelInfo {
-    pub fn stack(sizes: Vec<Pixels>, axis: Axis) -> Self {
+    pub fn stack(flexes: Vec<f32>, axis: Axis) -> Self {
         Self::Stack {
-            sizes,
+            flexes,
             axis: if axis == Axis::Horizontal { 0 } else { 1 },
         }
     }
@@ -142,9 +142,9 @@ impl PanelInfo {
         }
     }
 
-    pub fn sizes(&self) -> Option<&Vec<Pixels>> {
+    pub fn flexes(&self) -> Option<&Vec<f32>> {
         match self {
-            Self::Stack { sizes, .. } => Some(sizes),
+            Self::Stack { flexes, .. } => Some(flexes),
             _ => None,
         }
     }
@@ -194,14 +194,15 @@ impl PanelState {
             .collect();
 
         match info {
-            PanelInfo::Stack { sizes, axis } => {
+            PanelInfo::Stack { flexes, axis } => {
                 let axis = if axis == 0 {
                     Axis::Horizontal
                 } else {
                     Axis::Vertical
                 };
-                let sizes = sizes.iter().map(|s| Some(*s)).collect_vec();
-                DockItem::split_with_sizes(axis, items, sizes, &dock_area, window, cx)
+                let flexes = flexes.iter().map(|s| Some(*s)).collect_vec();
+                // FIXME: Set sizes from flexes.
+                DockItem::split_with_sizes(axis, items, vec![], &dock_area, window, cx)
             }
             PanelInfo::Tabs { active_index } => {
                 if items.len() == 1 {
