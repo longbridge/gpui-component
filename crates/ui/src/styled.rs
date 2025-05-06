@@ -221,6 +221,28 @@ impl Size {
             },
         }
     }
+
+    /// Returns a smaller size.
+    pub fn smaller(&self) -> Self {
+        match self {
+            Size::XSmall => Size::XSmall,
+            Size::Small => Size::XSmall,
+            Size::Medium => Size::Small,
+            Size::Large => Size::Medium,
+            Size::Size(val) => Size::Size(*val * 0.2),
+        }
+    }
+
+    /// Returns a larger size.
+    pub fn larger(&self) -> Self {
+        match self {
+            Size::XSmall => Size::Small,
+            Size::Small => Size::Medium,
+            Size::Medium => Size::Large,
+            Size::Large => Size::Large,
+            Size::Size(val) => Size::Size(*val * 1.2),
+        }
+    }
 }
 
 impl From<Pixels> for Size {
