@@ -213,9 +213,9 @@ impl Clone for Icon {
     fn clone(&self) -> Self {
         let mut this = Self::default().path(self.path.clone());
         this.style = self.style.clone();
-        this.rotation = self.rotation.clone();
-        this.size = self.size.clone();
-        this.text_color = self.text_color.clone();
+        this.rotation = self.rotation;
+        this.size = self.size;
+        this.text_color = self.text_color;
         this
     }
 }
