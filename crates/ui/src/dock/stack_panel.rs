@@ -186,11 +186,11 @@ impl StackPanel {
         self.insert_panel(panel, ix + 1, size, dock_area, window, cx);
     }
 
-    fn new_resizable_panel(panel: Arc<dyn PanelView>, size: Option<Pixels>) -> ResizablePanel {
+    fn new_resizable_panel(panel: Arc<dyn PanelView>, ratio: Option<f32>) -> ResizablePanel {
         resizable_panel()
             .content_view(panel.view())
             .content_visible(move |_, cx| panel.visible(cx))
-            .when_some(size, |this, size| this.size(size))
+            .when_some(ratio, |this, ratio| this.flex(ratio))
     }
 
     fn insert_panel(
@@ -240,8 +240,12 @@ impl StackPanel {
 
         self.panels.insert(ix, panel.clone());
         self.panel_group.update(cx, |view, cx| {
+            let total_size = view.total_size();
             view.insert_child(
-                Self::new_resizable_panel(panel.clone(), size),
+                Self::new_resizable_panel(
+                    panel.clone(),
+                    size.and_then(|size| Some(size / total_size)),
+                ),
                 ix,
                 window,
                 cx,

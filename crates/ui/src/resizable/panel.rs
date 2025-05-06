@@ -30,7 +30,7 @@ pub struct ResizablePanelGroup {
     panels: Vec<Entity<ResizablePanel>>,
     flexes: Vec<f32>,
     axis: Axis,
-    size: Option<Pixels>,
+    size_ratio: Option<f32>,
     bounds: Bounds<Pixels>,
     resizing_panel_ix: Option<usize>,
 }
@@ -41,7 +41,7 @@ impl ResizablePanelGroup {
             axis: Axis::Horizontal,
             flexes: Vec::new(),
             panels: Vec::new(),
-            size: None,
+            size_ratio: None,
             bounds: Bounds::default(),
             resizing_panel_ix: None,
         }
@@ -72,10 +72,10 @@ impl ResizablePanelGroup {
     /// Add a ResizablePanelGroup as a child to the group.
     pub fn group(self, group: ResizablePanelGroup, cx: &mut Context<Self>) -> Self {
         let group: ResizablePanelGroup = group;
-        let size = group.size;
+        let size_ratio = group.size_ratio;
         let panel = ResizablePanel::new()
             .content_view(cx.new(|_| group).into())
-            .when_some(size, |this, size| this.size(size));
+            .when_some(size_ratio, |this, ratio| this.flex(ratio));
         self.child(panel, cx)
     }
 
@@ -83,8 +83,8 @@ impl ResizablePanelGroup {
     ///
     /// - When the axis is horizontal, the size is the height of the group.
     /// - When the axis is vertical, the size is the width of the group.
-    pub fn size(mut self, size: Pixels) -> Self {
-        self.size = Some(size);
+    pub fn flex(mut self, ratio: f32) -> Self {
+        self.size_ratio = Some(ratio);
         self
     }
 
@@ -104,7 +104,7 @@ impl ResizablePanelGroup {
         panel.group = Some(cx.entity().downgrade());
         let flex = match panel.size_ratio {
             Some(ratio) => ratio,
-            None => panel.initial_size.unwrap_or_default() / self.total_size(),
+            None => panel.initial_radio.unwrap_or_default(),
         };
 
         self.flexes.push(flex);
@@ -123,7 +123,7 @@ impl ResizablePanelGroup {
         panel.group = Some(cx.entity().downgrade());
         let flex = match panel.size_ratio {
             Some(ratio) => ratio,
-            None => panel.initial_size.unwrap_or_default() / self.total_size(),
+            None => panel.initial_radio.unwrap_or_default(),
         };
         self.flexes.insert(ix, flex);
         self.panels.insert(ix, cx.new(|_| panel));
@@ -141,17 +141,17 @@ impl ResizablePanelGroup {
         let mut panel = panel;
 
         let old_panel = self.panels[ix].clone();
-        let old_panel_initial_size = old_panel.read(cx).initial_size;
+        let old_panel_initial_ratio = old_panel.read(cx).initial_radio;
         let old_panel_size_ratio = old_panel.read(cx).size_ratio;
 
-        panel.initial_size = old_panel_initial_size;
+        panel.initial_radio = old_panel_initial_ratio;
         panel.size_ratio = old_panel_size_ratio;
         panel.axis = self.axis;
         panel.group = Some(cx.entity().downgrade());
 
         let flex = match panel.size_ratio {
             Some(ratio) => ratio,
-            None => panel.initial_size.unwrap_or_default() / self.total_size(),
+            None => panel.initial_radio.unwrap_or_default(),
         };
 
         self.flexes[ix] = flex;
@@ -263,7 +263,6 @@ impl ResizablePanelGroup {
             new_flexes[main_ix] = (new_flexes[main_ix] - overflow).max(min_flex);
         }
 
-        let total_size = self.bounds.size.along(self.axis);
         self.flexes = new_flexes;
         for (i, panel) in self.panels.iter().enumerate() {
             let flex = self.flexes[i];
@@ -316,7 +315,7 @@ impl Render for ResizablePanelGroup {
 pub struct ResizablePanel {
     group: Option<WeakEntity<ResizablePanelGroup>>,
     /// Initial size is the size that the panel has when it is created.
-    initial_size: Option<Pixels>,
+    initial_radio: Option<f32>,
     /// size is the size that the panel has when it is resized or adjusted by flex layout.
     size: Option<Pixels>,
     /// the size ratio that the panel has relative to its group
@@ -334,7 +333,7 @@ impl ResizablePanel {
     pub(super) fn new() -> Self {
         Self {
             group: None,
-            initial_size: None,
+            initial_radio: None,
             size: None,
             size_ratio: None,
             axis: Axis::Horizontal,
@@ -367,16 +366,17 @@ impl ResizablePanel {
         self
     }
 
-    /// Set the initial size of the panel.
-    pub fn size(mut self, size: Pixels) -> Self {
-        self.initial_size = Some(size);
-        self
-    }
+    // /// Set the initial size of the panel.
+    // pub fn size(mut self, size: Pixels) -> Self {
+    //     self.initial_size = Some(size);
+    //     self
+    // }
 
     /// Set the flex ratio of the panel, the ratio is relative to the total size of the group.
     ///
     /// The `ratio` is 0.0 to 1.0.
-    pub fn ratio(mut self, ratio: f32) -> Self {
+    pub fn flex(mut self, ratio: f32) -> Self {
+        self.initial_radio = Some(ratio);
         self.size_ratio = Some(ratio);
         self
     }
@@ -405,7 +405,7 @@ impl Render for ResizablePanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if !(self.content_visible)(window, cx) {
             // To keep size as initial size, to make sure the size will not be changed.
-            self.initial_size = self.size;
+            self.initial_radio = self.size_ratio;
             self.size = None;
             return div();
         }
@@ -422,19 +422,19 @@ impl Render for ResizablePanel {
             .flex_grow()
             .size_full()
             .relative()
-            .when(self.initial_size.is_none(), |this| this.flex_shrink())
+            .when(self.initial_radio.is_none(), |this| this.flex_shrink())
             .when(self.axis.is_vertical(), |this| this.min_h(PANEL_MIN_SIZE))
             .when(self.axis.is_horizontal(), |this| this.min_w(PANEL_MIN_SIZE))
-            .when_some(self.initial_size, |this, size| {
-                if size.is_zero() {
+            .when_some(self.initial_radio, |this, radio| {
+                if radio == 0. {
                     this
                 } else {
                     // The `self.size` is None, that mean the initial size for the panel, so we need set flex_shrink_0
                     // To let it keep the initial size.
-                    this.when(self.size.is_none() && size > px(0.), |this| {
+                    this.when(self.size.is_none() && radio > 0., |this| {
                         this.flex_shrink_0()
                     })
-                    .flex_basis(size)
+                    .flex_basis(relative(radio))
                 }
             })
             .map(|this| match (self.size_ratio, self.size, total_size) {
