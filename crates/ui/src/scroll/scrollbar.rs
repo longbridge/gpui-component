@@ -367,30 +367,29 @@ impl Scrollbar {
     }
 
     fn style_for_hovered_bar(cx: &App) -> (Hsla, Hsla, Hsla, Pixels, Pixels, Pixels) {
-        let (width, inset, radius) = if cx.theme().scrollbar_show.is_hover() {
-            (THUMB_WIDTH, THUMB_INSET, THUMB_RADIUS)
-        } else {
-            (THUMB_ACTIVE_WIDTH, THUMB_ACTIVE_INSET, THUMB_ACTIVE_RADIUS)
-        };
-
         (
             cx.theme().scrollbar_thumb,
             cx.theme().scrollbar,
             gpui::transparent_black(),
-            width,
-            inset,
-            radius,
+            THUMB_ACTIVE_WIDTH,
+            THUMB_ACTIVE_INSET,
+            THUMB_ACTIVE_RADIUS,
         )
     }
 
-    fn style_for_idle(_: &App) -> (Hsla, Hsla, Hsla, Pixels, Pixels, Pixels) {
+    fn style_for_idle(cx: &App) -> (Hsla, Hsla, Hsla, Pixels, Pixels, Pixels) {
+        let (width, inset, radius) = match cx.theme().scrollbar_show {
+            ScrollbarShow::Scrolling => (THUMB_WIDTH, THUMB_INSET, THUMB_RADIUS),
+            _ => (THUMB_ACTIVE_WIDTH, THUMB_ACTIVE_INSET, THUMB_ACTIVE_RADIUS),
+        };
+
         (
             gpui::transparent_black(),
             gpui::transparent_black(),
             gpui::transparent_black(),
-            THUMB_WIDTH,
-            THUMB_INSET,
-            THUMB_RADIUS,
+            width,
+            inset,
+            radius,
         )
     }
 }
@@ -483,6 +482,7 @@ impl Element for Scrollbar {
             };
 
             // The horizontal scrollbar is set avoid overlapping with the vertical scrollbar, if the vertical scrollbar is visible.
+
             let margin_end = if has_both && !is_vertical {
                 THUMB_ACTIVE_WIDTH
             } else {
