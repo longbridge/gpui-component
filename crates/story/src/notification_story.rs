@@ -6,7 +6,7 @@ use gpui::{
 use gpui_component::{
     button::{Button, ButtonVariants as _},
     notification::{Notification, NotificationType},
-    ContextModal as _, IconName,
+    ContextModal as _,
 };
 
 use crate::section;
@@ -54,14 +54,28 @@ impl Render for NotificationStory {
             .track_focus(&self.focus_handle)
             .size_full()
             .child(
-                section("Show Notification")
+                section("Simple Notification").child(
+                    Button::new("show-notify-0")
+                        .label("Show Notification")
+                        .on_click(cx.listener(|_, _, window, cx| {
+                            window.push_notification("This is a notification.", cx)
+                        })),
+                ),
+            )
+            .child(
+                section("Notification with Type")
                     .child(
                         Button::new("show-notify-info")
                             .info()
                             .label("Info")
                             .on_click(cx.listener(|_, _, window, cx| {
-                                window
-                                    .push_notification("You have been saved file successfully.", cx)
+                                window.push_notification(
+                                    (
+                                        NotificationType::Info,
+                                        "You have been saved file successfully.",
+                                    ),
+                                    cx,
+                                )
                             })),
                     )
                     .child(
@@ -116,27 +130,22 @@ impl Render for NotificationStory {
                             struct TestNotification;
 
                             window.push_notification(
-                                Notification::new(
-                                    "你已经成功保存了文件，但是有一些警告信息需要你注意。",
-                                )
-                                .id::<TestNotification>()
-                                .title("保存成功")
-                                .icon(IconName::Inbox)
-                                .autohide(false)
-                                .action(|_, cx| {
-                                    Button::new("ok").label("Details...").on_click(cx.listener(
-                                        |this, _, window, cx| {
-                                            println!("You have clicked the Details action button.");
-                                            this.dismiss(window, cx);
-                                        },
-                                    ))
-                                })
-                                .on_click(cx.listener(
-                                    |_, _, _, cx| {
+                                Notification::new("There was a problem with your request.")
+                                    .id::<TestNotification>()
+                                    .title("Uh oh! Something went wrong.")
+                                    .autohide(false)
+                                    .action(|_, cx| {
+                                        Button::new("try-again").label("Try again").on_click(
+                                            cx.listener(|this, _, window, cx| {
+                                                println!("You have clicked the try again action.");
+                                                this.dismiss(window, cx);
+                                            }),
+                                        )
+                                    })
+                                    .on_click(cx.listener(|_, _, _, cx| {
                                         println!("Notification clicked");
                                         cx.notify();
-                                    },
-                                )),
+                                    })),
                                 cx,
                             )
                         })),

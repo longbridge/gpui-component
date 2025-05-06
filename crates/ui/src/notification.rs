@@ -19,11 +19,24 @@ use crate::{
     h_flex, v_flex, ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt,
 };
 
+#[derive(Debug, Clone, Copy, Default)]
 pub enum NotificationType {
+    #[default]
     Info,
     Success,
     Warning,
     Error,
+}
+
+impl NotificationType {
+    fn icon(&self, cx: &App) -> Icon {
+        match self {
+            Self::Info => Icon::new(IconName::Info).text_color(cx.theme().info),
+            Self::Success => Icon::new(IconName::CircleCheck).text_color(cx.theme().success),
+            Self::Warning => Icon::new(IconName::TriangleAlert).text_color(cx.theme().warning),
+            Self::Error => Icon::new(IconName::CircleX).text_color(cx.theme().danger),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
@@ -51,7 +64,7 @@ pub struct Notification {
     ///
     /// None means the notification will be added to the end of the list.
     id: NotificationId,
-    type_: NotificationType,
+    type_: Option<NotificationType>,
     title: Option<SharedString>,
     message: SharedString,
     icon: Option<Icon>,
@@ -105,7 +118,7 @@ impl Notification {
             id: id.into(),
             title: None,
             message: message.into(),
-            type_: NotificationType::Info,
+            type_: None,
             icon: None,
             autohide: true,
             action_builder: None,
@@ -165,7 +178,7 @@ impl Notification {
 
     /// Set the type of the notification, default is NotificationType::Info.
     pub fn with_type(mut self, type_: NotificationType) -> Self {
-        self.type_ = type_;
+        self.type_ = Some(type_);
         self
     }
 
@@ -218,23 +231,12 @@ impl FluentBuilder for Notification {}
 impl Render for Notification {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let closing = self.closing;
-        let icon = match self.icon.clone() {
-            Some(icon) => icon,
-            None => match self.type_ {
-                NotificationType::Info => Icon::new(IconName::Info).text_color(crate::blue_500()),
-                NotificationType::Success => {
-                    Icon::new(IconName::CircleCheck).text_color(crate::green_500())
-                }
-                NotificationType::Warning => {
-                    Icon::new(IconName::TriangleAlert).text_color(crate::yellow_500())
-                }
-                NotificationType::Error => {
-                    Icon::new(IconName::CircleX).text_color(crate::red_500())
-                }
-            },
+        let icon = match self.type_ {
+            None => self.icon.clone(),
+            Some(type_) => Some(type_.icon(cx)),
         };
 
-        div()
+        h_flex()
             .id("notification")
             .group("")
             .occlude()
@@ -248,26 +250,23 @@ impl Render for Notification {
             .py_2()
             .px_4()
             .gap_3()
-            .child(div().absolute().top_3().left_4().child(icon))
+            .when_some(icon.clone(), |this, icon| {
+                this.child(div().absolute().top_3().left_4().child(icon))
+            })
             .child(
-                h_flex()
-                    .gap_4()
-                    .justify_between()
+                v_flex()
                     .flex_1()
-                    .child(
-                        v_flex()
-                            .pl_6()
-                            .gap_1()
-                            .when_some(self.title.clone(), |this, title| {
-                                this.child(div().text_sm().font_semibold().child(title))
-                            })
-                            .overflow_hidden()
-                            .child(div().text_sm().child(self.message.clone())),
-                    )
-                    .when_some(self.action_builder.clone(), |this, action_builder| {
-                        this.child(action_builder(window, cx).small().outline())
-                    }),
+                    .when(icon.is_some(), |this| this.pl_6())
+                    .gap_0p5()
+                    .when_some(self.title.clone(), |this, title| {
+                        this.child(div().text_sm().font_semibold().child(title))
+                    })
+                    .overflow_hidden()
+                    .child(div().text_sm().child(self.message.clone())),
             )
+            .when_some(self.action_builder.clone(), |this, action_builder| {
+                this.child(action_builder(window, cx).small().outline().mr_1())
+            })
             .when_some(self.on_click.clone(), |this, on_click| {
                 this.on_click(cx.listener(move |view, event, window, cx| {
                     view.dismiss(window, cx);
