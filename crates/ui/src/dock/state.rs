@@ -26,8 +26,13 @@ pub struct DockAreaState {
 pub struct DockState {
     panel: PanelState,
     placement: DockPlacement,
-    size: Pixels,
+    #[serde(default = "default_ratio")]
+    ratio: f32,
     open: bool,
+}
+
+fn default_ratio() -> f32 {
+    0.2
 }
 
 impl DockState {
@@ -36,7 +41,7 @@ impl DockState {
 
         Self {
             placement: dock.placement,
-            size: dock.size,
+            ratio: dock.ratio,
             open: dock.open,
             panel: dock.panel.view().dump(cx),
         }
@@ -54,7 +59,7 @@ impl DockState {
             Dock::from_state(
                 dock_area.clone(),
                 self.placement,
-                self.size,
+                self.ratio,
                 item,
                 self.open,
                 window,
@@ -100,7 +105,8 @@ impl From<Bounds<Pixels>> for TileMeta {
 pub enum PanelInfo {
     #[serde(rename = "stack")]
     Stack {
-        flexes: Vec<f32>,
+        #[serde(default)]
+        ratios: Vec<f32>,
         axis: usize, // 0 for horizontal, 1 for vertical
     },
     #[serde(rename = "tabs")]
@@ -112,9 +118,9 @@ pub enum PanelInfo {
 }
 
 impl PanelInfo {
-    pub fn stack(flexes: Vec<f32>, axis: Axis) -> Self {
+    pub fn stack(ratios: Vec<f32>, axis: Axis) -> Self {
         Self::Stack {
-            flexes,
+            ratios,
             axis: if axis == Axis::Horizontal { 0 } else { 1 },
         }
     }
@@ -142,9 +148,9 @@ impl PanelInfo {
         }
     }
 
-    pub fn flexes(&self) -> Option<&Vec<f32>> {
+    pub fn ratios(&self) -> Option<&Vec<f32>> {
         match self {
-            Self::Stack { flexes, .. } => Some(flexes),
+            Self::Stack { ratios, .. } => Some(ratios),
             _ => None,
         }
     }
@@ -194,15 +200,14 @@ impl PanelState {
             .collect();
 
         match info {
-            PanelInfo::Stack { flexes, axis } => {
+            PanelInfo::Stack { ratios, axis } => {
                 let axis = if axis == 0 {
                     Axis::Horizontal
                 } else {
                     Axis::Vertical
                 };
-                let flexes = flexes.iter().map(|s| Some(*s)).collect_vec();
-                // FIXME: Set sizes from flexes.
-                DockItem::split_with_sizes(axis, items, vec![], &dock_area, window, cx)
+                let ratios = ratios.iter().map(|&ratio| Some(ratio as f32)).collect();
+                DockItem::split_with_sizes(axis, items, ratios, &dock_area, window, cx)
             }
             PanelInfo::Tabs { active_index } => {
                 if items.len() == 1 {
@@ -240,8 +245,6 @@ impl PanelState {
 
 #[cfg(test)]
 mod tests {
-    use gpui::px;
-
     use super::*;
     #[test]
     fn test_deserialize_item_state() {
@@ -260,7 +263,7 @@ mod tests {
 
         let left_dock = state.left_dock.unwrap();
         assert_eq!(left_dock.open, true);
-        assert_eq!(left_dock.size, px(350.0));
+        assert_eq!(left_dock.ratio, 0.2);
         assert_eq!(left_dock.placement, DockPlacement::Left);
         assert_eq!(left_dock.panel.panel_name, "TabPanel");
         assert_eq!(left_dock.panel.children.len(), 1);
@@ -268,14 +271,14 @@ mod tests {
 
         let bottom_dock = state.bottom_dock.unwrap();
         assert_eq!(bottom_dock.open, true);
-        assert_eq!(bottom_dock.size, px(200.0));
+        assert_eq!(bottom_dock.ratio, 0.32);
         assert_eq!(bottom_dock.panel.panel_name, "TabPanel");
         assert_eq!(bottom_dock.panel.children.len(), 2);
         assert_eq!(bottom_dock.panel.children[0].panel_name, "StoryContainer");
 
         let right_dock = state.right_dock.unwrap();
         assert_eq!(right_dock.open, true);
-        assert_eq!(right_dock.size, px(320.0));
+        assert_eq!(right_dock.ratio, 0.2);
         assert_eq!(right_dock.panel.panel_name, "TabPanel");
         assert_eq!(right_dock.panel.children.len(), 1);
         assert_eq!(right_dock.panel.children[0].panel_name, "StoryContainer");

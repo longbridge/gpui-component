@@ -53,10 +53,10 @@ impl ResizableStory {
             v_resizable()
                 .group(
                     h_resizable()
-                        .flex(0.1)
+                        .ratio(0.1)
                         .child(
                             resizable_panel()
-                                .flex(0.3)
+                                .ratio(0.3)
                                 .content(|_, cx| panel_box("Left 1 (Min 120px)", cx)),
                             cx,
                         )
@@ -66,7 +66,7 @@ impl ResizableStory {
                         )
                         .child(
                             resizable_panel()
-                                .flex(0.4)
+                                .ratio(0.4)
                                 .content(|_, cx| panel_box("Right (Grow)", cx)),
                             cx,
                         ),
@@ -78,7 +78,7 @@ impl ResizableStory {
                 )
                 .child(
                     resizable_panel()
-                        .flex(0.5)
+                        .ratio(0.5)
                         .content(|_, cx| panel_box("Bottom", cx)),
                     cx,
                 )
@@ -88,7 +88,7 @@ impl ResizableStory {
             h_resizable()
                 .child(
                     resizable_panel()
-                        .flex(0.3)
+                        .ratio(0.3)
                         .content(|_, cx| panel_box("Left 2", cx)),
                     cx,
                 )

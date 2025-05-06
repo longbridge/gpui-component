@@ -13,8 +13,8 @@ use crate::{
 use super::{DockArea, Panel, PanelEvent, PanelState, PanelView, TabPanel};
 use gpui::{
     prelude::FluentBuilder as _, App, AppContext, Axis, Context, DismissEvent, Entity,
-    EventEmitter, FocusHandle, Focusable, IntoElement, ParentElement, Pixels, Render, Styled,
-    Subscription, WeakEntity, Window,
+    EventEmitter, FocusHandle, Focusable, IntoElement, ParentElement, Render, Styled, Subscription,
+    WeakEntity, Window,
 };
 use smallvec::SmallVec;
 
@@ -41,7 +41,7 @@ impl Panel for StackPanel {
         }
     }
     fn dump(&self, cx: &App) -> PanelState {
-        let flexes = self.panel_group.read(cx).flexes();
+        let flexes = self.panel_group.read(cx).ratios();
         let mut state = PanelState::new(self);
         for panel in &self.panels {
             state.add_child(panel.dump(cx));
@@ -111,19 +111,19 @@ impl StackPanel {
     pub fn add_panel(
         &mut self,
         panel: Arc<dyn PanelView>,
-        size: Option<Pixels>,
+        ratio: Option<f32>,
         dock_area: WeakEntity<DockArea>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.insert_panel(panel, self.panels.len(), size, dock_area, window, cx);
+        self.insert_panel(panel, self.panels.len(), ratio, dock_area, window, cx);
     }
 
     pub fn add_panel_at(
         &mut self,
         panel: Arc<dyn PanelView>,
         placement: Placement,
-        size: Option<Pixels>,
+        ratio: Option<f32>,
         dock_area: WeakEntity<DockArea>,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -132,7 +132,7 @@ impl StackPanel {
             panel,
             self.panels_len(),
             placement,
-            size,
+            ratio,
             dock_area,
             window,
             cx,
@@ -145,17 +145,17 @@ impl StackPanel {
         panel: Arc<dyn PanelView>,
         ix: usize,
         placement: Placement,
-        size: Option<Pixels>,
+        ratio: Option<f32>,
         dock_area: WeakEntity<DockArea>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         match placement {
             Placement::Top | Placement::Left => {
-                self.insert_panel_before(panel, ix, size, dock_area, window, cx)
+                self.insert_panel_before(panel, ix, ratio, dock_area, window, cx)
             }
             Placement::Right | Placement::Bottom => {
-                self.insert_panel_after(panel, ix, size, dock_area, window, cx)
+                self.insert_panel_after(panel, ix, ratio, dock_area, window, cx)
             }
         }
     }
@@ -165,12 +165,12 @@ impl StackPanel {
         &mut self,
         panel: Arc<dyn PanelView>,
         ix: usize,
-        size: Option<Pixels>,
+        ratio: Option<f32>,
         dock_area: WeakEntity<DockArea>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.insert_panel(panel, ix, size, dock_area, window, cx);
+        self.insert_panel(panel, ix, ratio, dock_area, window, cx);
     }
 
     /// Insert a panel after the index.
@@ -178,26 +178,26 @@ impl StackPanel {
         &mut self,
         panel: Arc<dyn PanelView>,
         ix: usize,
-        size: Option<Pixels>,
+        ratio: Option<f32>,
         dock_area: WeakEntity<DockArea>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.insert_panel(panel, ix + 1, size, dock_area, window, cx);
+        self.insert_panel(panel, ix + 1, ratio, dock_area, window, cx);
     }
 
     fn new_resizable_panel(panel: Arc<dyn PanelView>, ratio: Option<f32>) -> ResizablePanel {
         resizable_panel()
             .content_view(panel.view())
             .content_visible(move |_, cx| panel.visible(cx))
-            .when_some(ratio, |this, ratio| this.flex(ratio))
+            .when_some(ratio, |this, ratio| this.ratio(ratio))
     }
 
     fn insert_panel(
         &mut self,
         panel: Arc<dyn PanelView>,
         ix: usize,
-        size: Option<Pixels>,
+        ratio: Option<f32>,
         dock_area: WeakEntity<DockArea>,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -240,12 +240,8 @@ impl StackPanel {
 
         self.panels.insert(ix, panel.clone());
         self.panel_group.update(cx, |view, cx| {
-            let total_size = view.total_size();
             view.insert_child(
-                Self::new_resizable_panel(
-                    panel.clone(),
-                    size.and_then(|size| Some(size / total_size)),
-                ),
+                Self::new_resizable_panel(panel.clone(), ratio),
                 ix,
                 window,
                 cx,

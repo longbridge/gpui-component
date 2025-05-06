@@ -3,8 +3,8 @@ use std::sync::Arc;
 use gpui::{
     div, prelude::FluentBuilder, px, rems, App, AppContext, Context, Corner, DefiniteLength,
     DismissEvent, DragMoveEvent, Empty, Entity, EventEmitter, FocusHandle, Focusable,
-    InteractiveElement as _, IntoElement, ParentElement, Pixels, Render, ScrollHandle,
-    SharedString, StatefulInteractiveElement, StyleRefinement, Styled, WeakEntity, Window,
+    InteractiveElement as _, IntoElement, ParentElement, Render, ScrollHandle, SharedString,
+    StatefulInteractiveElement, StyleRefinement, Styled, WeakEntity, Window,
 };
 use rust_i18n::t;
 
@@ -264,7 +264,7 @@ impl TabPanel {
         &mut self,
         panel: Arc<dyn PanelView>,
         placement: Placement,
-        size: Option<Pixels>,
+        ratio: Option<f32>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -272,7 +272,7 @@ impl TabPanel {
             cx.update(|window, cx| {
                 view.update(cx, |view, cx| {
                     view.will_split_placement = Some(placement);
-                    view.split_panel(panel, placement, size, window, cx)
+                    view.split_panel(panel, placement, ratio, window, cx)
                 })
                 .ok()
             })
@@ -930,7 +930,7 @@ impl TabPanel {
         &self,
         panel: Arc<dyn PanelView>,
         placement: Placement,
-        size: Option<Pixels>,
+        ratio: Option<f32>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -959,7 +959,7 @@ impl TabPanel {
                     Arc::new(new_tab_panel),
                     ix,
                     placement,
-                    size,
+                    ratio,
                     dock_area.clone(),
                     window,
                     cx,
@@ -971,7 +971,7 @@ impl TabPanel {
                     Arc::new(new_tab_panel),
                     ix,
                     placement,
-                    size,
+                    ratio,
                     dock_area.clone(),
                     window,
                     cx,
@@ -1001,7 +1001,13 @@ impl TabPanel {
 
             new_stack_panel.update(cx, |view, cx| match placement {
                 Placement::Left | Placement::Top => {
-                    view.add_panel(Arc::new(new_tab_panel), size, dock_area.clone(), window, cx);
+                    view.add_panel(
+                        Arc::new(new_tab_panel),
+                        ratio,
+                        dock_area.clone(),
+                        window,
+                        cx,
+                    );
                     view.add_panel(
                         Arc::new(tab_panel.clone()),
                         None,
@@ -1018,7 +1024,13 @@ impl TabPanel {
                         window,
                         cx,
                     );
-                    view.add_panel(Arc::new(new_tab_panel), size, dock_area.clone(), window, cx);
+                    view.add_panel(
+                        Arc::new(new_tab_panel),
+                        ratio,
+                        dock_area.clone(),
+                        window,
+                        cx,
+                    );
                 }
             });
 
