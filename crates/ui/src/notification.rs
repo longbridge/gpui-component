@@ -235,6 +235,7 @@ impl Render for Notification {
             None => self.icon.clone(),
             Some(type_) => Some(type_.icon(cx)),
         };
+        let has_icon = icon.is_some();
 
         h_flex()
             .id("notification")
@@ -250,13 +251,13 @@ impl Render for Notification {
             .py_2()
             .px_4()
             .gap_3()
-            .when_some(icon.clone(), |this, icon| {
+            .when_some(icon, |this, icon| {
                 this.child(div().absolute().top_3().left_4().child(icon))
             })
             .child(
                 v_flex()
                     .flex_1()
-                    .when(icon.is_some(), |this| this.pl_6())
+                    .when(has_icon, |this| this.pl_6())
                     .gap_0p5()
                     .when_some(self.title.clone(), |this, title| {
                         this.child(div().text_sm().font_semibold().child(title))
