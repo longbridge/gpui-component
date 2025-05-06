@@ -258,7 +258,6 @@ impl Render for Notification {
                 v_flex()
                     .flex_1()
                     .when(has_icon, |this| this.pl_6())
-                    .gap_0p5()
                     .when_some(self.title.clone(), |this, title| {
                         this.child(div().text_sm().font_semibold().child(title))
                     })
