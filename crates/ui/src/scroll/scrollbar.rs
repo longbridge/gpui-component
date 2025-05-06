@@ -38,7 +38,7 @@ const MIN_THUMB_SIZE: f32 = 48.;
 
 const THUMB_WIDTH: Pixels = px(3.);
 const THUMB_RADIUS: Pixels = Pixels(1.5);
-const THUMB_INSET: Pixels = Pixels(3.);
+const THUMB_INSET: Pixels = Pixels(2.);
 
 const THUMB_ACTIVE_WIDTH: Pixels = px(9.);
 const THUMB_ACTIVE_RADIUS: Pixels = Pixels(4.5);
@@ -576,17 +576,18 @@ impl Element for Scrollbar {
                 };
 
             // The clickable area of the thumb
+            let thumb_length = thumb_end - thumb_start - inset * 2;
             let thumb_bounds = if is_vertical {
                 Bounds::from_corner_and_size(
                     Corner::TopRight,
                     bounds.top_right() + point(-inset, inset + thumb_start),
-                    size(WIDTH, thumb_end - thumb_start - inset * 2),
+                    size(WIDTH, thumb_length),
                 )
             } else {
                 Bounds::from_corner_and_size(
                     Corner::BottomLeft,
                     bounds.bottom_left() + point(inset + thumb_start, -inset),
-                    size(thumb_end - thumb_start - inset * 2, WIDTH),
+                    size(thumb_length, WIDTH),
                 )
             };
 
@@ -595,13 +596,13 @@ impl Element for Scrollbar {
                 Bounds::from_corner_and_size(
                     Corner::TopRight,
                     bounds.top_right() + point(-inset, inset + thumb_start),
-                    size(thumb_width, thumb_end - thumb_start - inset * 2),
+                    size(thumb_width, thumb_length),
                 )
             } else {
                 Bounds::from_corner_and_size(
                     Corner::BottomLeft,
                     bounds.bottom_left() + point(inset + thumb_start, -inset),
-                    size(thumb_end - thumb_start - inset * 2, thumb_width),
+                    size(thumb_length, thumb_width),
                 )
             };
 
