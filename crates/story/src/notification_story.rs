@@ -106,31 +106,41 @@ impl Render for NotificationStory {
                                     cx,
                                 )
                             })),
-                    )
-                    .child(
-                        Button::new("show-notify-with-title")
-                            .label("Notification with Title")
-                            .on_click(cx.listener(|_, _, window, cx| {
-                                struct TestNotification;
-
-                                window.push_notification(
-                                    Notification::new(
-                                        "你已经成功保存了文件，但是有一些警告信息需要你注意。",
-                                    )
-                                    .id::<TestNotification>()
-                                    .title("保存成功")
-                                    .icon(IconName::Inbox)
-                                    .autohide(false)
-                                    .on_click(cx.listener(
-                                        |_, _, _, cx| {
-                                            println!("Notification clicked");
-                                            cx.notify();
-                                        },
-                                    )),
-                                    cx,
-                                )
-                            })),
                     ),
+            )
+            .child(
+                section("With title and action").child(
+                    Button::new("show-notify-with-title")
+                        .label("Notification with Title")
+                        .on_click(cx.listener(|_, _, window, cx| {
+                            struct TestNotification;
+
+                            window.push_notification(
+                                Notification::new(
+                                    "你已经成功保存了文件，但是有一些警告信息需要你注意。",
+                                )
+                                .id::<TestNotification>()
+                                .title("保存成功")
+                                .icon(IconName::Inbox)
+                                .autohide(false)
+                                .action(|_, cx| {
+                                    Button::new("ok").label("Details...").on_click(cx.listener(
+                                        |this, _, window, cx| {
+                                            println!("You have clicked the Details action button.");
+                                            this.dismiss(window, cx);
+                                        },
+                                    ))
+                                })
+                                .on_click(cx.listener(
+                                    |_, _, _, cx| {
+                                        println!("Notification clicked");
+                                        cx.notify();
+                                    },
+                                )),
+                                cx,
+                            )
+                        })),
+                ),
             )
     }
 }
