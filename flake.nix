@@ -22,7 +22,6 @@
             pkg-config
             eza
             fd
-            protobuf
             xorg.libX11
             glib
             pango
