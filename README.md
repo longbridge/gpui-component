@@ -1,6 +1,6 @@
 # GPUI Component
 
-UI components for building fantastic desktop application by using [GPUI](https://gpui.rs).
+UI components for building fantastic desktop applications using [GPUI](https://gpui.rs).
 
 ## Features
 
@@ -15,17 +15,17 @@ UI components for building fantastic desktop application by using [GPUI](https:/
 
 ## Showcase
 
-Here is the first application: [Longbridge Pro](https://longbridge.com/desktop) that is built by using GPUI Component.
+Here is the first application: [Longbridge Pro](https://longbridge.com/desktop), built using GPUI Component.
 
 <img width="1763" alt="Image" src="https://github.com/user-attachments/assets/3e2f4eb7-fd27-4343-b6dc-184465599e99" />
 
-We build multi-themes support in application, this feature is not including in GPUI Component. It is based on `Theme` feature, so it easy to do.
+We built multi-theme support in the application. This feature is not included in GPUI Component itself, but is based on the `Theme` feature, so it's easy to implement.
 
 ## Usage
 
-GPUI and GPUI Component still in development, so we need add dependency by git.
+GPUI and GPUI Component are still in development, so you need to add dependencies by git.
 
-And GPUI Component depends on `gpui` by special version (It keep updated to upstream) for including WebView support.
+GPUI Component depends on a specific version of `gpui` (kept updated with upstream) to include WebView support.
 
 ```toml
 gpui = { git = "https://github.com/huacnlee/zed.git", branch = "webview" }
@@ -34,22 +34,21 @@ gpui-component = { git = "https://github.com/longbridge/gpui-component.git" }
 
 ### WebView
 
-> Still early experimental, there have a lot of limitations.
+> Still early and experimental; there are a lot of limitations.
 
-GPUI Component have `WebView` element based on [Wry](https://github.com/tauri-apps/wry), this is an optional feature, you can enable it by feature flag.
+GPUI Component has a `WebView` element based on [Wry](https://github.com/tauri-apps/wry). This is an optional feature, which you can enable with a feature flag.
 
 ```toml
 gpui-component = { git = "https://github.com/longbridge/gpui-component.git", features = ["webview"] }
 ```
 
-More usage can be found in [story](https://github.com/longbridge/gpui-component/tree/main/crates/story) directory.
+More usage examples can be found in the [story](https://github.com/longbridge/gpui-component/tree/main/crates/story) directory.
 
 ### Icons
 
-GPUI Component have `Icon` element, but it does not include SVG files by default.
+GPUI Component has an `Icon` element, but it does not include SVG files by default.
 
-The example is using [Lucide](https://lucide.dev) icons, but you can use any icons you like, just named the svg files like [IconName](https://github.com/longbridge/gpui-component/blob/main/crates/ui/src/icon.rs#L86) defined the path name.
-You can add icons that you need in your project.
+The example uses [Lucide](https://lucide.dev) icons, but you can use any icons you like. Just name the SVG files as defined in [IconName](https://github.com/longbridge/gpui-component/blob/main/crates/ui/src/icon.rs#L86). You can add any icons you need to your project.
 
 ## Development
 
@@ -59,13 +58,13 @@ We have a gallery of applications built with GPUI Component.
 cargo run
 ```
 
-More examples can be found in `examples` directory, you can run them by `cargo run --example <example_name>`.
+More examples can be found in the `examples` directory. You can run them with `cargo run --example <example_name>`.
 
-Checkout [DEVELOPMENT](DEVELOPMENT) to see more details.
+Check out [DEVELOPMENT](DEVELOPMENT) for more details.
 
 ## License
 
 Apache-2.0
 
 - UI design based on [shadcn/ui](https://ui.shadcn.com).
-- Icon from [Lucide](https://lucide.dev).
+- Icons from [Lucide](https://lucide.dev).
