@@ -3,9 +3,9 @@
 use std::{ops::Deref, sync::Arc};
 
 use gpui::{
-    div, prelude::FluentBuilder as _, px, Along, App, AppContext, Axis, Context, Element, Empty,
-    Entity, IntoElement, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Render,
-    Style, StyleRefinement, Styled as _, WeakEntity, Window,
+    div, prelude::FluentBuilder as _, px, Along, App, AppContext, Axis, Context, DefiniteLength,
+    Element, Empty, Entity, IntoElement, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels,
+    Point, Render, Style, StyleRefinement, Styled as _, WeakEntity, Window,
 };
 use serde::{Deserialize, Serialize};
 
@@ -14,7 +14,7 @@ use crate::{
     StyledExt,
 };
 
-use super::{DockArea, DockItem, PanelView, TabPanel};
+use super::{definite_length_to_window_ratio, DockArea, DockItem, PanelView, TabPanel};
 
 #[derive(Clone)]
 struct ResizePanel;
@@ -249,8 +249,13 @@ impl Dock {
     }
 
     /// Set the size of the Dock.
-    pub fn set_ratio(&mut self, ratio: f32, _: &mut Window, cx: &mut Context<Self>) {
-        self.ratio = ratio;
+    pub fn set_size(
+        &mut self,
+        size: impl Into<DefiniteLength>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.ratio = definite_length_to_window_ratio(size, self.placement.axis(), window);
         cx.notify();
     }
 
