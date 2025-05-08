@@ -20,8 +20,6 @@
           buildInputs = [
             openssl
             pkg-config
-            eza
-            fd
             xorg.libX11
             glib
             pango
@@ -36,11 +34,6 @@
               extensions = [ "rust-src" ];
             })
           ];
-
-          shellHook = ''
-            alias ls=eza
-            alias find=fd
-          '';
 
           env = {
             RUST_BACKTRACE = "1";
