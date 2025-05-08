@@ -1,6 +1,6 @@
 use gpui::{
-    point, px, size, App, AppContext, Axis, Bounds, DefiniteLength, Entity, Pixels, WeakEntity,
-    Window,
+    point, px, relative, size, App, AppContext, Axis, Bounds, DefiniteLength, Entity, Pixels,
+    WeakEntity, Window,
 };
 use itertools::Itertools as _;
 use serde::{Deserialize, Serialize};
@@ -209,10 +209,7 @@ impl PanelState {
                 } else {
                     Axis::Vertical
                 };
-                let ratios = ratios
-                    .iter()
-                    .map(|&ratio| Some(DefiniteLength::Fraction(ratio)))
-                    .collect();
+                let ratios = ratios.iter().map(|&ratio| Some(relative(ratio))).collect();
                 DockItem::split_with_sizes(axis, items, ratios, &dock_area, window, cx)
             }
             PanelInfo::Tabs { active_index } => {

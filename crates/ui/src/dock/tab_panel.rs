@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use gpui::{
-    div, prelude::FluentBuilder, px, rems, App, AppContext, Context, Corner, DefiniteLength,
+    div, prelude::FluentBuilder, px, relative, rems, App, AppContext, Context, Corner,
     DismissEvent, DragMoveEvent, Empty, Entity, EventEmitter, FocusHandle, Focusable,
     InteractiveElement as _, IntoElement, ParentElement, Render, ScrollHandle, SharedString,
     StatefulInteractiveElement, StyleRefinement, Styled, WeakEntity, Window,
@@ -823,7 +823,7 @@ impl TabPanel {
                             .bg(cx.theme().drop_target)
                             .map(|this| match self.will_split_placement {
                                 Some(placement) => {
-                                    let size = DefiniteLength::Fraction(0.35);
+                                    let size = relative(0.35);
                                     match placement {
                                         Placement::Left => this.left_0().top_0().bottom_0().w(size),
                                         Placement::Right => {

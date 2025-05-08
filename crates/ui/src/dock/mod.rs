@@ -8,8 +8,8 @@ mod tiles;
 
 use anyhow::Result;
 use gpui::{
-    actions, canvas, div, prelude::FluentBuilder, Along, AnyElement, AnyView, App, AppContext,
-    Axis, Bounds, Context, DefiniteLength, Edges, Entity, EntityId, EventEmitter,
+    actions, canvas, div, prelude::FluentBuilder, relative, Along, AnyElement, AnyView, App,
+    AppContext, Axis, Bounds, Context, DefiniteLength, Edges, Entity, EntityId, EventEmitter,
     InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Render, SharedString, Styled,
     Subscription, WeakEntity, Window,
 };
@@ -747,7 +747,7 @@ impl DockArea {
                 } else {
                     self.set_left_dock(
                         DockItem::tabs(vec![panel], None, &weak_self, window, cx),
-                        DefiniteLength::Fraction(0.2),
+                        relative(0.2),
                         true,
                         window,
                         cx,
@@ -760,7 +760,7 @@ impl DockArea {
                 } else {
                     self.set_bottom_dock(
                         DockItem::tabs(vec![panel], None, &weak_self, window, cx),
-                        DefiniteLength::Fraction(0.2),
+                        relative(0.2),
                         true,
                         window,
                         cx,
@@ -773,7 +773,7 @@ impl DockArea {
                 } else {
                     self.set_right_dock(
                         DockItem::tabs(vec![panel], None, &weak_self, window, cx),
-                        DefiniteLength::Fraction(0.2),
+                        relative(0.2),
                         true,
                         window,
                         cx,
