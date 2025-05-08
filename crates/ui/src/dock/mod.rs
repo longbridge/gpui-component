@@ -8,10 +8,9 @@ mod tiles;
 
 use anyhow::Result;
 use gpui::{
-    actions, canvas, div, prelude::FluentBuilder, px, Along, AnyElement, AnyView, App, AppContext,
-    Axis, Bounds, Context, DefiniteLength, Edges, Entity, EntityId, EventEmitter,
-    InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Render, SharedString, Styled,
-    Subscription, WeakEntity, Window,
+    actions, canvas, div, prelude::FluentBuilder, px, AnyElement, AnyView, App, AppContext, Axis,
+    Bounds, Context, Edges, Entity, EntityId, EventEmitter, InteractiveElement as _, IntoElement,
+    ParentElement as _, Pixels, Render, SharedString, Styled, Subscription, WeakEntity, Window,
 };
 use std::sync::Arc;
 
@@ -27,22 +26,6 @@ pub fn init(cx: &mut App) {
 }
 
 actions!(dock, [ToggleZoom, ClosePanel]);
-
-/// Convert [`gpui::DefiniteLength`] to ratio of window.
-pub(crate) fn definite_length_to_window_ratio(
-    length: impl Into<DefiniteLength>,
-    axis: Axis,
-    window: &Window,
-) -> f32 {
-    let length: DefiniteLength = length.into();
-    match length {
-        DefiniteLength::Absolute(size) => {
-            let container_size = window.bounds().size.along(axis);
-            size.to_pixels(window.rem_size()) / container_size
-        }
-        DefiniteLength::Fraction(ratio) => ratio,
-    }
-}
 
 pub enum DockEvent {
     /// The layout of the dock has changed, subscribers this to save the layout.
@@ -155,22 +138,17 @@ impl DockItem {
 
     /// Create DockItem with split layout, each item of panel have specified size.
     ///
-    /// Please note that the `items` and `sizes` must have the same length.
+    /// Please note that the `items` and `ratios` must have the same length.
     /// Set `None` in `sizes` to make the index of panel have auto size.
     pub fn split_with_sizes(
         axis: Axis,
         items: Vec<DockItem>,
-        sizes: Vec<Option<DefiniteLength>>,
+        ratios: Vec<Option<f32>>,
         dock_area: &WeakEntity<DockArea>,
         window: &mut Window,
         cx: &mut App,
     ) -> Self {
         let mut items = items;
-        let ratios: Vec<Option<f32>> = sizes
-            .into_iter()
-            .map(|size| size.map(|val| definite_length_to_window_ratio(val, axis, window)))
-            .collect();
-
         let stack_panel = cx.new(|cx| {
             let mut stack_panel = StackPanel::new(axis, window, cx);
             for (i, item) in items.iter_mut().enumerate() {

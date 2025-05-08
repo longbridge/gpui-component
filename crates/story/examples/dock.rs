@@ -279,7 +279,7 @@ impl StoryWorkspace {
                     cx,
                 ),
             ],
-            vec![None, Some(relative(0.2))],
+            vec![None, Some(0.2)],
             &dock_area,
             window,
             cx,
