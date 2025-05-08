@@ -8,8 +8,8 @@ mod tiles;
 
 use anyhow::Result;
 use gpui::{
-    actions, canvas, div, prelude::FluentBuilder, relative, Along, AnyElement, AnyView, App,
-    AppContext, Axis, Bounds, Context, DefiniteLength, Edges, Entity, EntityId, EventEmitter,
+    actions, canvas, div, prelude::FluentBuilder, px, Along, AnyElement, AnyView, App, AppContext,
+    Axis, Bounds, Context, DefiniteLength, Edges, Entity, EntityId, EventEmitter,
     InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Render, SharedString, Styled,
     Subscription, WeakEntity, Window,
 };
@@ -41,6 +41,23 @@ pub(crate) fn definite_length_to_window_ratio(
             size.to_pixels(window.rem_size()) / container_size
         }
         DefiniteLength::Fraction(ratio) => ratio,
+    }
+}
+
+/// Convert [`gpui::DefiniteLength`] to Pixels relative to container bounds.
+pub(crate) fn definite_length_to_size(
+    length: impl Into<DefiniteLength>,
+    axis: Axis,
+    container_bounds: Bounds<Pixels>,
+    window: &Window,
+) -> Pixels {
+    let length: DefiniteLength = length.into();
+    match length {
+        DefiniteLength::Absolute(size) => size.to_pixels(window.rem_size()),
+        DefiniteLength::Fraction(ratio) => {
+            let container_size = container_bounds.size.along(axis);
+            ratio * container_size
+        }
     }
 }
 
@@ -552,7 +569,7 @@ impl DockArea {
     pub fn set_left_dock(
         &mut self,
         panel: DockItem,
-        size: impl Into<DefiniteLength>,
+        size: impl Into<Pixels>,
         open: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -572,7 +589,7 @@ impl DockArea {
     pub fn set_bottom_dock(
         &mut self,
         panel: DockItem,
-        size: impl Into<DefiniteLength>,
+        size: impl Into<Pixels>,
         open: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -592,7 +609,7 @@ impl DockArea {
     pub fn set_right_dock(
         &mut self,
         panel: DockItem,
-        size: impl Into<DefiniteLength>,
+        size: impl Into<Pixels>,
         open: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -745,7 +762,7 @@ impl DockArea {
                 } else {
                     self.set_left_dock(
                         DockItem::tabs(vec![panel], None, &weak_self, window, cx),
-                        relative(0.2),
+                        px(200.),
                         true,
                         window,
                         cx,
@@ -758,7 +775,7 @@ impl DockArea {
                 } else {
                     self.set_bottom_dock(
                         DockItem::tabs(vec![panel], None, &weak_self, window, cx),
-                        relative(0.2),
+                        px(200.),
                         true,
                         window,
                         cx,
@@ -771,7 +788,7 @@ impl DockArea {
                 } else {
                     self.set_right_dock(
                         DockItem::tabs(vec![panel], None, &weak_self, window, cx),
-                        relative(0.2),
+                        px(200.),
                         true,
                         window,
                         cx,

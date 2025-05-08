@@ -28,13 +28,8 @@ pub struct DockAreaState {
 pub struct DockState {
     panel: PanelState,
     placement: DockPlacement,
-    #[serde(default = "default_ratio")]
-    ratio: f32,
+    size: Pixels,
     open: bool,
-}
-
-fn default_ratio() -> f32 {
-    0.2
 }
 
 impl DockState {
@@ -43,7 +38,7 @@ impl DockState {
 
         Self {
             placement: dock.placement,
-            ratio: dock.ratio,
+            size: dock.size,
             open: dock.open,
             panel: dock.panel.view().dump(cx),
         }
@@ -61,7 +56,7 @@ impl DockState {
             Dock::from_state(
                 dock_area.clone(),
                 self.placement,
-                self.ratio,
+                self.size,
                 item,
                 self.open,
                 window,
@@ -265,7 +260,7 @@ mod tests {
 
         let left_dock = state.left_dock.unwrap();
         assert_eq!(left_dock.open, true);
-        assert_eq!(left_dock.ratio, 0.2);
+        assert_eq!(left_dock.size, px(350.));
         assert_eq!(left_dock.placement, DockPlacement::Left);
         assert_eq!(left_dock.panel.panel_name, "TabPanel");
         assert_eq!(left_dock.panel.children.len(), 1);
@@ -273,14 +268,14 @@ mod tests {
 
         let bottom_dock = state.bottom_dock.unwrap();
         assert_eq!(bottom_dock.open, true);
-        assert_eq!(bottom_dock.ratio, 0.32);
+        assert_eq!(bottom_dock.size, px(200.));
         assert_eq!(bottom_dock.panel.panel_name, "TabPanel");
         assert_eq!(bottom_dock.panel.children.len(), 2);
         assert_eq!(bottom_dock.panel.children[0].panel_name, "StoryContainer");
 
         let right_dock = state.right_dock.unwrap();
         assert_eq!(right_dock.open, true);
-        assert_eq!(right_dock.ratio, 0.2);
+        assert_eq!(right_dock.size, px(320.));
         assert_eq!(right_dock.panel.panel_name, "TabPanel");
         assert_eq!(right_dock.panel.children.len(), 1);
         assert_eq!(right_dock.panel.children[0].panel_name, "StoryContainer");
