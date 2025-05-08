@@ -168,9 +168,7 @@ impl DockItem {
         let mut items = items;
         let ratios: Vec<Option<f32>> = sizes
             .into_iter()
-            .map(|size| {
-                size.and_then(|val| Some(definite_length_to_window_ratio(val, axis, window)))
-            })
+            .map(|size| size.map(|val| definite_length_to_window_ratio(val, axis, window)))
             .collect();
 
         let stack_panel = cx.new(|cx| {
