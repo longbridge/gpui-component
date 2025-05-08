@@ -44,23 +44,6 @@ pub(crate) fn definite_length_to_window_ratio(
     }
 }
 
-/// Convert [`gpui::DefiniteLength`] to Pixels relative to container bounds.
-pub(crate) fn definite_length_to_size(
-    length: impl Into<DefiniteLength>,
-    axis: Axis,
-    container_bounds: Bounds<Pixels>,
-    window: &Window,
-) -> Pixels {
-    let length: DefiniteLength = length.into();
-    match length {
-        DefiniteLength::Absolute(size) => size.to_pixels(window.rem_size()),
-        DefiniteLength::Fraction(ratio) => {
-            let container_size = container_bounds.size.along(axis);
-            ratio * container_size
-        }
-    }
-}
-
 pub enum DockEvent {
     /// The layout of the dock has changed, subscribers this to save the layout.
     ///

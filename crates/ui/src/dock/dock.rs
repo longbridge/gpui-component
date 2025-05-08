@@ -3,9 +3,9 @@
 use std::{ops::Deref, sync::Arc};
 
 use gpui::{
-    div, prelude::FluentBuilder as _, px, App, AppContext, Axis, Bounds, Context, Element, Empty,
-    Entity, IntoElement, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Render,
-    Style, StyleRefinement, Styled as _, WeakEntity, Window,
+    div, prelude::FluentBuilder as _, px, App, AppContext, Axis, Context, Element, Empty, Entity,
+    IntoElement, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Render, Style,
+    StyleRefinement, Styled as _, WeakEntity, Window,
 };
 use serde::{Deserialize, Serialize};
 
