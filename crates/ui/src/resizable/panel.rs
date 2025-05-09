@@ -393,10 +393,6 @@ impl ResizablePanel {
     fn update_size(&mut self, bounds: Bounds<Pixels>, _: &mut Window, cx: &mut Context<Self>) {
         // FIXME: Sometimes we adjusted size, the `self.size_ratio` apply to the panel size may more than 1px than `self.size`.
         self.bounds = bounds;
-        if self.size_ratio.is_none() {
-            return;
-        }
-
         self.size_ratio = None;
         let new_size = bounds.size.along(self.axis);
         if self.size == Some(new_size) {
