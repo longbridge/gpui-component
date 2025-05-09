@@ -1,5 +1,3 @@
-use std::ops::Range;
-
 use gpui::{
     div, px, AnyElement, App, AppContext, Context, Entity, Focusable, IntoElement,
     ParentElement as _, Pixels, Render, SharedString, Styled, Window,

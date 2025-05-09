@@ -69,7 +69,13 @@ impl ResizablePanelGroup {
 
     /// Add a resizable panel to the group.
     pub fn child(mut self, panel: ResizablePanel, cx: &mut Context<Self>) -> Self {
-        self.add_child(panel, cx);
+        let mut panel = panel;
+        panel.axis = self.axis;
+        panel.group = Some(cx.entity().downgrade());
+        let new_size = self.total_size() / self.panels.len() as f32;
+        panel.initial_size = Some(new_size);
+        self.sizes.push(new_size);
+        self.panels.push(cx.new(|_| panel));
         self
     }
 
@@ -102,28 +108,28 @@ impl ResizablePanelGroup {
         self.sizes.iter().fold(px(0.0), |acc, &size| acc + size)
     }
 
-    pub fn add_child(&mut self, panel: ResizablePanel, cx: &mut Context<Self>) {
-        let mut panel = panel;
-        panel.axis = self.axis;
-        panel.group = Some(cx.entity().downgrade());
-        self.sizes.push(panel.initial_size.unwrap_or_default());
-        self.panels.push(cx.new(|_| panel));
-    }
-
     pub fn insert_child(
         &mut self,
         panel: ResizablePanel,
         ix: usize,
-        _: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let mut panel = panel;
         panel.axis = self.axis;
         panel.group = Some(cx.entity().downgrade());
+        let new_size = (self.total_size() / (self.panels.len() + 1) as f32).max(PANEL_MIN_SIZE);
+        panel.initial_size = Some(new_size);
 
-        self.sizes
-            .insert(ix, panel.initial_size.unwrap_or_default());
+        self.sizes.insert(ix, new_size);
         self.panels.insert(ix, cx.new(|_| panel));
+
+        let view = cx.entity();
+        window.on_next_frame(move |window, cx| {
+            view.update(cx, |this, cx| {
+                this.sync_real_panel_sizes(window, cx);
+            })
+        });
         cx.notify()
     }
 
@@ -135,17 +141,15 @@ impl ResizablePanelGroup {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let old_panel = self.panels[ix].read(cx);
+
         let mut panel = panel;
-
-        let old_panel = self.panels[ix].clone();
-        let old_panel_initial_size = old_panel.read(cx).initial_size;
-        let old_panel_size_ratio = old_panel.read(cx).size_ratio;
-
-        panel.initial_size = old_panel_initial_size;
-        panel.size_ratio = old_panel_size_ratio;
+        panel.initial_size = old_panel.initial_size;
+        panel.size_ratio = old_panel.size_ratio;
+        panel.size = old_panel.size;
         panel.axis = self.axis;
         panel.group = Some(cx.entity().downgrade());
-        self.sizes[ix] = panel.initial_size.unwrap_or_default();
+
         self.panels[ix] = cx.new(|_| panel);
         cx.notify()
     }
