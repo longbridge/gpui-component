@@ -255,6 +255,7 @@
     },
     "placement": "bottom",
     "size": 200.0,
+    "ratio": 0.32,
     "open": true,
     "resizeable": true
   }

@@ -279,7 +279,7 @@ impl StoryWorkspace {
                     cx,
                 ),
             ],
-            vec![None, Some(0.2)],
+            vec![None, Some(relative(0.2))],
             &dock_area,
             window,
             cx,
@@ -328,8 +328,8 @@ impl StoryWorkspace {
         _ = dock_area.update(cx, |view, cx| {
             view.set_version(MAIN_DOCK_AREA.version, window, cx);
             view.set_center(dock_item, window, cx);
-            view.set_left_dock(left_panels, px(300.), true, window, cx);
-            view.set_bottom_dock(bottom_panels, px(200.), true, window, cx);
+            view.set_left_dock(left_panels, relative(0.3), true, window, cx);
+            view.set_bottom_dock(bottom_panels, relative(0.2), true, window, cx);
             view.set_right_dock(right_panels, px(320.), true, window, cx);
 
             Self::save_state(&view.dump(cx)).unwrap();

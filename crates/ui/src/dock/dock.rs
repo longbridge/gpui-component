@@ -3,9 +3,9 @@
 use std::{ops::Deref, sync::Arc};
 
 use gpui::{
-    div, prelude::FluentBuilder as _, px, App, AppContext, Axis, Context, Element, Empty, Entity,
-    IntoElement, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Render, Style,
-    StyleRefinement, Styled as _, WeakEntity, Window,
+    div, prelude::FluentBuilder as _, px, Along, App, AppContext, Axis, Context, DefiniteLength,
+    Element, Empty, Entity, IntoElement, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels,
+    Point, Render, Style, StyleRefinement, Styled as _, WeakEntity, Window,
 };
 use serde::{Deserialize, Serialize};
 
@@ -14,7 +14,7 @@ use crate::{
     StyledExt,
 };
 
-use super::{DockArea, DockItem, PanelView, TabPanel};
+use super::{definite_length_to_window_ratio, DockArea, DockItem, PanelView, TabPanel};
 
 #[derive(Clone)]
 struct ResizePanel;
@@ -66,8 +66,8 @@ pub struct Dock {
     pub(super) placement: DockPlacement,
     dock_area: WeakEntity<DockArea>,
     pub(crate) panel: DockItem,
-    /// The size of the dock.
-    pub(super) size: Pixels,
+    /// The ratio of the dock.
+    pub(super) ratio: f32,
     pub(super) open: bool,
     /// Whether the Dock is collapsible, default: true
     pub(super) collapsible: bool,
@@ -104,7 +104,7 @@ impl Dock {
             panel,
             open: true,
             collapsible: true,
-            size: px(200.),
+            ratio: 0.2,
             resizing: false,
         }
     }
@@ -147,7 +147,7 @@ impl Dock {
     pub(super) fn from_state(
         dock_area: WeakEntity<DockArea>,
         placement: DockPlacement,
-        size: impl Into<Pixels>,
+        ratio: f32,
         panel: DockItem,
         open: bool,
         window: &mut Window,
@@ -176,7 +176,7 @@ impl Dock {
             dock_area,
             panel,
             open,
-            size: size.into(),
+            ratio,
             collapsible: true,
             resizing: false,
         }
@@ -244,13 +244,18 @@ impl Dock {
     /// Returns the size of the Dock, the size is means the width or height of
     /// the Dock, if the placement is left or right, the size is width,
     /// otherwise the size is height.
-    pub fn size(&self) -> Pixels {
-        self.size
+    pub fn ratio(&self) -> f32 {
+        self.ratio
     }
 
     /// Set the size of the Dock.
-    pub fn set_size(&mut self, size: impl Into<Pixels>, _: &mut Window, cx: &mut Context<Self>) {
-        self.size = size.into();
+    pub fn set_size(
+        &mut self,
+        size: impl Into<DefiniteLength>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.ratio = definite_length_to_window_ratio(size, self.placement.axis(), window);
         cx.notify();
     }
 
@@ -287,6 +292,16 @@ impl Dock {
         cx.notify();
     }
 
+    fn container_size(&self, cx: &App) -> Pixels {
+        let dock_area = self
+            .dock_area
+            .upgrade()
+            .expect("DockArea is missing")
+            .read(cx);
+        let area_bounds = dock_area.bounds;
+        area_bounds.size.along(self.placement.axis())
+    }
+
     fn render_resize_handle(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let axis = self.placement.axis();
         let view = cx.entity().clone();
@@ -320,7 +335,10 @@ impl Dock {
             DockPlacement::Bottom => area_bounds.bottom() - mouse_position.y,
             DockPlacement::Center => unreachable!(),
         };
-        self.size = size.max(PANEL_MIN_SIZE);
+        let container_size = self.container_size(cx);
+        let ratio = size / container_size;
+        let min_ratio = PANEL_MIN_SIZE / container_size;
+        self.ratio = ratio.clamp(min_ratio, 1.);
 
         cx.notify();
     }
@@ -337,7 +355,8 @@ impl Render for Dock {
         }
 
         let cache_style = StyleRefinement::default().absolute().size_full();
-        let dock_size = self.size;
+        let container_size = self.container_size(cx);
+        let dock_size = (self.ratio * container_size).max(PANEL_MIN_SIZE);
 
         div()
             .relative()
