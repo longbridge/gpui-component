@@ -118,7 +118,12 @@ impl ResizablePanelGroup {
         let mut panel = panel;
         panel.axis = self.axis;
         panel.group = Some(cx.entity().downgrade());
-        let new_size = (self.total_size() / (self.panels.len() + 1) as f32).max(PANEL_MIN_SIZE);
+        // initial_size is from the state
+        let new_size = match panel.initial_size {
+            Some(size) => size,
+            // Split to add child, use average size of all panels
+            None => (self.total_size() / (self.panels.len() + 1) as f32).max(PANEL_MIN_SIZE),
+        };
         panel.initial_size = Some(new_size);
 
         self.sizes.insert(ix, new_size);
