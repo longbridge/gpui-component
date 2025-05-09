@@ -246,7 +246,6 @@ impl ResizablePanelGroup {
             let mut changed = new_size - size;
             new_sizes[ix + 1] += self.sizes[ix] - new_size;
             new_sizes[ix] = new_size;
-            println!("----------- changed: {}", changed);
 
             while changed > px(0.) && ix > 0 {
                 ix -= 1;
@@ -254,14 +253,8 @@ impl ResizablePanelGroup {
                 let to_reduce = changed.min(available_size);
                 changed -= to_reduce;
                 new_sizes[ix] -= to_reduce;
-
-                println!(
-                    "----------- {}, old_size: {}, new_size: {}, available_size {} to_reduce: {}, changed: {}",
-                    ix, self.sizes[ix], new_sizes[ix], available_size, to_reduce, changed
-                );
             }
         }
-        dbg!(&new_sizes);
 
         // If total size exceeds container size, adjust the main panel
         let total_size: Pixels = new_sizes.iter().map(|s| s.0).sum::<f32>().into();
@@ -270,18 +263,18 @@ impl ResizablePanelGroup {
             new_sizes[main_ix] = (new_sizes[main_ix] - overflow).max(size_range.start);
         }
 
+        let total_size: Pixels = new_sizes.iter().map(|s| s.0).sum::<f32>().into();
         for (i, panel) in self.panels.iter().enumerate() {
             let size = new_sizes[i];
             let is_changed = self.sizes[i] != size;
             if size > px(0.) && is_changed {
                 panel.update(cx, |this, _| {
                     this.size = Some(size);
-                    this.size_ratio = Some(size / container_size);
+                    this.size_ratio = Some(size / total_size);
                 });
             }
         }
-        self.sizes = new_sizes.clone();
-        cx.notify();
+        self.sizes = new_sizes;
     }
 }
 impl EventEmitter<ResizablePanelEvent> for ResizablePanelGroup {}
@@ -394,11 +387,19 @@ impl ResizablePanel {
 
     /// Save the real panel size, and update group sizes
     fn update_size(&mut self, bounds: Bounds<Pixels>, _: &mut Window, cx: &mut Context<Self>) {
-        let new_size = bounds.size.along(self.axis);
+        // FIXME: Sometimes we adjusted size, the `self.size_ratio` apply to the panel size may more than 1px than `self.size`.
         self.bounds = bounds;
-        self.size_ratio = None;
-        self.size = Some(new_size);
+        if self.size_ratio.is_none() {
+            return;
+        }
 
+        self.size_ratio = None;
+        let new_size = bounds.size.along(self.axis);
+        if self.size == Some(new_size) {
+            return;
+        }
+
+        self.size = Some(new_size);
         let entity_id = cx.entity().entity_id();
         if let Some(group) = self.group.as_ref() {
             _ = group.update(cx, |view, _| {
