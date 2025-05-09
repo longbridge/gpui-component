@@ -95,6 +95,7 @@ impl ResizableStory {
                 .child(
                     resizable_panel()
                         .size(px(300.))
+                        .size_range(px(200.)..px(400.))
                         .content(|_, cx| panel_box("Left 2", cx)),
                     cx,
                 )

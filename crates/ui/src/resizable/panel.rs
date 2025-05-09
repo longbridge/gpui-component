@@ -234,6 +234,7 @@ impl ResizablePanelGroup {
         }
         let size_range = self.panel_size_range(ix, cx);
         let new_size = size.clamp(size_range.start, size_range.end);
+        println!("------------ new_size: {}", new_size);
 
         let is_expand = move_changed > px(0.);
 
@@ -246,7 +247,8 @@ impl ResizablePanelGroup {
 
             while changed > px(0.) && ix < self.panels.len() - 1 {
                 ix += 1;
-                let available_size = (new_sizes[ix] - PANEL_MIN_SIZE).max(px(0.));
+                let size_range = self.panel_size_range(ix, cx);
+                let available_size = (new_sizes[ix] - size_range.start).max(px(0.));
                 let to_reduce = changed.min(available_size);
                 new_sizes[ix] -= to_reduce;
                 changed -= to_reduce;
@@ -258,7 +260,8 @@ impl ResizablePanelGroup {
 
             while changed > px(0.) && ix > 0 {
                 ix -= 1;
-                let available_size = (new_sizes[ix] - PANEL_MIN_SIZE).max(px(0.));
+                let size_range = self.panel_size_range(ix, cx);
+                let available_size = (new_sizes[ix] - size_range.start).max(px(0.));
                 let to_reduce = changed.min(available_size);
                 changed -= to_reduce;
                 new_sizes[ix] -= to_reduce;
@@ -283,6 +286,7 @@ impl ResizablePanelGroup {
                 });
             }
         }
+        println!("------------ new_sizes: {:?}", new_sizes);
         self.sizes = new_sizes;
     }
 }
@@ -413,7 +417,7 @@ impl ResizablePanel {
                 }
             });
         }
-        cx.notify();
+        // cx.notify();
     }
 }
 
