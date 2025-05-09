@@ -189,7 +189,7 @@ impl ResizablePanelGroup {
 
     fn sync_real_panel_sizes(&mut self, _: &Window, cx: &App) {
         for (i, panel) in self.panels.iter().enumerate() {
-            self.sizes[i] = panel.read(cx).bounds.size.along(self.axis);
+            self.sizes[i] = panel.read(cx).bounds.size.along(self.axis).floor();
         }
     }
 
@@ -225,17 +225,17 @@ impl ResizablePanelGroup {
         }
         let size_range = self.panel_size_range(ix, cx);
         let new_size = size.clamp(size_range.start, size_range.end);
-        let mut changed = new_size - self.sizes[ix];
+
         let is_expand = move_changed > px(0.);
 
         let main_ix = ix;
         let mut new_sizes = self.sizes.clone();
 
         if is_expand {
+            let mut changed = new_size - self.sizes[ix];
             new_sizes[ix] = new_size;
 
-            // Now to expand logic is correct.
-            while move_changed > px(0.) && ix < self.panels.len() - 1 {
+            while changed > px(0.) && ix < self.panels.len() - 1 {
                 ix += 1;
                 let available_size = (new_sizes[ix] - PANEL_MIN_SIZE).max(px(0.));
                 let to_reduce = changed.min(available_size);
@@ -243,37 +243,45 @@ impl ResizablePanelGroup {
                 changed -= to_reduce;
             }
         } else {
-            new_sizes[ix] = new_size;
+            let mut changed = new_size - size;
             new_sizes[ix + 1] += self.sizes[ix] - new_size;
-            changed = size - size_range.start;
+            new_sizes[ix] = new_size;
+            println!("----------- changed: {}", changed);
 
-            while move_changed < px(0.) && ix > 0 {
+            while changed > px(0.) && ix > 0 {
                 ix -= 1;
-                let available_size = (self.sizes[ix] - PANEL_MIN_SIZE).max(px(0.));
-                let to_increase = changed.min(available_size);
-                new_sizes[ix] += to_increase;
-                changed += to_increase;
+                let available_size = (new_sizes[ix] - PANEL_MIN_SIZE).max(px(0.));
+                let to_reduce = changed.min(available_size);
+                changed -= to_reduce;
+                new_sizes[ix] -= to_reduce;
+
+                println!(
+                    "----------- {}, old_size: {}, new_size: {}, available_size {} to_reduce: {}, changed: {}",
+                    ix, self.sizes[ix], new_sizes[ix], available_size, to_reduce, changed
+                );
             }
         }
+        dbg!(&new_sizes);
 
         // If total size exceeds container size, adjust the main panel
         let total_size: Pixels = new_sizes.iter().map(|s| s.0).sum::<f32>().into();
         if total_size > container_size {
             let overflow = total_size - container_size;
-            new_sizes[main_ix] = (new_sizes[main_ix] - overflow).max(PANEL_MIN_SIZE);
+            new_sizes[main_ix] = (new_sizes[main_ix] - overflow).max(size_range.start);
         }
 
-        let total_size = new_sizes.iter().fold(px(0.0), |acc, &size| acc + size);
-        self.sizes = new_sizes;
         for (i, panel) in self.panels.iter().enumerate() {
-            let size = self.sizes[i];
-            if size > px(0.) {
+            let size = new_sizes[i];
+            let is_changed = self.sizes[i] != size;
+            if size > px(0.) && is_changed {
                 panel.update(cx, |this, _| {
                     this.size = Some(size);
-                    this.size_ratio = Some(size / total_size);
+                    this.size_ratio = Some(size / container_size);
                 });
             }
         }
+        self.sizes = new_sizes.clone();
+        cx.notify();
     }
 }
 impl EventEmitter<ResizablePanelEvent> for ResizablePanelGroup {}
