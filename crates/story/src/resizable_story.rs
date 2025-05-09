@@ -1,6 +1,8 @@
+use std::ops::Range;
+
 use gpui::{
     div, px, AnyElement, App, AppContext, Context, Entity, Focusable, IntoElement,
-    ParentElement as _, Render, SharedString, Styled, Window,
+    ParentElement as _, Pixels, Render, SharedString, Styled, Window,
 };
 use gpui_component::{
     resizable::{h_resizable, resizable_panel, v_resizable, ResizablePanelGroup},
@@ -57,7 +59,8 @@ impl ResizableStory {
                         .child(
                             resizable_panel()
                                 .size(px(300.))
-                                .content(|_, cx| panel_box("Left 1 (Min 120px)", cx)),
+                                .size_range(px(120.)..px(300.))
+                                .content(|_, cx| panel_box("Left 1 (120px .. 300px)", cx)),
                             cx,
                         )
                         .child(
@@ -83,7 +86,8 @@ impl ResizableStory {
                 .child(
                     resizable_panel()
                         .size(px(210.))
-                        .content(|_, cx| panel_box("Bottom", cx)),
+                        .size_range(px(80.)..Pixels::MAX)
+                        .content(|_, cx| panel_box("Bottom (80px .. 150px)", cx)),
                     cx,
                 )
         });
@@ -115,7 +119,7 @@ impl Render for ResizableStory {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .gap_6()
-            .child(self.group1.clone())
+            .child(div().h(px(900.)).child(self.group1.clone()))
             .child(self.group2.clone())
     }
 }
