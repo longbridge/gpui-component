@@ -78,7 +78,7 @@ pub enum DockItem {
     Split {
         axis: Axis,
         items: Vec<DockItem>,
-        ratios: Vec<Option<f32>>,
+        sizes: Vec<Option<Pixels>>,
         view: Entity<StackPanel>,
     },
     /// Tab layout
@@ -100,15 +100,12 @@ impl std::fmt::Debug for DockItem {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             DockItem::Split {
-                axis,
-                items,
-                ratios,
-                ..
+                axis, items, sizes, ..
             } => f
                 .debug_struct("Split")
                 .field("axis", axis)
                 .field("items", &items.len())
-                .field("ratios", ratios)
+                .field("sizes", sizes)
                 .finish(),
             DockItem::Tabs {
                 items, active_ix, ..
@@ -143,7 +140,7 @@ impl DockItem {
     pub fn split_with_sizes(
         axis: Axis,
         items: Vec<DockItem>,
-        ratios: Vec<Option<f32>>,
+        sizes: Vec<Option<Pixels>>,
         dock_area: &WeakEntity<DockArea>,
         window: &mut Window,
         cx: &mut App,
@@ -153,14 +150,14 @@ impl DockItem {
             let mut stack_panel = StackPanel::new(axis, window, cx);
             for (i, item) in items.iter_mut().enumerate() {
                 let view = item.view();
-                let ratio = ratios.get(i).copied().flatten();
-                stack_panel.add_panel(view.clone(), ratio, dock_area.clone(), window, cx)
+                let size = sizes.get(i).copied().flatten();
+                stack_panel.add_panel(view.clone(), size, dock_area.clone(), window, cx)
             }
 
             for (i, item) in items.iter().enumerate() {
                 let view = item.view();
-                let ratio = ratios.get(i).copied().flatten();
-                stack_panel.add_panel(view.clone(), ratio, dock_area.clone(), window, cx)
+                let size = sizes.get(i).copied().flatten();
+                stack_panel.add_panel(view.clone(), size, dock_area.clone(), window, cx)
             }
 
             stack_panel
@@ -179,7 +176,7 @@ impl DockItem {
         Self::Split {
             axis,
             items,
-            ratios,
+            sizes,
             view: stack_panel,
         }
     }
@@ -450,7 +447,7 @@ impl DockArea {
         let dock_item = DockItem::Split {
             axis: Axis::Horizontal,
             items: vec![],
-            ratios: vec![],
+            sizes: vec![],
             view: stack_panel.clone(),
         };
 
@@ -530,7 +527,7 @@ impl DockArea {
     pub fn set_left_dock(
         &mut self,
         panel: DockItem,
-        ratio: f32,
+        size: Option<Pixels>,
         open: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -539,7 +536,9 @@ impl DockArea {
         let weak_self = cx.entity().downgrade();
         self.left_dock = Some(cx.new(|cx| {
             let mut dock = Dock::left(weak_self.clone(), window, cx);
-            dock.set_ratio(ratio, window, cx);
+            if let Some(size) = size {
+                dock.set_size(size, window, cx);
+            }
             dock.set_panel(panel, window, cx);
             dock.set_open(open, window, cx);
             dock
@@ -550,7 +549,7 @@ impl DockArea {
     pub fn set_bottom_dock(
         &mut self,
         panel: DockItem,
-        ratio: f32,
+        size: Option<Pixels>,
         open: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -559,7 +558,9 @@ impl DockArea {
         let weak_self = cx.entity().downgrade();
         self.bottom_dock = Some(cx.new(|cx| {
             let mut dock = Dock::bottom(weak_self.clone(), window, cx);
-            dock.set_ratio(ratio, window, cx);
+            if let Some(size) = size {
+                dock.set_size(size, window, cx);
+            }
             dock.set_panel(panel, window, cx);
             dock.set_open(open, window, cx);
             dock
@@ -570,7 +571,7 @@ impl DockArea {
     pub fn set_right_dock(
         &mut self,
         panel: DockItem,
-        ratio: f32,
+        size: Option<Pixels>,
         open: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -579,7 +580,9 @@ impl DockArea {
         let weak_self = cx.entity().downgrade();
         self.right_dock = Some(cx.new(|cx| {
             let mut dock = Dock::right(weak_self.clone(), window, cx);
-            dock.set_ratio(ratio, window, cx);
+            if let Some(size) = size {
+                dock.set_size(size, window, cx);
+            }
             dock.set_panel(panel, window, cx);
             dock.set_open(open, window, cx);
             dock
@@ -723,7 +726,7 @@ impl DockArea {
                 } else {
                     self.set_left_dock(
                         DockItem::tabs(vec![panel], None, &weak_self, window, cx),
-                        0.2,
+                        None,
                         true,
                         window,
                         cx,
@@ -736,7 +739,7 @@ impl DockArea {
                 } else {
                     self.set_bottom_dock(
                         DockItem::tabs(vec![panel], None, &weak_self, window, cx),
-                        0.2,
+                        None,
                         true,
                         window,
                         cx,
@@ -749,7 +752,7 @@ impl DockArea {
                 } else {
                     self.set_right_dock(
                         DockItem::tabs(vec![panel], None, &weak_self, window, cx),
-                        0.2,
+                        None,
                         true,
                         window,
                         cx,
