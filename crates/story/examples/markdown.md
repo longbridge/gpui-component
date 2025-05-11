@@ -1,6 +1,6 @@
 # Hello, **World**!
 
-This is first paragraph, there have **BOLD**, _italic_, and ~strikethrough~, `code` text.
+This is first paragraph, It includes **BOLD**, _italic_, and ~strikethrough~, `code` text.
 
 > Blockquote: More complex nested inline style like **bold: _italic_**.
 > This is second paragraph, it includes a block quote.
