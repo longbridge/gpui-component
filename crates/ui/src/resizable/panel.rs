@@ -4,8 +4,8 @@ use std::{
 };
 
 use gpui::{
-    canvas, div, prelude::FluentBuilder, px, relative, Along, AnyElement, AnyView, App, AppContext,
-    Axis, Bounds, Context, Element, Empty, Entity, EntityId, EventEmitter, IntoElement, IsZero,
+    canvas, div, prelude::FluentBuilder, px, Along, AnyElement, AnyView, App, AppContext, Axis,
+    Bounds, Context, Element, Empty, Entity, EntityId, EventEmitter, IntoElement, IsZero,
     MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, Render, Style, Styled, WeakEntity, Window,
 };
 
