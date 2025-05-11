@@ -56,34 +56,30 @@ impl ResizableStory {
                         .size(px(150.))
                         .child(
                             resizable_panel()
-                                .size(px(300.))
+                                .size(px(120.))
                                 .size_range(px(120.)..px(300.))
-                                .content(|_, cx| panel_box("Left 1 (120px .. 300px)", cx)),
+                                .content(|_, cx| panel_box("Left (120px .. 300px)", cx)),
                             cx,
                         )
                         .child(
-                            resizable_panel()
-                                .size(px(400.))
-                                .content(|_, cx| panel_box("Center 1", cx)),
+                            resizable_panel().content(|_, cx| panel_box("Center", cx)),
                             cx,
                         )
                         .child(
                             resizable_panel()
                                 .size(px(300.))
-                                .content(|_, cx| panel_box("Right (Grow)", cx)),
+                                .content(|_, cx| panel_box("Right", cx)),
                             cx,
                         ),
                     cx,
                 )
                 .child(
-                    resizable_panel()
-                        .size(px(150.))
-                        .content(|_, cx| panel_box("Center (Grow)", cx)),
+                    resizable_panel().content(|_, cx| panel_box("Center", cx)),
                     cx,
                 )
                 .child(
                     resizable_panel()
-                        .size(px(210.))
+                        .size(px(80.))
                         .size_range(px(80.)..Pixels::MAX)
                         .content(|_, cx| panel_box("Bottom (80px .. 150px)", cx)),
                     cx,
@@ -94,15 +90,13 @@ impl ResizableStory {
             h_resizable()
                 .child(
                     resizable_panel()
-                        .size(px(300.))
+                        .size(px(200.))
                         .size_range(px(200.)..px(400.))
                         .content(|_, cx| panel_box("Left 2", cx)),
                     cx,
                 )
                 .child(
-                    resizable_panel()
-                        .size(px(400.))
-                        .content(|_, cx| panel_box("Right (Grow)", cx)),
+                    resizable_panel().content(|_, cx| panel_box("Right (Grow)", cx)),
                     cx,
                 )
         });
@@ -118,7 +112,7 @@ impl Render for ResizableStory {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .gap_6()
-            .child(div().h(px(900.)).child(self.group1.clone()))
+            .child(div().h(px(1200.)).child(self.group1.clone()))
             .child(self.group2.clone())
     }
 }
