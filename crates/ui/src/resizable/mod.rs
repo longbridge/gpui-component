@@ -1,7 +1,8 @@
 use std::ops::Range;
 
 use gpui::{
-    px, Along, App, Axis, Bounds, Context, ElementId, Entity, EventEmitter, Pixels, Window,
+    px, Along, App, AppContext, Axis, Bounds, Context, ElementId, Entity, EventEmitter, Pixels,
+    Window,
 };
 
 mod panel;
@@ -23,14 +24,14 @@ pub struct ResizableState {
 }
 
 impl ResizableState {
-    pub fn new() -> Self {
-        Self {
+    pub fn new(cx: &mut App) -> Entity<Self> {
+        cx.new(|_| Self {
             axis: Axis::Horizontal,
             panels: vec![],
             sizes: vec![],
             resizing_panel_ix: None,
             bounds: Bounds::default(),
-        }
+        })
     }
 
     pub fn insert_panel(
@@ -210,7 +211,7 @@ impl ResizableState {
 impl EventEmitter<ResizablePanelEvent> for ResizableState {}
 
 #[derive(Debug, Clone, Default)]
-pub struct ResizablePanelState {
+pub(crate) struct ResizablePanelState {
     pub size: Option<Pixels>,
     pub size_range: Range<Pixels>,
     bounds: Bounds<Pixels>,

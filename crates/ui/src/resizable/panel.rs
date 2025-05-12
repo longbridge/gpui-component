@@ -54,13 +54,16 @@ impl ResizablePanelGroup {
     /// - The `axis` will be set to the same axis as the group.
     /// - The `initial_size` will be set to the average size of all panels if not provided.
     /// - The `group` will be set to the group entity.
-    pub fn child(mut self, panel: ResizablePanel) -> Self {
-        self.children.push(panel);
+    pub fn child(mut self, panel: impl Into<ResizablePanel>) -> Self {
+        self.children.push(panel.into());
         self
     }
 
-    pub fn children(mut self, panels: impl IntoIterator<Item = ResizablePanel>) -> Self {
-        self.children = panels.into_iter().collect();
+    pub fn children<I>(mut self, panels: impl IntoIterator<Item = I>) -> Self
+    where
+        I: Into<ResizablePanel>,
+    {
+        self.children = panels.into_iter().map(|panel| panel.into()).collect();
         self
     }
 
@@ -78,6 +81,15 @@ impl ResizablePanelGroup {
         self
     }
 }
+impl<T> From<T> for ResizablePanel
+where
+    T: Into<AnyElement>,
+{
+    fn from(value: T) -> Self {
+        resizable_panel().child(value.into())
+    }
+}
+
 impl EventEmitter<ResizablePanelEvent> for ResizablePanelGroup {}
 
 impl RenderOnce for ResizablePanelGroup {

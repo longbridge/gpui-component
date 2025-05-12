@@ -12,8 +12,8 @@ use crate::{
 
 use super::{DockArea, Panel, PanelEvent, PanelState, PanelView, TabPanel};
 use gpui::{
-    App, AppContext, Axis, Context, DismissEvent, Entity, EventEmitter, FocusHandle, Focusable,
-    IntoElement, ParentElement, Pixels, Render, Styled, Subscription, WeakEntity, Window,
+    App, Axis, Context, DismissEvent, Entity, EventEmitter, FocusHandle, Focusable, IntoElement,
+    ParentElement, Pixels, Render, Styled, Subscription, WeakEntity, Window,
 };
 use smallvec::SmallVec;
 
@@ -53,7 +53,7 @@ impl Panel for StackPanel {
 
 impl StackPanel {
     pub fn new(axis: Axis, _: &mut Window, cx: &mut Context<Self>) -> Self {
-        let state = cx.new(|_| ResizableState::new());
+        let state = ResizableState::new(cx);
 
         // Bubble up the resize event.
         let _subscriptions = vec![cx.subscribe(&state, |_, _, _: &ResizablePanelEvent, cx| {

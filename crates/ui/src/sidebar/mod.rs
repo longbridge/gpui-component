@@ -5,8 +5,8 @@ use crate::{
     v_flex, ActiveTheme, Collapsible, Icon, IconName, Side, Sizable, StyledExt,
 };
 use gpui::{
-    div, prelude::FluentBuilder, px, AnyElement, App, ClickEvent, InteractiveElement as _,
-    IntoElement, ParentElement, Pixels, RenderOnce, Styled, Window,
+    div, prelude::FluentBuilder, px, AnyElement, App, ClickEvent, DefiniteLength,
+    InteractiveElement as _, IntoElement, ParentElement, Pixels, RenderOnce, Styled, Window,
 };
 use std::rc::Rc;
 
@@ -33,7 +33,8 @@ pub struct Sidebar<E: Collapsible + IntoElement + 'static> {
     /// The side of the sidebar
     side: Side,
     collapsible: bool,
-    width: Pixels,
+    width: DefiniteLength,
+    border_width: Pixels,
     collapsed: bool,
 }
 
@@ -45,7 +46,8 @@ impl<E: Collapsible + IntoElement> Sidebar<E> {
             footer: None,
             side,
             collapsible: true,
-            width: DEFAULT_WIDTH,
+            width: DEFAULT_WIDTH.into(),
+            border_width: px(1.),
             collapsed: false,
         }
     }
@@ -59,8 +61,14 @@ impl<E: Collapsible + IntoElement> Sidebar<E> {
     }
 
     /// Set the width of the sidebar
-    pub fn width(mut self, width: Pixels) -> Self {
-        self.width = width;
+    pub fn width(mut self, width: impl Into<DefiniteLength>) -> Self {
+        self.width = width.into();
+        self
+    }
+
+    /// Set border width of the sidebar
+    pub fn border_width(mut self, border_width: impl Into<Pixels>) -> Self {
+        self.border_width = border_width.into();
         self
     }
 
@@ -191,8 +199,8 @@ impl<E: Collapsible + IntoElement> RenderOnce for Sidebar<E> {
             .text_color(cx.theme().sidebar_foreground)
             .border_color(cx.theme().sidebar_border)
             .map(|this| match self.side {
-                Side::Left => this.border_r_1(),
-                Side::Right => this.border_l_1(),
+                Side::Left => this.border_r(self.border_width),
+                Side::Right => this.border_l(self.border_width),
             })
             .when_some(self.header.take(), |this, header| {
                 this.child(h_flex().id("header").p_2().gap_2().child(header))

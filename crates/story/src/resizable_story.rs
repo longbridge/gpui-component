@@ -40,9 +40,9 @@ impl ResizableStory {
     }
 
     fn new(_: &mut Window, cx: &mut App) -> Self {
-        let state1 = cx.new(|_| ResizableState::new());
-        let state2 = cx.new(|_| ResizableState::new());
-        let state3 = cx.new(|_| ResizableState::new());
+        let state1 = ResizableState::new(cx);
+        let state2 = ResizableState::new(cx);
+        let state3 = ResizableState::new(cx);
 
         Self {
             focus_handle: cx.focus_handle(),
