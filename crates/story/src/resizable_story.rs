@@ -4,7 +4,7 @@ use gpui::{
 };
 use gpui_component::{
     resizable::{h_resizable, resizable_panel, v_resizable, ResizablePanelGroup},
-    v_flex, ActiveTheme, StyledExt,
+    v_flex, ActiveTheme,
 };
 
 pub struct ResizableStory {
@@ -56,7 +56,7 @@ impl ResizableStory {
                         .size(px(150.))
                         .child(
                             resizable_panel()
-                                .size(px(120.))
+                                .size(px(150.))
                                 .size_range(px(120.)..px(300.))
                                 .content(|_, cx| panel_box("Left (120px .. 300px)", cx)),
                             cx,
@@ -113,7 +113,7 @@ impl Render for ResizableStory {
         v_flex()
             .size_full()
             .gap_6()
-            .child(div().h(px(800.)).debug_red().child(self.group1.clone()))
+            .child(div().h(px(800.)).child(self.group1.clone()))
             .child(self.group2.clone())
     }
 }

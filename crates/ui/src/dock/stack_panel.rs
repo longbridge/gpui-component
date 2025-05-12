@@ -5,7 +5,7 @@ use crate::{
     h_flex,
     resizable::{
         h_resizable, resizable_panel, v_resizable, ResizablePanel, ResizablePanelEvent,
-        ResizablePanelGroup,
+        ResizablePanelGroup, PANEL_MIN_SIZE,
     },
     ActiveTheme, AxisExt as _, Placement,
 };
@@ -238,10 +238,20 @@ impl StackPanel {
             ix
         };
 
+        // Get avg size of all panels to insert new panel, if size is None.
+        let size = match size {
+            Some(size) => size,
+            None => {
+                let panel_group = self.panel_group.read(cx);
+                (panel_group.total_size() / (panel_group.sizes().len() + 1) as f32)
+                    .max(PANEL_MIN_SIZE)
+            }
+        };
+
         self.panels.insert(ix, panel.clone());
         self.panel_group.update(cx, |view, cx| {
             view.insert_child(
-                Self::new_resizable_panel(panel.clone(), size),
+                Self::new_resizable_panel(panel.clone(), Some(size)),
                 ix,
                 window,
                 cx,
