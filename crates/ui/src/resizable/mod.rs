@@ -213,8 +213,6 @@ impl ResizableState {
 
         for (i, _) in old_sizes.iter().enumerate() {
             let size = new_sizes[i];
-
-            new_sizes[i] = size;
             self.panels[i].size = Some(size);
         }
 
