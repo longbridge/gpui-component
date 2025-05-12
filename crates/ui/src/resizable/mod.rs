@@ -124,7 +124,8 @@ impl ResizableState {
         self.sizes.clear();
     }
 
-    pub(crate) fn sizes(&self) -> &Vec<Pixels> {
+    /// Get the size of the panels.
+    pub fn sizes(&self) -> &Vec<Pixels> {
         &self.sizes
     }
 
