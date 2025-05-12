@@ -25,6 +25,7 @@ pub fn init(cx: &mut App) {
 
 pub struct NumberInput {
     input: Entity<TextInput>,
+    thousands_separator: SharedString,
     size: Size,
     _subscriptions: Vec<Subscription>,
     _synced_size: bool,
@@ -49,6 +50,7 @@ impl NumberInput {
         Self {
             input,
             size: Size::default(),
+            thousands_separator: "".into(),
             _synced_size: false,
             _subscriptions,
         }
@@ -114,6 +116,16 @@ impl NumberInput {
 
     pub fn decrement(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.on_action_decrement(&Decrement, window, cx);
+    }
+
+    /// Set the input to be a number input with thousands separator.
+    ///
+    /// Default is `""` (no separator).
+    ///
+    /// e.g.: `1234.56` to `1,234.56`
+    pub fn thousands_separator(mut self, sep: impl Into<SharedString>) -> Self {
+        self.thousands_separator = sep.into();
+        self
     }
 
     fn on_action_increment(&mut self, _: &Increment, window: &mut Window, cx: &mut Context<Self>) {
