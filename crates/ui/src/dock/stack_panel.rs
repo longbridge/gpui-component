@@ -4,17 +4,16 @@ use crate::{
     dock::PanelInfo,
     h_flex,
     resizable::{
-        h_resizable, resizable_panel, v_resizable, ResizablePanel, ResizablePanelEvent,
-        ResizablePanelGroup, PANEL_MIN_SIZE,
+        resizable_panel, ResizablePanelEvent, ResizablePanelGroup, ResizablePanelState,
+        ResizableState, PANEL_MIN_SIZE,
     },
     ActiveTheme, AxisExt as _, Placement,
 };
 
 use super::{DockArea, Panel, PanelEvent, PanelState, PanelView, TabPanel};
 use gpui::{
-    prelude::FluentBuilder as _, App, AppContext, Axis, Context, DismissEvent, Entity,
-    EventEmitter, FocusHandle, Focusable, IntoElement, ParentElement, Pixels, Render, Styled,
-    Subscription, WeakEntity, Window,
+    App, AppContext, Axis, Context, DismissEvent, Entity, EventEmitter, FocusHandle, Focusable,
+    IntoElement, ParentElement, Pixels, Render, Styled, Subscription, WeakEntity, Window,
 };
 use smallvec::SmallVec;
 
@@ -23,7 +22,7 @@ pub struct StackPanel {
     pub(super) axis: Axis,
     focus_handle: FocusHandle,
     pub(crate) panels: SmallVec<[Arc<dyn PanelView>; 2]>,
-    panel_group: Entity<ResizablePanelGroup>,
+    state: Entity<ResizableState>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -41,7 +40,7 @@ impl Panel for StackPanel {
         }
     }
     fn dump(&self, cx: &App) -> PanelState {
-        let sizes = self.panel_group.read(cx).sizes();
+        let sizes = self.state.read(cx).sizes().clone();
         let mut state = PanelState::new(self);
         for panel in &self.panels {
             state.add_child(panel.dump(cx));
@@ -54,26 +53,19 @@ impl Panel for StackPanel {
 
 impl StackPanel {
     pub fn new(axis: Axis, _: &mut Window, cx: &mut Context<Self>) -> Self {
-        let panel_group = cx.new(|_| {
-            if axis == Axis::Horizontal {
-                h_resizable()
-            } else {
-                v_resizable()
-            }
-        });
+        let state = cx.new(|_| ResizableState::new());
 
         // Bubble up the resize event.
-        let _subscriptions = vec![cx
-            .subscribe(&panel_group, |_, _, _: &ResizablePanelEvent, cx| {
-                cx.emit(PanelEvent::LayoutChanged)
-            })];
+        let _subscriptions = vec![cx.subscribe(&state, |_, _, _: &ResizablePanelEvent, cx| {
+            cx.emit(PanelEvent::LayoutChanged)
+        })];
 
         Self {
             axis,
             parent: None,
             focus_handle: cx.focus_handle(),
             panels: SmallVec::new(),
-            panel_group,
+            state,
             _subscriptions,
         }
     }
@@ -186,13 +178,6 @@ impl StackPanel {
         self.insert_panel(panel, ix + 1, size, dock_area, window, cx);
     }
 
-    fn new_resizable_panel(panel: Arc<dyn PanelView>, size: Option<Pixels>) -> ResizablePanel {
-        resizable_panel()
-            .content_view(panel.view())
-            .content_visible(move |_, cx| panel.visible(cx))
-            .when_some(size, |this, size| this.size(size))
-    }
-
     fn insert_panel(
         &mut self,
         panel: Arc<dyn PanelView>,
@@ -242,22 +227,15 @@ impl StackPanel {
         let size = match size {
             Some(size) => size,
             None => {
-                let panel_group = self.panel_group.read(cx);
-                (panel_group.total_size() / (panel_group.sizes().len() + 1) as f32)
-                    .max(PANEL_MIN_SIZE)
+                let state = self.state.read(cx);
+                (state.total_size() / (state.sizes().len() + 1) as f32).max(PANEL_MIN_SIZE)
             }
         };
 
         self.panels.insert(ix, panel.clone());
-        self.panel_group.update(cx, |view, cx| {
-            view.insert_child(
-                Self::new_resizable_panel(panel.clone(), Some(size)),
-                ix,
-                window,
-                cx,
-            )
+        self.state.update(cx, |state, cx| {
+            state.insert_panel(Some(size), Some(ix), cx);
         });
-
         cx.emit(PanelEvent::LayoutChanged);
         cx.notify();
     }
@@ -271,8 +249,8 @@ impl StackPanel {
     ) {
         if let Some(ix) = self.index_of_panel(panel.clone()) {
             self.panels.remove(ix);
-            self.panel_group.update(cx, |view, cx| {
-                view.remove_child(ix, window, cx);
+            self.state.update(cx, |state, cx| {
+                state.remove_panel(ix, cx);
             });
 
             cx.emit(PanelEvent::LayoutChanged);
@@ -287,18 +265,15 @@ impl StackPanel {
         &mut self,
         old_panel: Arc<dyn PanelView>,
         new_panel: Entity<StackPanel>,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) {
         if let Some(ix) = self.index_of_panel(old_panel.clone()) {
             self.panels[ix] = Arc::new(new_panel.clone());
-            self.panel_group.update(cx, |view, cx| {
-                view.replace_child(
-                    Self::new_resizable_panel(Arc::new(new_panel.clone()), None),
-                    ix,
-                    window,
-                    cx,
-                );
+
+            let panel_state = ResizablePanelState::default();
+            self.state.update(cx, |state, cx| {
+                state.replace_panel(ix, panel_state, cx);
             });
             cx.emit(PanelEvent::LayoutChanged);
         }
@@ -387,17 +362,17 @@ impl StackPanel {
     }
 
     /// Remove all panels from the stack.
-    pub(super) fn remove_all_panels(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn remove_all_panels(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         self.panels.clear();
-        self.panel_group
-            .update(cx, |view, cx| view.remove_all_children(window, cx));
+        self.state.update(cx, |state, cx| {
+            state.clear();
+            cx.notify();
+        });
     }
 
     /// Change the axis of the stack panel.
-    pub(super) fn set_axis(&mut self, axis: Axis, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn set_axis(&mut self, axis: Axis, _: &mut Window, cx: &mut Context<Self>) {
         self.axis = axis;
-        self.panel_group
-            .update(cx, |view, cx| view.set_axis(axis, window, cx));
         cx.notify();
     }
 }
@@ -415,6 +390,14 @@ impl Render for StackPanel {
             .size_full()
             .overflow_hidden()
             .bg(cx.theme().tab_bar)
-            .child(self.panel_group.clone())
+            .child(
+                ResizablePanelGroup::new("stack-panel-group", self.state.clone())
+                    .axis(self.axis)
+                    .children(self.panels.clone().into_iter().map(|panel| {
+                        resizable_panel()
+                            .child(panel.view())
+                            .visible(panel.visible(cx))
+                    })),
+            )
     }
 }
