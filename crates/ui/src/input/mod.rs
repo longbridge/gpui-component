@@ -3,7 +3,6 @@ mod change;
 mod clear_button;
 mod element;
 mod input;
-mod mask;
 mod mask_pattern;
 mod number_input;
 mod otp_input;

@@ -19,7 +19,7 @@ pub struct Gallery {
 }
 
 impl Gallery {
-    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(init_story: Option<&str>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let search_input = cx.new(|cx| {
             TextInput::new(window, cx)
                 .appearance(false)
@@ -82,7 +82,7 @@ impl Gallery {
             ),
         ];
 
-        Self {
+        let mut this = Self {
             search_input,
             stories,
             active_group_index: Some(0),
@@ -90,11 +90,31 @@ impl Gallery {
             collapsed: false,
             sidebar_state: ResizableState::new(cx),
             _subscriptions,
+        };
+
+        if let Some(init_story) = init_story {
+            this.set_active_story(init_story, cx);
         }
+
+        this
     }
 
-    fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
-        cx.new(|cx| Self::new(window, cx))
+    fn set_active_story(&mut self, name: &str, cx: &mut App) {
+        let group_index = 1;
+        let Some(story_index) = self.stories.get(group_index).and_then(|(_, stories)| {
+            stories
+                .iter()
+                .position(|story| story.read(cx).name.to_lowercase().replace("story", "") == name)
+        }) else {
+            return;
+        };
+
+        self.active_group_index = Some(group_index);
+        self.active_index = Some(story_index);
+    }
+
+    fn view(init_story: Option<&str>, window: &mut Window, cx: &mut App) -> Entity<Self> {
+        cx.new(|cx| Self::new(init_story, window, cx))
     }
 }
 
@@ -271,10 +291,17 @@ impl Render for Gallery {
 fn main() {
     let app = Application::new().with_assets(Assets);
 
+    // Parse `cargo run -- <story_name>`
+    let name = std::env::args().nth(1);
+
     app.run(move |cx| {
         story::init(cx);
         cx.activate(true);
 
-        story::create_new_window("Gallery of GPUI Component", Gallery::view, cx);
+        story::create_new_window(
+            "Gallery of GPUI Component",
+            move |window, cx| Gallery::view(name.as_deref(), window, cx),
+            cx,
+        );
     });
 }
