@@ -121,21 +121,10 @@ impl InputStory {
                 .placeholder("This input have prefix and suffix.")
         });
 
-        let phone_input = cx.new(|cx| {
-            TextInput::new(window, cx)
-                .mask_pattern("999-999-9999")
-                .placeholder("___-___-____")
-        });
-        let mask_input2 = cx.new(|cx| {
-            TextInput::new(window, cx)
-                .mask_pattern("AAA-999-AAA")
-                .placeholder("___-___-___")
-        });
-        let currency_input = cx.new(|cx| {
-            TextInput::new(window, cx)
-                .mask_pattern("999,999,999.999,999,999")
-                .placeholder("_,___.__")
-        });
+        let phone_input = cx.new(|cx| TextInput::new(window, cx).mask_pattern("(999)-999-9999"));
+        let mask_input2 = cx.new(|cx| TextInput::new(window, cx).mask_pattern("AAA-###-AAA"));
+        let currency_input =
+            cx.new(|cx| TextInput::new(window, cx).mask_pattern("999,999,999.999,999,999"));
 
         let _subscriptions = vec![
             cx.subscribe_in(&input1, window, Self::on_input_event),
@@ -260,7 +249,7 @@ impl Render for InputStory {
                     ),
             )
             .child(
-                section("Input with mask pattern: 999-999-9999")
+                section("Input with mask pattern: (999)-999-9999")
                     .max_w_md()
                     .child(self.phone_input.clone())
                     .child(
@@ -273,7 +262,7 @@ impl Render for InputStory {
                     ),
             )
             .child(
-                section("Input with mask pattern: AAA-999-AAA")
+                section("Input with mask pattern: AAA-###-AAA")
                     .max_w_md()
                     .child(self.mask_input2.clone())
                     .child(

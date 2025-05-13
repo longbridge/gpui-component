@@ -41,6 +41,24 @@ impl MaskToken {
         matches!(self, MaskToken::Sep(_))
     }
 
+    fn is_number(&self) -> bool {
+        matches!(
+            self,
+            MaskToken::Digit
+                | MaskToken::LetterOrDigit
+                | MaskToken::DecimalSep
+                | MaskToken::GroupSep
+        )
+    }
+
+    pub fn placeholder(&self) -> char {
+        match self {
+            MaskToken::DecimalSep | MaskToken::GroupSep => '.',
+            MaskToken::Sep(c) => *c,
+            _ => '_',
+        }
+    }
+
     fn mask_char(&self, ch: char) -> char {
         match self {
             MaskToken::Digit => ch,
@@ -66,6 +84,7 @@ impl MaskToken {
 
 #[derive(Clone, Default)]
 pub struct MaskPattern {
+    pattern: SharedString,
     tokens: Vec<MaskToken>,
 }
 
@@ -91,7 +110,21 @@ impl MaskPattern {
             })
             .collect();
 
-        Self { tokens }
+        Self {
+            tokens,
+            pattern: pattern.to_owned().into(),
+        }
+    }
+
+    pub fn pattern(&self) -> &SharedString {
+        &self.pattern
+    }
+
+    pub fn placeholder(&self) -> String {
+        self.tokens
+            .iter()
+            .map(|token| token.placeholder())
+            .collect()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -342,8 +375,10 @@ mod tests {
         assert_eq!(unmasked_text, "AB123456");
         assert_eq!(mask.is_valid(&masked_text), true);
 
-        let invalid_text = "12AB345";
-        assert_eq!(mask.is_valid(invalid_text), false);
+        assert_eq!(mask.is_valid("12AB345"), false);
+        assert_eq!(mask.is_valid("(11)123-456"), false);
+        assert_eq!(mask.is_valid("##"), false);
+        assert_eq!(mask.is_valid("(AB)123456"), true);
     }
 
     #[test]

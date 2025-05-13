@@ -1598,6 +1598,7 @@ impl TextInput {
     /// Example: "(999)999-999" for phone numbers
     pub fn mask_pattern(mut self, pattern: impl Into<MaskPattern>) -> Self {
         self.mask_pattern = pattern.into();
+        self.placeholder = self.mask_pattern.placeholder().into();
         self
     }
 }
