@@ -1672,7 +1672,7 @@ impl EntityInputHandler for TextInput {
             return;
         }
 
-        let (text, new_text_len) = if self.mask_pattern.is_any() {
+        let (text, new_text_len) = if self.mask_pattern.is_empty() {
             (pending_text.clone(), new_text.len())
         } else {
             let mask_text = self.mask_pattern.mask(&pending_text);

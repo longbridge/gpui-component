@@ -1,147 +1,175 @@
 use gpui::SharedString;
 
-#[derive(Clone, Default)]
-pub enum MaskPattern {
-    #[default]
+#[derive(Clone, PartialEq, Debug)]
+enum MaskToken {
+    /// 0 Digit, equivalent to `[0]`
+    // Digit0,
+    /// Digit, equivalent to `[0-9]`
+    Digit,
+    /// Letter, equivalent to `[a-zA-Z]`
+    Letter,
+    /// Letter or digit, equivalent to `[a-zA-Z0-9]`
+    LetterOrDigit,
+    /// Decimal separator `.` used for decimal point
+    DecimalSep,
+    /// Group separator `,` used for thousand separator
+    GroupSep,
+    /// Separator
+    Sep(char),
+    /// Any character
     Any,
-    Str(SharedString),
-    Regex(regex::Regex),
 }
 
-impl From<&str> for MaskPattern {
-    fn from(value: &str) -> Self {
-        MaskPattern::Str(value.to_owned().into())
+impl MaskToken {
+    pub fn is_any(&self) -> bool {
+        matches!(self, MaskToken::Any)
+    }
+
+    fn is_match(&self, ch: char) -> bool {
+        match self {
+            MaskToken::Digit => ch.is_ascii_digit(),
+            MaskToken::Letter => ch.is_ascii_alphabetic(),
+            MaskToken::LetterOrDigit => ch.is_ascii_alphanumeric(),
+            MaskToken::DecimalSep => ch == '.',
+            MaskToken::GroupSep => ch == ',',
+            MaskToken::Any => true,
+            MaskToken::Sep(c) => *c == ch,
+        }
+    }
+
+    fn is_sep(&self) -> bool {
+        matches!(self, MaskToken::Sep(_))
+    }
+
+    fn mask_char(&self, ch: char) -> char {
+        match self {
+            MaskToken::Digit => ch,
+            MaskToken::Letter => ch,
+            MaskToken::LetterOrDigit => ch,
+            MaskToken::DecimalSep => '.',
+            MaskToken::GroupSep => ',',
+            MaskToken::Sep(c) => *c,
+            MaskToken::Any => ch,
+        }
+    }
+
+    fn unmask_char(&self, ch: char) -> Option<char> {
+        match self {
+            MaskToken::Digit => Some(ch),
+            MaskToken::Letter => Some(ch),
+            MaskToken::LetterOrDigit => Some(ch),
+            MaskToken::Any => Some(ch),
+            _ => None,
+        }
     }
 }
 
-impl From<regex::Regex> for MaskPattern {
-    fn from(value: regex::Regex) -> Self {
-        MaskPattern::Regex(value)
+#[derive(Clone, Default)]
+pub struct MaskPattern {
+    tokens: Vec<MaskToken>,
+}
+
+impl From<&str> for MaskPattern {
+    fn from(pattern: &str) -> Self {
+        Self::new(pattern)
     }
 }
 
 impl MaskPattern {
-    pub(crate) fn is_any(&self) -> bool {
-        matches!(self, MaskPattern::Any)
+    pub fn new(pattern: &str) -> Self {
+        let tokens = pattern
+            .chars()
+            .map(|ch| match ch {
+                // '0' => MaskToken::Digit0,
+                '9' => MaskToken::Digit,
+                'A' => MaskToken::Letter,
+                '#' => MaskToken::LetterOrDigit,
+                '.' => MaskToken::DecimalSep,
+                ',' => MaskToken::GroupSep,
+                '*' => MaskToken::Any,
+                _ => MaskToken::Sep(ch),
+            })
+            .collect();
+
+        Self { tokens }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.tokens.is_empty()
     }
 
     /// Check is the mask text is valid.
     ///
     /// If the mask pattern is None, always return true.
-    pub(crate) fn is_valid(&self, mask_text: &str) -> bool {
-        if self.is_any() {
+    pub fn is_valid(&self, mask_text: &str) -> bool {
+        if self.is_empty() {
             return true;
         }
 
         let mut text_index = 0;
-        match self {
-            MaskPattern::Any => return true,
-            MaskPattern::Str(pattern) => {
-                for c in pattern.chars() {
-                    if text_index >= mask_text.len() {
-                        break;
-                    }
-                    match c {
-                        '9' => {
-                            if !mask_text[text_index..]
-                                .chars()
-                                .next()
-                                .map_or(false, |c| c.is_ascii_digit())
-                            {
-                                return false;
-                            }
-                        }
-                        'A' => {
-                            if !mask_text[text_index..]
-                                .chars()
-                                .next()
-                                .map_or(false, |c| c.is_ascii_alphabetic())
-                            {
-                                return false;
-                            }
-                        }
-                        '*' => {}
-                        _ => {
-                            if mask_text[text_index..].chars().next() != Some(c) {
-                                return false;
-                            }
-                        }
-                    }
-                    text_index += 1;
-                }
+        let mask_text_chars: Vec<char> = mask_text.chars().collect();
+        for token in &self.tokens {
+            if text_index >= mask_text_chars.len() {
+                break;
             }
-            MaskPattern::Regex(pattern) => {
-                if !pattern.is_match(mask_text) {
-                    return false;
-                }
+
+            let ch = mask_text_chars[text_index];
+            if token.is_match(ch) {
+                text_index += 1;
             }
         }
+        text_index == mask_text.len()
+    }
 
-        true
+    /// Check if valid input char at the given position.
+    pub fn is_valid_at(&self, ch: char, pos: usize) -> bool {
+        if self.is_empty() {
+            return true;
+        }
+
+        let mut pos = pos;
+        while let Some(token) = self.tokens.get(pos) {
+            if token.is_match(ch) {
+                return true;
+            }
+
+            if !token.is_sep() {
+                break;
+            }
+
+            pos += 1;
+        }
+
+        false
     }
 
     /// Format the text according to the mask pattern
-    pub(crate) fn mask(&self, text: &str) -> SharedString {
-        if self.is_any() {
+    ///
+    /// For example:
+    ///
+    /// - pattern: (999)999-999
+    /// - text: 123456789
+    /// - mask_text: (123)456-789
+    pub fn mask(&self, text: &str) -> SharedString {
+        if self.is_empty() {
             return text.to_owned().into();
         }
 
         let mut result = String::new();
-        let mut text_index = 0;
 
-        match self {
-            MaskPattern::Any => return text.to_owned().into(),
-            MaskPattern::Str(pattern) => {
-                for c in pattern.chars() {
-                    if text_index >= text.len() {
-                        break;
-                    }
-                    match c {
-                        '9' => {
-                            if text[text_index..]
-                                .chars()
-                                .next()
-                                .map_or(false, |c| c.is_ascii_digit())
-                            {
-                                result.push(text[text_index..].chars().next().unwrap());
-                                text_index += 1;
-                            }
-                        }
-                        'A' => {
-                            if text[text_index..]
-                                .chars()
-                                .next()
-                                .map_or(false, |c| c.is_ascii_alphabetic())
-                            {
-                                result.push(text[text_index..].chars().next().unwrap());
-                                text_index += 1;
-                            }
-                        }
-                        '*' => {
-                            result.push(text[text_index..].chars().next().unwrap());
-                            text_index += 1;
-                        }
-                        _ => {
-                            result.push(c);
-                            if text_index < text.len()
-                                && text[text_index..].chars().next() == Some(c)
-                            {
-                                text_index += 1;
-                            }
-                        }
-                    }
-                }
+        let mut text_index = 0;
+        let text_chars: Vec<char> = text.chars().collect();
+
+        for token in &self.tokens {
+            if text_index >= text_chars.len() {
+                break;
             }
-            MaskPattern::Regex(pattern) => {
-                if !pattern.is_match(text) {
-                    return text.to_owned().into();
-                }
-                let captures = pattern.captures(text).unwrap();
-                for i in 0..captures.len() {
-                    if let Some(m) = captures.get(i) {
-                        result.push_str(m.as_str());
-                    }
-                }
+
+            let ch = text_chars[text_index];
+            let mask_ch = token.mask_char(ch);
+            result.push(mask_ch);
+            if ch == mask_ch {
+                text_index += 1;
             }
         }
 
@@ -149,42 +177,19 @@ impl MaskPattern {
     }
 
     /// Extract original text from masked text
-    pub(crate) fn unmask(&self, mask_text: &str) -> String {
+    pub fn unmask(&self, mask_text: &str) -> String {
         let mut result = String::new();
-        let mut text_index = 0;
+        let mask_text_chars: Vec<char> = mask_text.chars().collect();
 
-        match self {
-            MaskPattern::Any => return mask_text.to_owned(),
-            MaskPattern::Str(pattern) => {
-                for c in pattern.chars() {
-                    if text_index >= mask_text.len() {
-                        break;
-                    }
-
-                    match c {
-                        '9' | 'A' | '*' => {
-                            if let Some(ch) = mask_text[text_index..].chars().next() {
-                                if (c == '9' && ch.is_ascii_digit())
-                                    || (c == 'A' && ch.is_ascii_alphabetic())
-                                    || (c == '*')
-                                {
-                                    result.push(ch);
-                                }
-                                text_index += 1;
-                            }
-                        }
-                        _ => {
-                            if mask_text[text_index..].chars().next() == Some(c) {
-                                text_index += 1;
-                            }
-                        }
-                    }
-                }
+        for (text_index, token) in self.tokens.iter().enumerate() {
+            if text_index >= mask_text_chars.len() {
+                break;
             }
-            MaskPattern::Regex(_) => {
-                // Regex patterns are not supported for unmasking
-                // This is a placeholder implementation
-                result = mask_text.to_owned();
+
+            let ch = mask_text_chars[text_index];
+            let unmask_ch = token.unmask_char(ch);
+            if let Some(ch) = unmask_ch {
+                result.push(ch);
             }
         }
 
@@ -297,11 +302,39 @@ impl MaskPattern {
 
 #[cfg(test)]
 mod tests {
-    use crate::input::mask_pattern::MaskPattern;
+    use crate::input::mask_pattern::{MaskPattern, MaskToken};
 
     #[test]
     fn test_mask_pattern1() {
-        let mask = MaskPattern::from("(AA)999-999");
+        let mask = MaskPattern::new("(AA)999-999");
+        assert_eq!(
+            mask.tokens,
+            vec![
+                MaskToken::Sep('('),
+                MaskToken::Letter,
+                MaskToken::Letter,
+                MaskToken::Sep(')'),
+                MaskToken::Digit,
+                MaskToken::Digit,
+                MaskToken::Digit,
+                MaskToken::Sep('-'),
+                MaskToken::Digit,
+                MaskToken::Digit,
+                MaskToken::Digit,
+            ]
+        );
+
+        assert_eq!(mask.is_valid_at('(', 0), true);
+        assert_eq!(mask.is_valid_at('H', 0), true);
+        assert_eq!(mask.is_valid_at('3', 0), false);
+        assert_eq!(mask.is_valid_at(')', 1), false);
+        assert_eq!(mask.is_valid_at('H', 1), true);
+        assert_eq!(mask.is_valid_at('1', 1), false);
+        assert_eq!(mask.is_valid_at('e', 2), true);
+        assert_eq!(mask.is_valid_at(')', 3), true);
+        assert_eq!(mask.is_valid_at('1', 3), true);
+        assert_eq!(mask.is_valid_at('2', 4), true);
+
         let text = "AB123456";
         let masked_text = mask.mask(text);
         assert_eq!(masked_text, "(AB)123-456");
@@ -309,13 +342,33 @@ mod tests {
         assert_eq!(unmasked_text, "AB123456");
         assert_eq!(mask.is_valid(&masked_text), true);
 
-        let invalid_text = "AB12345";
+        let invalid_text = "12AB345";
         assert_eq!(mask.is_valid(invalid_text), false);
     }
 
     #[test]
     fn test_mask_pattern2() {
-        let mask = MaskPattern::from("999-999-******");
+        let mask = MaskPattern::new("999-999-******");
+        assert_eq!(
+            mask.tokens,
+            vec![
+                MaskToken::Digit,
+                MaskToken::Digit,
+                MaskToken::Digit,
+                MaskToken::Sep('-'),
+                MaskToken::Digit,
+                MaskToken::Digit,
+                MaskToken::Digit,
+                MaskToken::Sep('-'),
+                MaskToken::Any,
+                MaskToken::Any,
+                MaskToken::Any,
+                MaskToken::Any,
+                MaskToken::Any,
+                MaskToken::Any,
+            ]
+        );
+
         let text = "123456A(111)";
         let masked_text = mask.mask(text);
         assert_eq!(masked_text, "123-456-A(111)");
