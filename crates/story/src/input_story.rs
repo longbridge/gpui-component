@@ -123,8 +123,12 @@ impl InputStory {
 
         let phone_input = cx.new(|cx| TextInput::new(window, cx).mask_pattern("(999)-999-9999"));
         let mask_input2 = cx.new(|cx| TextInput::new(window, cx).mask_pattern("AAA-###-AAA"));
-        let currency_input =
-            cx.new(|cx| TextInput::new(window, cx).mask_pattern(MaskPattern::number(Some(','))));
+        let currency_input = cx.new(|cx| {
+            TextInput::new(window, cx).mask_pattern(MaskPattern::Number {
+                separator: Some(','),
+                fraction: Some(3),
+            })
+        });
 
         let _subscriptions = vec![
             cx.subscribe_in(&input1, window, Self::on_input_event),

@@ -81,7 +81,10 @@ pub enum MaskPattern {
         tokens: Vec<MaskToken>,
     },
     Number {
-        group_separator: Option<char>,
+        /// Group separator, e.g. "," or " "
+        separator: Option<char>,
+        /// Number of fraction digits, e.g. 2 for 123.45
+        fraction: Option<usize>,
     },
 }
 
@@ -137,7 +140,8 @@ impl MaskPattern {
     /// Create a new mask pattern with group separator, e.g. "," or " "
     pub fn number(sep: Option<char>) -> Self {
         Self::Number {
-            group_separator: sep,
+            separator: sep,
+            fraction: None,
         }
     }
 
@@ -184,9 +188,7 @@ impl MaskPattern {
                 }
                 text_index == mask_text.len()
             }
-            Self::Number {
-                group_separator, ..
-            } => {
+            Self::Number { separator, .. } => {
                 if mask_text.is_empty() {
                     return true;
                 }
@@ -203,7 +205,7 @@ impl MaskPattern {
                 // check if the integer part is valid
                 if !int_part
                     .chars()
-                    .all(|ch| ch.is_ascii_digit() || Some(ch) == *group_separator)
+                    .all(|ch| ch.is_ascii_digit() || Some(ch) == *separator)
                 {
                     return false;
                 }
@@ -212,7 +214,7 @@ impl MaskPattern {
                 if let Some(frac) = frac_part {
                     if !frac
                         .chars()
-                        .all(|ch| ch.is_ascii_digit() || Some(ch) == *group_separator)
+                        .all(|ch| ch.is_ascii_digit() || Some(ch) == *separator)
                     {
                         return false;
                     }
@@ -267,14 +269,23 @@ impl MaskPattern {
         }
 
         match self {
-            Self::Number { group_separator } => {
-                if let Some(sep) = *group_separator {
+            Self::Number {
+                separator,
+                fraction,
+            } => {
+                if let Some(sep) = *separator {
                     // Remove the existing group separator
                     let text = text.replace(sep, "");
 
                     let mut parts = text.split('.');
                     let int_part = parts.next().unwrap_or("");
-                    let frac_part = parts.next();
+
+                    // Limit the fraction part to the given range, if not enough, pad with 0
+                    let frac_part = parts.next().map(|part| {
+                        part.chars()
+                            .take(fraction.unwrap_or(usize::MAX))
+                            .collect::<String>()
+                    });
 
                     // Reverse the integer part for easier grouping
                     let chars: Vec<char> = int_part.chars().rev().collect();
@@ -326,14 +337,18 @@ impl MaskPattern {
     /// Extract original text from masked text
     pub fn unmask(&self, mask_text: &str) -> String {
         match self {
-            Self::Number { group_separator } => {
-                if let Some(sep) = *group_separator {
+            Self::Number { separator, .. } => {
+                if let Some(sep) = *separator {
                     let mut result = String::new();
                     for ch in mask_text.chars() {
                         if ch == sep {
                             continue;
                         }
                         result.push(ch);
+                    }
+
+                    if result.contains('.') {
+                        result = result.trim_end_matches('0').to_string();
                     }
                     return result;
                 }
@@ -612,5 +627,20 @@ mod tests {
         let mask = MaskPattern::number(None);
         assert_eq!(mask.mask("1234567.89"), "1234567.89");
         assert_eq!(mask.unmask("1234567.89"), "1234567.89");
+    }
+
+    #[test]
+    fn test_number_with_fraction_digits() {
+        let mask = MaskPattern::Number {
+            separator: Some(','),
+            fraction: Some(4),
+        };
+
+        assert_eq!(mask.mask("1234567"), "1,234,567");
+        assert_eq!(mask.unmask("1,234,567"), "1234567");
+        assert_eq!(mask.mask("1234567.89"), "1,234,567.89");
+        assert_eq!(mask.unmask("1,234,567.890"), "1234567.89");
+        assert_eq!(mask.mask("1234567.891"), "1,234,567.891");
+        assert_eq!(mask.mask("1234567.891234"), "1,234,567.8912");
     }
 }
