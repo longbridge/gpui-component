@@ -208,7 +208,7 @@ impl MaskPattern {
             let ch = text_chars[text_index];
 
             // Break if expected char is not match
-            if !self.is_valid_at(ch, pos) {
+            if !token.is_sep() && !self.is_valid_at(ch, pos) {
                 break;
             }
 
