@@ -2199,17 +2199,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "format_num_pattern"
-version = "0.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "39657b084f99a6df45351bac3df5f764acc57e7191f90efd6acd51e3256070a6"
-dependencies = [
- "log",
- "memchr",
- "pure-rust-locales",
-]
-
-[[package]]
 name = "freetype-sys"
 version = "0.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2785,7 +2774,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
- "format_num_pattern",
  "futures-util",
  "gpui",
  "html5ever 0.27.0",
@@ -5170,12 +5158,6 @@ dependencies = [
  "quote",
  "syn 1.0.109",
 ]
-
-[[package]]
-name = "pure-rust-locales"
-version = "0.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1190fd18ae6ce9e137184f207593877e70f39b015040156b1e05081cdfe3733a"
 
 [[package]]
 name = "qoi"

@@ -118,16 +118,6 @@ impl NumberInput {
         self.on_action_decrement(&Decrement, window, cx);
     }
 
-    /// Set the input to be a number input with thousands separator.
-    ///
-    /// Default is `""` (no separator).
-    ///
-    /// e.g.: `1234.56` to `1,234.56`
-    pub fn thousands_separator(mut self, sep: impl Into<SharedString>) -> Self {
-        self.thousands_separator = sep.into();
-        self
-    }
-
     fn on_action_increment(&mut self, _: &Increment, window: &mut Window, cx: &mut Context<Self>) {
         self.on_step(StepAction::Increment, window, cx);
     }
