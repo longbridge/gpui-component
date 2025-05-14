@@ -1679,17 +1679,12 @@ impl EntityInputHandler for TextInput {
             return;
         }
 
-        let pending_text = self.mask_pattern.mask(&pending_text);
-        let new_text_len = pending_text.len().saturating_sub(self.text.len());
-
-        println!("-------- new_text: {:?}", new_text);
-        println!("-------- pending_text: {:?}", pending_text);
-        println!("-------- new_text_len: {:?}", new_text_len);
-
-        let new_pos = (range.start + new_text_len).min(pending_text.len());
+        let mask_text = self.mask_pattern.mask(&pending_text);
+        let new_text_len = (new_text.len() + mask_text.len()).saturating_sub(pending_text.len());
+        let new_pos = (range.start + new_text_len).min(mask_text.len());
 
         self.push_history(&range, &new_text, window, cx);
-        self.text = pending_text;
+        self.text = mask_text;
         self.selected_range = new_pos..new_pos;
         self.marked_range.take();
         self.update_preferred_x_offset(cx);
