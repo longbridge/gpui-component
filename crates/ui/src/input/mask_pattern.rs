@@ -21,10 +21,14 @@ enum MaskToken {
 }
 
 impl MaskToken {
+    /// Check if the token is any character.
     pub fn is_any(&self) -> bool {
         matches!(self, MaskToken::Any)
     }
 
+    /// Check if the token is a match for the given character.
+    ///
+    /// The separator is always a match any input character.
     fn is_match(&self, ch: char) -> bool {
         match self {
             MaskToken::Digit => ch.is_ascii_digit(),
@@ -37,11 +41,13 @@ impl MaskToken {
         }
     }
 
+    /// Is the token a separator (Can be ignored)
     fn is_sep(&self) -> bool {
-        matches!(self, MaskToken::Sep(_))
+        matches!(self, MaskToken::Sep(_) | MaskToken::GroupSep)
     }
 
-    fn is_number(&self) -> bool {
+    /// Check if the token is a number.
+    pub fn is_number(&self) -> bool {
         matches!(
             self,
             MaskToken::Digit
@@ -53,7 +59,8 @@ impl MaskToken {
 
     pub fn placeholder(&self) -> char {
         match self {
-            MaskToken::DecimalSep | MaskToken::GroupSep => '.',
+            MaskToken::DecimalSep => '.',
+            MaskToken::GroupSep => ',',
             MaskToken::Sep(c) => *c,
             _ => '_',
         }
@@ -61,9 +68,7 @@ impl MaskToken {
 
     fn mask_char(&self, ch: char) -> char {
         match self {
-            MaskToken::Digit => ch,
-            MaskToken::Letter => ch,
-            MaskToken::LetterOrDigit => ch,
+            MaskToken::Digit | MaskToken::LetterOrDigit | MaskToken::Letter => ch,
             MaskToken::DecimalSep => '.',
             MaskToken::GroupSep => ',',
             MaskToken::Sep(c) => *c,
@@ -160,17 +165,19 @@ impl MaskPattern {
             return true;
         }
 
-        let mut pos = pos;
-        while let Some(token) = self.tokens.get(pos) {
+        if let Some(token) = self.tokens.get(pos) {
             if token.is_match(ch) {
                 return true;
             }
 
-            if !token.is_sep() {
-                break;
+            if token.is_sep() {
+                // If next token is match, it's valid
+                if let Some(next_token) = self.tokens.get(pos + 1) {
+                    if next_token.is_match(ch) {
+                        return true;
+                    }
+                }
             }
-
-            pos += 1;
         }
 
         false
@@ -193,16 +200,23 @@ impl MaskPattern {
         let mut text_index = 0;
         let text_chars: Vec<char> = text.chars().collect();
 
-        for token in &self.tokens {
+        for (pos, token) in self.tokens.iter().enumerate() {
             if text_index >= text_chars.len() {
                 break;
             }
 
             let ch = text_chars[text_index];
+
+            // Break if expected char is not match
+            if !self.is_valid_at(ch, pos) {
+                break;
+            }
+
             let mask_ch = token.mask_char(ch);
             result.push(mask_ch);
             if ch == mask_ch {
                 text_index += 1;
+                continue;
             }
         }
 
@@ -338,6 +352,43 @@ mod tests {
     use crate::input::mask_pattern::{MaskPattern, MaskToken};
 
     #[test]
+    fn test_is_match() {
+        assert_eq!(MaskToken::Sep('(').is_match('('), true);
+        assert_eq!(MaskToken::Sep('-').is_match('('), false);
+        assert_eq!(MaskToken::Sep('-').is_match('3'), false);
+
+        assert_eq!(MaskToken::Digit.is_match('0'), true);
+        assert_eq!(MaskToken::Digit.is_match('9'), true);
+        assert_eq!(MaskToken::Digit.is_match('a'), false);
+        assert_eq!(MaskToken::Digit.is_match('C'), false);
+
+        assert_eq!(MaskToken::Letter.is_match('a'), true);
+        assert_eq!(MaskToken::Letter.is_match('Z'), true);
+        assert_eq!(MaskToken::Letter.is_match('3'), false);
+        assert_eq!(MaskToken::Letter.is_match('-'), false);
+
+        assert_eq!(MaskToken::LetterOrDigit.is_match('0'), true);
+        assert_eq!(MaskToken::LetterOrDigit.is_match('9'), true);
+        assert_eq!(MaskToken::LetterOrDigit.is_match('a'), true);
+        assert_eq!(MaskToken::LetterOrDigit.is_match('Z'), true);
+        assert_eq!(MaskToken::LetterOrDigit.is_match('3'), true);
+
+        assert_eq!(MaskToken::DecimalSep.is_match('.'), true);
+        assert_eq!(MaskToken::DecimalSep.is_match(','), false);
+        assert_eq!(MaskToken::DecimalSep.is_match('3'), false);
+
+        assert_eq!(MaskToken::GroupSep.is_match(','), true);
+        assert_eq!(MaskToken::GroupSep.is_match('3'), false);
+        assert_eq!(MaskToken::GroupSep.is_match('A'), false);
+        assert_eq!(MaskToken::GroupSep.is_match('.'), false);
+
+        assert_eq!(MaskToken::Any.is_match('a'), true);
+        assert_eq!(MaskToken::Any.is_match('3'), true);
+        assert_eq!(MaskToken::Any.is_match('-'), true);
+        assert_eq!(MaskToken::Any.is_match(' '), true);
+    }
+
+    #[test]
     fn test_mask_pattern1() {
         let mask = MaskPattern::new("(AA)999-999");
         assert_eq!(
@@ -360,6 +411,7 @@ mod tests {
         assert_eq!(mask.is_valid_at('(', 0), true);
         assert_eq!(mask.is_valid_at('H', 0), true);
         assert_eq!(mask.is_valid_at('3', 0), false);
+        assert_eq!(mask.is_valid_at('-', 0), false);
         assert_eq!(mask.is_valid_at(')', 1), false);
         assert_eq!(mask.is_valid_at('H', 1), true);
         assert_eq!(mask.is_valid_at('1', 1), false);
@@ -368,12 +420,18 @@ mod tests {
         assert_eq!(mask.is_valid_at('1', 3), true);
         assert_eq!(mask.is_valid_at('2', 4), true);
 
-        let text = "AB123456";
-        let masked_text = mask.mask(text);
-        assert_eq!(masked_text, "(AB)123-456");
-        let unmasked_text = mask.unmask(&masked_text);
+        assert_eq!(mask.is_valid("(AB)123-456"), true);
+
+        assert_eq!(mask.mask("AB123456"), "(AB)123-456");
+        assert_eq!(mask.mask("(AB)123-456"), "(AB)123-456");
+        assert_eq!(mask.mask("(AB123456"), "(AB)123-456");
+        assert_eq!(mask.mask("AB123-456"), "(AB)123-456");
+        assert_eq!(mask.mask("AB123-"), "(AB)123-");
+        assert_eq!(mask.mask("AB123--"), "(AB)123-");
+        assert_eq!(mask.mask("AB123-4"), "(AB)123-4");
+
+        let unmasked_text = mask.unmask("(AB)123-456");
         assert_eq!(unmasked_text, "AB123456");
-        assert_eq!(mask.is_valid(&masked_text), true);
 
         assert_eq!(mask.is_valid("12AB345"), false);
         assert_eq!(mask.is_valid("(11)123-456"), false);

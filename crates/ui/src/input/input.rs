@@ -1552,6 +1552,10 @@ impl TextInput {
             }
         }
 
+        if !self.mask_pattern.is_valid(new_text) {
+            return false;
+        }
+
         self.pattern
             .as_ref()
             .map(|p| p.is_match(new_text))
