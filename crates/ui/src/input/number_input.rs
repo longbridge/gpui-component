@@ -139,7 +139,7 @@ impl NumberInput {
         self.on_step(StepAction::Decrement, window, cx);
     }
 
-    fn on_step(&mut self, action: StepAction, window: &mut Window, cx: &mut Context<Self>) {
+    fn on_step(&mut self, action: StepAction, _: &mut Window, cx: &mut Context<Self>) {
         if self.input.read(cx).disabled {
             return;
         }
