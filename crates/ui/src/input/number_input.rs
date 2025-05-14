@@ -25,7 +25,6 @@ pub fn init(cx: &mut App) {
 
 pub struct NumberInput {
     input: Entity<TextInput>,
-    thousands_separator: SharedString,
     size: Size,
     _subscriptions: Vec<Subscription>,
     _synced_size: bool,
@@ -50,7 +49,6 @@ impl NumberInput {
         Self {
             input,
             size: Size::default(),
-            thousands_separator: "".into(),
             _synced_size: false,
             _subscriptions,
         }
