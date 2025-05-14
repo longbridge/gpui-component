@@ -299,7 +299,11 @@ impl MaskPattern {
                     let int_with_sep: String = result.chars().rev().collect();
 
                     let final_str = if let Some(frac) = frac_part {
-                        format!("{}.{}", int_with_sep, frac)
+                        if fraction == &Some(0) {
+                            int_with_sep
+                        } else {
+                            format!("{}.{}", int_with_sep, frac)
+                        }
                     } else {
                         int_with_sep
                     };
@@ -373,109 +377,6 @@ impl MaskPattern {
             Self::None => mask_text.to_owned(),
         }
     }
-
-    // /// Convert pos in masked text to pos in source text
-    // ///
-    // /// For example:
-    // ///
-    // /// Raw Text: 123456
-    // /// Masked text: (123)456
-    // ///
-    // /// - position_of_raw_text(0) = 0
-    // /// - position_of_raw_text(1) = 0
-    // /// - position_of_raw_text(2) = 1
-    // /// - position_of_raw_text(3) = 2
-    // /// - position_of_raw_text(4) = 3
-    // /// - position_of_raw_text(5) = 3
-    // /// - position_of_raw_text(6) = 4
-    // pub(crate) fn position_of_raw_text(&self, masked_pos: usize) -> usize {
-    //     let Some(pattern) = &self.mask_pattern else {
-    //         return masked_pos;
-    //     };
-
-    //     let mut raw_pos = 0;
-
-    //     for (i, c) in pattern.chars().enumerate() {
-    //         if i >= masked_pos {
-    //             break;
-    //         }
-
-    //         match c {
-    //             '9' | 'A' | '*' => {
-    //                 if let Some(ch) = self.text[raw_pos..].chars().next() {
-    //                     if (c == '9' && ch.is_ascii_digit())
-    //                         || (c == 'A' && ch.is_ascii_alphabetic())
-    //                         || (c == '*')
-    //                     {
-    //                         raw_pos += 1;
-    //                     }
-    //                 }
-    //             }
-    //             _ => {
-    //                 raw_pos += 1;
-    //             }
-    //         }
-    //     }
-
-    //     raw_pos
-    // }
-
-    // /// Check if the given position is a mask position
-    // pub(crate) fn is_mask_position(&self, pos: usize) -> bool {
-    //     let masked_pos = self.position_of_marked_text(pos);
-    //     masked_pos != pos
-    // }
-
-    // /// Convert pos in source text to pos in masked text
-    // ///
-    // /// For example:
-    // ///
-    // /// Raw Text: 123456
-    // /// Masked Text: (123)456
-    // ///
-    // /// - position_of_marked_text(0) = 1
-    // /// - position_of_marked_text(1) = 2
-    // /// - position_of_marked_text(2) = 3
-    // /// - position_of_marked_text(3) = 5
-    // /// - position_of_marked_text(4) = 6
-    // /// - position_of_marked_text(5) = 7
-    // /// - position_of_marked_text(6) = 8
-    // ///
-    // pub(crate) fn position_of_marked_text(&self, pos: usize) -> usize {
-    //     let Some(pattern) = &self.mask_pattern else {
-    //         return pos;
-    //     };
-    //     let mut marked_pos = 0;
-    //     let mut text_index = 0;
-
-    //     for (i, c) in pattern.chars().enumerate() {
-    //         if text_index >= pos {
-    //             break;
-    //         }
-
-    //         match c {
-    //             '9' | 'A' | '*' => {
-    //                 if let Some(ch) = self.text[text_index..].chars().next() {
-    //                     if (c == '9' && ch.is_ascii_digit())
-    //                         || (c == 'A' && ch.is_ascii_alphabetic())
-    //                         || (c == '*')
-    //                     {
-    //                         text_index += 1;
-    //                         marked_pos = i + 1;
-    //                     }
-    //                 }
-    //             }
-    //             _ => {
-    //                 marked_pos = i + 1;
-    //                 if self.text[text_index..].chars().next() == Some(c) {
-    //                     text_index += 1;
-    //                 }
-    //             }
-    //         }
-    //     }
-
-    //     marked_pos
-    // }
 }
 
 #[cfg(test)]
@@ -638,9 +539,24 @@ mod tests {
 
         assert_eq!(mask.mask("1234567"), "1,234,567");
         assert_eq!(mask.unmask("1,234,567"), "1234567");
+        assert_eq!(mask.mask("1234567."), "1,234,567.");
         assert_eq!(mask.mask("1234567.89"), "1,234,567.89");
         assert_eq!(mask.unmask("1,234,567.890"), "1234567.89");
         assert_eq!(mask.mask("1234567.891"), "1,234,567.891");
         assert_eq!(mask.mask("1234567.891234"), "1,234,567.8912");
+
+        let mask = MaskPattern::Number {
+            separator: Some(','),
+            fraction: None,
+        };
+
+        assert_eq!(mask.mask("1234567.1234567"), "1,234,567.1234567");
+
+        let mask = MaskPattern::Number {
+            separator: Some(','),
+            fraction: Some(0),
+        };
+
+        assert_eq!(mask.mask("1234567.1234567"), "1,234,567");
     }
 }
