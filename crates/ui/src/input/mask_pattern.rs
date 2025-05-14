@@ -1,7 +1,7 @@
 use gpui::SharedString;
 
 #[derive(Clone, PartialEq, Debug)]
-enum MaskToken {
+pub enum MaskToken {
     /// 0 Digit, equivalent to `[0]`
     // Digit0,
     /// Digit, equivalent to `[0-9]`
@@ -16,6 +16,7 @@ enum MaskToken {
     Any,
 }
 
+#[allow(unused)]
 impl MaskToken {
     /// Check if the token is any character.
     pub fn is_any(&self) -> bool {
@@ -124,6 +125,7 @@ impl MaskPattern {
         }
     }
 
+    #[allow(unused)]
     fn tokens(&self) -> Option<&Vec<MaskToken>> {
         match self {
             Self::Pattern { tokens, .. } => Some(tokens),
@@ -149,7 +151,8 @@ impl MaskPattern {
         }
     }
 
-    pub fn is_empty(&self) -> bool {
+    /// Return true if the mask pattern is None or no any pattern.
+    pub fn is_none(&self) -> bool {
         match self {
             Self::Pattern { tokens, .. } => tokens.is_empty(),
             Self::Number { .. } => false,
@@ -161,7 +164,7 @@ impl MaskPattern {
     ///
     /// If the mask pattern is None, always return true.
     pub fn is_valid(&self, mask_text: &str) -> bool {
-        if self.is_empty() {
+        if self.is_none() {
             return true;
         }
 
@@ -181,14 +184,49 @@ impl MaskPattern {
                 }
                 text_index == mask_text.len()
             }
-            Self::Number { .. } => true,
+            Self::Number {
+                group_separator, ..
+            } => {
+                if mask_text.is_empty() {
+                    return true;
+                }
+
+                // check if the text is valid number
+                let mut parts = mask_text.split('.');
+                let int_part = parts.next().unwrap_or("");
+                let frac_part = parts.next();
+
+                if int_part.is_empty() {
+                    return false;
+                }
+
+                // check if the integer part is valid
+                if !int_part
+                    .chars()
+                    .all(|ch| ch.is_ascii_digit() || Some(ch) == *group_separator)
+                {
+                    return false;
+                }
+
+                // check if the fraction part is valid
+                if let Some(frac) = frac_part {
+                    if !frac
+                        .chars()
+                        .all(|ch| ch.is_ascii_digit() || Some(ch) == *group_separator)
+                    {
+                        return false;
+                    }
+                }
+
+                true
+            }
             Self::None => true,
         }
     }
 
     /// Check if valid input char at the given position.
     pub fn is_valid_at(&self, ch: char, pos: usize) -> bool {
-        if self.is_empty() {
+        if self.is_none() {
             return true;
         }
 
@@ -224,18 +262,21 @@ impl MaskPattern {
     /// - text: 123456789
     /// - mask_text: (123)456-789
     pub fn mask(&self, text: &str) -> SharedString {
-        if self.is_empty() {
+        if self.is_none() {
             return text.to_owned().into();
         }
 
         match self {
             Self::Number { group_separator } => {
                 if let Some(sep) = *group_separator {
+                    // Remove the existing group separator
+                    let text = text.replace(sep, "");
+
                     let mut parts = text.split('.');
                     let int_part = parts.next().unwrap_or("");
                     let frac_part = parts.next();
 
-                    // 反转便于每三位插入分隔符
+                    // Reverse the integer part for easier grouping
                     let chars: Vec<char> = int_part.chars().rev().collect();
                     let mut result = String::new();
                     for (i, ch) in chars.iter().enumerate() {
@@ -457,7 +498,7 @@ mod tests {
     #[test]
     fn test_mask_none() {
         let mask = MaskPattern::None;
-        assert_eq!(mask.is_empty(), true);
+        assert_eq!(mask.is_none(), true);
         assert_eq!(mask.is_valid("1124124ASLDJKljk"), true);
         assert_eq!(mask.mask("hello-world"), "hello-world");
         assert_eq!(mask.unmask("hello-world"), "hello-world");
@@ -546,10 +587,11 @@ mod tests {
     }
 
     #[test]
-    fn test_group_separator() {
+    fn test_number_with_group_separator() {
         // Use comma as group separator
         let mask = MaskPattern::number(Some(','));
         assert_eq!(mask.mask("1234567"), "1,234,567");
+        assert_eq!(mask.mask("1,234,567"), "1,234,567");
         assert_eq!(mask.unmask("1,234,567"), "1234567");
         let mask = MaskPattern::number(Some(','));
         assert_eq!(mask.mask("1234567.89"), "1,234,567.89");

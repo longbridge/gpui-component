@@ -8,7 +8,7 @@ use crate::section;
 use gpui_component::{
     button::{Button, ButtonVariant, ButtonVariants as _},
     h_flex,
-    input::{InputEvent, TextInput},
+    input::{InputEvent, MaskPattern, TextInput},
     v_flex, ContextModal, FocusableCycle, Icon, IconName, Sizable,
 };
 
@@ -124,7 +124,7 @@ impl InputStory {
         let phone_input = cx.new(|cx| TextInput::new(window, cx).mask_pattern("(999)-999-9999"));
         let mask_input2 = cx.new(|cx| TextInput::new(window, cx).mask_pattern("AAA-###-AAA"));
         let currency_input =
-            cx.new(|cx| TextInput::new(window, cx).mask_pattern("999,999,999.999,999,999"));
+            cx.new(|cx| TextInput::new(window, cx).mask_pattern(MaskPattern::number(Some(','))));
 
         let _subscriptions = vec![
             cx.subscribe_in(&input1, window, Self::on_input_event),

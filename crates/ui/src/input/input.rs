@@ -1679,16 +1679,10 @@ impl EntityInputHandler for TextInput {
             return;
         }
 
-        let (text, new_text_len) = if self.mask_pattern.is_empty() {
-            (pending_text.clone(), new_text.len())
-        } else {
-            let mask_text = self.mask_pattern.mask(&pending_text);
-            let mask_diff = mask_text.len().saturating_sub(pending_text.len());
-            (mask_text, new_text.len() + mask_diff)
-        };
+        let text = self.mask_pattern.mask(&pending_text);
+        let new_text_len = text.len().saturating_sub(self.text.len());
 
         let new_pos = (range.start + new_text_len).min(text.len());
-        let new_text = text[range.start..new_pos].to_string();
 
         self.push_history(&range, &new_text, window, cx);
         self.text = text;
