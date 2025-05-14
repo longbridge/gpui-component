@@ -6,7 +6,7 @@ use regex::Regex;
 
 use crate::section;
 use gpui_component::{
-    input::{InputEvent, NumberInput, NumberInputEvent, StepAction},
+    input::{InputEvent, MaskPattern, NumberInput, NumberInputEvent, StepAction},
     v_flex, FocusableCycle, Sizable,
 };
 
@@ -26,6 +26,8 @@ pub struct NumberInputStory {
     number_input1: Entity<NumberInput>,
     number_input2: Entity<NumberInput>,
     number_input2_value: u64,
+    number_input3: Entity<NumberInput>,
+    number_input3_value: f64,
 
     _subscriptions: Vec<Subscription>,
 }
@@ -68,9 +70,23 @@ impl NumberInputStory {
                 .small()
         });
 
+        let number_input3 = cx.new(|cx| {
+            NumberInput::new(window, cx)
+                .placeholder("Number Input with mask pattern", window, cx)
+                .mask_pattern(
+                    MaskPattern::Number {
+                        separator: Some(','),
+                        fraction: Some(2),
+                    },
+                    window,
+                    cx,
+                )
+        });
+
         let _subscriptions = vec![
-            cx.subscribe_in(&number_input1, window, Self::on_number_input1_event),
-            cx.subscribe_in(&number_input2, window, Self::on_number_input2_event),
+            cx.subscribe_in(&number_input1, window, Self::on_number_input_event),
+            cx.subscribe_in(&number_input2, window, Self::on_number_input_event),
+            cx.subscribe_in(&number_input3, window, Self::on_number_input_event),
         ];
 
         Self {
@@ -78,6 +94,8 @@ impl NumberInputStory {
             number_input1_value,
             number_input2,
             number_input2_value: 0,
+            number_input3,
+            number_input3_value: 0.0,
             _subscriptions,
         }
     }
@@ -90,9 +108,9 @@ impl NumberInputStory {
         self.cycle_focus(false, window, cx);
     }
 
-    fn on_number_input1_event(
+    fn on_number_input_event(
         &mut self,
-        _: &Entity<NumberInput>,
+        this: &Entity<NumberInput>,
         event: &NumberInputEvent,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -100,8 +118,18 @@ impl NumberInputStory {
         match event {
             NumberInputEvent::Input(input_event) => match input_event {
                 InputEvent::Change(text) => {
-                    if let Ok(value) = text.parse::<i64>() {
-                        self.number_input1_value = value;
+                    if this == &self.number_input1 {
+                        if let Ok(value) = text.parse::<i64>() {
+                            self.number_input1_value = value;
+                        }
+                    } else if this == &self.number_input2 {
+                        if let Ok(value) = text.parse::<u64>() {
+                            self.number_input2_value = value;
+                        }
+                    } else if this == &self.number_input3 {
+                        if let Ok(value) = text.parse::<f64>() {
+                            self.number_input3_value = value;
+                        }
                     }
                     println!("Change: {}", text);
                 }
@@ -113,58 +141,40 @@ impl NumberInputStory {
             },
             NumberInputEvent::Step(step_action) => match step_action {
                 StepAction::Decrement => {
-                    self.number_input1_value = self.number_input1_value - 1;
-                    self.number_input1.update(cx, |input, cx| {
-                        input.set_value(self.number_input1_value.to_string(), window, cx);
-                    });
+                    if this == &self.number_input1 {
+                        self.number_input1_value = self.number_input1_value - 1;
+                        this.update(cx, |input, cx| {
+                            input.set_value(self.number_input1_value.to_string(), window, cx);
+                        });
+                    } else if this == &self.number_input2 {
+                        self.number_input2_value = self.number_input2_value - 1;
+                        this.update(cx, |input, cx| {
+                            input.set_value(self.number_input2_value.to_string(), window, cx);
+                        });
+                    } else if this == &self.number_input3 {
+                        self.number_input3_value = self.number_input3_value - 1.0;
+                        this.update(cx, |input, cx| {
+                            input.set_value(self.number_input3_value.to_string(), window, cx);
+                        });
+                    }
                 }
                 StepAction::Increment => {
-                    self.number_input1_value = self.number_input1_value + 1;
-                    self.number_input1.update(cx, |input, cx| {
-                        input.set_value(self.number_input1_value.to_string(), window, cx);
-                    });
-                }
-            },
-        }
-    }
-
-    fn on_number_input2_event(
-        &mut self,
-        _: &Entity<NumberInput>,
-        event: &NumberInputEvent,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        match event {
-            NumberInputEvent::Input(input_event) => match input_event {
-                InputEvent::Change(text) => {
-                    if let Ok(value) = text.parse::<u64>() {
-                        self.number_input2_value = value;
+                    if this == &self.number_input1 {
+                        self.number_input1_value = self.number_input1_value + 1;
+                        this.update(cx, |input, cx| {
+                            input.set_value(self.number_input1_value.to_string(), window, cx);
+                        });
+                    } else if this == &self.number_input2 {
+                        self.number_input2_value = self.number_input2_value + 1;
+                        this.update(cx, |input, cx| {
+                            input.set_value(self.number_input2_value.to_string(), window, cx);
+                        });
+                    } else if this == &self.number_input3 {
+                        self.number_input3_value = self.number_input3_value + 1.0;
+                        this.update(cx, |input, cx| {
+                            input.set_value(self.number_input3_value.to_string(), window, cx);
+                        });
                     }
-                    println!("Change: {}", text);
-                }
-                InputEvent::PressEnter { secondary } => {
-                    println!("PressEnter secondary: {}", secondary);
-                }
-                InputEvent::Focus => println!("Focus"),
-                InputEvent::Blur => println!("Blur"),
-            },
-            NumberInputEvent::Step(step_action) => match step_action {
-                StepAction::Decrement => {
-                    if self.number_input2_value.le(&0) {
-                        return;
-                    }
-
-                    self.number_input2_value = self.number_input2_value - 1;
-                    self.number_input2.update(cx, |input, cx| {
-                        input.set_value(self.number_input2_value.to_string(), window, cx);
-                    });
-                }
-                StepAction::Increment => {
-                    self.number_input2_value = self.number_input2_value + 1;
-                    self.number_input2.update(cx, |input, cx| {
-                        input.set_value(self.number_input2_value.to_string(), window, cx);
-                    });
                 }
             },
         }
@@ -201,6 +211,11 @@ impl Render for NumberInputStory {
                 section("Small Size")
                     .max_w_md()
                     .child(self.number_input2.clone()),
+            )
+            .child(
+                section("With mask pattern")
+                    .max_w_md()
+                    .child(self.number_input3.clone()),
             )
     }
 }

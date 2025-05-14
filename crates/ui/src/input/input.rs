@@ -244,7 +244,7 @@ pub struct TextInput {
     /// For special case, e.g.: NumberInput + - button
     pub(super) no_gap: bool,
     pub(super) height: Option<gpui::DefiniteLength>,
-    pattern: Option<regex::Regex>,
+    pub(super) pattern: Option<regex::Regex>,
     validate: Option<Box<dyn Fn(&str) -> bool + 'static>>,
     pub(crate) scroll_handle: ScrollHandle,
     scrollbar_state: Rc<Cell<ScrollbarState>>,
@@ -506,7 +506,7 @@ impl TextInput {
         self.replace_text(text, window, cx);
         self.history.ignore = false;
         // Ensure cursor to start when set text
-        self.selected_range = 0..0;
+        self.selected_range = self.text.len()..self.text.len();
 
         cx.notify();
     }
@@ -557,19 +557,19 @@ impl TextInput {
         cx.notify();
     }
 
-    /// Set with masked state.
+    /// Set with password masked state.
     pub fn masked(mut self, masked: bool) -> Self {
         self.masked = masked;
         self
     }
 
-    /// Set the masked state of the input field.
+    /// Set the password masked state of the input field.
     pub fn set_masked(&mut self, masked: bool, _: &mut Window, cx: &mut Context<Self>) {
         self.masked = masked;
         cx.notify();
     }
 
-    /// Set to enable toggle button for mask state.
+    /// Set to enable toggle button for password mask state.
     pub fn mask_toggle(mut self) -> Self {
         self.mask_toggle = true;
         self
@@ -1607,6 +1607,19 @@ impl TextInput {
         }
         self
     }
+
+    pub fn set_mask_pattern(
+        &mut self,
+        pattern: impl Into<MaskPattern>,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.mask_pattern = pattern.into();
+        if let Some(placeholder) = self.mask_pattern.placeholder() {
+            self.placeholder = placeholder.into();
+        }
+        cx.notify();
+    }
 }
 
 impl Sizable for TextInput {
@@ -1690,7 +1703,7 @@ impl EntityInputHandler for TextInput {
         self.update_preferred_x_offset(cx);
         self.update_scroll_offset(None, cx);
         self.check_to_auto_grow(window, cx);
-        cx.emit(InputEvent::Change(self.text.clone()));
+        cx.emit(InputEvent::Change(self.unmask_text()));
         cx.notify();
     }
 
@@ -1725,7 +1738,7 @@ impl EntityInputHandler for TextInput {
             .map(|range_utf16| self.range_from_utf16(range_utf16))
             .map(|new_range| new_range.start + range.start..new_range.end + range.end)
             .unwrap_or_else(|| range.start + new_text.len()..range.start + new_text.len());
-        cx.emit(InputEvent::Change(self.text.clone()));
+        cx.emit(InputEvent::Change(self.unmask_text()));
         cx.notify();
     }
 

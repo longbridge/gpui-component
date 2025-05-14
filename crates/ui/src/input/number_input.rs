@@ -12,6 +12,8 @@ use crate::{
     ActiveTheme, IconName, Sizable, Size, StyleSized, StyledExt as _,
 };
 
+use super::MaskPattern;
+
 actions!(number_input, [Increment, Decrement]);
 
 const KEY_CONTENT: &str = "NumberInput";
@@ -93,6 +95,19 @@ impl NumberInput {
         self
     }
 
+    pub fn mask_pattern(
+        self,
+        mask_pattern: MaskPattern,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        self.input.update(cx, |input, cx| {
+            input.pattern = None;
+            input.set_mask_pattern(mask_pattern, window, cx)
+        });
+        self
+    }
+
     pub fn set_value(
         &self,
         text: impl Into<SharedString>,
@@ -100,7 +115,7 @@ impl NumberInput {
         cx: &mut Context<Self>,
     ) {
         self.input
-            .update(cx, |input, cx| input.set_text(text, window, cx))
+            .update(cx, |input, cx| input.set_text(text, window, cx));
     }
 
     pub fn set_disabled(&self, disabled: bool, window: &mut Window, cx: &mut Context<Self>) {
@@ -124,7 +139,7 @@ impl NumberInput {
         self.on_step(StepAction::Decrement, window, cx);
     }
 
-    fn on_step(&mut self, action: StepAction, _: &mut Window, cx: &mut Context<Self>) {
+    fn on_step(&mut self, action: StepAction, window: &mut Window, cx: &mut Context<Self>) {
         if self.input.read(cx).disabled {
             return;
         }
