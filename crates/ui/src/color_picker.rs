@@ -348,7 +348,7 @@ impl Focusable for ColorPicker {
 impl RenderOnce for ColorPicker {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let state = self.state.read(cx);
-        let bounds = state.bounds.clone();
+        let bounds = state.bounds;
         let display_title: SharedString = if let Some(value) = state.value {
             value.to_hex()
         } else {
