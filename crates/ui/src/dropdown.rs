@@ -161,7 +161,7 @@ where
 
         if let Some(item) = self.delegate.get(ix) {
             let list_item = ListItem::new(("list-item", ix))
-                .check_icon(IconName::Check)
+                .check_icon(Icon::new(IconName::Check))
                 .selected(selected)
                 .input_text_size(size)
                 .list_size(size)
@@ -247,7 +247,7 @@ pub struct Dropdown<D: DropdownDelegate + 'static> {
     focus_handle: FocusHandle,
     list: Entity<List<DropdownListDelegate<D>>>,
     size: Size,
-    icon: Option<IconName>,
+    icon: Option<Icon>,
     open: bool,
     cleanable: bool,
     placeholder: Option<SharedString>,
@@ -408,7 +408,7 @@ where
     }
 
     /// Set the right icon for the dropdown input, instead of the default arrow icon.
-    pub fn icon(mut self, icon: impl Into<IconName>) -> Self {
+    pub fn icon(mut self, icon: impl Into<Icon>) -> Self {
         self.icon = Some(icon.into());
         self
     }
@@ -719,14 +719,14 @@ where
                                     Some(icon) => icon,
                                     None => {
                                         if self.open {
-                                            IconName::ChevronUp
+                                            Icon::new(IconName::ChevronUp)
                                         } else {
-                                            IconName::ChevronDown
+                                            Icon::new(IconName::ChevronDown)
                                         }
                                     }
                                 };
 
-                                this.child(Icon::new(icon).xsmall().text_color(
+                                this.child(icon.xsmall().text_color(
                                     match self.disabled {
                                         true => cx.theme().muted_foreground.opacity(0.5),
                                         false => cx.theme().muted_foreground,

@@ -1,4 +1,4 @@
-use crate::{h_flex, ActiveTheme, Disableable, Icon, IconName, Selectable, Sizable as _};
+use crate::{h_flex, ActiveTheme, Disableable, Icon, Selectable, Sizable as _};
 use gpui::{
     div, prelude::FluentBuilder as _, AnyElement, App, ClickEvent, Div, ElementId,
     InteractiveElement, IntoElement, MouseButton, MouseMoveEvent, ParentElement, RenderOnce,
@@ -38,8 +38,8 @@ impl ListItem {
     }
 
     /// Set to show check icon, default is None.
-    pub fn check_icon(mut self, icon: IconName) -> Self {
-        self.check_icon = Some(Icon::new(icon));
+    pub fn check_icon(mut self, icon: impl Into<Icon>) -> Self {
+        self.check_icon = Some(icon.into());
         self
     }
 
