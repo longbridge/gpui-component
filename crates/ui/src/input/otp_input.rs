@@ -1,38 +1,23 @@
 use gpui::{
-    div, prelude::FluentBuilder, px, AnyElement, AppContext as _, Context, Entity, EventEmitter,
-    FocusHandle, Focusable, InteractiveElement, IntoElement, KeyDownEvent, MouseButton,
-    MouseDownEvent, ParentElement as _, Render, SharedString, Styled as _, Subscription, Window,
+    div, prelude::FluentBuilder, px, AnyElement, App, AppContext as _, Context, Empty, Entity,
+    EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyDownEvent,
+    MouseButton, MouseDownEvent, ParentElement as _, Render, RenderOnce, SharedString, Styled as _,
+    Subscription, Window,
 };
 
+use super::{blink_cursor::BlinkCursor, InputEvent};
 use crate::{h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable, Size};
 
-use super::{blink_cursor::BlinkCursor, InputEvent};
-
-pub enum InputOptEvent {
-    /// When all OTP input have filled, this event will be triggered.
-    Change(SharedString),
-}
-
-/// A One Time Password (OTP) input element.
-///
-/// This can accept a fixed length number and can be masked.
-///
-/// Use case example:
-///
-/// - SMS OTP
-/// - Authenticator OTP
-pub struct OtpInput {
+pub struct OtpState {
     focus_handle: FocusHandle,
-    length: usize,
-    number_of_groups: usize,
-    masked: bool,
     value: SharedString,
     blink_cursor: Entity<BlinkCursor>,
-    size: Size,
+    masked: bool,
+    length: usize,
     _subscriptions: Vec<Subscription>,
 }
 
-impl OtpInput {
+impl OtpState {
     pub fn new(length: usize, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
         let blink_cursor = cx.new(|_| BlinkCursor::new());
@@ -56,21 +41,13 @@ impl OtpInput {
         ];
 
         Self {
-            focus_handle: focus_handle.clone(),
             length,
-            number_of_groups: 2,
+            focus_handle: focus_handle.clone(),
             value: SharedString::default(),
-            masked: false,
             blink_cursor: blink_cursor.clone(),
-            size: Size::Medium,
+            masked: false,
             _subscriptions,
         }
-    }
-
-    /// Set number of groups in the OTP Input.
-    pub fn groups(mut self, n: usize) -> Self {
-        self.number_of_groups = n;
-        self
     }
 
     /// Set default value of the OTP Input.
@@ -181,6 +158,48 @@ impl OtpInput {
         });
     }
 }
+impl Focusable for OtpState {
+    fn focus_handle(&self, _: &gpui::App) -> FocusHandle {
+        self.focus_handle.clone()
+    }
+}
+impl EventEmitter<InputEvent> for OtpState {}
+impl Render for OtpState {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        Empty
+    }
+}
+
+/// A One Time Password (OTP) input element.
+///
+/// This can accept a fixed length number and can be masked.
+///
+/// Use case example:
+///
+/// - SMS OTP
+/// - Authenticator OTP
+#[derive(IntoElement)]
+pub struct OtpInput {
+    state: Entity<OtpState>,
+    number_of_groups: usize,
+    size: Size,
+}
+
+impl OtpInput {
+    pub fn new(state: Entity<OtpState>) -> Self {
+        Self {
+            state,
+            number_of_groups: 2,
+            size: Size::Medium,
+        }
+    }
+
+    /// Set number of groups in the OTP Input.
+    pub fn groups(mut self, n: usize) -> Self {
+        self.number_of_groups = n;
+        self
+    }
+}
 
 impl Sizable for OtpInput {
     fn with_size(mut self, size: impl Into<crate::Size>) -> Self {
@@ -188,18 +207,11 @@ impl Sizable for OtpInput {
         self
     }
 }
-
-impl Focusable for OtpInput {
-    fn focus_handle(&self, _: &gpui::App) -> FocusHandle {
-        self.focus_handle.clone()
-    }
-}
-impl EventEmitter<InputEvent> for OtpInput {}
-
-impl Render for OtpInput {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let blink_show = self.blink_cursor.read(cx).visible();
-        let is_focused = self.focus_handle.is_focused(window);
+impl RenderOnce for OtpInput {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let state = self.state.read(cx);
+        let blink_show = state.blink_cursor.read(cx).visible();
+        let is_focused = state.focus_handle.is_focused(window);
 
         let text_size = match self.size {
             Size::XSmall => px(14.),
@@ -211,18 +223,18 @@ impl Render for OtpInput {
 
         let mut groups: Vec<Vec<AnyElement>> = Vec::with_capacity(self.number_of_groups);
         let mut group_ix = 0;
-        let group_items_count = self.length / self.number_of_groups;
+        let group_items_count = state.length / self.number_of_groups;
         for _ in 0..self.number_of_groups {
             groups.push(vec![]);
         }
 
-        for i in 0..self.length {
-            let c = self.value.chars().nth(i);
+        for i in 0..state.length {
+            let c = state.value.chars().nth(i);
             if i % group_items_count == 0 && i != 0 {
                 group_ix += 1;
             }
 
-            let is_input_focused = i == self.value.chars().count() && is_focused;
+            let is_input_focused = i == state.value.chars().count() && is_focused;
 
             groups[group_ix].push(
                 h_flex()
@@ -243,10 +255,13 @@ impl Render for OtpInput {
                         Size::Large => this.w_11().h_11(),
                         Size::Size(px) => this.w(px).h(px),
                     })
-                    .on_mouse_down(MouseButton::Left, cx.listener(Self::on_input_mouse_down))
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        window.listener_for(&self.state, OtpState::on_input_mouse_down),
+                    )
                     .map(|this| match c {
                         Some(c) => {
-                            if self.masked {
+                            if state.masked {
                                 this.child(
                                     Icon::new(IconName::Asterisk)
                                         .text_color(cx.theme().secondary_foreground)
@@ -271,8 +286,8 @@ impl Render for OtpInput {
         }
 
         v_flex()
-            .track_focus(&self.focus_handle)
-            .on_key_down(cx.listener(Self::on_key_down))
+            .track_focus(&self.state.read(cx).focus_handle)
+            .on_key_down(window.listener_for(&self.state, OtpState::on_key_down))
             .items_center()
             .child(
                 h_flex().items_center().gap_5().children(
