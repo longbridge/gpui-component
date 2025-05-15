@@ -7,7 +7,7 @@ use gpui::{
 use gpui_component::{
     button::{Button, ButtonVariant, ButtonVariants as _},
     checkbox::Checkbox,
-    date_picker::DatePicker,
+    date_picker::{DatePicker, DateState},
     dropdown::Dropdown,
     h_flex,
     input::{InputState, TextInput},
@@ -23,7 +23,7 @@ pub struct ModalStory {
     selected_value: Option<SharedString>,
     input1: Entity<InputState>,
     input2: Entity<InputState>,
-    date_picker: Entity<DatePicker>,
+    date: Entity<DateState>,
     dropdown: Entity<Dropdown<Vec<String>>>,
     modal_overlay: bool,
     model_show_close: bool,
@@ -56,8 +56,7 @@ impl ModalStory {
         let input2 = cx.new(|cx| {
             InputState::new(window, cx).placeholder("For test focus back on modal close.")
         });
-        let date_picker = cx
-            .new(|cx| DatePicker::new("birthday-picker", window, cx).placeholder("Date of Birth"));
+        let date = cx.new(|cx| DateState::new(window, cx));
         let dropdown = cx.new(|cx| {
             Dropdown::new(
                 "dropdown1",
@@ -77,7 +76,7 @@ impl ModalStory {
             selected_value: None,
             input1,
             input2,
-            date_picker,
+            date,
             dropdown,
             modal_overlay: true,
             model_show_close: true,
@@ -93,7 +92,7 @@ impl ModalStory {
         let modal_padding = self.model_padding;
         let overlay_closable = self.overlay_closable;
         let input1 = self.input1.clone();
-        let date_picker = self.date_picker.clone();
+        let date = self.date.clone();
         let dropdown = self.dropdown.clone();
         let view = cx.entity().clone();
         let keyboard = self.model_keyboard;
@@ -113,18 +112,21 @@ impl ModalStory {
                         .child("You can put anything here.")
                         .child(TextInput::new(input1.clone()))
                         .child(dropdown.clone())
-                        .child(date_picker.clone()),
+                        .child(
+                            DatePicker::new("birthday-picker", date.clone())
+                                .placeholder("Date of Birth"),
+                        ),
                 )
                 .footer({
                     let view = view.clone();
                     let input1 = input1.clone();
-                    let date_picker = date_picker.clone();
+                    let date = date.clone();
                     move |_, _, _, _cx| {
                         vec![
                             Button::new("confirm").primary().label("Confirm").on_click({
                                 let view = view.clone();
                                 let input1 = input1.clone();
-                                let date_picker = date_picker.clone();
+                                let date = date.clone();
                                 move |_, window, cx| {
                                     window.close_modal(cx);
 
@@ -133,7 +135,7 @@ impl ModalStory {
                                             format!(
                                                 "Hello, {}, date: {}",
                                                 input1.read(cx).value(),
-                                                date_picker.read(cx).date()
+                                                date.read(cx).date()
                                             )
                                             .into(),
                                         )

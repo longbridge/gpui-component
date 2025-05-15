@@ -50,10 +50,7 @@ impl DatePickerStory {
             picker
         });
         let date_picker_large = cx.new(|cx| {
-            let mut picker = DateState::new(window, cx)
-                .large()
-                .date_format("%Y-%m-%d")
-                .width(px(300.));
+            let mut picker = DateState::new(window, cx).date_format("%Y-%m-%d");
             picker.set_disabled(
                 calendar::Matcher::range(Some(now), now.checked_add_days(Days::new(7))),
                 window,
@@ -67,9 +64,7 @@ impl DatePickerStory {
             picker
         });
         let date_picker_small = cx.new(|cx| {
-            let mut picker = DatePicker::new("date_picker_small", window, cx)
-                .small()
-                .width(px(180.));
+            let mut picker = DateState::new(window, cx);
             picker.set_disabled(
                 calendar::Matcher::interval(Some(now), now.checked_add_days(Days::new(5))),
                 window,
@@ -79,10 +74,7 @@ impl DatePickerStory {
             picker
         });
         let date_range_picker = cx.new(|cx| {
-            let mut picker = DatePicker::new("date_range_picker", window, cx)
-                .number_of_months(2)
-                .cleanable()
-                .presets(range_presets.clone());
+            let mut picker = DateState::new(window, cx);
             picker.set_date(
                 (now, now.checked_add_days(Days::new(4)).unwrap()),
                 window,
@@ -91,12 +83,7 @@ impl DatePickerStory {
             picker
         });
 
-        let default_range_mode_picker = cx.new(|cx| {
-            DatePicker::range_picker("default_range_mode_picker", window, cx)
-                .placeholder("Range mode picker")
-                .cleanable()
-                .presets(range_presets.clone())
-        });
+        let default_range_mode_picker = cx.new(|cx| DateState::range(window, cx));
 
         let _subscriptions = vec![
             cx.subscribe(&date_picker, |this, _, ev, _| match ev {
@@ -183,24 +170,37 @@ impl Render for DatePickerStory {
                 ),
             )
             .child(
-                section("Small with 180px width")
-                    .max_w_md()
-                    .child(self.date_picker_small.clone()),
+                section("Small with 180px width").max_w_md().child(
+                    DatePicker::new("date-picker-small", self.date_picker_small.clone())
+                        .small()
+                        .width(px(180.)),
+                ),
             )
             .child(
-                section("Large")
-                    .max_w_md()
-                    .child(self.date_picker_large.clone()),
+                section("Large").max_w_md().child(
+                    DatePicker::new("date-picker-large", self.date_picker_large.clone())
+                        .large()
+                        .width(px(300.)),
+                ),
             )
             .child(
-                section("Date Range")
-                    .max_w_md()
-                    .child(self.date_range_picker.clone()),
+                section("Date Range").max_w_md().child(
+                    DatePicker::new("date-range-picker", self.date_range_picker.clone())
+                        .number_of_months(2)
+                        .cleanable()
+                        .presets(range_presets.clone()),
+                ),
             )
             .child(
-                section("Default Range Mode")
-                    .max_w_md()
-                    .child(self.default_range_mode_picker.clone()),
+                section("Default Range Mode").max_w_md().child(
+                    DatePicker::new(
+                        "default-range-mode-picker",
+                        self.default_range_mode_picker.clone(),
+                    )
+                    .placeholder("Range mode picker")
+                    .cleanable()
+                    .presets(range_presets.clone()),
+                ),
             )
             .child(
                 section("Date Picker Value").max_w_md().child(

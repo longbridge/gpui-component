@@ -6,7 +6,7 @@ use gpui_component::{
     button::{Button, ButtonGroup},
     checkbox::Checkbox,
     color_picker::{ColorPicker, ColorState},
-    date_picker::DatePicker,
+    date_picker::{DatePicker, DateState},
     divider::Divider,
     form::{form_field, v_form},
     h_flex,
@@ -23,7 +23,7 @@ pub struct FormStory {
     bio_input: Entity<InputState>,
     color_state: Entity<ColorState>,
     subscribe_email: bool,
-    date_picker: Entity<DatePicker>,
+    date: Entity<DateState>,
     layout: Axis,
     size: Size,
 }
@@ -65,13 +65,13 @@ impl FormStory {
                 .placeholder("Enter text here...")
                 .default_value("Hello 世界，this is GPUI component.")
         });
-        let date_picker = cx.new(|cx| DatePicker::new("birthday", window, cx));
+        let date = cx.new(|cx| DateState::new(window, cx));
 
         Self {
             name_input,
             email_input,
             bio_input,
-            date_picker,
+            date,
             color_state,
             subscribe_email: false,
             layout: Axis::Vertical,
@@ -188,7 +188,7 @@ impl Render for FormStory {
                     .child(
                         form_field()
                             .label("Birthday")
-                            .child(self.date_picker.clone())
+                            .child(DatePicker::new("date-picker", self.date.clone()))
                             .description("Select your birthday, we will send you a gift."),
                     )
                     .child(

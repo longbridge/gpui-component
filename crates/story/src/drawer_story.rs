@@ -11,7 +11,7 @@ use raw_window_handle::HasWindowHandle;
 use gpui_component::{
     button::{Button, ButtonVariant, ButtonVariants as _},
     checkbox::Checkbox,
-    date_picker::DatePicker,
+    date_picker::{DatePicker, DateState},
     h_flex,
     input::{InputState, TextInput},
     list::{List, ListDelegate, ListItem},
@@ -161,7 +161,7 @@ pub struct DrawerStory {
     list: Entity<List<ListItemDeletegate>>,
     input1: Entity<InputState>,
     input2: Entity<InputState>,
-    date_picker: Entity<DatePicker>,
+    date: Entity<DateState>,
     modal_overlay: bool,
     model_show_close: bool,
     model_padding: bool,
@@ -267,8 +267,7 @@ impl DrawerStory {
         let input2 = cx.new(|cx| {
             InputState::new(window, cx).placeholder("For test focus back on modal close.")
         });
-        let date_picker = cx
-            .new(|cx| DatePicker::new("birthday-picker", window, cx).placeholder("Date of Birth"));
+        let date = cx.new(|cx| DateState::new(window, cx));
 
         Self {
             focus_handle: cx.focus_handle(),
@@ -277,7 +276,7 @@ impl DrawerStory {
             list,
             input1,
             input2,
-            date_picker,
+            date,
             modal_overlay: true,
             model_show_close: true,
             model_padding: true,
@@ -293,7 +292,7 @@ impl DrawerStory {
         cx: &mut Context<Self>,
     ) {
         let input = self.input1.clone();
-        let date_picker = self.date_picker.clone();
+        let date = self.date.clone();
         let list = self.list.clone();
 
         let list_h = match placement {
@@ -308,7 +307,9 @@ impl DrawerStory {
                 .title("Drawer Title")
                 .gap_4()
                 .child(TextInput::new(input.clone()))
-                .child(date_picker.clone())
+                .child(
+                    DatePicker::new("birthday-picker", date.clone()).placeholder("Date of Birth"),
+                )
                 .child(
                     Button::new("send-notification")
                         .child("Test Notification")

@@ -74,13 +74,13 @@ impl Focusable for DateState {
 impl EventEmitter<DatePickerEvent> for DateState {}
 
 impl DateState {
-    /// Create a date picker.
+    /// Create a date state.
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         Self::new_with_range(false, window, cx)
     }
 
-    /// Create a date picker with range mode.
-    pub fn range_picker(window: &mut Window, cx: &mut Context<Self>) -> Self {
+    /// Create a date state with range mode.
+    pub fn range(window: &mut Window, cx: &mut Context<Self>) -> Self {
         Self::new_with_range(true, window, cx)
     }
 
@@ -294,6 +294,12 @@ impl DatePicker {
     /// Set preset ranges for the date picker.
     pub fn presets(mut self, presets: Vec<DateRangePreset>) -> Self {
         self.presets = Some(presets);
+        self
+    }
+
+    /// Set number of months to display in the calendar, default is 2.
+    pub fn number_of_months(mut self, number_of_months: usize) -> Self {
+        self.number_of_months = number_of_months;
         self
     }
 }
