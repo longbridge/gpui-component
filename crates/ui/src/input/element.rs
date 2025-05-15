@@ -1,24 +1,34 @@
 use gpui::{
     fill, point, px, relative, size, App, Bounds, Corners, Element, ElementId, ElementInputHandler,
     Entity, GlobalElementId, IntoElement, LayoutId, MouseButton, MouseMoveEvent, PaintQuad, Path,
-    Pixels, Point, Style, TextAlign, TextRun, UnderlineStyle, Window, WrappedLine,
+    Pixels, Point, SharedString, Style, TextAlign, TextRun, UnderlineStyle, Window, WrappedLine,
 };
 use smallvec::SmallVec;
 
 use crate::{ActiveTheme as _, Root};
 
-use super::TextInput;
+use super::InputState;
 
 const RIGHT_MARGIN: Pixels = px(5.);
 const BOTTOM_MARGIN: Pixels = px(20.);
 
 pub(super) struct TextElement {
-    input: Entity<TextInput>,
+    input: Entity<InputState>,
+    placeholder: SharedString,
 }
 
 impl TextElement {
-    pub(super) fn new(input: Entity<TextInput>) -> Self {
-        Self { input }
+    pub(super) fn new(input: Entity<InputState>) -> Self {
+        Self {
+            input,
+            placeholder: SharedString::default(),
+        }
+    }
+
+    /// Set the placeholder text of the input field.
+    pub fn placeholder(mut self, placeholder: impl Into<SharedString>) -> Self {
+        self.placeholder = placeholder.into();
+        self
     }
 
     fn paint_mouse_listeners(&mut self, window: &mut Window, _: &mut App) {
@@ -374,7 +384,7 @@ impl Element for TextElement {
         let line_height = window.line_height();
         let input = self.input.read(cx);
         let text = input.text.clone();
-        let placeholder = input.placeholder.clone();
+        let placeholder = self.placeholder.clone();
         let style = window.text_style();
         let mut bounds = bounds;
 
