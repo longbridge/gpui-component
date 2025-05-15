@@ -139,17 +139,17 @@ impl NumberInputStory {
                     if this == &self.number_input1 {
                         self.number_input1_value = self.number_input1_value - 1;
                         this.update(cx, |input, cx| {
-                            input.set_text(self.number_input1_value.to_string(), window, cx);
+                            input.set_value(self.number_input1_value.to_string(), window, cx);
                         });
                     } else if this == &self.number_input2 {
                         self.number_input2_value = self.number_input2_value - 1;
                         this.update(cx, |input, cx| {
-                            input.set_text(self.number_input2_value.to_string(), window, cx);
+                            input.set_value(self.number_input2_value.to_string(), window, cx);
                         });
                     } else if this == &self.number_input3 {
                         self.number_input3_value = self.number_input3_value - 1.0;
                         this.update(cx, |input, cx| {
-                            input.set_text(self.number_input3_value.to_string(), window, cx);
+                            input.set_value(self.number_input3_value.to_string(), window, cx);
                         });
                     }
                 }
@@ -157,17 +157,17 @@ impl NumberInputStory {
                     if this == &self.number_input1 {
                         self.number_input1_value = self.number_input1_value + 1;
                         this.update(cx, |input, cx| {
-                            input.set_text(self.number_input1_value.to_string(), window, cx);
+                            input.set_value(self.number_input1_value.to_string(), window, cx);
                         });
                     } else if this == &self.number_input2 {
                         self.number_input2_value = self.number_input2_value + 1;
                         this.update(cx, |input, cx| {
-                            input.set_text(self.number_input2_value.to_string(), window, cx);
+                            input.set_value(self.number_input2_value.to_string(), window, cx);
                         });
                     } else if this == &self.number_input3 {
                         self.number_input3_value = self.number_input3_value + 1.0;
                         this.update(cx, |input, cx| {
-                            input.set_text(self.number_input3_value.to_string(), window, cx);
+                            input.set_value(self.number_input3_value.to_string(), window, cx);
                         });
                     }
                 }

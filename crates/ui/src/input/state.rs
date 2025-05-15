@@ -489,14 +489,14 @@ impl InputState {
     /// Set the text of the input field.
     ///
     /// And the selection_range will be reset to 0..0.
-    pub fn set_text(
+    pub fn set_value(
         &mut self,
-        text: impl Into<SharedString>,
+        value: impl Into<SharedString>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         self.history.ignore = true;
-        self.replace_text(text, window, cx);
+        self.replace_text(value, window, cx);
         self.history.ignore = false;
         // Ensure cursor to start when set text
         self.selected_range = self.text.len()..self.text.len();

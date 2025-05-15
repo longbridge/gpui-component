@@ -5,7 +5,7 @@ use gpui::{
 use gpui_component::{
     button::{Button, ButtonGroup},
     checkbox::Checkbox,
-    color_picker::ColorPicker,
+    color_picker::{ColorPicker, ColorState},
     date_picker::DatePicker,
     divider::Divider,
     form::{form_field, v_form},
@@ -21,7 +21,7 @@ pub struct FormStory {
     name_input: Entity<InputState>,
     email_input: Entity<InputState>,
     bio_input: Entity<InputState>,
-    color_picker: Entity<ColorPicker>,
+    color_state: Entity<ColorState>,
     subscribe_email: bool,
     date_picker: Entity<DatePicker>,
     layout: Axis,
@@ -53,11 +53,7 @@ impl FormStory {
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let name_input = cx.new(|cx| InputState::new(window, cx).default_value("Jason Lee"));
-        let color_picker = cx.new(|cx| {
-            ColorPicker::new("color-picker-1", window, cx)
-                .small()
-                .label("Theme color")
-        });
+        let color_state = cx.new(|cx| ColorState::new(window, cx));
 
         let email_input =
             cx.new(|cx| InputState::new(window, cx).placeholder("Enter text here..."));
@@ -76,7 +72,7 @@ impl FormStory {
             email_input,
             bio_input,
             date_picker,
-            color_picker,
+            color_state,
             subscribe_email: false,
             layout: Axis::Vertical,
             size: Size::default(),
@@ -206,7 +202,13 @@ impl Render for FormStory {
                                 })),
                         ),
                     )
-                    .child(form_field().child(self.color_picker.clone()))
+                    .child(
+                        form_field().child(
+                            ColorPicker::new("color-picker-1", self.color_state.clone())
+                                .small()
+                                .label("Theme color"),
+                        ),
+                    )
                     .child(
                         form_field().child(
                             Checkbox::new("use-vertical-layout")

@@ -4,14 +4,14 @@ use gpui::{
 };
 use gpui_component::{
     blue_500,
-    color_picker::{ColorPicker, ColorPickerEvent},
+    color_picker::{ColorPicker, ColorPickerEvent, ColorState},
     green_500, red_500, v_flex, yellow_500, Colorize,
 };
 
 use crate::section;
 
 pub struct ColorPickerStory {
-    color_picker: Entity<ColorPicker>,
+    color: Entity<ColorState>,
     selected_color: Option<Hsla>,
 
     _subscriptions: Vec<Subscription>,
@@ -37,13 +37,9 @@ impl ColorPickerStory {
     }
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let color_picker = cx.new(|cx| {
-            ColorPicker::new("1", window, cx)
-                .default_value(red_500())
-                .featured_colors(vec![red_500(), blue_500(), green_500(), yellow_500()])
-        });
+        let color = cx.new(|cx| ColorState::new(window, cx).default_value(red_500()));
 
-        let _subscriptions = vec![cx.subscribe(&color_picker, |this, _, ev, _| match ev {
+        let _subscriptions = vec![cx.subscribe(&color, |this, _, ev, _| match ev {
             ColorPickerEvent::Change(color) => {
                 this.selected_color = *color;
                 println!("Color changed to: {:?}", color);
@@ -51,7 +47,7 @@ impl ColorPickerStory {
         })];
 
         Self {
-            color_picker,
+            color,
             selected_color: Some(red_500()),
             _subscriptions,
         }
@@ -60,7 +56,7 @@ impl ColorPickerStory {
 
 impl Focusable for ColorPickerStory {
     fn focus_handle(&self, cx: &gpui::App) -> gpui::FocusHandle {
-        self.color_picker.focus_handle(cx)
+        self.color.read(cx).focus_handle(cx)
     }
 }
 
@@ -69,7 +65,14 @@ impl Render for ColorPickerStory {
         v_flex().gap_3().child(
             section("Normal")
                 .max_w_md()
-                .child(self.color_picker.clone())
+                .child(
+                    ColorPicker::new("1", self.color.clone()).featured_colors(vec![
+                        red_500(),
+                        blue_500(),
+                        green_500(),
+                        yellow_500(),
+                    ]),
+                )
                 .when_some(self.selected_color, |this, color| {
                     this.child(color.to_hex())
                 }),
