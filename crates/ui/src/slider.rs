@@ -1,9 +1,9 @@
 use crate::{h_flex, tooltip::Tooltip, ActiveTheme, AxisExt};
 use gpui::{
-    canvas, div, prelude::FluentBuilder as _, px, AppContext as _, Axis, Bounds, Context,
-    DragMoveEvent, Empty, EntityId, EventEmitter, InteractiveElement, IntoElement, MouseButton,
-    MouseDownEvent, ParentElement as _, Pixels, Point, Render, StatefulInteractiveElement as _,
-    Styled, Window,
+    canvas, div, prelude::FluentBuilder as _, px, App, AppContext as _, Axis, Bounds, Context,
+    DragMoveEvent, Empty, Entity, EntityId, EventEmitter, InteractiveElement, IntoElement,
+    MouseButton, MouseDownEvent, ParentElement as _, Pixels, Point, Render, RenderOnce,
+    StatefulInteractiveElement as _, Styled, Window,
 };
 
 #[derive(Clone)]
@@ -19,46 +19,25 @@ pub enum SliderEvent {
     Change(f32),
 }
 
-/// A Slider element.
-pub struct Slider {
-    axis: Axis,
+pub struct SliderState {
     min: f32,
     max: f32,
     step: f32,
     value: f32,
-    reverse: bool,
-    percentage: f32,
     bounds: Bounds<Pixels>,
+    percentage: f32,
 }
 
-impl Slider {
-    fn new(axis: Axis) -> Self {
+impl SliderState {
+    pub fn new() -> Self {
         Self {
-            axis,
             min: 0.0,
             max: 100.0,
             step: 1.0,
             value: 0.0,
             percentage: 0.0,
-            reverse: false,
             bounds: Bounds::default(),
         }
-    }
-
-    /// Create a horizontal slider.
-    pub fn horizontal() -> Self {
-        Self::new(Axis::Horizontal)
-    }
-
-    /// Create a vertical slider.
-    pub fn vertical() -> Self {
-        Self::new(Axis::Vertical)
-    }
-
-    /// Set the reverse direction of the slider, default: false
-    pub fn reverse(mut self) -> Self {
-        self.reverse = true;
-        self
     }
 
     /// Set the minimum value of the slider, default: 0.0
@@ -107,19 +86,20 @@ impl Slider {
     /// Update value by mouse position
     fn update_value_by_position(
         &mut self,
+        axis: Axis,
+        reverse: bool,
         position: Point<Pixels>,
         _: &mut gpui::Window,
         cx: &mut gpui::Context<Self>,
     ) {
         let bounds = self.bounds;
-        let axis = self.axis;
         let min = self.min;
         let max = self.max;
         let step = self.step;
 
         let percentage = match axis {
             Axis::Horizontal => {
-                if self.reverse {
+                if reverse {
                     1. - (position.x - bounds.left()).clamp(px(0.), bounds.size.width)
                         / bounds.size.width
                 } else {
@@ -128,7 +108,7 @@ impl Slider {
                 }
             }
             Axis::Vertical => {
-                if self.reverse {
+                if reverse {
                     1. - (position.y - bounds.top()).clamp(px(0.), bounds.size.height)
                         / bounds.size.height
                 } else {
@@ -150,15 +130,61 @@ impl Slider {
         cx.emit(SliderEvent::Change(self.value));
         cx.notify();
     }
+}
+
+impl EventEmitter<SliderEvent> for SliderState {}
+impl Render for SliderState {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        Empty
+    }
+}
+
+/// A Slider element.
+#[derive(IntoElement)]
+pub struct Slider {
+    state: Entity<SliderState>,
+    axis: Axis,
+    reverse: bool,
+}
+
+impl Slider {
+    pub fn new(state: Entity<SliderState>) -> Self {
+        Self {
+            axis: Axis::Horizontal,
+            reverse: false,
+            state,
+        }
+    }
+
+    /// As a horizontal slider.
+    pub fn horizontal(mut self) -> Self {
+        self.axis = Axis::Horizontal;
+        self
+    }
+
+    /// As a vertical slider.
+    pub fn vertical(mut self) -> Self {
+        self.axis = Axis::Vertical;
+        self
+    }
+
+    /// Set the reverse direction of the slider, default: false
+    pub fn reverse(mut self) -> Self {
+        self.reverse = true;
+        self
+    }
 
     fn render_thumb(
         &self,
         thumb_bar_size: Pixels,
-        _: &mut Window,
-        cx: &mut Context<Self>,
+        window: &mut Window,
+        cx: &mut App,
     ) -> impl gpui::IntoElement {
-        let value = self.value;
-        let entity_id = cx.entity_id();
+        let state = self.state.read(cx);
+        let entity_id = self.state.entity_id();
+        let value = state.value;
+        let reverse = self.reverse;
+        let axis = self.axis;
 
         div()
             .id("slider-thumb")
@@ -166,8 +192,9 @@ impl Slider {
                 cx.stop_propagation();
                 cx.new(|_| drag.clone())
             })
-            .on_drag_move(
-                cx.listener(move |view, e: &DragMoveEvent<DragThumb>, window, cx| {
+            .on_drag_move(window.listener_for(
+                &self.state,
+                move |view, e: &DragMoveEvent<DragThumb>, window, cx| {
                     match e.drag(cx) {
                         DragThumb(id) => {
                             if *id != entity_id {
@@ -175,25 +202,31 @@ impl Slider {
                             }
 
                             // set value by mouse position
-                            view.update_value_by_position(e.event.position, window, cx)
+                            view.update_value_by_position(
+                                axis,
+                                reverse,
+                                e.event.position,
+                                window,
+                                cx,
+                            )
                         }
                     }
-                }),
-            )
+                },
+            ))
             .absolute()
-            .map(|this| match self.reverse {
+            .map(|this| match reverse {
                 true => this
-                    .when(self.axis.is_horizontal(), |this| {
+                    .when(axis.is_horizontal(), |this| {
                         this.bottom(px(-5.)).right(thumb_bar_size).mr(-px(8.))
                     })
-                    .when(self.axis.is_vertical(), |this| {
+                    .when(axis.is_vertical(), |this| {
                         this.bottom(thumb_bar_size).right(px(-5.)).mb(-px(8.))
                     }),
                 false => this
-                    .when(self.axis.is_horizontal(), |this| {
+                    .when(axis.is_horizontal(), |this| {
                         this.top(px(-5.)).left(thumb_bar_size).ml(-px(8.))
                     })
-                    .when(self.axis.is_vertical(), |this| {
+                    .when(axis.is_vertical(), |this| {
                         this.top(thumb_bar_size).left(px(-5.)).mt(-px(8.))
                     }),
             })
@@ -205,39 +238,39 @@ impl Slider {
             .bg(cx.theme().slider_thumb)
             .tooltip(move |window, cx| Tooltip::new(format!("{}", value)).build(window, cx))
     }
-
-    fn on_mouse_down(
-        &mut self,
-        event: &MouseDownEvent,
-        window: &mut gpui::Window,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        self.update_value_by_position(event.position, window, cx);
-    }
 }
 
-impl EventEmitter<SliderEvent> for Slider {}
-
-impl Render for Slider {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let thumb_bar_size = match self.axis {
-            Axis::Horizontal => self.percentage * self.bounds.size.width,
-            Axis::Vertical => self.percentage * self.bounds.size.height,
+impl RenderOnce for Slider {
+    fn render(self, window: &mut Window, cx: &mut gpui::App) -> impl IntoElement {
+        let state = self.state.read(cx);
+        let axis = self.axis;
+        let reverse = self.reverse;
+        let thumb_bar_size = match axis {
+            Axis::Horizontal => state.percentage * state.bounds.size.width,
+            Axis::Vertical => state.percentage * state.bounds.size.height,
         };
 
         div()
-            .id("slider")
+            .id(("slider", self.state.entity_id()))
             .flex_1()
-            .when(self.axis.is_vertical(), |this| {
+            .when(axis.is_vertical(), |this| {
                 this.flex().items_center().justify_center()
             })
             .child(
                 h_flex()
-                    .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
-                    .when(self.axis.is_horizontal(), |this| {
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        window.listener_for(
+                            &self.state,
+                            move |view, e: &MouseDownEvent, window, cx| {
+                                view.update_value_by_position(axis, reverse, e.position, window, cx)
+                            },
+                        ),
+                    )
+                    .when(axis.is_horizontal(), |this| {
                         this.items_center().h_6().w_full()
                     })
-                    .when(self.axis.is_vertical(), |this| {
+                    .when(axis.is_vertical(), |this| {
                         this.justify_center().w_6().h_full()
                     })
                     .flex_shrink_0()
@@ -245,20 +278,20 @@ impl Render for Slider {
                         div()
                             .id("slider-bar")
                             .relative()
-                            .when(self.axis.is_horizontal(), |this| this.w_full().h_1p5())
-                            .when(self.axis.is_vertical(), |this| this.h_full().w_1p5())
+                            .when(axis.is_horizontal(), |this| this.w_full().h_1p5())
+                            .when(axis.is_vertical(), |this| this.h_full().w_1p5())
                             .bg(cx.theme().slider_bar.opacity(0.2))
                             .active(|this| this.bg(cx.theme().slider_bar.opacity(0.4)))
                             .rounded(px(3.))
                             .child(
                                 div()
                                     .absolute()
-                                    .when(!self.reverse, |this| this.top_0().left_0())
-                                    .when(self.reverse, |this| this.bottom_0().right_0())
-                                    .when(self.axis.is_horizontal(), |this| {
+                                    .when(!reverse, |this| this.top_0().left_0())
+                                    .when(reverse, |this| this.bottom_0().right_0())
+                                    .when(axis.is_horizontal(), |this| {
                                         this.h_full().w(thumb_bar_size)
                                     })
-                                    .when(self.axis.is_vertical(), |this| {
+                                    .when(axis.is_vertical(), |this| {
                                         this.w_full().h(thumb_bar_size)
                                     })
                                     .bg(cx.theme().slider_bar)
@@ -266,9 +299,9 @@ impl Render for Slider {
                             )
                             .child(self.render_thumb(thumb_bar_size, window, cx))
                             .child({
-                                let view = cx.entity().clone();
+                                let state = self.state.clone();
                                 canvas(
-                                    move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds),
+                                    move |bounds, _, cx| state.update(cx, |r, _| r.bounds = bounds),
                                     |_, _, _, _| {},
                                 )
                                 .absolute()
