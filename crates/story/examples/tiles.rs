@@ -5,7 +5,7 @@ use gpui_component::{
         register_panel, DockArea, DockAreaState, DockEvent, DockItem, Panel, PanelEvent, PanelInfo,
         PanelRegistry, PanelState, PanelView,
     },
-    input::TextInput,
+    input::{InputState, TextInput},
     ActiveTheme, Root, Sizable, TitleBar,
 };
 use serde::{Deserialize, Serialize};
@@ -26,7 +26,7 @@ const TILES_DOCK_AREA: DockAreaTab = DockAreaTab {
 /// - Add a search bar to all panels.
 struct ContainerPanel {
     panel: Arc<dyn PanelView>,
-    search_input: Entity<TextInput>,
+    search_state: Entity<InputState>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -77,16 +77,11 @@ impl ContainerPanel {
 
     fn new(panel: Arc<dyn PanelView>, window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| {
-            let search_input = cx.new(|cx| {
-                TextInput::new(window, cx)
-                    .xsmall()
-                    .appearance(false)
-                    .placeholder("Search...")
-            });
+            let search_state = cx.new(|cx| InputState::new(window, cx).placeholder("Search..."));
 
             Self {
                 panel,
-                search_input,
+                search_state,
             }
         })
     }
@@ -110,7 +105,11 @@ impl Panel for ContainerPanel {
                 .rounded_lg()
                 .border_1()
                 .border_color(cx.theme().input)
-                .child(self.search_input.clone())
+                .child(
+                    TextInput::new(self.search_state.clone())
+                        .xsmall()
+                        .appearance(false),
+                )
                 .into_any_element(),
         )
     }

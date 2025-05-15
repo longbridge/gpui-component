@@ -7,7 +7,7 @@ use gpui_component::{
     button::{Button, ButtonVariants as _},
     divider::Divider,
     h_flex,
-    input::TextInput,
+    input::{InputState, TextInput},
     popover::{Popover, PopoverContent},
     v_flex, ContextModal, Sizable,
 };
@@ -41,13 +41,13 @@ pub fn init(cx: &mut App) {
 }
 
 struct Form {
-    input1: Entity<TextInput>,
+    input1: Entity<InputState>,
 }
 
 impl Form {
     fn new(window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| Self {
-            input1: cx.new(|cx| TextInput::new(window, cx)),
+            input1: cx.new(|cx| InputState::new(window, cx)),
         })
     }
 }
@@ -67,7 +67,7 @@ impl Render for Form {
             .p_4()
             .size_full()
             .child("This is a form container.")
-            .child(self.input1.clone())
+            .child(TextInput::new(self.input1.clone()))
             .child(
                 Button::new("submit")
                     .label("Submit")

@@ -4,7 +4,12 @@ use gpui::{
 };
 
 use crate::section;
-use gpui_component::{button::Button, h_flex, input::TextInput, v_flex, FocusableCycle, Sizable};
+use gpui_component::{
+    button::Button,
+    h_flex,
+    input::{InputState, TextInput},
+    v_flex, FocusableCycle, Sizable,
+};
 
 actions!(input_story, [Tab, TabPrev]);
 
@@ -18,7 +23,7 @@ pub fn init(cx: &mut App) {
 }
 
 pub struct TextareaStory {
-    textarea: Entity<TextInput>,
+    textarea: Entity<InputState>,
 }
 
 impl super::Story for TextareaStory {
@@ -46,11 +51,10 @@ impl TextareaStory {
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let textarea = cx.new(|cx| {
-            let mut input = TextInput::new(window, cx)
+            InputState::new(window, cx)
                 .multi_line()
                 .rows(10)
-                .placeholder("Enter text here...");
-            input.set_text(
+                .placeholder("Enter text here...").default_text(
                 unindent::unindent(
                     r#"Hello 世界，this is GPUI component.
 
@@ -70,11 +74,8 @@ impl TextareaStory {
 
                 If you want to see the demo, here is a some demo applications.
                 "#,
-                ),
-                window,
-                cx,
-            );
-            input
+                )
+            )
         });
 
         Self { textarea }
@@ -137,7 +138,7 @@ impl Render for TextareaStory {
                     v_flex()
                         .gap_2()
                         .w_full()
-                        .child(self.textarea.clone())
+                        .child(TextInput::new(self.textarea.clone()))
                         .child(
                             h_flex()
                                 .gap_2()

@@ -10,7 +10,7 @@ use gpui_component::{
     divider::Divider,
     form::{form_field, v_form},
     h_flex,
-    input::TextInput,
+    input::{InputState, TextInput},
     switch::Switch,
     v_flex, AxisExt, FocusableCycle, Selectable, Sizable, Size,
 };
@@ -18,9 +18,9 @@ use gpui_component::{
 actions!(input_story, [Tab, TabPrev]);
 
 pub struct FormStory {
-    name_input: Entity<TextInput>,
-    email_input: Entity<TextInput>,
-    bio_input: Entity<TextInput>,
+    name_input: Entity<InputState>,
+    email_input: Entity<InputState>,
+    bio_input: Entity<InputState>,
     color_picker: Entity<ColorPicker>,
     subscribe_email: bool,
     date_picker: Entity<DatePicker>,
@@ -52,26 +52,22 @@ impl FormStory {
     }
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let name_input = cx.new(|cx| {
-            let mut input = TextInput::new(window, cx).cleanable();
-            input.set_text("Jason Lee", window, cx);
-            input
-        });
+        let name_input = cx.new(|cx| InputState::new(window, cx).default_text("Jason Lee"));
         let color_picker = cx.new(|cx| {
             ColorPicker::new("color-picker-1", window, cx)
                 .small()
                 .label("Theme color")
         });
 
-        let email_input = cx.new(|cx| TextInput::new(window, cx).placeholder("Enter text here..."));
+        let email_input =
+            cx.new(|cx| InputState::new(window, cx).placeholder("Enter text here..."));
         let bio_input = cx.new(|cx| {
-            let mut input = TextInput::new(window, cx)
+            InputState::new(window, cx)
                 .multi_line()
                 .rows(5)
                 .max_rows(20)
-                .placeholder("Enter text here...");
-            input.set_text("Hello 世界，this is GPUI component.", window, cx);
-            input
+                .placeholder("Enter text here...")
+                .default_text("Hello 世界，this is GPUI component.")
         });
         let date_picker = cx.new(|cx| DatePicker::new("birthday", window, cx));
 
@@ -171,19 +167,19 @@ impl Render for FormStory {
                     .child(
                         form_field()
                             .label_fn(|_, _| "Name")
-                            .child(self.name_input.clone()),
+                            .child(TextInput::new(self.name_input.clone())),
                     )
                     .child(
                         form_field()
                             .label("Email")
-                            .child(self.email_input.clone())
+                            .child(TextInput::new(self.email_input.clone()))
                             .required(true),
                     )
                     .child(
                         form_field()
                             .label("Bio")
                             .when(self.layout.is_vertical(), |this| this.items_start())
-                            .child(self.bio_input.clone())
+                            .child(TextInput::new(self.bio_input.clone()))
                             .description_fn(|_, _| {
                                 div().child("Use at most 100 words to describe yourself.")
                             }),

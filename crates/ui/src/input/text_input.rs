@@ -1,7 +1,7 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     div, px, AnyElement, App, Entity, InteractiveElement as _, IntoElement, MouseButton,
-    ParentElement as _, Pixels, Rems, RenderOnce, SharedString, Styled as _, Window,
+    ParentElement as _, Pixels, Rems, RenderOnce, Styled as _, Window,
 };
 
 use crate::button::{Button, ButtonVariants as _};
@@ -86,11 +86,7 @@ impl TextInput {
         self
     }
 
-    fn render_toggle_mask_button(
-        state: Entity<InputState>,
-        _: &mut Window,
-        cx: &App,
-    ) -> impl IntoElement {
+    fn render_toggle_mask_button(state: Entity<InputState>) -> impl IntoElement {
         Button::new("toggle-mask")
             .icon(IconName::Eye)
             .xsmall()
@@ -216,6 +212,7 @@ impl RenderOnce for TextInput {
             .items_center()
             .gap(gap_x)
             .children(prefix)
+            // TODO: Define height here, and use it in the input element
             .child(self.state.clone())
             .child(
                 h_flex()
@@ -230,11 +227,7 @@ impl RenderOnce for TextInput {
                         this.child(Indicator::new().color(cx.theme().muted_foreground))
                     })
                     .when(self.mask_toggle, |this| {
-                        this.child(Self::render_toggle_mask_button(
-                            self.state.clone(),
-                            window,
-                            cx,
-                        ))
+                        this.child(Self::render_toggle_mask_button(self.state.clone()))
                     })
                     .when(show_clear_button, |this| {
                         this.child(clear_button(cx).on_click({

@@ -141,7 +141,7 @@ impl RenderOnce for NumberInput {
                         }
                     }),
             )
-            .child(TextInput::new(self.state.clone()))
+            .child(TextInput::new(self.state.clone()).no_gap())
             .child(
                 Button::new("plus")
                     .ghost()

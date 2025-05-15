@@ -1,7 +1,7 @@
 use gpui::{prelude::*, *};
 use gpui_component::{
     h_flex,
-    input::{InputEvent, TextInput},
+    input::{InputEvent, InputState, TextInput},
     resizable::{h_resizable, resizable_panel, ResizableState},
     sidebar::{Sidebar, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuItem},
     v_flex, ActiveTheme as _, Icon, IconName,
@@ -13,19 +13,14 @@ pub struct Gallery {
     active_group_index: Option<usize>,
     active_index: Option<usize>,
     collapsed: bool,
-    search_input: Entity<TextInput>,
+    search_input: Entity<InputState>,
     sidebar_state: Entity<ResizableState>,
     _subscriptions: Vec<Subscription>,
 }
 
 impl Gallery {
     pub fn new(init_story: Option<&str>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let search_input = cx.new(|cx| {
-            TextInput::new(window, cx)
-                .appearance(false)
-                .cleanable()
-                .placeholder("Search...")
-        });
+        let search_input = cx.new(|cx| InputState::new(window, cx).placeholder("Search..."));
         let _subscriptions = vec![cx.subscribe(&search_input, |this, _, e, cx| match e {
             InputEvent::Change(_) => {
                 this.active_group_index = Some(0);
@@ -222,7 +217,11 @@ impl Render for Gallery {
                                             .rounded_full()
                                             .flex_1()
                                             .mx_1()
-                                            .child(self.search_input.clone()),
+                                            .child(
+                                                TextInput::new(self.search_input.clone())
+                                                    .appearance(false)
+                                                    .cleanable(),
+                                            ),
                                     ),
                             )
                             .children(stories.clone().into_iter().enumerate().map(

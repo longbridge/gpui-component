@@ -14,7 +14,7 @@ use gpui_component::{
     checkbox::Checkbox,
     green, h_flex,
     indicator::Indicator,
-    input::{InputEvent, TextInput},
+    input::{InputEvent, InputState, TextInput},
     label::Label,
     popup_menu::{PopupMenu, PopupMenuExt},
     red,
@@ -576,7 +576,7 @@ impl TableDelegate for StockTableDelegate {
 
 pub struct TableStory {
     table: Entity<Table<StockTableDelegate>>,
-    num_stocks_input: Entity<TextInput>,
+    num_stocks_input: Entity<InputState>,
     stripe: bool,
     refresh_data: bool,
     size: Size,
@@ -614,7 +614,7 @@ impl TableStory {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         // Create the number input field with validation for positive integers
         let num_stocks_input = cx.new(|cx| {
-            let mut input = TextInput::new(window, cx)
+            let mut input = InputState::new(window, cx)
                 .placeholder("Enter number of Stocks to display")
                 .validate(|s| s.parse::<usize>().is_ok());
             input.set_text("5000", window, cx);
@@ -669,7 +669,7 @@ impl TableStory {
     // Event handler for changes in the number input field
     fn on_num_stocks_input_change(
         &mut self,
-        _: &Entity<TextInput>,
+        _: &Entity<InputState>,
         event: &InputEvent,
         _: &mut Window,
         cx: &mut Context<Self>,
@@ -935,7 +935,7 @@ impl Render for TableStory {
                         .child(
                             h_flex()
                                 .min_w_32()
-                                .child(self.num_stocks_input.clone())
+                                .child(TextInput::new(self.num_stocks_input.clone()))
                                 .into_any_element(),
                         )
                         .when(delegate.loading, |this| {

@@ -4,7 +4,7 @@ use gpui::{
 };
 use gpui_component::{
     h_flex,
-    input::{InputEvent, TextInput},
+    input::{InputEvent, InputState, TextInput},
     v_flex,
     webview::WebView,
     wry, ActiveTheme,
@@ -18,7 +18,7 @@ pub fn init(_: &mut App) {
 pub struct WebViewStory {
     focus_handle: FocusHandle,
     webview: Entity<WebView>,
-    address_input: Entity<TextInput>,
+    address_input: Entity<InputState>,
 }
 
 impl super::Story for WebViewStory {
@@ -76,11 +76,8 @@ impl WebViewStory {
             WebView::new(webview, window, cx)
         });
 
-        let address_input = cx.new(|cx| {
-            let mut input = TextInput::new(window, cx);
-            input.set_text("https://google.com", window, cx);
-            input
-        });
+        let address_input =
+            cx.new(|cx| InputState::new(window, cx).default_text("https://google.com"));
 
         let url = address_input.read(cx).text().clone();
         webview.update(cx, |view, _| {
@@ -139,7 +136,12 @@ impl Render for WebViewStory {
             .p_2()
             .gap_3()
             .size_full()
-            .child(h_flex().gap_2().items_center().child(address_input.clone()))
+            .child(
+                h_flex()
+                    .gap_2()
+                    .items_center()
+                    .child(TextInput::new(address_input.clone())),
+            )
             .child(
                 div()
                     .flex_1()

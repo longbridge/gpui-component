@@ -8,7 +8,7 @@ use crate::section;
 use gpui_component::{
     button::{Button, ButtonVariant, ButtonVariants as _},
     h_flex,
-    input::{InputEvent, MaskPattern, TextInput},
+    input::{InputEvent, InputState, MaskPattern, TextInput},
     v_flex, ContextModal, FocusableCycle, Icon, IconName, Sizable,
 };
 
@@ -24,19 +24,19 @@ pub fn init(cx: &mut App) {
 }
 
 pub struct InputStory {
-    input1: Entity<TextInput>,
-    input2: Entity<TextInput>,
-    input_esc: Entity<TextInput>,
-    mask_input: Entity<TextInput>,
-    disabled_input: Entity<TextInput>,
-    prefix_input1: Entity<TextInput>,
-    suffix_input1: Entity<TextInput>,
-    both_input1: Entity<TextInput>,
-    large_input: Entity<TextInput>,
-    small_input: Entity<TextInput>,
-    phone_input: Entity<TextInput>,
-    mask_input2: Entity<TextInput>,
-    currency_input: Entity<TextInput>,
+    input1: Entity<InputState>,
+    input2: Entity<InputState>,
+    input_esc: Entity<InputState>,
+    mask_input: Entity<InputState>,
+    disabled_input: Entity<InputState>,
+    prefix_input1: Entity<InputState>,
+    suffix_input1: Entity<InputState>,
+    both_input1: Entity<InputState>,
+    large_input: Entity<InputState>,
+    small_input: Entity<InputState>,
+    phone_input: Entity<InputState>,
+    mask_input2: Entity<InputState>,
+    currency_input: Entity<InputState>,
 
     _subscriptions: Vec<Subscription>,
 }
@@ -62,7 +62,7 @@ impl InputStory {
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let input1 = cx.new(|cx| {
-            let mut input = TextInput::new(window, cx).cleanable().h_full();
+            let mut input = InputState::new(window, cx).h_full();
             input.set_text(
                 "Hello 世界，this is GPUI component, this is a long text.",
                 window,
@@ -71,60 +71,34 @@ impl InputStory {
             input
         });
 
-        let input2 = cx.new(|cx| TextInput::new(window, cx).placeholder("Enter text here..."));
+        let input2 = cx.new(|cx| InputState::new(window, cx).placeholder("Enter text here..."));
         let input_esc = cx.new(|cx| {
-            TextInput::new(window, cx)
+            InputState::new(window, cx)
                 .placeholder("Enter text and clear it by pressing ESC")
-                .cleanable()
                 .clean_on_escape()
         });
 
         let mask_input = cx.new(|cx| {
-            let mut input = TextInput::new(window, cx)
-                .masked(true)
-                .mask_toggle()
-                .cleanable();
+            let mut input = InputState::new(window, cx).masked(true);
             input.set_text("this-is-password", window, cx);
             input
         });
 
-        let prefix_input1 = cx.new(|cx| {
-            TextInput::new(window, cx)
-                .prefix(|_, _| div().child(Icon::new(IconName::Search).small()).ml_3())
-                .placeholder("Search some thing...")
-                .cleanable()
-        });
+        let prefix_input1 =
+            cx.new(|cx| InputState::new(window, cx).placeholder("Search some thing..."));
         let suffix_input1 = cx.new(|cx| {
-            TextInput::new(window, cx)
-                .suffix(|_, _| {
-                    Button::new("info")
-                        .ghost()
-                        .icon(IconName::Info)
-                        .xsmall()
-                        .mr_3()
-                })
+            InputState::new(window, cx)
                 .placeholder("This input only support [a-zA-Z0-9] characters.")
                 .pattern(regex::Regex::new(r"^[a-zA-Z0-9]*$").unwrap())
-                .cleanable()
         });
         let both_input1 = cx.new(|cx| {
-            TextInput::new(window, cx)
-                .prefix(|_, _| div().child(Icon::new(IconName::Search).small()).ml_3())
-                .suffix(|_, _| {
-                    Button::new("info")
-                        .ghost()
-                        .icon(IconName::Info)
-                        .xsmall()
-                        .mr_3()
-                })
-                .cleanable()
-                .placeholder("This input have prefix and suffix.")
+            InputState::new(window, cx).placeholder("This input have prefix and suffix.")
         });
 
-        let phone_input = cx.new(|cx| TextInput::new(window, cx).mask_pattern("(999)-999-9999"));
-        let mask_input2 = cx.new(|cx| TextInput::new(window, cx).mask_pattern("AAA-###-AAA"));
+        let phone_input = cx.new(|cx| InputState::new(window, cx).mask_pattern("(999)-999-9999"));
+        let mask_input2 = cx.new(|cx| InputState::new(window, cx).mask_pattern("AAA-###-AAA"));
         let currency_input = cx.new(|cx| {
-            TextInput::new(window, cx).mask_pattern(MaskPattern::Number {
+            InputState::new(window, cx).mask_pattern(MaskPattern::Number {
                 separator: Some(','),
                 fraction: Some(3),
             })
@@ -142,19 +116,14 @@ impl InputStory {
             input_esc,
             mask_input,
             disabled_input: cx.new(|cx| {
-                let mut input = TextInput::new(window, cx);
+                let mut input = InputState::new(window, cx);
                 input.set_text("This is disabled input", window, cx);
                 input.set_disabled(true, window, cx);
                 input
             }),
-            large_input: cx.new(|cx| {
-                TextInput::new(window, cx)
-                    .large()
-                    .placeholder("Large input")
-            }),
+            large_input: cx.new(|cx| InputState::new(window, cx).placeholder("Large input")),
             small_input: cx.new(|cx| {
-                TextInput::new(window, cx)
-                    .small()
+                InputState::new(window, cx)
                     .validate(|s| s.parse::<f32>().is_ok())
                     .placeholder("validate to limit float number.")
             }),
@@ -178,7 +147,7 @@ impl InputStory {
 
     fn on_input_event(
         &mut self,
-        _: &Entity<TextInput>,
+        _: &Entity<InputState>,
         event: &InputEvent,
         _window: &mut Window,
         _cx: &mut Context<Self>,
@@ -228,26 +197,55 @@ impl Render for InputStory {
             .child(
                 section("Normal Input")
                     .max_w_md()
-                    .child(self.input1.clone())
+                    .child(TextInput::new(self.input1.clone()).cleanable())
                     .child(self.input2.clone()),
             )
             .child(
                 section("Input State")
                     .max_w_md()
-                    .child(self.disabled_input.clone())
-                    .child(self.mask_input.clone()),
+                    .child(TextInput::new(self.disabled_input.clone()))
+                    .child(
+                        TextInput::new(self.mask_input.clone())
+                            .mask_toggle()
+                            .cleanable(),
+                    ),
             )
             .child(
                 section("Prefix and Suffix")
                     .max_w_md()
-                    .child(self.prefix_input1.clone())
-                    .child(self.both_input1.clone())
-                    .child(self.suffix_input1.clone()),
+                    .child(
+                        TextInput::new(self.prefix_input1.clone())
+                            .cleanable()
+                            .prefix(Icon::new(IconName::Search).small().ml_3()),
+                    )
+                    .child(
+                        TextInput::new(self.both_input1.clone())
+                            .cleanable()
+                            .prefix(div().child(Icon::new(IconName::Search).small()).ml_3())
+                            .suffix(
+                                Button::new("info")
+                                    .ghost()
+                                    .icon(IconName::Info)
+                                    .xsmall()
+                                    .mr_3(),
+                            ),
+                    )
+                    .child(
+                        TextInput::new(self.suffix_input1.clone())
+                            .cleanable()
+                            .suffix(
+                                Button::new("info")
+                                    .ghost()
+                                    .icon(IconName::Info)
+                                    .xsmall()
+                                    .mr_3(),
+                            ),
+                    ),
             )
             .child(
                 section("Currency Input with thousands separator")
                     .max_w_md()
-                    .child(self.currency_input.clone())
+                    .child(TextInput::new(self.currency_input.clone()))
                     .child(
                         div().child(format!("Value: {:?}", self.currency_input.read(cx).text())),
                     ),
@@ -255,7 +253,7 @@ impl Render for InputStory {
             .child(
                 section("Input with mask pattern: (999)-999-9999")
                     .max_w_md()
-                    .child(self.phone_input.clone())
+                    .child(TextInput::new(self.phone_input.clone()))
                     .child(
                         v_flex()
                             .child(format!("Value: {:?}", self.phone_input.read(cx).text()))
@@ -268,7 +266,7 @@ impl Render for InputStory {
             .child(
                 section("Input with mask pattern: AAA-###-AAA")
                     .max_w_md()
-                    .child(self.mask_input2.clone())
+                    .child(TextInput::new(self.mask_input2.clone()))
                     .child(
                         v_flex()
                             .child(format!("Value: {:?}", self.mask_input2.read(cx).text()))
@@ -281,13 +279,13 @@ impl Render for InputStory {
             .child(
                 section("Input Size")
                     .max_w_md()
-                    .child(self.large_input.clone())
-                    .child(self.small_input.clone()),
+                    .child(TextInput::new(self.large_input.clone()).large())
+                    .child(TextInput::new(self.small_input.clone()).small()),
             )
             .child(
                 section("Cleanable and ESC to clean")
                     .max_w_md()
-                    .child(self.input_esc.clone()),
+                    .child(TextInput::new(self.input_esc.clone()).cleanable()),
             )
             .child(
                 section("Focused Input")

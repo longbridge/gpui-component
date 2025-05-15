@@ -3,40 +3,36 @@ use std::rc::Rc;
 use gpui::*;
 use gpui_component::{
     highlighter::HighlightTheme,
-    input::TextInput,
+    input::{InputState, TextInput},
     text::{TextView, TextViewStyle},
     ActiveTheme as _,
 };
 use story::Assets;
 
 pub struct Example {
-    text_input: Entity<TextInput>,
+    input_state: Entity<InputState>,
 }
 
 const EXAMPLE: &str = include_str!("./markdown.md");
 
 impl Example {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let text_input = cx.new(|cx| {
-            TextInput::new(window, cx)
+        let input_state = cx.new(|cx| {
+            InputState::new(window, cx)
                 .multi_line()
-                .appearance(false)
                 .h_full()
                 .placeholder("Enter your Markdown here...")
+                .default_text(EXAMPLE)
         });
 
         let _subscribe = cx.subscribe(
-            &text_input,
+            &input_state,
             |_, _, _: &gpui_component::input::InputEvent, cx| {
                 cx.notify();
             },
         );
 
-        _ = text_input.update(cx, |input, cx| {
-            input.set_text(EXAMPLE, window, cx);
-        });
-
-        Self { text_input }
+        Self { input_state }
     }
 
     fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
@@ -64,7 +60,7 @@ impl Render for Example {
                     .border_r_1()
                     .border_color(cx.theme().border)
                     .flex_1()
-                    .child(self.text_input.clone()),
+                    .child(TextInput::new(self.input_state.clone()).appearance(false)),
             )
             .child(
                 div()
@@ -75,7 +71,7 @@ impl Render for Example {
                     .flex_1()
                     .overflow_y_scroll()
                     .child(
-                        TextView::markdown("preview", self.text_input.read(cx).text()).style(
+                        TextView::markdown("preview", self.input_state.read(cx).text()).style(
                             TextViewStyle {
                                 highlight_theme: Rc::new(theme),
                                 ..Default::default()

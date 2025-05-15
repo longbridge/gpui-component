@@ -13,7 +13,7 @@ use gpui_component::{
     checkbox::Checkbox,
     date_picker::DatePicker,
     h_flex,
-    input::TextInput,
+    input::{InputState, TextInput},
     list::{List, ListDelegate, ListItem},
     v_flex,
     webview::WebView,
@@ -159,8 +159,8 @@ pub struct DrawerStory {
     drawer_placement: Option<Placement>,
     selected_value: Option<SharedString>,
     list: Entity<List<ListItemDeletegate>>,
-    input1: Entity<TextInput>,
-    input2: Entity<TextInput>,
+    input1: Entity<InputState>,
+    input2: Entity<InputState>,
     date_picker: Entity<DatePicker>,
     modal_overlay: bool,
     model_show_close: bool,
@@ -263,9 +263,9 @@ impl DrawerStory {
             list
         });
 
-        let input1 = cx.new(|cx| TextInput::new(window, cx).placeholder("Your Name"));
+        let input1 = cx.new(|cx| InputState::new(window, cx).placeholder("Your Name"));
         let input2 = cx.new(|cx| {
-            TextInput::new(window, cx).placeholder("For test focus back on modal close.")
+            InputState::new(window, cx).placeholder("For test focus back on modal close.")
         });
         let date_picker = cx
             .new(|cx| DatePicker::new("birthday-picker", window, cx).placeholder("Date of Birth"));
@@ -307,7 +307,7 @@ impl DrawerStory {
                 .size(px(400.))
                 .title("Drawer Title")
                 .gap_4()
-                .child(input.clone())
+                .child(TextInput::new(input.clone()))
                 .child(date_picker.clone())
                 .child(
                     Button::new("send-notification")
@@ -462,7 +462,7 @@ impl Render for DrawerStory {
                     .child(
                         section("Focus back test")
                             .max_w_md()
-                            .child(self.input2.clone())
+                            .child(TextInput::new(self.input2.clone()))
                             .child(
                                 Button::new("test-action")
                                     .label("Test Action")

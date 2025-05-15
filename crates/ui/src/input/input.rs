@@ -10,34 +10,23 @@ use std::ops::Range;
 use std::rc::Rc;
 use unicode_segmentation::*;
 
-use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    actions, div, impl_internal_actions, point, px, relative, AnyElement, App, AppContext, Bounds,
-    ClipboardItem, Context, DefiniteLength, Entity, EntityInputHandler, EventEmitter, FocusHandle,
-    Focusable, InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent, MouseButton,
-    MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Rems, Render,
-    RenderOnce, ScrollHandle, ScrollWheelEvent, SharedString, Styled as _, Subscription,
+    actions, div, impl_internal_actions, point, prelude::FluentBuilder as _, px, relative, App,
+    AppContext, Bounds, ClipboardItem, Context, DefiniteLength, Entity, EntityInputHandler,
+    EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding,
+    KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _,
+    Pixels, Point, Render, ScrollHandle, ScrollWheelEvent, SharedString, Styled as _, Subscription,
     UTF16Selection, Window, WrappedLine,
 };
 
 // TODO:
 // - Move cursor to skip line eof empty chars.
 
-use super::blink_cursor::BlinkCursor;
-use super::change::Change;
-use super::element::TextElement;
-use super::mask_pattern::MaskPattern;
-use super::number_input;
-
-use crate::button::{Button, ButtonVariants as _};
-use crate::history::History;
-use crate::indicator::Indicator;
-use crate::input::clear_button;
-use crate::scroll::{Scrollbar, ScrollbarAxis, ScrollbarState};
-use crate::{h_flex, StyledExt};
-use crate::{ActiveTheme, Root};
-use crate::{IconName, Size};
-use crate::{Sizable, StyleSized};
+use super::{
+    blink_cursor::BlinkCursor, change::Change, element::TextElement, mask_pattern::MaskPattern,
+    number_input,
+};
+use crate::{history::History, scroll::ScrollbarState, Root};
 
 #[derive(Clone, PartialEq, Eq, Deserialize)]
 pub struct Enter {
@@ -208,8 +197,6 @@ pub struct InputState {
     pub(super) multi_line: bool,
     pub(super) history: History<Change>,
     pub(super) blink_cursor: Entity<BlinkCursor>,
-    pub(super) prefix: Option<Box<dyn Fn(&mut Window, &mut Context<Self>) -> AnyElement + 'static>>,
-    pub(super) suffix: Option<Box<dyn Fn(&mut Window, &mut Context<Self>) -> AnyElement + 'static>>,
     pub(super) loading: bool,
     /// Range in UTF-8 length for the selected text.
     ///
@@ -293,8 +280,6 @@ impl InputState {
             masked: false,
             clean_on_escape: false,
             loading: false,
-            prefix: None,
-            suffix: None,
             height: None,
             pattern: None,
             validate: None,
@@ -619,6 +604,12 @@ impl InputState {
     pub fn set_loading(&mut self, loading: bool, _: &mut Window, cx: &mut Context<Self>) {
         self.loading = loading;
         cx.notify();
+    }
+
+    /// Set the default text of the input field.
+    pub fn default_text(mut self, text: impl Into<SharedString>) -> Self {
+        self.text = text.into();
+        self
     }
 
     /// Return the text of the input field.

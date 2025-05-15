@@ -6,7 +6,7 @@ use regex::Regex;
 
 use crate::section;
 use gpui_component::{
-    input::{InputEvent, MaskPattern, NumberInput, NumberInputEvent, StepAction},
+    input::{InputEvent, InputState, MaskPattern, NumberInput, NumberInputEvent, StepAction},
     v_flex, FocusableCycle, Sizable,
 };
 
@@ -23,10 +23,10 @@ pub fn init(cx: &mut App) {
 
 pub struct NumberInputStory {
     number_input1_value: i64,
-    number_input1: Entity<NumberInput>,
-    number_input2: Entity<NumberInput>,
+    number_input1: Entity<InputState>,
+    number_input2: Entity<InputState>,
     number_input2_value: u64,
-    number_input3: Entity<NumberInput>,
+    number_input3: Entity<InputState>,
     number_input3_value: f64,
 
     _subscriptions: Vec<Subscription>,
@@ -58,29 +58,24 @@ impl NumberInputStory {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let number_input1_value = 1;
         let number_input1 = cx.new(|cx| {
-            let input = NumberInput::new(window, cx).placeholder("Number Input", window, cx);
-            input.set_value(number_input1_value.to_string(), window, cx);
-            input
+            InputState::new(window, cx)
+                .placeholder("Number Input")
+                .default_text(number_input1_value.to_string())
         });
 
         let number_input2 = cx.new(|cx| {
-            NumberInput::new(window, cx)
-                .placeholder("Unsized Integer Number Input", window, cx)
-                .pattern(Regex::new(r"^\d+$").unwrap(), window, cx)
-                .small()
+            InputState::new(window, cx)
+                .placeholder("Unsized Integer Number Input")
+                .pattern(Regex::new(r"^\d+$").unwrap())
         });
 
         let number_input3 = cx.new(|cx| {
-            NumberInput::new(window, cx)
-                .placeholder("Number Input with mask pattern", window, cx)
-                .mask_pattern(
-                    MaskPattern::Number {
-                        separator: Some(','),
-                        fraction: Some(2),
-                    },
-                    window,
-                    cx,
-                )
+            InputState::new(window, cx)
+                .placeholder("Number Input with mask pattern")
+                .mask_pattern(MaskPattern::Number {
+                    separator: Some(','),
+                    fraction: Some(2),
+                })
         });
 
         let _subscriptions = vec![
@@ -110,7 +105,7 @@ impl NumberInputStory {
 
     fn on_number_input_event(
         &mut self,
-        this: &Entity<NumberInput>,
+        this: &Entity<InputState>,
         event: &NumberInputEvent,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -144,17 +139,17 @@ impl NumberInputStory {
                     if this == &self.number_input1 {
                         self.number_input1_value = self.number_input1_value - 1;
                         this.update(cx, |input, cx| {
-                            input.set_value(self.number_input1_value.to_string(), window, cx);
+                            input.set_text(self.number_input1_value.to_string(), window, cx);
                         });
                     } else if this == &self.number_input2 {
                         self.number_input2_value = self.number_input2_value - 1;
                         this.update(cx, |input, cx| {
-                            input.set_value(self.number_input2_value.to_string(), window, cx);
+                            input.set_text(self.number_input2_value.to_string(), window, cx);
                         });
                     } else if this == &self.number_input3 {
                         self.number_input3_value = self.number_input3_value - 1.0;
                         this.update(cx, |input, cx| {
-                            input.set_value(self.number_input3_value.to_string(), window, cx);
+                            input.set_text(self.number_input3_value.to_string(), window, cx);
                         });
                     }
                 }
@@ -162,17 +157,17 @@ impl NumberInputStory {
                     if this == &self.number_input1 {
                         self.number_input1_value = self.number_input1_value + 1;
                         this.update(cx, |input, cx| {
-                            input.set_value(self.number_input1_value.to_string(), window, cx);
+                            input.set_text(self.number_input1_value.to_string(), window, cx);
                         });
                     } else if this == &self.number_input2 {
                         self.number_input2_value = self.number_input2_value + 1;
                         this.update(cx, |input, cx| {
-                            input.set_value(self.number_input2_value.to_string(), window, cx);
+                            input.set_text(self.number_input2_value.to_string(), window, cx);
                         });
                     } else if this == &self.number_input3 {
                         self.number_input3_value = self.number_input3_value + 1.0;
                         this.update(cx, |input, cx| {
-                            input.set_value(self.number_input3_value.to_string(), window, cx);
+                            input.set_text(self.number_input3_value.to_string(), window, cx);
                         });
                     }
                 }
@@ -205,17 +200,17 @@ impl Render for NumberInputStory {
             .child(
                 section("Normal Size")
                     .max_w_md()
-                    .child(self.number_input1.clone()),
+                    .child(NumberInput::new(self.number_input1.clone())),
             )
             .child(
                 section("Small Size")
                     .max_w_md()
-                    .child(self.number_input2.clone()),
+                    .child(NumberInput::new(self.number_input2.clone()).small()),
             )
             .child(
                 section("With mask pattern")
                     .max_w_md()
-                    .child(self.number_input3.clone()),
+                    .child(NumberInput::new(self.number_input3.clone())),
             )
     }
 }

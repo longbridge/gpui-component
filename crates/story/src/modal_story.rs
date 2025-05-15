@@ -10,7 +10,7 @@ use gpui_component::{
     date_picker::DatePicker,
     dropdown::Dropdown,
     h_flex,
-    input::TextInput,
+    input::{InputState, TextInput},
     modal::ModalButtonProps,
     v_flex, ContextModal as _,
 };
@@ -21,8 +21,8 @@ actions!(modal_story, [TestAction]);
 pub struct ModalStory {
     focus_handle: FocusHandle,
     selected_value: Option<SharedString>,
-    input1: Entity<TextInput>,
-    input2: Entity<TextInput>,
+    input1: Entity<InputState>,
+    input2: Entity<InputState>,
     date_picker: Entity<DatePicker>,
     dropdown: Entity<Dropdown<Vec<String>>>,
     modal_overlay: bool,
@@ -52,9 +52,9 @@ impl ModalStory {
     }
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let input1 = cx.new(|cx| TextInput::new(window, cx).placeholder("Your Name"));
+        let input1 = cx.new(|cx| InputState::new(window, cx).placeholder("Your Name"));
         let input2 = cx.new(|cx| {
-            TextInput::new(window, cx).placeholder("For test focus back on modal close.")
+            InputState::new(window, cx).placeholder("For test focus back on modal close.")
         });
         let date_picker = cx
             .new(|cx| DatePicker::new("birthday-picker", window, cx).placeholder("Date of Birth"));
@@ -111,7 +111,7 @@ impl ModalStory {
                         .gap_3()
                         .child("This is a modal dialog.")
                         .child("You can put anything here.")
-                        .child(input1.clone())
+                        .child(TextInput::new(input1.clone()))
                         .child(dropdown.clone())
                         .child(date_picker.clone()),
                 )
@@ -252,7 +252,7 @@ impl Render for ModalStory {
                     .child(
                         section("Focus back test")
                             .max_w_md()
-                            .child(self.input2.clone())
+                            .child(TextInput::new(self.input2.clone()))
                             .child(
                                 Button::new("test-action")
                                     .label("Test Action")

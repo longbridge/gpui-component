@@ -1,6 +1,6 @@
 use crate::{
     drawer::Drawer,
-    input::{InputState, TextInput},
+    input::InputState,
     modal::Modal,
     notification::{Notification, NotificationList},
     window_border, ActiveTheme, Placement,
