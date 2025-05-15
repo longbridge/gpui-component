@@ -3,6 +3,7 @@ use gpui::{
     SharedString, Styled, Subscription, Window,
 };
 use gpui_component::{
+    checkbox::Checkbox,
     clipboard::Clipboard,
     h_flex,
     slider::{Slider, SliderEvent, SliderState},
@@ -19,6 +20,7 @@ pub struct SliderStory {
     slider2_value: f32,
     slider_hsl: [Entity<SliderState>; 4],
     slider_hsl_value: Hsla,
+    disabled: bool,
     _subscritions: Vec<Subscription>,
 }
 
@@ -128,6 +130,7 @@ impl SliderStory {
             slider2,
             slider_hsl,
             slider_hsl_value: gpui::red(),
+            disabled: false,
             _subscritions,
         }
     }
@@ -140,24 +143,43 @@ impl Focusable for SliderStory {
 }
 
 impl Render for SliderStory {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let rgb = SharedString::from(self.slider_hsl_value.to_hex());
 
         v_flex()
             .items_center()
             .gap_y_3()
             .child(
+                h_flex().justify_between().child(
+                    Checkbox::new("disabled")
+                        .checked(self.disabled)
+                        .label("Disabled")
+                        .on_click(cx.listener(|this, check: &bool, _, cx| {
+                            this.disabled = *check;
+                            cx.notify();
+                        })),
+                ),
+            )
+            .child(
                 section("Horizontal Slider")
                     .max_w_md()
                     .v_flex()
-                    .child(Slider::new(self.slider1.clone()).horizontal())
+                    .child(
+                        Slider::new(self.slider1.clone())
+                            .horizontal()
+                            .disabled(self.disabled),
+                    )
                     .child(format!("Value: {}", self.slider1_value)),
             )
             .child(
                 section("Slider (0 - 5)")
                     .max_w_md()
                     .v_flex()
-                    .child(Slider::new(self.slider2.clone()).horizontal())
+                    .child(
+                        Slider::new(self.slider2.clone())
+                            .horizontal()
+                            .disabled(self.disabled),
+                    )
                     .child(format!("Value: {}", self.slider2_value)),
             )
             .child(
@@ -190,7 +212,12 @@ impl Render for SliderStory {
                         .gap_3()
                         .items_center()
                         .justify_center()
-                        .child(Slider::new(self.slider_hsl[0].clone()).vertical().reverse())
+                        .child(
+                            Slider::new(self.slider_hsl[0].clone())
+                                .vertical()
+                                .reverse()
+                                .disabled(self.disabled),
+                        )
                         .child(
                             v_flex()
                                 .items_center()
@@ -204,7 +231,12 @@ impl Render for SliderStory {
                         .gap_3()
                         .items_center()
                         .justify_center()
-                        .child(Slider::new(self.slider_hsl[1].clone()).vertical().reverse())
+                        .child(
+                            Slider::new(self.slider_hsl[1].clone())
+                                .vertical()
+                                .reverse()
+                                .disabled(self.disabled),
+                        )
                         .child(
                             v_flex()
                                 .items_center()
@@ -218,7 +250,12 @@ impl Render for SliderStory {
                         .gap_3()
                         .items_center()
                         .justify_center()
-                        .child(Slider::new(self.slider_hsl[2].clone()).vertical().reverse())
+                        .child(
+                            Slider::new(self.slider_hsl[2].clone())
+                                .vertical()
+                                .reverse()
+                                .disabled(self.disabled),
+                        )
                         .child(
                             v_flex()
                                 .items_center()
@@ -232,7 +269,12 @@ impl Render for SliderStory {
                         .gap_3()
                         .items_center()
                         .justify_center()
-                        .child(Slider::new(self.slider_hsl[3].clone()).vertical().reverse())
+                        .child(
+                            Slider::new(self.slider_hsl[3].clone())
+                                .vertical()
+                                .reverse()
+                                .disabled(self.disabled),
+                        )
                         .child(
                             v_flex()
                                 .items_center()

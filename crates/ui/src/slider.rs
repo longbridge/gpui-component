@@ -145,6 +145,7 @@ pub struct Slider {
     state: Entity<SliderState>,
     axis: Axis,
     reverse: bool,
+    disabled: bool,
 }
 
 impl Slider {
@@ -153,6 +154,7 @@ impl Slider {
             axis: Axis::Horizontal,
             reverse: false,
             state,
+            disabled: false,
         }
     }
 
@@ -174,6 +176,12 @@ impl Slider {
         self
     }
 
+    /// Set the disabled state of the slider, default: false
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+
     fn render_thumb(
         &self,
         thumb_bar_size: Pixels,
@@ -185,6 +193,10 @@ impl Slider {
         let value = state.value;
         let reverse = self.reverse;
         let axis = self.axis;
+
+        if self.disabled {
+            return div().id("slider-thumb");
+        }
 
         div()
             .id("slider-thumb")
@@ -258,15 +270,19 @@ impl RenderOnce for Slider {
             })
             .child(
                 h_flex()
-                    .on_mouse_down(
-                        MouseButton::Left,
-                        window.listener_for(
-                            &self.state,
-                            move |view, e: &MouseDownEvent, window, cx| {
-                                view.update_value_by_position(axis, reverse, e.position, window, cx)
-                            },
-                        ),
-                    )
+                    .when(!self.disabled, |this| {
+                        this.on_mouse_down(
+                            MouseButton::Left,
+                            window.listener_for(
+                                &self.state,
+                                move |view, e: &MouseDownEvent, window, cx| {
+                                    view.update_value_by_position(
+                                        axis, reverse, e.position, window, cx,
+                                    )
+                                },
+                            ),
+                        )
+                    })
                     .when(axis.is_horizontal(), |this| {
                         this.items_center().h_6().w_full()
                     })
