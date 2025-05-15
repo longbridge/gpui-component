@@ -11,7 +11,7 @@ use crate::{
     ActiveTheme, IconName, Sizable, Size, StyleSized, StyledExt as _,
 };
 
-use super::InputState;
+use super::{InputState, TextInput};
 
 actions!(number_input, [Increment, Decrement]);
 
@@ -26,15 +26,15 @@ pub fn init(cx: &mut App) {
 
 #[derive(IntoElement)]
 pub struct NumberInput {
-    input: Entity<InputState>,
+    state: Entity<InputState>,
     placeholder: SharedString,
     size: Size,
 }
 
 impl NumberInput {
-    pub fn new(input: Entity<InputState>) -> Self {
+    pub fn new(state: Entity<InputState>) -> Self {
         Self {
-            input,
+            state,
             size: Size::default(),
             placeholder: SharedString::default(),
         }
@@ -94,7 +94,7 @@ impl EventEmitter<NumberInputEvent> for InputState {}
 
 impl Focusable for NumberInput {
     fn focus_handle(&self, cx: &App) -> FocusHandle {
-        self.input.focus_handle(cx)
+        self.state.focus_handle(cx)
     }
 }
 
@@ -106,7 +106,7 @@ impl Sizable for NumberInput {
 }
 impl RenderOnce for NumberInput {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let focused = self.input.focus_handle(cx).is_focused(window);
+        let focused = self.state.focus_handle(cx).is_focused(window);
 
         let btn_size = match self.size {
             Size::XSmall | Size::Small => Size::Size(px(16.)),
@@ -115,8 +115,8 @@ impl RenderOnce for NumberInput {
 
         h_flex()
             .key_context(KEY_CONTENT)
-            .on_action(window.listener_for(&self.input, InputState::on_action_increment))
-            .on_action(window.listener_for(&self.input, InputState::on_action_decrement))
+            .on_action(window.listener_for(&self.state, InputState::on_action_increment))
+            .on_action(window.listener_for(&self.state, InputState::on_action_decrement))
             .flex_1()
             .input_size(self.size)
             .px(match self.size {
@@ -135,20 +135,20 @@ impl RenderOnce for NumberInput {
                     .with_size(btn_size)
                     .icon(IconName::Minus)
                     .on_click({
-                        let state = self.input.clone();
+                        let state = self.state.clone();
                         move |_, window, cx| {
                             Self::decrement(state.clone(), window, cx);
                         }
                     }),
             )
-            .child(self.input.clone())
+            .child(TextInput::new(self.state.clone()))
             .child(
                 Button::new("plus")
                     .ghost()
                     .with_size(btn_size)
                     .icon(IconName::Plus)
                     .on_click({
-                        let state = self.input.clone();
+                        let state = self.state.clone();
                         move |_, window, cx| {
                             Self::increment(state.clone(), window, cx);
                         }

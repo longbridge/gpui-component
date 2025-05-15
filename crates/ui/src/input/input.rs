@@ -98,7 +98,7 @@ pub enum InputEvent {
     Blur,
 }
 
-const CONTEXT: &str = "Input";
+pub(super) const CONTEXT: &str = "Input";
 
 pub fn init(cx: &mut App) {
     cx.bind_keys([
@@ -205,7 +205,7 @@ pub fn init(cx: &mut App) {
 pub struct InputState {
     pub(super) focus_handle: FocusHandle,
     pub(super) text: SharedString,
-    multi_line: bool,
+    pub(super) multi_line: bool,
     pub(super) history: History<Change>,
     pub(super) blink_cursor: Entity<BlinkCursor>,
     pub(super) prefix: Option<Box<dyn Fn(&mut Window, &mut Context<Self>) -> AnyElement + 'static>>,
@@ -244,9 +244,9 @@ pub struct InputState {
     pub(super) no_gap: bool,
     pub(super) height: Option<gpui::DefiniteLength>,
     pub(super) pattern: Option<regex::Regex>,
-    validate: Option<Box<dyn Fn(&str) -> bool + 'static>>,
+    pub(super) validate: Option<Box<dyn Fn(&str) -> bool + 'static>>,
     pub(crate) scroll_handle: ScrollHandle,
-    scrollbar_state: Rc<Cell<ScrollbarState>>,
+    pub(super) scrollbar_state: Rc<Cell<ScrollbarState>>,
     /// The size of the scrollable content.
     pub(crate) scroll_size: gpui::Size<Pixels>,
     /// To remember the horizontal column (x-coordinate) of the cursor position.
@@ -603,12 +603,6 @@ impl InputState {
         cx.notify();
     }
 
-    /// Set the appearance of the input field.
-    pub fn appearance(mut self, appearance: bool) -> Self {
-        self.appearance = appearance;
-        self
-    }
-
     /// Set the prefix element of the input field, for example a search Icon.
     pub fn prefix<F, E>(mut self, builder: F) -> Self
     where
@@ -712,7 +706,7 @@ impl InputState {
         self.focus_handle.focus(window);
     }
 
-    fn left(&mut self, _: &Left, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn left(&mut self, _: &Left, window: &mut Window, cx: &mut Context<Self>) {
         self.pause_blink_cursor(cx);
         if self.selected_range.is_empty() {
             self.move_to(self.previous_boundary(self.cursor_offset()), window, cx);
@@ -721,7 +715,7 @@ impl InputState {
         }
     }
 
-    fn right(&mut self, _: &Right, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn right(&mut self, _: &Right, window: &mut Window, cx: &mut Context<Self>) {
         self.pause_blink_cursor(cx);
         if self.selected_range.is_empty() {
             self.move_to(self.next_boundary(self.selected_range.end), window, cx);
@@ -730,7 +724,7 @@ impl InputState {
         }
     }
 
-    fn up(&mut self, _: &Up, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn up(&mut self, _: &Up, window: &mut Window, cx: &mut Context<Self>) {
         if self.is_single_line() {
             return;
         }
@@ -738,7 +732,7 @@ impl InputState {
         self.move_vertical(-1, window, cx);
     }
 
-    fn down(&mut self, _: &Down, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn down(&mut self, _: &Down, window: &mut Window, cx: &mut Context<Self>) {
         if self.is_single_line() {
             return;
         }
@@ -746,15 +740,25 @@ impl InputState {
         self.move_vertical(1, window, cx);
     }
 
-    fn select_left(&mut self, _: &SelectLeft, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn select_left(
+        &mut self,
+        _: &SelectLeft,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.select_to(self.previous_boundary(self.cursor_offset()), window, cx);
     }
 
-    fn select_right(&mut self, _: &SelectRight, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn select_right(
+        &mut self,
+        _: &SelectRight,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.select_to(self.next_boundary(self.cursor_offset()), window, cx);
     }
 
-    fn select_up(&mut self, _: &SelectUp, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn select_up(&mut self, _: &SelectUp, window: &mut Window, cx: &mut Context<Self>) {
         if self.is_single_line() {
             return;
         }
@@ -762,7 +766,12 @@ impl InputState {
         self.select_to(offset, window, cx);
     }
 
-    fn select_down(&mut self, _: &SelectDown, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn select_down(
+        &mut self,
+        _: &SelectDown,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if self.is_single_line() {
             return;
         }
@@ -770,33 +779,48 @@ impl InputState {
         self.select_to(self.next_boundary(offset), window, cx);
     }
 
-    fn select_all(&mut self, _: &SelectAll, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn select_all(
+        &mut self,
+        _: &SelectAll,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.move_to(0, window, cx);
         self.select_to(self.text.len(), window, cx)
     }
 
-    fn home(&mut self, _: &Home, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn home(&mut self, _: &Home, window: &mut Window, cx: &mut Context<Self>) {
         self.pause_blink_cursor(cx);
         let offset = self.start_of_line(window, cx);
         self.move_to(offset, window, cx);
     }
 
-    fn end(&mut self, _: &End, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn end(&mut self, _: &End, window: &mut Window, cx: &mut Context<Self>) {
         self.pause_blink_cursor(cx);
         let offset = self.end_of_line(window, cx);
         self.move_to(offset, window, cx);
     }
 
-    fn move_to_start(&mut self, _: &MoveToStart, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn move_to_start(
+        &mut self,
+        _: &MoveToStart,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.move_to(0, window, cx);
     }
 
-    fn move_to_end(&mut self, _: &MoveToEnd, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn move_to_end(
+        &mut self,
+        _: &MoveToEnd,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let end = self.text.len();
         self.move_to(end, window, cx);
     }
 
-    fn move_to_previous_word(
+    pub(super) fn move_to_previous_word(
         &mut self,
         _: &MoveToPreviousWord,
         window: &mut Window,
@@ -806,7 +830,7 @@ impl InputState {
         self.move_to(offset, window, cx);
     }
 
-    fn move_to_next_word(
+    pub(super) fn move_to_next_word(
         &mut self,
         _: &MoveToNextWord,
         window: &mut Window,
@@ -816,16 +840,26 @@ impl InputState {
         self.move_to(offset, window, cx);
     }
 
-    fn select_to_start(&mut self, _: &SelectToStart, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn select_to_start(
+        &mut self,
+        _: &SelectToStart,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.select_to(0, window, cx);
     }
 
-    fn select_to_end(&mut self, _: &SelectToEnd, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn select_to_end(
+        &mut self,
+        _: &SelectToEnd,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let end = self.text.len();
         self.select_to(end, window, cx);
     }
 
-    fn select_to_start_of_line(
+    pub(super) fn select_to_start_of_line(
         &mut self,
         _: &SelectToStartOfLine,
         window: &mut Window,
@@ -835,7 +869,7 @@ impl InputState {
         self.select_to(self.previous_boundary(offset), window, cx);
     }
 
-    fn select_to_end_of_line(
+    pub(super) fn select_to_end_of_line(
         &mut self,
         _: &SelectToEndOfLine,
         window: &mut Window,
@@ -845,7 +879,7 @@ impl InputState {
         self.select_to(self.next_boundary(offset), window, cx);
     }
 
-    fn select_to_previous_word(
+    pub(super) fn select_to_previous_word(
         &mut self,
         _: &SelectToPreviousWordStart,
         window: &mut Window,
@@ -855,7 +889,7 @@ impl InputState {
         self.select_to(offset, window, cx);
     }
 
-    fn select_to_next_word(
+    pub(super) fn select_to_next_word(
         &mut self,
         _: &SelectToNextWordEnd,
         window: &mut Window,
@@ -937,7 +971,7 @@ impl InputState {
         line
     }
 
-    fn backspace(&mut self, _: &Backspace, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn backspace(&mut self, _: &Backspace, window: &mut Window, cx: &mut Context<Self>) {
         if self.selected_range.is_empty() {
             self.select_to(self.previous_boundary(self.cursor_offset()), window, cx)
         }
@@ -945,7 +979,7 @@ impl InputState {
         self.pause_blink_cursor(cx);
     }
 
-    fn delete(&mut self, _: &Delete, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn delete(&mut self, _: &Delete, window: &mut Window, cx: &mut Context<Self>) {
         if self.selected_range.is_empty() {
             self.select_to(self.next_boundary(self.cursor_offset()), window, cx)
         }
@@ -953,7 +987,7 @@ impl InputState {
         self.pause_blink_cursor(cx);
     }
 
-    fn delete_to_beginning_of_line(
+    pub(super) fn delete_to_beginning_of_line(
         &mut self,
         _: &DeleteToBeginningOfLine,
         window: &mut Window,
@@ -973,7 +1007,7 @@ impl InputState {
         self.pause_blink_cursor(cx);
     }
 
-    fn delete_to_end_of_line(
+    pub(super) fn delete_to_end_of_line(
         &mut self,
         _: &DeleteToEndOfLine,
         window: &mut Window,
@@ -992,7 +1026,7 @@ impl InputState {
         self.pause_blink_cursor(cx);
     }
 
-    fn delete_previous_word(
+    pub(super) fn delete_previous_word(
         &mut self,
         _: &DeleteToPreviousWordStart,
         window: &mut Window,
@@ -1008,7 +1042,7 @@ impl InputState {
         self.pause_blink_cursor(cx);
     }
 
-    fn delete_next_word(
+    pub(super) fn delete_next_word(
         &mut self,
         _: &DeleteToNextWordEnd,
         window: &mut Window,
@@ -1024,7 +1058,7 @@ impl InputState {
         self.pause_blink_cursor(cx);
     }
 
-    fn enter(&mut self, action: &Enter, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn enter(&mut self, action: &Enter, window: &mut Window, cx: &mut Context<Self>) {
         if self.is_multi_line() {
             let is_eof = self.selected_range.end == self.text.len();
             self.replace_text_in_range(None, "\n", window, cx);
@@ -1059,11 +1093,11 @@ impl InputState {
         cx.notify();
     }
 
-    fn clean(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn clean(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.replace_text("", window, cx);
     }
 
-    fn escape(&mut self, _: &Escape, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn escape(&mut self, _: &Escape, window: &mut Window, cx: &mut Context<Self>) {
         if self.selected_range.len() > 0 {
             return self.unselect(window, cx);
         }
@@ -1075,7 +1109,7 @@ impl InputState {
         cx.propagate();
     }
 
-    fn on_mouse_down(
+    pub(super) fn on_mouse_down(
         &mut self,
         event: &MouseDownEvent,
         window: &mut Window,
@@ -1096,12 +1130,17 @@ impl InputState {
         }
     }
 
-    fn on_mouse_up(&mut self, _: &MouseUpEvent, _window: &mut Window, _cx: &mut Context<Self>) {
+    pub(super) fn on_mouse_up(
+        &mut self,
+        _: &MouseUpEvent,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) {
         self.selecting = false;
         self.selected_word_range = None;
     }
 
-    fn on_scroll_wheel(
+    pub(super) fn on_scroll_wheel(
         &mut self,
         event: &ScrollWheelEvent,
         _window: &mut Window,
@@ -1125,7 +1164,7 @@ impl InputState {
         cx.notify();
     }
 
-    fn show_character_palette(
+    pub(super) fn show_character_palette(
         &mut self,
         _: &ShowCharacterPalette,
         window: &mut Window,
@@ -1134,7 +1173,7 @@ impl InputState {
         window.show_character_palette();
     }
 
-    fn copy(&mut self, _: &Copy, _: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn copy(&mut self, _: &Copy, _: &mut Window, cx: &mut Context<Self>) {
         if self.selected_range.is_empty() {
             return;
         }
@@ -1143,7 +1182,7 @@ impl InputState {
         cx.write_to_clipboard(ClipboardItem::new_string(selected_text));
     }
 
-    fn cut(&mut self, _: &Cut, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn cut(&mut self, _: &Cut, window: &mut Window, cx: &mut Context<Self>) {
         if self.selected_range.is_empty() {
             return;
         }
@@ -1153,7 +1192,7 @@ impl InputState {
         self.replace_text_in_range(None, "", window, cx);
     }
 
-    fn paste(&mut self, _: &Paste, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn paste(&mut self, _: &Paste, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(clipboard) = cx.read_from_clipboard() {
             let mut new_text = clipboard.text().unwrap_or_default();
             if !self.multi_line {
@@ -1189,7 +1228,7 @@ impl InputState {
         ));
     }
 
-    fn undo(&mut self, _: &Undo, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn undo(&mut self, _: &Undo, window: &mut Window, cx: &mut Context<Self>) {
         self.history.ignore = true;
         if let Some(changes) = self.history.undo() {
             for change in changes {
@@ -1200,7 +1239,7 @@ impl InputState {
         self.history.ignore = false;
     }
 
-    fn redo(&mut self, _: &Redo, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn redo(&mut self, _: &Redo, window: &mut Window, cx: &mut Context<Self>) {
         self.history.ignore = true;
         if let Some(changes) = self.history.redo() {
             for change in changes {
@@ -1492,7 +1531,7 @@ impl InputState {
         });
     }
 
-    fn on_key_down(&mut self, _: &KeyDownEvent, _: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn on_key_down(&mut self, _: &KeyDownEvent, _: &mut Window, cx: &mut Context<Self>) {
         self.pause_blink_cursor(cx);
     }
 
@@ -1777,211 +1816,5 @@ impl Render for InputState {
             .flex_grow()
             .overflow_x_hidden()
             .child(TextElement::new(cx.entity().clone()))
-    }
-}
-
-pub struct BaseInput {
-    state: Entity<InputState>,
-    size: Size,
-    no_gap: bool,
-    prefix: Option<AnyElement>,
-    suffix: Option<AnyElement>,
-    height: Option<Pixels>,
-    appearance: bool,
-}
-
-impl BaseInput {
-    fn render_toggle_mask_button(
-        state: Entity<InputState>,
-        _: &mut Window,
-        cx: &App,
-    ) -> Option<impl IntoElement> {
-        if !state.read(cx).mask_toggle {
-            return None;
-        }
-
-        Some(
-            Button::new("toggle-mask")
-                .icon(IconName::Eye)
-                .xsmall()
-                .ghost()
-                .on_mouse_down(MouseButton::Left, {
-                    let state = state.clone();
-                    move |_, window, cx| {
-                        state.update(cx, |state, cx| {
-                            state.set_masked(false, window, cx);
-                        })
-                    }
-                })
-                .on_mouse_up(MouseButton::Left, {
-                    let state = state.clone();
-                    move |_, window, cx| {
-                        state.update(cx, |state, cx| {
-                            state.set_masked(true, window, cx);
-                        })
-                    }
-                }),
-        )
-    }
-}
-
-impl RenderOnce for BaseInput {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        const LINE_HEIGHT: Rems = Rems(1.25);
-        let state = self.state.read(cx);
-        let focused = state.focus_handle.is_focused(window);
-        let mut gap_x = match self.size {
-            Size::Small => px(4.),
-            Size::Large => px(8.),
-            _ => px(4.),
-        };
-        if self.no_gap {
-            gap_x = px(0.);
-        }
-
-        let prefix = self.prefix;
-        let suffix = self.suffix;
-        let show_clear_button =
-            state.cleanable && !state.loading && !state.text.is_empty() && state.is_single_line();
-        let bg = if state.disabled {
-            cx.theme().muted
-        } else {
-            cx.theme().background
-        };
-
-        div()
-            .flex()
-            .id("input")
-            .key_context(CONTEXT)
-            .track_focus(&state.focus_handle)
-            .when(!state.disabled, |this| {
-                this.on_action(window.listener_for(&self.state, InputState::backspace))
-                    .on_action(window.listener_for(&self.state, InputState::delete))
-                    .on_action(
-                        window.listener_for(&self.state, InputState::delete_to_beginning_of_line),
-                    )
-                    .on_action(window.listener_for(&self.state, InputState::delete_to_end_of_line))
-                    .on_action(window.listener_for(&self.state, InputState::delete_previous_word))
-                    .on_action(window.listener_for(&self.state, InputState::delete_next_word))
-                    .on_action(window.listener_for(&self.state, InputState::enter))
-                    .on_action(window.listener_for(&self.state, InputState::escape))
-            })
-            .on_action(window.listener_for(&self.state, InputState::left))
-            .on_action(window.listener_for(&self.state, InputState::right))
-            .on_action(window.listener_for(&self.state, InputState::select_left))
-            .on_action(window.listener_for(&self.state, InputState::select_right))
-            .when(state.multi_line, |this| {
-                this.on_action(window.listener_for(&self.state, InputState::up))
-                    .on_action(window.listener_for(&self.state, InputState::down))
-                    .on_action(window.listener_for(&self.state, InputState::select_up))
-                    .on_action(window.listener_for(&self.state, InputState::select_down))
-            })
-            .on_action(window.listener_for(&self.state, InputState::select_all))
-            .on_action(window.listener_for(&self.state, InputState::select_to_start_of_line))
-            .on_action(window.listener_for(&self.state, InputState::select_to_end_of_line))
-            .on_action(window.listener_for(&self.state, InputState::select_to_previous_word))
-            .on_action(window.listener_for(&self.state, InputState::select_to_next_word))
-            .on_action(window.listener_for(&self.state, InputState::home))
-            .on_action(window.listener_for(&self.state, InputState::end))
-            .on_action(window.listener_for(&self.state, InputState::move_to_start))
-            .on_action(window.listener_for(&self.state, InputState::move_to_end))
-            .on_action(window.listener_for(&self.state, InputState::move_to_previous_word))
-            .on_action(window.listener_for(&self.state, InputState::move_to_next_word))
-            .on_action(window.listener_for(&self.state, InputState::select_to_start))
-            .on_action(window.listener_for(&self.state, InputState::select_to_end))
-            .on_action(window.listener_for(&self.state, InputState::show_character_palette))
-            .on_action(window.listener_for(&self.state, InputState::copy))
-            .on_action(window.listener_for(&self.state, InputState::paste))
-            .on_action(window.listener_for(&self.state, InputState::cut))
-            .on_action(window.listener_for(&self.state, InputState::undo))
-            .on_action(window.listener_for(&self.state, InputState::redo))
-            .on_key_down(window.listener_for(&self.state, InputState::on_key_down))
-            .on_mouse_down(
-                MouseButton::Left,
-                window.listener_for(&self.state, InputState::on_mouse_down),
-            )
-            .on_mouse_up(
-                MouseButton::Left,
-                window.listener_for(&self.state, InputState::on_mouse_up),
-            )
-            .on_scroll_wheel(window.listener_for(&self.state, InputState::on_scroll_wheel))
-            .size_full()
-            .line_height(LINE_HEIGHT)
-            .input_py(self.size)
-            .input_h(self.size)
-            .cursor_text()
-            .when(state.multi_line, |this| {
-                this.h_auto()
-                    .when_some(self.height, |this, height| this.h(height))
-            })
-            .when(self.appearance, |this| {
-                this.bg(bg)
-                    .border_color(cx.theme().input)
-                    .border_1()
-                    .rounded(cx.theme().radius)
-                    .when(cx.theme().shadow, |this| this.shadow_sm())
-                    .when(focused, |this| this.focused_border(cx))
-            })
-            .when(prefix.is_none(), |this| this.input_pl(self.size))
-            .input_pr(self.size)
-            .items_center()
-            .gap(gap_x)
-            .children(prefix)
-            .child(self.state.clone())
-            .child(
-                h_flex()
-                    .id("suffix")
-                    .absolute()
-                    .gap(gap_x)
-                    .when(self.appearance, |this| this.bg(bg))
-                    .items_center()
-                    .when(suffix.is_none(), |this| this.pr_1())
-                    .right_0()
-                    .when(state.loading, |this| {
-                        this.child(Indicator::new().color(cx.theme().muted_foreground))
-                    })
-                    .children(Self::render_toggle_mask_button(
-                        self.state.clone(),
-                        window,
-                        cx,
-                    ))
-                    .when(show_clear_button, |this| {
-                        this.child(clear_button(cx).on_click({
-                            let state = self.state.clone();
-                            move |_, window, cx| {
-                                state.update(cx, |state, cx| {
-                                    state.clean(window, cx);
-                                })
-                            }
-                        }))
-                    })
-                    .children(suffix),
-            )
-            .when(state.is_multi_line(), |this| {
-                let entity_id = self.state.entity_id();
-                if state.last_layout.is_some() {
-                    let scroll_size = state.scroll_size;
-
-                    this.relative().child(
-                        div()
-                            .absolute()
-                            .top_0()
-                            .left_0()
-                            .right(px(1.))
-                            .bottom_0()
-                            .child(
-                                Scrollbar::vertical(
-                                    entity_id,
-                                    state.scrollbar_state.clone(),
-                                    state.scroll_handle.clone(),
-                                    scroll_size,
-                                )
-                                .axis(ScrollbarAxis::Vertical),
-                            ),
-                    )
-                } else {
-                    this
-                }
-            })
     }
 }

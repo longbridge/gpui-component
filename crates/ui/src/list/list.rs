@@ -2,6 +2,7 @@ use std::time::Duration;
 use std::{cell::Cell, rc::Rc};
 
 use crate::actions::{Cancel, Confirm, SelectNext, SelectPrev};
+use crate::input::InputState;
 use crate::Icon;
 use crate::{
     input::{InputEvent, TextInput},
@@ -148,7 +149,7 @@ pub struct List<D: ListDelegate> {
     focus_handle: FocusHandle,
     delegate: D,
     max_height: Option<Length>,
-    query_input: Option<Entity<TextInput>>,
+    query_input: Option<Entity<InputState>>,
     last_query: Option<String>,
     selectable: bool,
     querying: bool,
@@ -170,10 +171,9 @@ where
 {
     pub fn new(delegate: D, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let query_input = cx.new(|cx| {
-            TextInput::new(window, cx)
-                .appearance(false)
-                .prefix(|_, cx| Icon::new(IconName::Search).text_color(cx.theme().muted_foreground))
-                .placeholder(t!("List.search_placeholder"))
+            InputState::new(window, cx)
+                // .prefix(|_, cx| Icon::new(IconName::Search).text_color(cx.theme().muted_foreground))
+                // .placeholder(t!("List.search_placeholder"))
                 .cleanable()
         });
 
@@ -235,7 +235,7 @@ where
 
     pub fn set_query_input(
         &mut self,
-        query_input: Entity<TextInput>,
+        query_input: Entity<InputState>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -245,7 +245,7 @@ where
     }
 
     /// Get the query input entity.
-    pub fn query_input(&self) -> Option<&Entity<TextInput>> {
+    pub fn query_input(&self) -> Option<&Entity<InputState>> {
         self.query_input.as_ref()
     }
 
@@ -310,7 +310,7 @@ where
 
     fn on_query_input_event(
         &mut self,
-        _: &Entity<TextInput>,
+        _: &Entity<InputState>,
         event: &InputEvent,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -591,7 +591,14 @@ where
                         })
                         .border_b_1()
                         .border_color(cx.theme().border)
-                        .child(input),
+                        .child(
+                            TextInput::new(input)
+                                .prefix(
+                                    Icon::new(IconName::Search)
+                                        .text_color(cx.theme().muted_foreground),
+                                )
+                                .appearance(false),
+                        ),
                 )
             })
             .when(loading, |this| {

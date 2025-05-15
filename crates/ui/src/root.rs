@@ -1,6 +1,6 @@
 use crate::{
     drawer::Drawer,
-    input::TextInput,
+    input::{InputState, TextInput},
     modal::Modal,
     notification::{Notification, NotificationList},
     window_border, ActiveTheme, Placement,
@@ -51,7 +51,7 @@ pub trait ContextModal: Sized {
     fn notifications(&mut self, cx: &mut App) -> Rc<Vec<Entity<Notification>>>;
 
     /// Return current focused Input entity.
-    fn focused_input(&mut self, cx: &mut App) -> Option<Entity<TextInput>>;
+    fn focused_input(&mut self, cx: &mut App) -> Option<Entity<InputState>>;
     /// Returns true if there is a focused Input entity.
     fn has_focused_input(&mut self, cx: &mut App) -> bool;
 }
@@ -175,7 +175,7 @@ impl ContextModal for Window {
         Root::read(self, cx).focused_input.is_some()
     }
 
-    fn focused_input(&mut self, cx: &mut App) -> Option<Entity<TextInput>> {
+    fn focused_input(&mut self, cx: &mut App) -> Option<Entity<InputState>> {
         Root::read(self, cx).focused_input.clone()
     }
 }
@@ -246,7 +246,7 @@ pub struct Root {
     previous_focus_handle: Option<FocusHandle>,
     active_drawer: Option<ActiveDrawer>,
     pub(crate) active_modals: Vec<ActiveModal>,
-    pub(super) focused_input: Option<Entity<TextInput>>,
+    pub(super) focused_input: Option<Entity<InputState>>,
     pub notification: Entity<NotificationList>,
     drawer_size: Option<DefiniteLength>,
     view: AnyView,

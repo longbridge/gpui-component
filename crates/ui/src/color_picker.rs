@@ -10,7 +10,7 @@ use crate::{
     button::{Button, ButtonVariants},
     divider::Divider,
     h_flex,
-    input::{InputEvent, TextInput},
+    input::{InputEvent, InputState, TextInput},
     tooltip::Tooltip,
     v_flex, ActiveTheme as _, Colorize as _, Icon, Selectable as _, Sizable, Size, StyleSized,
 };
@@ -64,7 +64,7 @@ pub struct ColorPicker {
     icon: Option<Icon>,
     size: Size,
     anchor: Corner,
-    color_input: Entity<TextInput>,
+    state: Entity<InputState>,
 
     open: bool,
     bounds: Bounds<Pixels>,
@@ -73,10 +73,10 @@ pub struct ColorPicker {
 
 impl ColorPicker {
     pub fn new(id: impl Into<ElementId>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let color_input = cx.new(|cx| TextInput::new(window, cx).small());
+        let state = cx.new(|cx| InputState::new(window, cx));
 
         let _subscriptions = vec![cx.subscribe_in(
-            &color_input,
+            &state,
             window,
             |this, _, ev: &InputEvent, window, cx| match ev {
                 InputEvent::Change(value) => {
@@ -86,7 +86,7 @@ impl ColorPicker {
                     }
                 }
                 InputEvent::PressEnter { .. } => {
-                    let val = this.color_input.read(cx).text();
+                    let val = this.state.read(cx).text();
                     if let Ok(color) = Hsla::parse_hex(&val) {
                         this.open = false;
                         this.update_value(Some(color), true, window, cx);
@@ -118,7 +118,7 @@ impl ColorPicker {
             label: None,
             icon: None,
             anchor: Corner::TopLeft,
-            color_input,
+            state,
             open: false,
             bounds: Bounds::default(),
             _subscriptions,
@@ -204,7 +204,7 @@ impl ColorPicker {
     ) {
         self.value = value;
         self.hovered_color = value;
-        self.color_input.update(cx, |view, cx| {
+        self.state.update(cx, |view, cx| {
             if let Some(value) = value {
                 view.set_text(value.to_hex(), window, cx);
             } else {
@@ -287,7 +287,7 @@ impl ColorPicker {
                                 .size_5()
                                 .rounded(cx.theme().radius),
                         )
-                        .child(self.color_input.clone()),
+                        .child(TextInput::new(self.state.clone())),
                 )
             })
     }
