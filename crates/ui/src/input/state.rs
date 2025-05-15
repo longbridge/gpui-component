@@ -11,11 +11,11 @@ use std::rc::Rc;
 use unicode_segmentation::*;
 
 use gpui::{
-    actions, div, impl_internal_actions, point, prelude::FluentBuilder as _, px, relative, App,
-    AppContext, Bounds, ClipboardItem, Context, DefiniteLength, Entity, EntityInputHandler,
-    EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding,
-    KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _,
-    Pixels, Point, Render, ScrollHandle, ScrollWheelEvent, SharedString, Styled as _, Subscription,
+    actions, div, impl_internal_actions, point, prelude::FluentBuilder as _, px, App, AppContext,
+    Bounds, ClipboardItem, Context, DefiniteLength, Entity, EntityInputHandler, EventEmitter,
+    FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent,
+    MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point,
+    Render, ScrollHandle, ScrollWheelEvent, SharedString, Styled as _, Subscription,
     UTF16Selection, Window, WrappedLine,
 };
 
@@ -220,10 +220,12 @@ pub struct InputState {
     pub(super) disabled: bool,
     pub(super) masked: bool,
     pub(super) clean_on_escape: bool,
+
+    pub(super) height: Option<DefiniteLength>,
     pub(super) rows: usize,
     pub(super) min_rows: usize,
     pub(super) max_rows: Option<usize>,
-    pub(super) height: Option<gpui::DefiniteLength>,
+
     pub(super) pattern: Option<regex::Regex>,
     pub(super) validate: Option<Box<dyn Fn(&str) -> bool + 'static>>,
     pub(crate) scroll_handle: ScrollHandle,
@@ -280,12 +282,12 @@ impl InputState {
             masked: false,
             clean_on_escape: false,
             loading: false,
-            height: None,
             pattern: None,
             validate: None,
             rows: 2,
             min_rows: 2,
             max_rows: None,
+            height: None,
             last_layout: None,
             last_bounds: None,
             last_selected_range: None,
@@ -296,8 +298,8 @@ impl InputState {
             scroll_size: gpui::size(px(0.), px(0.)),
             preferred_x_offset: None,
             placeholder: SharedString::default(),
-            _subscriptions,
             mask_pattern: MaskPattern::default(),
+            _subscriptions,
         }
     }
 
@@ -558,18 +560,6 @@ impl InputState {
     pub fn set_masked(&mut self, masked: bool, _: &mut Window, cx: &mut Context<Self>) {
         self.masked = masked;
         cx.notify();
-    }
-
-    /// Set full height of the input (Multi-line only).
-    pub fn h_full(mut self) -> Self {
-        self.height = Some(relative(1.));
-        self
-    }
-
-    /// Set height of the input (Multi-line only).
-    pub fn h(mut self, height: impl Into<DefiniteLength>) -> Self {
-        self.height = Some(height.into());
-        self
     }
 
     /// Set true to clear the input by pressing Escape key.

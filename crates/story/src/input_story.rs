@@ -62,13 +62,8 @@ impl InputStory {
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let input1 = cx.new(|cx| {
-            let mut input = InputState::new(window, cx).h_full();
-            input.set_text(
-                "Hello 世界，this is GPUI component, this is a long text.",
-                window,
-                cx,
-            );
-            input
+            InputState::new(window, cx)
+                .default_value("Hello 世界，this is GPUI component, this is a long text.")
         });
 
         let input2 = cx.new(|cx| InputState::new(window, cx).placeholder("Enter text here..."));
@@ -79,9 +74,9 @@ impl InputStory {
         });
 
         let mask_input = cx.new(|cx| {
-            let mut input = InputState::new(window, cx).masked(true);
-            input.set_text("this-is-password", window, cx);
-            input
+            InputState::new(window, cx)
+                .masked(true)
+                .default_value("this-is-password")
         });
 
         let prefix_input1 =
@@ -115,12 +110,8 @@ impl InputStory {
             input2,
             input_esc,
             mask_input,
-            disabled_input: cx.new(|cx| {
-                let mut input = InputState::new(window, cx);
-                input.set_text("This is disabled input", window, cx);
-                input.set_disabled(true, window, cx);
-                input
-            }),
+            disabled_input: cx
+                .new(|cx| InputState::new(window, cx).default_value("This is disabled input")),
             large_input: cx.new(|cx| InputState::new(window, cx).placeholder("Large input")),
             small_input: cx.new(|cx| {
                 InputState::new(window, cx)
@@ -203,7 +194,7 @@ impl Render for InputStory {
             .child(
                 section("Input State")
                     .max_w_md()
-                    .child(TextInput::new(self.disabled_input.clone()))
+                    .child(TextInput::new(self.disabled_input.clone()).disabled(true))
                     .child(
                         TextInput::new(self.mask_input.clone())
                             .mask_toggle()

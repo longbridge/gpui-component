@@ -1,7 +1,7 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    div, px, AnyElement, App, Entity, InteractiveElement as _, IntoElement, MouseButton,
-    ParentElement as _, Pixels, Rems, RenderOnce, Styled as _, Window,
+    div, px, relative, AnyElement, App, DefiniteLength, Entity, InteractiveElement as _,
+    IntoElement, MouseButton, ParentElement as _, Rems, RenderOnce, Styled as _, Window,
 };
 
 use crate::button::{Button, ButtonVariants as _};
@@ -22,10 +22,11 @@ pub struct TextInput {
     no_gap: bool,
     prefix: Option<AnyElement>,
     suffix: Option<AnyElement>,
-    height: Option<Pixels>,
+    height: Option<DefiniteLength>,
     appearance: bool,
     cleanable: bool,
     mask_toggle: bool,
+    disabled: bool,
 }
 
 impl Sizable for TextInput {
@@ -47,6 +48,7 @@ impl TextInput {
             appearance: true,
             cleanable: false,
             mask_toggle: false,
+            disabled: false,
         }
     }
 
@@ -57,6 +59,18 @@ impl TextInput {
 
     pub fn suffix(mut self, suffix: impl IntoElement) -> Self {
         self.suffix = Some(suffix.into_any_element());
+        self
+    }
+
+    /// Set full height of the input (Multi-line only).
+    pub fn h_full(mut self) -> Self {
+        self.height = Some(relative(1.));
+        self
+    }
+
+    /// Set height of the input (Multi-line only).
+    pub fn h(mut self, height: impl Into<DefiniteLength>) -> Self {
+        self.height = Some(height.into());
         self
     }
 
@@ -75,6 +89,12 @@ impl TextInput {
     /// Set to enable toggle button for password mask state.
     pub fn mask_toggle(mut self) -> Self {
         self.mask_toggle = true;
+        self
+    }
+
+    /// Set to disable the input field.
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
         self
     }
 
@@ -113,6 +133,12 @@ impl TextInput {
 impl RenderOnce for TextInput {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         const LINE_HEIGHT: Rems = Rems(1.25);
+
+        self.state.update(cx, |state, _| {
+            state.height = self.height;
+            state.disabled = self.disabled;
+        });
+
         let state = self.state.read(cx);
         let focused = state.focus_handle.is_focused(window);
         let mut gap_x = match self.size {

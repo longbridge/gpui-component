@@ -19,7 +19,6 @@ impl Example {
         let input_state = cx.new(|cx| {
             InputState::new(window, cx)
                 .multi_line()
-                .h_full()
                 .default_value(EXAMPLE)
                 .placeholder("Enter your HTML here...")
         });
@@ -53,7 +52,11 @@ impl Render for Example {
                     .w_1_2()
                     .border_r_1()
                     .border_color(cx.theme().border)
-                    .child(TextInput::new(self.input_state.clone()).appearance(false)),
+                    .child(
+                        TextInput::new(self.input_state.clone())
+                            .h_full()
+                            .appearance(false),
+                    ),
             )
             .child(
                 div()
