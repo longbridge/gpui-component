@@ -161,7 +161,7 @@ where
 
         if let Some(item) = self.delegate.get(ix) {
             let list_item = ListItem::new(("list-item", ix))
-                .check_icon(Icon::new(IconName::Check))
+                .check_icon(IconName::Check)
                 .selected(selected)
                 .input_text_size(size)
                 .list_size(size)
