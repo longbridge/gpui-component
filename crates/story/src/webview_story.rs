@@ -77,9 +77,9 @@ impl WebViewStory {
         });
 
         let address_input =
-            cx.new(|cx| InputState::new(window, cx).default_text("https://google.com"));
+            cx.new(|cx| InputState::new(window, cx).default_value("https://google.com"));
 
-        let url = address_input.read(cx).text().clone();
+        let url = address_input.read(cx).value().clone();
         webview.update(cx, |view, _| {
             view.load_url(&url);
         });
@@ -95,7 +95,7 @@ impl WebViewStory {
                 &address_input,
                 |this: &mut Self, input, event: &InputEvent, cx| match event {
                     InputEvent::PressEnter { .. } => {
-                        let url = input.read(cx).text().clone();
+                        let url = input.read(cx).value().clone();
                         this.webview.update(cx, |view, _| {
                             view.load_url(&url);
                         });

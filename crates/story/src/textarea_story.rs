@@ -54,7 +54,7 @@ impl TextareaStory {
             InputState::new(window, cx)
                 .multi_line()
                 .rows(10)
-                .placeholder("Enter text here...").default_text(
+                .placeholder("Enter text here...").default_value(
                 unindent::unindent(
                     r#"Hello 世界，this is GPUI component.
 

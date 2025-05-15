@@ -20,7 +20,7 @@ impl Example {
             InputState::new(window, cx)
                 .multi_line()
                 .h_full()
-                .default_text(EXAMPLE)
+                .default_value(EXAMPLE)
                 .placeholder("Enter your HTML here...")
         });
 
@@ -62,7 +62,7 @@ impl Render for Example {
                     .w_1_2()
                     .p_5()
                     .overflow_y_scroll()
-                    .child(TextView::html("preview", self.input_state.read(cx).text())),
+                    .child(TextView::html("preview", self.input_state.read(cx).value())),
             )
     }
 }

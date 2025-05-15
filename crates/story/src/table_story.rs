@@ -677,7 +677,7 @@ impl TableStory {
         match event {
             // Update when the user presses Enter or the input loses focus
             InputEvent::PressEnter { .. } | InputEvent::Blur => {
-                let text = self.num_stocks_input.read(cx).text().to_string();
+                let text = self.num_stocks_input.read(cx).value().to_string();
                 if let Ok(num) = text.parse::<usize>() {
                     self.table.update(cx, |table, _| {
                         table.delegate_mut().update_stocks(num);

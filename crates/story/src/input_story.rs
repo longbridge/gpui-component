@@ -247,7 +247,7 @@ impl Render for InputStory {
                     .max_w_md()
                     .child(TextInput::new(self.currency_input.clone()))
                     .child(
-                        div().child(format!("Value: {:?}", self.currency_input.read(cx).text())),
+                        div().child(format!("Value: {:?}", self.currency_input.read(cx).value())),
                     ),
             )
             .child(
@@ -256,10 +256,10 @@ impl Render for InputStory {
                     .child(TextInput::new(self.phone_input.clone()))
                     .child(
                         v_flex()
-                            .child(format!("Value: {:?}", self.phone_input.read(cx).text()))
+                            .child(format!("Value: {:?}", self.phone_input.read(cx).value()))
                             .child(format!(
                                 "Unmask Value: {:?}",
-                                self.phone_input.read(cx).unmask_text()
+                                self.phone_input.read(cx).unmask_value()
                             )),
                     ),
             )
@@ -269,10 +269,10 @@ impl Render for InputStory {
                     .child(TextInput::new(self.mask_input2.clone()))
                     .child(
                         v_flex()
-                            .child(format!("Value: {:?}", self.mask_input2.read(cx).text()))
+                            .child(format!("Value: {:?}", self.mask_input2.read(cx).value()))
                             .child(format!(
                                 "Unmask Value: {:?}",
-                                self.mask_input2.read(cx).unmask_text()
+                                self.mask_input2.read(cx).unmask_value()
                             )),
                     ),
             )
@@ -294,7 +294,7 @@ impl Render for InputStory {
                     .overflow_hidden()
                     .child(div().child(format!(
                         "Value: {:?}",
-                        window.focused_input(cx).map(|input| input.read(cx).text())
+                        window.focused_input(cx).map(|input| input.read(cx).value())
                     ))),
             )
             .child(

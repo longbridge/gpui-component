@@ -132,7 +132,7 @@ impl ModalStory {
                                         view.selected_value = Some(
                                             format!(
                                                 "Hello, {}, date: {}",
-                                                input1.read(cx).text(),
+                                                input1.read(cx).value(),
                                                 date_picker.read(cx).date()
                                             )
                                             .into(),

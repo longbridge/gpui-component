@@ -67,7 +67,7 @@ impl FormStory {
                 .rows(5)
                 .max_rows(20)
                 .placeholder("Enter text here...")
-                .default_text("Hello 世界，this is GPUI component.")
+                .default_value("Hello 世界，this is GPUI component.")
         });
         let date_picker = cx.new(|cx| DatePicker::new("birthday", window, cx));
 

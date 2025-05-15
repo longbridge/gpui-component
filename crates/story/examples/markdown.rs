@@ -22,7 +22,7 @@ impl Example {
                 .multi_line()
                 .h_full()
                 .placeholder("Enter your Markdown here...")
-                .default_text(EXAMPLE)
+                .default_value(EXAMPLE)
         });
 
         let _subscribe = cx.subscribe(
@@ -71,7 +71,7 @@ impl Render for Example {
                     .flex_1()
                     .overflow_y_scroll()
                     .child(
-                        TextView::markdown("preview", self.input_state.read(cx).text()).style(
+                        TextView::markdown("preview", self.input_state.read(cx).value()).style(
                             TextViewStyle {
                                 highlight_theme: Rc::new(theme),
                                 ..Default::default()

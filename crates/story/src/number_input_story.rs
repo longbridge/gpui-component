@@ -60,7 +60,7 @@ impl NumberInputStory {
         let number_input1 = cx.new(|cx| {
             InputState::new(window, cx)
                 .placeholder("Number Input")
-                .default_text(number_input1_value.to_string())
+                .default_value(number_input1_value.to_string())
         });
 
         let number_input2 = cx.new(|cx| {
