@@ -3,12 +3,12 @@ use std::{cell::Cell, rc::Rc};
 
 use crate::actions::{Cancel, Confirm, SelectNext, SelectPrev};
 use crate::input::InputState;
-use crate::Icon;
 use crate::{
     input::{InputEvent, TextInput},
     scroll::{Scrollbar, ScrollbarState},
     v_flex, ActiveTheme, IconName, Size,
 };
+use crate::{Icon, Sizable as _};
 use gpui::{
     div, prelude::FluentBuilder, uniform_list, AnyElement, AppContext, Entity, FocusHandle,
     Focusable, InteractiveElement, IntoElement, KeyBinding, Length, ListSizingBehavior,
@@ -173,8 +173,7 @@ where
         let query_input = cx.new(|cx| {
             InputState::new(window, cx)
                 // .prefix(|_, cx| Icon::new(IconName::Search).text_color(cx.theme().muted_foreground))
-                // .placeholder(t!("List.search_placeholder"))
-                .cleanable()
+                .placeholder(t!("List.search_placeholder"))
         });
 
         let _query_input_subscription =
@@ -202,12 +201,7 @@ where
     }
 
     /// Set the size
-    pub fn set_size(&mut self, size: Size, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(input) = &self.query_input {
-            input.update(cx, |input, cx| {
-                input.set_size(size, window, cx);
-            })
-        }
+    pub fn set_size(&mut self, size: Size, _: &mut Window, _: &mut Context<Self>) {
         self.size = size;
     }
 
@@ -593,10 +587,12 @@ where
                         .border_color(cx.theme().border)
                         .child(
                             TextInput::new(input)
+                                .with_size(self.size)
                                 .prefix(
                                     Icon::new(IconName::Search)
                                         .text_color(cx.theme().muted_foreground),
                                 )
+                                .cleanable()
                                 .appearance(false),
                         ),
                 )

@@ -232,16 +232,10 @@ pub struct InputState {
     pub(super) selecting: bool,
     pub(super) disabled: bool,
     pub(super) masked: bool,
-    pub(super) mask_toggle: bool,
-    pub(super) appearance: bool,
-    pub(super) cleanable: bool,
     pub(super) clean_on_escape: bool,
-    pub(super) size: Size,
     pub(super) rows: usize,
     pub(super) min_rows: usize,
     pub(super) max_rows: Option<usize>,
-    /// For special case, e.g.: NumberInput + - button
-    pub(super) no_gap: bool,
     pub(super) height: Option<gpui::DefiniteLength>,
     pub(super) pattern: Option<regex::Regex>,
     pub(super) validate: Option<Box<dyn Fn(&str) -> bool + 'static>>,
@@ -254,6 +248,7 @@ pub struct InputState {
     _subscriptions: Vec<Subscription>,
     /// The mask pattern for formatting the input text
     pub(crate) mask_pattern: MaskPattern,
+    pub(super) placeholder: SharedString,
 }
 
 impl EventEmitter<InputEvent> for InputState {}
@@ -296,15 +291,10 @@ impl InputState {
             selecting: false,
             disabled: false,
             masked: false,
-            mask_toggle: false,
-            appearance: true,
-            cleanable: false,
             clean_on_escape: false,
             loading: false,
             prefix: None,
             suffix: None,
-            no_gap: false,
-            size: Size::Medium,
             height: None,
             pattern: None,
             validate: None,
@@ -320,6 +310,7 @@ impl InputState {
             scrollbar_state: Rc::new(Cell::new(ScrollbarState::default())),
             scroll_size: gpui::size(px(0.), px(0.)),
             preferred_x_offset: None,
+            placeholder: SharedString::default(),
             _subscriptions,
             mask_pattern: MaskPattern::default(),
         }
@@ -329,6 +320,23 @@ impl InputState {
     pub fn multi_line(mut self) -> Self {
         self.multi_line = true;
         self
+    }
+
+    /// Set placeholder
+    pub fn placeholder(mut self, placeholder: impl Into<SharedString>) -> Self {
+        self.placeholder = placeholder.into();
+        self
+    }
+
+    /// Set placeholder
+    pub fn set_placeholder(
+        &mut self,
+        placeholder: impl Into<SharedString>,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.placeholder = placeholder.into();
+        cx.notify();
     }
 
     /// Called after moving the cursor. Updates preferred_x_offset if we know where the cursor now is.
@@ -567,66 +575,6 @@ impl InputState {
         cx.notify();
     }
 
-    /// Set to enable toggle button for password mask state.
-    pub fn mask_toggle(mut self) -> Self {
-        self.mask_toggle = true;
-        self
-    }
-
-    /// Set the prefix element of the input field.
-    pub fn set_prefix<F, E>(&mut self, builder: F, _: &mut Window, cx: &mut Context<Self>)
-    where
-        F: Fn(&Window, &Context<Self>) -> E + 'static,
-        E: IntoElement,
-    {
-        self.prefix = Some(Box::new(move |window, cx| {
-            builder(window, cx).into_any_element()
-        }));
-        cx.notify();
-    }
-
-    /// Set the suffix element of the input field.
-    pub fn set_suffix<F, E>(&mut self, builder: F, _: &mut Window, cx: &mut Context<Self>)
-    where
-        F: Fn(&Window, &Context<Self>) -> E + 'static,
-        E: IntoElement,
-    {
-        self.suffix = Some(Box::new(move |window, cx| {
-            builder(window, cx).into_any_element()
-        }));
-        cx.notify();
-    }
-
-    /// Set the Input size
-    pub fn set_size(&mut self, size: Size, _window: &mut Window, cx: &mut Context<Self>) {
-        self.size = size;
-        cx.notify();
-    }
-
-    /// Set the prefix element of the input field, for example a search Icon.
-    pub fn prefix<F, E>(mut self, builder: F) -> Self
-    where
-        F: Fn(&mut Window, &mut Context<Self>) -> E + 'static,
-        E: IntoElement,
-    {
-        self.prefix = Some(Box::new(move |window, cx| {
-            builder(window, cx).into_any_element()
-        }));
-        self
-    }
-
-    /// Set the suffix element of the input field, for example a clear button.
-    pub fn suffix<F, E>(mut self, builder: F) -> Self
-    where
-        F: Fn(&mut Window, &mut Context<Self>) -> E + 'static,
-        E: IntoElement,
-    {
-        self.suffix = Some(Box::new(move |window, cx| {
-            builder(window, cx).into_any_element()
-        }));
-        self
-    }
-
     /// Set full height of the input (Multi-line only).
     pub fn h_full(mut self) -> Self {
         self.height = Some(relative(1.));
@@ -639,23 +587,9 @@ impl InputState {
         self
     }
 
-    /// Set true to show the clear button when the input field is not empty.
-    pub fn cleanable(mut self) -> Self {
-        self.cleanable = true;
-        self
-    }
-
     /// Set true to clear the input by pressing Escape key.
     pub fn clean_on_escape(mut self) -> Self {
         self.clean_on_escape = true;
-        self
-    }
-
-    /// Set true to not use gap between input and prefix, suffix, and clear button.
-    ///
-    /// Default: false
-    pub(super) fn no_gap(mut self) -> Self {
-        self.no_gap = true;
         self
     }
 
@@ -1593,9 +1527,9 @@ impl InputState {
     /// Example: "(999)999-999" for phone numbers
     pub fn mask_pattern(mut self, pattern: impl Into<MaskPattern>) -> Self {
         self.mask_pattern = pattern.into();
-        // if let Some(placeholder) = self.mask_pattern.placeholder() {
-        //     self.placeholder = placeholder.into();
-        // }
+        if let Some(placeholder) = self.mask_pattern.placeholder() {
+            self.placeholder = placeholder.into();
+        }
         self
     }
 
@@ -1606,17 +1540,10 @@ impl InputState {
         cx: &mut Context<Self>,
     ) {
         self.mask_pattern = pattern.into();
-        // if let Some(placeholder) = self.mask_pattern.placeholder() {
-        //     self.placeholder = placeholder.into();
-        // }
+        if let Some(placeholder) = self.mask_pattern.placeholder() {
+            self.placeholder = placeholder.into();
+        }
         cx.notify();
-    }
-}
-
-impl Sizable for InputState {
-    fn with_size(mut self, size: impl Into<Size>) -> Self {
-        self.size = size.into();
-        self
     }
 }
 
@@ -1815,6 +1742,6 @@ impl Render for InputState {
             .when(self.is_multi_line(), |this| this.h_full())
             .flex_grow()
             .overflow_x_hidden()
-            .child(TextElement::new(cx.entity().clone()))
+            .child(TextElement::new(cx.entity().clone()).placeholder(self.placeholder.clone()))
     }
 }

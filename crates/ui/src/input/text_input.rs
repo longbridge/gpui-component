@@ -1,7 +1,7 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     div, px, AnyElement, App, Entity, InteractiveElement as _, IntoElement, MouseButton,
-    ParentElement as _, Pixels, Rems, RenderOnce, Styled as _, Window,
+    ParentElement as _, Pixels, Rems, RenderOnce, SharedString, Styled as _, Window,
 };
 
 use crate::button::{Button, ButtonVariants as _};
@@ -24,6 +24,15 @@ pub struct TextInput {
     suffix: Option<AnyElement>,
     height: Option<Pixels>,
     appearance: bool,
+    cleanable: bool,
+    mask_toggle: bool,
+}
+
+impl Sizable for TextInput {
+    fn with_size(mut self, size: impl Into<Size>) -> Self {
+        self.size = size.into();
+        self
+    }
 }
 
 impl TextInput {
@@ -35,7 +44,9 @@ impl TextInput {
             prefix: None,
             suffix: None,
             height: None,
-            appearance: false,
+            appearance: true,
+            cleanable: false,
+            mask_toggle: false,
         }
     }
 
@@ -55,37 +66,51 @@ impl TextInput {
         self
     }
 
+    /// Set true to show the clear button when the input field is not empty.
+    pub fn cleanable(mut self) -> Self {
+        self.cleanable = true;
+        self
+    }
+
+    /// Set to enable toggle button for password mask state.
+    pub fn mask_toggle(mut self) -> Self {
+        self.mask_toggle = true;
+        self
+    }
+
+    /// Set true to not use gap between input and prefix, suffix, and clear button.
+    ///
+    /// Default: false
+    pub(super) fn no_gap(mut self) -> Self {
+        self.no_gap = true;
+        self
+    }
+
     fn render_toggle_mask_button(
         state: Entity<InputState>,
         _: &mut Window,
         cx: &App,
-    ) -> Option<impl IntoElement> {
-        if !state.read(cx).mask_toggle {
-            return None;
-        }
-
-        Some(
-            Button::new("toggle-mask")
-                .icon(IconName::Eye)
-                .xsmall()
-                .ghost()
-                .on_mouse_down(MouseButton::Left, {
-                    let state = state.clone();
-                    move |_, window, cx| {
-                        state.update(cx, |state, cx| {
-                            state.set_masked(false, window, cx);
-                        })
-                    }
-                })
-                .on_mouse_up(MouseButton::Left, {
-                    let state = state.clone();
-                    move |_, window, cx| {
-                        state.update(cx, |state, cx| {
-                            state.set_masked(true, window, cx);
-                        })
-                    }
-                }),
-        )
+    ) -> impl IntoElement {
+        Button::new("toggle-mask")
+            .icon(IconName::Eye)
+            .xsmall()
+            .ghost()
+            .on_mouse_down(MouseButton::Left, {
+                let state = state.clone();
+                move |_, window, cx| {
+                    state.update(cx, |state, cx| {
+                        state.set_masked(false, window, cx);
+                    })
+                }
+            })
+            .on_mouse_up(MouseButton::Left, {
+                let state = state.clone();
+                move |_, window, cx| {
+                    state.update(cx, |state, cx| {
+                        state.set_masked(true, window, cx);
+                    })
+                }
+            })
     }
 }
 
@@ -106,7 +131,7 @@ impl RenderOnce for TextInput {
         let prefix = self.prefix;
         let suffix = self.suffix;
         let show_clear_button =
-            state.cleanable && !state.loading && !state.text.is_empty() && state.is_single_line();
+            self.cleanable && !state.loading && !state.text.is_empty() && state.is_single_line();
         let bg = if state.disabled {
             cx.theme().muted
         } else {
@@ -114,8 +139,8 @@ impl RenderOnce for TextInput {
         };
 
         div()
+            .id(("input", self.state.entity_id()))
             .flex()
-            .id("input")
             .key_context(crate::input::CONTEXT)
             .track_focus(&state.focus_handle)
             .when(!state.disabled, |this| {
@@ -204,11 +229,13 @@ impl RenderOnce for TextInput {
                     .when(state.loading, |this| {
                         this.child(Indicator::new().color(cx.theme().muted_foreground))
                     })
-                    .children(Self::render_toggle_mask_button(
-                        self.state.clone(),
-                        window,
-                        cx,
-                    ))
+                    .when(self.mask_toggle, |this| {
+                        this.child(Self::render_toggle_mask_button(
+                            self.state.clone(),
+                            window,
+                            cx,
+                        ))
+                    })
                     .when(show_clear_button, |this| {
                         this.child(clear_button(cx).on_click({
                             let state = self.state.clone();
