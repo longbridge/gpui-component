@@ -560,7 +560,7 @@ where
         };
 
         let initial_view = if let Some(input) = &self.query_input {
-            if input.read(cx).text().is_empty() {
+            if input.read(cx).value().is_empty() {
                 self.delegate().render_initial(window, cx)
             } else {
                 None

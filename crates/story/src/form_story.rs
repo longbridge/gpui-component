@@ -52,7 +52,7 @@ impl FormStory {
     }
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let name_input = cx.new(|cx| InputState::new(window, cx).default_text("Jason Lee"));
+        let name_input = cx.new(|cx| InputState::new(window, cx).default_value("Jason Lee"));
         let color_picker = cx.new(|cx| {
             ColorPicker::new("color-picker-1", window, cx)
                 .small()

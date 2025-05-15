@@ -606,19 +606,19 @@ impl InputState {
         cx.notify();
     }
 
-    /// Set the default text of the input field.
-    pub fn default_text(mut self, text: impl Into<SharedString>) -> Self {
-        self.text = text.into();
+    /// Set the default value of the input field.
+    pub fn default_value(mut self, value: impl Into<SharedString>) -> Self {
+        self.text = value.into();
         self
     }
 
-    /// Return the text of the input field.
-    pub fn text(&self) -> &SharedString {
+    /// Return the value of the input field.
+    pub fn value(&self) -> &SharedString {
         &self.text
     }
 
-    /// Return the text without mask.
-    pub fn unmask_text(&self) -> SharedString {
+    /// Return the value without mask.
+    pub fn unmask_value(&self) -> SharedString {
         self.mask_pattern.unmask(&self.text).into()
     }
 
@@ -1612,7 +1612,7 @@ impl EntityInputHandler for InputState {
         self.update_preferred_x_offset(cx);
         self.update_scroll_offset(None, cx);
         self.check_to_auto_grow(window, cx);
-        cx.emit(InputEvent::Change(self.unmask_text()));
+        cx.emit(InputEvent::Change(self.unmask_value()));
         cx.notify();
     }
 
@@ -1647,7 +1647,7 @@ impl EntityInputHandler for InputState {
             .map(|range_utf16| self.range_from_utf16(range_utf16))
             .map(|new_range| new_range.start + range.start..new_range.end + range.end)
             .unwrap_or_else(|| range.start + new_text.len()..range.start + new_text.len());
-        cx.emit(InputEvent::Change(self.unmask_text()));
+        cx.emit(InputEvent::Change(self.unmask_value()));
         cx.notify();
     }
 

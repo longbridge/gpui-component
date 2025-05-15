@@ -86,7 +86,7 @@ impl ColorPicker {
                     }
                 }
                 InputEvent::PressEnter { .. } => {
-                    let val = this.state.read(cx).text();
+                    let val = this.state.read(cx).value();
                     if let Ok(color) = Hsla::parse_hex(&val) {
                         this.open = false;
                         this.update_value(Some(color), true, window, cx);
