@@ -2,9 +2,9 @@ use std::borrow::Cow;
 
 use chrono::{Datelike, Local, NaiveDate};
 use gpui::{
-    prelude::FluentBuilder as _, px, relative, ClickEvent, Context, ElementId, EventEmitter,
-    FocusHandle, InteractiveElement, IntoElement, ParentElement, Render, SharedString,
-    StatefulInteractiveElement, Styled, Window,
+    prelude::FluentBuilder as _, px, relative, App, ClickEvent, Context, ElementId, Empty, Entity,
+    EventEmitter, FocusHandle, InteractiveElement, IntoElement, ParentElement, Render, RenderOnce,
+    SharedString, StatefulInteractiveElement, Styled, Window,
 };
 use rust_i18n::t;
 
@@ -126,7 +126,7 @@ impl Date {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ViewMode {
     Day,
     Month,
@@ -221,35 +221,42 @@ impl Matcher {
     }
 }
 
-pub struct Calendar {
+pub struct CalendarState {
     focus_handle: FocusHandle,
-    size: Size,
-    date: Date,
     view_mode: ViewMode,
+    date: Date,
     current_year: i32,
     current_month: u8,
     years: Vec<Vec<i32>>,
     year_page: i32,
+    today: NaiveDate,
     /// Number of the months view to show.
     number_of_months: usize,
-    today: NaiveDate,
     disabled: Option<Matcher>,
 }
 
-impl Calendar {
+#[derive(IntoElement)]
+pub struct Calendar {
+    size: Size,
+    state: Entity<CalendarState>,
+    bordered: bool,
+    /// Number of the months view to show.
+    number_of_months: usize,
+}
+
+impl CalendarState {
     pub fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
         let today = Local::now().naive_local().date();
         Self {
             focus_handle: cx.focus_handle(),
-            size: Size::default(),
             view_mode: ViewMode::Day,
             date: Date::Single(None),
             current_month: today.month() as u8,
             current_year: today.year(),
             years: vec![],
             year_page: 0,
-            number_of_months: 1,
             today,
+            number_of_months: 1,
             disabled: None,
         }
         .year_range((today.year() - 50, today.year() + 50))
@@ -291,16 +298,10 @@ impl Calendar {
         self.date
     }
 
-    /// Set number of months to show, default is 1.
-    pub fn number_of_months(mut self, number_of_months: usize) -> Self {
-        self.number_of_months = number_of_months;
-        self
-    }
-
-    pub fn set_size(&mut self, size: Size, _: &mut Window, cx: &mut Context<Self>) {
-        self.size = size;
-        cx.notify();
-    }
+    // pub fn set_size(&mut self, size: Size, _: &mut Window, cx: &mut Context<Self>) {
+    //     self.size = size;
+    //     cx.notify();
+    // }
 
     pub fn set_number_of_months(
         &mut self,
@@ -435,22 +436,238 @@ impl Calendar {
         .into()
     }
 
-    fn render_week(
+    fn set_view_mode(&mut self, mode: ViewMode, _: &mut Window, cx: &mut Context<Self>) {
+        self.view_mode = mode;
+        cx.notify();
+    }
+
+    fn months(&self) -> Vec<SharedString> {
+        [
+            t!("Calendar.month.January"),
+            t!("Calendar.month.February"),
+            t!("Calendar.month.March"),
+            t!("Calendar.month.April"),
+            t!("Calendar.month.May"),
+            t!("Calendar.month.June"),
+            t!("Calendar.month.July"),
+            t!("Calendar.month.August"),
+            t!("Calendar.month.September"),
+            t!("Calendar.month.October"),
+            t!("Calendar.month.November"),
+            t!("Calendar.month.December"),
+        ]
+        .iter()
+        .map(|s| s.clone().into())
+        .collect()
+    }
+}
+
+impl Render for CalendarState {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        Empty
+    }
+}
+
+impl Calendar {
+    pub fn new(state: Entity<CalendarState>) -> Self {
+        Self {
+            size: Size::default(),
+            state,
+            bordered: true,
+            number_of_months: 1,
+        }
+    }
+
+    /// Set number of months to show, default is 1.
+    pub fn number_of_months(mut self, number_of_months: usize) -> Self {
+        self.number_of_months = number_of_months;
+        self
+    }
+
+    /// Set bordered, default: `true`.
+    pub fn bordered(mut self, bordered: bool) -> Self {
+        self.bordered = bordered;
+        self
+    }
+
+    fn render_day(
         &self,
-        week: impl Into<SharedString>,
-        _: &mut Window,
-        cx: &mut Context<Self>,
+        d: &NaiveDate,
+        offset_month: usize,
+        window: &mut Window,
+        cx: &mut App,
     ) -> impl IntoElement {
+        let state = self.state.read(cx);
+        let (_, month) = state.offset_year_month(offset_month);
+        let day = d.day();
+        let is_current_month = d.month() == month;
+        let is_active = state.date.is_active(d) && is_current_month;
+        let is_in_range = state.date.is_in_range(d);
+
+        let date = *d;
+        let is_today = *d == state.today;
+        let disabled = state
+            .disabled
+            .as_ref()
+            .map_or(false, |disabled| disabled.matched(&date));
+
+        self.item_button(
+            d.ordinal() as usize,
+            day.to_string(),
+            is_active,
+            is_in_range,
+            !is_current_month || disabled,
+            disabled,
+            window,
+            cx,
+        )
+        .when(is_today && !is_active, |this| {
+            this.border_1().border_color(cx.theme().border)
+        }) // Add border for today
+        .when(!disabled, |this| {
+            this.on_click(window.listener_for(
+                &self.state,
+                move |view, _: &ClickEvent, window, cx| {
+                    if view.date.is_single() {
+                        view.set_date(date, window, cx);
+                        cx.emit(CalendarEvent::Selected(view.date()));
+                    } else {
+                        let start = view.date.start();
+                        let end = view.date.end();
+
+                        if start.is_none() && end.is_none() {
+                            view.set_date(Date::Range(Some(date), None), window, cx);
+                        } else if start.is_some() && end.is_none() {
+                            if date < start.unwrap() {
+                                view.set_date(Date::Range(Some(date), None), window, cx);
+                            } else {
+                                view.set_date(
+                                    Date::Range(Some(start.unwrap()), Some(date)),
+                                    window,
+                                    cx,
+                                );
+                            }
+                        } else {
+                            view.set_date(Date::Range(Some(date), None), window, cx);
+                        }
+
+                        if view.date.is_complete() {
+                            cx.emit(CalendarEvent::Selected(view.date()));
+                        }
+                    }
+                },
+            ))
+        })
+    }
+
+    fn render_header(&self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let state = self.state.read(cx);
+        let current_year = state.current_year;
+        let view_mode = state.view_mode;
+        let disabled = view_mode.is_month();
+        let multiple_months = self.number_of_months > 1;
+        let icon_size = match self.size {
+            Size::Small => Size::Small,
+            Size::Large => Size::Medium,
+            _ => Size::Medium,
+        };
+
         h_flex()
-            .map(|this| match self.size {
-                Size::Small => this.size_7().rounded(cx.theme().radius / 2.0),
-                Size::Large => this.size_10().rounded(cx.theme().radius),
-                _ => this.size_9().rounded(cx.theme().radius),
+            .gap_0p5()
+            .justify_between()
+            .items_center()
+            .child(
+                Button::new("prev")
+                    .icon(IconName::ArrowLeft)
+                    .ghost()
+                    .disabled(disabled)
+                    .with_size(icon_size)
+                    .when(view_mode.is_day(), |this| {
+                        this.on_click(window.listener_for(&self.state, CalendarState::prev_month))
+                    })
+                    .when(view_mode.is_year(), |this| {
+                        this.when(!state.has_prev_year_page(), |this| this.disabled(true))
+                            .on_click(
+                                window.listener_for(&self.state, CalendarState::prev_year_page),
+                            )
+                    }),
+            )
+            .when(!multiple_months, |this| {
+                this.child(
+                    h_flex()
+                        .justify_center()
+                        .gap_3()
+                        .child(
+                            Button::new("month")
+                                .ghost()
+                                .label(state.month_name(0))
+                                .compact()
+                                .with_size(self.size)
+                                .selected(view_mode.is_month())
+                                .on_click(window.listener_for(
+                                    &self.state,
+                                    move |view, _, window, cx| {
+                                        if view_mode.is_month() {
+                                            view.set_view_mode(ViewMode::Day, window, cx);
+                                        } else {
+                                            view.set_view_mode(ViewMode::Month, window, cx);
+                                        }
+                                        cx.notify();
+                                    },
+                                )),
+                        )
+                        .child(
+                            Button::new("year")
+                                .ghost()
+                                .label(current_year.to_string())
+                                .compact()
+                                .with_size(self.size)
+                                .selected(view_mode.is_year())
+                                .on_click(window.listener_for(
+                                    &self.state,
+                                    |view, _, window, cx| {
+                                        if view.view_mode.is_year() {
+                                            view.set_view_mode(ViewMode::Day, window, cx);
+                                        } else {
+                                            view.set_view_mode(ViewMode::Year, window, cx);
+                                        }
+                                        cx.notify();
+                                    },
+                                )),
+                        ),
+                )
             })
-            .justify_center()
-            .text_color(cx.theme().muted_foreground)
-            .text_sm()
-            .child(week.into())
+            .when(multiple_months, |this| {
+                this.child(h_flex().flex_1().justify_around().children(
+                    (0..self.number_of_months).map(|n| {
+                        h_flex()
+                            .justify_center()
+                            .map(|this| match self.size {
+                                Size::Small => this.gap_2(),
+                                Size::Large => this.gap_4(),
+                                _ => this.gap_3(),
+                            })
+                            .child(state.month_name(n))
+                            .child(current_year.to_string())
+                    }),
+                ))
+            })
+            .child(
+                Button::new("next")
+                    .icon(IconName::ArrowRight)
+                    .ghost()
+                    .disabled(disabled)
+                    .with_size(icon_size)
+                    .when(view_mode.is_day(), |this| {
+                        this.on_click(window.listener_for(&self.state, CalendarState::next_month))
+                    })
+                    .when(view_mode.is_year(), |this| {
+                        this.when(!state.has_next_year_page(), |this| this.disabled(true))
+                            .on_click(
+                                window.listener_for(&self.state, CalendarState::next_year_page),
+                            )
+                    }),
+            )
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -463,7 +680,7 @@ impl Calendar {
         muted: bool,
         disabled: bool,
         _: &mut Window,
-        cx: &mut Context<Self>,
+        cx: &mut App,
     ) -> impl IntoElement + Styled + StatefulInteractiveElement {
         h_flex()
             .id(id.into())
@@ -501,196 +718,8 @@ impl Calendar {
             .child(label.into())
     }
 
-    fn render_day(
-        &self,
-        d: &NaiveDate,
-        offset_month: usize,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
-        let (_, month) = self.offset_year_month(offset_month);
-        let day = d.day();
-        let is_current_month = d.month() == month;
-        let is_active = self.date.is_active(d) && is_current_month;
-        let is_in_range = self.date.is_in_range(d);
-
-        let date = *d;
-        let is_today = *d == self.today;
-        let disabled = self
-            .disabled
-            .as_ref()
-            .map_or(false, |disabled| disabled.matched(&date));
-
-        self.item_button(
-            d.ordinal() as usize,
-            day.to_string(),
-            is_active,
-            is_in_range,
-            !is_current_month || disabled,
-            disabled,
-            window,
-            cx,
-        )
-        .when(is_today && !is_active, |this| {
-            this.border_1().border_color(cx.theme().border)
-        }) // Add border for today
-        .when(!disabled, |this| {
-            this.on_click(cx.listener(move |view, _: &ClickEvent, window, cx| {
-                if view.date.is_single() {
-                    view.set_date(date, window, cx);
-                    cx.emit(CalendarEvent::Selected(view.date()));
-                } else {
-                    let start = view.date.start();
-                    let end = view.date.end();
-
-                    if start.is_none() && end.is_none() {
-                        view.set_date(Date::Range(Some(date), None), window, cx);
-                    } else if start.is_some() && end.is_none() {
-                        if date < start.unwrap() {
-                            view.set_date(Date::Range(Some(date), None), window, cx);
-                        } else {
-                            view.set_date(
-                                Date::Range(Some(start.unwrap()), Some(date)),
-                                window,
-                                cx,
-                            );
-                        }
-                    } else {
-                        view.set_date(Date::Range(Some(date), None), window, cx);
-                    }
-
-                    if view.date.is_complete() {
-                        cx.emit(CalendarEvent::Selected(view.date()));
-                    }
-                }
-            }))
-        })
-    }
-
-    fn set_view_mode(&mut self, mode: ViewMode, _: &mut Window, cx: &mut Context<Self>) {
-        self.view_mode = mode;
-        cx.notify();
-    }
-
-    fn months(&self) -> Vec<SharedString> {
-        [
-            t!("Calendar.month.January"),
-            t!("Calendar.month.February"),
-            t!("Calendar.month.March"),
-            t!("Calendar.month.April"),
-            t!("Calendar.month.May"),
-            t!("Calendar.month.June"),
-            t!("Calendar.month.July"),
-            t!("Calendar.month.August"),
-            t!("Calendar.month.September"),
-            t!("Calendar.month.October"),
-            t!("Calendar.month.November"),
-            t!("Calendar.month.December"),
-        ]
-        .iter()
-        .map(|s| s.clone().into())
-        .collect()
-    }
-
-    fn render_header(&self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let current_year = self.current_year;
-        let disabled = self.view_mode.is_month();
-        let multiple_months = self.number_of_months > 1;
-        let icon_size = match self.size {
-            Size::Small => Size::Small,
-            Size::Large => Size::Medium,
-            _ => Size::Medium,
-        };
-
-        h_flex()
-            .gap_0p5()
-            .justify_between()
-            .items_center()
-            .child(
-                Button::new("prev")
-                    .icon(IconName::ArrowLeft)
-                    .ghost()
-                    .disabled(disabled)
-                    .with_size(icon_size)
-                    .when(self.view_mode.is_day(), |this| {
-                        this.on_click(cx.listener(Self::prev_month))
-                    })
-                    .when(self.view_mode.is_year(), |this| {
-                        this.when(!self.has_prev_year_page(), |this| this.disabled(true))
-                            .on_click(cx.listener(Self::prev_year_page))
-                    }),
-            )
-            .when(!multiple_months, |this| {
-                this.child(
-                    h_flex()
-                        .justify_center()
-                        .gap_3()
-                        .child(
-                            Button::new("month")
-                                .ghost()
-                                .label(self.month_name(0))
-                                .compact()
-                                .with_size(self.size)
-                                .selected(self.view_mode.is_month())
-                                .on_click(cx.listener(|view, _, window, cx| {
-                                    if view.view_mode.is_month() {
-                                        view.set_view_mode(ViewMode::Day, window, cx);
-                                    } else {
-                                        view.set_view_mode(ViewMode::Month, window, cx);
-                                    }
-                                    cx.notify();
-                                })),
-                        )
-                        .child(
-                            Button::new("year")
-                                .ghost()
-                                .label(current_year.to_string())
-                                .compact()
-                                .with_size(self.size)
-                                .selected(self.view_mode.is_year())
-                                .on_click(cx.listener(|view, _, window, cx| {
-                                    if view.view_mode.is_year() {
-                                        view.set_view_mode(ViewMode::Day, window, cx);
-                                    } else {
-                                        view.set_view_mode(ViewMode::Year, window, cx);
-                                    }
-                                    cx.notify();
-                                })),
-                        ),
-                )
-            })
-            .when(multiple_months, |this| {
-                this.child(h_flex().flex_1().justify_around().children(
-                    (0..self.number_of_months).map(|n| {
-                        h_flex()
-                            .justify_center()
-                            .map(|this| match self.size {
-                                Size::Small => this.gap_2(),
-                                Size::Large => this.gap_4(),
-                                _ => this.gap_3(),
-                            })
-                            .child(self.month_name(n))
-                            .child(current_year.to_string())
-                    }),
-                ))
-            })
-            .child(
-                Button::new("next")
-                    .icon(IconName::ArrowRight)
-                    .ghost()
-                    .disabled(disabled)
-                    .with_size(icon_size)
-                    .when(self.view_mode.is_day(), |this| {
-                        this.on_click(cx.listener(Self::next_month))
-                    })
-                    .when(self.view_mode.is_year(), |this| {
-                        this.when(!self.has_next_year_page(), |this| this.disabled(true))
-                            .on_click(cx.listener(Self::next_year_page))
-                    }),
-            )
-    }
-
-    fn render_days(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_days(&self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let state = self.state.read(cx);
         let weeks = [
             t!("Calendar.week.0"),
             t!("Calendar.week.1"),
@@ -709,7 +738,8 @@ impl Calendar {
             })
             .justify_between()
             .children(
-                self.days()
+                state
+                    .days()
                     .chunks(5)
                     .enumerate()
                     .map(|(offset_month, days)| {
@@ -732,8 +762,28 @@ impl Calendar {
             )
     }
 
-    fn render_months(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let months = self.months();
+    fn render_week(
+        &self,
+        week: impl Into<SharedString>,
+        _: &mut Window,
+        cx: &mut App,
+    ) -> impl IntoElement {
+        h_flex()
+            .map(|this| match self.size {
+                Size::Small => this.size_7().rounded(cx.theme().radius / 2.0),
+                Size::Large => this.size_10().rounded(cx.theme().radius),
+                _ => this.size_9().rounded(cx.theme().radius),
+            })
+            .justify_center()
+            .text_color(cx.theme().muted_foreground)
+            .text_sm()
+            .child(week.into())
+    }
+
+    fn render_months(&self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let state = self.state.read(cx);
+        let months = state.months();
+        let current_month = state.current_month;
 
         h_flex()
             .mt_3()
@@ -751,7 +801,7 @@ impl Calendar {
                     .iter()
                     .enumerate()
                     .map(|(ix, month)| {
-                        let active = (ix + 1) as u8 == self.current_month;
+                        let active = (ix + 1) as u8 == current_month;
 
                         self.item_button(
                             ix,
@@ -765,7 +815,8 @@ impl Calendar {
                         )
                         .w(relative(0.3))
                         .text_sm()
-                        .on_click(cx.listener(
+                        .on_click(window.listener_for(
+                            &self.state,
                             move |view, _, window, cx| {
                                 view.current_month = (ix + 1) as u8;
                                 view.set_view_mode(ViewMode::Day, window, cx);
@@ -777,8 +828,10 @@ impl Calendar {
             )
     }
 
-    fn render_years(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let current_page_years = &self.years[self.year_page as usize];
+    fn render_years(&self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let state = self.state.read(cx);
+        let current_year = state.current_year;
+        let current_page_years = &self.state.read(cx).years[state.year_page as usize].clone();
 
         h_flex()
             .id("years")
@@ -796,7 +849,7 @@ impl Calendar {
                     .enumerate()
                     .map(|(ix, year)| {
                         let year = *year;
-                        let active = year == self.current_year;
+                        let active = year == current_year;
 
                         self.item_button(
                             ix,
@@ -809,7 +862,8 @@ impl Calendar {
                             cx,
                         )
                         .w(relative(0.2))
-                        .on_click(cx.listener(
+                        .on_click(window.listener_for(
+                            &self.state,
                             move |view, _, window, cx| {
                                 view.current_year = year;
                                 view.set_view_mode(ViewMode::Day, window, cx);
@@ -828,23 +882,30 @@ impl Sizable for Calendar {
         self
     }
 }
-impl EventEmitter<CalendarEvent> for Calendar {}
+impl EventEmitter<CalendarEvent> for CalendarState {}
+impl RenderOnce for Calendar {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let view_mode = self.state.read(cx).view_mode;
+        let number_of_months = self.number_of_months;
+        self.state
+            .update(cx, |state, _| state.number_of_months = number_of_months);
 
-impl Render for Calendar {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
         v_flex()
-            .track_focus(&self.focus_handle)
+            .track_focus(&self.state.read(cx).focus_handle)
+            .when(self.bordered, |this| {
+                this.border_1().border_color(cx.theme().border).p_3()
+            })
             .gap_0p5()
             .child(self.render_header(window, cx))
             .child(
                 v_flex()
-                    .when(self.view_mode.is_day(), |this| {
+                    .when(view_mode.is_day(), |this| {
                         this.child(self.render_days(window, cx))
                     })
-                    .when(self.view_mode.is_month(), |this| {
+                    .when(view_mode.is_month(), |this| {
                         this.child(self.render_months(window, cx))
                     })
-                    .when(self.view_mode.is_year(), |this| {
+                    .when(view_mode.is_year(), |this| {
                         this.child(self.render_years(window, cx))
                     }),
             )

@@ -1,9 +1,9 @@
 use chrono::NaiveDate;
 use gpui::{
     anchored, deferred, div, prelude::FluentBuilder as _, px, App, AppContext, Context, ElementId,
-    Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement as _, KeyBinding, Length,
-    MouseButton, ParentElement as _, Render, SharedString, StatefulInteractiveElement as _, Styled,
-    Subscription, Window,
+    Empty, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement,
+    KeyBinding, Length, MouseButton, ParentElement as _, Render, RenderOnce, SharedString,
+    StatefulInteractiveElement as _, Styled, Subscription, Window,
 };
 use rust_i18n::t;
 
@@ -15,7 +15,7 @@ use crate::{
     v_flex, ActiveTheme, Icon, IconName, Sizable, Size, StyleSized as _, StyledExt as _,
 };
 
-use super::calendar::{Calendar, CalendarEvent, Date, Matcher};
+use super::calendar::{Calendar, CalendarEvent, CalendarState, Date, Matcher};
 
 pub fn init(cx: &mut App) {
     let context = Some("DatePicker");
@@ -55,43 +55,36 @@ impl DateRangePreset {
         }
     }
 }
-pub struct DatePicker {
-    id: ElementId,
+
+pub struct DateState {
     focus_handle: FocusHandle,
     date: Date,
-    cleanable: bool,
-    placeholder: Option<SharedString>,
     open: bool,
-    size: Size,
-    width: Length,
+    calendar: Entity<CalendarState>,
     date_format: SharedString,
-    calendar: Entity<Calendar>,
     number_of_months: usize,
-    presets: Option<Vec<DateRangePreset>>,
     _subscriptions: Vec<Subscription>,
 }
 
-impl DatePicker {
+impl Focusable for DateState {
+    fn focus_handle(&self, _: &App) -> FocusHandle {
+        self.focus_handle.clone()
+    }
+}
+impl EventEmitter<DatePickerEvent> for DateState {}
+
+impl DateState {
     /// Create a date picker.
-    pub fn new(id: impl Into<ElementId>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        Self::new_with_range(id, false, window, cx)
+    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        Self::new_with_range(false, window, cx)
     }
 
     /// Create a date picker with range mode.
-    pub fn range_picker(
-        id: impl Into<ElementId>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Self {
-        Self::new_with_range(id, true, window, cx)
+    pub fn range_picker(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        Self::new_with_range(true, window, cx)
     }
 
-    fn new_with_range(
-        id: impl Into<ElementId>,
-        is_range: bool,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Self {
+    fn new_with_range(is_range: bool, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let date = if is_range {
             Date::Range(None, None)
         } else {
@@ -99,7 +92,7 @@ impl DatePicker {
         };
 
         let calendar = cx.new(|cx| {
-            let mut this = Calendar::new(window, cx);
+            let mut this = CalendarState::new(window, cx);
             this.set_date(date, window, cx);
             this
         });
@@ -116,18 +109,12 @@ impl DatePicker {
         )];
 
         Self {
-            id: id.into(),
             focus_handle: cx.focus_handle(),
             date,
             calendar,
             open: false,
-            size: Size::default(),
-            width: Length::Auto,
             date_format: "%Y/%m/%d".into(),
-            cleanable: false,
             number_of_months: 1,
-            placeholder: None,
-            presets: None,
             _subscriptions,
         }
     }
@@ -138,33 +125,9 @@ impl DatePicker {
         self
     }
 
-    /// Set the placeholder of the date picker, default: "".
-    pub fn placeholder(mut self, placeholder: impl Into<SharedString>) -> Self {
-        self.placeholder = Some(placeholder.into());
-        self
-    }
-
-    /// Set true to show the clear button when the input field is not empty.
-    pub fn cleanable(mut self) -> Self {
-        self.cleanable = true;
-        self
-    }
-
-    /// Set width of the date picker input field, default is `Length::Auto`.
-    pub fn width(mut self, width: impl Into<Length>) -> Self {
-        self.width = width.into();
-        self
-    }
-
     /// Set the number of months calendar view to display, default is 1.
     pub fn number_of_months(mut self, number_of_months: usize) -> Self {
         self.number_of_months = number_of_months;
-        self
-    }
-
-    /// Set preset ranges for the date picker.
-    pub fn presets(mut self, presets: Vec<DateRangePreset>) -> Self {
-        self.presets = Some(presets);
         self
     }
 
@@ -200,12 +163,6 @@ impl DatePicker {
         self.calendar.update(cx, |view, cx| {
             view.set_disabled(disabled.into(), window, cx);
         });
-    }
-
-    /// Set size of the date picker.
-    pub fn set_size(&mut self, size: Size, _: &mut Window, cx: &mut Context<Self>) {
-        self.size = size;
-        cx.notify();
     }
 
     fn escape(&mut self, _: &Cancel, window: &mut Window, cx: &mut Context<Self>) {
@@ -270,7 +227,18 @@ impl DatePicker {
     }
 }
 
-impl EventEmitter<DatePickerEvent> for DatePicker {}
+#[derive(IntoElement)]
+pub struct DatePicker {
+    id: ElementId,
+    state: Entity<DateState>,
+    cleanable: bool,
+    placeholder: Option<SharedString>,
+    size: Size,
+    width: Length,
+    number_of_months: usize,
+    presets: Option<Vec<DateRangePreset>>,
+}
+
 impl Sizable for DatePicker {
     fn with_size(mut self, size: impl Into<Size>) -> Self {
         self.size = size.into();
@@ -278,35 +246,80 @@ impl Sizable for DatePicker {
     }
 }
 impl Focusable for DatePicker {
-    fn focus_handle(&self, _: &App) -> FocusHandle {
-        self.focus_handle.clone()
+    fn focus_handle(&self, cx: &App) -> FocusHandle {
+        self.state.focus_handle(cx)
     }
 }
 
-impl Render for DatePicker {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
+impl Render for DateState {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl gpui::IntoElement {
+        Empty
+    }
+}
+
+impl DatePicker {
+    pub fn new(id: impl Into<ElementId>, state: Entity<DateState>) -> Self {
+        let id = id.into();
+
+        Self {
+            id,
+            state,
+            cleanable: true,
+            placeholder: None,
+            size: Size::default(),
+            width: Length::Auto,
+            number_of_months: 2,
+            presets: None,
+        }
+    }
+
+    /// Set the placeholder of the date picker, default: "".
+    pub fn placeholder(mut self, placeholder: impl Into<SharedString>) -> Self {
+        self.placeholder = Some(placeholder.into());
+        self
+    }
+
+    /// Set true to show the clear button when the input field is not empty.
+    pub fn cleanable(mut self) -> Self {
+        self.cleanable = true;
+        self
+    }
+
+    /// Set width of the date picker input field, default is `Length::Auto`.
+    pub fn width(mut self, width: impl Into<Length>) -> Self {
+        self.width = width.into();
+        self
+    }
+
+    /// Set preset ranges for the date picker.
+    pub fn presets(mut self, presets: Vec<DateRangePreset>) -> Self {
+        self.presets = Some(presets);
+        self
+    }
+}
+
+impl RenderOnce for DatePicker {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         // This for keep focus border style, when click on the popup.
-        let is_focused = self.focus_handle.contains_focused(window, cx);
-        let show_clean = self.cleanable && self.date.is_some();
+        let is_focused = self.focus_handle(cx).contains_focused(window, cx);
+        let state = self.state.read(cx);
+        let show_clean = self.cleanable && state.date.is_some();
         let placeholder = self
             .placeholder
             .clone()
             .unwrap_or_else(|| t!("DatePicker.placeholder").into());
-        let display_title = self
+        let display_title = state
             .date
-            .format(&self.date_format)
+            .format(&state.date_format)
             .unwrap_or(placeholder.clone());
-
-        self.calendar.update(cx, |view, cx| {
-            view.set_size(self.size, window, cx);
-            view.set_number_of_months(self.number_of_months, window, cx);
-        });
 
         div()
             .id(self.id.clone())
             .key_context("DatePicker")
-            .track_focus(&self.focus_handle)
-            .when(self.open, |this| this.on_action(cx.listener(Self::escape)))
+            .track_focus(&self.focus_handle(cx))
+            .when(state.open, |this| {
+                this.on_action(window.listener_for(&self.state, DateState::escape))
+            })
             .w_full()
             .relative()
             .map(|this| match self.width {
@@ -330,8 +343,8 @@ impl Render for DatePicker {
                     .input_text_size(self.size)
                     .when(is_focused, |this| this.focused_border(cx))
                     .input_size(self.size)
-                    .when(!self.open, |this| {
-                        this.on_click(cx.listener(Self::toggle_calendar))
+                    .when(!state.open, |this| {
+                        this.on_click(window.listener_for(&self.state, DateState::toggle_calendar))
                     })
                     .child(
                         h_flex()
@@ -341,7 +354,11 @@ impl Render for DatePicker {
                             .gap_1()
                             .child(div().w_full().overflow_hidden().child(display_title))
                             .when(show_clean, |this| {
-                                this.child(clear_button(cx).on_click(cx.listener(Self::clean)))
+                                this.child(
+                                    clear_button(cx).on_click(
+                                        window.listener_for(&self.state, DateState::clean),
+                                    ),
+                                )
                             })
                             .when(!show_clean, |this| {
                                 this.child(
@@ -352,7 +369,7 @@ impl Render for DatePicker {
                             }),
                     ),
             )
-            .when(self.open, |this| {
+            .when(state.open, |this| {
                 this.child(
                     deferred(
                         anchored().snap_to_window_with_margin(px(8.)).child(
@@ -367,7 +384,7 @@ impl Render for DatePicker {
                                 .bg(cx.theme().background)
                                 .on_mouse_up_out(
                                     MouseButton::Left,
-                                    cx.listener(|view, _, window, cx| {
+                                    window.listener_for(&self.state, |view, _, window, cx| {
                                         view.escape(&Cancel, window, cx);
                                     }),
                                 )
@@ -385,7 +402,8 @@ impl Render for DatePicker {
                                                                 .small()
                                                                 .ghost()
                                                                 .label(preset.label.clone())
-                                                                .on_click(cx.listener(
+                                                                .on_click(window.listener_for(
+                                                                    &self.state,
                                                                     move |this, _, window, cx| {
                                                                         this.select_preset(
                                                                             &preset, window, cx,
@@ -397,7 +415,12 @@ impl Render for DatePicker {
                                                 ),
                                             )
                                         })
-                                        .child(self.calendar.clone()),
+                                        .child(
+                                            Calendar::new(state.calendar.clone())
+                                                .number_of_months(self.number_of_months)
+                                                .bordered(false)
+                                                .with_size(self.size),
+                                        ),
                                 ),
                         ),
                     )
