@@ -37,9 +37,9 @@ impl Sizable for TextInput {
 }
 
 impl TextInput {
-    pub fn new(state: Entity<InputState>) -> Self {
+    pub fn new(state: &Entity<InputState>) -> Self {
         Self {
-            state,
+            state: state.clone(),
             size: Size::default(),
             no_gap: false,
             prefix: None,

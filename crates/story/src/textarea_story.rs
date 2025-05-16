@@ -138,7 +138,7 @@ impl Render for TextareaStory {
                     v_flex()
                         .gap_2()
                         .w_full()
-                        .child(TextInput::new(self.textarea.clone()))
+                        .child(TextInput::new(&self.textarea))
                         .child(
                             h_flex()
                                 .gap_2()

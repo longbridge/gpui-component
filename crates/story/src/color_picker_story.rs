@@ -65,14 +65,12 @@ impl Render for ColorPickerStory {
         v_flex().gap_3().child(
             section("Normal")
                 .max_w_md()
-                .child(
-                    ColorPicker::new("1", self.color.clone()).featured_colors(vec![
-                        red_500(),
-                        blue_500(),
-                        green_500(),
-                        yellow_500(),
-                    ]),
-                )
+                .child(ColorPicker::new(&self.color).featured_colors(vec![
+                    red_500(),
+                    blue_500(),
+                    green_500(),
+                    yellow_500(),
+                ]))
                 .when_some(self.selected_color, |this, color| {
                     this.child(color.to_hex())
                 }),

@@ -130,7 +130,6 @@ impl Focusable for WebViewStory {
 impl Render for WebViewStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let webview = self.webview.clone();
-        let address_input = self.address_input.clone();
 
         v_flex()
             .p_2()
@@ -140,7 +139,7 @@ impl Render for WebViewStory {
                 h_flex()
                     .gap_2()
                     .items_center()
-                    .child(TextInput::new(address_input.clone())),
+                    .child(TextInput::new(&self.address_input)),
             )
             .child(
                 div()

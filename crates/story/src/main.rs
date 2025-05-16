@@ -218,7 +218,7 @@ impl Render for Gallery {
                                             .flex_1()
                                             .mx_1()
                                             .child(
-                                                TextInput::new(self.search_input.clone())
+                                                TextInput::new(&self.search_input)
                                                     .appearance(false)
                                                     .cleanable(),
                                             ),

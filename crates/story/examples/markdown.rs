@@ -59,11 +59,7 @@ impl Render for Example {
                     .border_r_1()
                     .border_color(cx.theme().border)
                     .flex_1()
-                    .child(
-                        TextInput::new(self.input_state.clone())
-                            .h_full()
-                            .appearance(false),
-                    ),
+                    .child(TextInput::new(&self.input_state).h_full().appearance(false)),
             )
             .child(
                 div()

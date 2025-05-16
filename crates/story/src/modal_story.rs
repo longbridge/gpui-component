@@ -109,12 +109,9 @@ impl ModalStory {
                         .gap_3()
                         .child("This is a modal dialog.")
                         .child("You can put anything here.")
-                        .child(TextInput::new(input1.clone()))
-                        .child(Dropdown::new(dropdown.clone()))
-                        .child(
-                            DatePicker::new("birthday-picker", date.clone())
-                                .placeholder("Date of Birth"),
-                        ),
+                        .child(TextInput::new(&input1))
+                        .child(Dropdown::new(&dropdown))
+                        .child(DatePicker::new(&date).placeholder("Date of Birth")),
                 )
                 .footer({
                     let view = view.clone();
@@ -253,7 +250,7 @@ impl Render for ModalStory {
                     .child(
                         section("Focus back test")
                             .max_w_md()
-                            .child(TextInput::new(self.input2.clone()))
+                            .child(TextInput::new(&self.input2))
                             .child(
                                 Button::new("test-action")
                                     .label("Test Action")

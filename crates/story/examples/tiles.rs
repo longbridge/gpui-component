@@ -106,7 +106,7 @@ impl Panel for ContainerPanel {
                 .border_1()
                 .border_color(cx.theme().input)
                 .child(
-                    TextInput::new(self.search_state.clone())
+                    TextInput::new(&self.search_state)
                         .xsmall()
                         .appearance(false),
                 )

@@ -118,7 +118,7 @@ impl Render for AppTitleBar {
                     .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                     .child((self.child.clone())(window, cx))
                     .child(
-                        ColorPicker::new("theme-color-picker", self.theme_color.clone())
+                        ColorPicker::new(&self.theme_color)
                             .small()
                             .anchor(Corner::TopRight)
                             .icon(IconName::Palette),

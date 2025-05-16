@@ -67,7 +67,7 @@ impl Render for Form {
             .p_4()
             .size_full()
             .child("This is a form container.")
-            .child(TextInput::new(self.input1.clone()))
+            .child(TextInput::new(&self.input1))
             .child(
                 Button::new("submit")
                     .label("Submit")

@@ -519,10 +519,10 @@ impl<D> Dropdown<D>
 where
     D: DropdownDelegate + 'static,
 {
-    pub fn new(state: Entity<DropdownState<D>>) -> Self {
+    pub fn new(state: &Entity<DropdownState<D>>) -> Self {
         Self {
             id: ("dropdown", state.entity_id()).into(),
-            state,
+            state: state.clone(),
             placeholder: None,
             size: Size::Medium,
             icon: None,

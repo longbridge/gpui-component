@@ -935,7 +935,7 @@ impl Render for TableStory {
                         .child(
                             h_flex()
                                 .min_w_32()
-                                .child(TextInput::new(self.num_stocks_input.clone()))
+                                .child(TextInput::new(&self.num_stocks_input))
                                 .into_any_element(),
                         )
                         .when(delegate.loading, |this| {

@@ -47,7 +47,7 @@ impl CalendarStory {
 }
 
 impl Focusable for CalendarStory {
-    fn focus_handle(&self, _: &App) -> gpui::FocusHandle {
+    fn focus_handle(&self, _: &App) -> FocusHandle {
         self.focus_handle.clone()
     }
 }
@@ -59,12 +59,12 @@ impl Render for CalendarStory {
             .child(
                 section("Normal")
                     .max_w_md()
-                    .child(Calendar::new(self.calendar.clone())),
+                    .child(Calendar::new(&self.calendar)),
             )
             .child(
                 section("With 3 Months")
                     .max_w_md()
-                    .child(Calendar::new(self.calendar_wide.clone()).number_of_months(3)),
+                    .child(Calendar::new(&self.calendar_wide).number_of_months(3)),
             )
     }
 }

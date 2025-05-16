@@ -50,13 +50,13 @@ impl NumberInput {
         self
     }
 
-    pub fn increment(state: Entity<InputState>, window: &mut Window, cx: &mut App) {
+    pub fn increment(state: &Entity<InputState>, window: &mut Window, cx: &mut App) {
         state.update(cx, |state, cx| {
             state.on_action_increment(&Increment, window, cx);
         })
     }
 
-    pub fn decrement(state: Entity<InputState>, window: &mut Window, cx: &mut App) {
+    pub fn decrement(state: &Entity<InputState>, window: &mut Window, cx: &mut App) {
         state.update(cx, |state, cx| {
             state.on_action_decrement(&Decrement, window, cx);
         })
@@ -137,11 +137,11 @@ impl RenderOnce for NumberInput {
                     .on_click({
                         let state = self.state.clone();
                         move |_, window, cx| {
-                            Self::decrement(state.clone(), window, cx);
+                            Self::decrement(&state, window, cx);
                         }
                     }),
             )
-            .child(TextInput::new(self.state.clone()).no_gap())
+            .child(TextInput::new(&self.state).no_gap())
             .child(
                 Button::new("plus")
                     .ghost()
@@ -150,7 +150,7 @@ impl RenderOnce for NumberInput {
                     .on_click({
                         let state = self.state.clone();
                         move |_, window, cx| {
-                            Self::increment(state.clone(), window, cx);
+                            Self::increment(&state, window, cx);
                         }
                     }),
             )

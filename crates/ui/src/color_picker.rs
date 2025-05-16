@@ -177,10 +177,10 @@ pub struct ColorPicker {
 }
 
 impl ColorPicker {
-    pub fn new(id: impl Into<ElementId>, state: Entity<ColorState>) -> Self {
+    pub fn new(state: &Entity<ColorState>) -> Self {
         Self {
-            id: id.into(),
-            state,
+            id: ("color-picker", state.entity_id()).into(),
+            state: state.clone(),
             featured_colors: vec![
                 crate::black(),
                 crate::gray_600(),
@@ -317,7 +317,7 @@ impl ColorPicker {
                                 .size_5()
                                 .rounded(cx.theme().radius),
                         )
-                        .child(TextInput::new(state.read(cx).state.clone())),
+                        .child(TextInput::new(&state.read(cx).state)),
                 )
             })
     }

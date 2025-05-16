@@ -469,10 +469,10 @@ impl Render for CalendarState {
 }
 
 impl Calendar {
-    pub fn new(state: Entity<CalendarState>) -> Self {
+    pub fn new(state: &Entity<CalendarState>) -> Self {
         Self {
             size: Size::default(),
-            state,
+            state: state.clone(),
             bordered: true,
             number_of_months: 1,
         }

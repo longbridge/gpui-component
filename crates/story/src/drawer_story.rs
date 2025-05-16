@@ -291,8 +291,6 @@ impl DrawerStory {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let input = self.input1.clone();
-        let date = self.date.clone();
         let list = self.list.clone();
 
         let list_h = match placement {
@@ -301,15 +299,15 @@ impl DrawerStory {
         };
 
         let overlay = self.modal_overlay;
+        let input1 = self.input1.clone();
+        let date = self.date.clone();
         window.open_drawer_at(placement, cx, move |this, _, cx| {
             this.overlay(overlay)
                 .size(px(400.))
                 .title("Drawer Title")
                 .gap_4()
-                .child(TextInput::new(input.clone()))
-                .child(
-                    DatePicker::new("birthday-picker", date.clone()).placeholder("Date of Birth"),
-                )
+                .child(TextInput::new(&input1))
+                .child(DatePicker::new(&date).placeholder("Date of Birth"))
                 .child(
                     Button::new("send-notification")
                         .child("Test Notification")
@@ -463,7 +461,7 @@ impl Render for DrawerStory {
                     .child(
                         section("Focus back test")
                             .max_w_md()
-                            .child(TextInput::new(self.input2.clone()))
+                            .child(TextInput::new(&self.input2))
                             .child(
                                 Button::new("test-action")
                                     .label("Test Action")

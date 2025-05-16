@@ -586,7 +586,7 @@ where
                         .border_b_1()
                         .border_color(cx.theme().border)
                         .child(
-                            TextInput::new(input)
+                            TextInput::new(&input)
                                 .with_size(self.size)
                                 .prefix(
                                     Icon::new(IconName::Search)

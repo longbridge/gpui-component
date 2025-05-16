@@ -164,28 +164,28 @@ impl Render for DatePickerStory {
             .gap_3()
             .child(
                 section("Normal").max_w_md().child(
-                    DatePicker::new("date-picker1", self.date_picker.clone())
+                    DatePicker::new(&self.date_picker)
                         .cleanable()
                         .presets(presets),
                 ),
             )
             .child(
                 section("Small with 180px width").max_w_md().child(
-                    DatePicker::new("date-picker-small", self.date_picker_small.clone())
+                    DatePicker::new(&self.date_picker_small)
                         .small()
                         .width(px(180.)),
                 ),
             )
             .child(
                 section("Large").max_w_md().child(
-                    DatePicker::new("date-picker-large", self.date_picker_large.clone())
+                    DatePicker::new(&self.date_picker_large)
                         .large()
                         .width(px(300.)),
                 ),
             )
             .child(
                 section("Date Range").max_w_md().child(
-                    DatePicker::new("date-range-picker", self.date_range_picker.clone())
+                    DatePicker::new(&self.date_range_picker)
                         .number_of_months(2)
                         .cleanable()
                         .presets(range_presets.clone()),
@@ -193,13 +193,10 @@ impl Render for DatePickerStory {
             )
             .child(
                 section("Default Range Mode").max_w_md().child(
-                    DatePicker::new(
-                        "default-range-mode-picker",
-                        self.default_range_mode_picker.clone(),
-                    )
-                    .placeholder("Range mode picker")
-                    .cleanable()
-                    .presets(range_presets.clone()),
+                    DatePicker::new(&self.default_range_mode_picker)
+                        .placeholder("Range mode picker")
+                        .cleanable()
+                        .presets(range_presets.clone()),
                 ),
             )
             .child(

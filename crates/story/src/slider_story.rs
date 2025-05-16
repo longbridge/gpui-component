@@ -165,7 +165,7 @@ impl Render for SliderStory {
                     .max_w_md()
                     .v_flex()
                     .child(
-                        Slider::new(self.slider1.clone())
+                        Slider::new(&self.slider1)
                             .horizontal()
                             .disabled(self.disabled),
                     )
@@ -176,7 +176,7 @@ impl Render for SliderStory {
                     .max_w_md()
                     .v_flex()
                     .child(
-                        Slider::new(self.slider2.clone())
+                        Slider::new(&self.slider2)
                             .horizontal()
                             .disabled(self.disabled),
                     )
@@ -213,7 +213,7 @@ impl Render for SliderStory {
                         .items_center()
                         .justify_center()
                         .child(
-                            Slider::new(self.slider_hsl[0].clone())
+                            Slider::new(&self.slider_hsl[0])
                                 .vertical()
                                 .reverse()
                                 .disabled(self.disabled),
@@ -232,7 +232,7 @@ impl Render for SliderStory {
                         .items_center()
                         .justify_center()
                         .child(
-                            Slider::new(self.slider_hsl[1].clone())
+                            Slider::new(&self.slider_hsl[1])
                                 .vertical()
                                 .reverse()
                                 .disabled(self.disabled),
@@ -251,7 +251,7 @@ impl Render for SliderStory {
                         .items_center()
                         .justify_center()
                         .child(
-                            Slider::new(self.slider_hsl[2].clone())
+                            Slider::new(&self.slider_hsl[2])
                                 .vertical()
                                 .reverse()
                                 .disabled(self.disabled),
@@ -270,7 +270,7 @@ impl Render for SliderStory {
                         .items_center()
                         .justify_center()
                         .child(
-                            Slider::new(self.slider_hsl[3].clone())
+                            Slider::new(&self.slider_hsl[3])
                                 .vertical()
                                 .reverse()
                                 .disabled(self.disabled),

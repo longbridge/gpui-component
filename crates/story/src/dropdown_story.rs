@@ -216,14 +216,14 @@ impl Render for DropdownStory {
             )
             .child(
                 section("Dropdown").max_w_128().child(
-                    Dropdown::new(self.country_dropdown.clone())
+                    Dropdown::new(&self.country_dropdown)
                         .cleanable()
                         .disabled(self.disabled),
                 ),
             )
             .child(
                 section("Searchable").max_w_128().child(
-                    Dropdown::new(self.fruit_dropdown.clone())
+                    Dropdown::new(&self.fruit_dropdown)
                         .disabled(self.disabled)
                         .icon(IconName::Search)
                         .width(px(320.))
@@ -233,11 +233,11 @@ impl Render for DropdownStory {
             .child(
                 section("Disabled")
                     .max_w_128()
-                    .child(Dropdown::new(self.disabled_dropdown.clone()).disabled(true)),
+                    .child(Dropdown::new(&self.disabled_dropdown).disabled(true)),
             )
             .child(
                 section("With preview label").max_w_128().child(
-                    Dropdown::new(self.simple_dropdown1.clone())
+                    Dropdown::new(&self.simple_dropdown1)
                         .disabled(self.disabled)
                         .small()
                         .placeholder("UI")
@@ -246,7 +246,7 @@ impl Render for DropdownStory {
             )
             .child(
                 section("Searchable Dropdown").max_w_128().child(
-                    Dropdown::new(self.simple_dropdown2.clone())
+                    Dropdown::new(&self.simple_dropdown2)
                         .disabled(self.disabled)
                         .small()
                         .placeholder("Language")
@@ -255,7 +255,7 @@ impl Render for DropdownStory {
             )
             .child(
                 section("Empty Items").max_w_128().child(
-                    Dropdown::new(self.simple_dropdown3.clone())
+                    Dropdown::new(&self.simple_dropdown3)
                         .disabled(self.disabled)
                         .small()
                         .empty(

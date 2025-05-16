@@ -149,11 +149,11 @@ pub struct Slider {
 }
 
 impl Slider {
-    pub fn new(state: Entity<SliderState>) -> Self {
+    pub fn new(state: &Entity<SliderState>) -> Self {
         Self {
             axis: Axis::Horizontal,
             reverse: false,
-            state,
+            state: state.clone(),
             disabled: false,
         }
     }

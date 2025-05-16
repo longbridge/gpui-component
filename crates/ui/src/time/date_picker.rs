@@ -258,12 +258,10 @@ impl Render for DateState {
 }
 
 impl DatePicker {
-    pub fn new(id: impl Into<ElementId>, state: Entity<DateState>) -> Self {
-        let id = id.into();
-
+    pub fn new(state: &Entity<DateState>) -> Self {
         Self {
-            id,
-            state,
+            id: ("date-picker", state.entity_id()).into(),
+            state: state.clone(),
             cleanable: true,
             placeholder: None,
             size: Size::default(),
@@ -422,7 +420,7 @@ impl RenderOnce for DatePicker {
                                             )
                                         })
                                         .child(
-                                            Calendar::new(state.calendar.clone())
+                                            Calendar::new(&state.calendar)
                                                 .number_of_months(self.number_of_months)
                                                 .bordered(false)
                                                 .with_size(self.size),

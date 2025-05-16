@@ -163,19 +163,19 @@ impl Render for FormStory {
                     .child(
                         form_field()
                             .label_fn(|_, _| "Name")
-                            .child(TextInput::new(self.name_input.clone())),
+                            .child(TextInput::new(&self.name_input)),
                     )
                     .child(
                         form_field()
                             .label("Email")
-                            .child(TextInput::new(self.email_input.clone()))
+                            .child(TextInput::new(&self.email_input))
                             .required(true),
                     )
                     .child(
                         form_field()
                             .label("Bio")
                             .when(self.layout.is_vertical(), |this| this.items_start())
-                            .child(TextInput::new(self.bio_input.clone()))
+                            .child(TextInput::new(&self.bio_input))
                             .description_fn(|_, _| {
                                 div().child("Use at most 100 words to describe yourself.")
                             }),
@@ -188,7 +188,7 @@ impl Render for FormStory {
                     .child(
                         form_field()
                             .label("Birthday")
-                            .child(DatePicker::new("date-picker", self.date.clone()))
+                            .child(DatePicker::new(&self.date))
                             .description("Select your birthday, we will send you a gift."),
                     )
                     .child(
@@ -204,7 +204,7 @@ impl Render for FormStory {
                     )
                     .child(
                         form_field().child(
-                            ColorPicker::new("color-picker-1", self.color_state.clone())
+                            ColorPicker::new(&self.color_state)
                                 .small()
                                 .label("Theme color"),
                         ),
