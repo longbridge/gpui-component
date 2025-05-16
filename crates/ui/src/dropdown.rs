@@ -1,8 +1,9 @@
 use gpui::{
     anchored, canvas, deferred, div, prelude::FluentBuilder, px, rems, AnyElement, App, AppContext,
-    Bounds, ClickEvent, Context, DismissEvent, ElementId, Entity, EventEmitter, FocusHandle,
+    Bounds, ClickEvent, Context, DismissEvent, ElementId, Empty, Entity, EventEmitter, FocusHandle,
     Focusable, InteractiveElement, IntoElement, KeyBinding, Length, ParentElement, Pixels, Render,
-    SharedString, StatefulInteractiveElement, Styled, Subscription, Task, WeakEntity, Window,
+    RenderOnce, SharedString, StatefulInteractiveElement, Styled, Subscription, Task, WeakEntity,
+    Window,
 };
 use rust_i18n::t;
 
@@ -99,12 +100,7 @@ pub trait DropdownDelegate: Sized {
         false
     }
 
-    fn perform_search(
-        &mut self,
-        _query: &str,
-        _window: &mut Window,
-        _: &mut Context<Dropdown<Self>>,
-    ) -> Task<()> {
+    fn perform_search(&mut self, _query: &str, _window: &mut Window, _: &mut App) -> Task<()> {
         Task::ready(())
     }
 }
@@ -131,7 +127,7 @@ impl<T: DropdownItem> DropdownDelegate for Vec<T> {
 
 struct DropdownListDelegate<D: DropdownDelegate + 'static> {
     delegate: D,
-    dropdown: WeakEntity<Dropdown<D>>,
+    dropdown: WeakEntity<DropdownState<D>>,
     selected_index: Option<usize>,
 }
 
@@ -241,25 +237,32 @@ pub enum DropdownEvent<D: DropdownDelegate + 'static> {
     Confirm(Option<<D::Item as DropdownItem>::Value>),
 }
 
-/// A Dropdown element.
-pub struct Dropdown<D: DropdownDelegate + 'static> {
-    id: ElementId,
+pub struct DropdownState<D: DropdownDelegate + 'static> {
     focus_handle: FocusHandle,
     list: Entity<List<DropdownListDelegate<D>>>,
     size: Size,
-    icon: Option<Icon>,
+    empty: Option<Box<dyn Fn(&Window, &App) -> AnyElement>>,
+    /// Store the bounds of the input
+    bounds: Bounds<Pixels>,
     open: bool,
+    selected_value: Option<<D::Item as DropdownItem>::Value>,
+    _subscriptions: Vec<Subscription>,
+}
+
+/// A Dropdown element.
+#[derive(IntoElement)]
+pub struct Dropdown<D: DropdownDelegate + 'static> {
+    id: ElementId,
+    state: Entity<DropdownState<D>>,
+    size: Size,
+    icon: Option<Icon>,
     cleanable: bool,
     placeholder: Option<SharedString>,
     title_prefix: Option<SharedString>,
-    selected_value: Option<<D::Item as DropdownItem>::Value>,
-    empty: Option<Box<dyn Fn(&Window, &App) -> AnyElement + 'static>>,
+    empty: Option<AnyElement>,
     width: Length,
     menu_width: Length,
-    /// Store the bounds of the input
-    bounds: Bounds<Pixels>,
     disabled: bool,
-    _subscriptions: Vec<Subscription>,
 }
 
 pub struct SearchableVec<T> {
@@ -306,12 +309,7 @@ impl<T: DropdownItem + Clone> DropdownDelegate for SearchableVec<T> {
         true
     }
 
-    fn perform_search(
-        &mut self,
-        query: &str,
-        _window: &mut Window,
-        _: &mut Context<Dropdown<Self>>,
-    ) -> Task<()> {
+    fn perform_search(&mut self, query: &str, _window: &mut Window, _: &mut App) -> Task<()> {
         self.matched_items = self
             .items
             .iter()
@@ -332,12 +330,11 @@ impl From<Vec<SharedString>> for SearchableVec<SharedString> {
     }
 }
 
-impl<D> Dropdown<D>
+impl<D> DropdownState<D>
 where
     D: DropdownDelegate + 'static,
 {
     pub fn new(
-        id: impl Into<ElementId>,
         delegate: D,
         selected_index: Option<usize>,
         window: &mut Window,
@@ -368,75 +365,17 @@ where
         ];
 
         let mut this = Self {
-            id: id.into(),
             focus_handle,
-            placeholder: None,
             list,
             size: Size::Medium,
-            icon: None,
             selected_value: None,
             open: false,
-            cleanable: false,
-            title_prefix: None,
-            empty: None,
-            width: Length::Auto,
-            menu_width: Length::Auto,
             bounds: Bounds::default(),
-            disabled: false,
+            empty: None,
             _subscriptions,
         };
         this.set_selected_index(selected_index, window, cx);
         this
-    }
-
-    /// Set the width of the dropdown input, default: Length::Auto
-    pub fn width(mut self, width: impl Into<Length>) -> Self {
-        self.width = width.into();
-        self
-    }
-
-    /// Set the width of the dropdown menu, default: Length::Auto
-    pub fn menu_width(mut self, width: impl Into<Length>) -> Self {
-        self.menu_width = width.into();
-        self
-    }
-
-    /// Set the placeholder for display when dropdown value is empty.
-    pub fn placeholder(mut self, placeholder: impl Into<SharedString>) -> Self {
-        self.placeholder = Some(placeholder.into());
-        self
-    }
-
-    /// Set the right icon for the dropdown input, instead of the default arrow icon.
-    pub fn icon(mut self, icon: impl Into<Icon>) -> Self {
-        self.icon = Some(icon.into());
-        self
-    }
-
-    /// Set title prefix for the dropdown.
-    ///
-    /// e.g.: Country: United States
-    ///
-    /// You should set the label is `Country: `
-    pub fn title_prefix(mut self, prefix: impl Into<SharedString>) -> Self {
-        self.title_prefix = Some(prefix.into());
-        self
-    }
-
-    /// Set true to show the clear button when the input field is not empty.
-    pub fn cleanable(mut self) -> Self {
-        self.cleanable = true;
-        self
-    }
-
-    /// Set the disable state for the dropdown.
-    pub fn disabled(mut self, disabled: bool) -> Self {
-        self.disabled = disabled;
-        self
-    }
-
-    pub fn set_disabled(&mut self, disabled: bool) {
-        self.disabled = disabled;
     }
 
     pub fn empty<E, F>(mut self, f: F) -> Self
@@ -556,6 +495,97 @@ where
         cx.emit(DropdownEvent::Confirm(None));
     }
 
+    /// Set the items for the dropdown.
+    pub fn set_items(&mut self, items: D, _: &mut Window, cx: &mut Context<Self>)
+    where
+        D: DropdownDelegate + 'static,
+    {
+        self.list.update(cx, |list, _| {
+            list.delegate_mut().delegate = items;
+        });
+    }
+}
+
+impl<D> Render for DropdownState<D>
+where
+    D: DropdownDelegate + 'static,
+{
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        Empty
+    }
+}
+
+impl<D> Dropdown<D>
+where
+    D: DropdownDelegate + 'static,
+{
+    pub fn new(id: impl Into<ElementId>, state: Entity<DropdownState<D>>) -> Self {
+        Self {
+            id: id.into(),
+            state,
+            placeholder: None,
+            size: Size::Medium,
+            icon: None,
+            cleanable: false,
+            title_prefix: None,
+            empty: None,
+            width: Length::Auto,
+            menu_width: Length::Auto,
+            disabled: false,
+        }
+    }
+
+    /// Set the width of the dropdown input, default: Length::Auto
+    pub fn width(mut self, width: impl Into<Length>) -> Self {
+        self.width = width.into();
+        self
+    }
+
+    /// Set the width of the dropdown menu, default: Length::Auto
+    pub fn menu_width(mut self, width: impl Into<Length>) -> Self {
+        self.menu_width = width.into();
+        self
+    }
+
+    /// Set the placeholder for display when dropdown value is empty.
+    pub fn placeholder(mut self, placeholder: impl Into<SharedString>) -> Self {
+        self.placeholder = Some(placeholder.into());
+        self
+    }
+
+    /// Set the right icon for the dropdown input, instead of the default arrow icon.
+    pub fn icon(mut self, icon: impl Into<Icon>) -> Self {
+        self.icon = Some(icon.into());
+        self
+    }
+
+    /// Set title prefix for the dropdown.
+    ///
+    /// e.g.: Country: United States
+    ///
+    /// You should set the label is `Country: `
+    pub fn title_prefix(mut self, prefix: impl Into<SharedString>) -> Self {
+        self.title_prefix = Some(prefix.into());
+        self
+    }
+
+    /// Set true to show the clear button when the input field is not empty.
+    pub fn cleanable(mut self) -> Self {
+        self.cleanable = true;
+        self
+    }
+
+    /// Set the disable state for the dropdown.
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+
+    pub fn empty(mut self, el: impl IntoElement) -> Self {
+        self.empty = Some(el.into_any_element());
+        self
+    }
+
     /// Returns the title element for the dropdown input.
     fn display_title(&self, _: &Window, cx: &App) -> impl IntoElement {
         let default_title = div()
@@ -569,11 +599,13 @@ where
                 this.text_color(cx.theme().muted_foreground)
             });
 
-        let Some(selected_index) = &self.selected_index(cx) else {
+        let Some(selected_index) = &self.state.read(cx).selected_index(cx) else {
             return default_title;
         };
 
         let Some(title) = self
+            .state
+            .read(cx)
             .list
             .read(cx)
             .delegate()
@@ -600,16 +632,6 @@ where
             })
             .child(title)
     }
-
-    /// Set the items for the dropdown.
-    pub fn set_items(&mut self, items: D, _: &mut Window, cx: &mut Context<Self>)
-    where
-        D: DropdownDelegate + 'static,
-    {
-        self.list.update(cx, |list, _| {
-            list.delegate_mut().delegate = items;
-        });
-    }
 }
 
 impl<D> Sizable for Dropdown<D>
@@ -622,9 +644,9 @@ where
     }
 }
 
-impl<D> EventEmitter<DropdownEvent<D>> for Dropdown<D> where D: DropdownDelegate + 'static {}
-impl<D> EventEmitter<DismissEvent> for Dropdown<D> where D: DropdownDelegate + 'static {}
-impl<D> Focusable for Dropdown<D>
+impl<D> EventEmitter<DropdownEvent<D>> for DropdownState<D> where D: DropdownDelegate + 'static {}
+impl<D> EventEmitter<DismissEvent> for DropdownState<D> where D: DropdownDelegate + 'static {}
+impl<D> Focusable for DropdownState<D>
 where
     D: DropdownDelegate,
 {
@@ -636,34 +658,49 @@ where
         }
     }
 }
+impl<D> Focusable for Dropdown<D>
+where
+    D: DropdownDelegate,
+{
+    fn focus_handle(&self, cx: &App) -> FocusHandle {
+        self.state.focus_handle(cx)
+    }
+}
 
-impl<D> Render for Dropdown<D>
+impl<D> RenderOnce for Dropdown<D>
 where
     D: DropdownDelegate + 'static,
 {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let is_focused = self.focus_handle.is_focused(window);
-        let show_clean = self.cleanable && self.selected_index(cx).is_some();
-        let view = cx.entity().clone();
-        let bounds = self.bounds;
-        let allow_open = !(self.open || self.disabled);
-        let outline_visible = self.open || is_focused && !self.disabled;
-        let popup_radius = cx.theme().radius.min(px(8.));
-
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let is_focused = self.focus_handle(cx).is_focused(window);
         // If the size has change, set size to self.list, to change the QueryInput size.
-        if self.list.read(cx).size != self.size {
-            self.list
-                .update(cx, |this, cx| this.set_size(self.size, window, cx))
+        let old_size = self.state.read(cx).list.read(cx).size;
+        if old_size != self.size {
+            self.state
+                .read(cx)
+                .list
+                .clone()
+                .update(cx, |this, cx| this.set_size(self.size, window, cx));
+            self.state.update(cx, |this, _| {
+                this.size = self.size;
+            });
         }
+
+        let state = self.state.read(cx);
+        let show_clean = self.cleanable && state.selected_index(cx).is_some();
+        let bounds = state.bounds;
+        let allow_open = !(state.open || self.disabled);
+        let outline_visible = state.open || is_focused && !self.disabled;
+        let popup_radius = cx.theme().radius.min(px(8.));
 
         div()
             .id(self.id.clone())
             .key_context(CONTEXT)
-            .track_focus(&self.focus_handle)
-            .on_action(cx.listener(Self::up))
-            .on_action(cx.listener(Self::down))
-            .on_action(cx.listener(Self::enter))
-            .on_action(cx.listener(Self::escape))
+            .track_focus(&self.focus_handle(cx))
+            .on_action(window.listener_for(&self.state, DropdownState::up))
+            .on_action(window.listener_for(&self.state, DropdownState::down))
+            .on_action(window.listener_for(&self.state, DropdownState::enter))
+            .on_action(window.listener_for(&self.state, DropdownState::escape))
             .size_full()
             .relative()
             .input_text_size(self.size)
@@ -689,7 +726,7 @@ where
                     .when(outline_visible, |this| this.focused_border(cx))
                     .input_size(self.size)
                     .when(allow_open, |this| {
-                        this.on_click(cx.listener(Self::toggle_menu))
+                        this.on_click(window.listener_for(&self.state, DropdownState::toggle_menu))
                     })
                     .child(
                         h_flex()
@@ -710,7 +747,9 @@ where
                                     if self.disabled {
                                         this.disabled(true)
                                     } else {
-                                        this.on_click(cx.listener(Self::clean))
+                                        this.on_click(
+                                            window.listener_for(&self.state, DropdownState::clean),
+                                        )
                                     }
                                 }))
                             })
@@ -718,7 +757,7 @@ where
                                 let icon = match self.icon.clone() {
                                     Some(icon) => icon,
                                     None => {
-                                        if self.open {
+                                        if state.open {
                                             Icon::new(IconName::ChevronUp)
                                         } else {
                                             Icon::new(IconName::ChevronDown)
@@ -726,24 +765,25 @@ where
                                     }
                                 };
 
-                                this.child(icon.xsmall().text_color(
-                                    match self.disabled {
-                                        true => cx.theme().muted_foreground.opacity(0.5),
-                                        false => cx.theme().muted_foreground,
-                                    },
-                                ))
+                                this.child(icon.xsmall().text_color(match self.disabled {
+                                    true => cx.theme().muted_foreground.opacity(0.5),
+                                    false => cx.theme().muted_foreground,
+                                }))
                             }),
                     )
                     .child(
                         canvas(
-                            move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds),
+                            {
+                                let state = self.state.clone();
+                                move |bounds, _, cx| state.update(cx, |r, _| r.bounds = bounds)
+                            },
                             |_, _, _, _| {},
                         )
                         .absolute()
                         .size_full(),
                     ),
             )
-            .when(self.open, |this| {
+            .when(state.open, |this| {
                 this.child(
                     deferred(
                         anchored().snap_to_window_with_margin(px(8.)).child(
@@ -762,11 +802,14 @@ where
                                         .border_color(cx.theme().border)
                                         .rounded(popup_radius)
                                         .shadow_md()
-                                        .child(self.list.clone()),
+                                        .child(state.list.clone()),
                                 )
-                                .on_mouse_down_out(cx.listener(|this, _, window, cx| {
-                                    this.escape(&Cancel, window, cx);
-                                })),
+                                .on_mouse_down_out(window.listener_for(
+                                    &self.state,
+                                    |this, _, window, cx| {
+                                        this.escape(&Cancel, window, cx);
+                                    },
+                                )),
                         ),
                     )
                     .with_priority(1),

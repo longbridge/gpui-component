@@ -5,7 +5,7 @@ use gpui::{
 
 use gpui_component::{
     checkbox::Checkbox,
-    dropdown::{Dropdown, DropdownEvent, DropdownItem, SearchableVec},
+    dropdown::{Dropdown, DropdownEvent, DropdownItem, DropdownState, SearchableVec},
     h_flex, v_flex, ActiveTheme, FocusableCycle, IconName, Sizable,
 };
 
@@ -53,12 +53,12 @@ impl DropdownItem for Country {
 
 pub struct DropdownStory {
     disabled: bool,
-    country_dropdown: Entity<Dropdown<Vec<Country>>>,
-    fruit_dropdown: Entity<Dropdown<SearchableVec<SharedString>>>,
-    simple_dropdown1: Entity<Dropdown<Vec<SharedString>>>,
-    simple_dropdown2: Entity<Dropdown<SearchableVec<SharedString>>>,
-    simple_dropdown3: Entity<Dropdown<Vec<SharedString>>>,
-    disabled_dropdown: Entity<Dropdown<Vec<SharedString>>>,
+    country_dropdown: Entity<DropdownState<Vec<Country>>>,
+    fruit_dropdown: Entity<DropdownState<SearchableVec<SharedString>>>,
+    simple_dropdown1: Entity<DropdownState<Vec<SharedString>>>,
+    simple_dropdown2: Entity<DropdownState<SearchableVec<SharedString>>>,
+    simple_dropdown3: Entity<DropdownState<Vec<SharedString>>>,
+    disabled_dropdown: Entity<DropdownState<Vec<SharedString>>>,
 }
 
 impl super::Story for DropdownStory {
@@ -97,9 +97,7 @@ impl DropdownStory {
             Country::new("Ecuador", "EC"),
         ];
 
-        let country_dropdown = cx.new(|cx| {
-            Dropdown::new("dropdown-country", countries, Some(6), window, cx).cleanable()
-        });
+        let country_dropdown = cx.new(|cx| DropdownState::new(countries, Some(6), window, cx));
 
         let fruits = SearchableVec::new(vec![
             "Apple".into(),
@@ -110,12 +108,7 @@ impl DropdownStory {
             "Watermelon & This is a long long long long long long long long long title".into(),
             "Avocado".into(),
         ]);
-        let fruit_dropdown = cx.new(|cx| {
-            Dropdown::new("dropdown-fruits", fruits, None, window, cx)
-                .icon(IconName::Search)
-                .width(px(320.))
-                .menu_width(px(400.))
-        });
+        let fruit_dropdown = cx.new(|cx| DropdownState::new(fruits, None, window, cx));
 
         cx.new(|cx| {
             cx.subscribe_in(&country_dropdown, window, Self::on_dropdown_event)
@@ -126,23 +119,16 @@ impl DropdownStory {
                 country_dropdown,
                 fruit_dropdown,
                 simple_dropdown1: cx.new(|cx| {
-                    Dropdown::new(
-                        "string-list1",
+                    DropdownState::new(
                         vec!["QPUI".into(), "Iced".into(), "QT".into(), "Cocoa".into()],
                         Some(0),
                         window,
                         cx,
                     )
-                    .small()
-                    .placeholder("UI")
-                    .title_prefix("UI: ")
                 }),
                 simple_dropdown2: cx.new(|cx| {
                     let mut dropdown =
-                        Dropdown::new("string-list2", SearchableVec::new(vec![]), None, window, cx)
-                            .small()
-                            .placeholder("Language")
-                            .title_prefix("Language: ");
+                        DropdownState::new(SearchableVec::new(vec![]), None, window, cx);
 
                     dropdown.set_items(
                         SearchableVec::new(vec![
@@ -157,28 +143,10 @@ impl DropdownStory {
 
                     dropdown
                 }),
-                simple_dropdown3: cx.new(|cx| {
-                    Dropdown::new("string-list3", Vec::<SharedString>::new(), None, window, cx)
-                        .small()
-                        .empty(|_, cx| {
-                            h_flex()
-                                .h_24()
-                                .justify_center()
-                                .text_color(cx.theme().muted_foreground)
-                                .child("No Data")
-                        })
-                }),
-                disabled_dropdown: cx.new(|cx| {
-                    Dropdown::new(
-                        "disabled-dropdown",
-                        Vec::<SharedString>::new(),
-                        None,
-                        window,
-                        cx,
-                    )
-                    .small()
-                    .disabled(true)
-                }),
+                simple_dropdown3: cx
+                    .new(|cx| DropdownState::new(Vec::<SharedString>::new(), None, window, cx)),
+                disabled_dropdown: cx
+                    .new(|cx| DropdownState::new(Vec::<SharedString>::new(), None, window, cx)),
             }
         })
     }
@@ -189,7 +157,7 @@ impl DropdownStory {
 
     fn on_dropdown_event(
         &mut self,
-        _: &Entity<Dropdown<Vec<Country>>>,
+        _: &Entity<DropdownState<Vec<Country>>>,
         event: &DropdownEvent<Vec<Country>>,
         _window: &mut Window,
         _cx: &mut Context<Self>,
@@ -211,16 +179,7 @@ impl DropdownStory {
 
     fn toggle_disabled(&mut self, disabled: bool, _: &mut Window, cx: &mut Context<Self>) {
         self.disabled = disabled;
-        self.country_dropdown
-            .update(cx, |this, _| this.set_disabled(disabled));
-        self.fruit_dropdown
-            .update(cx, |this, _| this.set_disabled(disabled));
-        self.simple_dropdown1
-            .update(cx, |this, _| this.set_disabled(disabled));
-        self.simple_dropdown2
-            .update(cx, |this, _| this.set_disabled(disabled));
-        self.simple_dropdown3
-            .update(cx, |this, _| this.set_disabled(disabled));
+        cx.notify();
     }
 }
 
@@ -256,34 +215,55 @@ impl Render for DropdownStory {
                     })),
             )
             .child(
-                section("Dropdown")
-                    .max_w_128()
-                    .child(self.country_dropdown.clone()),
+                section("Dropdown").max_w_128().child(
+                    Dropdown::new("country", self.country_dropdown.clone())
+                        .cleanable()
+                        .disabled(self.disabled),
+                ),
             )
             .child(
-                section("Searchable")
-                    .max_w_128()
-                    .child(self.fruit_dropdown.clone()),
+                section("Searchable").max_w_128().child(
+                    Dropdown::new("fruits", self.fruit_dropdown.clone())
+                        .disabled(self.disabled)
+                        .icon(IconName::Search)
+                        .width(px(320.))
+                        .menu_width(px(400.)),
+                ),
+            )
+            .child(section("Disabled").max_w_128().child(
+                Dropdown::new("disabled-dropdown", self.disabled_dropdown.clone()).disabled(true),
+            ))
+            .child(
+                section("With preview label").max_w_128().child(
+                    Dropdown::new("simple-dropdown1", self.simple_dropdown1.clone())
+                        .disabled(self.disabled)
+                        .small()
+                        .placeholder("UI")
+                        .title_prefix("UI: "),
+                ),
             )
             .child(
-                section("Disabled")
-                    .max_w_128()
-                    .child(self.disabled_dropdown.clone()),
+                section("Searchable Dropdown").max_w_128().child(
+                    Dropdown::new("simple-dropdown2", self.simple_dropdown2.clone())
+                        .disabled(self.disabled)
+                        .small()
+                        .placeholder("Language")
+                        .title_prefix("Language: "),
+                ),
             )
             .child(
-                section("With preview label")
-                    .max_w_128()
-                    .child(self.simple_dropdown1.clone()),
-            )
-            .child(
-                section("Searchable Dropdown")
-                    .max_w_128()
-                    .child(self.simple_dropdown2.clone()),
-            )
-            .child(
-                section("Empty Items")
-                    .max_w_128()
-                    .child(self.simple_dropdown3.clone()),
+                section("Empty Items").max_w_128().child(
+                    Dropdown::new("simple-dropdown3", self.simple_dropdown3.clone())
+                        .disabled(self.disabled)
+                        .small()
+                        .empty(
+                            h_flex()
+                                .h_24()
+                                .justify_center()
+                                .text_color(cx.theme().muted_foreground)
+                                .child("No Data"),
+                        ),
+                ),
             )
             .child(
                 section("Selected Values").max_w_lg().child(

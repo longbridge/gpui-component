@@ -8,7 +8,7 @@ use gpui_component::{
     button::{Button, ButtonVariant, ButtonVariants as _},
     checkbox::Checkbox,
     date_picker::{DatePicker, DateState},
-    dropdown::Dropdown,
+    dropdown::{Dropdown, DropdownState},
     h_flex,
     input::{InputState, TextInput},
     modal::ModalButtonProps,
@@ -24,7 +24,7 @@ pub struct ModalStory {
     input1: Entity<InputState>,
     input2: Entity<InputState>,
     date: Entity<DateState>,
-    dropdown: Entity<Dropdown<Vec<String>>>,
+    dropdown: Entity<DropdownState<Vec<String>>>,
     modal_overlay: bool,
     model_show_close: bool,
     model_padding: bool,
@@ -58,8 +58,7 @@ impl ModalStory {
         });
         let date = cx.new(|cx| DateState::new(window, cx));
         let dropdown = cx.new(|cx| {
-            Dropdown::new(
-                "dropdown1",
+            DropdownState::new(
                 vec![
                     "Option 1".to_string(),
                     "Option 2".to_string(),
@@ -111,7 +110,7 @@ impl ModalStory {
                         .child("This is a modal dialog.")
                         .child("You can put anything here.")
                         .child(TextInput::new(input1.clone()))
-                        .child(dropdown.clone())
+                        .child(Dropdown::new("dropdown1", dropdown.clone()))
                         .child(
                             DatePicker::new("birthday-picker", date.clone())
                                 .placeholder("Date of Birth"),
