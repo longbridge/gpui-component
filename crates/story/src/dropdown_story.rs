@@ -120,7 +120,17 @@ impl DropdownStory {
                 fruit_dropdown,
                 simple_dropdown1: cx.new(|cx| {
                     DropdownState::new(
-                        vec!["QPUI".into(), "Iced".into(), "QT".into(), "Cocoa".into()],
+                        vec![
+                            "GPUI".into(),
+                            "Iced".into(),
+                            "egui".into(),
+                            "Makepad".into(),
+                            "Slint".into(),
+                            "QT".into(),
+                            "ImGui".into(),
+                            "Cocoa".into(),
+                            "WinUI".into(),
+                        ],
                         Some(0),
                         window,
                         cx,
