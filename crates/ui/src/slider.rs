@@ -19,6 +19,7 @@ pub enum SliderEvent {
     Change(f32),
 }
 
+/// State of the [`Slider`].
 pub struct SliderState {
     min: f32,
     max: f32,
@@ -149,6 +150,7 @@ pub struct Slider {
 }
 
 impl Slider {
+    /// Create a new [`Slider`] element bind to the [`SliderState`].
     pub fn new(state: &Entity<SliderState>) -> Self {
         Self {
             axis: Axis::Horizontal,

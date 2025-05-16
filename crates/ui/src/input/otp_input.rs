@@ -186,9 +186,10 @@ pub struct OtpInput {
 }
 
 impl OtpInput {
-    pub fn new(state: Entity<OtpState>) -> Self {
+    /// Create a new [`OtpInput`] element bind to the [`OtpState`].
+    pub fn new(state: &Entity<OtpState>) -> Self {
         Self {
-            state,
+            state: state.clone(),
             number_of_groups: 2,
             size: Size::Medium,
         }

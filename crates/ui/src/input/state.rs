@@ -191,6 +191,7 @@ pub fn init(cx: &mut App) {
     number_input::init(cx);
 }
 
+/// InputState to keep editing state of the [`super::TextInput`].
 pub struct InputState {
     pub(super) focus_handle: FocusHandle,
     pub(super) text: SharedString,
@@ -220,24 +221,24 @@ pub struct InputState {
     pub(super) disabled: bool,
     pub(super) masked: bool,
     pub(super) clean_on_escape: bool,
-
     pub(super) height: Option<DefiniteLength>,
     pub(super) rows: usize,
     pub(super) min_rows: usize,
     pub(super) max_rows: Option<usize>,
-
     pub(super) pattern: Option<regex::Regex>,
     pub(super) validate: Option<Box<dyn Fn(&str) -> bool + 'static>>,
     pub(crate) scroll_handle: ScrollHandle,
     pub(super) scrollbar_state: Rc<Cell<ScrollbarState>>,
     /// The size of the scrollable content.
     pub(crate) scroll_size: gpui::Size<Pixels>,
-    /// To remember the horizontal column (x-coordinate) of the cursor position.
-    preferred_x_offset: Option<Pixels>,
-    _subscriptions: Vec<Subscription>,
+
     /// The mask pattern for formatting the input text
     pub(crate) mask_pattern: MaskPattern,
     pub(super) placeholder: SharedString,
+
+    /// To remember the horizontal column (x-coordinate) of the cursor position.
+    preferred_x_offset: Option<Pixels>,
+    _subscriptions: Vec<Subscription>,
 }
 
 impl EventEmitter<InputEvent> for InputState {}

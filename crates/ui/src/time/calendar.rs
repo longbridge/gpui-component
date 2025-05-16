@@ -221,6 +221,7 @@ impl Matcher {
     }
 }
 
+/// Use to store the state of the calendar.
 pub struct CalendarState {
     focus_handle: FocusHandle,
     view_mode: ViewMode,

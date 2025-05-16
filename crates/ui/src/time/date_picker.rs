@@ -56,6 +56,7 @@ impl DateRangePreset {
     }
 }
 
+/// Use to store the state of the date picker.
 pub struct DatePickerState {
     focus_handle: FocusHandle,
     date: Date,

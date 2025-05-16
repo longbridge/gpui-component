@@ -32,9 +32,10 @@ pub struct NumberInput {
 }
 
 impl NumberInput {
-    pub fn new(state: Entity<InputState>) -> Self {
+    /// Create a new [`NumberInput`] element bind to the [`InputState`].
+    pub fn new(state: &Entity<InputState>) -> Self {
         Self {
-            state,
+            state: state.clone(),
             size: Size::default(),
             placeholder: SharedString::default(),
         }

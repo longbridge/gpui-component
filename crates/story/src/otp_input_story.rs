@@ -153,28 +153,16 @@ impl Render for OtpInputStory {
             .child(
                 section("Normal")
                     .v_flex()
-                    .child(OtpInput::new(self.otp_state.clone()))
+                    .child(OtpInput::new(&self.otp_state))
                     .when_some(self.otp_value.clone(), |this, otp| {
                         this.child(format!("Your OTP: {}", otp))
                     }),
             )
-            .child(
-                section("Small").child(
-                    OtpInput::new(self.otp_state_small.clone())
-                        .groups(1)
-                        .small(),
-                ),
-            )
-            .child(
-                section("Large").child(
-                    OtpInput::new(self.otp_state_large.clone())
-                        .groups(3)
-                        .large(),
-                ),
-            )
+            .child(section("Small").child(OtpInput::new(&self.otp_state_small).groups(1).small()))
+            .child(section("Large").child(OtpInput::new(&self.otp_state_large).groups(3).large()))
             .child(
                 section("With Size").child(
-                    OtpInput::new(self.otp_state_sized.clone())
+                    OtpInput::new(&self.otp_state_sized)
                         .groups(1)
                         .with_size(px(55.)),
                 ),

@@ -55,6 +55,7 @@ fn color_palettes() -> Vec<Vec<Hsla>> {
     ]
 }
 
+/// State of the [`ColorPicker`].
 pub struct ColorPickerState {
     focus_handle: FocusHandle,
     value: Option<Hsla>,

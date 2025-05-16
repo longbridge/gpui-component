@@ -200,17 +200,17 @@ impl Render for NumberInputStory {
             .child(
                 section("Normal Size")
                     .max_w_md()
-                    .child(NumberInput::new(self.number_input1.clone())),
+                    .child(NumberInput::new(&self.number_input1)),
             )
             .child(
                 section("Small Size")
                     .max_w_md()
-                    .child(NumberInput::new(self.number_input2.clone()).small()),
+                    .child(NumberInput::new(&self.number_input2).small()),
             )
             .child(
                 section("With mask pattern")
                     .max_w_md()
-                    .child(NumberInput::new(self.number_input3.clone())),
+                    .child(NumberInput::new(&self.number_input3)),
             )
     }
 }

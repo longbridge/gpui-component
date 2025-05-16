@@ -37,6 +37,7 @@ impl Sizable for TextInput {
 }
 
 impl TextInput {
+    /// Create a new [`TextInput`] element bind to the [`InputState`].
     pub fn new(state: &Entity<InputState>) -> Self {
         Self {
             state: state.clone(),

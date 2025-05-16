@@ -237,6 +237,7 @@ pub enum DropdownEvent<D: DropdownDelegate + 'static> {
     Confirm(Option<<D::Item as DropdownItem>::Value>),
 }
 
+/// State of the [`Dropdown`].
 pub struct DropdownState<D: DropdownDelegate + 'static> {
     focus_handle: FocusHandle,
     list: Entity<List<DropdownListDelegate<D>>>,
