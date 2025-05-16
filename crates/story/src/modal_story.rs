@@ -110,7 +110,7 @@ impl ModalStory {
                         .child("This is a modal dialog.")
                         .child("You can put anything here.")
                         .child(TextInput::new(input1.clone()))
-                        .child(Dropdown::new("dropdown1", dropdown.clone()))
+                        .child(Dropdown::new(dropdown.clone()))
                         .child(
                             DatePicker::new("birthday-picker", date.clone())
                                 .placeholder("Date of Birth"),

@@ -216,26 +216,28 @@ impl Render for DropdownStory {
             )
             .child(
                 section("Dropdown").max_w_128().child(
-                    Dropdown::new("country", self.country_dropdown.clone())
+                    Dropdown::new(self.country_dropdown.clone())
                         .cleanable()
                         .disabled(self.disabled),
                 ),
             )
             .child(
                 section("Searchable").max_w_128().child(
-                    Dropdown::new("fruits", self.fruit_dropdown.clone())
+                    Dropdown::new(self.fruit_dropdown.clone())
                         .disabled(self.disabled)
                         .icon(IconName::Search)
                         .width(px(320.))
                         .menu_width(px(400.)),
                 ),
             )
-            .child(section("Disabled").max_w_128().child(
-                Dropdown::new("disabled-dropdown", self.disabled_dropdown.clone()).disabled(true),
-            ))
+            .child(
+                section("Disabled")
+                    .max_w_128()
+                    .child(Dropdown::new(self.disabled_dropdown.clone()).disabled(true)),
+            )
             .child(
                 section("With preview label").max_w_128().child(
-                    Dropdown::new("simple-dropdown1", self.simple_dropdown1.clone())
+                    Dropdown::new(self.simple_dropdown1.clone())
                         .disabled(self.disabled)
                         .small()
                         .placeholder("UI")
@@ -244,7 +246,7 @@ impl Render for DropdownStory {
             )
             .child(
                 section("Searchable Dropdown").max_w_128().child(
-                    Dropdown::new("simple-dropdown2", self.simple_dropdown2.clone())
+                    Dropdown::new(self.simple_dropdown2.clone())
                         .disabled(self.disabled)
                         .small()
                         .placeholder("Language")
@@ -253,7 +255,7 @@ impl Render for DropdownStory {
             )
             .child(
                 section("Empty Items").max_w_128().child(
-                    Dropdown::new("simple-dropdown3", self.simple_dropdown3.clone())
+                    Dropdown::new(self.simple_dropdown3.clone())
                         .disabled(self.disabled)
                         .small()
                         .empty(
