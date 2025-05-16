@@ -5,19 +5,19 @@ use gpui::{
 };
 use gpui_component::{
     calendar,
-    date_picker::{DatePicker, DatePickerEvent, DateRangePreset, DateState},
+    date_picker::{DatePicker, DatePickerEvent, DatePickerState, DateRangePreset},
     v_flex, Sizable as _,
 };
 
 use crate::section;
 
 pub struct DatePickerStory {
-    date_picker: Entity<DateState>,
-    date_picker_small: Entity<DateState>,
-    date_picker_large: Entity<DateState>,
+    date_picker: Entity<DatePickerState>,
+    date_picker_small: Entity<DatePickerState>,
+    date_picker_large: Entity<DatePickerState>,
     date_picker_value: Option<String>,
-    date_range_picker: Entity<DateState>,
-    default_range_mode_picker: Entity<DateState>,
+    date_range_picker: Entity<DatePickerState>,
+    default_range_mode_picker: Entity<DatePickerState>,
 
     _subscriptions: Vec<Subscription>,
 }
@@ -44,13 +44,13 @@ impl DatePickerStory {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let now = chrono::Local::now().naive_local().date();
         let date_picker = cx.new(|cx| {
-            let mut picker = DateState::new(window, cx);
+            let mut picker = DatePickerState::new(window, cx);
             picker.set_date(now, window, cx);
             picker.set_disabled(vec![0, 6], window, cx);
             picker
         });
         let date_picker_large = cx.new(|cx| {
-            let mut picker = DateState::new(window, cx).date_format("%Y-%m-%d");
+            let mut picker = DatePickerState::new(window, cx).date_format("%Y-%m-%d");
             picker.set_disabled(
                 calendar::Matcher::range(Some(now), now.checked_add_days(Days::new(7))),
                 window,
@@ -64,7 +64,7 @@ impl DatePickerStory {
             picker
         });
         let date_picker_small = cx.new(|cx| {
-            let mut picker = DateState::new(window, cx);
+            let mut picker = DatePickerState::new(window, cx);
             picker.set_disabled(
                 calendar::Matcher::interval(Some(now), now.checked_add_days(Days::new(5))),
                 window,
@@ -74,7 +74,7 @@ impl DatePickerStory {
             picker
         });
         let date_range_picker = cx.new(|cx| {
-            let mut picker = DateState::new(window, cx);
+            let mut picker = DatePickerState::new(window, cx);
             picker.set_date(
                 (now, now.checked_add_days(Days::new(4)).unwrap()),
                 window,
@@ -83,7 +83,7 @@ impl DatePickerStory {
             picker
         });
 
-        let default_range_mode_picker = cx.new(|cx| DateState::range(window, cx));
+        let default_range_mode_picker = cx.new(|cx| DatePickerState::range(window, cx));
 
         let _subscriptions = vec![
             cx.subscribe(&date_picker, |this, _, ev, _| match ev {

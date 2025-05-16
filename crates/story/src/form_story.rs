@@ -5,8 +5,8 @@ use gpui::{
 use gpui_component::{
     button::{Button, ButtonGroup},
     checkbox::Checkbox,
-    color_picker::{ColorPicker, ColorState},
-    date_picker::{DatePicker, DateState},
+    color_picker::{ColorPicker, ColorPickerState},
+    date_picker::{DatePicker, DatePickerState},
     divider::Divider,
     form::{form_field, v_form},
     h_flex,
@@ -21,9 +21,9 @@ pub struct FormStory {
     name_input: Entity<InputState>,
     email_input: Entity<InputState>,
     bio_input: Entity<InputState>,
-    color_state: Entity<ColorState>,
+    color_state: Entity<ColorPickerState>,
     subscribe_email: bool,
-    date: Entity<DateState>,
+    date: Entity<DatePickerState>,
     layout: Axis,
     size: Size,
 }
@@ -53,7 +53,7 @@ impl FormStory {
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let name_input = cx.new(|cx| InputState::new(window, cx).default_value("Jason Lee"));
-        let color_state = cx.new(|cx| ColorState::new(window, cx));
+        let color_state = cx.new(|cx| ColorPickerState::new(window, cx));
 
         let email_input =
             cx.new(|cx| InputState::new(window, cx).placeholder("Enter text here..."));
@@ -65,7 +65,7 @@ impl FormStory {
                 .placeholder("Enter text here...")
                 .default_value("Hello 世界，this is GPUI component.")
         });
-        let date = cx.new(|cx| DateState::new(window, cx));
+        let date = cx.new(|cx| DatePickerState::new(window, cx));
 
         Self {
             name_input,

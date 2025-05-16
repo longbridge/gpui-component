@@ -11,7 +11,7 @@ use raw_window_handle::HasWindowHandle;
 use gpui_component::{
     button::{Button, ButtonVariant, ButtonVariants as _},
     checkbox::Checkbox,
-    date_picker::{DatePicker, DateState},
+    date_picker::{DatePicker, DatePickerState},
     h_flex,
     input::{InputState, TextInput},
     list::{List, ListDelegate, ListItem},
@@ -161,7 +161,7 @@ pub struct DrawerStory {
     list: Entity<List<ListItemDeletegate>>,
     input1: Entity<InputState>,
     input2: Entity<InputState>,
-    date: Entity<DateState>,
+    date: Entity<DatePickerState>,
     modal_overlay: bool,
     model_show_close: bool,
     model_padding: bool,
@@ -267,7 +267,7 @@ impl DrawerStory {
         let input2 = cx.new(|cx| {
             InputState::new(window, cx).placeholder("For test focus back on modal close.")
         });
-        let date = cx.new(|cx| DateState::new(window, cx));
+        let date = cx.new(|cx| DatePickerState::new(window, cx));
 
         Self {
             focus_handle: cx.focus_handle(),

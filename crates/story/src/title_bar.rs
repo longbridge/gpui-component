@@ -8,7 +8,7 @@ use gpui::{
 use gpui_component::{
     badge::Badge,
     button::{Button, ButtonVariants as _},
-    color_picker::{ColorPicker, ColorPickerEvent, ColorState},
+    color_picker::{ColorPicker, ColorPickerEvent, ColorPickerState},
     locale,
     popup_menu::PopupMenuExt as _,
     scroll::ScrollbarShow,
@@ -22,7 +22,7 @@ pub struct AppTitleBar {
     title: SharedString,
     locale_selector: Entity<LocaleSelector>,
     font_size_selector: Entity<FontSizeSelector>,
-    theme_color: Entity<ColorState>,
+    theme_color: Entity<ColorPickerState>,
     child: Rc<dyn Fn(&mut Window, &mut App) -> AnyElement>,
     _subscriptions: Vec<Subscription>,
 }
@@ -43,7 +43,7 @@ impl AppTitleBar {
         }
 
         let theme_color =
-            cx.new(|cx| ColorState::new(window, cx).default_value(cx.theme().primary));
+            cx.new(|cx| ColorPickerState::new(window, cx).default_value(cx.theme().primary));
 
         let _subscriptions = vec![cx.subscribe_in(
             &theme_color,

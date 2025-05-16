@@ -56,7 +56,7 @@ impl DateRangePreset {
     }
 }
 
-pub struct DateState {
+pub struct DatePickerState {
     focus_handle: FocusHandle,
     date: Date,
     open: bool,
@@ -66,14 +66,14 @@ pub struct DateState {
     _subscriptions: Vec<Subscription>,
 }
 
-impl Focusable for DateState {
+impl Focusable for DatePickerState {
     fn focus_handle(&self, _: &App) -> FocusHandle {
         self.focus_handle.clone()
     }
 }
-impl EventEmitter<DatePickerEvent> for DateState {}
+impl EventEmitter<DatePickerEvent> for DatePickerState {}
 
-impl DateState {
+impl DatePickerState {
     /// Create a date state.
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         Self::new_with_range(false, window, cx)
@@ -230,7 +230,7 @@ impl DateState {
 #[derive(IntoElement)]
 pub struct DatePicker {
     id: ElementId,
-    state: Entity<DateState>,
+    state: Entity<DatePickerState>,
     cleanable: bool,
     placeholder: Option<SharedString>,
     size: Size,
@@ -251,14 +251,14 @@ impl Focusable for DatePicker {
     }
 }
 
-impl Render for DateState {
+impl Render for DatePickerState {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl gpui::IntoElement {
         Empty
     }
 }
 
 impl DatePicker {
-    pub fn new(state: &Entity<DateState>) -> Self {
+    pub fn new(state: &Entity<DatePickerState>) -> Self {
         Self {
             id: ("date-picker", state.entity_id()).into(),
             state: state.clone(),
@@ -322,7 +322,7 @@ impl RenderOnce for DatePicker {
             .key_context("DatePicker")
             .track_focus(&self.focus_handle(cx))
             .when(state.open, |this| {
-                this.on_action(window.listener_for(&self.state, DateState::escape))
+                this.on_action(window.listener_for(&self.state, DatePickerState::escape))
             })
             .w_full()
             .relative()
@@ -348,7 +348,9 @@ impl RenderOnce for DatePicker {
                     .when(is_focused, |this| this.focused_border(cx))
                     .input_size(self.size)
                     .when(!state.open, |this| {
-                        this.on_click(window.listener_for(&self.state, DateState::toggle_calendar))
+                        this.on_click(
+                            window.listener_for(&self.state, DatePickerState::toggle_calendar),
+                        )
                     })
                     .child(
                         h_flex()
@@ -358,11 +360,9 @@ impl RenderOnce for DatePicker {
                             .gap_1()
                             .child(div().w_full().overflow_hidden().child(display_title))
                             .when(show_clean, |this| {
-                                this.child(
-                                    clear_button(cx).on_click(
-                                        window.listener_for(&self.state, DateState::clean),
-                                    ),
-                                )
+                                this.child(clear_button(cx).on_click(
+                                    window.listener_for(&self.state, DatePickerState::clean),
+                                ))
                             })
                             .when(!show_clean, |this| {
                                 this.child(

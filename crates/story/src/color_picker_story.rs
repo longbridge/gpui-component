@@ -4,14 +4,14 @@ use gpui::{
 };
 use gpui_component::{
     blue_500,
-    color_picker::{ColorPicker, ColorPickerEvent, ColorState},
+    color_picker::{ColorPicker, ColorPickerEvent, ColorPickerState},
     green_500, red_500, v_flex, yellow_500, Colorize,
 };
 
 use crate::section;
 
 pub struct ColorPickerStory {
-    color: Entity<ColorState>,
+    color: Entity<ColorPickerState>,
     selected_color: Option<Hsla>,
 
     _subscriptions: Vec<Subscription>,
@@ -37,7 +37,7 @@ impl ColorPickerStory {
     }
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let color = cx.new(|cx| ColorState::new(window, cx).default_value(red_500()));
+        let color = cx.new(|cx| ColorPickerState::new(window, cx).default_value(red_500()));
 
         let _subscriptions = vec![cx.subscribe(&color, |this, _, ev, _| match ev {
             ColorPickerEvent::Change(color) => {

@@ -7,7 +7,7 @@ use gpui::{
 use gpui_component::{
     button::{Button, ButtonVariant, ButtonVariants as _},
     checkbox::Checkbox,
-    date_picker::{DatePicker, DateState},
+    date_picker::{DatePicker, DatePickerState},
     dropdown::{Dropdown, DropdownState},
     h_flex,
     input::{InputState, TextInput},
@@ -23,7 +23,7 @@ pub struct ModalStory {
     selected_value: Option<SharedString>,
     input1: Entity<InputState>,
     input2: Entity<InputState>,
-    date: Entity<DateState>,
+    date: Entity<DatePickerState>,
     dropdown: Entity<DropdownState<Vec<String>>>,
     modal_overlay: bool,
     model_show_close: bool,
@@ -56,7 +56,7 @@ impl ModalStory {
         let input2 = cx.new(|cx| {
             InputState::new(window, cx).placeholder("For test focus back on modal close.")
         });
-        let date = cx.new(|cx| DateState::new(window, cx));
+        let date = cx.new(|cx| DatePickerState::new(window, cx));
         let dropdown = cx.new(|cx| {
             DropdownState::new(
                 vec![

@@ -55,7 +55,7 @@ fn color_palettes() -> Vec<Vec<Hsla>> {
     ]
 }
 
-pub struct ColorState {
+pub struct ColorPickerState {
     focus_handle: FocusHandle,
     value: Option<Hsla>,
     hovered_color: Option<Hsla>,
@@ -65,7 +65,7 @@ pub struct ColorState {
     _subscriptions: Vec<Subscription>,
 }
 
-impl ColorState {
+impl ColorPickerState {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let state = cx.new(|cx| InputState::new(window, cx));
 
@@ -153,13 +153,13 @@ impl ColorState {
         cx.notify();
     }
 }
-impl EventEmitter<ColorPickerEvent> for ColorState {}
-impl Render for ColorState {
+impl EventEmitter<ColorPickerEvent> for ColorPickerState {}
+impl Render for ColorPickerState {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         self.state.clone()
     }
 }
-impl Focusable for ColorState {
+impl Focusable for ColorPickerState {
     fn focus_handle(&self, _: &App) -> FocusHandle {
         self.focus_handle.clone()
     }
@@ -168,7 +168,7 @@ impl Focusable for ColorState {
 #[derive(IntoElement)]
 pub struct ColorPicker {
     id: ElementId,
-    state: Entity<ColorState>,
+    state: Entity<ColorPickerState>,
     featured_colors: Vec<Hsla>,
     label: Option<SharedString>,
     icon: Option<Icon>,
@@ -177,7 +177,7 @@ pub struct ColorPicker {
 }
 
 impl ColorPicker {
-    pub fn new(state: &Entity<ColorState>) -> Self {
+    pub fn new(state: &Entity<ColorPickerState>) -> Self {
         Self {
             id: ("color-picker", state.entity_id()).into(),
             state: state.clone(),
@@ -360,7 +360,7 @@ impl RenderOnce for ColorPicker {
             .id(self.id.clone())
             .key_context(CONTEXT)
             .track_focus(&state.focus_handle)
-            .on_action(window.listener_for(&self.state, ColorState::on_escape))
+            .on_action(window.listener_for(&self.state, ColorPickerState::on_escape))
             .child(
                 h_flex()
                     .id("color-picker-input")
@@ -401,7 +401,7 @@ impl RenderOnce for ColorPicker {
                         )
                     })
                     .when_some(self.label.clone(), |this, label| this.child(label))
-                    .on_click(window.listener_for(&self.state, ColorState::toggle_picker))
+                    .on_click(window.listener_for(&self.state, ColorPickerState::toggle_picker))
                     .child(
                         canvas(
                             {
