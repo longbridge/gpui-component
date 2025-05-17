@@ -14,7 +14,7 @@ use crate::{
     h_flex,
     popup_menu::{PopupMenu, PopupMenuExt},
     tab::{Tab, TabBar},
-    v_flex, ActiveTheme, AxisExt, IconName, Placement, Selectable, Sizable, StyledExt,
+    v_flex, ActiveTheme, AxisExt, IconName, Placement, Selectable, Sizable,
 };
 
 use super::{
