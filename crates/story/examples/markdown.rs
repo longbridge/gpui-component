@@ -1,16 +1,21 @@
-use std::rc::Rc;
+use std::{rc::Rc, sync::LazyLock};
 
 use gpui::*;
 use gpui_component::{
-    highlighter::HighlightTheme,
-    input::{InputState, TextInput},
+    highlighter::{HighlightTheme, Highlighter},
+    input::{InputEvent, InputState, TextInput},
     text::{TextView, TextViewStyle},
     ActiveTheme as _,
 };
 use story::Assets;
 
+static LIGHT_THEME: LazyLock<HighlightTheme> = LazyLock::new(|| HighlightTheme::default_light());
+static DARK_THEME: LazyLock<HighlightTheme> = LazyLock::new(|| HighlightTheme::default_dark());
+const LANG: &str = "markdown";
+
 pub struct Example {
     input_state: Entity<InputState>,
+    is_dark: bool,
 }
 
 const EXAMPLE: &str = include_str!("./markdown.md");
@@ -22,16 +27,17 @@ impl Example {
                 .multi_line()
                 .placeholder("Enter your Markdown here...")
                 .default_value(EXAMPLE)
+                .highlighter(Highlighter::new(Some(LANG), &LIGHT_THEME))
         });
 
-        let _subscribe = cx.subscribe(
-            &input_state,
-            |_, _, _: &gpui_component::input::InputEvent, cx| {
-                cx.notify();
-            },
-        );
+        let _subscribe = cx.subscribe(&input_state, |_, _, _: &InputEvent, cx| {
+            cx.notify();
+        });
 
-        Self { input_state }
+        Self {
+            input_state,
+            is_dark: false,
+        }
     }
 
     fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
@@ -40,12 +46,24 @@ impl Example {
 }
 
 impl Render for Example {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = if cx.theme().mode.is_dark() {
             HighlightTheme::default_dark()
         } else {
             HighlightTheme::default_light()
         };
+
+        let is_dark = cx.theme().mode.is_dark();
+        if self.is_dark != is_dark {
+            self.is_dark = is_dark;
+            self.input_state.update(cx, |state, cx| {
+                if is_dark {
+                    state.set_highlighter(Highlighter::new(Some(LANG), &DARK_THEME), window, cx);
+                } else {
+                    state.set_highlighter(Highlighter::new(Some(LANG), &LIGHT_THEME), window, cx);
+                }
+            });
+        }
 
         div()
             .flex()

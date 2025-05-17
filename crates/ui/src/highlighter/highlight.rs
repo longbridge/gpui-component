@@ -6,7 +6,7 @@ use std::{
 use syntect::{highlighting, parsing};
 
 static SYNTAXES: LazyLock<parsing::SyntaxSet> =
-    LazyLock::new(parsing::SyntaxSet::load_defaults_nonewlines);
+    LazyLock::new(parsing::SyntaxSet::load_defaults_newlines);
 
 static DEFAULT_LIGHT: LazyLock<Arc<highlighting::Theme>> = LazyLock::new(|| {
     let mut cursor = std::io::Cursor::new(include_bytes!("./themes/light.tmTheme"));
