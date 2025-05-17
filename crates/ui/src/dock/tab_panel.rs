@@ -14,7 +14,7 @@ use crate::{
     h_flex,
     popup_menu::{PopupMenu, PopupMenuExt},
     tab::{Tab, TabBar},
-    v_flex, ActiveTheme, AxisExt, IconName, Placement, Selectable, Sizable,
+    v_flex, ActiveTheme, AxisExt, IconName, Placement, Selectable, Sizable, StyledExt,
 };
 
 use super::{
@@ -444,7 +444,7 @@ impl TabPanel {
                             .icon(icon)
                             .xsmall()
                             .ghost()
-                            .tooltip(tooltip)
+                            .tooltip_with_action(tooltip, &ToggleZoom, None)
                             .when(zoomed, |this| this.selected(true))
                             .on_click(cx.listener(|view, _, window, cx| {
                                 view.on_action_toggle_zoom(&ToggleZoom, window, cx)
@@ -799,6 +799,7 @@ impl TabPanel {
         let is_render_in_tabs = self.panels.len() > 1 && self.inner_padding(cx);
 
         v_flex()
+            .id("active-panel")
             .group("")
             .flex_1()
             .when(is_render_in_tabs, |this| this.pt_2())

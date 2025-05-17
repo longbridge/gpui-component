@@ -2,7 +2,7 @@ use anyhow::{Context as _, Result};
 use gpui::*;
 use gpui_component::{
     button::{Button, ButtonVariants as _},
-    dock::{DockArea, DockAreaState, DockEvent, DockItem, DockPlacement},
+    dock::{DockArea, DockAreaState, DockEvent, DockItem, DockPlacement, ToggleZoom},
     popup_menu::PopupMenuExt,
     IconName, Root, Sizable, Theme,
 };
@@ -40,6 +40,8 @@ pub fn init(cx: &mut App) {
 
     gpui_component::init(cx);
     story::init(cx);
+
+    cx.bind_keys(vec![KeyBinding::new("shift-escape", ToggleZoom, None)]);
 
     cx.activate(true);
 }
