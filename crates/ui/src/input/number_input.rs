@@ -1,6 +1,6 @@
 use gpui::{
-    actions, prelude::FluentBuilder as _, px, App, Context, Entity, EventEmitter, FocusHandle,
-    Focusable, InteractiveElement, IntoElement, KeyBinding, ParentElement, RenderOnce,
+    actions, prelude::FluentBuilder as _, px, App, Context, ElementId, Entity, EventEmitter,
+    FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding, ParentElement, RenderOnce,
     SharedString, Styled, Window,
 };
 
@@ -26,6 +26,7 @@ pub fn init(cx: &mut App) {
 
 #[derive(IntoElement)]
 pub struct NumberInput {
+    id: ElementId,
     state: Entity<InputState>,
     placeholder: SharedString,
     size: Size,
@@ -35,6 +36,7 @@ impl NumberInput {
     /// Create a new [`NumberInput`] element bind to the [`InputState`].
     pub fn new(state: &Entity<InputState>) -> Self {
         Self {
+            id: ("number-input", state.entity_id()).into(),
             state: state.clone(),
             size: Size::default(),
             placeholder: SharedString::default(),
@@ -115,6 +117,7 @@ impl RenderOnce for NumberInput {
         };
 
         h_flex()
+            .id(self.id)
             .key_context(KEY_CONTENT)
             .on_action(window.listener_for(&self.state, InputState::on_action_increment))
             .on_action(window.listener_for(&self.state, InputState::on_action_decrement))
@@ -142,7 +145,7 @@ impl RenderOnce for NumberInput {
                         }
                     }),
             )
-            .child(TextInput::new(&self.state).no_gap())
+            .child(TextInput::new(&self.state).appearance(false).no_gap())
             .child(
                 Button::new("plus")
                     .ghost()
