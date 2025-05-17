@@ -13,9 +13,9 @@ use unicode_segmentation::*;
 use gpui::{
     actions, div, impl_internal_actions, point, prelude::FluentBuilder as _, px, App, AppContext,
     Bounds, ClipboardItem, Context, DefiniteLength, Entity, EntityInputHandler, EventEmitter,
-    FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent,
-    MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point,
-    Render, ScrollHandle, ScrollWheelEvent, SharedString, Styled as _, Subscription,
+    FocusHandle, Focusable, HighlightStyle, InteractiveElement as _, IntoElement, KeyBinding,
+    KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _,
+    Pixels, Point, Render, ScrollHandle, ScrollWheelEvent, SharedString, Styled as _, Subscription,
     UTF16Selection, Window, WrappedLine,
 };
 
@@ -26,7 +26,7 @@ use super::{
     blink_cursor::BlinkCursor, change::Change, element::TextElement, mask_pattern::MaskPattern,
     number_input, text_wrapper::TextWrapper,
 };
-use crate::{history::History, scroll::ScrollbarState, Root};
+use crate::{highlighter::Highlighter, history::History, scroll::ScrollbarState, Root};
 
 #[derive(Clone, PartialEq, Eq, Deserialize)]
 pub struct Enter {
@@ -322,6 +322,10 @@ pub struct InputState {
     pub(crate) mask_pattern: MaskPattern,
     pub(super) placeholder: SharedString,
 
+    /// Code highlight
+    pub(crate) highlighter: Option<Highlighter<'static>>,
+    pub(super) cache_highlights: (u64, Vec<(Range<usize>, HighlightStyle)>),
+
     /// To remember the horizontal column (x-coordinate) of the cursor position.
     preferred_x_offset: Option<Pixels>,
     _subscriptions: Vec<Subscription>,
@@ -392,6 +396,8 @@ impl InputState {
             preferred_x_offset: None,
             placeholder: SharedString::default(),
             mask_pattern: MaskPattern::default(),
+            highlighter: None,
+            cache_highlights: (0, vec![]),
             _subscriptions,
         }
     }
@@ -421,6 +427,25 @@ impl InputState {
     pub fn placeholder(mut self, placeholder: impl Into<SharedString>) -> Self {
         self.placeholder = placeholder.into();
         self
+    }
+
+    /// Set highlighter
+    pub fn highlighter(mut self, highlighter: Highlighter<'static>) -> Self {
+        self.highlighter = Some(highlighter);
+        self.cache_highlights = (0, vec![]);
+        self
+    }
+
+    /// Set highlighter
+    pub fn set_highlighter(
+        &mut self,
+        highlighter: Highlighter<'static>,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.highlighter = Some(highlighter);
+        self.cache_highlights = (0, vec![]);
+        cx.notify();
     }
 
     /// Set placeholder

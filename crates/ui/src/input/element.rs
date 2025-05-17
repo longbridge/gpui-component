@@ -1,7 +1,10 @@
+use std::ops::Range;
+
 use gpui::{
-    fill, point, px, relative, size, App, Bounds, Corners, Element, ElementId, ElementInputHandler,
-    Entity, GlobalElementId, IntoElement, LayoutId, MouseButton, MouseMoveEvent, PaintQuad, Path,
-    Pixels, Point, SharedString, Style, TextAlign, TextRun, UnderlineStyle, Window, WrappedLine,
+    fill, hash, point, px, relative, size, App, Bounds, Corners, Element, ElementId,
+    ElementInputHandler, Entity, GlobalElementId, HighlightStyle, IntoElement, LayoutId,
+    MouseButton, MouseMoveEvent, PaintQuad, Path, Pixels, Point, SharedString, Style, TextAlign,
+    TextRun, UnderlineStyle, Window, WrappedLine,
 };
 use smallvec::SmallVec;
 
@@ -302,6 +305,27 @@ impl TextElement {
 
         builder.build().ok()
     }
+
+    fn highlight_text(&self, cx: &mut App) -> Option<Vec<(Range<usize>, HighlightStyle)>> {
+        let input = self.input.read(cx);
+        let text = input.text.clone();
+
+        let cache_key = hash(&text);
+        if input.cache_highlights.0 == cache_key {
+            return Some(input.cache_highlights.1.clone());
+        }
+
+        if let Some(highlighter) = input.highlighter.as_ref() {
+            let styles = highlighter.highlight(&text);
+            self.input.update(cx, |input, _cx| {
+                input.cache_highlights = (cache_key, styles.clone());
+            });
+
+            Some(styles)
+        } else {
+            None
+        }
+    }
 }
 
 pub(super) struct PrepaintState {
@@ -392,6 +416,7 @@ impl Element for TextElement {
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
+        let highlights = self.highlight_text(cx);
         let multi_line = self.input.read(cx).is_multi_line();
         let line_height = window.line_height();
         let input = self.input.read(cx);
@@ -410,6 +435,8 @@ impl Element for TextElement {
         } else {
             (text, cx.theme().foreground)
         };
+
+        let text_style = window.text_style();
 
         let run = TextRun {
             len: display_text.len(),
@@ -444,7 +471,21 @@ impl Element for TextElement {
             .filter(|run| run.len > 0)
             .collect()
         } else {
-            vec![run]
+            if let Some(highlights) = highlights {
+                let mut runs = vec![];
+                for (range, style) in highlights {
+                    let run = text_style
+                        .clone()
+                        .highlight(style)
+                        .to_run(range.end - range.start);
+                    if run.len > 0 {
+                        runs.push(run);
+                    }
+                }
+                runs
+            } else {
+                vec![run]
+            }
         };
 
         let font_size = style.font_size.to_pixels(window.rem_size());
