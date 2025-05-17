@@ -99,7 +99,19 @@ impl StackPanel {
         self.panels.iter().position(|p| p == &panel)
     }
 
+    fn assert_panel_is_valid(&self, panel: &Arc<dyn PanelView>) {
+        assert!(
+            panel.view().downcast::<TabPanel>().is_ok()
+                || panel.view().downcast::<StackPanel>().is_ok(),
+            "Panel must be a `TabPanel` or `StackPanel`"
+        );
+    }
+
     /// Add a panel at the end of the stack.
+    ///
+    /// If `size` is `None`, the panel will be given the average size of all panels in the stack.
+    ///
+    /// The `panel` must be a [`TabPanel`] or [`StackPanel`].
     pub fn add_panel(
         &mut self,
         panel: Arc<dyn PanelView>,
@@ -111,6 +123,9 @@ impl StackPanel {
         self.insert_panel(panel, self.panels.len(), size, dock_area, window, cx);
     }
 
+    /// Add a panel at the [`Placement`].
+    ///
+    /// The `panel` must be a [`TabPanel`] or [`StackPanel`].
     pub fn add_panel_at(
         &mut self,
         panel: Arc<dyn PanelView>,
@@ -131,6 +146,9 @@ impl StackPanel {
         );
     }
 
+    /// Insert a panel at the index.
+    ///
+    /// The `panel` must be a [`TabPanel`] or [`StackPanel`].
     #[allow(clippy::too_many_arguments)]
     pub fn insert_panel_at(
         &mut self,
@@ -153,6 +171,8 @@ impl StackPanel {
     }
 
     /// Insert a panel at the index.
+    ///
+    /// The `panel` must be a [`TabPanel`] or [`StackPanel`].
     pub fn insert_panel_before(
         &mut self,
         panel: Arc<dyn PanelView>,
@@ -166,6 +186,8 @@ impl StackPanel {
     }
 
     /// Insert a panel after the index.
+    ///
+    /// The `panel` must be a [`TabPanel`] or [`StackPanel`].
     pub fn insert_panel_after(
         &mut self,
         panel: Arc<dyn PanelView>,
@@ -187,6 +209,8 @@ impl StackPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.assert_panel_is_valid(&panel);
+
         // If the panel is already in the stack, return.
         if let Some(_) = self.index_of_panel(panel.clone()) {
             return;
@@ -241,23 +265,25 @@ impl StackPanel {
     }
 
     /// Remove panel from the stack.
+    ///
+    /// If `ix` is not found, do nothing.
     pub fn remove_panel(
         &mut self,
         panel: Arc<dyn PanelView>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if let Some(ix) = self.index_of_panel(panel.clone()) {
-            self.panels.remove(ix);
-            self.state.update(cx, |state, cx| {
-                state.remove_panel(ix, cx);
-            });
+        let Some(ix) = self.index_of_panel(panel.clone()) else {
+            return;
+        };
 
-            cx.emit(PanelEvent::LayoutChanged);
-            self.remove_self_if_empty(window, cx);
-        } else {
-            println!("Panel not found in stack panel.");
-        }
+        self.panels.remove(ix);
+        self.state.update(cx, |state, cx| {
+            state.remove_panel(ix, cx);
+        });
+
+        cx.emit(PanelEvent::LayoutChanged);
+        self.remove_self_if_empty(window, cx);
     }
 
     /// Replace the old panel with the new panel at same index.
