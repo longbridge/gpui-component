@@ -10,7 +10,7 @@ use crate::{ActiveTheme as _, Root};
 use super::InputState;
 
 const RIGHT_MARGIN: Pixels = px(5.);
-const BOTTOM_MARGIN: Pixels = px(20.);
+const BOTTOM_MARGIN_ROWS: usize = 1;
 
 pub(super) struct TextElement {
     input: Entity<InputState>,
@@ -63,7 +63,7 @@ impl TextElement {
         let bottom_margin = if input.auto_grow {
             px(0.)
         } else {
-            BOTTOM_MARGIN
+            BOTTOM_MARGIN_ROWS * line_height + line_height
         };
         // The cursor corresponds to the current cursor position in the text no only the line.
         let mut cursor_pos = None;
@@ -124,7 +124,7 @@ impl TextElement {
                     > bounds.size.height - bottom_margin
                 {
                     // cursor is out of bottom
-                    bounds.size.height - cursor_pos.y - line_height - bottom_margin
+                    bounds.size.height - bottom_margin - cursor_pos.y
                 } else if scroll_offset.y + cursor_pos.y < px(0.) {
                     // cursor is out of top
                     scroll_offset.y - cursor_pos.y
