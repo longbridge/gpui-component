@@ -225,6 +225,7 @@ pub struct InputState {
     pub(super) rows: usize,
     pub(super) min_rows: usize,
     pub(super) max_rows: Option<usize>,
+    pub(super) auto_grow: bool,
     pub(super) pattern: Option<regex::Regex>,
     pub(super) validate: Option<Box<dyn Fn(&str) -> bool + 'static>>,
     pub(crate) scroll_handle: ScrollHandle,
@@ -288,6 +289,7 @@ impl InputState {
             rows: 2,
             min_rows: 2,
             max_rows: None,
+            auto_grow: false,
             height: None,
             last_layout: None,
             last_bounds: None,
@@ -484,6 +486,12 @@ impl InputState {
     /// default: None
     pub fn max_rows(mut self, max_rows: usize) -> Self {
         self.max_rows = Some(max_rows);
+        self
+    }
+
+    /// Set the auto-grow mode for the multi-line Textarea.
+    pub fn auto_grow(mut self) -> Self {
+        self.auto_grow = true;
         self
     }
 

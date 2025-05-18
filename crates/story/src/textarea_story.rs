@@ -1,5 +1,5 @@
 use gpui::{
-    actions, App, AppContext as _, ClickEvent, Context, Entity, FocusHandle, Focusable,
+    actions, px, App, AppContext as _, ClickEvent, Context, Entity, FocusHandle, Focusable,
     InteractiveElement, IntoElement, KeyBinding, ParentElement as _, Render, Styled, Window,
 };
 
@@ -24,6 +24,7 @@ pub fn init(cx: &mut App) {
 
 pub struct TextareaStory {
     textarea: Entity<InputState>,
+    textarea_auto_grow: Entity<InputState>,
 }
 
 impl super::Story for TextareaStory {
@@ -78,7 +79,20 @@ impl TextareaStory {
             )
         });
 
-        Self { textarea }
+        let textarea_auto_grow = cx.new(|cx| {
+            InputState::new(window, cx)
+                .multi_line()
+                .rows(1)
+                .max_rows(5)
+                .auto_grow()
+                .placeholder("Enter text here...")
+                .default_value("Hello 世界，this is GPUI component.")
+        });
+
+        Self {
+            textarea,
+            textarea_auto_grow,
+        }
     }
 
     fn tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
@@ -138,7 +152,7 @@ impl Render for TextareaStory {
                     v_flex()
                         .gap_2()
                         .w_full()
-                        .child(TextInput::new(&self.textarea))
+                        .child(TextInput::new(&self.textarea).h(px(320.)))
                         .child(
                             h_flex()
                                 .gap_2()
@@ -155,6 +169,13 @@ impl Render for TextareaStory {
                                         .on_click(cx.listener(Self::on_replace_text_to_textarea)),
                                 ),
                         ),
+                ),
+            )
+            .child(
+                section("Textarea Auto Grow").child(
+                    v_flex()
+                        .w_full()
+                        .child(TextInput::new(&self.textarea_auto_grow)),
                 ),
             )
     }

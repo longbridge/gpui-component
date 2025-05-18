@@ -60,10 +60,10 @@ impl TextElement {
         let mut cursor = None;
 
         // If the input has a fixed height (Otherwise is auto-grow), we need to add a bottom margin to the input.
-        let bottom_margin = if input.height.is_some() {
-            BOTTOM_MARGIN
-        } else {
+        let bottom_margin = if input.auto_grow {
             px(0.)
+        } else {
+            BOTTOM_MARGIN
         };
         // The cursor corresponds to the current cursor position in the text no only the line.
         let mut cursor_pos = None;
@@ -111,7 +111,7 @@ impl TextElement {
 
             if cursor_moved || selection_changed {
                 scroll_offset.x =
-                    if scroll_offset.x + cursor_pos.x > (bounds.size.width - bottom_margin) {
+                    if scroll_offset.x + cursor_pos.x > (bounds.size.width - RIGHT_MARGIN) {
                         // cursor is out of right
                         bounds.size.width - RIGHT_MARGIN - cursor_pos.x
                     } else if scroll_offset.x + cursor_pos.x < px(0.) {
@@ -120,16 +120,17 @@ impl TextElement {
                     } else {
                         scroll_offset.x
                     };
-                scroll_offset.y =
-                    if scroll_offset.y + cursor_pos.y > (bounds.size.height - bottom_margin) {
-                        // cursor is out of bottom
-                        bounds.size.height - bottom_margin - cursor_pos.y
-                    } else if scroll_offset.y + cursor_pos.y < px(0.) {
-                        // cursor is out of top
-                        scroll_offset.y - cursor_pos.y
-                    } else {
-                        scroll_offset.y
-                    };
+                scroll_offset.y = if scroll_offset.y + cursor_pos.y + line_height
+                    > bounds.size.height - bottom_margin
+                {
+                    // cursor is out of bottom
+                    bounds.size.height - cursor_pos.y - line_height - bottom_margin
+                } else if scroll_offset.y + cursor_pos.y < px(0.) {
+                    // cursor is out of top
+                    scroll_offset.y - cursor_pos.y
+                } else {
+                    scroll_offset.y
+                };
 
                 if input.selection_reversed {
                     if scroll_offset.x + cursor_start.x < px(0.) {
@@ -361,16 +362,6 @@ impl Element for TextElement {
         let input = self.input.read(cx);
         let line_height = window.line_height();
 
-        // Check to auto grow
-        let rows = if input.is_multi_line() {
-            let max_rows = input.max_rows.unwrap_or(usize::MAX);
-            let rows = (input.scroll_size.height / line_height) as isize;
-            rows.clamp(input.min_rows as isize, max_rows as isize)
-                .max(0) as usize
-        } else {
-            input.rows
-        };
-
         let mut style = Style::default();
         style.size.width = relative(1.).into();
         if self.input.read(cx).is_multi_line() {
@@ -379,6 +370,19 @@ impl Element for TextElement {
                 style.size.height = h.into();
                 style.min_size.height = line_height.into();
             } else {
+                // Check to auto grow
+                let rows = if input.auto_grow {
+                    let rows = (input.scroll_size.height / line_height) as usize;
+                    let max_rows = input
+                        .max_rows
+                        .unwrap_or(usize::MAX)
+                        .min(rows)
+                        .max(input.min_rows);
+                    rows.clamp(input.min_rows, max_rows)
+                } else {
+                    input.rows
+                };
+
                 style.size.height = relative(1.).into();
                 style.min_size.height = (rows.max(1) as f32 * line_height).into();
             }
