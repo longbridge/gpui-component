@@ -992,23 +992,6 @@ impl InputState {
         });
     }
 
-    fn check_to_auto_grow(&mut self, _: &mut Window, cx: &mut Context<Self>) {
-        if !self.is_multi_line() {
-            return;
-        }
-        let Some(max_rows) = self.max_rows else {
-            return;
-        };
-
-        let changed_rows = ((self.scroll_size.height - self.input_bounds.size.height)
-            / self.last_line_height) as isize;
-
-        self.rows = (self.rows as isize + changed_rows)
-            .clamp(self.min_rows as isize, max_rows as isize)
-            .max(0) as usize;
-        cx.notify();
-    }
-
     pub(super) fn clean(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.replace_text("", window, cx);
     }
@@ -1568,6 +1551,10 @@ impl EntityInputHandler for InputState {
         self.marked_range = None;
     }
 
+    /// Replace text in range.
+    ///
+    /// - If the new text is invalid, it will not be replaced.
+    /// - If `range_utf16` is not provided, the current selected range will be used.
     fn replace_text_in_range(
         &mut self,
         range_utf16: Option<Range<usize>>,
@@ -1602,7 +1589,6 @@ impl EntityInputHandler for InputState {
         self.marked_range.take();
         self.update_preferred_x_offset(cx);
         self.update_scroll_offset(None, cx);
-        self.check_to_auto_grow(window, cx);
         cx.emit(InputEvent::Change(self.unmask_value()));
         cx.notify();
     }
