@@ -26,10 +26,9 @@ impl Example {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let input_state = cx.new(|cx| {
             InputState::new(window, cx)
-                .multi_line()
+                .code_editor(Some(LANG), &LIGHT_THEME)
                 .default_value(EXAMPLE)
                 .placeholder("Enter your HTML here...")
-                .highlighter(Highlighter::new(Some(LANG), &LIGHT_THEME))
         });
 
         let _subscribe = cx.subscribe(
@@ -52,15 +51,15 @@ impl Example {
 }
 
 impl Render for Example {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let is_dark = cx.theme().mode.is_dark();
         if self.is_dark != is_dark {
             self.is_dark = is_dark;
             self.input_state.update(cx, |state, cx| {
                 if is_dark {
-                    state.set_highlighter(Highlighter::new(Some(LANG), &DARK_THEME), window, cx);
+                    state.set_highlighter(Highlighter::new(Some(LANG), &DARK_THEME), cx);
                 } else {
-                    state.set_highlighter(Highlighter::new(Some(LANG), &LIGHT_THEME), window, cx);
+                    state.set_highlighter(Highlighter::new(Some(LANG), &LIGHT_THEME), cx);
                 }
             });
         }

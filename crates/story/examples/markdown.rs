@@ -24,10 +24,9 @@ impl Example {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let input_state = cx.new(|cx| {
             InputState::new(window, cx)
-                .multi_line()
+                .code_editor(Some(LANG), &LIGHT_THEME)
                 .placeholder("Enter your Markdown here...")
                 .default_value(EXAMPLE)
-                .highlighter(Highlighter::new(Some(LANG), &LIGHT_THEME))
         });
 
         let _subscribe = cx.subscribe(&input_state, |_, _, _: &InputEvent, cx| {
@@ -46,7 +45,7 @@ impl Example {
 }
 
 impl Render for Example {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = if cx.theme().mode.is_dark() {
             HighlightTheme::default_dark()
         } else {
@@ -58,9 +57,9 @@ impl Render for Example {
             self.is_dark = is_dark;
             self.input_state.update(cx, |state, cx| {
                 if is_dark {
-                    state.set_highlighter(Highlighter::new(Some(LANG), &DARK_THEME), window, cx);
+                    state.set_highlighter(Highlighter::new(Some(LANG), &DARK_THEME), cx);
                 } else {
-                    state.set_highlighter(Highlighter::new(Some(LANG), &LIGHT_THEME), window, cx);
+                    state.set_highlighter(Highlighter::new(Some(LANG), &LIGHT_THEME), cx);
                 }
             });
         }

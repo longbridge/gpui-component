@@ -28,10 +28,9 @@ impl Example {
         let default_language: SharedString = LANGUAGES[0].into();
         let input_state = cx.new(|cx| {
             InputState::new(window, cx)
-                .multi_line()
+                .code_editor(Some(&default_language), &LIGHT_THEME)
                 .default_value(EXAMPLE)
                 .placeholder("Enter your code here...")
-                .highlighter(Highlighter::new(Some(&default_language), &LIGHT_THEME))
         });
         let language_state = cx.new(|cx| {
             DropdownState::new(

@@ -10,7 +10,7 @@ use smallvec::SmallVec;
 
 use crate::{ActiveTheme as _, Root};
 
-use super::InputState;
+use super::{InputMode, InputState};
 
 const RIGHT_MARGIN: Pixels = px(5.);
 const BOTTOM_MARGIN_ROWS: usize = 1;
@@ -311,19 +311,27 @@ impl TextElement {
         let text = input.text.as_ref();
 
         let cache_key = hash(&text);
-        if input.cache_highlights.0 == cache_key {
-            return Some(input.cache_highlights.1.clone());
-        }
 
-        if let Some(highlighter) = input.highlighter.as_ref() {
-            let styles = highlighter.highlight(&text);
-            self.input.update(cx, |input, _cx| {
-                input.cache_highlights = (cache_key, styles.clone());
-            });
+        match &input.mode {
+            InputMode::CodeEditor { highlighter, cache } => {
+                if cache.0 == cache_key {
+                    return Some(cache.1.clone());
+                }
 
-            Some(styles)
-        } else {
-            None
+                if let Some(highlighter) = highlighter {
+                    let styles = highlighter.highlight(&text);
+                    self.input.update(cx, |input, _cx| {
+                        input
+                            .mode
+                            .set_code_editor_cache((cache_key, styles.clone()));
+                    });
+
+                    Some(styles)
+                } else {
+                    None
+                }
+            }
+            _ => None,
         }
     }
 }

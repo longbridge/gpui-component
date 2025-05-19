@@ -26,7 +26,12 @@ use super::{
     blink_cursor::BlinkCursor, change::Change, element::TextElement, mask_pattern::MaskPattern,
     number_input, text_wrapper::TextWrapper,
 };
-use crate::{highlighter::Highlighter, history::History, scroll::ScrollbarState, Root};
+use crate::{
+    highlighter::{HighlightTheme, Highlighter},
+    history::History,
+    scroll::ScrollbarState,
+    Root,
+};
 
 #[derive(Clone, PartialEq, Eq, Deserialize)]
 pub struct Enter {
@@ -191,13 +196,17 @@ pub fn init(cx: &mut App) {
     number_input::init(cx);
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Default, Clone)]
 pub enum InputMode {
     #[default]
     SingleLine,
     MultiLine {
         rows: usize,
         height: Option<DefiniteLength>,
+    },
+    CodeEditor {
+        highlighter: Option<Rc<Highlighter<'static>>>,
+        cache: (u64, Vec<(Range<usize>, HighlightStyle)>),
     },
     AutoGrow {
         rows: usize,
@@ -278,6 +287,15 @@ impl InputMode {
             _ => None,
         }
     }
+
+    pub(super) fn set_code_editor_cache(
+        &mut self,
+        cache: (u64, Vec<(Range<usize>, HighlightStyle)>),
+    ) {
+        if let InputMode::CodeEditor { cache: c, .. } = self {
+            *c = cache;
+        }
+    }
 }
 
 /// InputState to keep editing state of the [`super::TextInput`].
@@ -321,10 +339,6 @@ pub struct InputState {
     /// The mask pattern for formatting the input text
     pub(crate) mask_pattern: MaskPattern,
     pub(super) placeholder: SharedString,
-
-    /// Code highlight
-    pub(crate) highlighter: Option<Highlighter<'static>>,
-    pub(super) cache_highlights: (u64, Vec<(Range<usize>, HighlightStyle)>),
 
     /// To remember the horizontal column (x-coordinate) of the cursor position.
     preferred_x_offset: Option<Pixels>,
@@ -396,8 +410,6 @@ impl InputState {
             preferred_x_offset: None,
             placeholder: SharedString::default(),
             mask_pattern: MaskPattern::default(),
-            highlighter: None,
-            cache_highlights: (0, vec![]),
             _subscriptions,
         }
     }
@@ -423,23 +435,34 @@ impl InputState {
         self
     }
 
+    /// Set Input to use [`InputMode::CodeEditor`] mode.
+    pub fn code_editor(mut self, language: Option<&str>, theme: &'static HighlightTheme) -> Self {
+        let highlighter = Highlighter::new(language, theme);
+        self.mode = InputMode::CodeEditor {
+            highlighter: Some(Rc::new(highlighter)),
+            cache: (0, vec![]),
+        };
+        self
+    }
+
     /// Set placeholder
     pub fn placeholder(mut self, placeholder: impl Into<SharedString>) -> Self {
         self.placeholder = placeholder.into();
         self
     }
 
-    /// Set highlighter
-    pub fn highlighter(mut self, highlighter: Highlighter<'static>) -> Self {
-        self.highlighter = Some(highlighter);
-        self.cache_highlights = (0, vec![]);
-        self
-    }
-
-    /// Set highlighter
+    /// Set highlighter, only for [`InputMode::CodeEditor`] mode.
     pub fn set_highlighter(&mut self, highlighter: Highlighter<'static>, cx: &mut Context<Self>) {
-        self.highlighter = Some(highlighter);
-        self.cache_highlights = (0, vec![]);
+        let new_highlighter = Rc::new(highlighter);
+        match &mut self.mode {
+            InputMode::CodeEditor {
+                highlighter, cache, ..
+            } => {
+                *highlighter = Some(new_highlighter);
+                *cache = (0, vec![]);
+            }
+            _ => {}
+        }
         cx.notify();
     }
 
@@ -585,7 +608,7 @@ impl InputState {
     pub(super) fn is_multi_line(&self) -> bool {
         matches!(
             self.mode,
-            InputMode::MultiLine { .. } | InputMode::AutoGrow { .. }
+            InputMode::MultiLine { .. } | InputMode::AutoGrow { .. } | InputMode::CodeEditor { .. }
         )
     }
 
