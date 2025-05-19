@@ -308,7 +308,7 @@ impl TextElement {
 
     fn highlight_text(&self, cx: &mut App) -> Option<Vec<(Range<usize>, HighlightStyle)>> {
         let input = self.input.read(cx);
-        let text = input.text.clone();
+        let text = input.text.as_ref();
 
         let cache_key = hash(&text);
         if input.cache_highlights.0 == cache_key {

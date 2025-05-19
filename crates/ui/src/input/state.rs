@@ -437,12 +437,7 @@ impl InputState {
     }
 
     /// Set highlighter
-    pub fn set_highlighter(
-        &mut self,
-        highlighter: Highlighter<'static>,
-        _: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    pub fn set_highlighter(&mut self, highlighter: Highlighter<'static>, cx: &mut Context<Self>) {
         self.highlighter = Some(highlighter);
         self.cache_highlights = (0, vec![]);
         cx.notify();
