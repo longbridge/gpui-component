@@ -2,6 +2,7 @@ mod blink_cursor;
 mod change;
 mod clear_button;
 mod element;
+mod input_mode;
 mod mask_pattern;
 mod number_input;
 mod otp_input;

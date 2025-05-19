@@ -12,19 +12,19 @@ use unicode_segmentation::*;
 
 use gpui::{
     actions, div, impl_internal_actions, point, prelude::FluentBuilder as _, px, App, AppContext,
-    Bounds, ClipboardItem, Context, DefiniteLength, Entity, EntityInputHandler, EventEmitter,
-    FocusHandle, Focusable, HighlightStyle, InteractiveElement as _, IntoElement, KeyBinding,
-    KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _,
-    Pixels, Point, Render, ScrollHandle, ScrollWheelEvent, SharedString, Styled as _, Subscription,
-    UTF16Selection, Window, WrappedLine,
+    Bounds, ClipboardItem, Context, Entity, EntityInputHandler, EventEmitter, FocusHandle,
+    Focusable, InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent, MouseButton,
+    MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Render,
+    ScrollHandle, ScrollWheelEvent, SharedString, Styled as _, Subscription, UTF16Selection,
+    Window, WrappedLine,
 };
 
 // TODO:
 // - Move cursor to skip line eof empty chars.
 
 use super::{
-    blink_cursor::BlinkCursor, change::Change, element::TextElement, mask_pattern::MaskPattern,
-    number_input, text_wrapper::TextWrapper,
+    blink_cursor::BlinkCursor, change::Change, element::TextElement, input_mode::InputMode,
+    mask_pattern::MaskPattern, number_input, text_wrapper::TextWrapper,
 };
 use crate::{
     highlighter::{HighlightTheme, Highlighter},
@@ -196,108 +196,6 @@ pub fn init(cx: &mut App) {
     number_input::init(cx);
 }
 
-#[derive(Default, Clone)]
-pub enum InputMode {
-    #[default]
-    SingleLine,
-    MultiLine {
-        rows: usize,
-        height: Option<DefiniteLength>,
-    },
-    CodeEditor {
-        highlighter: Option<Rc<Highlighter<'static>>>,
-        cache: (u64, Vec<(Range<usize>, HighlightStyle)>),
-    },
-    AutoGrow {
-        rows: usize,
-        min_rows: usize,
-        max_rows: usize,
-    },
-}
-
-impl InputMode {
-    pub(super) fn set_rows(&mut self, new_rows: usize) {
-        match self {
-            InputMode::MultiLine { rows, .. } => {
-                *rows = new_rows;
-            }
-            InputMode::AutoGrow {
-                rows,
-                min_rows,
-                max_rows,
-            } => {
-                *rows = new_rows.clamp(*min_rows, *max_rows);
-            }
-            _ => {}
-        }
-    }
-
-    pub(super) fn update_auto_grow(&mut self, text_wrapper: &TextWrapper) {
-        match self {
-            Self::AutoGrow { .. } => {
-                let wrapped_lines = text_wrapper.wrapped_lines.len();
-                self.set_rows(wrapped_lines);
-            }
-            _ => {}
-        }
-    }
-
-    /// At least 1 row be return.
-    pub(super) fn rows(&self) -> usize {
-        match self {
-            InputMode::MultiLine { rows, .. } => *rows,
-            InputMode::AutoGrow { rows, .. } => *rows,
-            _ => 1,
-        }
-        .max(1)
-    }
-
-    /// At least 1 row be return.
-    #[allow(unused)]
-    pub(super) fn min_rows(&self) -> usize {
-        match self {
-            InputMode::MultiLine { .. } => 1,
-            InputMode::AutoGrow { min_rows, .. } => *min_rows,
-            _ => 1,
-        }
-        .max(1)
-    }
-
-    #[allow(unused)]
-    pub(super) fn max_rows(&self) -> usize {
-        match self {
-            InputMode::MultiLine { .. } => usize::MAX,
-            InputMode::AutoGrow { max_rows, .. } => *max_rows,
-            _ => 1,
-        }
-    }
-
-    pub(super) fn set_height(&mut self, new_height: Option<DefiniteLength>) {
-        match self {
-            InputMode::MultiLine { height, .. } => {
-                *height = new_height;
-            }
-            _ => {}
-        }
-    }
-
-    pub(super) fn height(&self) -> Option<DefiniteLength> {
-        match self {
-            InputMode::MultiLine { height, .. } => *height,
-            _ => None,
-        }
-    }
-
-    pub(super) fn set_code_editor_cache(
-        &mut self,
-        cache: (u64, Vec<(Range<usize>, HighlightStyle)>),
-    ) {
-        if let InputMode::CodeEditor { cache: c, .. } = self {
-            *c = cache;
-        }
-    }
-}
-
 /// InputState to keep editing state of the [`super::TextInput`].
 pub struct InputState {
     pub(super) focus_handle: FocusHandle,
@@ -436,11 +334,17 @@ impl InputState {
     }
 
     /// Set Input to use [`InputMode::CodeEditor`] mode.
-    pub fn code_editor(mut self, language: Option<&str>, theme: &'static HighlightTheme) -> Self {
+    pub fn code_editor(
+        mut self,
+        language: Option<&str>,
+        theme: &'static HighlightTheme,
+        line_number: bool,
+    ) -> Self {
         let highlighter = Highlighter::new(language, theme);
         self.mode = InputMode::CodeEditor {
             highlighter: Some(Rc::new(highlighter)),
             cache: (0, vec![]),
+            line_number,
         };
         self
     }
@@ -449,6 +353,14 @@ impl InputState {
     pub fn placeholder(mut self, placeholder: impl Into<SharedString>) -> Self {
         self.placeholder = placeholder.into();
         self
+    }
+
+    /// Set line number, only for [`InputMode::CodeEditor`] mode.
+    pub fn set_line_number(&mut self, line_number: bool, _: &mut Window, cx: &mut Context<Self>) {
+        if let InputMode::CodeEditor { line_number: l, .. } = &mut self.mode {
+            *l = line_number;
+        }
+        cx.notify();
     }
 
     /// Set highlighter, only for [`InputMode::CodeEditor`] mode.
