@@ -61,7 +61,7 @@ impl TextElement {
 
         // If the input has a fixed height (Otherwise is auto-grow), we need to add a bottom margin to the input.
         let bottom_margin = if input.is_auto_grow() {
-            px(0.)
+            px(0.) + line_height
         } else {
             BOTTOM_MARGIN_ROWS * line_height + line_height
         };
