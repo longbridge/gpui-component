@@ -74,6 +74,8 @@ impl Render for Example {
                     .w_1_2()
                     .border_r_1()
                     .border_color(cx.theme().border)
+                    .font_family("Menlo")
+                    .text_size(px(13.))
                     .child(TextInput::new(&self.input_state).h_full().appearance(false)),
             )
             .child(

@@ -36,8 +36,9 @@ impl TextWrapper {
         self.update(self.text.clone(), cx);
     }
 
-    pub(super) fn set_font(&mut self, font: Font, cx: &mut App) {
+    pub(super) fn set_font(&mut self, font: Font, font_size: Pixels, cx: &mut App) {
         self.font = font;
+        self.font_size = font_size;
         self.update(self.text.clone(), cx);
     }
 

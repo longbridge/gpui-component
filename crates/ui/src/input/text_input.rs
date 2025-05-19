@@ -134,9 +134,12 @@ impl TextInput {
 impl RenderOnce for TextInput {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         const LINE_HEIGHT: Rems = Rems(1.25);
+        let font = window.text_style().font();
+        let font_size = window.text_style().font_size.to_pixels(window.rem_size());
 
-        self.state.update(cx, |state, _| {
+        self.state.update(cx, |state, cx| {
             state.mode.set_height(self.height);
+            state.text_wrapper.set_font(font, font_size, cx);
             state.disabled = self.disabled;
         });
 
@@ -222,6 +225,7 @@ impl RenderOnce for TextInput {
             .input_py(self.size)
             .input_h(self.size)
             .cursor_text()
+            .text_size(font_size)
             .when(state.is_multi_line(), |this| {
                 this.h_auto()
                     .when_some(self.height, |this, height| this.h(height))
@@ -239,7 +243,6 @@ impl RenderOnce for TextInput {
             .items_center()
             .gap(gap_x)
             .children(prefix)
-            // TODO: Define height here, and use it in the input element
             .child(self.state.clone())
             .child(
                 h_flex()
