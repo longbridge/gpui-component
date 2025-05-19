@@ -1000,6 +1000,26 @@ impl InputState {
         });
     }
 
+    pub(super) fn check_to_auto_grow(&mut self, _: &mut Context<Self>) {
+        if !self.auto_grow {
+            return;
+        }
+        if !self.is_multi_line() {
+            return;
+        }
+        let rows = (self.scroll_size.height / self.last_line_height) as usize;
+        let max_rows = self
+            .max_rows
+            .unwrap_or(usize::MAX)
+            .min(rows)
+            .max(self.min_rows);
+        self.rows = rows.clamp(self.min_rows, max_rows);
+        println!(
+            "------------ updated {} rows: {}",
+            self.scroll_size.height, self.rows
+        );
+    }
+
     pub(super) fn clean(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.replace_text("", window, cx);
     }
@@ -1597,6 +1617,7 @@ impl EntityInputHandler for InputState {
         self.marked_range.take();
         self.update_preferred_x_offset(cx);
         self.update_scroll_offset(None, cx);
+        self.check_to_auto_grow(cx);
         cx.emit(InputEvent::Change(self.unmask_value()));
         cx.notify();
     }

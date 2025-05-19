@@ -370,25 +370,8 @@ impl Element for TextElement {
                 style.size.height = h.into();
                 style.min_size.height = line_height.into();
             } else {
-                // Check to auto grow
-                let rows = if input.auto_grow {
-                    let rows = (input.scroll_size.height / line_height) as usize;
-                    let max_rows = input
-                        .max_rows
-                        .unwrap_or(usize::MAX)
-                        .min(rows)
-                        .max(input.min_rows);
-                    println!(
-                        "------------ rows: {}, scroll_height: {}",
-                        rows, input.scroll_size.height
-                    );
-                    rows.clamp(input.min_rows, max_rows)
-                } else {
-                    input.rows
-                };
-
                 style.size.height = relative(1.).into();
-                style.min_size.height = (rows.max(1) as f32 * line_height).into();
+                style.min_size.height = (input.rows.max(1) as f32 * line_height).into();
             }
         } else {
             // For single-line inputs, the minimum height should be the line height
