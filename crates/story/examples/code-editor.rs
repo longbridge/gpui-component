@@ -29,6 +29,7 @@ impl Example {
         let input_state = cx.new(|cx| {
             InputState::new(window, cx)
                 .code_editor(Some(&default_language), &LIGHT_THEME)
+                .line_number(true)
                 .default_value(EXAMPLE)
                 .placeholder("Enter your code here...")
         });

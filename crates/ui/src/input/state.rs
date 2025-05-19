@@ -334,17 +334,12 @@ impl InputState {
     }
 
     /// Set Input to use [`InputMode::CodeEditor`] mode.
-    pub fn code_editor(
-        mut self,
-        language: Option<&str>,
-        theme: &'static HighlightTheme,
-        line_number: bool,
-    ) -> Self {
+    pub fn code_editor(mut self, language: Option<&str>, theme: &'static HighlightTheme) -> Self {
         let highlighter = Highlighter::new(language, theme);
         self.mode = InputMode::CodeEditor {
             highlighter: Some(Rc::new(highlighter)),
             cache: (0, vec![]),
-            line_number,
+            line_number: true,
         };
         self
     }
@@ -352,6 +347,13 @@ impl InputState {
     /// Set placeholder
     pub fn placeholder(mut self, placeholder: impl Into<SharedString>) -> Self {
         self.placeholder = placeholder.into();
+        self
+    }
+
+    pub fn line_number(mut self, line_number: bool) -> Self {
+        if let InputMode::CodeEditor { line_number: l, .. } = &mut self.mode {
+            *l = line_number;
+        }
         self
     }
 
