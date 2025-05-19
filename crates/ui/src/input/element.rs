@@ -60,7 +60,7 @@ impl TextElement {
         let mut cursor = None;
 
         // If the input has a fixed height (Otherwise is auto-grow), we need to add a bottom margin to the input.
-        let bottom_margin = if input.auto_grow {
+        let bottom_margin = if input.is_auto_grow() {
             px(0.)
         } else {
             BOTTOM_MARGIN_ROWS * line_height + line_height
@@ -366,12 +366,12 @@ impl Element for TextElement {
         style.size.width = relative(1.).into();
         if self.input.read(cx).is_multi_line() {
             style.flex_grow = 1.0;
-            if let Some(h) = input.height {
+            if let Some(h) = input.mode.height() {
                 style.size.height = h.into();
                 style.min_size.height = line_height.into();
             } else {
                 style.size.height = relative(1.).into();
-                style.min_size.height = (input.rows.max(1) as f32 * line_height).into();
+                style.min_size.height = (input.mode.rows() * line_height).into();
             }
         } else {
             // For single-line inputs, the minimum height should be the line height

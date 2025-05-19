@@ -81,10 +81,7 @@ impl TextareaStory {
 
         let textarea_auto_grow = cx.new(|cx| {
             InputState::new(window, cx)
-                .multi_line()
-                .rows(1)
-                .max_rows(5)
-                .auto_grow()
+                .auto_grow(1, 5)
                 .placeholder("Enter text here...")
                 .default_value("Hello 世界，this is GPUI component.")
         });

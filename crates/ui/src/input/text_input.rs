@@ -136,7 +136,7 @@ impl RenderOnce for TextInput {
         const LINE_HEIGHT: Rems = Rems(1.25);
 
         self.state.update(cx, |state, _| {
-            state.height = self.height;
+            state.mode.set_height(self.height);
             state.disabled = self.disabled;
         });
 
@@ -182,7 +182,7 @@ impl RenderOnce for TextInput {
             .on_action(window.listener_for(&self.state, InputState::right))
             .on_action(window.listener_for(&self.state, InputState::select_left))
             .on_action(window.listener_for(&self.state, InputState::select_right))
-            .when(state.multi_line, |this| {
+            .when(state.is_multi_line(), |this| {
                 this.on_action(window.listener_for(&self.state, InputState::up))
                     .on_action(window.listener_for(&self.state, InputState::down))
                     .on_action(window.listener_for(&self.state, InputState::select_up))
@@ -222,7 +222,7 @@ impl RenderOnce for TextInput {
             .input_py(self.size)
             .input_h(self.size)
             .cursor_text()
-            .when(state.multi_line, |this| {
+            .when(state.is_multi_line(), |this| {
                 this.h_auto()
                     .when_some(self.height, |this, height| this.h(height))
             })
