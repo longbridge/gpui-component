@@ -226,6 +226,9 @@ impl TextElement {
                     end_x = line_wrap_width;
                 }
 
+                // Ensure at least 6px width for the selection for empty lines.
+                end_x = end_x.max(start.x + px(6.));
+
                 line_corners.push(Corners {
                     top_left: line_origin + point(start.x, start.y),
                     top_right: line_origin + point(end_x, start.y),
