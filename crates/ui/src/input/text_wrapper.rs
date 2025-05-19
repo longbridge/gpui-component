@@ -28,6 +28,10 @@ impl TextWrapper {
     }
 
     pub(super) fn set_wrap_width(&mut self, wrap_width: Option<Pixels>, cx: &mut App) {
+        if self.wrap_width == wrap_width {
+            return;
+        }
+
         self.wrap_width = wrap_width;
         self.update(self.text.clone(), cx);
     }
@@ -56,6 +60,8 @@ impl TextWrapper {
                 wrapped_lines.push(prev_boundary_ix..line.len());
             }
         }
+
+        // Add last empty line.
         if text.chars().last().unwrap_or('\n') == '\n' {
             wrapped_lines.push(text.len()..text.len());
         }

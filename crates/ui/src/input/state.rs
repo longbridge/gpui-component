@@ -1624,6 +1624,18 @@ impl InputState {
         }
         cx.notify();
     }
+
+    pub(super) fn set_input_bounds(&mut self, new_bounds: Bounds<Pixels>, cx: &mut Context<Self>) {
+        let wrap_width_changed = self.input_bounds.size.width != new_bounds.size.width;
+        self.input_bounds = new_bounds;
+
+        // Update text_wrapper wrap_width if changed.
+        if wrap_width_changed {
+            self.text_wrapper
+                .set_wrap_width(Some(new_bounds.size.width), cx);
+            self.mode.update_auto_grow(&self.text_wrapper);
+        }
+    }
 }
 
 impl EntityInputHandler for InputState {

@@ -589,7 +589,7 @@ impl Element for TextElement {
             input.last_bounds = Some(bounds);
             input.last_cursor_offset = Some(input.cursor_offset());
             input.last_line_height = line_height;
-            input.input_bounds = input_bounds;
+            input.set_input_bounds(input_bounds, cx);
             input.last_selected_range = Some(selected_range);
             input.scroll_size = scroll_size;
             input
