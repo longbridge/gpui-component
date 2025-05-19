@@ -378,6 +378,10 @@ impl Element for TextElement {
                         .unwrap_or(usize::MAX)
                         .min(rows)
                         .max(input.min_rows);
+                    println!(
+                        "------------ rows: {}, scroll_height: {}",
+                        rows, input.scroll_size.height
+                    );
                     rows.clamp(input.min_rows, max_rows)
                 } else {
                     input.rows
