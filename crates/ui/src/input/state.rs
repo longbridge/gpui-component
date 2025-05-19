@@ -337,6 +337,7 @@ impl InputState {
     pub fn code_editor(mut self, language: Option<&str>, theme: &'static HighlightTheme) -> Self {
         let highlighter = Highlighter::new(language, theme);
         self.mode = InputMode::CodeEditor {
+            rows: 2,
             highlighter: Some(Rc::new(highlighter)),
             cache: (0, vec![]),
             line_number: true,
@@ -671,6 +672,7 @@ impl InputState {
     /// Set the default value of the input field.
     pub fn default_value(mut self, value: impl Into<SharedString>) -> Self {
         self.text = value.into();
+        self.text_wrapper.text = self.text.clone();
         self
     }
 
@@ -1668,7 +1670,7 @@ impl EntityInputHandler for InputState {
 
         self.push_history(&range, &new_text, window, cx);
         self.text = mask_text;
-        self.text_wrapper.update(self.text.clone(), cx);
+        self.text_wrapper.update(self.text.clone(), false, cx);
         self.selected_range = new_pos..new_pos;
         self.marked_range.take();
         self.update_preferred_x_offset(cx);
@@ -1789,6 +1791,8 @@ impl Focusable for InputState {
 
 impl Render for InputState {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.text_wrapper.update(self.text.clone(), false, cx);
+
         div()
             .id("text-element")
             .flex_1()

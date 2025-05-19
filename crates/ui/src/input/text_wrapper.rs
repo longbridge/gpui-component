@@ -28,21 +28,24 @@ impl TextWrapper {
     }
 
     pub(super) fn set_wrap_width(&mut self, wrap_width: Option<Pixels>, cx: &mut App) {
-        if self.wrap_width == wrap_width {
-            return;
-        }
-
         self.wrap_width = wrap_width;
-        self.update(self.text.clone(), cx);
+        self.update(self.text.clone(), true, cx);
     }
 
     pub(super) fn set_font(&mut self, font: Font, font_size: Pixels, cx: &mut App) {
         self.font = font;
         self.font_size = font_size;
-        self.update(self.text.clone(), cx);
+        self.update(self.text.clone(), true, cx);
     }
 
-    pub(super) fn update(&mut self, text: SharedString, cx: &mut App) {
+    /// Update the text wrapper and recalculate the wrapped lines.
+    ///
+    /// If the `text` is the same as the current text, do nothing.
+    pub(super) fn update(&mut self, text: SharedString, force: bool, cx: &mut App) {
+        if self.text == text && !force {
+            return;
+        }
+
         let mut wrapped_lines = vec![];
         let wrap_width = self.wrap_width.unwrap_or(Pixels::MAX);
         let mut line_wrapper = cx

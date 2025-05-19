@@ -2,7 +2,9 @@ use std::sync::LazyLock;
 
 use gpui::*;
 use gpui_component::{
+    checkbox::Checkbox,
     dropdown::{Dropdown, DropdownEvent, DropdownState},
+    h_flex,
     highlighter::{HighlightTheme, Highlighter},
     input::{InputEvent, InputState, TextInput},
     v_flex, ActiveTheme as _,
@@ -17,6 +19,7 @@ pub struct Example {
     language_state: Entity<DropdownState<Vec<SharedString>>>,
     language: SharedString,
     is_dark: bool,
+    line_number: bool,
     _subscribes: Vec<Subscription>,
 }
 
@@ -62,6 +65,7 @@ impl Example {
             language_state,
             language: default_language,
             is_dark: false,
+            line_number: true,
             _subscribes,
         }
     }
@@ -97,11 +101,26 @@ impl Render for Example {
         v_flex()
             .size_full()
             .child(
-                div()
-                    .flex_shrink_0()
+                h_flex()
                     .p_4()
                     .pb_0()
-                    .child(Dropdown::new(&self.language_state).title_prefix("Language: ")),
+                    .gap_4()
+                    .flex_shrink_0()
+                    .items_center()
+                    .justify_between()
+                    .child(Dropdown::new(&self.language_state).title_prefix("Language: "))
+                    .child(
+                        Checkbox::new("line-numbger")
+                            .checked(self.line_number)
+                            .on_click(cx.listener(|this, checked: &bool, window, cx| {
+                                this.line_number = *checked;
+                                this.input_state.update(cx, |state, cx| {
+                                    state.set_line_number(this.line_number, window, cx);
+                                });
+                                cx.notify();
+                            }))
+                            .label("Line Number"),
+                    ),
             )
             .child(
                 div()

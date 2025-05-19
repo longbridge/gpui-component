@@ -14,6 +14,7 @@ pub enum InputMode {
         height: Option<DefiniteLength>,
     },
     CodeEditor {
+        rows: usize,
         /// Show line number
         line_number: bool,
         highlighter: Option<Rc<Highlighter<'static>>>,
@@ -32,6 +33,9 @@ impl InputMode {
             InputMode::MultiLine { rows, .. } => {
                 *rows = new_rows;
             }
+            InputMode::CodeEditor { rows, .. } => {
+                *rows = new_rows;
+            }
             InputMode::AutoGrow {
                 rows,
                 min_rows,
@@ -44,19 +48,15 @@ impl InputMode {
     }
 
     pub(super) fn update_auto_grow(&mut self, text_wrapper: &TextWrapper) {
-        match self {
-            Self::AutoGrow { .. } => {
-                let wrapped_lines = text_wrapper.wrapped_lines.len();
-                self.set_rows(wrapped_lines);
-            }
-            _ => {}
-        }
+        let wrapped_lines = text_wrapper.wrapped_lines.len();
+        self.set_rows(wrapped_lines);
     }
 
     /// At least 1 row be return.
     pub(super) fn rows(&self) -> usize {
         match self {
             InputMode::MultiLine { rows, .. } => *rows,
+            InputMode::CodeEditor { rows, .. } => *rows,
             InputMode::AutoGrow { rows, .. } => *rows,
             _ => 1,
         }
@@ -67,7 +67,7 @@ impl InputMode {
     #[allow(unused)]
     pub(super) fn min_rows(&self) -> usize {
         match self {
-            InputMode::MultiLine { .. } => 1,
+            InputMode::MultiLine { .. } | InputMode::CodeEditor { .. } => 1,
             InputMode::AutoGrow { min_rows, .. } => *min_rows,
             _ => 1,
         }
@@ -77,7 +77,7 @@ impl InputMode {
     #[allow(unused)]
     pub(super) fn max_rows(&self) -> usize {
         match self {
-            InputMode::MultiLine { .. } => usize::MAX,
+            InputMode::MultiLine { .. } | InputMode::CodeEditor { .. } => usize::MAX,
             InputMode::AutoGrow { max_rows, .. } => *max_rows,
             _ => 1,
         }
@@ -110,6 +110,7 @@ impl InputMode {
 
     /// Return false if the mode is not [`InputMode::CodeEditor`].
     #[allow(unused)]
+    #[inline]
     pub(super) fn line_number(&self) -> bool {
         match self {
             InputMode::CodeEditor { line_number, .. } => *line_number,
