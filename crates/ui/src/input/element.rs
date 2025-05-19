@@ -10,7 +10,7 @@ use smallvec::SmallVec;
 
 use crate::{ActiveTheme as _, Root};
 
-use super::{input_mode::InputMode, InputState};
+use super::{mode::InputMode, InputState};
 
 const RIGHT_MARGIN: Pixels = px(5.);
 const BOTTOM_MARGIN_ROWS: usize = 1;

@@ -23,8 +23,8 @@ use gpui::{
 // - Move cursor to skip line eof empty chars.
 
 use super::{
-    blink_cursor::BlinkCursor, change::Change, element::TextElement, input_mode::InputMode,
-    mask_pattern::MaskPattern, number_input, text_wrapper::TextWrapper,
+    blink_cursor::BlinkCursor, change::Change, element::TextElement, mask_pattern::MaskPattern,
+    mode::InputMode, number_input, text_wrapper::TextWrapper,
 };
 use crate::{
     highlighter::{HighlightTheme, Highlighter},
