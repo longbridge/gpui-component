@@ -24,7 +24,7 @@ use gpui::{
 
 use super::{
     blink_cursor::BlinkCursor, change::Change, element::TextElement, mask_pattern::MaskPattern,
-    number_input,
+    number_input, text_wrapper::TextWrapper,
 };
 use crate::{history::History, scroll::ScrollbarState, Root};
 
@@ -212,8 +212,22 @@ impl InputMode {
             InputMode::MultiLine { rows, .. } => {
                 *rows = new_rows;
             }
-            InputMode::AutoGrow { rows, .. } => {
-                *rows = new_rows;
+            InputMode::AutoGrow {
+                rows,
+                min_rows,
+                max_rows,
+            } => {
+                *rows = new_rows.clamp(*min_rows, *max_rows);
+            }
+            _ => {}
+        }
+    }
+
+    pub(super) fn update_auto_grow(&mut self, text_wrapper: &TextWrapper) {
+        match self {
+            Self::AutoGrow { .. } => {
+                let wrapped_lines = text_wrapper.wrapped_lines.len();
+                self.set_rows(wrapped_lines);
             }
             _ => {}
         }
@@ -271,6 +285,7 @@ pub struct InputState {
     pub(super) focus_handle: FocusHandle,
     pub(super) mode: InputMode,
     pub(super) text: SharedString,
+    pub(super) text_wrapper: TextWrapper,
     pub(super) history: History<Change>,
     pub(super) blink_cursor: Entity<BlinkCursor>,
     pub(super) loading: bool,
@@ -341,9 +356,16 @@ impl InputState {
             cx.on_blur(&focus_handle, window, Self::on_blur),
         ];
 
+        let text_style = window.text_style();
+
         Self {
             focus_handle: focus_handle.clone(),
             text: "".into(),
+            text_wrapper: TextWrapper::new(
+                text_style.font(),
+                text_style.font_size.to_pixels(window.rem_size()),
+                None,
+            ),
             blink_cursor,
             history,
             selected_range: 0..0,
@@ -1084,27 +1106,6 @@ impl InputState {
         });
     }
 
-    pub(super) fn check_to_auto_grow(&mut self, _: &mut Context<Self>) {
-        if !self.is_auto_grow() {
-            return;
-        }
-
-        match self.mode {
-            InputMode::AutoGrow {
-                rows,
-                min_rows,
-                max_rows,
-            } => {
-                // Get number of rows
-                // FIXME: Use wraped lines * line_height to get scroll height, we need to calculate before render.
-                let height_rows = (self.scroll_size.height / self.last_line_height) as usize;
-                let max_rows = max_rows.min(rows).max(min_rows);
-                self.mode.set_rows(height_rows.clamp(min_rows, max_rows));
-            }
-            _ => {}
-        }
-    }
-
     pub(super) fn clean(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.replace_text("", window, cx);
     }
@@ -1698,11 +1699,12 @@ impl EntityInputHandler for InputState {
 
         self.push_history(&range, &new_text, window, cx);
         self.text = mask_text;
+        self.text_wrapper.update(self.text.clone(), cx);
         self.selected_range = new_pos..new_pos;
         self.marked_range.take();
         self.update_preferred_x_offset(cx);
         self.update_scroll_offset(None, cx);
-        self.check_to_auto_grow(cx);
+        self.mode.update_auto_grow(&self.text_wrapper);
         cx.emit(InputEvent::Change(self.unmask_value()));
         cx.notify();
     }

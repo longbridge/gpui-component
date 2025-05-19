@@ -7,6 +7,7 @@ mod number_input;
 mod otp_input;
 mod state;
 mod text_input;
+mod text_wrapper;
 
 pub(crate) use clear_button::*;
 pub use mask_pattern::MaskPattern;
