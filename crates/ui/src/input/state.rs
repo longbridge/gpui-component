@@ -1208,7 +1208,7 @@ impl InputState {
                     removed_len += tab_indent.len();
                 }
                 // +1 for "\n"
-                offset += line.len() - tab_indent.len() + 1;
+                offset += line.len().saturating_sub(tab_indent.len()) + 1;
             }
 
             if lines_count > 1 {
