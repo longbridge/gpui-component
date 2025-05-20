@@ -346,6 +346,14 @@ impl InputState {
     }
 
     /// Set Input to use [`InputMode::CodeEditor`] mode.
+    ///
+    /// Code Editor aim for help used to simple code editing or display, not a full-featured code editor.
+    ///
+    /// ## Features
+    ///
+    /// - Syntax Highlighting
+    /// - Auto Indent
+    /// - Line Number
     pub fn code_editor(mut self, language: Option<&str>, theme: &'static HighlightTheme) -> Self {
         let highlighter = Highlighter::new(language, theme);
         self.mode = InputMode::CodeEditor {
