@@ -1526,8 +1526,6 @@ impl InputState {
                 return line.unwrapped_layout.closest_index_for_x(pos.x);
             }
 
-            let trimed_line = line.text.trim_end_matches(|c| c == '\r');
-
             let index_result = line.closest_index_for_position(pos, line_height);
             if let Ok(v) = index_result {
                 index += v;
@@ -1537,7 +1535,7 @@ impl InputState {
                 // The fallback index is saved in Err from `index_for_position` method.
                 index += index_result.unwrap_err();
                 break;
-            } else if trimed_line.len() == 0 {
+            } else if line.text.trim_end_matches(|c| c == '\r').len() == 0 {
                 // empty line on Windows is `\r`, other is ''
                 let line_bounds = Bounds {
                     origin: line_origin,
@@ -1552,7 +1550,7 @@ impl InputState {
                 index += line.len();
             }
 
-            // +1 for revert `lines` splited `\n`
+            // +1 for revert `lines` split `\n`
             index += 1;
         }
 
