@@ -45,6 +45,7 @@ pub enum InputMode {
     CodeEditor {
         tab: TabSize,
         rows: usize,
+        height: Option<DefiniteLength>,
         /// Show line number
         line_number: bool,
         highlighter: Option<Rc<Highlighter<'static>>>,
@@ -72,6 +73,18 @@ impl InputMode {
                 max_rows,
             } => {
                 *rows = new_rows.clamp(*min_rows, *max_rows);
+            }
+            _ => {}
+        }
+    }
+
+    pub(super) fn set_height(&mut self, new_height: Option<DefiniteLength>) {
+        match self {
+            InputMode::MultiLine { height, .. } => {
+                *height = new_height;
+            }
+            InputMode::CodeEditor { height, .. } => {
+                *height = new_height;
             }
             _ => {}
         }
@@ -113,18 +126,10 @@ impl InputMode {
         }
     }
 
-    pub(super) fn set_height(&mut self, new_height: Option<DefiniteLength>) {
-        match self {
-            InputMode::MultiLine { height, .. } => {
-                *height = new_height;
-            }
-            _ => {}
-        }
-    }
-
     pub(super) fn height(&self) -> Option<DefiniteLength> {
         match self {
             InputMode::MultiLine { height, .. } => *height,
+            InputMode::CodeEditor { height, .. } => *height,
             _ => None,
         }
     }

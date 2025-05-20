@@ -129,7 +129,8 @@ impl Render for Example {
             .child(
                 div()
                     .id("source")
-                    .size_full()
+                    .w_full()
+                    .flex_1()
                     .font_family("Menlo")
                     .p_4()
                     .text_size(px(13.))

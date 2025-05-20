@@ -11,12 +11,12 @@ use std::rc::Rc;
 use unicode_segmentation::*;
 
 use gpui::{
-    actions, div, impl_internal_actions, point, prelude::FluentBuilder as _, px, App, AppContext,
-    Bounds, ClipboardItem, Context, Entity, EntityInputHandler, EventEmitter, FocusHandle,
-    Focusable, InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent, MouseButton,
-    MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Render,
-    ScrollHandle, ScrollWheelEvent, SharedString, Styled as _, Subscription, UTF16Selection,
-    Window, WrappedLine,
+    actions, div, impl_internal_actions, point, prelude::FluentBuilder as _, px, relative, App,
+    AppContext, Bounds, ClipboardItem, Context, Entity, EntityInputHandler, EventEmitter,
+    FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent,
+    MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point,
+    Render, ScrollHandle, ScrollWheelEvent, SharedString, Styled as _, Subscription,
+    UTF16Selection, Window, WrappedLine,
 };
 
 // TODO:
@@ -352,6 +352,7 @@ impl InputState {
     /// - line_number: true
     /// - tab_size: 2
     /// - hard_tabs: false
+    /// - height: full
     ///
     /// Code Editor aim for help used to simple code editing or display, not a full-featured code editor.
     ///
@@ -368,6 +369,7 @@ impl InputState {
             highlighter: Some(Rc::new(highlighter)),
             cache: (0, vec![]),
             line_number: true,
+            height: Some(relative(1.)),
         };
         self
     }
