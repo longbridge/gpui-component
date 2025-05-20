@@ -719,16 +719,26 @@ impl InputState {
         if self.is_single_line() {
             return;
         }
-        self.pause_blink_cursor(cx);
-        self.move_vertical(-1, window, cx);
+
+        if self.selected_range.is_empty() {
+            self.pause_blink_cursor(cx);
+            self.move_vertical(-1, window, cx);
+        } else {
+            self.move_to(self.selected_range.start, window, cx);
+        }
     }
 
     pub(super) fn down(&mut self, _: &Down, window: &mut Window, cx: &mut Context<Self>) {
         if self.is_single_line() {
             return;
         }
-        self.pause_blink_cursor(cx);
-        self.move_vertical(1, window, cx);
+
+        if self.selected_range.is_empty() {
+            self.pause_blink_cursor(cx);
+            self.move_vertical(1, window, cx);
+        } else {
+            self.move_to(self.selected_range.end, window, cx);
+        }
     }
 
     pub(super) fn select_left(
@@ -1379,6 +1389,8 @@ impl InputState {
     /// Select the word at the given offset.
     ///
     /// The offset is the UTF-8 offset.
+    ///
+    /// FIXME: When click on a non-word character, the word is not selected.
     fn select_word(&mut self, offset: usize, window: &mut Window, cx: &mut Context<Self>) {
         fn is_word(c: char) -> bool {
             c.is_alphanumeric() || matches!(c, '_')
