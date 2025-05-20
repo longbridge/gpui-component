@@ -347,6 +347,12 @@ impl InputState {
 
     /// Set Input to use [`InputMode::CodeEditor`] mode.
     ///
+    /// Default options:
+    ///
+    /// - line_number: true
+    /// - tab_size: 2
+    /// - hard_tabs: false
+    ///
     /// Code Editor aim for help used to simple code editing or display, not a full-featured code editor.
     ///
     /// ## Features
