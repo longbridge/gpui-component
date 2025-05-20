@@ -23,8 +23,13 @@ use gpui::{
 // - Move cursor to skip line eof empty chars.
 
 use super::{
-    blink_cursor::BlinkCursor, change::Change, element::TextElement, mask_pattern::MaskPattern,
-    mode::InputMode, number_input, text_wrapper::TextWrapper,
+    blink_cursor::BlinkCursor,
+    change::Change,
+    element::TextElement,
+    mask_pattern::MaskPattern,
+    mode::{InputMode, TabSize},
+    number_input,
+    text_wrapper::TextWrapper,
 };
 use crate::{
     highlighter::{HighlightTheme, Highlighter},
@@ -50,6 +55,8 @@ actions!(
         DeleteToEndOfLine,
         DeleteToPreviousWordStart,
         DeleteToNextWordEnd,
+        Indent,
+        Outdent,
         Up,
         Down,
         Left,
@@ -117,6 +124,8 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("down", Down, Some(CONTEXT)),
         KeyBinding::new("left", Left, Some(CONTEXT)),
         KeyBinding::new("right", Right, Some(CONTEXT)),
+        KeyBinding::new("tab", Indent, Some(CONTEXT)),
+        KeyBinding::new("shift-tab", Outdent, Some(CONTEXT)),
         KeyBinding::new("shift-left", SelectLeft, Some(CONTEXT)),
         KeyBinding::new("shift-right", SelectRight, Some(CONTEXT)),
         KeyBinding::new("shift-up", SelectUp, Some(CONTEXT)),
@@ -321,6 +330,7 @@ impl InputState {
         self.mode = InputMode::MultiLine {
             rows: 2,
             height: None,
+            tab: TabSize::default(),
         };
         self
     }
@@ -340,6 +350,7 @@ impl InputState {
         let highlighter = Highlighter::new(language, theme);
         self.mode = InputMode::CodeEditor {
             rows: 2,
+            tab: TabSize::default(),
             highlighter: Some(Rc::new(highlighter)),
             cache: (0, vec![]),
             line_number: true,
@@ -353,6 +364,7 @@ impl InputState {
         self
     }
 
+    /// Set enable/disable line number, only for [`InputMode::CodeEditor`] mode.
     pub fn line_number(mut self, line_number: bool) -> Self {
         if let InputMode::CodeEditor { line_number: l, .. } = &mut self.mode {
             *l = line_number;
@@ -366,6 +378,39 @@ impl InputState {
             *l = line_number;
         }
         cx.notify();
+    }
+
+    /// Set the tab size for the input.
+    ///
+    /// Only for [`InputMode::MultiLine`] and [`InputMode::CodeEditor`] mode.
+    pub fn tab_size(mut self, tab: TabSize) -> Self {
+        match &mut self.mode {
+            InputMode::MultiLine { tab: t, .. } => *t = tab,
+            InputMode::CodeEditor { tab: t, .. } => *t = tab,
+            _ => {}
+        }
+        self
+    }
+
+    /// Set the number of rows for the multi-line Textarea.
+    ///
+    /// This is only used when `multi_line` is set to true.
+    ///
+    /// default: 2
+    pub fn rows(mut self, rows: usize) -> Self {
+        match &mut self.mode {
+            InputMode::MultiLine { rows: r, .. } => *r = rows,
+            InputMode::AutoGrow {
+                max_rows: max_r,
+                rows: r,
+                ..
+            } => {
+                *r = rows;
+                *max_r = rows;
+            }
+            _ => {}
+        }
+        self
     }
 
     /// Set highlighter, only for [`InputMode::CodeEditor`] mode.
@@ -537,28 +582,6 @@ impl InputState {
     #[inline]
     pub(super) fn is_auto_grow(&self) -> bool {
         matches!(self.mode, InputMode::AutoGrow { .. })
-    }
-
-    /// Set the number of rows for the multi-line Textarea.
-    ///
-    /// This is only used when `multi_line` is set to true.
-    ///
-    /// default: 2
-    pub fn rows(mut self, rows: usize) -> Self {
-        match self.mode {
-            InputMode::MultiLine { height, .. } => {
-                self.mode = InputMode::MultiLine { rows, height };
-            }
-            InputMode::AutoGrow { max_rows, .. } => {
-                self.mode = InputMode::AutoGrow {
-                    rows,
-                    min_rows: rows,
-                    max_rows,
-                };
-            }
-            _ => {}
-        }
-        self
     }
 
     /// Set the text of the input field.
@@ -1074,6 +1097,54 @@ impl InputState {
         cx.emit(InputEvent::PressEnter {
             secondary: action.secondary,
         });
+    }
+
+    pub(super) fn indent(&mut self, _: &Indent, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(tab_size) = self.mode.tab_size() else {
+            return;
+        };
+
+        let tab_indent = tab_size.to_string();
+        let selected_range = self.selected_range.clone();
+
+        let mut offset = self.selected_range.start;
+        if !self.selected_range.is_empty() {
+            // Indent line
+            offset = self.start_of_line(window, cx);
+        }
+
+        self.replace_text_in_range(
+            Some(self.range_to_utf16(&(offset..offset))),
+            &tab_indent,
+            window,
+            cx,
+        );
+        self.selected_range =
+            selected_range.start + tab_indent.len()..selected_range.end + tab_indent.len();
+    }
+
+    pub(super) fn outdent(&mut self, _: &Outdent, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(tab_size) = self.mode.tab_size() else {
+            return;
+        };
+
+        let selected_range = self.selected_range.clone();
+        let tab_outdent = tab_size.to_string();
+        let offset = self.start_of_line(window, cx);
+
+        // If the offset + tab_outdent.len is \s or \t, then remove it.
+        let indent_range = self.range_to_utf16(&(offset..offset + tab_outdent.len()));
+        if self
+            .text_for_range(indent_range.clone(), &mut None, window, cx)
+            .unwrap_or_default()
+            .trim()
+            .len()
+            == 0
+        {
+            self.replace_text_in_range(Some(indent_range), "".into(), window, cx);
+            self.selected_range = selected_range.start.saturating_sub(tab_outdent.len())
+                ..selected_range.end.saturating_sub(tab_outdent.len());
+        }
     }
 
     pub(super) fn clean(&mut self, window: &mut Window, cx: &mut Context<Self>) {

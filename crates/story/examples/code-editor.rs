@@ -23,7 +23,7 @@ pub struct Example {
     _subscribes: Vec<Subscription>,
 }
 
-const EXAMPLE: &str = include_str!("../src/main.rs");
+const EXAMPLE: &str = include_str!("./code-editor.rs");
 const LANGUAGES: [&str; 7] = ["rust", "javascript", "html", "css", "go", "python", "ruby"];
 
 impl Example {

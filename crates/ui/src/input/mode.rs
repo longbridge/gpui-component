@@ -1,19 +1,59 @@
-use gpui::{DefiniteLength, HighlightStyle};
+use gpui::{DefiniteLength, HighlightStyle, SharedString};
+
 use std::ops::Range;
 use std::rc::Rc;
 
 use super::text_wrapper::TextWrapper;
 use crate::highlighter::Highlighter;
 
+#[derive(Debug, Copy, Clone)]
+pub struct TabSize {
+    /// Default is 2
+    pub tab_size: usize,
+    /// Set true to use `\t` as tab indent, default is false
+    pub hard_tabs: bool,
+}
+
+impl Default for TabSize {
+    fn default() -> Self {
+        Self {
+            tab_size: 2,
+            hard_tabs: false,
+        }
+    }
+}
+
+impl TabSize {
+    /// Create a new [`TabSize`] with the given tab size.
+    ///
+    /// If `hard_tabs` is true, use `\t` as tab indent, default is false and `tab_size` will be ignored.
+    pub fn new(tab_size: usize, hard_tabs: bool) -> Self {
+        Self {
+            tab_size,
+            hard_tabs,
+        }
+    }
+
+    pub(super) fn to_string(&self) -> SharedString {
+        if self.hard_tabs {
+            "\t".into()
+        } else {
+            " ".repeat(self.tab_size).into()
+        }
+    }
+}
+
 #[derive(Default, Clone)]
 pub enum InputMode {
     #[default]
     SingleLine,
     MultiLine {
+        tab: TabSize,
         rows: usize,
         height: Option<DefiniteLength>,
     },
     CodeEditor {
+        tab: TabSize,
         rows: usize,
         /// Show line number
         line_number: bool,
@@ -116,5 +156,32 @@ impl InputMode {
             InputMode::CodeEditor { line_number, .. } => *line_number,
             _ => false,
         }
+    }
+
+    #[inline]
+    pub(super) fn tab_size(&self) -> Option<&TabSize> {
+        match self {
+            InputMode::MultiLine { tab, .. } => Some(tab),
+            InputMode::CodeEditor { tab, .. } => Some(tab),
+            _ => None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TabSize;
+
+    #[test]
+    fn test_tab_size() {
+        let tab = TabSize::new(2, false);
+        assert_eq!(tab.to_string(), "  ");
+        let tab = TabSize::new(4, false);
+        assert_eq!(tab.to_string(), "    ");
+
+        let tab = TabSize::new(2, true);
+        assert_eq!(tab.to_string(), "\t");
+        let tab = TabSize::new(4, true);
+        assert_eq!(tab.to_string(), "\t");
     }
 }
