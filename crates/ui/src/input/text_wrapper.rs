@@ -69,7 +69,7 @@ impl TextWrapper {
             let mut line_wraps = vec![];
             let mut prev_boundary_ix = 0;
 
-            // Here only have wraped line, if there is no wrap meet, the `line_wraps` result will empty.
+            // Here only have wrapped line, if there is no wrap meet, the `line_wraps` result will empty.
             for boundary in line_wrapper.wrap_line(&[LineFragment::text(line)], wrap_width) {
                 line_wraps.push(prev_boundary_ix..boundary.ix);
                 prev_boundary_ix = boundary.ix;
