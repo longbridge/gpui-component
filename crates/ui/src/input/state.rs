@@ -1551,39 +1551,63 @@ impl InputState {
     ///
     /// FIXME: When click on a non-word character, the word is not selected.
     fn select_word(&mut self, offset: usize, window: &mut Window, cx: &mut Context<Self>) {
+        #[inline(always)]
         fn is_word(c: char) -> bool {
             c.is_alphanumeric() || matches!(c, '_')
         }
 
-        let mut start = self.offset_to_utf16(offset);
+        let mut start = offset;
         let mut end = start;
         let prev_text = self
-            .text_for_range(0..start, &mut None, window, cx)
+            .text_for_range(self.range_to_utf16(&(0..start + 1)), &mut None, window, cx)
             .unwrap_or_default();
         let next_text = self
-            .text_for_range(end..self.text.len(), &mut None, window, cx)
+            .text_for_range(
+                self.range_to_utf16(&(end..self.text.len())),
+                &mut None,
+                window,
+                cx,
+            )
             .unwrap_or_default();
 
-        let prev_chars = prev_text.chars().rev().peekable();
-        let next_chars = next_text.chars().peekable();
+        let prev_chars = prev_text.chars().rev();
+        let next_chars = next_text.chars();
 
+        let mut last_char_len = 0;
         for (_, c) in prev_chars.enumerate() {
             if !is_word(c) {
                 break;
             }
 
-            start -= c.len_utf16();
+            last_char_len = c.len_utf8();
+            start = start.saturating_sub(last_char_len);
         }
+        start += last_char_len;
 
         for (_, c) in next_chars.enumerate() {
             if !is_word(c) {
                 break;
             }
 
-            end += c.len_utf16();
+            end += c.len_utf8();
         }
 
-        self.selected_range = self.range_from_utf16(&(start..end));
+        // Ensure at least one character is selected
+        if start == end {
+            end = end + 1;
+
+            // Avoid select empty range
+            match self.text.get(start..end) {
+                None => return,
+                Some(part) => {
+                    if part.trim().len() == 0 {
+                        return;
+                    }
+                }
+            }
+        }
+
+        self.selected_range = start..end;
         self.selected_word_range = Some(self.selected_range.clone());
         cx.notify()
     }
