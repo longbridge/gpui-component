@@ -1,4 +1,4 @@
-use chrono::{Days, Duration, Utc};
+use chrono::{Datelike, Days, Duration, Utc};
 use gpui::{
     px, App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement as _, Render,
     Styled as _, Subscription, Window,
@@ -15,6 +15,7 @@ pub struct DatePickerStory {
     date_picker: Entity<DatePickerState>,
     date_picker_small: Entity<DatePickerState>,
     date_picker_large: Entity<DatePickerState>,
+    data_picker_custom: Entity<DatePickerState>,
     date_picker_value: Option<String>,
     date_range_picker: Entity<DatePickerState>,
     default_range_mode_picker: Entity<DatePickerState>,
@@ -73,6 +74,16 @@ impl DatePickerStory {
             picker.set_date(now, window, cx);
             picker
         });
+        let data_picker_custom = cx.new(|cx| {
+            let mut picker = DatePickerState::new(window, cx);
+            picker.set_disabled(
+                calendar::Matcher::custom(|date| date.day0() < 5),
+                window,
+                cx,
+            );
+            picker.set_date(now, window, cx);
+            picker
+        });
         let date_range_picker = cx.new(|cx| {
             let mut picker = DatePickerState::new(window, cx);
             picker.set_date(
@@ -107,6 +118,7 @@ impl DatePickerStory {
             date_picker,
             date_picker_large,
             date_picker_small,
+            data_picker_custom,
             date_range_picker,
             default_range_mode_picker,
             date_picker_value: None,
@@ -182,6 +194,11 @@ impl Render for DatePickerStory {
                         .large()
                         .width(px(300.)),
                 ),
+            )
+            .child(
+                section("Custom (First 5 days of each month disabled)")
+                    .max_w_md()
+                    .child(DatePicker::new(&self.data_picker_custom)),
             )
             .child(
                 section("Date Range").max_w_md().child(
