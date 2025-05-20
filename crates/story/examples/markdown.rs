@@ -3,7 +3,8 @@ use std::{rc::Rc, sync::LazyLock};
 use gpui::*;
 use gpui_component::{
     highlighter::{HighlightTheme, Highlighter},
-    input::{InputEvent, InputState, TextInput},
+    input::{InputEvent, InputState, TabSize, TextInput},
+    resizable::{h_resizable, resizable_panel, ResizableState},
     text::{TextView, TextViewStyle},
     ActiveTheme as _,
 };
@@ -15,6 +16,7 @@ const LANG: &str = "markdown";
 
 pub struct Example {
     input_state: Entity<InputState>,
+    resizable_state: Entity<ResizableState>,
     is_dark: bool,
 }
 
@@ -25,15 +27,22 @@ impl Example {
         let input_state = cx.new(|cx| {
             InputState::new(window, cx)
                 .code_editor(Some(LANG), &LIGHT_THEME)
+                .line_number(false)
+                .tab_size(TabSize {
+                    tab_size: 2,
+                    ..Default::default()
+                })
                 .placeholder("Enter your Markdown here...")
                 .default_value(EXAMPLE)
         });
+        let resizable_state = ResizableState::new(cx);
 
         let _subscribe = cx.subscribe(&input_state, |_, _, _: &InputEvent, cx| {
             cx.notify();
         });
 
         Self {
+            resizable_state,
             input_state,
             is_dark: false,
         }
@@ -64,36 +73,31 @@ impl Render for Example {
             });
         }
 
-        div()
-            .flex()
-            .flex_row()
-            .h_full()
+        h_resizable("container", self.resizable_state.clone())
             .child(
-                div()
-                    .id("source")
-                    .h_full()
-                    .w_1_2()
-                    .border_r_1()
-                    .border_color(cx.theme().border)
-                    .flex_1()
-                    .child(TextInput::new(&self.input_state).h_full().appearance(false)),
+                resizable_panel().child(
+                    div()
+                        .id("source")
+                        .size_full()
+                        .child(TextInput::new(&self.input_state).h_full().appearance(false)),
+                ),
             )
             .child(
-                div()
-                    .id("preview")
-                    .h_full()
-                    .w_1_2()
-                    .p_5()
-                    .flex_1()
-                    .overflow_y_scroll()
-                    .child(
-                        TextView::markdown("preview", self.input_state.read(cx).value()).style(
-                            TextViewStyle {
-                                highlight_theme: Rc::new(theme),
-                                ..Default::default()
-                            },
+                resizable_panel().child(
+                    div()
+                        .id("preview")
+                        .size_full()
+                        .p_5()
+                        .overflow_y_scroll()
+                        .child(
+                            TextView::markdown("preview", self.input_state.read(cx).value()).style(
+                                TextViewStyle {
+                                    highlight_theme: Rc::new(theme),
+                                    ..Default::default()
+                                },
+                            ),
                         ),
-                    ),
+                ),
             )
     }
 }

@@ -2,9 +2,9 @@ use std::sync::LazyLock;
 
 use gpui::*;
 use gpui_component::{
-    h_flex,
     highlighter::{HighlightTheme, Highlighter},
-    input::{InputState, TextInput},
+    input::{InputState, TabSize, TextInput},
+    resizable::{h_resizable, resizable_panel, ResizableState},
     text::TextView,
     ActiveTheme as _,
 };
@@ -15,6 +15,7 @@ static DARK_THEME: LazyLock<HighlightTheme> = LazyLock::new(|| HighlightTheme::d
 
 pub struct Example {
     input_state: Entity<InputState>,
+    resizable_state: Entity<ResizableState>,
     is_dark: bool,
     _subscribe: Subscription,
 }
@@ -27,9 +28,15 @@ impl Example {
         let input_state = cx.new(|cx| {
             InputState::new(window, cx)
                 .code_editor(Some(LANG), &LIGHT_THEME)
+                .tab_size(TabSize {
+                    tab_size: 4,
+                    hard_tabs: false,
+                })
                 .default_value(EXAMPLE)
                 .placeholder("Enter your HTML here...")
         });
+
+        let resizable_state = ResizableState::new(cx);
 
         let _subscribe = cx.subscribe(
             &input_state,
@@ -40,6 +47,7 @@ impl Example {
 
         Self {
             input_state,
+            resizable_state,
             is_dark: false,
             _subscribe,
         }
@@ -64,27 +72,26 @@ impl Render for Example {
             });
         }
 
-        h_flex()
-            .h_full()
+        h_resizable("container", self.resizable_state.clone())
             .child(
-                div()
-                    .id("source")
-                    .h_full()
-                    .w_1_2()
-                    .border_r_1()
-                    .border_color(cx.theme().border)
-                    .font_family("Menlo")
-                    .text_size(px(13.))
-                    .child(TextInput::new(&self.input_state).h_full().appearance(false)),
+                resizable_panel().child(
+                    div()
+                        .id("source")
+                        .size_full()
+                        .font_family("Menlo")
+                        .text_size(px(13.))
+                        .child(TextInput::new(&self.input_state).h_full().appearance(false)),
+                ),
             )
             .child(
-                div()
-                    .id("preview")
-                    .h_full()
-                    .w_1_2()
-                    .p_5()
-                    .overflow_y_scroll()
-                    .child(TextView::html("preview", self.input_state.read(cx).value())),
+                resizable_panel().child(
+                    div()
+                        .id("preview")
+                        .size_full()
+                        .p_5()
+                        .overflow_y_scroll()
+                        .child(TextView::html("preview", self.input_state.read(cx).value())),
+                ),
             )
     }
 }
