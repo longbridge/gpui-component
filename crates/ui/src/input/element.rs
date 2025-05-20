@@ -459,18 +459,26 @@ impl Element for TextElement {
         let mut line_number_width = px(0.);
         let line_numbers = if input.mode.line_number() {
             let mut line_numbers = SmallVec::new();
+            let total_lines = input.text.lines().count();
+            let run_len = if total_lines > 999 { 4 } else { 3 };
             let runs = vec![TextRun {
-                len: 3,
+                len: run_len,
                 font: style.font(),
                 color: cx.theme().muted_foreground,
                 background_color: None,
                 underline: None,
                 strikethrough: None,
             }];
-            for i in 1..=self.input.read(cx).mode.rows() {
+            for i in 1..=total_lines {
+                let line_no = if run_len == 4 {
+                    format!("{:>4}", i).into()
+                } else {
+                    format!("{:>3}", i).into()
+                };
+
                 let line = window
                     .text_system()
-                    .shape_text(format!("{:>3}", i).into(), font_size, &runs, None, None)
+                    .shape_text(line_no, font_size, &runs, None, None)
                     .unwrap();
                 line_number_width = (line.last().unwrap().width() + LINE_NUMBER_MARGIN_RIGHT)
                     .max(line_number_width);
@@ -704,6 +712,7 @@ impl Element for TextElement {
             input.set_input_bounds(input_bounds, cx);
             input.last_selected_range = Some(selected_range);
             input.scroll_size = scroll_size;
+            input.line_number_width = prepaint.line_number_width;
             input
                 .scroll_handle
                 .set_offset(prepaint.cursor_scroll_offset);

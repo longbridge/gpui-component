@@ -233,6 +233,7 @@ pub struct InputState {
     pub(super) scrollbar_state: Rc<Cell<ScrollbarState>>,
     /// The size of the scrollable content.
     pub(crate) scroll_size: gpui::Size<Pixels>,
+    pub(crate) line_number_width: Pixels,
 
     /// The mask pattern for formatting the input text
     pub(crate) mask_pattern: MaskPattern,
@@ -306,6 +307,7 @@ impl InputState {
             scrollbar_state: Rc::new(Cell::new(ScrollbarState::default())),
             scroll_size: gpui::size(px(0.), px(0.)),
             preferred_x_offset: None,
+            line_number_width: px(0.),
             placeholder: SharedString::default(),
             mask_pattern: MaskPattern::default(),
             _subscriptions,
@@ -1271,7 +1273,7 @@ impl InputState {
         //
         // - included the input padding.
         // - included the scroll offset.
-        let inner_position = position - bounds.origin;
+        let inner_position = position - bounds.origin - point(self.line_number_width, px(0.));
 
         let mut index = 0;
         let mut y_offset = px(0.);
