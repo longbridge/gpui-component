@@ -2,6 +2,14 @@ use std::ops::Range;
 
 use gpui::{App, Font, LineFragment, Pixels, SharedString};
 
+#[allow(unused)]
+pub(super) struct LineWrap {
+    /// The number of soft wrapped lines of this line (Not include first line.)
+    pub(super) wrap_lines: usize,
+    /// The range of the line text in the entire text.
+    pub(super) range: Range<usize>,
+}
+
 /// Used to prepare the text with soft_wrap to be get lines to displayed in the TextArea
 ///
 /// After use lines to calculate the scroll size of the TextArea
@@ -9,6 +17,8 @@ pub(super) struct TextWrapper {
     pub(super) text: SharedString,
     /// The wrapped lines, value is start and end index of the line (by split \n).
     pub(super) wrapped_lines: Vec<Range<usize>>,
+    /// The lines by split \n
+    pub(super) lines: Vec<LineWrap>,
     pub(super) font: Font,
     pub(super) font_size: Pixels,
     /// If is none, it means the text is not wrapped
@@ -24,6 +34,7 @@ impl TextWrapper {
             font_size,
             wrap_width,
             wrapped_lines: Vec::new(),
+            lines: Vec::new(),
         }
     }
 
@@ -47,30 +58,48 @@ impl TextWrapper {
         }
 
         let mut wrapped_lines = vec![];
+        let mut lines = vec![];
         let wrap_width = self.wrap_width.unwrap_or(Pixels::MAX);
         let mut line_wrapper = cx
             .text_system()
             .line_wrapper(self.font.clone(), self.font_size);
 
+        let mut prev_line_ix = 0;
         for line in text.lines() {
+            let mut line_wraps = vec![];
             let mut prev_boundary_ix = 0;
+
+            // Here only have wraped line, if there is no wrap meet, the `line_wraps` result will empty.
             for boundary in line_wrapper.wrap_line(&[LineFragment::text(line)], wrap_width) {
-                wrapped_lines.push(prev_boundary_ix..boundary.ix);
+                line_wraps.push(prev_boundary_ix..boundary.ix);
                 prev_boundary_ix = boundary.ix;
             }
 
+            lines.push(LineWrap {
+                wrap_lines: line_wraps.len(),
+                range: prev_line_ix..line.len(),
+            });
+
+            wrapped_lines.extend(line_wraps);
             // Reset of the line
             if !line[prev_boundary_ix..].is_empty() || prev_boundary_ix == 0 {
-                wrapped_lines.push(prev_boundary_ix..line.len());
+                wrapped_lines.push(prev_line_ix + prev_boundary_ix..prev_line_ix + line.len());
             }
+
+            prev_line_ix += line.len();
         }
 
         // Add last empty line.
         if text.chars().last().unwrap_or('\n') == '\n' {
             wrapped_lines.push(text.len()..text.len());
+            lines.push(LineWrap {
+                wrap_lines: 0,
+                range: text.len()..text.len(),
+            });
         }
 
         self.text = text;
         self.wrapped_lines = wrapped_lines;
+        self.lines = lines;
     }
 }

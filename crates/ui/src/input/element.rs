@@ -459,7 +459,7 @@ impl Element for TextElement {
         let mut line_number_width = px(0.);
         let line_numbers = if input.mode.line_number() {
             let mut line_numbers = SmallVec::new();
-            let total_lines = input.text.lines().count();
+            let total_lines = input.text_wrapper.lines.len();
             let run_len = if total_lines > 999 { 4 } else { 3 };
             let runs = vec![TextRun {
                 len: run_len,
@@ -469,11 +469,12 @@ impl Element for TextElement {
                 underline: None,
                 strikethrough: None,
             }];
-            for i in 1..=total_lines {
+
+            for (i, line_wrap) in input.text_wrapper.lines.iter().enumerate() {
                 let line_no = if run_len == 4 {
-                    format!("{:>4}", i).into()
+                    format!("{:>4}", i + 1).into()
                 } else {
-                    format!("{:>3}", i).into()
+                    format!("{:>3}", i + 1).into()
                 };
 
                 let line = window
@@ -483,6 +484,15 @@ impl Element for TextElement {
                 line_number_width = (line.last().unwrap().width() + LINE_NUMBER_MARGIN_RIGHT)
                     .max(line_number_width);
                 line_numbers.extend(line);
+
+                for _ in 0..line_wrap.wrap_lines {
+                    // Empty line no for wrapped lines
+                    let line = window
+                        .text_system()
+                        .shape_text("    ".into(), font_size, &runs, None, None)
+                        .unwrap();
+                    line_numbers.extend(line);
+                }
             }
             Some(line_numbers)
         } else {
