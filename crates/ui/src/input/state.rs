@@ -1012,6 +1012,49 @@ impl InputState {
         line
     }
 
+    /// Get indent string of next line.
+    ///
+    /// To get current and next line indent, to return more depth one.
+    pub(super) fn indent_of_next_line(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> String {
+        if self.is_single_line() {
+            return "".into();
+        }
+
+        let mut current_indent = String::new();
+        let mut next_indent = String::new();
+        let current_line_start_pos = self.start_of_line(window, cx);
+        let next_line_start_pos = self.end_of_line(window, cx);
+        for c in self.text.chars().skip(current_line_start_pos) {
+            if !c.is_whitespace() {
+                break;
+            }
+            if c == '\n' || c == '\r' {
+                break;
+            }
+            current_indent.push(c);
+        }
+
+        for c in self.text.chars().skip(next_line_start_pos) {
+            if !c.is_whitespace() {
+                break;
+            }
+            if c == '\n' || c == '\r' {
+                break;
+            }
+            next_indent.push(c);
+        }
+
+        if next_indent.len() > current_indent.len() {
+            return next_indent;
+        } else {
+            return current_indent;
+        }
+    }
+
     pub(super) fn backspace(&mut self, _: &Backspace, window: &mut Window, cx: &mut Context<Self>) {
         if self.selected_range.is_empty() {
             self.select_to(self.previous_boundary(self.cursor_offset()), window, cx)
@@ -1102,6 +1145,9 @@ impl InputState {
     pub(super) fn enter(&mut self, action: &Enter, window: &mut Window, cx: &mut Context<Self>) {
         if self.is_multi_line() {
             let is_eof = self.selected_range.end == self.text.len();
+
+            // Get current line indent
+            let indent = self.indent_of_next_line(window, cx);
             self.replace_text_in_range(None, "\n", window, cx);
 
             // Move cursor to the start of the next line
@@ -1110,6 +1156,14 @@ impl InputState {
                 new_offset += 1;
             }
             self.move_to(new_offset, window, cx);
+
+            // Add indent
+            self.replace_text_in_range(
+                Some(self.range_to_utf16(&(self.cursor_offset()..self.cursor_offset()))),
+                &indent,
+                window,
+                cx,
+            );
         }
 
         cx.emit(InputEvent::PressEnter {
