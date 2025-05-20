@@ -720,12 +720,11 @@ impl InputState {
             return;
         }
 
-        if self.selected_range.is_empty() {
-            self.pause_blink_cursor(cx);
-            self.move_vertical(-1, window, cx);
-        } else {
-            self.move_to(self.selected_range.start, window, cx);
+        if !self.selected_range.is_empty() {
+            self.move_to(self.selected_range.start.saturating_sub(1), window, cx);
         }
+        self.pause_blink_cursor(cx);
+        self.move_vertical(-1, window, cx);
     }
 
     pub(super) fn down(&mut self, _: &Down, window: &mut Window, cx: &mut Context<Self>) {
@@ -733,12 +732,12 @@ impl InputState {
             return;
         }
 
-        if self.selected_range.is_empty() {
-            self.pause_blink_cursor(cx);
-            self.move_vertical(1, window, cx);
-        } else {
-            self.move_to(self.selected_range.end, window, cx);
+        if !self.selected_range.is_empty() {
+            self.move_to(self.selected_range.end.saturating_sub(1), window, cx);
         }
+
+        self.pause_blink_cursor(cx);
+        self.move_vertical(1, window, cx);
     }
 
     pub(super) fn select_left(
