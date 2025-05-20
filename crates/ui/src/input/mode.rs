@@ -24,16 +24,6 @@ impl Default for TabSize {
 }
 
 impl TabSize {
-    /// Create a new [`TabSize`] with the given tab size.
-    ///
-    /// If `hard_tabs` is true, use `\t` as tab indent, default is false and `tab_size` will be ignored.
-    pub fn new(tab_size: usize, hard_tabs: bool) -> Self {
-        Self {
-            tab_size,
-            hard_tabs,
-        }
-    }
-
     pub(super) fn to_string(&self) -> SharedString {
         if self.hard_tabs {
             "\t".into()
@@ -174,14 +164,26 @@ mod tests {
 
     #[test]
     fn test_tab_size() {
-        let tab = TabSize::new(2, false);
+        let tab = TabSize {
+            tab_size: 2,
+            hard_tabs: false,
+        };
         assert_eq!(tab.to_string(), "  ");
-        let tab = TabSize::new(4, false);
+        let tab = TabSize {
+            tab_size: 4,
+            hard_tabs: false,
+        };
         assert_eq!(tab.to_string(), "    ");
 
-        let tab = TabSize::new(2, true);
+        let tab = TabSize {
+            tab_size: 2,
+            hard_tabs: true,
+        };
         assert_eq!(tab.to_string(), "\t");
-        let tab = TabSize::new(4, true);
+        let tab = TabSize {
+            tab_size: 4,
+            hard_tabs: true,
+        };
         assert_eq!(tab.to_string(), "\t");
     }
 }

@@ -6,7 +6,7 @@ use gpui_component::{
     dropdown::{Dropdown, DropdownEvent, DropdownState},
     h_flex,
     highlighter::{HighlightTheme, Highlighter},
-    input::{InputEvent, InputState, TextInput},
+    input::{InputEvent, InputState, TabSize, TextInput},
     v_flex, ActiveTheme as _,
 };
 use story::Assets;
@@ -33,6 +33,10 @@ impl Example {
             InputState::new(window, cx)
                 .code_editor(Some(&default_language), &LIGHT_THEME)
                 .line_number(true)
+                .tab_size(TabSize {
+                    tab_size: 4,
+                    hard_tabs: false,
+                })
                 .default_value(EXAMPLE)
                 .placeholder("Enter your code here...")
         });
