@@ -959,6 +959,24 @@ impl InputState {
         line
     }
 
+    /// Get start line of selection start or end (The min value).
+    ///
+    /// This is means is always get the first line of selection.
+    fn start_of_line_of_selection(&mut self, window: &mut Window, cx: &mut Context<Self>) -> usize {
+        if self.is_single_line() {
+            return 0;
+        }
+
+        let offset = self.previous_boundary(self.selected_range.start.min(self.selected_range.end));
+        let line = self
+            .text_for_range(self.range_to_utf16(&(0..offset + 1)), &mut None, window, cx)
+            .unwrap_or_default()
+            .rfind('\n')
+            .map(|i| i + 1)
+            .unwrap_or(0);
+        line
+    }
+
     /// Get end of line
     fn end_of_line(&mut self, window: &mut Window, cx: &mut Context<Self>) -> usize {
         if self.is_single_line() {
@@ -1106,21 +1124,54 @@ impl InputState {
 
         let tab_indent = tab_size.to_string();
         let selected_range = self.selected_range.clone();
+        let mut added_len = 0;
 
-        let mut offset = self.selected_range.start;
         if !self.selected_range.is_empty() {
-            // Indent line
-            offset = self.start_of_line(window, cx);
-        }
+            let mut offset = self.start_of_line_of_selection(window, cx);
 
-        self.replace_text_in_range(
-            Some(self.range_to_utf16(&(offset..offset))),
-            &tab_indent,
-            window,
-            cx,
-        );
-        self.selected_range =
-            selected_range.start + tab_indent.len()..selected_range.end + tab_indent.len();
+            let selected_text = self
+                .text_for_range(
+                    self.range_to_utf16(&(offset..selected_range.end)),
+                    &mut None,
+                    window,
+                    cx,
+                )
+                .unwrap_or("".into());
+
+            let mut lines_count = 0;
+            for line in selected_text.lines() {
+                lines_count += 1;
+                self.replace_text_in_range(
+                    Some(self.range_to_utf16(&(offset..offset))),
+                    &tab_indent,
+                    window,
+                    cx,
+                );
+                added_len += tab_indent.len();
+                // +1 for "\n"
+                offset += line.len() + tab_indent.len() + 1;
+            }
+
+            if lines_count > 1 {
+                self.selected_range =
+                    selected_range.start + tab_indent.len()..selected_range.end + added_len;
+            } else {
+                self.selected_range =
+                    selected_range.start + added_len..selected_range.end + added_len;
+            }
+        } else {
+            // Selected none
+            let offset = self.selected_range.start;
+            self.replace_text_in_range(
+                Some(self.range_to_utf16(&(offset..offset))),
+                &tab_indent,
+                window,
+                cx,
+            );
+            added_len = tab_indent.len();
+
+            self.selected_range = selected_range.start + added_len..selected_range.end + added_len;
+        }
     }
 
     pub(super) fn outdent(&mut self, _: &Outdent, window: &mut Window, cx: &mut Context<Self>) {
@@ -1128,22 +1179,60 @@ impl InputState {
             return;
         };
 
+        let tab_indent = tab_size.to_string();
         let selected_range = self.selected_range.clone();
-        let tab_outdent = tab_size.to_string();
-        let offset = self.start_of_line(window, cx);
+        let mut removed_len = 0;
 
-        // If the offset + tab_outdent.len is \s or \t, then remove it.
-        let indent_range = self.range_to_utf16(&(offset..offset + tab_outdent.len()));
-        if self
-            .text_for_range(indent_range.clone(), &mut None, window, cx)
-            .unwrap_or_default()
-            .trim()
-            .len()
-            == 0
-        {
-            self.replace_text_in_range(Some(indent_range), "".into(), window, cx);
-            self.selected_range = selected_range.start.saturating_sub(tab_outdent.len())
-                ..selected_range.end.saturating_sub(tab_outdent.len());
+        if !self.selected_range.is_empty() {
+            let mut offset = self.start_of_line_of_selection(window, cx);
+
+            let selected_text = self
+                .text_for_range(
+                    self.range_to_utf16(&(offset..selected_range.end)),
+                    &mut None,
+                    window,
+                    cx,
+                )
+                .unwrap_or("".into());
+
+            let mut lines_count = 0;
+            for line in selected_text.lines() {
+                lines_count += 1;
+                if line.starts_with(tab_indent.as_ref()) {
+                    self.replace_text_in_range(
+                        Some(self.range_to_utf16(&(offset..offset + tab_indent.len()))),
+                        "",
+                        window,
+                        cx,
+                    );
+                    removed_len += tab_indent.len();
+                }
+                // +1 for "\n"
+                offset += line.len() - tab_indent.len() + 1;
+            }
+
+            if lines_count > 1 {
+                self.selected_range = selected_range.start.saturating_sub(tab_indent.len())
+                    ..selected_range.end.saturating_sub(removed_len);
+            } else {
+                self.selected_range = selected_range.start.saturating_sub(tab_indent.len())
+                    ..selected_range.end.saturating_sub(tab_indent.len());
+            }
+        } else {
+            // Selected none
+            let offset = self.start_of_line_of_selection(window, cx);
+            if self.text[offset..].starts_with(tab_indent.as_ref()) {
+                self.replace_text_in_range(
+                    Some(self.range_to_utf16(&(offset..offset + tab_indent.len()))),
+                    "",
+                    window,
+                    cx,
+                );
+                removed_len = tab_indent.len();
+
+                self.selected_range = selected_range.start.saturating_sub(removed_len)
+                    ..selected_range.end.saturating_sub(removed_len);
+            }
         }
     }
 
