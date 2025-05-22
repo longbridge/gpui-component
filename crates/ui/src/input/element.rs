@@ -413,12 +413,13 @@ impl Element for TextElement {
         let line_height = window.line_height();
         let input = self.input.read(cx);
         let text = input.text.clone();
+        let is_empty = text.is_empty();
         let placeholder = self.placeholder.clone();
         let style = window.text_style();
         let font_size = style.font_size.to_pixels(window.rem_size());
         let mut bounds = bounds;
 
-        let (display_text, text_color) = if text.is_empty() {
+        let (display_text, text_color) = if is_empty {
             (placeholder, cx.theme().muted_foreground)
         } else if input.masked {
             (
@@ -507,7 +508,7 @@ impl Element for TextElement {
             .into_iter()
             .filter(|run| run.len > 0)
             .collect()
-        } else {
+        } else if !is_empty {
             if let Some(highlight_lines) = highlight_lines {
                 let mut runs = vec![];
                 for style in highlight_lines {
@@ -517,6 +518,8 @@ impl Element for TextElement {
             } else {
                 vec![run]
             }
+        } else {
+            vec![run]
         };
 
         let wrap_width = if multi_line {
