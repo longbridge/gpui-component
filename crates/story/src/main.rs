@@ -61,6 +61,7 @@ impl Gallery {
                     StoryContainer::panel::<NumberInputStory>(window, cx),
                     StoryContainer::panel::<OtpInputStory>(window, cx),
                     StoryContainer::panel::<PopoverStory>(window, cx),
+                    StoryContainer::panel::<PostmanStory>(window, cx), // Added PostmanStory
                     StoryContainer::panel::<ProgressStory>(window, cx),
                     StoryContainer::panel::<RadioStory>(window, cx),
                     StoryContainer::panel::<ResizableStory>(window, cx),
