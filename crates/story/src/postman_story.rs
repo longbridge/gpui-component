@@ -1,14 +1,15 @@
 use gpui::{
-    actions, div, prelude::FluentBuilder as _, AnyElement, App, AppContext, Context, Entity,
-    Focusable, InteractiveElement, IntoElement, ParentElement as _, Render, Styled, Task,
-    WeakEntity, Window, WindowHandle, rems,
+    actions, div, prelude::FluentBuilder as _, rems, AnyElement, App, AppContext, Context, Entity,
+    Focusable, InteractiveElement, IntoElement, ParentElement as _, Render,
+    StatefulInteractiveElement as _, Styled, Task, WeakEntity, Window, WindowHandle,
 };
 use gpui_component::{
     button::Button,
+    dropdown::{Dropdown, DropdownItem, DropdownState},
+    h_flex,
     input::{InputState, TextInput},
-    tab_bar::{Tab, TabBar},
-    dropdown::{Dropdown, DropdownState, DropdownItem},
-    v_flex, h_flex,
+    tab::{Tab, TabBar},
+    v_flex, ActiveTheme as _, Disableable as _, Selectable as _,
 };
 use reqwest::{
     header::{HeaderMap, HeaderName, HeaderValue},
@@ -73,12 +74,10 @@ impl DropdownItem for HttpMethod {
     }
 }
 
-
 // TODO: Define actions if needed for this story
 
 // Define the main struct for our Postman-like feature
 pub struct PostmanStory {
-    window: WindowHandle,
     url_input: Entity<InputState>,
     http_method_dropdown: Entity<DropdownState<Vec<HttpMethod>>>,
     active_tab: TabId,
@@ -117,29 +116,28 @@ impl PostmanStory {
     }
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let window_handle = window.handle();
-        let url_input = cx.new_entity(|cx_is| {
-            InputState::new(window_handle.clone(), cx_is).placeholder("Enter URL")
+        let url_input = cx.new(|cx_is| {
+            InputState::new(window, cx_is)
+                .default_value("https://api.github.com/repos/longbridge/gpui-component")
+                .placeholder("Enter URL")
         });
 
-        let http_method_dropdown = cx.new_entity(|cx_ds| {
-            DropdownState::new(HttpMethod::all(), Some(0), window_handle.clone(), cx_ds)
-        });
-        
+        let http_method_dropdown =
+            cx.new(|cx_ds| DropdownState::new(HttpMethod::all(), Some(0), window, cx_ds));
+
         let mut header_pairs = Vec::new();
-        header_pairs.push(Self::create_empty_kv_pair(&window_handle, cx));
+        header_pairs.push(Self::create_empty_kv_pair(window, cx));
 
         let mut query_param_pairs = Vec::new();
-        query_param_pairs.push(Self::create_empty_kv_pair(&window_handle, cx));
+        query_param_pairs.push(Self::create_empty_kv_pair(window, cx));
 
-        let body_input = cx.new_entity(|cx_is| {
-            InputState::new(window_handle.clone(), cx_is)
+        let body_input = cx.new(|cx_is| {
+            InputState::new(window, cx_is)
                 .placeholder("Request body")
                 .auto_grow(5, 20)
         });
 
         Self {
-            window: window_handle,
             url_input,
             http_method_dropdown,
             active_tab: TabId::Headers,
@@ -156,13 +154,11 @@ impl PostmanStory {
     }
 
     fn create_empty_kv_pair(
-        window: &WindowHandle,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> (Entity<InputState>, Entity<InputState>) {
-        let key_input = cx
-            .new_entity(|cx_is| InputState::new(window.clone(), cx_is).placeholder("Key"));
-        let value_input = cx
-            .new_entity(|cx_is| InputState::new(window.clone(), cx_is).placeholder("Value"));
+        let key_input = cx.new(|cx_is| InputState::new(window, cx_is).placeholder("Key"));
+        let value_input = cx.new(|cx_is| InputState::new(window, cx_is).placeholder("Value"));
         (key_input, value_input)
     }
 }
@@ -189,12 +185,9 @@ impl Render for PostmanStory {
                     .gap_2()
                     .items_center()
                     .child(
-                        Dropdown::new(&self.http_method_dropdown)
-                            .width(rems(7.0)) // ~112px at 16px base
+                        Dropdown::new(&self.http_method_dropdown).width(rems(7.0)), // ~112px at 16px base
                     )
-                    .child(
-                        div().flex_grow().child(TextInput::new(&self.url_input))
-                    )
+                    .child(TextInput::new(&self.url_input))
                     .child({
                         let label = if self.is_loading {
                             "Sending..."
@@ -213,7 +206,7 @@ impl Render for PostmanStory {
                 TabBar::new("request_config_tabs")
                     .child(
                         Tab::new("headers_tab")
-                            .label("Headers")
+                            .child("Headers")
                             .selected(self.active_tab == TabId::Headers)
                             .on_click(cx.listener(|this, _, _, cx_self| {
                                 this.active_tab = TabId::Headers;
@@ -222,7 +215,7 @@ impl Render for PostmanStory {
                     )
                     .child(
                         Tab::new("params_tab")
-                            .label("Query Params")
+                            .child("Query Params")
                             .selected(self.active_tab == TabId::QueryParams)
                             .on_click(cx.listener(|this, _, _, cx_self| {
                                 this.active_tab = TabId::QueryParams;
@@ -231,7 +224,7 @@ impl Render for PostmanStory {
                     )
                     .child(
                         Tab::new("body_tab")
-                            .label("Body")
+                            .child("Body")
                             .selected(self.active_tab == TabId::Body)
                             .on_click(cx.listener(|this, _, _, cx_self| {
                                 this.active_tab = TabId::Body;
@@ -314,7 +307,7 @@ impl PostmanStory {
         let client = self.client.clone(); // Clone client for the async task
         let view_handle: WeakEntity<Self> = cx.entity().downgrade(); // Get a weak handle to the view
 
-        cx.spawn(|mut cx_task| async move {
+        cx.spawn(async move |window, cx| {
             let req_method =
                 ReqwestMethod::from_str(selected_method.as_str()).unwrap_or(ReqwestMethod::GET);
 
@@ -330,28 +323,31 @@ impl PostmanStory {
                 Ok(response) => {
                     let status = response.status().to_string();
                     let headers_string = format!("{:#?}", response.headers()); // Simple debug format
-                    let response_body_result: Result<String, reqwest::Error> = response.text().await;
+                    let response_body_result: Result<String, reqwest::Error> =
+                        response.text().await;
 
-                    let _ = cx_task.update_view(view_handle, |this, cx_update| {
-                        this.response_status = Some(status);
-                        this.response_headers = Some(headers_string);
-                        match response_body_result {
-                            Ok(text) => {
-                                this.response_body = Some(text);
+                    let _ = cx.update(|cx| {
+                        view_handle.update(cx, |this, cx| {
+                            this.response_status = Some(status);
+                            this.response_headers = Some(headers_string);
+                            match response_body_result {
+                                Ok(text) => {
+                                    this.response_body = Some(text);
+                                }
+                                Err(e) => {
+                                    // Error reading body, but we still got status/headers
+                                    this.error_message =
+                                        Some(format!("Error reading response body: {}", e));
+                                    this.response_body = None; // Or Some("Error: Could not read body.".to_string())
+                                }
                             }
-                            Err(e) => {
-                                // Error reading body, but we still got status/headers
-                                this.error_message =
-                                    Some(format!("Error reading response body: {}", e));
-                                this.response_body = None; // Or Some("Error: Could not read body.".to_string())
-                            }
-                        }
-                        this.is_loading = false;
-                        cx_update.notify();
+                            this.is_loading = false;
+                            cx.notify();
+                        })
                     });
                 }
                 Err(err) => {
-                    let _ = cx_task.update_view(view_handle, |this, cx_update| {
+                    let _ = view_handle.update(cx, |this, cx_update| {
                         this.error_message = Some(format!("Request failed: {}", err));
                         this.is_loading = false;
                         cx_update.notify();
@@ -396,7 +392,7 @@ impl PostmanStory {
         if let Some(err_msg) = &self.error_message {
             return div()
                 .p_4()
-                .text_color(theme.colors().error) // Use theme color for error
+                .text_color(theme.danger) // Use theme color for error
                 .child(format!("Error: {}", err_msg))
                 .into_any_element();
         }
@@ -413,34 +409,29 @@ impl PostmanStory {
             .p_2()
             .gap_3() // Increased gap for sections
             .flex_grow() // Ensure it takes available space
-            .child(
-                div().child(format!(
-                    "Status: {}",
-                    self.response_status.as_deref().unwrap_or("N/A")
-                )),
-            )
+            .child(div().child(format!(
+                "Status: {}",
+                self.response_status.as_deref().unwrap_or("N/A")
+            )))
             .child(
                 v_flex()
                     .id("response-headers-section")
                     .gap_1()
+                    .child(div().font_weight(gpui::FontWeight::BOLD).child("Headers:"))
                     .child(
                         div()
-                            .font_weight(gpui::FontWeight::BOLD)
-                            .child("Headers:"),
-                    )
-                    .child(
-                        div()
+                            .id("response-body")
                             .max_h(rems(10.0)) // Max height for scroll, e.g., 10 rems (160px)
                             .overflow_y_scroll()
                             .p_1()
                             .border_1()
-                            .border_color(theme.colors().border)
+                            .border_color(theme.border)
                             .children(
                                 self.response_headers
-                                    .as_deref()
-                                    .unwrap_or("N/A")
+                                    .clone()
+                                    .unwrap_or("N/A".to_string())
                                     .lines()
-                                    .map(|line| div().child(line))
+                                    .map(|line| div().child(line.to_string()))
                                     .collect::<Vec<_>>(),
                             ),
                     ),
@@ -450,20 +441,17 @@ impl PostmanStory {
                     .id("response-body-section")
                     .gap_1()
                     .flex_grow() // Allow body to take more space
+                    .child(div().font_weight(gpui::FontWeight::BOLD).child("Body:"))
                     .child(
                         div()
-                            .font_weight(gpui::FontWeight::BOLD)
-                            .child("Body:"),
-                    )
-                    .child(
-                        div()
+                            .id("body")
                             .flex_grow() // Ensure this div itself can grow
                             .max_h(rems(20.0)) // Max height for scroll, e.g., 20 rems (320px)
                             .overflow_y_scroll()
                             .p_1()
                             .border_1()
-                            .border_color(theme.colors().border)
-                            .child(self.response_body.as_deref().unwrap_or("N/A")),
+                            .border_color(theme.border)
+                            .child(self.response_body.clone().unwrap_or("N/A".into())),
                     ),
             )
             .into_any_element()
@@ -472,12 +460,13 @@ impl PostmanStory {
     fn render_active_tab_content(&mut self, cx: &mut Context<Self>) -> AnyElement {
         match self.active_tab {
             TabId::Headers => {
-                let header_rows = self.header_pairs
+                let header_rows = self
+                    .header_pairs
                     .iter()
                     .enumerate()
                     .map(|(index, (key_input, value_input))| {
                         h_flex()
-                            .key(("header_pair", index))
+                            .id(("header_pair", index))
                             .gap_2()
                             .items_center() // Align items vertically
                             .children(Self::render_kv_pair_inputs(key_input, value_input))
@@ -500,21 +489,22 @@ impl PostmanStory {
                     .child(
                         Button::new("add_header")
                             .label("Add Header")
-                            .on_click(cx.listener(|this, _, _, cx_self| {
-                                let new_pair = Self::create_empty_kv_pair(&this.window, cx_self);
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                let new_pair = Self::create_empty_kv_pair(window, cx);
                                 this.header_pairs.push(new_pair);
-                                cx_self.notify();
+                                cx.notify();
                             })),
                     )
                     .into_any_element()
             }
             TabId::QueryParams => {
-                let param_rows = self.query_param_pairs
+                let param_rows = self
+                    .query_param_pairs
                     .iter()
                     .enumerate()
                     .map(|(index, (key_input, value_input))| {
                         h_flex()
-                            .key(("query_param_pair", index))
+                            .id(("query_param_pair", index))
                             .gap_2()
                             .items_center() // Align items vertically
                             .children(Self::render_kv_pair_inputs(key_input, value_input))
@@ -528,7 +518,7 @@ impl PostmanStory {
                             )
                     })
                     .collect::<Vec<_>>();
-                
+
                 v_flex()
                     .id("query_params_content")
                     .p_2()
@@ -537,10 +527,10 @@ impl PostmanStory {
                     .child(
                         Button::new("add_param")
                             .label("Add Param")
-                            .on_click(cx.listener(|this, _, _, cx_self| {
-                                let new_pair = Self::create_empty_kv_pair(&this.window, cx_self);
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                let new_pair = Self::create_empty_kv_pair(window, cx);
                                 this.query_param_pairs.push(new_pair);
-                                cx_self.notify();
+                                cx.notify();
                             })),
                     )
                     .into_any_element()

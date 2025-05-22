@@ -13,12 +13,16 @@ gpui-component = { workspace = true, features = ["webview"] }
 rand = "0.8"
 raw-window-handle = { version = "0.6", features = ["std"] }
 regex = "1"
-reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features = false }
+reqwest = { version = "0.11", features = [
+    "json",
+    "rustls-tls",
+], default-features = false }
 reqwest_client = { git = "https://github.com/huacnlee/zed.git", branch = "webview" }
 rust-embed = "8.5.0"
 serde = "1"
 serde_json = "1"
 unindent = "0.2.3"
+tokio = { version = "1", features = ["full"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = { version = "0.18" }

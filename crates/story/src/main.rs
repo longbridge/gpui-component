@@ -291,6 +291,16 @@ impl Render for Gallery {
 fn main() {
     let app = Application::new().with_assets(Assets);
 
+    // Initialize tokio runtime in the main thread
+    // This is used for avoid tokio spawn hangs in the main thread.
+    //
+    // https://github.com/longbridge/gpui-component/pull/100
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let _guard = rt.enter();
+
     // Parse `cargo run -- <story_name>`
     let name = std::env::args().nth(1);
 
