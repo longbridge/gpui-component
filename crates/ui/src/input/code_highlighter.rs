@@ -53,7 +53,7 @@ impl CodeHighlighter {
 
         let mut lines = vec![];
         let mut new_cache = HashMap::new();
-        for line in text.lines() {
+        for line in text.split('\n') {
             let cache_key = gpui::hash(&line);
 
             // cache hit
