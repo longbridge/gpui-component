@@ -223,6 +223,8 @@ pub struct InputState {
     /// Range for save the selected word, use to keep word range when drag move.
     pub(super) selected_word_range: Option<Range<usize>>,
     pub(super) selection_reversed: bool,
+    /// The index of the current line.
+    pub(super) current_line_index: Option<usize>,
     pub(super) marked_range: Option<Range<usize>>,
     pub(super) last_layout: Option<SmallVec<[WrappedLine; 1]>>,
     pub(super) last_cursor_offset: Option<usize>,
@@ -298,6 +300,7 @@ impl InputState {
             selected_range: 0..0,
             selected_word_range: None,
             selection_reversed: false,
+            current_line_index: None,
             marked_range: None,
             input_bounds: Bounds::default(),
             selecting: false,

@@ -22,7 +22,7 @@ impl LineHighlightStyle {
 
 #[derive(Clone)]
 pub(super) struct CodeHighlighter {
-    highlighter: Rc<Highlighter<'static>>,
+    pub(super) highlighter: Rc<Highlighter<'static>>,
     pub(super) text: SharedString,
     /// The lines by split \n
     pub(super) lines: Vec<LineHighlightStyle>,

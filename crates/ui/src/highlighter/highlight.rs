@@ -52,6 +52,10 @@ impl HighlightTheme {
             inner: Arc::new(theme),
         })
     }
+
+    pub fn settings(&self) -> &highlighting::ThemeSettings {
+        &self.inner.settings
+    }
 }
 
 /// Inspired by the `iced` crate's `Highlighter` struct.
@@ -59,6 +63,7 @@ impl HighlightTheme {
 /// https://github.com/iced-rs/iced/blob/master/highlighter/src/lib.rs#L24
 pub struct Highlighter<'a> {
     syntax: &'static parsing::SyntaxReference,
+    pub(crate) theme: &'a HighlightTheme,
     highlighter: highlighting::Highlighter<'a>,
 }
 
@@ -71,6 +76,7 @@ impl<'a> Highlighter<'a> {
 
         Self {
             syntax,
+            theme,
             highlighter,
         }
     }
@@ -104,7 +110,7 @@ impl<'a> Highlighter<'a> {
     }
 }
 
-fn color_to_hsla(color: highlighting::Color) -> Hsla {
+pub fn color_to_hsla(color: highlighting::Color) -> Hsla {
     gpui::Rgba {
         r: color.r as f32 / 255.,
         g: color.g as f32 / 255.,

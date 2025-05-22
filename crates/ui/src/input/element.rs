@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use gpui::{
     fill, point, px, relative, size, App, Bounds, Corners, Element, ElementId, ElementInputHandler,
     Entity, GlobalElementId, IntoElement, LayoutId, MouseButton, MouseMoveEvent, PaintQuad, Path,
@@ -54,10 +56,11 @@ impl TextElement {
         line_number_width: Pixels,
         window: &mut Window,
         cx: &mut App,
-    ) -> (Option<PaintQuad>, Point<Pixels>) {
+    ) -> (Option<PaintQuad>, Point<Pixels>, usize) {
         let input = self.input.read(cx);
         let selected_range = &input.selected_range;
         let cursor_offset = input.cursor_offset();
+        let mut current_line_index = 0;
         let mut scroll_offset = input.scroll_handle.offset();
         let mut cursor = None;
 
@@ -172,9 +175,12 @@ impl TextElement {
                     cx.theme().caret,
                 ))
             };
+
+            // Calculate the current line index
+            current_line_index = (cursor_pos.y.0 / line_height.0) as usize;
         }
 
-        (cursor, scroll_offset)
+        (cursor, scroll_offset, current_line_index)
     }
 
     fn layout_selections(
@@ -316,6 +322,13 @@ impl TextElement {
             _ => None,
         })
     }
+
+    fn highlighter(&self, cx: &App) -> Option<Rc<crate::highlighter::Highlighter<'static>>> {
+        match &self.input.read(cx).mode {
+            InputMode::CodeEditor { highlighter, .. } => Some(highlighter.highlighter.clone()),
+            _ => None,
+        }
+    }
 }
 
 pub(super) struct PrepaintState {
@@ -324,6 +337,7 @@ pub(super) struct PrepaintState {
     line_number_width: Pixels,
     cursor: Option<PaintQuad>,
     cursor_scroll_offset: Point<Pixels>,
+    current_line_index: usize,
     selection_path: Option<Path<Pixels>>,
     bounds: Bounds<Pixels>,
 }
@@ -438,10 +452,19 @@ impl Element for TextElement {
             let mut line_numbers = SmallVec::new();
             let total_lines = input.text_wrapper.lines.len();
             let run_len = if total_lines > 999 { 4 } else { 3 };
-            let runs = vec![TextRun {
+
+            let other_line_runs = vec![TextRun {
                 len: run_len,
                 font: style.font(),
                 color: cx.theme().muted_foreground,
+                background_color: None,
+                underline: None,
+                strikethrough: None,
+            }];
+            let current_line_runs = vec![TextRun {
+                len: run_len,
+                font: style.font(),
+                color: cx.theme().foreground,
                 background_color: None,
                 underline: None,
                 strikethrough: None,
@@ -452,6 +475,12 @@ impl Element for TextElement {
                     format!("{:>4}", i + 1).into()
                 } else {
                     format!("{:>3}", i + 1).into()
+                };
+
+                let runs = if input.current_line_index == Some(i) {
+                    &current_line_runs
+                } else {
+                    &other_line_runs
                 };
 
                 let line = window
@@ -564,7 +593,7 @@ impl Element for TextElement {
 
         // Calculate the scroll offset to keep the cursor in view
 
-        let (cursor, cursor_scroll_offset) = self.layout_cursor(
+        let (cursor, cursor_scroll_offset, current_line_index) = self.layout_cursor(
             &lines,
             line_height,
             &mut bounds,
@@ -589,6 +618,7 @@ impl Element for TextElement {
             line_number_width,
             cursor,
             cursor_scroll_offset,
+            current_line_index,
             selection_path,
         }
     }
@@ -657,10 +687,24 @@ impl Element for TextElement {
         }
 
         if let Some(line_numbers) = prepaint.line_numbers.as_ref() {
-            for line in line_numbers.iter() {
+            for (ix, line) in line_numbers.iter().enumerate() {
                 let p = point(origin.x, origin.y + offset_y);
-                _ = line.paint(p, line_height, TextAlign::Left, None, window, cx);
                 let line_size = line.size(line_height);
+                // Paint the current line background
+                if prepaint.current_line_index == ix {
+                    if let Some(bg_color) = self
+                        .highlighter(cx)
+                        .and_then(|h| h.theme.settings().line_highlight)
+                        .map(crate::highlighter::color_to_hsla)
+                    {
+                        window.paint_quad(fill(
+                            Bounds::new(p, size(bounds.size.width, line_height)),
+                            bg_color,
+                        ));
+                    }
+                }
+
+                _ = line.paint(p, line_height, TextAlign::Left, None, window, cx);
                 offset_y += line_size.height;
             }
         }
@@ -668,8 +712,9 @@ impl Element for TextElement {
         let mut offset_y = px(0.);
         for line in prepaint.lines.iter() {
             let p = point(origin.x + prepaint.line_number_width, origin.y + offset_y);
+            let line_size = line.size(line_height);
             _ = line.paint(p, line_height, TextAlign::Left, None, window, cx);
-            offset_y += line.size(line_height).height;
+            offset_y += line_size.height;
         }
 
         if focused {
@@ -696,6 +741,7 @@ impl Element for TextElement {
             input.last_selected_range = Some(selected_range);
             input.scroll_size = scroll_size;
             input.line_number_width = prepaint.line_number_width;
+            input.current_line_index = Some(prepaint.current_line_index);
             input
                 .scroll_handle
                 .set_offset(prepaint.cursor_scroll_offset);
