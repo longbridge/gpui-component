@@ -25,6 +25,7 @@ use gpui::{
 use super::{
     blink_cursor::BlinkCursor,
     change::Change,
+    code_highlighter::CodeHighligher,
     element::TextElement,
     mask_pattern::MaskPattern,
     mode::{InputMode, TabSize},
@@ -362,12 +363,11 @@ impl InputState {
     /// - Auto Indent
     /// - Line Number
     pub fn code_editor(mut self, language: Option<&str>, theme: &'static HighlightTheme) -> Self {
-        let highlighter = Highlighter::new(language, theme);
+        let highlighter = Rc::new(Highlighter::new(language, theme));
         self.mode = InputMode::CodeEditor {
             rows: 2,
             tab: TabSize::default(),
-            highlighter: Some(Rc::new(highlighter)),
-            cache: (0, vec![]),
+            highlighter: CodeHighligher::new(highlighter),
             line_number: true,
             height: Some(relative(1.)),
         };
@@ -433,11 +433,8 @@ impl InputState {
     pub fn set_highlighter(&mut self, highlighter: Highlighter<'static>, cx: &mut Context<Self>) {
         let new_highlighter = Rc::new(highlighter);
         match &mut self.mode {
-            InputMode::CodeEditor {
-                highlighter, cache, ..
-            } => {
-                *highlighter = Some(new_highlighter);
-                *cache = (0, vec![]);
+            InputMode::CodeEditor { highlighter, .. } => {
+                highlighter.set_highlighter(new_highlighter, cx);
             }
             _ => {}
         }

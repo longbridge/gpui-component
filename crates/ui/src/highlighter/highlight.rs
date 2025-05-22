@@ -75,16 +75,16 @@ impl<'a> Highlighter<'a> {
         }
     }
 
-    /// Highlight a text and returns a vector of ranges and highlight styles
-    pub fn highlight(&self, text: &str) -> Vec<(Range<usize>, HighlightStyle)> {
+    /// Highlight a line and returns a vector of ranges and highlight styles
+    pub fn highlight(&self, line: &str) -> Vec<(Range<usize>, HighlightStyle)> {
         let mut parser = parsing::ParseState::new(self.syntax);
         let mut stack = parsing::ScopeStack::new();
 
-        let ops = parser.parse_line(text, &SYNTAXES).unwrap_or_default();
+        let ops = parser.parse_line(line, &SYNTAXES).unwrap_or_default();
 
         ScopeRangeIterator {
             ops,
-            line_length: text.len(),
+            line_length: line.len(),
             index: 0,
             last_str_index: 0,
         }

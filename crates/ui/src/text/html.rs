@@ -468,7 +468,9 @@ fn parse_paragraph(
                     0..text.len(),
                     InlineTextStyle {
                         link: Some(LinkMark {
-                            url: attr_value(&attrs, local_name!("href")).unwrap().into(),
+                            url: attr_value(&attrs, local_name!("href"))
+                                .unwrap_or_default()
+                                .into(),
                             title: attr_value(&attrs, local_name!("title")).map(Into::into),
                         }),
                         ..Default::default()
