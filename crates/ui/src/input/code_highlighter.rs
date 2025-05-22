@@ -13,12 +13,7 @@ impl LineHighlightStyle {
     pub(super) fn to_run(&self, text_style: &TextStyle) -> Vec<TextRun> {
         self.styles
             .iter()
-            .map(|(range, style)| {
-                text_style
-                    .clone()
-                    .highlight(style.clone())
-                    .to_run(range.len())
-            })
+            .map(|(range, style)| text_style.clone().highlight(*style).to_run(range.len()))
             // Add last `\n` Run with len 1
             .chain(std::iter::once(text_style.clone().to_run(1)))
             .collect()
