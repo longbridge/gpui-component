@@ -79,8 +79,11 @@ impl NumberInputStory {
         });
 
         let _subscriptions = vec![
+            cx.subscribe_in(&number_input1, window, Self::on_input_event),
             cx.subscribe_in(&number_input1, window, Self::on_number_input_event),
+            cx.subscribe_in(&number_input2, window, Self::on_input_event),
             cx.subscribe_in(&number_input2, window, Self::on_number_input_event),
+            cx.subscribe_in(&number_input3, window, Self::on_input_event),
             cx.subscribe_in(&number_input3, window, Self::on_number_input_event),
         ];
 
@@ -103,6 +106,38 @@ impl NumberInputStory {
         self.cycle_focus(false, window, cx);
     }
 
+    fn on_input_event(
+        &mut self,
+        this: &Entity<InputState>,
+        event: &InputEvent,
+        _: &mut Window,
+        _: &mut Context<Self>,
+    ) {
+        match event {
+            InputEvent::Change(text) => {
+                if this == &self.number_input1 {
+                    if let Ok(value) = text.parse::<i64>() {
+                        self.number_input1_value = value;
+                    }
+                } else if this == &self.number_input2 {
+                    if let Ok(value) = text.parse::<u64>() {
+                        self.number_input2_value = value;
+                    }
+                } else if this == &self.number_input3 {
+                    if let Ok(value) = text.parse::<f64>() {
+                        self.number_input3_value = value;
+                    }
+                }
+                println!("Change: {}", text);
+            }
+            InputEvent::PressEnter { secondary } => {
+                println!("PressEnter secondary: {}", secondary)
+            }
+            InputEvent::Focus => println!("Focus"),
+            InputEvent::Blur => println!("Blur"),
+        }
+    }
+
     fn on_number_input_event(
         &mut self,
         this: &Entity<InputState>,
@@ -111,29 +146,6 @@ impl NumberInputStory {
         cx: &mut Context<Self>,
     ) {
         match event {
-            NumberInputEvent::Input(input_event) => match input_event {
-                InputEvent::Change(text) => {
-                    if this == &self.number_input1 {
-                        if let Ok(value) = text.parse::<i64>() {
-                            self.number_input1_value = value;
-                        }
-                    } else if this == &self.number_input2 {
-                        if let Ok(value) = text.parse::<u64>() {
-                            self.number_input2_value = value;
-                        }
-                    } else if this == &self.number_input3 {
-                        if let Ok(value) = text.parse::<f64>() {
-                            self.number_input3_value = value;
-                        }
-                    }
-                    println!("Change: {}", text);
-                }
-                InputEvent::PressEnter { secondary } => {
-                    println!("PressEnter secondary: {}", secondary)
-                }
-                InputEvent::Focus => println!("Focus"),
-                InputEvent::Blur => println!("Blur"),
-            },
             NumberInputEvent::Step(step_action) => match step_action {
                 StepAction::Decrement => {
                     if this == &self.number_input1 {

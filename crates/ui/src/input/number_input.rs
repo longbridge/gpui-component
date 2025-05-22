@@ -6,9 +6,7 @@ use gpui::{
 
 use crate::{
     button::{Button, ButtonVariants as _},
-    h_flex,
-    input::InputEvent,
-    ActiveTheme, IconName, Sizable, Size, StyleSized, StyledExt as _,
+    h_flex, ActiveTheme, IconName, Sizable, Size, StyleSized, StyledExt as _,
 };
 
 use super::{InputState, TextInput};
@@ -90,7 +88,6 @@ pub enum StepAction {
     Increment,
 }
 pub enum NumberInputEvent {
-    Input(InputEvent),
     Step(StepAction),
 }
 impl EventEmitter<NumberInputEvent> for InputState {}
