@@ -26,7 +26,7 @@ impl LineHighlightStyle {
 }
 
 #[derive(Clone)]
-pub(super) struct CodeHighligher {
+pub(super) struct CodeHighlighter {
     highlighter: Rc<Highlighter<'static>>,
     pub(super) text: SharedString,
     /// The lines by split \n
@@ -34,7 +34,7 @@ pub(super) struct CodeHighligher {
     pub(super) cache: HashMap<u64, LineHighlightStyle>,
 }
 
-impl CodeHighligher {
+impl CodeHighlighter {
     pub(super) fn new(highlighter: Rc<Highlighter<'static>>) -> Self {
         Self {
             highlighter,

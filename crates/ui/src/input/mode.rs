@@ -1,6 +1,6 @@
 use gpui::{DefiniteLength, SharedString};
 
-use super::code_highlighter::CodeHighligher;
+use super::code_highlighter::CodeHighlighter;
 use super::text_wrapper::TextWrapper;
 
 #[derive(Debug, Copy, Clone)]
@@ -45,7 +45,7 @@ pub enum InputMode {
         height: Option<DefiniteLength>,
         /// Show line number
         line_number: bool,
-        highlighter: CodeHighligher,
+        highlighter: CodeHighlighter,
     },
     AutoGrow {
         rows: usize,

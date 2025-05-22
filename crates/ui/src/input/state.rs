@@ -25,7 +25,7 @@ use gpui::{
 use super::{
     blink_cursor::BlinkCursor,
     change::Change,
-    code_highlighter::CodeHighligher,
+    code_highlighter::CodeHighlighter,
     element::TextElement,
     mask_pattern::MaskPattern,
     mode::{InputMode, TabSize},
@@ -367,7 +367,7 @@ impl InputState {
         self.mode = InputMode::CodeEditor {
             rows: 2,
             tab: TabSize::default(),
-            highlighter: CodeHighligher::new(highlighter),
+            highlighter: CodeHighlighter::new(highlighter),
             line_number: true,
             height: Some(relative(1.)),
         };
