@@ -6,7 +6,6 @@ use crate::highlighter::Highlighter;
 
 #[derive(Debug, Clone)]
 pub(crate) struct LineHighlightStyle {
-    pub(crate) offset: usize,
     pub(crate) styles: Rc<Vec<(Range<usize>, HighlightStyle)>>,
 }
 
@@ -15,13 +14,13 @@ impl LineHighlightStyle {
         self.styles
             .iter()
             .map(|(range, style)| {
-                let range = range.start + self.offset..range.end + self.offset;
-
                 text_style
                     .clone()
                     .highlight(style.clone())
                     .to_run(range.len())
             })
+            // Add last `\n` Run with len 1
+            .chain(std::iter::once(text_style.clone().to_run(1)))
             .collect()
     }
 }
@@ -32,7 +31,7 @@ pub(super) struct CodeHighligher {
     pub(super) text: SharedString,
     /// The lines by split \n
     pub(super) lines: Vec<LineHighlightStyle>,
-    pub(super) cache: HashMap<u64, Rc<Vec<(Range<usize>, HighlightStyle)>>>,
+    pub(super) cache: HashMap<u64, LineHighlightStyle>,
 }
 
 impl CodeHighligher {
@@ -58,27 +57,20 @@ impl CodeHighligher {
 
         let mut lines = vec![];
         let mut new_cache = HashMap::new();
-        let mut offset = 0;
         for line in text.lines() {
-            let line_len = line.len() + 1;
             let cache_key = gpui::hash(&line);
-            println!("------ {}", offset);
 
             // cache hit
-            if let Some(styles) = self.cache.get(&cache_key) {
-                new_cache.insert(cache_key, styles.clone());
-                lines.push(LineHighlightStyle {
-                    offset,
-                    styles: styles.clone(),
-                });
+            if let Some(line_style) = self.cache.get(&cache_key) {
+                new_cache.insert(cache_key, line_style.clone());
+                lines.push(line_style.clone());
             } else {
                 // cache miss
                 let styles = Rc::new(self.highlighter.highlight(line));
-                new_cache.insert(cache_key, styles.clone());
-                lines.push(LineHighlightStyle { offset, styles });
+                let line_style = LineHighlightStyle { styles };
+                new_cache.insert(cache_key, line_style.clone());
+                lines.push(line_style);
             }
-
-            offset += line_len;
         }
 
         // Ensure to recreate cache to remove unused caches.
