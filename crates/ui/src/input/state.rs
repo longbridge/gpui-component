@@ -223,7 +223,7 @@ pub struct InputState {
     /// Range for save the selected word, use to keep word range when drag move.
     pub(super) selected_word_range: Option<Range<usize>>,
     pub(super) selection_reversed: bool,
-    /// The index of the current line.
+    /// The index of the current line, zero-based.
     pub(super) current_line_index: Option<usize>,
     pub(super) marked_range: Option<Range<usize>>,
     pub(super) last_layout: Option<SmallVec<[WrappedLine; 1]>>,
