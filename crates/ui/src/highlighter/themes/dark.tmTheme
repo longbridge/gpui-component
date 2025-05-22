@@ -1,597 +1,324 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-<dict>
-	<key>author</key>
-	<string>Michael Sheets</string>
-	<key>gutterSettings</key>
-	<dict>
-		<key>background</key>
-		<string>#2F2F31</string>
-		<key>divider</key>
-		<string>#414143</string>
-		<key>foreground</key>
-		<string>#8F8F8F</string>
-		<key>selectionBackground</key>
-		<string>#414143</string>
-		<key>selectionBorder</key>
-		<string>#484848</string>
-		<key>selectionForeground</key>
-		<string>#BABABA</string>
-	</dict>
-	<key>name</key>
-	<string>Twilight</string>
-	<key>semanticClass</key>
-	<string>theme.dark.twilight</string>
-	<key>settings</key>
-	<array>
-		<dict>
-			<key>settings</key>
-			<dict>
-				<key>background</key>
-				<string>#181818</string>
-				<key>caret</key>
-				<string>#A7A7A7</string>
-				<key>foreground</key>
-				<string>#F8F8F8</string>
-				<key>invisibles</key>
-				<string>#FFFFFF40</string>
-				<key>lineHighlight</key>
-				<string>#FFFFFF08</string>
-				<key>selection</key>
-				<string>#DDF0FF33</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>Foldings</string>
-			<key>scope</key>
-			<string>deco.folding</string>
-			<key>settings</key>
-			<dict>
-				<key>foreground</key>
-				<string>#5A6A65</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>Comment</string>
-			<key>scope</key>
-			<string>comment</string>
-			<key>settings</key>
-			<dict>
-				<key>fontStyle</key>
-				<string>italic</string>
-				<key>foreground</key>
-				<string>#5F5A60</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>Constant</string>
-			<key>scope</key>
-			<string>constant</string>
-			<key>settings</key>
-			<dict>
-				<key>foreground</key>
-				<string>#CF6A4C</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>Entity</string>
-			<key>scope</key>
-			<string>entity</string>
-			<key>settings</key>
-			<dict>
-				<key>fontStyle</key>
-				<string></string>
-				<key>foreground</key>
-				<string>#9B703F</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>Keyword</string>
-			<key>scope</key>
-			<string>keyword</string>
-			<key>settings</key>
-			<dict>
-				<key>fontStyle</key>
-				<string></string>
-				<key>foreground</key>
-				<string>#CDA869</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>Storage</string>
-			<key>scope</key>
-			<string>storage</string>
-			<key>settings</key>
-			<dict>
-				<key>fontStyle</key>
-				<string></string>
-				<key>foreground</key>
-				<string>#F9EE98</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>String</string>
-			<key>scope</key>
-			<string>string</string>
-			<key>settings</key>
-			<dict>
-				<key>fontStyle</key>
-				<string></string>
-				<key>foreground</key>
-				<string>#8F9D6A</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>Support</string>
-			<key>scope</key>
-			<string>support</string>
-			<key>settings</key>
-			<dict>
-				<key>fontStyle</key>
-				<string></string>
-				<key>foreground</key>
-				<string>#9B859D</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>Variable</string>
-			<key>scope</key>
-			<string>variable</string>
-			<key>settings</key>
-			<dict>
-				<key>foreground</key>
-				<string>#7587A6</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>Invalid – Deprecated</string>
-			<key>scope</key>
-			<string>invalid.deprecated</string>
-			<key>settings</key>
-			<dict>
-				<key>fontStyle</key>
-				<string>italic underline</string>
-				<key>foreground</key>
-				<string>#D2A8A1</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>Invalid – Illegal</string>
-			<key>scope</key>
-			<string>invalid.illegal</string>
-			<key>settings</key>
-			<dict>
-				<key>background</key>
-				<string>#562D56BF</string>
-				<key>foreground</key>
-				<string>#F8F8F8</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>-----------------------------------</string>
-			<key>settings</key>
-			<dict/>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>♦ Embedded Source</string>
-			<key>scope</key>
-			<string>meta.embedded.block, punctuation.whitespace.embedded</string>
-			<key>settings</key>
-			<dict>
-				<key>background</key>
-				<string>#B0B3BA14</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>♦ Embedded Source (Bright)</string>
-			<key>scope</key>
-			<string>meta.embedded.line</string>
-			<key>settings</key>
-			<dict>
-				<key>background</key>
-				<string>#B1B3BA21</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>♦ Entity inherited-class</string>
-			<key>scope</key>
-			<string>entity.other.inherited-class</string>
-			<key>settings</key>
-			<dict>
-				<key>fontStyle</key>
-				<string>italic</string>
-				<key>foreground</key>
-				<string>#9B5C2E</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>♦ String embedded-source</string>
-			<key>scope</key>
-			<string>string meta.embedded</string>
-			<key>settings</key>
-			<dict>
-				<key>fontStyle</key>
-				<string></string>
-				<key>foreground</key>
-				<string>#DAEFA3</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>♦ String constant</string>
-			<key>scope</key>
-			<string>string constant</string>
-			<key>settings</key>
-			<dict>
-				<key>foreground</key>
-				<string>#DDF2A4</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>♦ String.regexp</string>
-			<key>scope</key>
-			<string>string.regexp</string>
-			<key>settings</key>
-			<dict>
-				<key>fontStyle</key>
-				<string></string>
-				<key>foreground</key>
-				<string>#E9C062</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>♦ String.regexp.«special»</string>
-			<key>scope</key>
-			<string>string.regexp constant.character.escape, string.regexp source.ruby.embedded, string.regexp string.regexp.arbitrary-repetition</string>
-			<key>settings</key>
-			<dict>
-				<key>foreground</key>
-				<string>#CF7D34</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>♦ String variable</string>
-			<key>scope</key>
-			<string>string variable</string>
-			<key>settings</key>
-			<dict>
-				<key>foreground</key>
-				<string>#8A9A95</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>♦ Support.function</string>
-			<key>scope</key>
-			<string>support.function</string>
-			<key>settings</key>
-			<dict>
-				<key>fontStyle</key>
-				<string></string>
-				<key>foreground</key>
-				<string>#DAD085</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>♦ Support.constant</string>
-			<key>scope</key>
-			<string>support.constant</string>
-			<key>settings</key>
-			<dict>
-				<key>fontStyle</key>
-				<string></string>
-				<key>foreground</key>
-				<string>#CF6A4C</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>c C/C++ Preprocessor Line</string>
-			<key>scope</key>
-			<string>meta.preprocessor.c, source.swift meta.preprocessor</string>
-			<key>settings</key>
-			<dict>
-				<key>foreground</key>
-				<string>#8996A8</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>c C/C++ Preprocessor Directive</string>
-			<key>scope</key>
-			<string>meta.preprocessor.c keyword, source.swift meta.preprocessor keyword</string>
-			<key>settings</key>
-			<dict>
-				<key>foreground</key>
-				<string>#AFC4DB</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>✘ Doctype/XML Processing</string>
-			<key>scope</key>
-			<string>meta.tag.metadata.doctype, meta.tag.metadata.doctype entity, meta.tag.metadata.doctype string, meta.tag.metadata.processing.xml, meta.tag.metadata.processing.xml entity, meta.tag.metadata.processing.xml string</string>
-			<key>settings</key>
-			<dict>
-				<key>foreground</key>
-				<string>#494949</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>✘ Meta.tag.«all»</string>
-			<key>scope</key>
-			<string>declaration.tag, declaration.tag entity, meta.tag, meta.tag entity</string>
-			<key>settings</key>
-			<dict>
-				<key>foreground</key>
-				<string>#AC885B</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>✘ Meta.tag.inline</string>
-			<key>scope</key>
-			<string>declaration.tag.inline, declaration.tag.inline entity, meta.tag.inline, meta.tag.inline entity</string>
-			<key>settings</key>
-			<dict>
-				<key>foreground</key>
-				<string>#E0C589</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>§ css tag-name</string>
-			<key>scope</key>
-			<string>meta.selector.css entity.name.tag</string>
-			<key>settings</key>
-			<dict>
-				<key>foreground</key>
-				<string>#CDA869</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>§ css:pseudo-class</string>
-			<key>scope</key>
-			<string>meta.selector.css entity.other.attribute-name.tag.pseudo-class</string>
-			<key>settings</key>
-			<dict>
-				<key>foreground</key>
-				<string>#8F9D6A</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>§ css#id</string>
-			<key>scope</key>
-			<string>meta.selector.css entity.other.attribute-name.id</string>
-			<key>settings</key>
-			<dict>
-				<key>foreground</key>
-				<string>#8B98AB</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>§ css.class</string>
-			<key>scope</key>
-			<string>meta.selector.css entity.other.attribute-name.class</string>
-			<key>settings</key>
-			<dict>
-				<key>foreground</key>
-				<string>#9B703F</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>§ css property-name:</string>
-			<key>scope</key>
-			<string>support.type.property-name.css</string>
-			<key>settings</key>
-			<dict>
-				<key>foreground</key>
-				<string>#C5AF75</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>§ css property-value;</string>
-			<key>scope</key>
-			<string>meta.property-group support.constant.property-value.css, meta.property-value support.constant.property-value.css</string>
-			<key>settings</key>
-			<dict>
-				<key>foreground</key>
-				<string>#F9EE98</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>§ css @at-rule</string>
-			<key>scope</key>
-			<string>meta.preprocessor.at-rule keyword.control.at-rule</string>
-			<key>settings</key>
-			<dict>
-				<key>foreground</key>
-				<string>#8693A5</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>§ css additional-constants</string>
-			<key>scope</key>
-			<string>meta.property-value support.constant.named-color.css, meta.property-value constant</string>
-			<key>settings</key>
-			<dict>
-				<key>foreground</key>
-				<string>#CA7840</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>§ css constructor.argument</string>
-			<key>scope</key>
-			<string>meta.constructor.argument.css</string>
-			<key>settings</key>
-			<dict>
-				<key>foreground</key>
-				<string>#8F9D6A</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>⎇ diff.header</string>
-			<key>scope</key>
-			<string>meta.diff, meta.diff.header, meta.separator, meta.diff.range, meta.diff.index</string>
-			<key>settings</key>
-			<dict>
-				<key>background</key>
-				<string>#0E2231</string>
-				<key>fontStyle</key>
-				<string>italic</string>
-				<key>foreground</key>
-				<string>#F8F8F8</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>⎇ diff.deleted</string>
-			<key>scope</key>
-			<string>markup.deleted</string>
-			<key>settings</key>
-			<dict>
-				<key>background</key>
-				<string>#420E09</string>
-				<key>foreground</key>
-				<string>#F8F8F8</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>⎇ diff.changed</string>
-			<key>scope</key>
-			<string>markup.changed</string>
-			<key>settings</key>
-			<dict>
-				<key>background</key>
-				<string>#4A410D</string>
-				<key>foreground</key>
-				<string>#F8F8F8</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>⎇ diff.inserted</string>
-			<key>scope</key>
-			<string>markup.inserted</string>
-			<key>settings</key>
-			<dict>
-				<key>background</key>
-				<string>#253B22</string>
-				<key>foreground</key>
-				<string>#F8F8F8</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>Markup: List</string>
-			<key>scope</key>
-			<string>markup.list</string>
-			<key>settings</key>
-			<dict>
-				<key>foreground</key>
-				<string>#F9EE98</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>Markup: Heading</string>
-			<key>scope</key>
-			<string>markup.heading</string>
-			<key>settings</key>
-			<dict>
-				<key>foreground</key>
-				<string>#CF6A4C</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>Markup: Raw Block</string>
-			<key>scope</key>
-			<string>markup.raw.block</string>
-			<key>settings</key>
-			<dict>
-				<key>background</key>
-				<string>#B0B3BA14</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>Test: 1</string>
-			<key>scope</key>
-			<string>meta.test1</string>
-			<key>settings</key>
-			<dict>
-				<key>background</key>
-				<string>#0E2231C5</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>Test: 2</string>
-			<key>scope</key>
-			<string>meta.test2</string>
-			<key>settings</key>
-			<dict>
-				<key>background</key>
-				<string>#420E0990</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>Test: 3</string>
-			<key>scope</key>
-			<string>meta.test3</string>
-			<key>settings</key>
-			<dict>
-				<key>background</key>
-				<string>#4A410D90</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>name</key>
-			<string>Test: 4</string>
-			<key>scope</key>
-			<string>meta.test4</string>
-			<key>settings</key>
-			<dict>
-				<key>background</key>
-				<string>#253B2290</string>
-			</dict>
-		</dict>
-	</array>
-	<key>uuid</key>
-	<string>766026CB-703D-4610-B070-8DE07D967C5F</string>
-</dict>
+  <dict>
+    <key>name</key>
+    <string>macOS Classic Dark</string>
+    <key>semanticClass</key>
+    <string>theme.dark.mac-classic</string>
+    <key>settings</key>
+    <array>
+      <!-- Editor UI -->
+      <dict>
+        <key>settings</key>
+        <dict>
+          <key>background</key>
+          <string>#131313</string>                        <!-- style.background -->
+          <key>caret</key>
+          <string>#CACCCA</string>                        <!-- text -->
+          <key>foreground</key>
+          <string>#DDDDDD</string>                        <!-- editor.foreground -->
+          <key>invisibles</key>
+          <string>#9E9E9E</string>                        <!-- text.muted -->
+          <key>lineHighlight</key>
+          <string>#272727</string>                        <!-- editor.active_line.background -->
+          <key>selection</key>
+          <string>#72CFFE3D</string>                      <!-- players[0].selection -->
+        </dict>
+      </dict>
+
+      <!-- Attribute -->
+      <dict>
+        <key>name</key>
+        <string>Attribute</string>
+        <key>scope</key>
+        <string>entity.other.attribute-name</string>
+        <key>settings</key>
+        <dict>
+          <key>foreground</key>
+          <string>#BE9A52</string>                      <!-- syntax.attribute.color -->
+        </dict>
+      </dict>
+
+      <!-- Boolean -->
+      <dict>
+        <key>name</key>
+        <string>Boolean</string>
+        <key>scope</key>
+        <string>constant.language.boolean, constant.numeric.boolean</string>
+        <key>settings</key>
+        <dict>
+          <key>foreground</key>
+          <string>#E1D797</string>                      <!-- syntax.boolean.color -->
+        </dict>
+      </dict>
+
+      <!-- Comment -->
+      <dict>
+        <key>name</key>
+        <string>Comment</string>
+        <key>scope</key>
+        <string>comment, comment.block.documentation</string>
+        <key>settings</key>
+        <dict>
+          <key>foreground</key>
+          <string>#9E9E9E</string>                      <!-- syntax.comment.color -->
+        </dict>
+      </dict>
+
+      <!-- Constant -->
+      <dict>
+        <key>name</key>
+        <string>Constant</string>
+        <key>scope</key>
+        <string>constant, constant.other, constant.language</string>
+        <key>settings</key>
+        <dict>
+          <key>foreground</key>
+          <string>#E1D797</string>                      <!-- syntax.constant.color -->
+        </dict>
+      </dict>
+
+      <!-- Constructor -->
+      <dict>
+        <key>name</key>
+        <string>Constructor</string>
+        <key>scope</key>
+        <string>entity.name.function.constructor</string>
+        <key>settings</key>
+        <dict>
+          <key>foreground</key>
+          <string>#b5af9a</string>                      <!-- syntax.constructor.color -->
+        </dict>
+      </dict>
+
+      <!-- Embedded -->
+      <dict>
+        <key>name</key>
+        <string>Embedded</string>
+        <key>scope</key>
+        <string>meta.embedded, text source</string>
+        <key>settings</key>
+        <dict>
+          <key>foreground</key>
+          <string>#CACCCA</string>                      <!-- syntax.embedded.color -->
+        </dict>
+      </dict>
+
+      <!-- Function -->
+      <dict>
+        <key>name</key>
+        <string>Function Name</string>
+        <key>scope</key>
+        <string>entity.name.function, support.function, support.function.any-method</string>
+        <key>settings</key>
+        <dict>
+          <key>foreground</key>
+          <string>#E1D797</string>                      <!-- syntax.function.color -->
+        </dict>
+      </dict>
+
+      <!-- Keyword -->
+      <dict>
+        <key>name</key>
+        <string>Keyword</string>
+        <key>scope</key>
+        <string>keyword, storage</string>
+        <key>settings</key>
+        <dict>
+          <key>foreground</key>
+          <string>#E19773</string>                      <!-- syntax.keyword.color -->
+        </dict>
+      </dict>
+
+      <!-- Class -->
+      <dict>
+        <key>name</key>
+        <string>Class</string>
+        <key>scope</key>
+        <string>support.class, support.type, entity.name.class, entity.name.type.class, meta.class</string>
+        <key>settings</key>
+        <dict>
+          <key>foreground</key>
+          <string>#A86D3B</string>                      <!-- syntax.type.color variant -->
+        </dict>
+      </dict>
+
+      <!-- Link text -->
+      <dict>
+        <key>name</key>
+        <string>Link Text</string>
+        <key>scope</key>
+        <string>markup.underline.link, string.other.link</string>
+        <key>settings</key>
+        <dict>
+          <key>foreground</key>
+          <string>#A86D3B</string>                      <!-- syntax.link_text.color -->
+        </dict>
+      </dict>
+
+      <!-- Link URI -->
+      <dict>
+        <key>name</key>
+        <string>Link URI</string>
+        <key>scope</key>
+        <string>string.other.link.title, string.other.link.description</string>
+        <key>settings</key>
+        <dict>
+          <key>fontStyle</key>
+          <string>italic</string>
+          <key>foreground</key>
+          <string>#6F6D66</string>                      <!-- syntax.link_uri.color -->
+        </dict>
+      </dict>
+
+      <!-- Number -->
+      <dict>
+        <key>name</key>
+        <string>Number</string>
+        <key>scope</key>
+        <string>constant.numeric</string>
+        <key>settings</key>
+        <dict>
+          <key>foreground</key>
+          <string>#E19773</string>                      <!-- syntax.number.color -->
+        </dict>
+      </dict>
+
+      <!-- String -->
+      <dict>
+        <key>name</key>
+        <string>String</string>
+        <key>scope</key>
+        <string>string, string.quoted</string>
+        <key>settings</key>
+        <dict>
+          <key>foreground</key>
+          <string>#76BA53</string>                      <!-- syntax.string.color -->
+        </dict>
+      </dict>
+
+      <!-- String Escape / Regex -->
+      <dict>
+        <key>name</key>
+        <string>String Escape / Regex</string>
+        <key>scope</key>
+        <string>string.escape, string.regex</string>
+        <key>settings</key>
+        <dict>
+          <key>foreground</key>
+          <string>#76BA53</string>                      <!-- syntax.string.escape & regex -->
+        </dict>
+      </dict>
+
+      <!-- String Special -->
+      <dict>
+        <key>name</key>
+        <string>String Special</string>
+        <key>scope</key>
+        <string>string.special, string.special.symbol</string>
+        <key>settings</key>
+        <dict>
+          <key>foreground</key>
+          <string>#E1D797</string>                      <!-- syntax.string.special & symbol -->
+        </dict>
+      </dict>
+
+      <!-- Tag -->
+      <dict>
+        <key>name</key>
+        <string>Tag</string>
+        <key>scope</key>
+        <string>meta.tag, declaration.tag</string>
+        <key>settings</key>
+        <dict>
+          <key>foreground</key>
+          <string>#B5AF9A</string>                      <!-- syntax.tag.color -->
+        </dict>
+      </dict>
+
+      <!-- Text Literal -->
+      <dict>
+        <key>name</key>
+        <string>Text Literal</string>
+        <key>scope</key>
+        <string>text.literal</string>
+        <key>settings</key>
+        <dict>
+          <key>foreground</key>
+          <string>#E1D797</string>                      <!-- syntax.text.literal.color -->
+        </dict>
+      </dict>
+
+      <!-- Title -->
+      <dict>
+        <key>name</key>
+        <string>Title</string>
+        <key>scope</key>
+        <string>entity.name.section, entity.name.title</string>
+        <key>settings</key>
+        <dict>
+          <key>foreground</key>
+          <string>#A76D3B</string>                      <!-- syntax.title.color -->
+        </dict>
+      </dict>
+
+      <!-- Type -->
+      <dict>
+        <key>name</key>
+        <string>Type</string>
+        <key>scope</key>
+        <string>entity.name.type</string>
+        <key>settings</key>
+        <dict>
+          <key>fontStyle</key>
+          <string>underline</string>
+          <key>foreground</key>
+          <string>#A86D3B</string>                      <!-- syntax.type.color -->
+        </dict>
+      </dict>
+
+      <!-- Property -->
+      <dict>
+        <key>name</key>
+        <string>Property</string>
+        <key>scope</key>
+        <string>variable.other.property</string>
+        <key>settings</key>
+        <dict>
+          <key>foreground</key>
+          <string>#CACCCA</string>                      <!-- fallback to text -->
+        </dict>
+      </dict>
+
+      <!-- Variable -->
+      <dict>
+        <key>name</key>
+        <string>Variable</string>
+        <key>scope</key>
+        <string>variable.language, variable.other</string>
+        <key>settings</key>
+        <dict>
+          <key>foreground</key>
+          <string>#DDDDDD</string>                      <!-- editor.foreground -->
+        </dict>
+      </dict>
+
+      <!-- Variable Special -->
+      <dict>
+        <key>name</key>
+        <string>Variable Special</string>
+        <key>scope</key>
+        <string>variable.other.readwrite, variable.other.other</string>
+        <key>settings</key>
+        <dict>
+          <key>foreground</key>
+          <string>#E19773</string>                      <!-- syntax.variable.special.color -->
+        </dict>
+      </dict>
+
+    </array>
+    <key>uuid</key>
+    <string>82d2fb7d-4049-44ec-a5b1-135fd5f7ce9f</string>
+  </dict>
 </plist>

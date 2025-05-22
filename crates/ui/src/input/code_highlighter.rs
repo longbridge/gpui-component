@@ -47,11 +47,12 @@ impl CodeHighligher {
     pub fn set_highlighter(&mut self, highlighter: Rc<Highlighter<'static>>, cx: &mut App) {
         self.highlighter = highlighter;
         self.lines.clear();
-        self.update(self.text.clone(), cx);
+        self.cache.clear();
+        self.update(self.text.clone(), true, cx);
     }
 
-    pub fn update(&mut self, text: SharedString, _: &mut App) {
-        if self.text == text {
+    pub fn update(&mut self, text: SharedString, force: bool, _: &mut App) {
+        if self.text == text && !force {
             return;
         }
 

@@ -310,7 +310,7 @@ impl TextElement {
     fn highlight_lines(&mut self, cx: &mut App) -> Option<Vec<LineHighlightStyle>> {
         self.input.update(cx, |state, cx| match &mut state.mode {
             InputMode::CodeEditor { highlighter, .. } => {
-                highlighter.update(state.text.clone(), cx);
+                highlighter.update(state.text.clone(), false, cx);
                 Some(highlighter.lines.clone())
             }
             _ => None,
