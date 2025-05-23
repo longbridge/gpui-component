@@ -248,6 +248,7 @@ impl RenderOnce for Alert {
                                 })
                                 .child(
                                     Icon::new(IconName::Close)
+                                        .text_color(cx.theme().foreground)
                                         .with_size(self.size.max(Size::Medium))
                                         .flex_shrink_0(),
                                 ),
