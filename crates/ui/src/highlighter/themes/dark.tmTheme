@@ -110,7 +110,7 @@
         <key>name</key>
         <string>Function Name</string>
         <key>scope</key>
-        <string>entity.name.function, support.function, support.function.any-method</string>
+        <string>entity.name.function, support.function, support.function.any-method, variable.annotation</string>
         <key>settings</key>
         <dict>
           <key>foreground</key>
@@ -121,9 +121,9 @@
       <!-- Keyword -->
       <dict>
         <key>name</key>
-        <string>Keyword</string>
+        <string>Keyword, self</string>
         <key>scope</key>
-        <string>keyword, storage</string>
+        <string>keyword, storage, variable.language</string>
         <key>settings</key>
         <dict>
           <key>foreground</key>
@@ -136,7 +136,7 @@
         <key>name</key>
         <string>Class</string>
         <key>scope</key>
-        <string>support.class, support.type, entity.name.class, entity.name.type.class, meta.class</string>
+        <string>entity, support.class, support.type, entity.name.class, entity.name.trait, meta.class</string>
         <key>settings</key>
         <dict>
           <key>foreground</key>
@@ -296,7 +296,7 @@
         <key>name</key>
         <string>Variable</string>
         <key>scope</key>
-        <string>variable.language, variable.other</string>
+        <string>variable.other</string>
         <key>settings</key>
         <dict>
           <key>foreground</key>

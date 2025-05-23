@@ -71,9 +71,9 @@
       <!-- Constant -->
       <dict>
         <key>name</key>
-        <string>Constant</string>
+        <string>Constant, self</string>
         <key>scope</key>
-        <string>constant, constant.other</string>
+        <string>constant, constant.other, variable.language</string>
         <key>settings</key>
         <dict>
           <key>foreground</key>
@@ -107,6 +107,19 @@
         </dict>
       </dict>
 
+
+      <dict>
+        <key>name</key>
+        <string>Annotation</string>
+        <key>scope</key>
+        <string>variable.annotation</string>
+        <key>settings</key>
+        <dict>
+          <key>foreground</key>
+          <string>#9D8550</string>                      <!-- syntax.embedded.color -->
+        </dict>
+      </dict>
+
       <!-- Function -->
       <dict>
         <key>name</key>
@@ -137,7 +150,7 @@
         <key>name</key>
         <string>Class</string>
         <key>scope</key>
-        <string>support.class, support.type, entity.name.class, entity.name.type.class, meta.class</string>
+        <string>entity, support.class, support.type, entity.name.class, entity.name.type.class, meta.class, entity.name.constant, entity.name.namespace</string>
         <key>settings</key>
         <dict>
           <key>foreground</key>
@@ -191,7 +204,7 @@
         <key>name</key>
         <string>String</string>
         <key>scope</key>
-        <string>string, string.quoted</string>
+        <string>string, string.quoted, string.quoted.single, string.quoted.double, string.quoted.triple</string>
         <key>settings</key>
         <dict>
           <key>foreground</key>
@@ -297,7 +310,7 @@
         <key>name</key>
         <string>Variable</string>
         <key>scope</key>
-        <string>variable.language, variable.other</string>
+        <string>variable.other</string>
         <key>settings</key>
         <dict>
           <key>foreground</key>

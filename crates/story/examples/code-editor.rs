@@ -131,9 +131,9 @@ impl Render for Example {
                     .id("source")
                     .w_full()
                     .flex_1()
-                    .font_family("Menlo")
+                    .font_family("Monaco")
                     .p_4()
-                    .text_size(px(13.))
+                    .text_size(px(12.))
                     .child(TextInput::new(&self.input_state).h_full()),
             )
     }
