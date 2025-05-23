@@ -58,7 +58,11 @@ impl TextElement {
         cx: &mut App,
     ) -> (Option<PaintQuad>, Point<Pixels>, usize) {
         let input = self.input.read(cx);
-        let selected_range = &input.selected_range;
+        let mut selected_range = input.selected_range.clone();
+        if let Some(marked_range) = &input.marked_range {
+            selected_range = marked_range.end..marked_range.end;
+        }
+
         let cursor_offset = input.cursor_offset();
         let mut current_line_index = 0;
         let mut scroll_offset = input.scroll_handle.offset();
@@ -193,7 +197,10 @@ impl TextElement {
         cx: &mut App,
     ) -> Option<Path<Pixels>> {
         let input = self.input.read(cx);
-        let selected_range = &input.selected_range;
+        let mut selected_range = input.selected_range.clone();
+        if let Some(marked_range) = &input.marked_range {
+            selected_range = marked_range.end..marked_range.end;
+        }
         if selected_range.is_empty() {
             return None;
         }

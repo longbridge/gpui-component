@@ -225,6 +225,7 @@ pub struct InputState {
     pub(super) selection_reversed: bool,
     /// The index of the current line, zero-based.
     pub(super) current_line_index: Option<usize>,
+    /// The marked range is the temporary insert text on IME typing.
     pub(super) marked_range: Option<Range<usize>>,
     pub(super) last_layout: Option<SmallVec<[WrappedLine; 1]>>,
     pub(super) last_cursor_offset: Option<usize>,
@@ -1468,6 +1469,10 @@ impl InputState {
     }
 
     pub(super) fn cursor_offset(&self) -> usize {
+        if let Some(marked_range) = &self.marked_range {
+            return marked_range.end;
+        }
+
         if self.selection_reversed {
             self.selected_range.start
         } else {
@@ -1938,6 +1943,7 @@ impl EntityInputHandler for InputState {
         cx.notify();
     }
 
+    /// Mark text is the IME temporary insert on typing.
     fn replace_and_mark_text_in_range(
         &mut self,
         range_utf16: Option<Range<usize>>,
@@ -1963,12 +1969,14 @@ impl EntityInputHandler for InputState {
 
         self.push_history(&range, new_text, window, cx);
         self.text = pending_text;
+        self.text_wrapper.update(self.text.clone(), false, cx);
         self.marked_range = Some(range.start..range.start + new_text.len());
         self.selected_range = new_selected_range_utf16
             .as_ref()
             .map(|range_utf16| self.range_from_utf16(range_utf16))
             .map(|new_range| new_range.start + range.start..new_range.end + range.end)
             .unwrap_or_else(|| range.start + new_text.len()..range.start + new_text.len());
+        self.mode.update_auto_grow(&self.text_wrapper);
         cx.emit(InputEvent::Change(self.unmask_value()));
         cx.notify();
     }
