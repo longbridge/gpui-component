@@ -61,6 +61,7 @@ impl Gallery {
                     StoryContainer::panel::<NumberInputStory>(window, cx),
                     StoryContainer::panel::<OtpInputStory>(window, cx),
                     StoryContainer::panel::<PopoverStory>(window, cx),
+                    StoryContainer::panel::<PostmanStory>(window, cx), // Added PostmanStory
                     StoryContainer::panel::<ProgressStory>(window, cx),
                     StoryContainer::panel::<RadioStory>(window, cx),
                     StoryContainer::panel::<ResizableStory>(window, cx),
@@ -289,6 +290,16 @@ impl Render for Gallery {
 
 fn main() {
     let app = Application::new().with_assets(Assets);
+
+    // Initialize tokio runtime in the main thread
+    // This is used for avoid tokio spawn hangs in the main thread.
+    //
+    // https://github.com/longbridge/gpui-component/pull/100
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let _guard = rt.enter();
 
     // Parse `cargo run -- <story_name>`
     let name = std::env::args().nth(1);
