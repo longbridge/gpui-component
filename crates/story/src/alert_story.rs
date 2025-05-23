@@ -13,6 +13,7 @@ use crate::section;
 
 pub struct AlertStory {
     size: Size,
+    banner_visible: bool,
     focus_handle: gpui::FocusHandle,
 }
 
@@ -20,6 +21,7 @@ impl AlertStory {
     fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
             size: Size::default(),
+            banner_visible: true,
             focus_handle: cx.focus_handle(),
         }
     }
@@ -63,6 +65,20 @@ impl Render for AlertStory {
         v_flex()
             .gap_4()
             .child(
+                Alert::warning(
+                    "banner-1",
+                    "This is a banner alert, it will take the full width of the container.",
+                )
+                .banner()
+                .on_close(cx.listener(|this, _, _, cx| {
+                    this.banner_visible = !this.banner_visible;
+                    cx.notify();
+                }))
+                .visible(self.banner_visible)
+                .with_size(self.size)
+                .icon(IconName::Bell),
+            )
+            .child(
                 ButtonGroup::new("toggle-size")
                     .outline()
                     .compact()
@@ -99,14 +115,18 @@ impl Render for AlertStory {
             )
             .child(
                 section("Info").max_w_md().child(
-                    Alert::info("This is an info alert.")
+                    Alert::info("info1", "This is an info alert.")
                         .with_size(self.size)
-                        .title("Info message"),
+                        .title("Info message")
+                        .on_close(cx.listener(|_, _, _, _| {
+                            println!("Info alert closed");
+                        })),
                 ),
             )
             .child(
                 section("Success with Title").max_w_md().child(
                     Alert::success(
+                        "success-1",
                         "You have successfully submitted your form.\n\
                     Thank you for your submission!",
                     )
@@ -117,6 +137,7 @@ impl Render for AlertStory {
             .child(
                 section("Warning").max_w_md().child(
                     Alert::warning(
+                        "warning-1",
                         "This is a warning alert with icon and title.\n\
                     This is second line of text to test is the line-height is correct.",
                     )
@@ -126,6 +147,7 @@ impl Render for AlertStory {
             .child(
                 section("Error").max_w_md().child(
                     Alert::error(
+                        "error-1",
                         "There was an error submitting your form.\n\
                     Please try again later, if you still have issues, please contact support.",
                     )
@@ -135,7 +157,7 @@ impl Render for AlertStory {
             )
             .child(
                 section("Custom Icon").max_w_md().child(
-                    Alert::info("Custom icon with info alert.")
+                    Alert::info("other-1", "Custom icon with info alert.")
                         .title("Custom Icon")
                         .with_size(self.size)
                         .icon(IconName::Bell),

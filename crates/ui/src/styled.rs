@@ -180,6 +180,16 @@ pub enum Size {
 }
 
 impl Size {
+    fn as_f32(&self) -> f32 {
+        match self {
+            Size::Size(val) => val.0,
+            Size::XSmall => 0.,
+            Size::Small => 1.,
+            Size::Medium => 2.,
+            Size::Large => 3.,
+        }
+    }
+
     /// Returns the height for table row.
     #[inline]
     pub fn table_row_height(&self) -> Pixels {
@@ -241,6 +251,32 @@ impl Size {
             Size::Medium => Size::Large,
             Size::Large => Size::Large,
             Size::Size(val) => Size::Size(*val * 1.2),
+        }
+    }
+
+    /// Return the max size between two sizes.
+    ///
+    /// e.g. `Size::XSmall.max(Size::Small)` will return `Size::XSmall`.
+    pub fn max(&self, other: Self) -> Self {
+        match (self, other) {
+            (Size::Size(a), Size::Size(b)) => Size::Size(px(a.0.min(b.0))),
+            (Size::Size(a), _) => Size::Size(*a),
+            (_, Size::Size(b)) => Size::Size(b),
+            (a, b) if a.as_f32() < b.as_f32() => *a,
+            _ => other,
+        }
+    }
+
+    /// Return the min size between two sizes.
+    ///
+    /// e.g. `Size::XSmall.min(Size::Small)` will return `Size::Small`.
+    pub fn min(&self, other: Self) -> Self {
+        match (self, other) {
+            (Size::Size(a), Size::Size(b)) => Size::Size(px(a.0.max(b.0))),
+            (Size::Size(a), _) => Size::Size(*a),
+            (_, Size::Size(b)) => Size::Size(b),
+            (a, b) if a.as_f32() > b.as_f32() => *a,
+            _ => other,
         }
     }
 }
@@ -519,4 +555,37 @@ impl Side {
 pub trait Collapsible {
     fn collapsed(self, collapsed: bool) -> Self;
     fn is_collapsed(&self) -> bool;
+}
+
+#[cfg(test)]
+mod tests {
+    use gpui::px;
+
+    use crate::Size;
+
+    #[test]
+    fn test_size_max_min() {
+        assert_eq!(Size::Small.min(Size::XSmall), Size::Small);
+        assert_eq!(Size::XSmall.min(Size::Small), Size::Small);
+        assert_eq!(Size::Small.min(Size::Medium), Size::Medium);
+        assert_eq!(Size::Medium.min(Size::Large), Size::Large);
+        assert_eq!(Size::Large.min(Size::Small), Size::Large);
+
+        assert_eq!(
+            Size::Size(px(10.)).min(Size::Size(px(20.))),
+            Size::Size(px(20.))
+        );
+
+        // Min
+        assert_eq!(Size::Small.max(Size::XSmall), Size::XSmall);
+        assert_eq!(Size::XSmall.max(Size::Small), Size::XSmall);
+        assert_eq!(Size::Small.max(Size::Medium), Size::Small);
+        assert_eq!(Size::Medium.max(Size::Large), Size::Medium);
+        assert_eq!(Size::Large.max(Size::Small), Size::Small);
+
+        assert_eq!(
+            Size::Size(px(10.)).max(Size::Size(px(20.))),
+            Size::Size(px(10.))
+        );
+    }
 }
