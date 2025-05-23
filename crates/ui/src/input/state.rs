@@ -1303,6 +1303,9 @@ impl InputState {
     }
 
     pub(super) fn escape(&mut self, _: &Escape, window: &mut Window, cx: &mut Context<Self>) {
+        if self.marked_range.is_some() {
+            self.unmark_text(window, cx);
+        }
         if self.selected_range.len() > 0 {
             return self.unselect(window, cx);
         }
@@ -1320,6 +1323,14 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // If there have IME marked range and is empty (Means pressed Esc to abort IME typing)
+        // Clear the marked range.
+        if let Some(marked_range) = &self.marked_range {
+            if marked_range.len() == 0 {
+                self.marked_range = None;
+            }
+        }
+
         self.selecting = true;
         let offset = self.index_for_mouse_position(event.position, window, cx);
         // Double click to select word

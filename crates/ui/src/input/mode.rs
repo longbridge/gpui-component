@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use gpui::{DefiniteLength, SharedString};
 
 use super::code_highlighter::CodeHighlighter;
@@ -145,6 +147,13 @@ impl InputMode {
         match self {
             InputMode::MultiLine { tab, .. } => Some(tab),
             InputMode::CodeEditor { tab, .. } => Some(tab),
+            _ => None,
+        }
+    }
+
+    pub(super) fn highlighter(&self) -> Option<Rc<crate::highlighter::Highlighter<'static>>> {
+        match &self {
+            InputMode::CodeEditor { highlighter, .. } => Some(highlighter.highlighter.clone()),
             _ => None,
         }
     }

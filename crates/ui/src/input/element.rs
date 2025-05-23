@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use gpui::{
     fill, point, px, relative, size, App, Bounds, Corners, Element, ElementId, ElementInputHandler,
     Entity, GlobalElementId, IntoElement, LayoutId, MouseButton, MouseMoveEvent, PaintQuad, Path,
@@ -199,7 +197,9 @@ impl TextElement {
         let input = self.input.read(cx);
         let mut selected_range = input.selected_range.clone();
         if let Some(marked_range) = &input.marked_range {
-            selected_range = marked_range.end..marked_range.end;
+            if !marked_range.is_empty() {
+                selected_range = marked_range.end..marked_range.end;
+            }
         }
         if selected_range.is_empty() {
             return None;
@@ -328,13 +328,6 @@ impl TextElement {
             }
             _ => None,
         })
-    }
-
-    fn highlighter(&self, cx: &App) -> Option<Rc<crate::highlighter::Highlighter<'static>>> {
-        match &self.input.read(cx).mode {
-            InputMode::CodeEditor { highlighter, .. } => Some(highlighter.highlighter.clone()),
-            _ => None,
-        }
     }
 }
 
@@ -520,8 +513,31 @@ impl Element for TextElement {
             underline: None,
             strikethrough: None,
         };
+        let marked_run = TextRun {
+            len: 0,
+            font: style.font(),
+            color: text_color,
+            background_color: None,
+            underline: Some(UnderlineStyle {
+                thickness: px(1.),
+                color: Some(text_color),
+                wavy: false,
+            }),
+            strikethrough: None,
+        };
 
-        let runs = if let Some(marked_range) = input.marked_range.as_ref() {
+        let runs = if !is_empty {
+            if let Some(highlight_lines) = highlight_lines {
+                let mut runs = vec![];
+                for style in highlight_lines {
+                    runs.extend(style.to_run(&text_style, &input.marked_range, &marked_run));
+                }
+                runs.into_iter().filter(|run| run.len > 0).collect()
+            } else {
+                vec![run]
+            }
+        } else if let Some(marked_range) = &input.marked_range {
+            // IME marked text
             vec![
                 TextRun {
                     len: marked_range.start,
@@ -529,11 +545,7 @@ impl Element for TextElement {
                 },
                 TextRun {
                     len: marked_range.end - marked_range.start,
-                    underline: Some(UnderlineStyle {
-                        color: Some(run.color),
-                        thickness: px(1.0),
-                        wavy: false,
-                    }),
+                    underline: marked_run.underline,
                     ..run.clone()
                 },
                 TextRun {
@@ -544,16 +556,6 @@ impl Element for TextElement {
             .into_iter()
             .filter(|run| run.len > 0)
             .collect()
-        } else if !is_empty {
-            if let Some(highlight_lines) = highlight_lines {
-                let mut runs = vec![];
-                for style in highlight_lines {
-                    runs.extend(style.to_run(&text_style));
-                }
-                runs.into_iter().filter(|run| run.len > 0).collect()
-            } else {
-                vec![run]
-            }
         } else {
             vec![run]
         };
@@ -674,11 +676,6 @@ impl Element for TextElement {
             }
         });
 
-        // Paint selections
-        if let Some(path) = prepaint.selection_path.take() {
-            window.paint_path(path, cx.theme().selection);
-        }
-
         // Paint multi line text
         let line_height = window.line_height();
         let origin = bounds.origin;
@@ -697,10 +694,14 @@ impl Element for TextElement {
             for (ix, line) in line_numbers.iter().enumerate() {
                 let p = point(origin.x, origin.y + offset_y);
                 let line_size = line.size(line_height);
+
                 // Paint the current line background
                 if prepaint.current_line_index == ix {
                     if let Some(bg_color) = self
-                        .highlighter(cx)
+                        .input
+                        .read(cx)
+                        .mode
+                        .highlighter()
                         .and_then(|h| h.theme.settings().line_highlight)
                         .map(crate::highlighter::color_to_hsla)
                     {
@@ -716,6 +717,12 @@ impl Element for TextElement {
             }
         }
 
+        // Paint selections
+        if let Some(path) = prepaint.selection_path.take() {
+            window.paint_path(path, cx.theme().selection);
+        }
+
+        // Paint text
         let mut offset_y = px(0.);
         for line in prepaint.lines.iter() {
             let p = point(origin.x + prepaint.line_number_width, origin.y + offset_y);
