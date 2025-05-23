@@ -787,6 +787,7 @@ impl PopupMenu {
                 disabled,
             } => this.selected(hovered).disabled(*disabled).child(
                 h_flex()
+                    .items_start()
                     .when(hovered, |this| {
                         this.rounded(cx.theme().radius)
                             .mx(-INNER_PADDING)
@@ -794,9 +795,9 @@ impl PopupMenu {
                             .bg(cx.theme().accent)
                             .text_color(cx.theme().accent_foreground)
                     })
-                    .items_start()
                     .child(
                         h_flex()
+                            .min_h(ITEM_HEIGHT)
                             .size_full()
                             .items_center()
                             .gap_x_1()
