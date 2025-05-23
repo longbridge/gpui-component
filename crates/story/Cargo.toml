@@ -6,10 +6,11 @@ version = "0.1.0"
 
 [dependencies]
 anyhow.workspace = true
-chrono = "0.4"
-fake = { version = "2.10.0", features = ["dummy"] }
 gpui.workspace = true
 gpui-component = { workspace = true, features = ["webview"] }
+
+chrono = "0.4"
+fake = { version = "2.10.0", features = ["dummy"] }
 rand = "0.8"
 raw-window-handle = { version = "0.6", features = ["std"] }
 regex = "1"
