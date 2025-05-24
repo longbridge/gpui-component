@@ -60,7 +60,7 @@ cargo run
 
 More examples can be found in the `examples` directory. You can run them with `cargo run --example <example_name>`.
 
-Check out [DEVELOPMENT](DEVELOPMENT) for more details.
+Check out [DEVELOPMENT.md](DEVELOPMENT.md) for more details.
 
 ## License
 
