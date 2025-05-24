@@ -1,0 +1,19 @@
+[package]
+name = "gpui-webview"
+version = "0.1.0"
+edition = "2024"
+authors = ["sunli <scott_s829@163.com>"]
+license = "Apache-2.0"
+homepage = "https://github.com/longbridge/gpui-component"
+repository = "https://github.com/longbridge/gpui-component"
+
+
+[dependencies]
+gpui.workspace = true
+gpui-component.workspace = true
+wef.workspace = true
+
+image = { version = "0.25.6", default-features = false }
+serde = { version = "1.0.219", features = ["derive"] }
+schemars = "0.8.22"
+raw-window-handle = "0.6.2"
