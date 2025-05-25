@@ -23,6 +23,7 @@ mod notification_story;
 mod number_input_story;
 mod otp_input_story;
 mod popover_story;
+mod postman_story; // Added postman_story module
 mod progress_story;
 mod radio_story;
 mod resizable_story;
@@ -73,6 +74,7 @@ pub use notification_story::NotificationStory;
 pub use number_input_story::NumberInputStory;
 pub use otp_input_story::OtpInputStory;
 pub use popover_story::PopoverStory;
+pub use postman_story::PostmanStory; // Added PostmanStory export
 pub use progress_story::ProgressStory;
 pub use radio_story::RadioStory;
 pub use resizable_story::ResizableStory;
@@ -612,6 +614,7 @@ impl StoryState {
             "ListStory" => story!(ListStory),
             "ModalStory" => story!(ModalStory),
             "PopoverStory" => story!(PopoverStory),
+            "PostmanStory" => story!(PostmanStory), // Added PostmanStory to macro
             "ProgressStory" => story!(ProgressStory),
             "ResizableStory" => story!(ResizableStory),
             "ScrollableStory" => story!(ScrollableStory),
