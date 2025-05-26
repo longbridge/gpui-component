@@ -614,7 +614,13 @@ impl InputState {
         self.replace_text(value, window, cx);
         self.history.ignore = false;
         // Ensure cursor to start when set text
-        self.selected_range = self.text.len()..self.text.len();
+        if self.is_single_line() {
+            self.selected_range = self.text.len()..self.text.len();
+        } else {
+            self.selected_range = 0..0;
+        }
+        // Move scroll to top
+        self.scroll_handle.set_offset(point(px(0.), px(0.)));
 
         cx.notify();
     }

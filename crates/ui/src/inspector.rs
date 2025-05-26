@@ -8,10 +8,12 @@ use gpui::{
 
 use crate::{
     button::{Button, ButtonVariants},
+    clipboard::Clipboard,
     description_list::DescriptionList,
     h_flex,
     highlighter::HighlightTheme,
     input::{InputState, TextInput},
+    link::Link,
     v_flex, ActiveTheme, IconName, Selectable, Sizable, TITLE_BAR_HEIGHT,
 };
 
@@ -96,7 +98,7 @@ impl Render for DivInspector {
         let input_state = self.input_state.clone();
         let last_styles = input_state.read(cx).value().clone();
 
-        v_flex().size_full().gap_1().text_sm().when_some(
+        v_flex().size_full().gap_3().text_sm().when_some(
             self.inspector_state.clone(),
             |this, state| {
                 let styles = serde_json::to_string_pretty(&state.base_style);
@@ -120,14 +122,21 @@ impl Render for DivInspector {
                         .child("Content Size", format!("{}", state.content_size), 1),
                 )
                 .child(
-                    v_flex().w_full().flex_1().gap_1().child("Styles").child(
-                        div()
-                            .flex_1()
-                            .w_full()
-                            .font_family("Monaco")
-                            .text_size(px(12.))
-                            .child(TextInput::new(&input_state).h_full()),
-                    ),
+                    v_flex()
+                        .w_full()
+                        .flex_1()
+                        .gap_1()
+                        .text_sm()
+                        .text_color(cx.theme().description_list_label_foreground)
+                        .child("Styles")
+                        .child(
+                            div()
+                                .flex_1()
+                                .w_full()
+                                .font_family("Monaco")
+                                .text_size(px(12.))
+                                .child(TextInput::new(&input_state).h_full()),
+                        ),
                 )
             },
         )
@@ -139,6 +148,10 @@ fn render_inspector(
     window: &mut Window,
     cx: &mut Context<Inspector>,
 ) -> AnyElement {
+    let inspector_element_id = inspector.active_element_id();
+    let source_location =
+        inspector_element_id.map(|id| SharedString::new(format!("{}", id.path.source_location)));
+
     v_flex()
         .id("inspector")
         .size_full()
@@ -184,9 +197,23 @@ fn render_inspector(
                 ),
         )
         .child(
-            div()
+            v_flex()
                 .flex_1()
-                .p_2()
+                .p_3()
+                .gap_3()
+                .when_some(source_location, |this, source_location| {
+                    this.child(
+                        h_flex()
+                            .gap_1()
+                            .text_sm()
+                            .child(
+                                Link::new("source-location")
+                                    .href(format!("file://{}", source_location))
+                                    .child(source_location.clone()),
+                            )
+                            .child(Clipboard::new("copy-source-location").value(source_location)),
+                    )
+                })
                 .children(inspector.render_inspector_states(window, cx)),
         )
         .into_any_element()
