@@ -640,8 +640,8 @@ impl InputState {
         cx: &mut Context<Self>,
     ) {
         let text: SharedString = text.into();
-        let range = self.range_to_utf16(&(self.cursor_offset()..self.cursor_offset()));
-        self.replace_text_in_range(Some(range), &text, window, cx);
+        let range_utf16 = self.range_to_utf16(&(self.cursor_offset()..self.cursor_offset()));
+        self.replace_text_in_range(Some(range_utf16), &text, window, cx);
         self.selected_range = self.selected_range.end..self.selected_range.end;
     }
 
@@ -783,7 +783,11 @@ impl InputState {
         }
 
         if !self.selected_range.is_empty() {
-            self.move_to(self.selected_range.start.saturating_sub(1), window, cx);
+            self.move_to(
+                self.previous_boundary(self.selected_range.start.saturating_sub(1)),
+                window,
+                cx,
+            );
         }
         self.pause_blink_cursor(cx);
         self.move_vertical(-1, window, cx);
@@ -795,7 +799,11 @@ impl InputState {
         }
 
         if !self.selected_range.is_empty() {
-            self.move_to(self.selected_range.end.saturating_sub(1), window, cx);
+            self.move_to(
+                self.next_boundary(self.selected_range.end.saturating_sub(1)),
+                window,
+                cx,
+            );
         }
 
         self.pause_blink_cursor(cx);
@@ -825,7 +833,7 @@ impl InputState {
             return;
         }
         let offset = self.start_of_line(window, cx).saturating_sub(1);
-        self.select_to(offset, window, cx);
+        self.select_to(self.previous_boundary(offset), window, cx);
     }
 
     pub(super) fn select_down(
@@ -1199,7 +1207,7 @@ impl InputState {
             if is_eof {
                 new_offset += 1;
             }
-            self.move_to(new_offset, window, cx);
+            self.move_to(self.next_boundary(new_offset), window, cx);
 
             // Add indent
             self.replace_text_in_range(
@@ -1668,7 +1676,7 @@ impl InputState {
         let mut start = offset;
         let mut end = start;
         let prev_text = self
-            .text_for_range(self.range_to_utf16(&(0..start + 1)), &mut None, window, cx)
+            .text_for_range(self.range_to_utf16(&(0..start)), &mut None, window, cx)
             .unwrap_or_default();
         let next_text = self
             .text_for_range(
@@ -1682,16 +1690,16 @@ impl InputState {
         let prev_chars = prev_text.chars().rev();
         let next_chars = next_text.chars();
 
-        let mut last_char_len = 0;
-        for (_, c) in prev_chars.enumerate() {
+        let pre_chars_count = prev_chars.clone().count();
+        for (ix, c) in prev_chars.enumerate() {
             if !is_word(c) {
                 break;
             }
 
-            last_char_len = c.len_utf8();
-            start = start.saturating_sub(last_char_len);
+            if ix < pre_chars_count {
+                start = start.saturating_sub(c.len_utf8());
+            }
         }
-        start += last_char_len;
 
         for (_, c) in next_chars.enumerate() {
             if !is_word(c) {
@@ -1701,19 +1709,8 @@ impl InputState {
             end += c.len_utf8();
         }
 
-        // Ensure at least one character is selected
         if start == end {
-            end = end + 1;
-
-            // Avoid select empty range
-            match self.text.get(start..end) {
-                None => return,
-                Some(part) => {
-                    if part.trim().len() == 0 {
-                        return;
-                    }
-                }
-            }
+            return;
         }
 
         self.selected_range = start..end;
