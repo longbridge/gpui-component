@@ -62,7 +62,6 @@ impl Example {
             input_state,
             language_state,
             language: default_language,
-            is_dark: false,
             line_number: true,
             _subscribes,
         }
