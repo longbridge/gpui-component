@@ -149,9 +149,14 @@ where
         Some(self.id.clone())
     }
 
+    fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
+        None
+    }
+
     fn request_layout(
         &mut self,
         id: Option<&gpui::GlobalElementId>,
+        _: Option<&gpui::InspectorElementId>,
         window: &mut Window,
         cx: &mut App,
     ) -> (gpui::LayoutId, Self::RequestLayoutState) {
@@ -214,6 +219,7 @@ where
     fn prepaint(
         &mut self,
         _: Option<&gpui::GlobalElementId>,
+        _: Option<&gpui::InspectorElementId>,
         _: gpui::Bounds<Pixels>,
         element: &mut Self::RequestLayoutState,
         window: &mut Window,
@@ -227,6 +233,7 @@ where
     fn paint(
         &mut self,
         _: Option<&gpui::GlobalElementId>,
+        _: Option<&gpui::InspectorElementId>,
         _: gpui::Bounds<Pixels>,
         element: &mut Self::RequestLayoutState,
         _: &mut Self::PrepaintState,

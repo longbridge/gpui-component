@@ -139,9 +139,14 @@ impl Element for WebViewElement {
         None
     }
 
+    fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
+        None
+    }
+
     fn request_layout(
         &mut self,
         _: Option<&GlobalElementId>,
+        _: Option<&gpui::InspectorElementId>,
         window: &mut Window,
         cx: &mut App,
     ) -> (LayoutId, Self::RequestLayoutState) {
@@ -158,6 +163,7 @@ impl Element for WebViewElement {
     fn prepaint(
         &mut self,
         _: Option<&GlobalElementId>,
+        _: Option<&gpui::InspectorElementId>,
         bounds: Bounds<Pixels>,
         _: &mut Self::RequestLayoutState,
         window: &mut Window,
@@ -187,6 +193,7 @@ impl Element for WebViewElement {
     fn paint(
         &mut self,
         _: Option<&GlobalElementId>,
+        _: Option<&gpui::InspectorElementId>,
         bounds: Bounds<Pixels>,
         _: &mut Self::RequestLayoutState,
         hitbox: &mut Self::PrepaintState,

@@ -210,20 +210,26 @@ impl Element for SvgImg {
         Some(self.id.clone())
     }
 
+    fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
+        None
+    }
+
     fn request_layout(
         &mut self,
         global_id: Option<&GlobalElementId>,
+        inspector_id: Option<&gpui::InspectorElementId>,
         window: &mut Window,
         cx: &mut App,
     ) -> (gpui::LayoutId, Self::RequestLayoutState) {
+        let layout_id = self.interactivity.request_layout(
+            global_id,
+            inspector_id,
+            window,
+            cx,
+            |style, window, cx| window.request_layout(style, None, cx),
+        );
+
         let global_id = global_id.unwrap();
-
-        let layout_id =
-            self.interactivity
-                .request_layout(Some(global_id), window, cx, |style, window, cx| {
-                    window.request_layout(style, None, cx)
-                });
-
         let source = &self.source;
         let source_hash = hash(source);
 
@@ -283,6 +289,7 @@ impl Element for SvgImg {
     fn prepaint(
         &mut self,
         global_id: Option<&GlobalElementId>,
+        inspector_id: Option<&gpui::InspectorElementId>,
         bounds: Bounds<Pixels>,
         state: &mut Self::RequestLayoutState,
         window: &mut Window,
@@ -290,6 +297,7 @@ impl Element for SvgImg {
     ) -> Self::PrepaintState {
         let hitbox = self.interactivity.prepaint(
             global_id,
+            inspector_id,
             bounds,
             bounds.size,
             window,
@@ -303,6 +311,7 @@ impl Element for SvgImg {
     fn paint(
         &mut self,
         global_id: Option<&GlobalElementId>,
+        inspector_id: Option<&gpui::InspectorElementId>,
         bounds: Bounds<Pixels>,
         _: &mut Self::RequestLayoutState,
         state: &mut Self::PrepaintState,
@@ -315,8 +324,14 @@ impl Element for SvgImg {
         };
         let size = image.size(0).map(|x| x.0 as f32);
 
-        self.interactivity
-            .paint(global_id, bounds, hitbox, window, cx, |_, window, _| {
+        self.interactivity.paint(
+            global_id,
+            inspector_id,
+            bounds,
+            hitbox,
+            window,
+            cx,
+            |_, window, _| {
                 // To calculate the ratio of the original image size to the container bounds size.
                 // Scale by shortest side (width or height) to get a fit image.
                 // And center the image in the container bounds.
@@ -342,7 +357,8 @@ impl Element for SvgImg {
                 if let Err(err) = window.paint_image(img_bounds, px(0.).into(), image, 0, false) {
                     eprintln!("failed to paint svg image: {:?}", err);
                 }
-            })
+            },
+        )
     }
 }
 
