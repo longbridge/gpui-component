@@ -148,6 +148,7 @@ fn render_inspector(
         .child(
             h_flex()
                 .w_full()
+                .justify_between()
                 .gap_2()
                 .h(TITLE_BAR_HEIGHT)
                 .line_height(TITLE_BAR_HEIGHT)
@@ -156,17 +157,31 @@ fn render_inspector(
                 .border_b_1()
                 .border_color(cx.theme().border)
                 .child(
-                    Button::new("inspect")
-                        .icon(IconName::Inspector)
-                        .selected(inspector.is_picking())
+                    h_flex()
+                        .gap_2()
+                        .text_sm()
+                        .child(
+                            Button::new("inspect")
+                                .icon(IconName::Inspector)
+                                .selected(inspector.is_picking())
+                                .small()
+                                .ghost()
+                                .on_click(cx.listener(|this, _, window, _| {
+                                    this.start_picking();
+                                    window.refresh();
+                                })),
+                        )
+                        .child("Inspector"),
+                )
+                .child(
+                    Button::new("close")
+                        .icon(IconName::Close)
                         .small()
                         .ghost()
-                        .on_click(cx.listener(|this, _, window, _| {
-                            this.start_picking();
-                            window.refresh();
-                        })),
-                )
-                .child("Inspector"),
+                        .on_click(|_, window, cx| {
+                            window.dispatch_action(Box::new(ToggleInspector), cx);
+                        }),
+                ),
         )
         .child(
             div()
