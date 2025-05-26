@@ -17,7 +17,7 @@ use crate::{
     v_flex, ActiveTheme, IconName, Selectable, Sizable, TITLE_BAR_HEIGHT,
 };
 
-actions!(app, [ToggleInspector]);
+actions!(inspector, [ToggleInspector]);
 
 /// Initialize the inspector and register the action to toggle it.
 pub fn init(cx: &mut App) {
