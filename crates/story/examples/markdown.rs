@@ -1,4 +1,4 @@
-use std::{rc::Rc, sync::LazyLock};
+use std::rc::Rc;
 
 use gpui::*;
 use gpui_component::{
@@ -10,8 +10,6 @@ use gpui_component::{
 };
 use story::Assets;
 
-static LIGHT_THEME: LazyLock<HighlightTheme> = LazyLock::new(|| HighlightTheme::default_light());
-static DARK_THEME: LazyLock<HighlightTheme> = LazyLock::new(|| HighlightTheme::default_dark());
 const LANG: &str = "markdown";
 
 pub struct Example {
@@ -26,7 +24,7 @@ impl Example {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let input_state = cx.new(|cx| {
             InputState::new(window, cx)
-                .code_editor(Some(LANG), &LIGHT_THEME)
+                .code_editor(Some(LANG), &HighlightTheme::default_light())
                 .line_number(false)
                 .tab_size(TabSize {
                     tab_size: 2,
@@ -66,9 +64,15 @@ impl Render for Example {
             self.is_dark = is_dark;
             self.input_state.update(cx, |state, cx| {
                 if is_dark {
-                    state.set_highlighter(Highlighter::new(Some(LANG), &DARK_THEME), cx);
+                    state.set_highlighter(
+                        Highlighter::new(Some(LANG), &HighlightTheme::default_dark()),
+                        cx,
+                    );
                 } else {
-                    state.set_highlighter(Highlighter::new(Some(LANG), &LIGHT_THEME), cx);
+                    state.set_highlighter(
+                        Highlighter::new(Some(LANG), &HighlightTheme::default_light()),
+                        cx,
+                    );
                 }
             });
         }
@@ -92,7 +96,7 @@ impl Render for Example {
                         .child(
                             TextView::markdown("preview", self.input_state.read(cx).value()).style(
                                 TextViewStyle {
-                                    highlight_theme: Rc::new(theme),
+                                    highlight_theme: Rc::new(theme.clone()),
                                     ..Default::default()
                                 },
                             ),

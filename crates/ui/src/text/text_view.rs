@@ -84,7 +84,7 @@ impl Default for TextViewStyle {
         Self {
             paragraph_gap: rems(1.),
             heading_base_font_size: px(14.),
-            highlight_theme: Rc::new(HighlightTheme::default_light()),
+            highlight_theme: Rc::new(HighlightTheme::default_light().clone()),
         }
     }
 }

@@ -2,6 +2,7 @@ mod colors;
 mod event;
 mod focusable;
 mod icon;
+mod inspector;
 mod kbd;
 mod menu;
 mod root;
@@ -64,6 +65,7 @@ pub use wry;
 pub use crate::Disableable;
 pub use event::InteractiveElementExt;
 pub use focusable::FocusableCycle;
+pub use inspector::*;
 pub use menu::{context_menu, popup_menu};
 pub use root::{ContextModal, Root};
 pub use styled::*;
@@ -88,6 +90,7 @@ rust_i18n::i18n!("locales", fallback = "en");
 /// You can initialize the UI module at your application's entry point.
 pub fn init(cx: &mut App) {
     theme::init(cx);
+    inspector::init(cx);
     date_picker::init(cx);
     dock::init(cx);
     drawer::init(cx);

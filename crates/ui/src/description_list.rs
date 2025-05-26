@@ -57,6 +57,12 @@ impl From<SharedString> for DescriptionText {
     }
 }
 
+impl From<String> for DescriptionText {
+    fn from(text: String) -> Self {
+        DescriptionText::String(SharedString::from(text))
+    }
+}
+
 impl RenderOnce for DescriptionText {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         match self {

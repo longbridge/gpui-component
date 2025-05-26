@@ -18,6 +18,15 @@ static DEFAULT_DARK: LazyLock<Arc<highlighting::Theme>> = LazyLock::new(|| {
     Arc::new(highlighting::ThemeSet::load_from_reader(&mut cursor).unwrap())
 });
 
+pub static LIGHT_THEME: LazyLock<HighlightTheme> = LazyLock::new(|| HighlightTheme {
+    name: "default-light".into(),
+    inner: DEFAULT_LIGHT.clone(),
+});
+pub static DARK_THEME: LazyLock<HighlightTheme> = LazyLock::new(|| HighlightTheme {
+    name: "default-dark".into(),
+    inner: DEFAULT_DARK.clone(),
+});
+
 /// Represents a theme for syntax highlighting.
 #[derive(Debug, Clone, PartialEq)]
 pub struct HighlightTheme {
@@ -27,19 +36,13 @@ pub struct HighlightTheme {
 
 impl HighlightTheme {
     /// Default light theme.
-    pub fn default_light() -> Self {
-        Self {
-            name: "default-light".into(),
-            inner: DEFAULT_LIGHT.clone(),
-        }
+    pub fn default_light() -> &'static Self {
+        &LIGHT_THEME
     }
 
     /// Default dark theme.
-    pub fn default_dark() -> Self {
-        Self {
-            name: "default-dark".into(),
-            inner: DEFAULT_DARK.clone(),
-        }
+    pub fn default_dark() -> &'static Self {
+        &DARK_THEME
     }
 
     /// Parse a theme from a string (tmTheme)

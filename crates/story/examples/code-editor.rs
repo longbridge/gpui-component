@@ -1,5 +1,3 @@
-use std::sync::LazyLock;
-
 use gpui::*;
 use gpui_component::{
     checkbox::Checkbox,
@@ -10,9 +8,6 @@ use gpui_component::{
     v_flex, ActiveTheme as _,
 };
 use story::Assets;
-
-static LIGHT_THEME: LazyLock<HighlightTheme> = LazyLock::new(|| HighlightTheme::default_light());
-static DARK_THEME: LazyLock<HighlightTheme> = LazyLock::new(|| HighlightTheme::default_dark());
 
 pub struct Example {
     input_state: Entity<InputState>,
@@ -31,7 +26,7 @@ impl Example {
         let default_language: SharedString = LANGUAGES[0].into();
         let input_state = cx.new(|cx| {
             InputState::new(window, cx)
-                .code_editor(Some(&default_language), &LIGHT_THEME)
+                .code_editor(Some(&default_language), &HighlightTheme::default_light())
                 .line_number(true)
                 .tab_size(TabSize {
                     tab_size: 4,
@@ -89,9 +84,15 @@ impl Example {
             self.is_dark = is_dark;
             self.input_state.update(cx, |state, cx| {
                 if is_dark {
-                    state.set_highlighter(Highlighter::new(Some(language), &DARK_THEME), cx);
+                    state.set_highlighter(
+                        Highlighter::new(Some(language), &HighlightTheme::default_dark()),
+                        cx,
+                    );
                 } else {
-                    state.set_highlighter(Highlighter::new(Some(language), &LIGHT_THEME), cx);
+                    state.set_highlighter(
+                        Highlighter::new(Some(language), &HighlightTheme::default_dark()),
+                        cx,
+                    );
                 }
             });
         }

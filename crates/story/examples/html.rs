@@ -1,5 +1,3 @@
-use std::sync::LazyLock;
-
 use gpui::*;
 use gpui_component::{
     highlighter::{HighlightTheme, Highlighter},
@@ -9,9 +7,6 @@ use gpui_component::{
     ActiveTheme as _,
 };
 use story::Assets;
-
-static LIGHT_THEME: LazyLock<HighlightTheme> = LazyLock::new(|| HighlightTheme::default_light());
-static DARK_THEME: LazyLock<HighlightTheme> = LazyLock::new(|| HighlightTheme::default_dark());
 
 pub struct Example {
     input_state: Entity<InputState>,
@@ -27,7 +22,7 @@ impl Example {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let input_state = cx.new(|cx| {
             InputState::new(window, cx)
-                .code_editor(Some(LANG), &LIGHT_THEME)
+                .code_editor(Some(LANG), &HighlightTheme::default_light())
                 .tab_size(TabSize {
                     tab_size: 4,
                     hard_tabs: false,
@@ -65,9 +60,15 @@ impl Render for Example {
             self.is_dark = is_dark;
             self.input_state.update(cx, |state, cx| {
                 if is_dark {
-                    state.set_highlighter(Highlighter::new(Some(LANG), &DARK_THEME), cx);
+                    state.set_highlighter(
+                        Highlighter::new(Some(LANG), &HighlightTheme::default_dark()),
+                        cx,
+                    );
                 } else {
-                    state.set_highlighter(Highlighter::new(Some(LANG), &LIGHT_THEME), cx);
+                    state.set_highlighter(
+                        Highlighter::new(Some(LANG), &HighlightTheme::default_light()),
+                        cx,
+                    );
                 }
             });
         }
