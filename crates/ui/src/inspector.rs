@@ -145,6 +145,7 @@ fn render_inspector(
     let inspector_element_id = inspector.active_element_id();
     let source_location =
         inspector_element_id.map(|id| SharedString::new(format!("{}", id.path.source_location)));
+    let element_global_id = inspector_element_id.map(|id| format!("{}", id.path.global_id));
 
     v_flex()
         .id("inspector")
@@ -197,6 +198,7 @@ fn render_inspector(
                 .flex_1()
                 .p_3()
                 .gap_3()
+                .text_sm()
                 .when_some(source_location, |this, source_location| {
                     this.child(
                         h_flex()
@@ -210,6 +212,7 @@ fn render_inspector(
                             .child(Clipboard::new("copy-source-location").value(source_location)),
                     )
                 })
+                .children(element_global_id)
                 .children(inspector.render_inspector_states(window, cx)),
         )
         .into_any_element()

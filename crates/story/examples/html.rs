@@ -1,17 +1,14 @@
 use gpui::*;
 use gpui_component::{
-    highlighter::{HighlightTheme, Highlighter},
     input::{InputState, TabSize, TextInput},
     resizable::{h_resizable, resizable_panel, ResizableState},
     text::TextView,
-    ActiveTheme as _,
 };
 use story::Assets;
 
 pub struct Example {
     input_state: Entity<InputState>,
     resizable_state: Entity<ResizableState>,
-    is_dark: bool,
     _subscribe: Subscription,
 }
 
@@ -22,7 +19,7 @@ impl Example {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let input_state = cx.new(|cx| {
             InputState::new(window, cx)
-                .code_editor(Some(LANG), &HighlightTheme::default_light())
+                .code_editor(Some(LANG))
                 .tab_size(TabSize {
                     tab_size: 4,
                     hard_tabs: false,
@@ -43,7 +40,6 @@ impl Example {
         Self {
             input_state,
             resizable_state,
-            is_dark: false,
             _subscribe,
         }
     }
@@ -55,24 +51,6 @@ impl Example {
 
 impl Render for Example {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let is_dark = cx.theme().mode.is_dark();
-        if self.is_dark != is_dark {
-            self.is_dark = is_dark;
-            self.input_state.update(cx, |state, cx| {
-                if is_dark {
-                    state.set_highlighter(
-                        Highlighter::new(Some(LANG), &HighlightTheme::default_dark()),
-                        cx,
-                    );
-                } else {
-                    state.set_highlighter(
-                        Highlighter::new(Some(LANG), &HighlightTheme::default_light()),
-                        cx,
-                    );
-                }
-            });
-        }
-
         h_resizable("container", self.resizable_state.clone())
             .child(
                 resizable_panel().child(

@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use gpui::*;
 use gpui_component::{
-    highlighter::{HighlightTheme, Highlighter},
+    highlighter::HighlightTheme,
     input::{InputEvent, InputState, TabSize, TextInput},
     resizable::{h_resizable, resizable_panel, ResizableState},
     text::{TextView, TextViewStyle},
@@ -15,7 +15,6 @@ const LANG: &str = "markdown";
 pub struct Example {
     input_state: Entity<InputState>,
     resizable_state: Entity<ResizableState>,
-    is_dark: bool,
 }
 
 const EXAMPLE: &str = include_str!("./markdown.md");
@@ -24,7 +23,7 @@ impl Example {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let input_state = cx.new(|cx| {
             InputState::new(window, cx)
-                .code_editor(Some(LANG), &HighlightTheme::default_light())
+                .code_editor(Some(LANG))
                 .line_number(false)
                 .tab_size(TabSize {
                     tab_size: 2,
@@ -42,7 +41,6 @@ impl Example {
         Self {
             resizable_state,
             input_state,
-            is_dark: false,
         }
     }
 
@@ -60,22 +58,6 @@ impl Render for Example {
         };
 
         let is_dark = cx.theme().mode.is_dark();
-        if self.is_dark != is_dark {
-            self.is_dark = is_dark;
-            self.input_state.update(cx, |state, cx| {
-                if is_dark {
-                    state.set_highlighter(
-                        Highlighter::new(Some(LANG), &HighlightTheme::default_dark()),
-                        cx,
-                    );
-                } else {
-                    state.set_highlighter(
-                        Highlighter::new(Some(LANG), &HighlightTheme::default_light()),
-                        cx,
-                    );
-                }
-            });
-        }
 
         h_resizable("container", self.resizable_state.clone())
             .child(
@@ -97,6 +79,7 @@ impl Render for Example {
                             TextView::markdown("preview", self.input_state.read(cx).value()).style(
                                 TextViewStyle {
                                     highlight_theme: Rc::new(theme.clone()),
+                                    is_dark,
                                     ..Default::default()
                                 },
                             ),
