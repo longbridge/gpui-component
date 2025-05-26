@@ -1661,7 +1661,7 @@ impl InputState {
         let mut start = offset;
         let mut end = start;
         let prev_text = self
-            .text_for_range(self.range_to_utf16(&(0..start + 1)), &mut None, window, cx)
+            .text_for_range(self.range_to_utf16(&(0..start)), &mut None, window, cx)
             .unwrap_or_default();
         let next_text = self
             .text_for_range(
@@ -1675,16 +1675,16 @@ impl InputState {
         let prev_chars = prev_text.chars().rev();
         let next_chars = next_text.chars();
 
-        let mut last_char_len = 0;
-        for (_, c) in prev_chars.enumerate() {
+        let pre_chars_count = prev_chars.clone().count();
+        for (ix, c) in prev_chars.enumerate() {
             if !is_word(c) {
                 break;
             }
 
-            last_char_len = c.len_utf8();
-            start = start.saturating_sub(last_char_len);
+            if ix < pre_chars_count {
+                start = start.saturating_sub(c.len_utf8());
+            }
         }
-        start += last_char_len;
 
         for (_, c) in next_chars.enumerate() {
             if !is_word(c) {
@@ -1694,19 +1694,8 @@ impl InputState {
             end += c.len_utf8();
         }
 
-        // Ensure at least one character is selected
         if start == end {
-            end = end + 1;
-
-            // Avoid select empty range
-            match self.text.get(start..end) {
-                None => return,
-                Some(part) => {
-                    if part.trim().len() == 0 {
-                        return;
-                    }
-                }
-            }
+            return;
         }
 
         self.selected_range = start..end;
