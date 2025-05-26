@@ -964,8 +964,8 @@ impl InputState {
     /// Return the start offset of the previous word.
     fn previous_start_of_word(&mut self) -> usize {
         let offset = self.selected_range.start;
-        let prev_str = &self.text[..offset].to_string();
-        UnicodeSegmentation::split_word_bound_indices(prev_str as &str)
+        let prev_str = self.text_for_range_utf8(0..offset);
+        UnicodeSegmentation::split_word_bound_indices(prev_str)
             .filter(|(_, s)| !s.trim_start().is_empty())
             .next_back()
             .map(|(i, _)| i)
@@ -975,8 +975,8 @@ impl InputState {
     /// Return the next end offset of the next word.
     fn next_end_of_word(&mut self) -> usize {
         let offset = self.cursor_offset();
-        let next_str = &self.text[offset..].to_string();
-        UnicodeSegmentation::split_word_bound_indices(next_str as &str)
+        let next_str = self.text_for_range_utf8(offset..self.text.len());
+        UnicodeSegmentation::split_word_bound_indices(next_str)
             .find(|(_, s)| !s.trim_start().is_empty())
             .map(|(i, s)| offset + i + s.len())
             .unwrap_or(self.text.len())
@@ -1296,9 +1296,12 @@ impl InputState {
                         cx,
                     );
                     removed_len += tab_indent.len();
+
+                    // +1 for "\n"
+                    offset += line.len().saturating_sub(tab_indent.len()) + 1;
+                } else {
+                    offset += line.len() + 1;
                 }
-                // +1 for "\n"
-                offset += line.len().saturating_sub(tab_indent.len()) + 1;
             }
 
             self.selected_range = start_offset..selected_range.end.saturating_sub(removed_len);
@@ -1306,7 +1309,10 @@ impl InputState {
             // Selected none
             let start_offset = self.selected_range.start;
             let offset = self.start_of_line_of_selection(window, cx);
-            if self.text[offset..].starts_with(tab_indent.as_ref()) {
+            if self
+                .text_for_range_utf8(offset..self.text.len())
+                .starts_with(tab_indent.as_ref())
+            {
                 self.replace_text_in_range(
                     Some(self.range_to_utf16(&(offset..offset + tab_indent.len()))),
                     "",
@@ -1416,7 +1422,9 @@ impl InputState {
             return;
         }
 
-        let selected_text = self.text[self.selected_range.clone()].to_string();
+        let selected_text = self
+            .text_for_range_utf8(self.selected_range.clone())
+            .to_string();
         cx.write_to_clipboard(ClipboardItem::new_string(selected_text));
     }
 
@@ -1425,7 +1433,9 @@ impl InputState {
             return;
         }
 
-        let selected_text = self.text[self.selected_range.clone()].to_string();
+        let selected_text = self
+            .text_for_range_utf8(self.selected_range.clone())
+            .to_string();
         cx.write_to_clipboard(ClipboardItem::new_string(selected_text));
         self.replace_text_in_range(None, "", window, cx);
     }
@@ -1891,6 +1901,11 @@ impl InputState {
             self.mode.update_auto_grow(&self.text_wrapper);
         }
     }
+
+    fn text_for_range_utf8(&mut self, range: impl Into<Range<usize>>) -> &str {
+        let range = self.range_from_utf16(&self.range_to_utf16(&range.into()));
+        &self.text[range]
+    }
 }
 
 impl EntityInputHandler for InputState {
@@ -1953,8 +1968,10 @@ impl EntityInputHandler for InputState {
             .or(self.marked_range.clone())
             .unwrap_or(self.selected_range.clone());
 
-        let pending_text: SharedString =
-            (self.text[0..range.start].to_owned() + new_text + &self.text[range.end..]).into();
+        let pending_text: SharedString = (self.text_for_range_utf8(0..range.start).to_owned()
+            + new_text
+            + self.text_for_range_utf8(range.end..self.text.len()))
+        .into();
         // Check if the new text is valid
         if !self.is_valid_input(&pending_text) {
             return;
@@ -1994,8 +2011,10 @@ impl EntityInputHandler for InputState {
             .map(|range_utf16| self.range_from_utf16(range_utf16))
             .or(self.marked_range.clone())
             .unwrap_or(self.selected_range.clone());
-        let pending_text: SharedString =
-            (self.text[0..range.start].to_owned() + new_text + &self.text[range.end..]).into();
+        let pending_text: SharedString = (self.text_for_range_utf8(0..range.start).to_owned()
+            + new_text
+            + self.text_for_range_utf8(range.end..self.text.len()))
+        .into();
         if !self.is_valid_input(&pending_text) {
             return;
         }
