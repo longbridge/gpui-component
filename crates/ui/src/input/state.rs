@@ -981,7 +981,7 @@ impl InputState {
         let next_str = &self.text[offset..].to_string();
         UnicodeSegmentation::split_word_bound_indices(next_str as &str)
             .find(|(_, s)| !s.trim_start().is_empty())
-            .map(|(i, s)| self.next_boundary(offset + i + s.len()))
+            .map(|(i, s)| offset + i + s.len())
             .unwrap_or(self.text.len())
     }
 
