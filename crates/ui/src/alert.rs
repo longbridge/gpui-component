@@ -55,7 +55,7 @@ impl Alert {
     /// Create a new alert with the given message.
     fn new(id: impl Into<ElementId>, message: impl Into<Text>) -> Self {
         Self {
-            base: div().id(id),
+            base: h_flex().id(id),
             variant: AlertVariant::default(),
             icon: None,
             title: None,
@@ -181,80 +181,77 @@ impl RenderOnce for Alert {
         let color = self.variant.color(cx);
 
         self.base
-            .flex_1()
-            .when(self.banner, |this| this.w_full())
+            .w_full()
+            .bg(color.opacity(0.06))
+            .text_color(self.variant.fg(cx))
+            .px(padding_x)
+            .py(padding_y)
+            .gap(gap)
+            .justify_between()
+            .line_height(relative(line_height))
+            .map(|this| match self.size {
+                Size::Large => this.text_base(),
+                _ => this.text_sm(),
+            })
+            .when(!self.banner, |this| {
+                this.rounded(radius)
+                    .border_1()
+                    .border_color(color)
+                    .items_start()
+            })
             .child(
-                h_flex()
-                    .w_full()
-                    .items_center()
-                    .when(!self.banner, |this| {
-                        this.rounded(radius)
-                            .border_1()
-                            .border_color(color)
-                            .items_start()
-                    })
-                    .bg(color.opacity(0.06))
-                    .text_color(self.variant.fg(cx))
-                    .px(padding_x)
-                    .py(padding_y)
-                    .gap(gap)
+                div()
+                    .flex()
+                    .flex_1()
+                    .items_start()
                     .overflow_hidden()
-                    .justify_between()
-                    .map(|this| match self.size {
-                        Size::Large => this.text_base(),
-                        _ => this.text_sm(),
-                    })
-                    .line_height(relative(line_height))
+                    .gap(gap)
                     .child(
-                        h_flex()
-                            .items_start()
-                            .gap(gap)
-                            .child(
-                                div().mt(icon_mt).child(
-                                    self.icon
-                                        .unwrap_or(IconName::Info.into())
-                                        .with_size(self.size)
-                                        .flex_shrink_0(),
-                                ),
-                            )
-                            .child(
-                                div()
-                                    .overflow_hidden()
-                                    .when(!self.banner, |this| {
-                                        this.when_some(self.title, |this, title| {
-                                            this.child(
-                                                div()
-                                                    .w_full()
-                                                    .truncate()
-                                                    .mb_1()
-                                                    .font_semibold()
-                                                    .child(title),
-                                            )
-                                        })
-                                    })
-                                    .child(div().overflow_hidden().child(self.message)),
-                            ),
+                        div().mt(icon_mt).child(
+                            self.icon
+                                .unwrap_or(IconName::Info.into())
+                                .with_size(self.size)
+                                .flex_shrink_0(),
+                        ),
                     )
-                    .when_some(self.on_close, |this, on_close| {
-                        this.child(
-                            div()
-                                .id("close")
-                                .p_0p5()
-                                .rounded(cx.theme().radius)
-                                .hover(|this| this.bg(color.opacity(0.1)))
-                                .active(|this| this.bg(color.opacity(0.2)))
-                                .on_click(move |ev, window, cx| {
-                                    on_close(ev, window, cx);
+                    .child(
+                        div()
+                            .flex_1()
+                            .overflow_hidden()
+                            .when(!self.banner, |this| {
+                                this.when_some(self.title, |this, title| {
+                                    this.child(
+                                        div()
+                                            .w_full()
+                                            .truncate()
+                                            .mb_1()
+                                            .font_semibold()
+                                            .child(title),
+                                    )
                                 })
-                                .child(
-                                    Icon::new(IconName::Close)
-                                        .text_color(cx.theme().foreground)
-                                        .with_size(self.size.max(Size::Medium))
-                                        .flex_shrink_0(),
-                                ),
-                        )
-                    }),
+                            })
+                            .child(self.message),
+                    ),
             )
+            .when_some(self.on_close, |this, on_close| {
+                this.child(
+                    div()
+                        .id("close")
+                        .p_0p5()
+                        .rounded(cx.theme().radius)
+                        .hover(|this| this.bg(color.opacity(0.1)))
+                        .active(|this| this.bg(color.opacity(0.2)))
+                        .on_click(move |ev, window, cx| {
+                            on_close(ev, window, cx);
+                        })
+                        .child(
+                            Icon::new(IconName::Close)
+                                .text_color(cx.theme().foreground)
+                                .with_size(self.size.max(Size::Medium))
+                                .flex_shrink_0(),
+                        ),
+                )
+            })
             .into_any_element()
     }
 }

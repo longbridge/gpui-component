@@ -114,7 +114,7 @@ impl Render for AlertStory {
                     })),
             )
             .child(
-                section("Info").max_w_md().child(
+                section("Info").w_2_3().child(
                     Alert::info("info1", "This is an info alert.")
                         .with_size(self.size)
                         .title("Info message")
@@ -124,7 +124,7 @@ impl Render for AlertStory {
                 ),
             )
             .child(
-                section("Success with Title").max_w_md().child(
+                section("Success with Title").w_2_3().child(
                     Alert::success(
                         "success-1",
                         "You have successfully submitted your form.\n\
@@ -135,7 +135,7 @@ impl Render for AlertStory {
                 ),
             )
             .child(
-                section("Warning").max_w_md().child(
+                section("Warning").w_2_3().child(
                     Alert::warning(
                         "warning-1",
                         "This is a warning alert with icon and title.\n\
@@ -145,7 +145,7 @@ impl Render for AlertStory {
                 ),
             )
             .child(
-                section("Error").max_w_md().child(
+                section("Error").w_2_3().child(
                     Alert::error(
                         "error-1",
                         "There was an error submitting your form.\n\
@@ -156,11 +156,14 @@ impl Render for AlertStory {
                 ),
             )
             .child(
-                section("Custom Icon").max_w_md().child(
-                    Alert::info("other-1", "Custom icon with info alert.")
-                        .title("Custom Icon")
-                        .with_size(self.size)
-                        .icon(IconName::Bell),
+                section("Custom Icon").w_2_3().child(
+                    Alert::info(
+                        "other-1",
+                        "Custom icon with info alert with long long long long long long long long long long long long long long long long long long long long messageeeeeeeee.",
+                    )
+                    .title("Custom Icon")
+                    .with_size(self.size)
+                    .icon(IconName::Bell),
                 ),
             )
     }
