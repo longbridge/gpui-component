@@ -215,8 +215,9 @@ impl CodeBlock {
         let highlight = Highlighter::new(
             lang.as_ref().map(|v| v.as_ref()),
             text_view_style.highlight_theme.as_ref(),
+            text_view_style.highlight_theme.as_ref(),
         );
-        let styles = highlight.highlight(code.as_ref());
+        let styles = highlight.highlight(code.as_ref(), text_view_style.is_dark);
         Self { code, lang, styles }
     }
 }

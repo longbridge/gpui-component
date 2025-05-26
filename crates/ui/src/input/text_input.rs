@@ -27,6 +27,7 @@ pub struct TextInput {
     cleanable: bool,
     mask_toggle: bool,
     disabled: bool,
+    bordered: bool,
 }
 
 impl Sizable for TextInput {
@@ -47,6 +48,7 @@ impl TextInput {
             suffix: None,
             height: None,
             appearance: true,
+            bordered: true,
             cleanable: false,
             mask_toggle: false,
             disabled: false,
@@ -78,6 +80,12 @@ impl TextInput {
     /// Set the appearance of the input field.
     pub fn appearance(mut self, appearance: bool) -> Self {
         self.appearance = appearance;
+        self
+    }
+
+    /// Set the bordered for the input field, default: true
+    pub fn bordered(mut self, bordered: bool) -> Self {
+        self.bordered = bordered;
         self
     }
 
@@ -234,11 +242,13 @@ impl RenderOnce for TextInput {
             })
             .when(self.appearance, |this| {
                 this.bg(bg)
-                    .border_color(cx.theme().input)
-                    .border_1()
                     .rounded(cx.theme().radius)
-                    .when(cx.theme().shadow, |this| this.shadow_sm())
-                    .when(focused, |this| this.focused_border(cx))
+                    .when(self.bordered, |this| {
+                        this.border_color(cx.theme().input)
+                            .border_1()
+                            .when(cx.theme().shadow, |this| this.shadow_sm())
+                            .when(focused, |this| this.focused_border(cx))
+                    })
             })
             .when(prefix.is_none(), |this| this.input_pl(self.size))
             .input_pr(self.size)

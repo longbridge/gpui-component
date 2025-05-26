@@ -709,7 +709,7 @@ impl Element for TextElement {
                         .read(cx)
                         .mode
                         .highlighter()
-                        .and_then(|h| h.theme.settings().line_highlight)
+                        .and_then(|h| h.theme(cx.theme().is_dark()).settings().line_highlight)
                         .map(crate::highlighter::color_to_hsla)
                     {
                         window.paint_quad(fill(

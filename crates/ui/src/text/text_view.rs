@@ -77,6 +77,7 @@ pub struct TextViewStyle {
     pub heading_base_font_size: Pixels,
     /// Highlight theme for code blocks. Default: [`HighlightTheme::default_light()`]
     pub highlight_theme: Rc<HighlightTheme>,
+    pub is_dark: bool,
 }
 
 impl Default for TextViewStyle {
@@ -85,6 +86,7 @@ impl Default for TextViewStyle {
             paragraph_gap: rems(1.),
             heading_base_font_size: px(14.),
             highlight_theme: Rc::new(HighlightTheme::default_light().clone()),
+            is_dark: false,
         }
     }
 }

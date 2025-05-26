@@ -66,26 +66,51 @@ impl HighlightTheme {
 /// https://github.com/iced-rs/iced/blob/master/highlighter/src/lib.rs#L24
 pub struct Highlighter<'a> {
     syntax: &'static parsing::SyntaxReference,
-    pub(crate) theme: &'a HighlightTheme,
-    highlighter: highlighting::Highlighter<'a>,
+    pub(crate) light_theme: &'a HighlightTheme,
+    pub(crate) dark_theme: &'a HighlightTheme,
+    light_highlighter: highlighting::Highlighter<'a>,
+    dark_highlighter: highlighting::Highlighter<'a>,
 }
 
 impl<'a> Highlighter<'a> {
-    pub fn new(lang: Option<&str>, theme: &'a HighlightTheme) -> Self {
+    pub fn new(
+        lang: Option<&str>,
+        light_theme: &'a HighlightTheme,
+        dark_theme: &'a HighlightTheme,
+    ) -> Self {
         let syntax = lang
             .and_then(|lang| SYNTAXES.find_syntax_by_token(&lang))
             .unwrap_or_else(|| SYNTAXES.find_syntax_plain_text());
-        let highlighter = highlighting::Highlighter::new(&theme.inner);
+        let light_highlighter = highlighting::Highlighter::new(&light_theme.inner);
+        let dark_highlighter = highlighting::Highlighter::new(&dark_theme.inner);
 
         Self {
             syntax,
-            theme,
-            highlighter,
+            light_theme,
+            dark_theme,
+            light_highlighter,
+            dark_highlighter,
+        }
+    }
+
+    pub(crate) fn theme(&self, is_dark: bool) -> &HighlightTheme {
+        if is_dark {
+            self.dark_theme
+        } else {
+            self.light_theme
+        }
+    }
+
+    fn highlighter(&self, is_dark: bool) -> &highlighting::Highlighter<'a> {
+        if is_dark {
+            &self.dark_highlighter
+        } else {
+            &self.light_highlighter
         }
     }
 
     /// Highlight a line and returns a vector of ranges and highlight styles
-    pub fn highlight(&self, line: &str) -> Vec<(Range<usize>, HighlightStyle)> {
+    pub fn highlight(&self, line: &str, is_dark: bool) -> Vec<(Range<usize>, HighlightStyle)> {
         let mut parser = parsing::ParseState::new(self.syntax);
         let mut stack = parsing::ScopeStack::new();
 
@@ -102,7 +127,7 @@ impl<'a> Highlighter<'a> {
             if range.is_empty() {
                 return None;
             } else {
-                let style_mod = self.highlighter.style_mod_for_stack(&stack.scopes);
+                let style_mod = self.highlighter(is_dark).style_mod_for_stack(&stack.scopes);
                 let mut style = HighlightStyle::default();
                 style.color = style_mod.foreground.map(color_to_hsla);
                 style.background_color = style_mod.background.map(color_to_hsla);

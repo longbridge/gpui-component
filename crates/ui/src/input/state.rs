@@ -359,6 +359,8 @@ impl InputState {
     /// - hard_tabs: false
     /// - height: full
     ///
+    /// If `highlighter` is None, will use the default highlighter.
+    ///
     /// Code Editor aim for help used to simple code editing or display, not a full-featured code editor.
     ///
     /// ## Features
@@ -366,12 +368,15 @@ impl InputState {
     /// - Syntax Highlighting
     /// - Auto Indent
     /// - Line Number
-    pub fn code_editor(mut self, language: Option<&str>, theme: &'static HighlightTheme) -> Self {
-        let highlighter = Rc::new(Highlighter::new(language, theme));
+    pub fn code_editor(mut self, language: Option<&str>) -> Self {
         self.mode = InputMode::CodeEditor {
             rows: 2,
             tab: TabSize::default(),
-            highlighter: CodeHighlighter::new(highlighter),
+            highlighter: CodeHighlighter::new(Rc::new(Highlighter::new(
+                language,
+                &HighlightTheme::default_light(),
+                &HighlightTheme::default_dark(),
+            ))),
             line_number: true,
             height: Some(relative(1.)),
         };

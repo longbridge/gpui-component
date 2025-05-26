@@ -5,7 +5,7 @@ use gpui_component::{
     h_flex,
     highlighter::{HighlightTheme, Highlighter},
     input::{InputEvent, InputState, TabSize, TextInput},
-    v_flex, ActiveTheme as _,
+    v_flex,
 };
 use story::Assets;
 
@@ -13,7 +13,6 @@ pub struct Example {
     input_state: Entity<InputState>,
     language_state: Entity<DropdownState<Vec<SharedString>>>,
     language: SharedString,
-    is_dark: bool,
     line_number: bool,
     _subscribes: Vec<Subscription>,
 }
@@ -26,7 +25,7 @@ impl Example {
         let default_language: SharedString = LANGUAGES[0].into();
         let input_state = cx.new(|cx| {
             InputState::new(window, cx)
-                .code_editor(Some(&default_language), &HighlightTheme::default_light())
+                .code_editor(Some(&default_language))
                 .line_number(true)
                 .tab_size(TabSize {
                     tab_size: 4,
@@ -74,26 +73,21 @@ impl Example {
     }
 
     fn update_highlighter(&mut self, new_language: Option<SharedString>, cx: &mut Context<Self>) {
-        let is_dark = cx.theme().mode.is_dark();
         let is_language_changed = new_language.is_some();
         if new_language.is_some() {
             self.language = new_language.unwrap();
         }
         let language = self.language.as_ref();
-        if self.is_dark != is_dark || is_language_changed {
-            self.is_dark = is_dark;
+        if is_language_changed {
             self.input_state.update(cx, |state, cx| {
-                if is_dark {
-                    state.set_highlighter(
-                        Highlighter::new(Some(language), &HighlightTheme::default_dark()),
-                        cx,
-                    );
-                } else {
-                    state.set_highlighter(
-                        Highlighter::new(Some(language), &HighlightTheme::default_dark()),
-                        cx,
-                    );
-                }
+                state.set_highlighter(
+                    Highlighter::new(
+                        Some(language),
+                        &HighlightTheme::default_light(),
+                        &HighlightTheme::default_dark(),
+                    ),
+                    cx,
+                );
             });
         }
     }

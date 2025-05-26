@@ -2,7 +2,7 @@ use std::{collections::HashMap, ops::Range, rc::Rc};
 
 use gpui::{App, HighlightStyle, SharedString, TextRun, TextStyle};
 
-use crate::highlighter::Highlighter;
+use crate::{highlighter::Highlighter, ActiveTheme, ThemeMode};
 
 #[derive(Debug, Clone)]
 pub(crate) struct LineHighlightStyle {
@@ -44,6 +44,7 @@ pub(super) struct CodeHighlighter {
     pub(super) text: SharedString,
     /// The lines by split \n
     pub(super) lines: Vec<LineHighlightStyle>,
+    pub(super) cache_theme_mode: ThemeMode,
     pub(super) cache: HashMap<u64, LineHighlightStyle>,
 }
 
@@ -53,6 +54,7 @@ impl CodeHighlighter {
             highlighter,
             text: SharedString::default(),
             lines: vec![],
+            cache_theme_mode: ThemeMode::default(),
             cache: HashMap::new(),
         }
     }
@@ -64,9 +66,14 @@ impl CodeHighlighter {
         self.update(self.text.clone(), true, cx);
     }
 
-    pub fn update(&mut self, text: SharedString, force: bool, _: &mut App) {
-        if self.text == text && !force {
+    pub fn update(&mut self, text: SharedString, force: bool, cx: &mut App) {
+        if self.text == text && self.cache_theme_mode == cx.theme().mode && !force {
             return;
+        }
+
+        // Clear if mode is changed
+        if self.cache_theme_mode != cx.theme().mode {
+            self.cache.clear();
         }
 
         let mut lines = vec![];
@@ -85,7 +92,7 @@ impl CodeHighlighter {
                 lines.push(new_style);
             } else {
                 // cache miss
-                let styles = Rc::new(self.highlighter.highlight(line));
+                let styles = Rc::new(self.highlighter.highlight(line, cx.theme().is_dark()));
                 let line_style = LineHighlightStyle { offset, styles };
                 new_cache.insert(cache_key, line_style.clone());
                 lines.push(line_style);
@@ -96,6 +103,7 @@ impl CodeHighlighter {
         }
 
         // Ensure to recreate cache to remove unused caches.
+        self.cache_theme_mode = cx.theme().mode;
         self.cache = new_cache;
         self.lines = lines;
         self.text = text;

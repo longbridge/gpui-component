@@ -11,7 +11,6 @@ use crate::{
     clipboard::Clipboard,
     description_list::DescriptionList,
     h_flex,
-    highlighter::HighlightTheme,
     input::{InputState, TextInput},
     link::Link,
     v_flex, ActiveTheme, IconName, Selectable, Sizable, TITLE_BAR_HEIGHT,
@@ -60,15 +59,9 @@ pub struct DivInspector {
 
 impl DivInspector {
     pub fn new(window: &mut Window, cx: &mut App) -> Self {
-        let theme = if cx.theme().is_dark() {
-            HighlightTheme::default_dark()
-        } else {
-            HighlightTheme::default_light()
-        };
-
         let input_state = cx.new(|cx| {
             InputState::new(window, cx)
-                .code_editor(Some("json"), theme)
+                .code_editor(Some("json"))
                 .line_number(false)
                 .disabled(true)
         });
@@ -134,7 +127,9 @@ impl Render for DivInspector {
                                 .w_full()
                                 .font_family("Monaco")
                                 .text_size(px(12.))
-                                .child(TextInput::new(&input_state).h_full()),
+                                .border_1()
+                                .border_color(cx.theme().border)
+                                .child(TextInput::new(&input_state).h_full().appearance(false)),
                         ),
                 )
             },
