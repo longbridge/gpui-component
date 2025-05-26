@@ -158,6 +158,7 @@ fn render_inspector(
         .bg(cx.theme().background)
         .border_l_1()
         .border_color(cx.theme().border)
+        .text_color(cx.theme().foreground)
         .child(
             h_flex()
                 .w_full()
@@ -168,7 +169,8 @@ fn render_inspector(
                 .overflow_hidden()
                 .px_2()
                 .border_b_1()
-                .border_color(cx.theme().border)
+                .border_color(cx.theme().title_bar_border)
+                .bg(cx.theme().title_bar)
                 .child(
                     h_flex()
                         .gap_2()
