@@ -635,8 +635,8 @@ impl InputState {
         cx: &mut Context<Self>,
     ) {
         let text: SharedString = text.into();
-        let range = self.range_to_utf16(&(self.cursor_offset()..self.cursor_offset()));
-        self.replace_text_in_range(Some(range), &text, window, cx);
+        let range_utf16 = self.range_to_utf16(&(self.cursor_offset()..self.cursor_offset()));
+        self.replace_text_in_range(Some(range_utf16), &text, window, cx);
         self.selected_range = self.selected_range.end..self.selected_range.end;
     }
 
@@ -778,7 +778,11 @@ impl InputState {
         }
 
         if !self.selected_range.is_empty() {
-            self.move_to(self.selected_range.start.saturating_sub(1), window, cx);
+            self.move_to(
+                self.previous_boundary(self.selected_range.start.saturating_sub(1)),
+                window,
+                cx,
+            );
         }
         self.pause_blink_cursor(cx);
         self.move_vertical(-1, window, cx);
@@ -790,7 +794,11 @@ impl InputState {
         }
 
         if !self.selected_range.is_empty() {
-            self.move_to(self.selected_range.end.saturating_sub(1), window, cx);
+            self.move_to(
+                self.next_boundary(self.selected_range.end.saturating_sub(1)),
+                window,
+                cx,
+            );
         }
 
         self.pause_blink_cursor(cx);
@@ -820,7 +828,7 @@ impl InputState {
             return;
         }
         let offset = self.start_of_line(window, cx).saturating_sub(1);
-        self.select_to(offset, window, cx);
+        self.select_to(self.previous_boundary(offset), window, cx);
     }
 
     pub(super) fn select_down(
@@ -973,7 +981,7 @@ impl InputState {
         let next_str = &self.text[offset..].to_string();
         UnicodeSegmentation::split_word_bound_indices(next_str as &str)
             .find(|(_, s)| !s.trim_start().is_empty())
-            .map(|(i, s)| offset + i + s.len())
+            .map(|(i, s)| self.next_boundary(offset + i + s.len()))
             .unwrap_or(self.text.len())
     }
 
@@ -1194,7 +1202,7 @@ impl InputState {
             if is_eof {
                 new_offset += 1;
             }
-            self.move_to(new_offset, window, cx);
+            self.move_to(self.next_boundary(new_offset), window, cx);
 
             // Add indent
             self.replace_text_in_range(
