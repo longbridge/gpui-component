@@ -67,11 +67,10 @@ impl DivInspector {
         };
 
         let input_state = cx.new(|cx| {
-            let mut state = InputState::new(window, cx)
+            InputState::new(window, cx)
                 .code_editor(Some("json"), theme)
-                .line_number(false);
-            state.set_disabled(true, window, cx);
-            state
+                .line_number(false)
+                .disabled(true)
         });
 
         Self {
