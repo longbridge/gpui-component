@@ -1,7 +1,7 @@
 use gpui::{
-    actions, prelude::FluentBuilder as _, px, App, Context, ElementId, Entity, EventEmitter,
-    FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding, ParentElement, RenderOnce,
-    SharedString, Styled, Window,
+    actions, prelude::FluentBuilder as _, px, AnyElement, App, Context, ElementId, Entity,
+    EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding,
+    ParentElement, RenderOnce, SharedString, Styled, Window,
 };
 
 use crate::{
@@ -28,6 +28,8 @@ pub struct NumberInput {
     state: Entity<InputState>,
     placeholder: SharedString,
     size: Size,
+    prefix: Option<AnyElement>,
+    suffix: Option<AnyElement>,
 }
 
 impl NumberInput {
@@ -38,6 +40,8 @@ impl NumberInput {
             state: state.clone(),
             size: Size::default(),
             placeholder: SharedString::default(),
+            prefix: None,
+            suffix: None,
         }
     }
 
@@ -61,6 +65,16 @@ impl NumberInput {
         state.update(cx, |state, cx| {
             state.on_action_decrement(&Decrement, window, cx);
         })
+    }
+
+    pub fn prefix(mut self, prefix: impl IntoElement) -> Self {
+        self.prefix = Some(prefix.into_any_element());
+        self
+    }
+
+    pub fn suffix(mut self, suffix: impl IntoElement) -> Self {
+        self.suffix = Some(suffix.into_any_element());
+        self
     }
 }
 
@@ -142,7 +156,13 @@ impl RenderOnce for NumberInput {
                         }
                     }),
             )
-            .child(TextInput::new(&self.state).appearance(false).no_gap())
+            .child(
+                TextInput::new(&self.state)
+                    .appearance(false)
+                    .no_gap()
+                    .when_some(self.prefix, |this, prefix| this.prefix(prefix))
+                    .when_some(self.suffix, |this, suffix| this.suffix(suffix)),
+            )
             .child(
                 Button::new("plus")
                     .ghost()

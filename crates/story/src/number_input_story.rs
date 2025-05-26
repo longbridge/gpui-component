@@ -6,8 +6,9 @@ use regex::Regex;
 
 use crate::section;
 use gpui_component::{
+    button::{Button, ButtonVariants},
     input::{InputEvent, InputState, MaskPattern, NumberInput, NumberInputEvent, StepAction},
-    v_flex, FocusableCycle, Sizable,
+    v_flex, FocusableCycle, IconName, Sizable,
 };
 
 actions!(input_story, [Tab, TabPrev]);
@@ -215,9 +216,15 @@ impl Render for NumberInputStory {
                     .child(NumberInput::new(&self.number_input1)),
             )
             .child(
-                section("Small Size")
-                    .max_w_md()
-                    .child(NumberInput::new(&self.number_input2).small()),
+                section("Small Size with suffix").max_w_md().child(
+                    NumberInput::new(&self.number_input2).small().suffix(
+                        Button::new("info")
+                            .ghost()
+                            .icon(IconName::Info)
+                            .xsmall()
+                            .mr_3(),
+                    ),
+                ),
             )
             .child(
                 section("With mask pattern")
