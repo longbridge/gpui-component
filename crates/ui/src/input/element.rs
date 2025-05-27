@@ -709,8 +709,7 @@ impl Element for TextElement {
                         .read(cx)
                         .mode
                         .highlighter()
-                        .and_then(|h| h.theme(cx.theme().is_dark()).settings().line_highlight)
-                        .map(crate::highlighter::color_to_hsla)
+                        .and_then(|h| h.theme(cx.theme().is_dark()).current_line)
                     {
                         window.paint_quad(fill(
                             Bounds::new(p, size(bounds.size.width, line_height)),

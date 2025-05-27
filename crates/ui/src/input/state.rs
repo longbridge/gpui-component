@@ -32,12 +32,7 @@ use super::{
     number_input,
     text_wrapper::TextWrapper,
 };
-use crate::{
-    highlighter::{HighlightTheme, Highlighter},
-    history::History,
-    scroll::ScrollbarState,
-    Root,
-};
+use crate::{highlighter::Highlighter, history::History, scroll::ScrollbarState, Root};
 
 #[derive(Clone, PartialEq, Eq, Deserialize)]
 pub struct Enter {
@@ -368,15 +363,14 @@ impl InputState {
     /// - Syntax Highlighting
     /// - Auto Indent
     /// - Line Number
-    pub fn code_editor(mut self, language: Option<&str>) -> Self {
+    pub fn code_editor(
+        mut self,
+        config: Option<tree_sitter_highlight::HighlightConfiguration>,
+    ) -> Self {
         self.mode = InputMode::CodeEditor {
             rows: 2,
             tab: TabSize::default(),
-            highlighter: CodeHighlighter::new(Rc::new(Highlighter::new(
-                language,
-                &HighlightTheme::default_light(),
-                &HighlightTheme::default_dark(),
-            ))),
+            highlighter: CodeHighlighter::new(Rc::new(Highlighter::new(config))),
             line_number: true,
             height: Some(relative(1.)),
         };
@@ -439,7 +433,7 @@ impl InputState {
     }
 
     /// Set highlighter, only for [`InputMode::CodeEditor`] mode.
-    pub fn set_highlighter(&mut self, highlighter: Highlighter<'static>, cx: &mut Context<Self>) {
+    pub fn set_highlighter(&mut self, highlighter: Highlighter, cx: &mut Context<Self>) {
         let new_highlighter = Rc::new(highlighter);
         match &mut self.mode {
             InputMode::CodeEditor { highlighter, .. } => {

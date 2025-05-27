@@ -1,184 +1,270 @@
-use gpui::{HighlightStyle, Hsla, SharedString};
+use gpui::{FontStyle, FontWeight, HighlightStyle, Hsla};
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 use std::{
-    ops::Range,
-    sync::{Arc, LazyLock},
+    cell::RefCell,
+    ops::{Deref, Range},
+    rc::Rc,
+    sync::LazyLock,
 };
-use syntect::{highlighting, parsing};
+use tree_sitter_highlight::HighlightEvent;
 
-static SYNTAXES: LazyLock<parsing::SyntaxSet> =
-    LazyLock::new(parsing::SyntaxSet::load_defaults_newlines);
+use crate::ThemeMode;
 
-static DEFAULT_LIGHT: LazyLock<Arc<highlighting::Theme>> = LazyLock::new(|| {
-    let mut cursor = std::io::Cursor::new(include_bytes!("./themes/light.tmTheme"));
-    Arc::new(highlighting::ThemeSet::load_from_reader(&mut cursor).unwrap())
-});
-
-static DEFAULT_DARK: LazyLock<Arc<highlighting::Theme>> = LazyLock::new(|| {
-    let mut cursor = std::io::Cursor::new(include_bytes!("./themes/dark.tmTheme"));
-    Arc::new(highlighting::ThemeSet::load_from_reader(&mut cursor).unwrap())
-});
-
-pub static LIGHT_THEME: LazyLock<HighlightTheme> = LazyLock::new(|| HighlightTheme {
-    name: "default-light".into(),
-    inner: DEFAULT_LIGHT.clone(),
-});
-pub static DARK_THEME: LazyLock<HighlightTheme> = LazyLock::new(|| HighlightTheme {
-    name: "default-dark".into(),
-    inner: DEFAULT_DARK.clone(),
-});
-
-/// Represents a theme for syntax highlighting.
-#[derive(Debug, Clone, PartialEq)]
-pub struct HighlightTheme {
-    name: SharedString,
-    inner: Arc<highlighting::Theme>,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, JsonSchema, Serialize, Deserialize)]
+pub struct ThemeStyle {
+    color: Option<Hsla>,
+    font_style: Option<FontStyle>,
+    font_weight: Option<FontWeight>,
 }
 
+impl From<ThemeStyle> for HighlightStyle {
+    fn from(style: ThemeStyle) -> Self {
+        HighlightStyle {
+            color: style.color,
+            font_weight: style.font_weight,
+            font_style: style.font_style,
+            ..Default::default()
+        }
+    }
+}
+
+/// Theme for Tree-sitter Highlight
+///
+/// https://docs.rs/tree-sitter-highlight/0.25.4/tree_sitter_highlight/
+#[derive(Debug, Clone, PartialEq, Eq, Hash, JsonSchema, Serialize, Deserialize)]
+pub struct HighlightColors {
+    attribute: Option<ThemeStyle>,
+    comment: Option<ThemeStyle>,
+    constant: Option<ThemeStyle>,
+    #[serde(rename = "constant.builtin")]
+    constant_builtin: Option<ThemeStyle>,
+    constructor: Option<ThemeStyle>,
+    embedded: Option<ThemeStyle>,
+    function: Option<ThemeStyle>,
+    #[serde(rename = "function.builtin")]
+    function_builtin: Option<ThemeStyle>,
+    keyword: Option<ThemeStyle>,
+    module: Option<ThemeStyle>,
+    number: Option<ThemeStyle>,
+    operator: Option<ThemeStyle>,
+    property: Option<ThemeStyle>,
+    #[serde(rename = "property.builtin")]
+    property_builtin: Option<ThemeStyle>,
+    punctuation: Option<ThemeStyle>,
+    #[serde(rename = "punctuation.bracket")]
+    punctuation_bracket: Option<ThemeStyle>,
+    #[serde(rename = "punctuation.delimiter")]
+    punctuation_delimiter: Option<ThemeStyle>,
+    #[serde(rename = "punctuation.special")]
+    punctuation_special: Option<ThemeStyle>,
+    string: Option<ThemeStyle>,
+    #[serde(rename = "string.special")]
+    string_special: Option<ThemeStyle>,
+    tag: Option<ThemeStyle>,
+    #[serde(rename = "type")]
+    type_: Option<ThemeStyle>,
+    #[serde(rename = "type.builtin")]
+    type_builtin: Option<ThemeStyle>,
+    variable: Option<ThemeStyle>,
+    #[serde(rename = "variable.builtin")]
+    variable_builtin: Option<ThemeStyle>,
+    #[serde(rename = "variable.parameter")]
+    variable_parameter: Option<ThemeStyle>,
+}
+
+impl HighlightColors {
+    pub fn style(&self, name: &str) -> Option<HighlightStyle> {
+        match name {
+            "attribute" => Some(self.attribute),
+            "comment" => Some(self.comment),
+            "constant" => Some(self.constant),
+            "constant.builtin" => Some(self.constant_builtin),
+            "constructor" => Some(self.constructor),
+            "embedded" => Some(self.embedded),
+            "function" => Some(self.function),
+            "function.builtin" => Some(self.function_builtin),
+            "keyword" => Some(self.keyword),
+            "module" => Some(self.module),
+            "number" => Some(self.number),
+            "operator" => Some(self.operator),
+            "property" => Some(self.property),
+            "property.builtin" => Some(self.property_builtin),
+            "punctuation" => Some(self.punctuation),
+            "punctuation.bracket" => Some(self.punctuation_bracket),
+            "punctuation.delimiter" => Some(self.punctuation_delimiter),
+            "punctuation.special" => Some(self.punctuation_special),
+            "string" => Some(self.string),
+            "string.special" => Some(self.string_special),
+            "tag" => Some(self.tag),
+            "type" => Some(self.type_),
+            "type.builtin" => Some(self.type_builtin),
+            "variable" => Some(self.variable),
+            "variable.builtin" => Some(self.variable_builtin),
+            "variable.parameter" => Some(self.variable_parameter),
+            _ => None,
+        }
+        .and_then(|s| s.map(|s| s.into()))
+    }
+
+    pub fn style_for_index(&self, index: usize) -> Option<HighlightStyle> {
+        HIGHLIGHT_NAMES.get(index).and_then(|name| self.style(name))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, JsonSchema, Serialize, Deserialize)]
+pub struct HighlightTheme {
+    pub name: String,
+    pub mode: ThemeMode,
+    #[serde(rename = "current_line.background")]
+    pub current_line: Option<Hsla>,
+    pub syntax: HighlightColors,
+}
+
+impl Deref for HighlightTheme {
+    type Target = HighlightColors;
+
+    fn deref(&self) -> &Self::Target {
+        &self.syntax
+    }
+}
+
+const HIGHLIGHT_NAMES: [&str; 26] = [
+    "attribute",
+    "comment",
+    "constant",
+    "constant.builtin",
+    "constructor",
+    "embedded",
+    "function",
+    "function.builtin",
+    "keyword",
+    "module",
+    "number",
+    "operator",
+    "property",
+    "property.builtin",
+    "punctuation",
+    "punctuation.bracket",
+    "punctuation.delimiter",
+    "punctuation.special",
+    "string",
+    "string.special",
+    "tag",
+    "type",
+    "type.builtin",
+    "variable",
+    "variable.builtin",
+    "variable.parameter",
+];
+
+const DEFAULT_DARK: LazyLock<HighlightTheme> = LazyLock::new(|| {
+    let json = include_str!("./themes/dark.json");
+    serde_json::from_str(json).unwrap()
+});
+const DEFAULT_LIGHT: LazyLock<HighlightTheme> = LazyLock::new(|| {
+    let json = include_str!("./themes/light.json");
+    serde_json::from_str(json).unwrap()
+});
+
 impl HighlightTheme {
-    /// Default light theme.
-    pub fn default_light() -> &'static Self {
-        &LIGHT_THEME
+    pub fn default_dark() -> Self {
+        DEFAULT_DARK.clone()
     }
 
-    /// Default dark theme.
-    pub fn default_dark() -> &'static Self {
-        &DARK_THEME
-    }
-
-    /// Parse a theme from a string (tmTheme)
-    pub fn parse(name: &str, theme_str: &str) -> anyhow::Result<Self> {
-        let mut cursor = std::io::Cursor::new(theme_str);
-        let theme = highlighting::ThemeSet::load_from_reader(&mut cursor)?;
-
-        Ok(Self {
-            name: SharedString::from(name.to_string()),
-            inner: Arc::new(theme),
-        })
-    }
-
-    pub fn settings(&self) -> &highlighting::ThemeSettings {
-        &self.inner.settings
+    pub fn default_light() -> Self {
+        DEFAULT_LIGHT.clone()
     }
 }
 
 /// Inspired by the `iced` crate's `Highlighter` struct.
 ///
 /// https://github.com/iced-rs/iced/blob/master/highlighter/src/lib.rs#L24
-pub struct Highlighter<'a> {
-    syntax: &'static parsing::SyntaxReference,
-    pub(crate) light_theme: &'a HighlightTheme,
-    pub(crate) dark_theme: &'a HighlightTheme,
-    light_highlighter: highlighting::Highlighter<'a>,
-    dark_highlighter: highlighting::Highlighter<'a>,
+pub struct Highlighter {
+    highlighter: Rc<RefCell<tree_sitter_highlight::Highlighter>>,
+    config: Option<Rc<tree_sitter_highlight::HighlightConfiguration>>,
+    pub(crate) light_theme: Rc<HighlightTheme>,
+    pub(crate) dark_theme: Rc<HighlightTheme>,
 }
 
-impl<'a> Highlighter<'a> {
-    pub fn new(
-        lang: Option<&str>,
-        light_theme: &'a HighlightTheme,
-        dark_theme: &'a HighlightTheme,
-    ) -> Self {
-        let syntax = lang
-            .and_then(|lang| SYNTAXES.find_syntax_by_token(&lang))
-            .unwrap_or_else(|| SYNTAXES.find_syntax_plain_text());
-        let light_highlighter = highlighting::Highlighter::new(&light_theme.inner);
-        let dark_highlighter = highlighting::Highlighter::new(&dark_theme.inner);
+impl Highlighter {
+    pub fn new(config: Option<tree_sitter_highlight::HighlightConfiguration>) -> Self {
+        let highlighter = tree_sitter_highlight::Highlighter::new();
+
+        let config = config.map(|config| {
+            let mut config = config;
+            config.configure(&HIGHLIGHT_NAMES);
+            Rc::new(config)
+        });
 
         Self {
-            syntax,
-            light_theme,
-            dark_theme,
-            light_highlighter,
-            dark_highlighter,
+            highlighter: Rc::new(RefCell::new(highlighter)),
+            config,
+            light_theme: Rc::new(HighlightTheme::default_light()),
+            dark_theme: Rc::new(HighlightTheme::default_dark()),
         }
     }
 
-    pub(crate) fn theme(&self, is_dark: bool) -> &HighlightTheme {
+    pub fn set_theme(&mut self, light_theme: &HighlightTheme, dark_theme: &HighlightTheme) {
+        self.light_theme = Rc::new(light_theme.clone());
+        self.dark_theme = Rc::new(dark_theme.clone());
+    }
+
+    pub(crate) fn theme(&self, is_dark: bool) -> &Rc<HighlightTheme> {
         if is_dark {
-            self.dark_theme
+            &self.dark_theme
         } else {
-            self.light_theme
+            &self.light_theme
         }
     }
 
-    fn highlighter(&self, is_dark: bool) -> &highlighting::Highlighter<'a> {
-        if is_dark {
-            &self.dark_highlighter
-        } else {
-            &self.light_highlighter
-        }
-    }
-
-    /// Highlight a line and returns a vector of ranges and highlight styles
+    /// Highlight a line and returns a vector of ranges and highlight styles.
     pub fn highlight(&self, line: &str, is_dark: bool) -> Vec<(Range<usize>, HighlightStyle)> {
-        let mut parser = parsing::ParseState::new(self.syntax);
-        let mut stack = parsing::ScopeStack::new();
+        let Some(config) = self.config.as_ref() else {
+            return vec![];
+        };
 
-        let ops = parser.parse_line(line, &SYNTAXES).unwrap_or_default();
+        let theme = self.theme(is_dark).clone();
+        let mut highlighter = self.highlighter.borrow_mut();
+        let Ok(highlights) = highlighter.highlight(config, line.as_bytes(), None, |_| None) else {
+            return vec![];
+        };
 
-        ScopeRangeIterator {
-            ops,
-            line_length: line.len(),
-            index: 0,
-            last_str_index: 0,
-        }
-        .filter_map(move |(range, scope)| {
-            let _ = stack.apply(&scope);
-            if range.is_empty() {
-                return None;
-            } else {
-                let style_mod = self.highlighter(is_dark).style_mod_for_stack(&stack.scopes);
-                let mut style = HighlightStyle::default();
-                style.color = style_mod.foreground.map(color_to_hsla);
-                style.background_color = style_mod.background.map(color_to_hsla);
-                Some((range, style))
+        let mut styles = vec![];
+        let mut current_range = None;
+        let mut current_style = None;
+        for event in highlights {
+            if let Ok(event) = event {
+                match event {
+                    HighlightEvent::Source { start, end } => {
+                        current_range = Some(start..end);
+                    }
+                    HighlightEvent::HighlightStart(scope) => {
+                        if let Some(style) = theme.syntax.style_for_index(scope.0) {
+                            current_style = Some(style);
+                        }
+                    }
+                    HighlightEvent::HighlightEnd => {
+                        if let (Some(range), Some(style)) = (current_range, current_style) {
+                            if !range.is_empty() {
+                                styles.push((range, style));
+                            }
+                        }
+
+                        current_range = None;
+                        current_style = None;
+                    }
+                }
             }
-        })
-        .collect()
-    }
-}
-
-pub fn color_to_hsla(color: highlighting::Color) -> Hsla {
-    gpui::Rgba {
-        r: color.r as f32 / 255.,
-        g: color.g as f32 / 255.,
-        b: color.b as f32 / 255.,
-        a: color.a as f32 / 100.,
-    }
-    .into()
-}
-
-struct ScopeRangeIterator {
-    ops: Vec<(usize, parsing::ScopeStackOp)>,
-    line_length: usize,
-    index: usize,
-    last_str_index: usize,
-}
-
-impl Iterator for ScopeRangeIterator {
-    type Item = (std::ops::Range<usize>, parsing::ScopeStackOp);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.index > self.ops.len() {
-            return None;
         }
 
-        let next_str_i = if self.index == self.ops.len() {
-            self.line_length
-        } else {
-            self.ops[self.index].0
-        };
+        // println!(
+        //     "----------------- len: {}, offset: {}, ranges: {:?}",
+        //     line.len(),
+        //     offset,
+        //     styles.iter().map(|(range, _)| range).collect::<Vec<_>>()
+        // );
 
-        let range = self.last_str_index..next_str_i;
-        self.last_str_index = next_str_i;
-
-        let op = if self.index == 0 {
-            parsing::ScopeStackOp::Noop
-        } else {
-            self.ops[self.index - 1].1.clone()
-        };
-
-        self.index += 1;
-        Some((range, op))
+        styles
     }
 }

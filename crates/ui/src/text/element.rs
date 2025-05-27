@@ -212,11 +212,7 @@ impl CodeBlock {
         lang: Option<SharedString>,
         text_view_style: &TextViewStyle,
     ) -> Self {
-        let highlight = Highlighter::new(
-            lang.as_ref().map(|v| v.as_ref()),
-            text_view_style.highlight_theme.as_ref(),
-            text_view_style.highlight_theme.as_ref(),
-        );
+        let highlight = Highlighter::new(None);
         let styles = highlight.highlight(code.as_ref(), text_view_style.is_dark);
         Self { code, lang, styles }
     }

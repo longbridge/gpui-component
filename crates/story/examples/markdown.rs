@@ -2,15 +2,13 @@ use std::rc::Rc;
 
 use gpui::*;
 use gpui_component::{
-    highlighter::HighlightTheme,
+    highlighter::{self, HighlightTheme},
     input::{InputEvent, InputState, TabSize, TextInput},
     resizable::{h_resizable, resizable_panel, ResizableState},
     text::{TextView, TextViewStyle},
     ActiveTheme as _,
 };
 use story::Assets;
-
-const LANG: &str = "markdown";
 
 pub struct Example {
     input_state: Entity<InputState>,
@@ -23,7 +21,7 @@ impl Example {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let input_state = cx.new(|cx| {
             InputState::new(window, cx)
-                .code_editor(Some(LANG))
+                .code_editor(highlighter::Language::Markdown.build())
                 .line_number(false)
                 .tab_size(TabSize {
                     tab_size: 2,

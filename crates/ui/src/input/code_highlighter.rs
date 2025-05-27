@@ -20,6 +20,10 @@ impl LineHighlightStyle {
         self.styles
             .iter()
             .map(|(range, style)| {
+                println!(
+                    "----------------- offset: {}, range: {:?}",
+                    self.offset, range
+                );
                 let mut run = text_style.clone().highlight(*style).to_run(range.len());
                 if let Some(marked_range) = marked_range {
                     if self.offset + range.start >= marked_range.start
@@ -40,7 +44,7 @@ impl LineHighlightStyle {
 
 #[derive(Clone)]
 pub(super) struct CodeHighlighter {
-    pub(super) highlighter: Rc<Highlighter<'static>>,
+    pub(super) highlighter: Rc<Highlighter>,
     pub(super) text: SharedString,
     /// The lines by split \n
     pub(super) lines: Vec<LineHighlightStyle>,
@@ -49,7 +53,7 @@ pub(super) struct CodeHighlighter {
 }
 
 impl CodeHighlighter {
-    pub(super) fn new(highlighter: Rc<Highlighter<'static>>) -> Self {
+    pub(super) fn new(highlighter: Rc<Highlighter>) -> Self {
         Self {
             highlighter,
             text: SharedString::default(),
@@ -59,7 +63,7 @@ impl CodeHighlighter {
         }
     }
 
-    pub fn set_highlighter(&mut self, highlighter: Rc<Highlighter<'static>>, cx: &mut App) {
+    pub fn set_highlighter(&mut self, highlighter: Rc<Highlighter>, cx: &mut App) {
         self.highlighter = highlighter;
         self.lines.clear();
         self.cache.clear();

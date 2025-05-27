@@ -10,7 +10,7 @@ use crate::{
     button::{Button, ButtonVariants},
     clipboard::Clipboard,
     description_list::DescriptionList,
-    h_flex,
+    h_flex, highlighter,
     input::{InputState, TextInput},
     link::Link,
     v_flex, ActiveTheme, IconName, Selectable, Sizable, TITLE_BAR_HEIGHT,
@@ -61,7 +61,7 @@ impl DivInspector {
     pub fn new(window: &mut Window, cx: &mut App) -> Self {
         let input_state = cx.new(|cx| {
             InputState::new(window, cx)
-                .code_editor(Some("json"))
+                .code_editor(highlighter::Language::Json.build())
                 .line_number(false)
                 .disabled(true)
         });

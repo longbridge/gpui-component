@@ -1,0 +1,137 @@
+{
+    "name": "macOS Classic Dark",
+    "mode": "dark",
+    "current_line.background": "#1E1E1E",
+    "syntax": {
+        "attribute": {
+            "color": "#be9a52",
+            "font_style": null,
+            "font_weight": null
+        },
+        "comment": {
+            "color": "#9E9E9E",
+            "font_style": null,
+            "font_weight": null
+        },
+        "constant": {
+            "color": "#E1D797",
+            "font_style": null,
+            "font_weight": null
+        },
+        "constant.builtin": {
+            "color": "#E1D797",
+            "font_style": null,
+            "font_weight": null
+        },
+        "constructor": {
+            "color": "#b5af9a",
+            "font_style": null,
+            "font_weight": null
+        },
+        "embedded": {
+            "color": "#CACCCA",
+            "font_style": null,
+            "font_weight": null
+        },
+        "function": {
+            "color": "#E1D797",
+            "font_style": null,
+            "font_weight": null
+        },
+        "function.builtin": {
+            "color": "#E1D797",
+            "font_style": null,
+            "font_weight": null
+        },
+        "keyword": {
+            "color": "#E19773",
+            "font_style": null,
+            "font_weight": null
+        },
+        "module": {
+            "color": "#A86D3B",
+            "font_style": null,
+            "font_weight": null
+        },
+        "number": {
+            "color": "#E19773",
+            "font_style": null,
+            "font_weight": null
+        },
+        "operator": {
+            "color": "#E19773",
+            "font_style": null,
+            "font_weight": null
+        },
+        "property": {
+            "color": "#CACCCA",
+            "font_style": null,
+            "font_weight": null
+        },
+        "property.builtin": {
+            "color": "#CACCCA",
+            "font_style": null,
+            "font_weight": null
+        },
+        "punctuation": {
+            "color": "#CACCCA",
+            "font_style": null,
+            "font_weight": null
+        },
+        "punctuation.bracket": {
+            "color": "#CACCCA",
+            "font_style": null,
+            "font_weight": null
+        },
+        "punctuation.delimiter": {
+            "color": "#CACCCA",
+            "font_style": null,
+            "font_weight": null
+        },
+        "punctuation.special": {
+            "color": "#CACCCA",
+            "font_style": null,
+            "font_weight": null
+        },
+        "string": {
+            "color": "#76BA53",
+            "font_style": null,
+            "font_weight": null
+        },
+        "string.special": {
+            "color": "#E1D797",
+            "font_style": null,
+            "font_weight": null
+        },
+        "tag": {
+            "color": "#b5af9a",
+            "font_style": null,
+            "font_weight": null
+        },
+        "type": {
+            "color": "#A86D3B",
+            "font_style": null,
+            "font_weight": null
+        },
+        "type.builtin": {
+            "color": "#A86D3B",
+            "font_style": null,
+            "font_weight": null
+        },
+        "variable": {
+            "color": "#CACCCA",
+            "font_style": null,
+            "font_weight": null
+        },
+        "variable.builtin": {
+            "color": "#E19773",
+            "font_style": null,
+            "font_weight": null
+        },
+        "variable.parameter": {
+            "color": "#E19773",
+            "font_style": null,
+            "font_weight": null
+        }
+    }
+}

@@ -151,7 +151,7 @@ impl InputMode {
         }
     }
 
-    pub(super) fn highlighter(&self) -> Option<Rc<crate::highlighter::Highlighter<'static>>> {
+    pub(super) fn highlighter(&self) -> Option<Rc<crate::highlighter::Highlighter>> {
         match &self {
             InputMode::CodeEditor { highlighter, .. } => Some(highlighter.highlighter.clone()),
             _ => None,
