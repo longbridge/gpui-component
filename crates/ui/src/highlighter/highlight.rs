@@ -6,7 +6,7 @@ use std::{
     ops::{Deref, Range},
     sync::{Arc, LazyLock, RwLock},
 };
-use tree_sitter_highlight::HighlightEvent;
+use tree_sitter_highlight::{HighlightConfiguration, HighlightEvent};
 
 use crate::ThemeMode;
 
@@ -186,7 +186,7 @@ impl HighlightTheme {
 #[derive(Clone)]
 pub struct Highlighter {
     highlighter: Arc<RwLock<tree_sitter_highlight::Highlighter>>,
-    config: Option<Arc<tree_sitter_highlight::HighlightConfiguration>>,
+    config: Arc<HighlightConfiguration>,
     pub(crate) light_theme: Arc<HighlightTheme>,
     pub(crate) dark_theme: Arc<HighlightTheme>,
 }
@@ -196,13 +196,11 @@ static LANGUAGE_REGISTRY: LazyLock<RwLock<HashMap<String, Highlighter>>> =
     LazyLock::new(|| RwLock::new(HashMap::new()));
 
 impl Highlighter {
-    pub fn new(config: Option<tree_sitter_highlight::HighlightConfiguration>) -> Self {
+    pub fn new(config: impl Into<HighlightConfiguration>) -> Self {
         let highlighter = tree_sitter_highlight::Highlighter::new();
-
-        let config = config.map(|mut config| {
-            config.configure(&HIGHLIGHT_NAMES);
-            Arc::new(config)
-        });
+        let mut config = config.into();
+        config.configure(&HIGHLIGHT_NAMES);
+        let config = Arc::new(config);
 
         let highlighter = Self {
             highlighter: Arc::new(RwLock::new(highlighter)),
@@ -220,9 +218,8 @@ impl Highlighter {
             return Some(highlighter.clone());
         }
 
-        let config = Language::from_str(&lang).and_then(|lang| lang.build());
-        if let Some(config) = config {
-            let highlighter = Highlighter::new(Some(config));
+        if let Some(language) = Language::from_str(&lang) {
+            let highlighter = Highlighter::new(language);
             registry.insert(lang.to_string(), highlighter.clone());
             return Some(highlighter);
         }
@@ -248,9 +245,7 @@ impl Highlighter {
     /// The Ranges in Vec is connected all bytes offsets of the line.
     pub fn highlight(&self, line: &str, is_dark: bool) -> Vec<(Range<usize>, HighlightStyle)> {
         let default_styles = vec![(0..line.len(), HighlightStyle::default())];
-        let Some(config) = self.config.as_ref() else {
-            return default_styles;
-        };
+        let config = self.config.as_ref();
 
         let theme = self.theme(is_dark);
         let mut highlighter = self.highlighter.write().unwrap();

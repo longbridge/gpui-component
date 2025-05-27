@@ -69,6 +69,9 @@ tree-sitter-proto = "0.2.0"
 tree-sitter-make = "1.1.1"
 tree-sitter-cmake = "0.7.1"
 tree-sitter-typescript = "0.23.2"
+tree-sitter-diff = "0.1.0"
+tree-sitter-elixir = "0.3"
+tree-sitter-embedded-template = "0.23.0"
 
 [dev-dependencies]
 indoc = "2"

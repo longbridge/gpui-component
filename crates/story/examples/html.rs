@@ -1,6 +1,6 @@
 use gpui::*;
 use gpui_component::{
-    highlighter,
+    highlighter::Language,
     input::{InputState, TabSize, TextInput},
     resizable::{h_resizable, resizable_panel, ResizableState},
     text::TextView,
@@ -19,7 +19,7 @@ impl Example {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let input_state = cx.new(|cx| {
             InputState::new(window, cx)
-                .code_editor(highlighter::Language::Html.build())
+                .code_editor(Language::Html)
                 .tab_size(TabSize {
                     tab_size: 4,
                     hard_tabs: false,

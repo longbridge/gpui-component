@@ -8,6 +8,7 @@ use smallvec::SmallVec;
 use std::cell::Cell;
 use std::ops::Range;
 use std::rc::Rc;
+use tree_sitter_highlight::HighlightConfiguration;
 use unicode_segmentation::*;
 
 use gpui::{
@@ -363,10 +364,7 @@ impl InputState {
     /// - Syntax Highlighting
     /// - Auto Indent
     /// - Line Number
-    pub fn code_editor(
-        mut self,
-        config: Option<tree_sitter_highlight::HighlightConfiguration>,
-    ) -> Self {
+    pub fn code_editor(mut self, config: impl Into<HighlightConfiguration>) -> Self {
         self.mode = InputMode::CodeEditor {
             rows: 2,
             tab: TabSize::default(),

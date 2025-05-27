@@ -1,3 +1,5 @@
+use tree_sitter_highlight::HighlightConfiguration;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Language {
     Json,
@@ -26,14 +28,24 @@ pub enum Language {
     CMake,
     TypeScript,
     Tsx,
+    Diff,
+    Elixir,
+    Erb,
+    Ejs,
+}
+
+impl ToString for Language {
+    fn to_string(&self) -> String {
+        format!("{:?}", self)
+    }
 }
 
 impl Language {
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
-            "json" => Some(Self::Json),
-            "markdown" | "md" => Some(Self::Markdown),
-            "markdown-inline" | "md-inline" => Some(Self::MarkdownInline),
+            "json" | "jsonc" => Some(Self::Json),
+            "markdown" | "md" | "mdx" => Some(Self::Markdown),
+            "markdown-inline" => Some(Self::MarkdownInline),
             "toml" => Some(Self::Toml),
             "yaml" | "yml" => Some(Self::Yaml),
             "rust" | "rs" => Some(Self::Rust),
@@ -47,21 +59,25 @@ impl Language {
             "ruby" | "rb" => Some(Self::Ruby),
             "bash" | "sh" => Some(Self::Bash),
             "html" => Some(Self::Html),
-            "css" => Some(Self::Css),
+            "css" | "scss" => Some(Self::Css),
             "swift" => Some(Self::Swift),
             "scala" => Some(Self::Scala),
             "csharp" | "cs" => Some(Self::CSharp),
             "graphql" => Some(Self::GraphQL),
-            "proto" => Some(Self::Proto),
+            "proto" | "protobuf" => Some(Self::Proto),
             "make" | "makefile" => Some(Self::Make),
             "cmake" => Some(Self::CMake),
             "typescript" | "ts" => Some(Self::TypeScript),
             "tsx" => Some(Self::Tsx),
+            "diff" => Some(Self::Diff),
+            "elixir" | "ex" => Some(Self::Elixir),
+            "erb" => Some(Self::Erb),
+            "ejs" => Some(Self::Ejs),
             _ => None,
         }
     }
 
-    pub fn build(&self) -> Option<tree_sitter_highlight::HighlightConfiguration> {
+    pub fn build(&self) -> HighlightConfiguration {
         let (language, query, injection, locals) = match self {
             Self::Json => (
                 tree_sitter_json::LANGUAGE,
@@ -194,6 +210,30 @@ impl Language {
                 "",
                 tree_sitter_typescript::LOCALS_QUERY,
             ),
+            Self::Diff => (
+                tree_sitter_diff::LANGUAGE,
+                tree_sitter_diff::HIGHLIGHTS_QUERY,
+                "",
+                "",
+            ),
+            Self::Elixir => (
+                tree_sitter_elixir::LANGUAGE,
+                tree_sitter_elixir::HIGHLIGHTS_QUERY,
+                tree_sitter_elixir::INJECTIONS_QUERY,
+                "",
+            ),
+            Self::Erb => (
+                tree_sitter_embedded_template::LANGUAGE,
+                tree_sitter_embedded_template::HIGHLIGHTS_QUERY,
+                tree_sitter_embedded_template::INJECTIONS_EJS_QUERY,
+                "",
+            ),
+            Self::Ejs => (
+                tree_sitter_embedded_template::LANGUAGE,
+                tree_sitter_embedded_template::HIGHLIGHTS_QUERY,
+                tree_sitter_embedded_template::INJECTIONS_EJS_QUERY,
+                "",
+            ),
         };
 
         let language = tree_sitter::Language::new(language);
@@ -201,8 +241,18 @@ impl Language {
         let config = tree_sitter_highlight::HighlightConfiguration::new(
             language, name, query, injection, locals,
         )
-        .ok()?;
+        .ok()
+        .expect(&format!(
+            "failed to build `tree_sitter_highlight::HighlightConfiguration` for default language {}",
+            name
+        ));
 
-        Some(config)
+        config
+    }
+}
+
+impl From<Language> for HighlightConfiguration {
+    fn from(language: Language) -> Self {
+        language.build()
     }
 }

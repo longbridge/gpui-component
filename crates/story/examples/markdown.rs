@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use gpui::*;
 use gpui_component::{
-    highlighter::{self, HighlightTheme},
+    highlighter::{HighlightTheme, Language},
     input::{InputEvent, InputState, TabSize, TextInput},
     resizable::{h_resizable, resizable_panel, ResizableState},
     text::{TextView, TextViewStyle},
@@ -21,7 +21,7 @@ impl Example {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let input_state = cx.new(|cx| {
             InputState::new(window, cx)
-                .code_editor(highlighter::Language::Markdown.build())
+                .code_editor(Language::Markdown)
                 .line_number(false)
                 .tab_size(TabSize {
                     tab_size: 2,

@@ -3,7 +3,7 @@ use gpui_component::{
     checkbox::Checkbox,
     dropdown::{Dropdown, DropdownEvent, DropdownState},
     h_flex,
-    highlighter::{self, Highlighter},
+    highlighter::{Highlighter, Language},
     input::{InputEvent, InputState, TabSize, TextInput},
     v_flex,
 };
@@ -12,22 +12,28 @@ use story::Assets;
 pub struct Example {
     input_state: Entity<InputState>,
     language_state: Entity<DropdownState<Vec<SharedString>>>,
-    language: SharedString,
+    language: Language,
     line_number: bool,
     _subscribes: Vec<Subscription>,
 }
 
 const EXAMPLE: &str = include_str!("./code-editor.rs");
-const LANGUAGES: [&str; 7] = ["rust", "javascript", "html", "css", "go", "python", "ruby"];
+const LANGUAGES: [Language; 7] = [
+    Language::Rust,
+    Language::JavaScript,
+    Language::Html,
+    Language::Css,
+    Language::Go,
+    Language::Python,
+    Language::Ruby,
+];
 
 impl Example {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let default_language: SharedString = LANGUAGES[0].into();
+        let default_language = LANGUAGES[0];
         let input_state = cx.new(|cx| {
             InputState::new(window, cx)
-                .code_editor(
-                    highlighter::Language::from_str(&default_language).and_then(|l| l.build()),
-                )
+                .code_editor(default_language)
                 .line_number(true)
                 .tab_size(TabSize {
                     tab_size: 4,
@@ -53,7 +59,7 @@ impl Example {
                 &language_state,
                 |this, state, _: &DropdownEvent<Vec<SharedString>>, cx| {
                     if let Some(val) = state.read(cx).selected_value() {
-                        this.update_highlighter(Some(val.clone()), cx);
+                        this.update_highlighter(Language::from_str(&val), cx);
                         cx.notify();
                     }
                 },
@@ -73,20 +79,15 @@ impl Example {
         cx.new(|cx| Self::new(window, cx))
     }
 
-    fn update_highlighter(&mut self, new_language: Option<SharedString>, cx: &mut Context<Self>) {
+    fn update_highlighter(&mut self, new_language: Option<Language>, cx: &mut Context<Self>) {
         let is_language_changed = new_language.is_some();
         if new_language.is_some() {
             self.language = new_language.unwrap();
         }
-        let language = self.language.as_ref();
+        let language = self.language;
         if is_language_changed {
             self.input_state.update(cx, |state, cx| {
-                state.set_highlighter(
-                    Highlighter::new(
-                        highlighter::Language::from_str(language).and_then(|l| l.build()),
-                    ),
-                    cx,
-                );
+                state.set_highlighter(Highlighter::new(language), cx);
             });
         }
     }
