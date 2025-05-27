@@ -235,6 +235,11 @@ impl LanguageRegistry {
 
         if let Some(language) = Language::from_str(&lang) {
             let config = self.register(lang, language.build());
+
+            for injection_lang in language.injection_languages() {
+                self.register(injection_lang.name(), injection_lang.build());
+            }
+
             return Some(config);
         }
 
@@ -255,7 +260,11 @@ impl LanguageRegistry {
     }
 
     fn injection_callback(&self, lang: &str) -> Option<&HighlightConfiguration> {
-        self.languages.get(lang).map(|c| c.as_ref())
+        if let Some(config) = self.languages.get(lang) {
+            return Some(config.as_ref());
+        }
+
+        None
     }
 
     /// Highlight a line and returns a vector of ranges and highlight styles.

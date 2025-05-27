@@ -117,6 +117,14 @@ impl Language {
         }
     }
 
+    pub(super) fn injection_languages(&self) -> Vec<Self> {
+        match self {
+            Self::Markdown => vec![Self::MarkdownInline, Self::Html],
+            Self::MarkdownInline => vec![],
+            _ => vec![],
+        }
+    }
+
     fn _language_info(&self) -> (tree_sitter::Language, &str, &str, &str) {
         let (language, query, injection, locals) = match self {
             Self::Json => (
