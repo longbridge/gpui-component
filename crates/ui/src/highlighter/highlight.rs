@@ -181,9 +181,6 @@ impl HighlightTheme {
     }
 }
 
-/// Inspired by the `iced` crate's `Highlighter` struct.
-///
-/// https://github.com/iced-rs/iced/blob/master/highlighter/src/lib.rs#L24
 pub struct Highlighter {
     highlighter: Rc<RefCell<tree_sitter_highlight::Highlighter>>,
     config: Option<Rc<tree_sitter_highlight::HighlightConfiguration>>,
