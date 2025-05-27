@@ -8,7 +8,6 @@ use smallvec::SmallVec;
 use std::cell::Cell;
 use std::ops::Range;
 use std::rc::Rc;
-use tree_sitter_highlight::HighlightConfiguration;
 use unicode_segmentation::*;
 
 use gpui::{
@@ -33,7 +32,7 @@ use super::{
     number_input,
     text_wrapper::TextWrapper,
 };
-use crate::{highlighter::Highlighter, history::History, scroll::ScrollbarState, Root};
+use crate::{history::History, scroll::ScrollbarState, Root};
 
 #[derive(Clone, PartialEq, Eq, Deserialize)]
 pub struct Enter {
@@ -364,11 +363,11 @@ impl InputState {
     /// - Syntax Highlighting
     /// - Auto Indent
     /// - Line Number
-    pub fn code_editor(mut self, config: impl Into<HighlightConfiguration>) -> Self {
+    pub fn code_editor(mut self, language: impl Into<SharedString>) -> Self {
         self.mode = InputMode::CodeEditor {
             rows: 2,
             tab: TabSize::default(),
-            highlighter: CodeHighlighter::new(Rc::new(Highlighter::new(config))),
+            highlighter: CodeHighlighter::new(language),
             line_number: true,
             height: Some(relative(1.)),
         };
@@ -431,11 +430,10 @@ impl InputState {
     }
 
     /// Set highlighter, only for [`InputMode::CodeEditor`] mode.
-    pub fn set_highlighter(&mut self, highlighter: Highlighter, cx: &mut Context<Self>) {
-        let new_highlighter = Rc::new(highlighter);
+    pub fn set_highlighter(&mut self, language: impl Into<SharedString>, cx: &mut Context<Self>) {
         match &mut self.mode {
             InputMode::CodeEditor { highlighter, .. } => {
-                highlighter.set_highlighter(new_highlighter, cx);
+                highlighter.set_language(language, cx);
             }
             _ => {}
         }

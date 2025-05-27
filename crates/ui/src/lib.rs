@@ -91,6 +91,7 @@ rust_i18n::i18n!("locales", fallback = "en");
 pub fn init(cx: &mut App) {
     theme::init(cx);
     inspector::init(cx);
+    highlighter::init(cx);
     date_picker::init(cx);
     dock::init(cx);
     drawer::init(cx);

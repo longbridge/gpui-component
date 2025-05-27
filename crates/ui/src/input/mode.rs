@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use gpui::{DefiniteLength, SharedString};
 
 use super::code_highlighter::CodeHighlighter;
@@ -151,9 +149,10 @@ impl InputMode {
         }
     }
 
-    pub(super) fn highlighter(&self) -> Option<Rc<crate::highlighter::Highlighter>> {
+    #[allow(unused)]
+    pub(super) fn highlighter(&self) -> Option<&CodeHighlighter> {
         match &self {
-            InputMode::CodeEditor { highlighter, .. } => Some(highlighter.highlighter.clone()),
+            InputMode::CodeEditor { highlighter, .. } => Some(highlighter),
             _ => None,
         }
     }

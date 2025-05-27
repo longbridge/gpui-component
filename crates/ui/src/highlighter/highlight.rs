@@ -1,4 +1,4 @@
-use gpui::{FontStyle, FontWeight, HighlightStyle, Hsla};
+use gpui::{App, FontStyle, FontWeight, HighlightStyle, Hsla};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -6,7 +6,7 @@ use std::{
     ops::{Deref, Range},
     sync::{Arc, LazyLock, RwLock},
 };
-use tree_sitter_highlight::{HighlightConfiguration, HighlightEvent};
+use tree_sitter_highlight::{HighlightConfiguration, HighlightEvent, Highlighter};
 
 use crate::ThemeMode;
 
@@ -183,45 +183,55 @@ impl HighlightTheme {
     }
 }
 
+pub fn init(cx: &mut App) {
+    cx.set_global(LanguageRegistry::new());
+}
+
 #[derive(Clone)]
-pub struct Highlighter {
-    highlighter: Arc<RwLock<tree_sitter_highlight::Highlighter>>,
-    config: Arc<HighlightConfiguration>,
+pub struct LanguageRegistry {
+    highlighter: Arc<RwLock<Highlighter>>,
+    languages: HashMap<String, Arc<HighlightConfiguration>>,
     pub(crate) light_theme: Arc<HighlightTheme>,
     pub(crate) dark_theme: Arc<HighlightTheme>,
 }
 
-/// Used to cache the highlighter for each language.
-static LANGUAGE_REGISTRY: LazyLock<RwLock<HashMap<String, Highlighter>>> =
-    LazyLock::new(|| RwLock::new(HashMap::new()));
+impl gpui::Global for LanguageRegistry {}
 
-impl Highlighter {
-    pub fn new(config: impl Into<HighlightConfiguration>) -> Self {
-        let highlighter = tree_sitter_highlight::Highlighter::new();
+impl LanguageRegistry {
+    pub fn global(cx: &App) -> &LanguageRegistry {
+        cx.global::<LanguageRegistry>()
+    }
+
+    pub fn global_mut(cx: &mut App) -> &mut LanguageRegistry {
+        cx.global_mut::<LanguageRegistry>()
+    }
+
+    pub fn new() -> Self {
+        Self {
+            highlighter: Arc::new(RwLock::new(Highlighter::new())),
+            languages: HashMap::new(),
+            light_theme: Arc::new(HighlightTheme::default_light()),
+            dark_theme: Arc::new(HighlightTheme::default_dark()),
+        }
+    }
+
+    pub fn register(&mut self, lang: &str, config: impl Into<HighlightConfiguration>) {
         let mut config = config.into();
         config.configure(&HIGHLIGHT_NAMES);
         let config = Arc::new(config);
 
-        let highlighter = Self {
-            highlighter: Arc::new(RwLock::new(highlighter)),
-            config,
-            light_theme: Arc::new(HighlightTheme::default_light()),
-            dark_theme: Arc::new(HighlightTheme::default_dark()),
-        };
-
-        highlighter
+        self.languages.insert(lang.to_string(), config);
     }
 
-    pub fn with_language(lang: &str) -> Option<Highlighter> {
-        let mut registry = LANGUAGE_REGISTRY.write().unwrap();
-        if let Some(highlighter) = registry.get(lang) {
-            return Some(highlighter.clone());
+    pub fn with_language(&mut self, lang: &str) -> Option<Arc<HighlightConfiguration>> {
+        if let Some(config) = self.languages.get(lang) {
+            return Some(config.clone());
         }
 
         if let Some(language) = Language::from_str(&lang) {
-            let highlighter = Highlighter::new(language);
-            registry.insert(lang.to_string(), highlighter.clone());
-            return Some(highlighter);
+            let config = Arc::new(language.build());
+            self.languages.insert(language.name(), config.clone());
+            return Some(config);
         }
 
         None
@@ -243,13 +253,22 @@ impl Highlighter {
     /// Highlight a line and returns a vector of ranges and highlight styles.
     ///
     /// The Ranges in Vec is connected all bytes offsets of the line.
-    pub fn highlight(&self, line: &str, is_dark: bool) -> Vec<(Range<usize>, HighlightStyle)> {
+    pub fn highlight(
+        &mut self,
+        lang: &str,
+        line: &str,
+        is_dark: bool,
+    ) -> Vec<(Range<usize>, HighlightStyle)> {
         let default_styles = vec![(0..line.len(), HighlightStyle::default())];
-        let config = self.config.as_ref();
+        let config = self.with_language(lang).unwrap();
 
-        let theme = self.theme(is_dark);
+        let theme = self.theme(is_dark).clone();
         let mut highlighter = self.highlighter.write().unwrap();
-        let Ok(highlights) = highlighter.highlight(config, line.as_bytes(), None, |_| None) else {
+        let Ok(highlights) =
+            highlighter.highlight(config.as_ref(), line.as_bytes(), None, |lang| {
+                self.languages.get(lang).map(|c| c.as_ref())
+            })
+        else {
             return default_styles;
         };
 

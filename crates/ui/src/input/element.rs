@@ -5,7 +5,7 @@ use gpui::{
 };
 use smallvec::SmallVec;
 
-use crate::{ActiveTheme as _, Root};
+use crate::{highlighter::LanguageRegistry, ActiveTheme as _, Root};
 
 use super::{code_highlighter::LineHighlightStyle, mode::InputMode, InputState};
 
@@ -704,12 +704,8 @@ impl Element for TextElement {
 
                 // Paint the current line background
                 if prepaint.current_line_index == ix {
-                    if let Some(bg_color) = self
-                        .input
-                        .read(cx)
-                        .mode
-                        .highlighter()
-                        .and_then(|h| h.theme(cx.theme().is_dark()).current_line)
+                    let is_dark = cx.theme().is_dark();
+                    if let Some(bg_color) = LanguageRegistry::global(cx).theme(is_dark).current_line
                     {
                         window.paint_quad(fill(
                             Bounds::new(p, size(bounds.size.width, line_height)),

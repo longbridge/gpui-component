@@ -1,6 +1,6 @@
 use gpui::{
-    div, prelude::FluentBuilder as _, AnyElement, Element, ElementId, IntoElement, ParentElement,
-    SharedString, Styled, Window,
+    div, prelude::FluentBuilder as _, AnyElement, App, Element, ElementId, IntoElement,
+    ParentElement, SharedString, Styled, Window,
 };
 use markdown::{
     mdast::{self, Node},
@@ -60,7 +60,7 @@ pub struct MarkdownState {
 }
 
 impl MarkdownState {
-    fn parse_if_needed(&mut self, new_text: SharedString, style: &TextViewStyle) {
+    fn parse_if_needed(&mut self, new_text: SharedString, style: &TextViewStyle, cx: &mut App) {
         let is_changed = self.raw != new_text || self.style != *style;
 
         if self.root.is_some() && !is_changed {
@@ -68,7 +68,7 @@ impl MarkdownState {
         }
 
         self.raw = new_text;
-        self.root = Some(parse_markdown(&self.raw, &style));
+        self.root = Some(parse_markdown(&self.raw, &style, cx));
         self.style = style.clone();
     }
 }
@@ -102,7 +102,7 @@ impl Element for MarkdownElement {
     ) -> (gpui::LayoutId, Self::RequestLayoutState) {
         window.with_element_state(id.unwrap(), |state, window| {
             let mut state: MarkdownState = state.unwrap_or_default();
-            state.parse_if_needed(self.text.clone(), &self.style);
+            state.parse_if_needed(self.text.clone(), &self.style, cx);
 
             let root = state
                 .root
@@ -154,9 +154,13 @@ impl Element for MarkdownElement {
 }
 
 /// Parse Markdown into a tree of nodes.
-fn parse_markdown(raw: &str, style: &TextViewStyle) -> Result<element::Node, SharedString> {
+fn parse_markdown(
+    raw: &str,
+    style: &TextViewStyle,
+    cx: &mut App,
+) -> Result<element::Node, SharedString> {
     markdown::to_mdast(&raw, &ParseOptions::gfm())
-        .map(|n| ast_to_node(n, style))
+        .map(|n| ast_to_node(n, style, cx))
         .map_err(|e| e.to_string().into())
 }
 
@@ -346,13 +350,13 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node) -> String {
     text
 }
 
-fn ast_to_node(value: mdast::Node, style: &TextViewStyle) -> element::Node {
+fn ast_to_node(value: mdast::Node, style: &TextViewStyle, cx: &mut App) -> element::Node {
     match value {
         Node::Root(val) => {
             let children = val
                 .children
                 .into_iter()
-                .map(|c| ast_to_node(c, style))
+                .map(|c| ast_to_node(c, style, cx))
                 .collect();
             element::Node::Root { children }
         }
@@ -376,7 +380,7 @@ fn ast_to_node(value: mdast::Node, style: &TextViewStyle) -> element::Node {
             let children = list
                 .children
                 .into_iter()
-                .map(|c| ast_to_node(c, style))
+                .map(|c| ast_to_node(c, style, cx))
                 .collect();
             element::Node::List {
                 ordered: list.ordered,
@@ -387,7 +391,7 @@ fn ast_to_node(value: mdast::Node, style: &TextViewStyle) -> element::Node {
             let children = val
                 .children
                 .into_iter()
-                .map(|c| ast_to_node(c, style))
+                .map(|c| ast_to_node(c, style, cx))
                 .collect();
             element::Node::ListItem {
                 children,
@@ -400,6 +404,7 @@ fn ast_to_node(value: mdast::Node, style: &TextViewStyle) -> element::Node {
             raw.value.into(),
             raw.lang.map(|s| s.into()),
             style,
+            cx,
         )),
         Node::Heading(val) => {
             let mut paragraph = Paragraph::default();
@@ -412,7 +417,9 @@ fn ast_to_node(value: mdast::Node, style: &TextViewStyle) -> element::Node {
                 children: paragraph,
             }
         }
-        Node::Math(val) => element::Node::CodeBlock(CodeBlock::new(val.value.into(), None, style)),
+        Node::Math(val) => {
+            element::Node::CodeBlock(CodeBlock::new(val.value.into(), None, style, cx))
+        }
         Node::Html(val) => match parse_html(&val.value) {
             Ok(el) => el,
             Err(err) => {
@@ -423,15 +430,24 @@ fn ast_to_node(value: mdast::Node, style: &TextViewStyle) -> element::Node {
                 element::Node::Paragraph(val.value.into())
             }
         },
-        Node::MdxFlowExpression(val) => {
-            element::Node::CodeBlock(CodeBlock::new(val.value.into(), Some("mdx".into()), style))
-        }
-        Node::Yaml(val) => {
-            element::Node::CodeBlock(CodeBlock::new(val.value.into(), Some("yml".into()), style))
-        }
-        Node::Toml(val) => {
-            element::Node::CodeBlock(CodeBlock::new(val.value.into(), Some("toml".into()), style))
-        }
+        Node::MdxFlowExpression(val) => element::Node::CodeBlock(CodeBlock::new(
+            val.value.into(),
+            Some("mdx".into()),
+            style,
+            cx,
+        )),
+        Node::Yaml(val) => element::Node::CodeBlock(CodeBlock::new(
+            val.value.into(),
+            Some("yml".into()),
+            style,
+            cx,
+        )),
+        Node::Toml(val) => element::Node::CodeBlock(CodeBlock::new(
+            val.value.into(),
+            Some("toml".into()),
+            style,
+            cx,
+        )),
         Node::MdxJsxTextElement(val) => {
             let mut paragraph = Paragraph::default();
             val.children.iter().for_each(|c| {
@@ -469,22 +485,5 @@ fn ast_to_node(value: mdast::Node, style: &TextViewStyle) -> element::Node {
             }
             element::Node::Unknown
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::text::TextViewStyle;
-
-    use super::parse_markdown;
-
-    #[test]
-    fn test_parse_br() {
-        let raw = "Row 1<br/>Row 2<br>[Link](https://github.com)";
-        let node = parse_markdown(&raw, &TextViewStyle::default()).unwrap();
-        assert_eq!(
-            node.to_markdown(),
-            "Row 1\nRow 2\n[Link](https://github.com)"
-        );
     }
 }

@@ -1,6 +1,11 @@
+use gpui::SharedString;
+use serde::{Deserialize, Serialize};
 use tree_sitter_highlight::HighlightConfiguration;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, enum_iterator::Sequence,
+)]
+#[serde(rename_all = "snake_case")]
 pub enum Language {
     Json,
     Markdown,
@@ -34,18 +39,30 @@ pub enum Language {
     Ejs,
 }
 
-impl ToString for Language {
-    fn to_string(&self) -> String {
-        format!("{:?}", self)
+impl From<Language> for SharedString {
+    fn from(language: Language) -> Self {
+        language.name().into()
     }
 }
 
 impl Language {
+    pub fn all() -> impl Iterator<Item = Self> {
+        enum_iterator::all::<Language>()
+    }
+
+    pub fn name(&self) -> String {
+        self._language_info()
+            .0
+            .name()
+            .unwrap_or(serde_json::to_string(self).unwrap().as_str())
+            .to_string()
+    }
+
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "json" | "jsonc" => Some(Self::Json),
             "markdown" | "md" | "mdx" => Some(Self::Markdown),
-            "markdown-inline" => Some(Self::MarkdownInline),
+            "markdown_inline" => Some(Self::MarkdownInline),
             "toml" => Some(Self::Toml),
             "yaml" | "yml" => Some(Self::Yaml),
             "rust" | "rs" => Some(Self::Rust),
@@ -77,7 +94,7 @@ impl Language {
         }
     }
 
-    pub fn build(&self) -> HighlightConfiguration {
+    fn _language_info(&self) -> (tree_sitter::Language, &str, &str, &str) {
         let (language, query, injection, locals) = match self {
             Self::Json => (
                 tree_sitter_json::LANGUAGE,
@@ -237,15 +254,18 @@ impl Language {
         };
 
         let language = tree_sitter::Language::new(language);
+        (language, query, injection, locals)
+    }
+
+    pub fn build(&self) -> HighlightConfiguration {
+        let (language, query, injection, locals) = self._language_info();
         let name = language.name().unwrap_or("text");
         let config = tree_sitter_highlight::HighlightConfiguration::new(
             language, name, query, injection, locals,
         )
         .ok()
-        .expect(&format!(
-            "failed to build `tree_sitter_highlight::HighlightConfiguration` for default language {}",
-            name
-        ));
+        .unwrap_or_else(|| panic!("failed to build `tree_sitter_highlight::HighlightConfiguration` for default language {}",
+            name));
 
         config
     }

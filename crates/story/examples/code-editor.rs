@@ -3,7 +3,7 @@ use gpui_component::{
     checkbox::Checkbox,
     dropdown::{Dropdown, DropdownEvent, DropdownState},
     h_flex,
-    highlighter::{Highlighter, Language},
+    highlighter::Language,
     input::{InputEvent, InputState, TabSize, TextInput},
     v_flex,
 };
@@ -33,7 +33,7 @@ impl Example {
         let default_language = LANGUAGES[0];
         let input_state = cx.new(|cx| {
             InputState::new(window, cx)
-                .code_editor(default_language)
+                .code_editor(default_language.name())
                 .line_number(true)
                 .tab_size(TabSize {
                     tab_size: 4,
@@ -44,7 +44,7 @@ impl Example {
         });
         let language_state = cx.new(|cx| {
             DropdownState::new(
-                LANGUAGES.iter().map(|s| s.to_string().into()).collect(),
+                LANGUAGES.iter().map(|s| s.name().into()).collect(),
                 Some(0),
                 window,
                 cx,
@@ -87,7 +87,7 @@ impl Example {
         let language = self.language;
         if is_language_changed {
             self.input_state.update(cx, |state, cx| {
-                state.set_highlighter(Highlighter::new(language), cx);
+                state.set_highlighter(language, cx);
             });
         }
     }

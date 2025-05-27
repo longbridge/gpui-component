@@ -2,7 +2,7 @@ use std::{collections::HashMap, ops::Range, rc::Rc};
 
 use gpui::{App, HighlightStyle, SharedString, TextRun, TextStyle};
 
-use crate::{highlighter::Highlighter, ActiveTheme, ThemeMode};
+use crate::{highlighter::LanguageRegistry, ActiveTheme, ThemeMode};
 
 #[derive(Debug, Clone)]
 pub(crate) struct LineHighlightStyle {
@@ -40,7 +40,7 @@ impl LineHighlightStyle {
 
 #[derive(Clone)]
 pub(super) struct CodeHighlighter {
-    pub(super) highlighter: Rc<Highlighter>,
+    pub(super) language: SharedString,
     pub(super) text: SharedString,
     /// The lines by split \n
     pub(super) lines: Vec<LineHighlightStyle>,
@@ -49,9 +49,9 @@ pub(super) struct CodeHighlighter {
 }
 
 impl CodeHighlighter {
-    pub(super) fn new(highlighter: Rc<Highlighter>) -> Self {
+    pub(super) fn new(language: impl Into<SharedString>) -> Self {
         Self {
-            highlighter,
+            language: language.into(),
             text: SharedString::default(),
             lines: vec![],
             cache_theme_mode: ThemeMode::default(),
@@ -59,8 +59,8 @@ impl CodeHighlighter {
         }
     }
 
-    pub fn set_highlighter(&mut self, highlighter: Rc<Highlighter>, cx: &mut App) {
-        self.highlighter = highlighter;
+    pub fn set_language(&mut self, language: impl Into<SharedString>, cx: &mut App) {
+        self.language = language.into();
         self.lines.clear();
         self.cache.clear();
         self.update(self.text.clone(), true, cx);
@@ -91,8 +91,13 @@ impl CodeHighlighter {
                 new_cache.insert(cache_key, new_style.clone());
                 lines.push(new_style);
             } else {
+                let is_dark = cx.theme().is_dark();
                 // cache miss
-                let styles = Rc::new(self.highlighter.highlight(line, cx.theme().is_dark()));
+                let styles = Rc::new(LanguageRegistry::global_mut(cx).highlight(
+                    &self.language,
+                    line,
+                    is_dark,
+                ));
                 let line_style = LineHighlightStyle { offset, styles };
                 new_cache.insert(cache_key, line_style.clone());
                 lines.push(line_style);
