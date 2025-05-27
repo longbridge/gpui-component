@@ -1203,7 +1203,7 @@ impl InputState {
             self.replace_text_in_range(None, "\n", window, cx);
 
             // Move cursor to the start of the next line
-            let mut new_offset = self.next_boundary(self.cursor_offset()) - 1;
+            let mut new_offset = self.cursor_offset() - 1;
             if is_eof {
                 new_offset += 1;
             }
