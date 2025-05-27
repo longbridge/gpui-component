@@ -331,9 +331,7 @@ impl RenderOnce for FormField {
 
         #[inline]
         fn wrap_label(label_width: Option<Pixels>) -> Div {
-            h_flex()
-                .truncate()
-                .when_some(label_width, |this, width| this.w(width).flex_shrink_0())
+            div().when_some(label_width, |this, width| this.w(width).flex_shrink_0())
         }
 
         let gap = match self.props.gap {
@@ -390,7 +388,7 @@ impl RenderOnce for FormField {
                                 }),
                         )
                     })
-                    .child(div().w_full().child(self.child)),
+                    .child(div().flex_1().overflow_x_hidden().child(self.child)),
             )
             .child(
                 // Other
