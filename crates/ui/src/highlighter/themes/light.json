@@ -75,7 +75,7 @@
             "font_weight": null
         },
         "punctuation": {
-            "color": "#333333",
+            "color": "#666666",
             "font_style": null,
             "font_weight": null
         },
@@ -90,7 +90,7 @@
             "font_weight": null
         },
         "punctuation.special": {
-            "color": "#333333",
+            "color": "#0433ff",
             "font_style": null,
             "font_weight": null
         },
@@ -102,6 +102,16 @@
         "string.special": {
             "color": "#d21f07",
             "font_style": null,
+            "font_weight": null
+        },
+        "text.strong": {
+            "color": "#222222",
+            "font_style": null,
+            "font_weight": 600
+        },
+        "text.emphasis": {
+            "color": "#0433ff",
+            "font_style": "Italic",
             "font_weight": null
         },
         "tag": {

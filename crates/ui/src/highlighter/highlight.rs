@@ -72,6 +72,16 @@ pub struct HighlightColors {
     variable_builtin: Option<ThemeStyle>,
     #[serde(rename = "variable.parameter")]
     variable_parameter: Option<ThemeStyle>,
+    #[serde(rename = "text.uri")]
+    text_uri: Option<ThemeStyle>,
+    #[serde(rename = "text.reference")]
+    text_reference: Option<ThemeStyle>,
+    #[serde(rename = "text.strong")]
+    text_strong: Option<ThemeStyle>,
+    #[serde(rename = "text.emphasis")]
+    text_emphasis: Option<ThemeStyle>,
+    #[serde(rename = "text.literal")]
+    text_literal: Option<ThemeStyle>,
 }
 
 impl HighlightColors {
@@ -103,6 +113,11 @@ impl HighlightColors {
             "variable" => Some(self.variable),
             "variable.builtin" => Some(self.variable_builtin),
             "variable.parameter" => Some(self.variable_parameter),
+            "text.uri" => Some(self.text_uri),
+            "text.reference" => Some(self.text_reference),
+            "text.strong" => Some(self.text_strong),
+            "text.emphasis" => Some(self.text_emphasis),
+            "text.literal" => Some(self.text_literal),
             _ => None,
         }
         .and_then(|s| s.map(|s| s.into()))
@@ -134,7 +149,7 @@ impl Deref for HighlightTheme {
     }
 }
 
-const HIGHLIGHT_NAMES: [&str; 27] = [
+const HIGHLIGHT_NAMES: [&str; 32] = [
     "attribute",
     "comment",
     "constant",
@@ -162,6 +177,11 @@ const HIGHLIGHT_NAMES: [&str; 27] = [
     "variable",
     "variable.builtin",
     "variable.parameter",
+    "text.uri",
+    "text.reference",
+    "text.strong",
+    "text.emphasis",
+    "text.literal",
 ];
 
 const DEFAULT_DARK: LazyLock<HighlightTheme> = LazyLock::new(|| {
