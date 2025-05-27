@@ -1,11 +1,7 @@
 use gpui::SharedString;
-use serde::{Deserialize, Serialize};
 use tree_sitter_highlight::HighlightConfiguration;
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, enum_iterator::Sequence,
-)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, enum_iterator::Sequence)]
 pub enum Language {
     Json,
     Markdown,
@@ -50,12 +46,39 @@ impl Language {
         enum_iterator::all::<Language>()
     }
 
-    pub fn name(&self) -> String {
-        self._language_info()
-            .0
-            .name()
-            .unwrap_or(serde_json::to_string(self).unwrap().as_str())
-            .to_string()
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Json => "json",
+            Self::Markdown => "markdown",
+            Self::MarkdownInline => "markdown_inline",
+            Self::Toml => "toml",
+            Self::Yaml => "yaml",
+            Self::Rust => "rust",
+            Self::Go => "go",
+            Self::C => "c",
+            Self::Cpp => "cpp",
+            Self::JavaScript => "javascript",
+            Self::Zig => "zig",
+            Self::Java => "java",
+            Self::Python => "python",
+            Self::Ruby => "ruby",
+            Self::Bash => "bash",
+            Self::Html => "html",
+            Self::Css => "css",
+            Self::Swift => "swift",
+            Self::Scala => "scala",
+            Self::CSharp => "csharp",
+            Self::GraphQL => "graphql",
+            Self::Proto => "proto",
+            Self::Make => "make",
+            Self::CMake => "cmake",
+            Self::TypeScript => "typescript",
+            Self::Tsx => "tsx",
+            Self::Diff => "diff",
+            Self::Elixir => "elixir",
+            Self::Erb => "erb",
+            Self::Ejs => "ejs",
+        }
     }
 
     pub fn from_str(s: &str) -> Option<Self> {
@@ -274,5 +297,31 @@ impl Language {
 impl From<Language> for HighlightConfiguration {
     fn from(language: Language) -> Self {
         language.build()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_language_name() {
+        assert_eq!(Language::MarkdownInline.name(), "markdown_inline");
+        assert_eq!(Language::Markdown.name(), "markdown");
+        assert_eq!(Language::Json.name(), "json");
+        assert_eq!(Language::Yaml.name(), "yaml");
+        assert_eq!(Language::Rust.name(), "rust");
+        assert_eq!(Language::Go.name(), "go");
+        assert_eq!(Language::C.name(), "c");
+        assert_eq!(Language::Cpp.name(), "cpp");
+        assert_eq!(Language::JavaScript.name(), "javascript");
+        assert_eq!(Language::Zig.name(), "zig");
+        assert_eq!(Language::CSharp.name(), "csharp");
+        assert_eq!(Language::TypeScript.name(), "typescript");
+        assert_eq!(Language::Tsx.name(), "tsx");
+        assert_eq!(Language::Diff.name(), "diff");
+        assert_eq!(Language::Elixir.name(), "elixir");
+        assert_eq!(Language::Erb.name(), "erb");
+        assert_eq!(Language::Ejs.name(), "ejs");
     }
 }

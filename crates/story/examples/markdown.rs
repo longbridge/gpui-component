@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use gpui::*;
 use gpui_component::{
-    highlighter::{HighlightTheme, Language},
+    highlighter::{HighlightTheme, Language, LanguageRegistry},
     input::{InputEvent, InputState, TabSize, TextInput},
     resizable::{h_resizable, resizable_panel, ResizableState},
     text::{TextView, TextViewStyle},

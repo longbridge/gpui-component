@@ -215,22 +215,26 @@ impl LanguageRegistry {
         }
     }
 
-    pub fn register(&mut self, lang: &str, config: impl Into<HighlightConfiguration>) {
+    pub fn register(
+        &mut self,
+        lang: &str,
+        config: impl Into<HighlightConfiguration>,
+    ) -> Arc<HighlightConfiguration> {
         let mut config = config.into();
         config.configure(&HIGHLIGHT_NAMES);
         let config = Arc::new(config);
 
-        self.languages.insert(lang.to_string(), config);
+        self.languages.insert(lang.to_string(), config.clone());
+        config
     }
 
-    pub fn with_language(&mut self, lang: &str) -> Option<Arc<HighlightConfiguration>> {
+    pub(crate) fn with_language(&mut self, lang: &str) -> Option<Arc<HighlightConfiguration>> {
         if let Some(config) = self.languages.get(lang) {
             return Some(config.clone());
         }
 
         if let Some(language) = Language::from_str(&lang) {
-            let config = Arc::new(language.build());
-            self.languages.insert(language.name(), config.clone());
+            let config = self.register(lang, language.build());
             return Some(config);
         }
 
@@ -242,12 +246,16 @@ impl LanguageRegistry {
         self.dark_theme = Arc::new(dark_theme.clone());
     }
 
-    pub(crate) fn theme(&self, is_dark: bool) -> &Arc<HighlightTheme> {
+    pub fn theme(&self, is_dark: bool) -> &Arc<HighlightTheme> {
         if is_dark {
             &self.dark_theme
         } else {
             &self.light_theme
         }
+    }
+
+    fn injection_callback(&self, lang: &str) -> Option<&HighlightConfiguration> {
+        self.languages.get(lang).map(|c| c.as_ref())
     }
 
     /// Highlight a line and returns a vector of ranges and highlight styles.
@@ -266,7 +274,7 @@ impl LanguageRegistry {
         let mut highlighter = self.highlighter.write().unwrap();
         let Ok(highlights) =
             highlighter.highlight(config.as_ref(), line.as_bytes(), None, |lang| {
-                self.languages.get(lang).map(|c| c.as_ref())
+                self.injection_callback(lang)
             })
         else {
             return default_styles;
