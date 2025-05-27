@@ -13,7 +13,7 @@ use gpui_component::{
     popup_menu::PopupMenuExt as _,
     scroll::ScrollbarShow,
     set_locale, ActiveTheme as _, ContextModal as _, IconName, Sizable as _, Theme, ThemeMode,
-    TitleBar, ToggleInspector,
+    TitleBar,
 };
 
 use crate::{SelectFont, SelectLocale, SelectRadius, SelectScrollbarShow};
@@ -312,8 +312,6 @@ impl Render for FontSizeSelector {
                                 scroll_show == ScrollbarShow::Always,
                                 Box::new(SelectScrollbarShow(ScrollbarShow::Always)),
                             )
-                            .separator()
-                            .menu("Inspector", Box::new(ToggleInspector))
                     })
                     .anchor(Corner::TopRight),
             )
