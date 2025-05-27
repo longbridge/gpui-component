@@ -2,14 +2,15 @@ use gpui::{FontStyle, FontWeight, HighlightStyle, Hsla};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{
-    cell::RefCell,
+    collections::HashMap,
     ops::{Deref, Range},
-    rc::Rc,
-    sync::LazyLock,
+    sync::{Arc, LazyLock, RwLock},
 };
 use tree_sitter_highlight::HighlightEvent;
 
 use crate::ThemeMode;
+
+use super::Language;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, JsonSchema, Serialize, Deserialize)]
 pub struct ThemeStyle {
@@ -107,6 +108,7 @@ impl HighlightColors {
         .and_then(|s| s.map(|s| s.into()))
     }
 
+    #[inline]
     pub fn style_for_index(&self, index: usize) -> Option<HighlightStyle> {
         HIGHLIGHT_NAMES.get(index).and_then(|name| self.style(name))
     }
@@ -181,37 +183,59 @@ impl HighlightTheme {
     }
 }
 
+#[derive(Clone)]
 pub struct Highlighter {
-    highlighter: Rc<RefCell<tree_sitter_highlight::Highlighter>>,
-    config: Option<Rc<tree_sitter_highlight::HighlightConfiguration>>,
-    pub(crate) light_theme: Rc<HighlightTheme>,
-    pub(crate) dark_theme: Rc<HighlightTheme>,
+    highlighter: Arc<RwLock<tree_sitter_highlight::Highlighter>>,
+    config: Option<Arc<tree_sitter_highlight::HighlightConfiguration>>,
+    pub(crate) light_theme: Arc<HighlightTheme>,
+    pub(crate) dark_theme: Arc<HighlightTheme>,
 }
+
+/// Used to cache the highlighter for each language.
+static LANGUAGE_REGISTRY: LazyLock<RwLock<HashMap<String, Highlighter>>> =
+    LazyLock::new(|| RwLock::new(HashMap::new()));
 
 impl Highlighter {
     pub fn new(config: Option<tree_sitter_highlight::HighlightConfiguration>) -> Self {
         let highlighter = tree_sitter_highlight::Highlighter::new();
 
-        let config = config.map(|config| {
-            let mut config = config;
+        let config = config.map(|mut config| {
             config.configure(&HIGHLIGHT_NAMES);
-            Rc::new(config)
+            Arc::new(config)
         });
 
-        Self {
-            highlighter: Rc::new(RefCell::new(highlighter)),
+        let highlighter = Self {
+            highlighter: Arc::new(RwLock::new(highlighter)),
             config,
-            light_theme: Rc::new(HighlightTheme::default_light()),
-            dark_theme: Rc::new(HighlightTheme::default_dark()),
+            light_theme: Arc::new(HighlightTheme::default_light()),
+            dark_theme: Arc::new(HighlightTheme::default_dark()),
+        };
+
+        highlighter
+    }
+
+    pub fn with_language(lang: &str) -> Option<Highlighter> {
+        let mut registry = LANGUAGE_REGISTRY.write().unwrap();
+        if let Some(highlighter) = registry.get(lang) {
+            return Some(highlighter.clone());
         }
+
+        let config = Language::from_str(&lang).and_then(|lang| lang.build());
+        if let Some(config) = config {
+            let highlighter = Highlighter::new(Some(config));
+            registry.insert(lang.to_string(), highlighter.clone());
+            return Some(highlighter);
+        }
+
+        None
     }
 
     pub fn set_theme(&mut self, light_theme: &HighlightTheme, dark_theme: &HighlightTheme) {
-        self.light_theme = Rc::new(light_theme.clone());
-        self.dark_theme = Rc::new(dark_theme.clone());
+        self.light_theme = Arc::new(light_theme.clone());
+        self.dark_theme = Arc::new(dark_theme.clone());
     }
 
-    pub(crate) fn theme(&self, is_dark: bool) -> &Rc<HighlightTheme> {
+    pub(crate) fn theme(&self, is_dark: bool) -> &Arc<HighlightTheme> {
         if is_dark {
             &self.dark_theme
         } else {
@@ -220,14 +244,16 @@ impl Highlighter {
     }
 
     /// Highlight a line and returns a vector of ranges and highlight styles.
+    ///
+    /// The Ranges in Vec is connected all bytes offsets of the line.
     pub fn highlight(&self, line: &str, is_dark: bool) -> Vec<(Range<usize>, HighlightStyle)> {
         let default_styles = vec![(0..line.len(), HighlightStyle::default())];
         let Some(config) = self.config.as_ref() else {
             return default_styles;
         };
 
-        let theme = self.theme(is_dark).clone();
-        let mut highlighter = self.highlighter.borrow_mut();
+        let theme = self.theme(is_dark);
+        let mut highlighter = self.highlighter.write().unwrap();
         let Ok(highlights) = highlighter.highlight(config, line.as_bytes(), None, |_| None) else {
             return default_styles;
         };
@@ -236,36 +262,34 @@ impl Highlighter {
         let mut last_range = 0..0;
         let mut current_range = None;
         let mut current_style = None;
-        for event in highlights {
-            if let Ok(event) = event {
-                match event {
-                    HighlightEvent::Source { start, end } => {
-                        current_range = Some(start..end);
+        for event in highlights.flatten() {
+            match event {
+                HighlightEvent::Source { start, end } => {
+                    current_range = Some(start..end);
+                }
+                HighlightEvent::HighlightStart(scope) => {
+                    if let Some(style) = theme.syntax.style_for_index(scope.0) {
+                        current_style = Some(style);
                     }
-                    HighlightEvent::HighlightStart(scope) => {
-                        if let Some(style) = theme.syntax.style_for_index(scope.0) {
-                            current_style = Some(style);
-                        }
-                    }
-                    HighlightEvent::HighlightEnd => {
-                        if let (Some(range), Some(style)) = (current_range, current_style) {
-                            if last_range.end < range.start {
-                                styles
-                                    .push((last_range.end..range.start, HighlightStyle::default()))
-                            }
-
-                            styles.push((range.clone(), style));
-                            last_range = range;
+                }
+                HighlightEvent::HighlightEnd => {
+                    if let (Some(range), Some(style)) = (current_range, current_style) {
+                        // Ensure every range is connected.
+                        if last_range.end < range.start {
+                            styles.push((last_range.end..range.start, HighlightStyle::default()))
                         }
 
-                        current_range = None;
-                        current_style = None;
+                        styles.push((range.clone(), style));
+                        last_range = range;
                     }
+
+                    current_range = None;
+                    current_style = None;
                 }
             }
         }
 
-        // Append to first and end to let ranges to covert line len.
+        // Ensure the last range is connected to the end of the line.
         if last_range.end < line.len() {
             styles.push((last_range.end..line.len(), HighlightStyle::default()));
         }

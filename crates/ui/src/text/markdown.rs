@@ -433,7 +433,6 @@ fn ast_to_node(value: mdast::Node, style: &TextViewStyle) -> element::Node {
             element::Node::CodeBlock(CodeBlock::new(val.value.into(), Some("toml".into()), style))
         }
         Node::MdxJsxTextElement(val) => {
-            println!("MdxJsxTextElement: {:#?}", val);
             let mut paragraph = Paragraph::default();
             val.children.iter().for_each(|c| {
                 parse_paragraph(&mut paragraph, c);
@@ -441,7 +440,6 @@ fn ast_to_node(value: mdast::Node, style: &TextViewStyle) -> element::Node {
             element::Node::Paragraph(paragraph)
         }
         Node::MdxJsxFlowElement(val) => {
-            println!("MdxJsxFlowElement: {:#?}", val);
             let mut paragraph = Paragraph::default();
             val.children.iter().for_each(|c| {
                 parse_paragraph(&mut paragraph, c);

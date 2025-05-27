@@ -69,7 +69,7 @@ impl RenderOnce for Text {
 }
 
 /// TextViewStyle used to customize the style for [`TextView`].
-#[derive(Clone, PartialEq)]
+#[derive(Clone)]
 pub struct TextViewStyle {
     /// Gap of each paragraphs, default is 1 rem.
     pub paragraph_gap: Rems,
@@ -78,6 +78,14 @@ pub struct TextViewStyle {
     /// Highlight theme for code blocks. Default: [`HighlightTheme::default_light()`]
     pub highlight_theme: Rc<HighlightTheme>,
     pub is_dark: bool,
+}
+
+impl PartialEq for TextViewStyle {
+    fn eq(&self, other: &Self) -> bool {
+        self.paragraph_gap == other.paragraph_gap
+            && self.heading_base_font_size == other.heading_base_font_size
+            && self.highlight_theme == other.highlight_theme
+    }
 }
 
 impl Default for TextViewStyle {

@@ -8,11 +8,7 @@ use gpui::{
 };
 use markdown::mdast;
 
-use crate::{
-    h_flex,
-    highlighter::{Highlighter, Language},
-    v_flex, ActiveTheme as _, Icon, IconName,
-};
+use crate::{h_flex, highlighter::Highlighter, v_flex, ActiveTheme as _, Icon, IconName};
 
 use super::{utils::list_item_prefix, TextViewStyle};
 
@@ -216,11 +212,13 @@ impl CodeBlock {
         lang: Option<SharedString>,
         text_view_style: &TextViewStyle,
     ) -> Self {
-        let config = lang
-            .clone()
-            .and_then(|lang| Language::from_str(&lang).and_then(|lang| lang.build()));
-        let highlight = Highlighter::new(config);
-        let styles = highlight.highlight(code.as_ref(), text_view_style.is_dark);
+        let mut styles = vec![];
+        if let Some(lang) = &lang {
+            if let Some(highlight) = Highlighter::with_language(lang) {
+                styles = highlight.highlight(code.as_ref(), text_view_style.is_dark);
+            }
+        };
+
         Self { code, lang, styles }
     }
 }
