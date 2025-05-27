@@ -46,7 +46,7 @@ chrono = "0.4.38"
 tree-sitter = "0.25.4"
 tree-sitter-highlight = "0.25.4"
 tree-sitter-json = "0.24.8"
-tree-sitter-md = "0.3.2"
+tree-sitter-md = { git = "https://github.com/tree-sitter-grammars/tree-sitter-markdown", tag = "v0.5.0" }
 tree-sitter-toml-ng = "0.7.0"
 tree-sitter-yaml = "0.7.1"
 tree-sitter-rust = "0.24.0"

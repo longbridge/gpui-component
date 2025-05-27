@@ -32,6 +32,7 @@ impl Language {
         match s {
             "json" => Some(Self::Json),
             "markdown" | "md" => Some(Self::Markdown),
+            "markdown-inline" | "md-inline" => Some(Self::MarkdownInline),
             "toml" => Some(Self::Toml),
             "yaml" | "yml" => Some(Self::Yaml),
             "rust" | "rs" => Some(Self::Rust),
@@ -195,7 +196,7 @@ impl Language {
         };
 
         let language = tree_sitter::Language::new(language);
-        let name = language.name().unwrap_or("");
+        let name = language.name().unwrap_or("text");
         let config = tree_sitter_highlight::HighlightConfiguration::new(
             language, name, query, injection, locals,
         )
