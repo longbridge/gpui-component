@@ -1,5 +1,6 @@
 {
     "name": "macOS Classic Dark",
+    "author": "Jason Lee <huacnlee@gmail.com>",
     "mode": "light",
     "current_line.background": "#F0F0F0",
     "syntax": {

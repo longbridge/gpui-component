@@ -43,7 +43,6 @@ minify-html = "0.15.0"
 # Calendar
 chrono = "0.4.38"
 # Code Editor
-syntect = { version = "5.2", features = ["plist-load"] }
 tree-sitter = "0.25.4"
 tree-sitter-highlight = "0.25.4"
 tree-sitter-json = "0.24.8"
@@ -69,6 +68,7 @@ tree-sitter-graphql = "0.1.0"
 tree-sitter-proto = "0.2.0"
 tree-sitter-make = "1.1.1"
 tree-sitter-cmake = "0.7.1"
+tree-sitter-typescript = "0.23.2"
 
 [dev-dependencies]
 indoc = "2"

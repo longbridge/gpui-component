@@ -1,6 +1,7 @@
 pub enum Language {
     Json,
     Markdown,
+    MarkdownInline,
     Toml,
     Yaml,
     Rust,
@@ -22,6 +23,8 @@ pub enum Language {
     Proto,
     Make,
     CMake,
+    TypeScript,
+    Tsx,
 }
 
 impl Language {
@@ -50,6 +53,8 @@ impl Language {
             "proto" => Some(Self::Proto),
             "make" | "makefile" => Some(Self::Make),
             "cmake" => Some(Self::CMake),
+            "typescript" | "ts" => Some(Self::TypeScript),
+            "tsx" => Some(Self::Tsx),
             _ => None,
         }
     }
@@ -64,8 +69,14 @@ impl Language {
             ),
             Self::Markdown => (
                 tree_sitter_md::LANGUAGE,
+                tree_sitter_md::HIGHLIGHT_QUERY_BLOCK,
                 tree_sitter_md::INJECTION_QUERY_BLOCK,
-                tree_sitter_md::INJECTION_QUERY_BLOCK,
+                "",
+            ),
+            Self::MarkdownInline => (
+                tree_sitter_md::INLINE_LANGUAGE,
+                tree_sitter_md::HIGHLIGHT_QUERY_INLINE,
+                tree_sitter_md::INJECTION_QUERY_INLINE,
                 "",
             ),
             Self::Toml => (
@@ -169,6 +180,18 @@ impl Language {
                 "",
             ),
             Self::CMake => (tree_sitter_cmake::LANGUAGE, "", "", ""),
+            Self::TypeScript => (
+                tree_sitter_typescript::LANGUAGE_TYPESCRIPT,
+                tree_sitter_typescript::HIGHLIGHTS_QUERY,
+                "",
+                tree_sitter_typescript::LOCALS_QUERY,
+            ),
+            Self::Tsx => (
+                tree_sitter_typescript::LANGUAGE_TSX,
+                tree_sitter_typescript::HIGHLIGHTS_QUERY,
+                "",
+                tree_sitter_typescript::LOCALS_QUERY,
+            ),
         };
 
         let language = tree_sitter::Language::new(language);

@@ -20,10 +20,6 @@ impl LineHighlightStyle {
         self.styles
             .iter()
             .map(|(range, style)| {
-                println!(
-                    "----------------- offset: {}, range: {:?}",
-                    self.offset, range
-                );
                 let mut run = text_style.clone().highlight(*style).to_run(range.len());
                 if let Some(marked_range) = marked_range {
                     if self.offset + range.start >= marked_range.start

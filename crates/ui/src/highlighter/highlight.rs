@@ -115,6 +115,9 @@ impl HighlightColors {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, JsonSchema, Serialize, Deserialize)]
 pub struct HighlightTheme {
     pub name: String,
+    #[serde(default)]
+    pub author: String,
+    #[serde(default)]
     pub mode: ThemeMode,
     #[serde(rename = "current_line.background")]
     pub current_line: Option<Hsla>,
@@ -129,7 +132,7 @@ impl Deref for HighlightTheme {
     }
 }
 
-const HIGHLIGHT_NAMES: [&str; 26] = [
+const HIGHLIGHT_NAMES: [&str; 27] = [
     "attribute",
     "comment",
     "constant",
@@ -150,6 +153,7 @@ const HIGHLIGHT_NAMES: [&str; 26] = [
     "punctuation.special",
     "string",
     "string.special",
+    "string.special.key",
     "tag",
     "type",
     "type.builtin",
@@ -220,17 +224,19 @@ impl Highlighter {
 
     /// Highlight a line and returns a vector of ranges and highlight styles.
     pub fn highlight(&self, line: &str, is_dark: bool) -> Vec<(Range<usize>, HighlightStyle)> {
+        let default_styles = vec![(0..line.len(), HighlightStyle::default())];
         let Some(config) = self.config.as_ref() else {
-            return vec![];
+            return default_styles;
         };
 
         let theme = self.theme(is_dark).clone();
         let mut highlighter = self.highlighter.borrow_mut();
         let Ok(highlights) = highlighter.highlight(config, line.as_bytes(), None, |_| None) else {
-            return vec![];
+            return default_styles;
         };
 
         let mut styles = vec![];
+        let mut last_range = 0..0;
         let mut current_range = None;
         let mut current_style = None;
         for event in highlights {
@@ -246,9 +252,13 @@ impl Highlighter {
                     }
                     HighlightEvent::HighlightEnd => {
                         if let (Some(range), Some(style)) = (current_range, current_style) {
-                            if !range.is_empty() {
-                                styles.push((range, style));
+                            if last_range.end < range.start {
+                                styles
+                                    .push((last_range.end..range.start, HighlightStyle::default()))
                             }
+
+                            styles.push((range.clone(), style));
+                            last_range = range;
                         }
 
                         current_range = None;
@@ -258,12 +268,10 @@ impl Highlighter {
             }
         }
 
-        // println!(
-        //     "----------------- len: {}, offset: {}, ranges: {:?}",
-        //     line.len(),
-        //     offset,
-        //     styles.iter().map(|(range, _)| range).collect::<Vec<_>>()
-        // );
+        // Append to first and end to let ranges to covert line len.
+        if last_range.end < line.len() {
+            styles.push((last_range.end..line.len(), HighlightStyle::default()));
+        }
 
         styles
     }
