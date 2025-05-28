@@ -1,4 +1,4 @@
-use gpui::{App, FontStyle, FontWeight, HighlightStyle, Hsla};
+use gpui::{App, FontWeight, HighlightStyle, Hsla};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -8,9 +8,139 @@ use std::{
 };
 use tree_sitter_highlight::{HighlightConfiguration, HighlightEvent, Highlighter};
 
+use super::Language;
 use crate::ThemeMode;
 
-use super::Language;
+const HIGHLIGHT_NAMES: [&str; 40] = [
+    "attribute",
+    "boolean",
+    "comment",
+    "comment.doc",
+    "constant",
+    "constructor",
+    "embedded",
+    "emphasis",
+    "emphasis.strong",
+    "enum",
+    "function",
+    "hint",
+    "keyword",
+    "label",
+    "link_text",
+    "link_uri",
+    "number",
+    "operator",
+    "predictive",
+    "preproc",
+    "primary",
+    "property",
+    "punctuation",
+    "punctuation.bracket",
+    "punctuation.delimiter",
+    "punctuation.list_marker",
+    "punctuation.special",
+    "string",
+    "string.escape",
+    "string.regex",
+    "string.special",
+    "string.special.symbol",
+    "tag",
+    "tag.doctype",
+    "text.literal",
+    "title",
+    "type",
+    "variable",
+    "variable.special",
+    "variant",
+];
+
+const DEFAULT_DARK: LazyLock<HighlightTheme> = LazyLock::new(|| {
+    let json = include_str!("./themes/dark.json");
+    serde_json::from_str(json).unwrap()
+});
+const DEFAULT_LIGHT: LazyLock<HighlightTheme> = LazyLock::new(|| {
+    let json = include_str!("./themes/light.json");
+    serde_json::from_str(json).unwrap()
+});
+
+/// Theme for Tree-sitter Highlight
+///
+/// https://docs.rs/tree-sitter-highlight/0.25.4/tree_sitter_highlight/
+#[derive(Debug, Clone, PartialEq, Eq, Hash, JsonSchema, Serialize, Deserialize)]
+pub struct SyntaxColors {
+    pub attribute: Option<ThemeStyle>,
+    pub boolean: Option<ThemeStyle>,
+    pub comment: Option<ThemeStyle>,
+    pub comment_doc: Option<ThemeStyle>,
+    pub constant: Option<ThemeStyle>,
+    pub constructor: Option<ThemeStyle>,
+    pub embedded: Option<ThemeStyle>,
+    pub emphasis: Option<ThemeStyle>,
+    #[serde(rename = "emphasis.strong")]
+    pub emphasis_strong: Option<ThemeStyle>,
+    #[serde(rename = "enum")]
+    pub enum_: Option<ThemeStyle>,
+    pub function: Option<ThemeStyle>,
+    pub hint: Option<ThemeStyle>,
+    pub keyword: Option<ThemeStyle>,
+    pub label: Option<ThemeStyle>,
+    #[serde(rename = "link_text")]
+    pub link_text: Option<ThemeStyle>,
+    #[serde(rename = "link_uri")]
+    pub link_uri: Option<ThemeStyle>,
+    pub number: Option<ThemeStyle>,
+    pub operator: Option<ThemeStyle>,
+    pub predictive: Option<ThemeStyle>,
+    pub preproc: Option<ThemeStyle>,
+    pub primary: Option<ThemeStyle>,
+    pub property: Option<ThemeStyle>,
+    pub punctuation: Option<ThemeStyle>,
+    #[serde(rename = "punctuation.bracket")]
+    pub punctuation_bracket: Option<ThemeStyle>,
+    #[serde(rename = "punctuation.delimiter")]
+    pub punctuation_delimiter: Option<ThemeStyle>,
+    #[serde(rename = "punctuation.list_marker")]
+    pub punctuation_list_marker: Option<ThemeStyle>,
+    #[serde(rename = "punctuation.special")]
+    pub punctuation_special: Option<ThemeStyle>,
+    pub string: Option<ThemeStyle>,
+    #[serde(rename = "string.escape")]
+    pub string_escape: Option<ThemeStyle>,
+    #[serde(rename = "string.regex")]
+    pub string_regex: Option<ThemeStyle>,
+    #[serde(rename = "string.special")]
+    pub string_special: Option<ThemeStyle>,
+    #[serde(rename = "string.special.symbol")]
+    pub string_special_symbol: Option<ThemeStyle>,
+    pub tag: Option<ThemeStyle>,
+    #[serde(rename = "tag.doctype")]
+    pub tag_doctype: Option<ThemeStyle>,
+    #[serde(rename = "text.literal")]
+    pub text_literal: Option<ThemeStyle>,
+    pub title: Option<ThemeStyle>,
+    #[serde(rename = "type")]
+    pub type_: Option<ThemeStyle>,
+    pub variable: Option<ThemeStyle>,
+    #[serde(rename = "variable.special")]
+    pub variable_special: Option<ThemeStyle>,
+    pub variant: Option<ThemeStyle>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, JsonSchema, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FontStyle {
+    Normal,
+    Italic,
+}
+
+impl From<FontStyle> for gpui::FontStyle {
+    fn from(style: FontStyle) -> Self {
+        match style {
+            FontStyle::Normal => gpui::FontStyle::Normal,
+            FontStyle::Italic => gpui::FontStyle::Italic,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, JsonSchema, Serialize, Deserialize)]
 pub struct ThemeStyle {
@@ -24,106 +154,58 @@ impl From<ThemeStyle> for HighlightStyle {
         HighlightStyle {
             color: style.color,
             font_weight: style.font_weight,
-            font_style: style.font_style,
+            font_style: style.font_style.map(Into::into),
             ..Default::default()
         }
     }
 }
 
-/// Theme for Tree-sitter Highlight
-///
-/// https://docs.rs/tree-sitter-highlight/0.25.4/tree_sitter_highlight/
-#[derive(Debug, Clone, PartialEq, Eq, Hash, JsonSchema, Serialize, Deserialize)]
-pub struct HighlightColors {
-    attribute: Option<ThemeStyle>,
-    comment: Option<ThemeStyle>,
-    constant: Option<ThemeStyle>,
-    #[serde(rename = "constant.builtin")]
-    constant_builtin: Option<ThemeStyle>,
-    constructor: Option<ThemeStyle>,
-    embedded: Option<ThemeStyle>,
-    function: Option<ThemeStyle>,
-    #[serde(rename = "function.builtin")]
-    function_builtin: Option<ThemeStyle>,
-    keyword: Option<ThemeStyle>,
-    module: Option<ThemeStyle>,
-    number: Option<ThemeStyle>,
-    operator: Option<ThemeStyle>,
-    property: Option<ThemeStyle>,
-    #[serde(rename = "property.builtin")]
-    property_builtin: Option<ThemeStyle>,
-    punctuation: Option<ThemeStyle>,
-    #[serde(rename = "punctuation.bracket")]
-    punctuation_bracket: Option<ThemeStyle>,
-    #[serde(rename = "punctuation.delimiter")]
-    punctuation_delimiter: Option<ThemeStyle>,
-    #[serde(rename = "punctuation.special")]
-    punctuation_special: Option<ThemeStyle>,
-    string: Option<ThemeStyle>,
-    #[serde(rename = "string.special")]
-    string_special: Option<ThemeStyle>,
-    tag: Option<ThemeStyle>,
-    #[serde(rename = "type")]
-    type_: Option<ThemeStyle>,
-    #[serde(rename = "type.builtin")]
-    type_builtin: Option<ThemeStyle>,
-    variable: Option<ThemeStyle>,
-    #[serde(rename = "variable.builtin")]
-    variable_builtin: Option<ThemeStyle>,
-    #[serde(rename = "variable.parameter")]
-    variable_parameter: Option<ThemeStyle>,
-    #[serde(rename = "text.title")]
-    text_title: Option<ThemeStyle>,
-    #[serde(rename = "text.uri")]
-    text_uri: Option<ThemeStyle>,
-    #[serde(rename = "text.reference")]
-    text_reference: Option<ThemeStyle>,
-    #[serde(rename = "text.strong")]
-    text_strong: Option<ThemeStyle>,
-    #[serde(rename = "text.emphasis")]
-    text_emphasis: Option<ThemeStyle>,
-    #[serde(rename = "text.literal")]
-    text_literal: Option<ThemeStyle>,
-}
-
-impl HighlightColors {
+impl SyntaxColors {
     pub fn style(&self, name: &str) -> Option<HighlightStyle> {
         match name {
-            "attribute" => Some(self.attribute),
-            "comment" => Some(self.comment),
-            "constant" => Some(self.constant),
-            "constant.builtin" => Some(self.constant_builtin),
-            "constructor" => Some(self.constructor),
-            "embedded" => Some(self.embedded),
-            "function" => Some(self.function),
-            "function.builtin" => Some(self.function_builtin),
-            "keyword" => Some(self.keyword),
-            "module" => Some(self.module),
-            "number" => Some(self.number),
-            "operator" => Some(self.operator),
-            "property" => Some(self.property),
-            "property.builtin" => Some(self.property_builtin),
-            "punctuation" => Some(self.punctuation),
-            "punctuation.bracket" => Some(self.punctuation_bracket),
-            "punctuation.delimiter" => Some(self.punctuation_delimiter),
-            "punctuation.special" => Some(self.punctuation_special),
-            "string" => Some(self.string),
-            "string.special" => Some(self.string_special),
-            "tag" => Some(self.tag),
-            "type" => Some(self.type_),
-            "type.builtin" => Some(self.type_builtin),
-            "variable" => Some(self.variable),
-            "variable.builtin" => Some(self.variable_builtin),
-            "variable.parameter" => Some(self.variable_parameter),
-            "text.title" => Some(self.text_title),
-            "text.uri" => Some(self.text_uri),
-            "text.reference" => Some(self.text_reference),
-            "text.strong" => Some(self.text_strong),
-            "text.emphasis" => Some(self.text_emphasis),
-            "text.literal" => Some(self.text_literal),
-            _ => None,
+            "attribute" => self.attribute,
+            "boolean" => self.boolean,
+            "comment" => self.comment,
+            "comment.doc" => self.comment_doc,
+            "constant" => self.constant,
+            "constructor" => self.constructor,
+            "embedded" => self.embedded,
+            "emphasis" => self.emphasis,
+            "emphasis.strong" => self.emphasis_strong,
+            "enum" => self.enum_,
+            "function" => self.function,
+            "hint" => self.hint,
+            "keyword" => self.keyword,
+            "label" => self.label,
+            "link_text" => self.link_text,
+            "link_uri" => self.link_uri,
+            "number" => self.number,
+            "operator" => self.operator,
+            "predictive" => self.predictive,
+            "preproc" => self.preproc,
+            "primary" => self.primary,
+            "property" => self.property,
+            "punctuation" => self.punctuation,
+            "punctuation.bracket" => self.punctuation_bracket,
+            "punctuation.delimiter" => self.punctuation_delimiter,
+            "punctuation.list_marker" => self.punctuation_list_marker,
+            "punctuation.special" => self.punctuation_special,
+            "string" => self.string,
+            "string.escape" => self.string_escape,
+            "string.regex" => self.string_regex,
+            "string.special" => self.string_special,
+            "string.special.symbol" => self.string_special_symbol,
+            "tag" => self.tag,
+            "tag.doctype" => self.tag_doctype,
+            "text.literal" => self.text_literal,
+            "title" => self.title,
+            "type" => self.type_,
+            "variable" => self.variable,
+            "variable.special" => self.variable_special,
+            "variant" => self.variant,
+            _ => unreachable!("unknown highlight name: {}", name),
         }
-        .and_then(|s| s.map(|s| s.into()))
+        .map(|s| s.into())
     }
 
     #[inline]
@@ -133,69 +215,42 @@ impl HighlightColors {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, JsonSchema, Serialize, Deserialize)]
+pub struct HighlightThemeStyle {
+    #[serde(rename = "editor.background")]
+    pub background: Option<Hsla>,
+    #[serde(rename = "editor.foreground")]
+    pub foreground: Option<Hsla>,
+    #[serde(rename = "editor.active_line.background")]
+    pub active_line: Option<Hsla>,
+    #[serde(rename = "editor.line_number")]
+    pub line_number: Option<Hsla>,
+    #[serde(rename = "editor.active_line_number")]
+    pub active_line_number: Option<Hsla>,
+    pub syntax: SyntaxColors,
+}
+
+/// Theme for Tree-sitter Highlight from JSON theme file.
+///
+/// This json is compatible with the Zed theme format.
+///
+/// https://zed.dev/docs/extensions/languages#syntax-highlighting
+#[derive(Debug, Clone, PartialEq, Eq, Hash, JsonSchema, Serialize, Deserialize)]
 pub struct HighlightTheme {
     pub name: String,
     #[serde(default)]
     pub author: String,
     #[serde(default)]
-    pub mode: ThemeMode,
-    #[serde(rename = "current_line.background")]
-    pub current_line: Option<Hsla>,
-    pub syntax: HighlightColors,
+    pub appearance: ThemeMode,
+    pub style: HighlightThemeStyle,
 }
 
 impl Deref for HighlightTheme {
-    type Target = HighlightColors;
+    type Target = SyntaxColors;
 
     fn deref(&self) -> &Self::Target {
-        &self.syntax
+        &self.style.syntax
     }
 }
-
-const HIGHLIGHT_NAMES: [&str; 33] = [
-    "attribute",
-    "comment",
-    "constant",
-    "constant.builtin",
-    "constructor",
-    "embedded",
-    "function",
-    "function.builtin",
-    "keyword",
-    "module",
-    "number",
-    "operator",
-    "property",
-    "property.builtin",
-    "punctuation",
-    "punctuation.bracket",
-    "punctuation.delimiter",
-    "punctuation.special",
-    "string",
-    "string.special",
-    "string.special.key",
-    "tag",
-    "type",
-    "type.builtin",
-    "variable",
-    "variable.builtin",
-    "variable.parameter",
-    "text.title",
-    "text.uri",
-    "text.reference",
-    "text.strong",
-    "text.emphasis",
-    "text.literal",
-];
-
-const DEFAULT_DARK: LazyLock<HighlightTheme> = LazyLock::new(|| {
-    let json = include_str!("./themes/dark.json");
-    serde_json::from_str(json).unwrap()
-});
-const DEFAULT_LIGHT: LazyLock<HighlightTheme> = LazyLock::new(|| {
-    let json = include_str!("./themes/light.json");
-    serde_json::from_str(json).unwrap()
-});
 
 impl HighlightTheme {
     pub fn default_dark() -> Self {
@@ -211,6 +266,7 @@ pub fn init(cx: &mut App) {
     cx.set_global(LanguageRegistry::new());
 }
 
+/// Registry for code highlighter languages.
 #[derive(Clone)]
 pub struct LanguageRegistry {
     highlighter: Arc<RwLock<Highlighter>>,
@@ -270,12 +326,14 @@ impl LanguageRegistry {
         None
     }
 
-    pub fn set_theme(&mut self, light_theme: &HighlightTheme, dark_theme: &HighlightTheme) {
+    #[allow(unused)]
+    pub(crate) fn set_theme(&mut self, light_theme: &HighlightTheme, dark_theme: &HighlightTheme) {
         self.light_theme = Arc::new(light_theme.clone());
         self.dark_theme = Arc::new(dark_theme.clone());
     }
 
-    pub fn theme(&self, is_dark: bool) -> &Arc<HighlightTheme> {
+    #[allow(unused)]
+    pub(crate) fn theme(&self, is_dark: bool) -> &Arc<HighlightTheme> {
         if is_dark {
             &self.dark_theme
         } else {
@@ -323,7 +381,7 @@ impl LanguageRegistry {
                     current_range = Some(start..end);
                 }
                 HighlightEvent::HighlightStart(scope) => {
-                    if let Some(style) = theme.syntax.style_for_index(scope.0) {
+                    if let Some(style) = theme.style_for_index(scope.0) {
                         current_style = Some(style);
                     }
                 }

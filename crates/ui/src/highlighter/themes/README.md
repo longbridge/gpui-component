@@ -1,0 +1,1 @@
+The default theme based on [zed-theme-macos-classic](https://github.com/huacnlee/zed-theme-macos-classic).

@@ -705,7 +705,10 @@ impl Element for TextElement {
                 // Paint the current line background
                 if prepaint.current_line_index == ix {
                     let is_dark = cx.theme().is_dark();
-                    if let Some(bg_color) = LanguageRegistry::global(cx).theme(is_dark).current_line
+                    if let Some(bg_color) = LanguageRegistry::global(cx)
+                        .theme(is_dark)
+                        .style
+                        .active_line
                     {
                         window.paint_quad(fill(
                             Bounds::new(p, size(bounds.size.width, line_height)),

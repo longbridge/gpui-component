@@ -85,7 +85,7 @@ impl Language {
         match s {
             "json" | "jsonc" => Some(Self::Json),
             "markdown" | "md" | "mdx" => Some(Self::Markdown),
-            "markdown_inline" => Some(Self::MarkdownInline),
+            "markdown_inline" | "markdown-inline" => Some(Self::MarkdownInline),
             "toml" => Some(Self::Toml),
             "yaml" | "yml" => Some(Self::Yaml),
             "rust" | "rs" => Some(Self::Rust),
@@ -120,7 +120,7 @@ impl Language {
     pub(super) fn injection_languages(&self) -> Vec<Self> {
         match self {
             Self::Markdown => vec![Self::MarkdownInline, Self::Html, Self::Toml, Self::Yaml],
-            Self::MarkdownInline => vec![Self::Html],
+            Self::MarkdownInline => vec![],
             _ => vec![],
         }
     }
@@ -290,7 +290,7 @@ impl Language {
 
     pub fn build(&self) -> HighlightConfiguration {
         let (language, query, injection, locals) = self._language_info();
-        let name = language.name().unwrap_or("text");
+        let name = language.name().unwrap_or("plaintext");
         let config = tree_sitter_highlight::HighlightConfiguration::new(
             language, name, query, injection, locals,
         )
