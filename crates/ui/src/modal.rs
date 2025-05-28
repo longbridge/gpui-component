@@ -135,7 +135,7 @@ impl Modal {
             overlay: true,
             keyboard: true,
             layer_ix: 0,
-            overlay_visible: true,
+            overlay_visible: false,
             on_close: Rc::new(|_, _, _| {}),
             on_ok: None,
             on_cancel: Rc::new(|_, _, _| true),

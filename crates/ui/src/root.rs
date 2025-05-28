@@ -356,35 +356,44 @@ impl Root {
         let root = window.root::<Root>()??;
 
         let active_modals = root.read(cx).active_modals.clone();
-        let mut has_overlay = false;
 
         if active_modals.is_empty() {
             return None;
         }
 
-        Some(
-            div().children(active_modals.iter().enumerate().map(|(i, active_modal)| {
+        let mut show_overlay_ix = None;
+
+        let mut modals = active_modals
+            .iter()
+            .enumerate()
+            .map(|(i, active_modal)| {
                 let mut modal = Modal::new(window, cx);
 
                 modal = (active_modal.builder)(modal, window, cx);
-                modal.layer_ix = i;
+
                 // Give the modal the focus handle, because `modal` is a temporary value, is not possible to
                 // keep the focus handle in the modal.
                 //
                 // So we keep the focus handle in the `active_modal`, this is owned by the `Root`.
                 modal.focus_handle = active_modal.focus_handle.clone();
 
-                // Keep only have one overlay, we only render the first modal with overlay.
-                if has_overlay {
-                    modal.overlay_visible = false;
-                }
+                modal.layer_ix = i;
+                // Find the modal which one needs to show overlay.
                 if modal.has_overlay() {
-                    has_overlay = true;
+                    show_overlay_ix = Some(i);
                 }
 
                 modal
-            })),
-        )
+            })
+            .collect::<Vec<_>>();
+
+        if let Some(ix) = show_overlay_ix {
+            if let Some(modal) = modals.get_mut(ix) {
+                modal.overlay_visible = true;
+            }
+        }
+
+        Some(div().children(modals))
     }
 
     /// Return the root view of the Root.

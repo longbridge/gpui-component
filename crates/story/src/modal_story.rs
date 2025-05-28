@@ -144,7 +144,7 @@ impl ModalStory {
                                         modal
                                             .title("Other Modal")
                                             .child("This is another modal.")
-                                            .min_h(px(300.))
+                                            .min_h(px(100.))
                                             .overlay(overlay)
                                             .keyboard(keyboard)
                                             .show_close(modal_show_close)
