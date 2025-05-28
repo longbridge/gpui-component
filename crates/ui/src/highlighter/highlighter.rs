@@ -18,7 +18,7 @@ pub struct SyntaxHighlighter {
     highlighter: Highlighter,
     config: Option<Arc<HighlightConfiguration>>,
     /// Cache of highlight results: stable_node_id -> Vec<(Range<usize>, named scope)>
-    cache: HashMap<Range<usize>, HighlightStyle>,
+    cache: Vec<(Range<usize>, HighlightStyle)>,
 }
 
 impl SyntaxHighlighter {
@@ -37,7 +37,7 @@ impl SyntaxHighlighter {
             text: SharedString::new(""),
             highlighter: Highlighter::new(),
             config: None,
-            cache: HashMap::new(),
+            cache: vec![],
         }
     }
 
@@ -122,26 +122,49 @@ impl SyntaxHighlighter {
                 let highlight_name = self.query.capture_names()[cap.index as usize];
 
                 if let Some(style) = theme.style(highlight_name) {
-                    self.cache.insert(node_range, style.into());
+                    self.cache.push((node_range, style.clone()));
                 } else {
-                    self.cache.insert(node_range, HighlightStyle::default());
+                    self.cache.push((node_range, HighlightStyle::default()));
                 }
             }
         }
     }
 
-    pub fn styles(&self, range: Range<usize>) -> Vec<(Range<usize>, HighlightStyle)> {
+    /// The argument `range` is the range of the line in the text.
+    ///
+    /// Returns `range` is the range in the line.
+    pub fn styles(&self, range: &Range<usize>) -> Vec<(Range<usize>, HighlightStyle)> {
         let mut styles = vec![];
         let start_offset = range.start;
+        let line_len = range.len();
 
+        let mut last_end = 0;
         for (node_range, style) in self.cache.iter() {
-            if range.contains(&node_range.start) && range.contains(&node_range.end) {
-                styles.push((
-                    node_range.start.saturating_sub(start_offset)
-                        ..node_range.end.saturating_sub(start_offset),
-                    style.clone(),
-                ));
+            if node_range.start < range.start {
+                continue;
             }
+
+            if node_range.end > range.end {
+                break;
+            }
+
+            let range_in_line = node_range.start.saturating_sub(start_offset)
+                ..node_range.end.saturating_sub(start_offset);
+
+            if range_in_line.start > last_end {
+                styles.push((last_end..range_in_line.start, HighlightStyle::default()));
+            }
+
+            last_end = range_in_line.end;
+            styles.push((range_in_line, style.clone()));
+        }
+
+        if last_end == 0 {
+            styles.insert(0, (0..line_len, HighlightStyle::default()));
+        }
+
+        if last_end < line_len {
+            styles.push((last_end..line_len, HighlightStyle::default()));
         }
 
         styles

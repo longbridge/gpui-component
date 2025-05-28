@@ -323,12 +323,14 @@ impl TextElement {
     }
 
     fn highlight_lines(&mut self, cx: &mut App) -> Option<Vec<LineHighlightStyle>> {
-        self.input.update(cx, |state, cx| match &mut state.mode {
+        self.input.update(cx, |state, _| match &mut state.mode {
             InputMode::CodeEditor { highlighter, .. } => {
                 let mut offset = 0;
                 let mut lines = vec![];
                 for line in state.text.split('\n') {
-                    let styles = highlighter.borrow().styles(offset..offset + line.len());
+                    let range = offset..offset + line.len();
+                    let styles = highlighter.borrow().styles(&range);
+
                     lines.push(LineHighlightStyle {
                         offset,
                         styles: Rc::new(styles),
