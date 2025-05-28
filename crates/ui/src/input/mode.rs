@@ -5,7 +5,6 @@ use gpui::{DefiniteLength, SharedString};
 
 use crate::highlighter::SyntaxHighlighter;
 
-use super::code_highlighter::CodeHighlighter;
 use super::text_wrapper::TextWrapper;
 
 #[derive(Debug, Copy, Clone)]

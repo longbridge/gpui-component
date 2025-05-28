@@ -25,7 +25,6 @@ use gpui::{
 use super::{
     blink_cursor::BlinkCursor,
     change::Change,
-    code_highlighter::CodeHighlighter,
     element::TextElement,
     mask_pattern::MaskPattern,
     mode::{InputMode, TabSize},

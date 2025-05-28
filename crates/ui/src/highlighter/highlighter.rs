@@ -1,7 +1,7 @@
 use gpui::{App, HighlightStyle, SharedString};
-use std::{collections::HashMap, ops::Range, rc::Rc, sync::Arc};
+use std::{ops::Range, sync::Arc};
 use tree_sitter::{InputEdit, Parser, Point, Query, QueryCursor, StreamingIterator as _, Tree};
-use tree_sitter_highlight::{HighlightConfiguration, HighlightEvent, Highlighter};
+use tree_sitter_highlight::{HighlightConfiguration, Highlighter};
 
 use crate::ActiveTheme as _;
 

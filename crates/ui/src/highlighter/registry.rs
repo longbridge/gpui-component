@@ -1,4 +1,4 @@
-use gpui::{App, FontWeight, HighlightStyle, Hsla, SharedString};
+use gpui::{App, FontWeight, HighlightStyle, Hsla};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{
