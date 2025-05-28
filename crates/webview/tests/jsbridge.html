@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>JSBridge</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 20px;
+      }
+      h1 {
+        color: #333;
+      }
+      button {
+        background-color: #007bff;
+        color: white;
+        border: none;
+        padding: 10px 15px;
+        cursor: pointer;
+        margin: 5px 0;
+      }
+      button:hover {
+        background-color: #0056b3;
+      }
+      p {
+        margin-top: 20px;
+        font-weight: bold;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>JSBridge</h1>
+    <div>
+      <h3>Call Native Functions</h3>
+      <button onclick="toUppercase()">toUppercase</button>
+      <button onclick="addInt()">1+2</button>
+      <button onclick="parseIntOk()">parseInt Ok</button>
+      <button onclick="parseIntError()">parseInt Error</button>
+      <button onclick="sleep()">sleep(async)</button>
+      <button onclick="emit()">emit</button>
+    </div>
+    <p id="output"></p>
+
+    <script>
+      jsBridge.addEventListener((message) => {
+        document.getElementById("output").textContent =
+          "Message from native: " + JSON.stringify(message);
+      });
+
+      function doCall(promise) {
+        then((response) => {
+          document.getElementById("output").textContent =
+            "Response from native: " + response;
+        }).catch((error) => {
+          document.getElementById("output").textContent = "Error: " + error;
+        });
+      }
+
+      function call(f) {
+        if (jsBridge) {
+          f()
+            .then((response) => {
+              document.getElementById("output").textContent =
+                "Response from native: " + response;
+            })
+            .catch((error) => {
+              document.getElementById("output").textContent = "Error: " + error;
+            });
+          document.getElementById("output").textContent =
+            "Request sent to native application.";
+        } else {
+          document.getElementById("output").textContent =
+            "jsBridge is not available.";
+        }
+      }
+
+      function toUppercase() {
+        call(() => jsBridge.toUppercase("hello world"));
+      }
+
+      function addInt() {
+        call(() => jsBridge.addInt(1, 2));
+      }
+
+      function parseIntOk() {
+        call(() => jsBridge.parseInt("123"));
+      }
+
+      function parseIntError() {
+        call(() => jsBridge.parseInt("abc"));
+      }
+
+      function sleep() {
+        call(() => jsBridge.sleep(2000));
+      }
+
+      function emit() {
+        jsBridge.emit();
+      }
+    </script>
+  </body>
+</html>

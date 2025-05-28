@@ -1,0 +1,10 @@
+[package]
+name = "wef-gpui-example"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+gpui-webview = { path = "../../" }
+gpui.workspace = true
+gpui-component.workspace = true
+serde = { version = "1.0.219", features = ["derive"] }

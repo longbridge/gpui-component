@@ -1,0 +1,12 @@
+edition = "2021"
+newline_style = "unix"
+# comments
+normalize_comments = true
+wrap_comments = true
+format_code_in_doc_comments = true
+# imports
+imports_granularity = "Crate"
+group_imports = "StdExternalCrate"
+# report
+#report_fixme="Unnumbered"
+#report_todo="Unnumbered"

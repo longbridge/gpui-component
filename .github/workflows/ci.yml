@@ -6,6 +6,8 @@ on:
       - "*"
     tags:
       - "*"
+env:
+  CEF_VERSION: "136.1.6+g1ac1b14+chromium-136.0.7103.114"
 
 jobs:
   test:
@@ -17,10 +19,13 @@ jobs:
         include:
           - target: aarch64-apple-darwin
             run_on: macos-latest
+            cef_arch: macosarm64
           - target: x86_64-linux-gnu
             run_on: ubuntu-latest
+            cef_arch: linux64
           - target: x86_64-windows-msvc
             run_on: windows-latest
+            cef_arch: windows64
     runs-on: ${{ matrix.run_on }}
     steps:
       - uses: actions/checkout@v4
@@ -39,7 +44,28 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
+            ~/.cef
           key: test-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+      - name: Cache CEF
+        id: cache-cef
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/cef_binary_${{ env.CEF_VERSION }}_${{ matrix.cef_arch }}
+          key: cef-${{ env.CEF_VERSION }}-${{ matrix.cef_arch }}
+      - name: Download CEF
+        if: ${{ !steps.cache-cef.outputs.cache-hit }}
+        run: |
+          mkdir -p $HOME/.local/share
+          cargo run -p wef-tool download-cef $HOME/.local/share
+      - name: Set CEF_ROOT
+        if: ${{ matrix.run_on != 'windows-latest' }}
+        run: |
+          echo CEF_ROOT=$HOME/.local/share/cef_binary_${{ env.CEF_VERSION }}_${{ matrix.cef_arch }} >> $GITHUB_ENV
+      - name: Set CEF_ROOT on windows
+        if: ${{ matrix.run_on == 'windows-latest' }}
+        run: |
+          echo CEF_ROOT=$HOME\.local\share\cef_binary_${{ env.CEF_VERSION }}_${{ matrix.cef_arch }} >> $env:GITHUB_ENV
+          dir $HOME/.local/share
       - name: Typo check
         if: ${{ matrix.run_on == 'macos-latest' }}
         run: |
@@ -49,6 +75,17 @@ jobs:
         if: ${{ matrix.run_on == 'macos-latest' }}
         run: |
           cargo clippy -- --deny warnings
-      - name: Build test
+      - name: Test Linux
+        if: ${{ matrix.run_on == 'ubuntu-latest' }}
+        run: |
+          cargo run -p wef-tool add-framework target/debug
+          cargo test --all
+      - name: Test Windows
+        if: ${{ matrix.run_on == 'windows-latest' }}
+        run: |
+          cargo run -p wef-tool add-framework target/debug
+          cargo test --all
+      - name: Test MacOS
+        if: ${{ matrix.run_on == 'macos-latest' }}
         run: |
           cargo test --all
