@@ -1,17 +1,18 @@
 use gpui::{App, HighlightStyle, SharedString};
 use std::{ops::Range, sync::Arc};
-use tree_sitter::{InputEdit, Parser, Point, Query, QueryCursor, StreamingIterator as _, Tree};
+use tree_sitter::{
+    InputEdit, Node, Parser, Point, Query, QueryCursor, StreamingIterator as _, Tree,
+};
 use tree_sitter_highlight::{HighlightConfiguration, Highlighter};
 
-use crate::ActiveTheme as _;
-
-use super::{Language, LanguageRegistry};
+use super::{HighlightTheme, Language};
 
 /// A syntax highlighter that supports incremental parsing, multiline text,
 /// and caching of highlight results.
 pub struct SyntaxHighlighter {
     language: Option<Language>,
     query: Option<Query>,
+    injection_queries: Option<Vec<Query>>,
     parser: Parser,
     old_tree: Option<Tree>,
     text: SharedString,
@@ -20,7 +21,7 @@ pub struct SyntaxHighlighter {
     /// Cache of highlight, the range is offset of the token in the tree.
     ///
     /// The Vec is ordered by the range from 0 to the end of the line.
-    cache: Vec<(Range<usize>, HighlightStyle)>,
+    cache: Vec<(Range<usize>, String)>,
 }
 
 impl SyntaxHighlighter {
@@ -36,6 +37,8 @@ impl SyntaxHighlighter {
         SyntaxHighlighter {
             language,
             query: language.map(|l| l.query()),
+            injection_queries: language
+                .map(|l| l.injection_languages().iter().map(|l| l.query()).collect()),
             parser,
             old_tree: None,
             text: SharedString::new(""),
@@ -58,6 +61,8 @@ impl SyntaxHighlighter {
 
         self.language = language;
         self.query = language.map(|l| l.query());
+        self.injection_queries =
+            language.map(|l| l.injection_languages().iter().map(|l| l.query()).collect());
         self.old_tree = None;
         self.text = SharedString::new("");
         self.highlighter = Highlighter::new();
@@ -106,7 +111,7 @@ impl SyntaxHighlighter {
         self.build_styles(cx);
     }
 
-    fn build_styles(&mut self, cx: &mut App) {
+    fn build_styles(&mut self, _: &mut App) {
         let Some(tree) = &self.old_tree else {
             return;
         };
@@ -116,8 +121,6 @@ impl SyntaxHighlighter {
         };
 
         self.cache.clear();
-
-        let theme = LanguageRegistry::global(cx).theme(cx.theme().is_dark());
         let mut query_cursor = QueryCursor::new();
 
         let mut matches = query_cursor.matches(&query, tree.root_node(), self.text.as_bytes());
@@ -135,27 +138,61 @@ impl SyntaxHighlighter {
 
                 let highlight_name = query.capture_names()[cap.index as usize];
 
-                last_end = node_range.end;
-                if let Some(style) = theme.style(highlight_name) {
-                    self.cache.push((node_range, style.clone()));
+                if highlight_name.starts_with("injection.") {
+                    println!("injection. {}", highlight_name);
+                    self.cache.extend(self.handle_injection(node));
                 } else {
-                    self.cache.push((node_range, HighlightStyle::default()));
+                    self.cache
+                        .push((node_range.clone(), highlight_name.to_string()));
+                }
+                last_end = node_range.end;
+            }
+        }
+    }
+
+    fn handle_injection(&self, node: Node) -> Vec<(Range<usize>, String)> {
+        let mut cache = vec![];
+        let Some(injection_queries) = &self.injection_queries else {
+            return cache;
+        };
+        let Some(query) = &self.query else {
+            return cache;
+        };
+
+        let mut query_cursor = QueryCursor::new();
+
+        for inj_query in injection_queries.iter() {
+            let mut matches = query_cursor.matches(inj_query, node, self.text.as_bytes());
+            while let Some(m) = matches.next() {
+                for cap in m.captures {
+                    let content_node = cap.node;
+                    let highlight_name = query.capture_names()[cap.index as usize];
+
+                    let content_range: Range<usize> =
+                        (content_node.start_byte()..content_node.end_byte()).into();
+                    cache.push((content_range, highlight_name.to_string()));
                 }
             }
         }
+
+        cache
     }
 
     /// The argument `range` is the range of the line in the text.
     ///
     /// Returns `range` is the range in the line.
-    pub fn styles(&self, range: &Range<usize>) -> Vec<(Range<usize>, HighlightStyle)> {
+    pub fn styles(
+        &self,
+        range: &Range<usize>,
+        theme: &HighlightTheme,
+    ) -> Vec<(Range<usize>, HighlightStyle)> {
         let mut styles = vec![];
         let start_offset = range.start;
         let line_len = range.len();
 
         let mut last_range = 0..0;
         // NOTE: the ranges in the cache may have duplicates, so we need to merge them.
-        for (node_range, style) in self.cache.iter() {
+        for (node_range, highlight_name) in self.cache.iter() {
             if node_range.start < range.start {
                 continue;
             }
@@ -175,7 +212,9 @@ impl SyntaxHighlighter {
                 ));
             }
 
-            styles.push((range_in_line.clone(), style.clone()));
+            let style = theme.style(&highlight_name).unwrap_or_default();
+
+            styles.push((range_in_line.clone(), style));
             last_range = range_in_line;
         }
 

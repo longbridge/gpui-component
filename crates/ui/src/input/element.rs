@@ -323,13 +323,16 @@ impl TextElement {
     }
 
     fn highlight_lines(&mut self, cx: &mut App) -> Option<Vec<LineHighlightStyle>> {
+        let theme = LanguageRegistry::global(cx)
+            .theme(cx.theme().is_dark())
+            .clone();
         self.input.update(cx, |state, _| match &mut state.mode {
             InputMode::CodeEditor { highlighter, .. } => {
                 let mut offset = 0;
                 let mut lines = vec![];
                 for line in state.text.split('\n') {
                     let range = offset..offset + line.len();
-                    let styles = highlighter.borrow().styles(&range);
+                    let styles = highlighter.borrow().styles(&range, &theme);
 
                     lines.push(LineHighlightStyle {
                         offset,
