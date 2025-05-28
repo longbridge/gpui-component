@@ -135,14 +135,14 @@ impl Language {
             ),
             Self::Markdown => (
                 tree_sitter_md::LANGUAGE,
-                tree_sitter_md::HIGHLIGHT_QUERY_BLOCK,
-                tree_sitter_md::INJECTION_QUERY_BLOCK,
+                include_str!("languages/markdown/highlights.scm"),
+                include_str!("languages/markdown/injections.scm"),
                 "",
             ),
             Self::MarkdownInline => (
                 tree_sitter_md::INLINE_LANGUAGE,
-                tree_sitter_md::HIGHLIGHT_QUERY_INLINE,
-                tree_sitter_md::INJECTION_QUERY_INLINE,
+                include_str!("languages/markdown_inline/highlights.scm"),
+                include_str!("languages/markdown_inline/injections.scm"),
                 "",
             ),
             Self::Toml => (
