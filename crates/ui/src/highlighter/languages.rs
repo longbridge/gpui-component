@@ -1,6 +1,5 @@
 use gpui::SharedString;
 use tree_sitter::Query;
-use tree_sitter_highlight::HighlightConfiguration;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, enum_iterator::Sequence)]
 pub enum Language {
@@ -36,6 +35,29 @@ pub enum Language {
     Ejs,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LanguageConfig {
+    pub language: tree_sitter::Language,
+    pub highlights: SharedString,
+    pub injections: SharedString,
+    pub locals: SharedString,
+}
+
+impl LanguageConfig {
+    pub fn new(
+        language: tree_sitter::Language,
+        highlights: &str,
+        injections: &str,
+        locals: &str,
+    ) -> Self {
+        Self {
+            language,
+            highlights: SharedString::from(highlights.to_string()),
+            injections: SharedString::from(injections.to_string()),
+            locals: SharedString::from(locals.to_string()),
+        }
+    }
+}
 impl From<Language> for SharedString {
     fn from(language: Language) -> Self {
         language.name().into()
@@ -118,6 +140,7 @@ impl Language {
         }
     }
 
+    #[allow(unused)]
     pub(super) fn injection_languages(&self) -> Vec<Self> {
         match self {
             Self::Markdown => vec![Self::MarkdownInline, Self::Html, Self::Toml, Self::Yaml],
@@ -127,14 +150,14 @@ impl Language {
     }
 
     pub(super) fn query(&self) -> Query {
-        let (language, query, _, _) = self.language_info();
-        Query::new(&language, query).unwrap()
+        let config = self.config();
+        Query::new(&config.language, &config.highlights).unwrap()
     }
 
     /// Return the language info for the language.
     ///
     /// (language, query, injection, locals)
-    pub(super) fn language_info(&self) -> (tree_sitter::Language, &str, &str, &str) {
+    pub(super) fn config(&self) -> LanguageConfig {
         let (language, query, injection, locals) = match self {
             Self::Json => (
                 tree_sitter_json::LANGUAGE,
@@ -294,26 +317,8 @@ impl Language {
         };
 
         let language = tree_sitter::Language::new(language);
-        (language, query, injection, locals)
-    }
 
-    pub fn build(&self) -> HighlightConfiguration {
-        let (language, query, injection, locals) = self.language_info();
-        let name = language.name().unwrap_or("plaintext");
-        let config = tree_sitter_highlight::HighlightConfiguration::new(
-            language, name, query, injection, locals,
-        )
-        .ok()
-        .unwrap_or_else(|| panic!("failed to build `tree_sitter_highlight::HighlightConfiguration` for default language {}",
-            name));
-
-        config
-    }
-}
-
-impl From<Language> for HighlightConfiguration {
-    fn from(language: Language) -> Self {
-        language.build()
+        LanguageConfig::new(language, query, injection, locals)
     }
 }
 

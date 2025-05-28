@@ -3,12 +3,11 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
-    ops::{Deref, Range},
-    sync::{Arc, LazyLock, RwLock},
+    ops::Deref,
+    sync::{Arc, LazyLock},
 };
-use tree_sitter_highlight::{HighlightConfiguration, HighlightEvent, Highlighter};
 
-use super::Language;
+use super::LanguageConfig;
 use crate::ThemeMode;
 
 pub(super) const HIGHLIGHT_NAMES: [&str; 40] = [
@@ -273,8 +272,7 @@ pub fn init(cx: &mut App) {
 /// Registry for code highlighter languages.
 #[derive(Clone)]
 pub struct LanguageRegistry {
-    highlighter: Arc<RwLock<Highlighter>>,
-    languages: HashMap<String, Arc<HighlightConfiguration>>,
+    languages: HashMap<String, LanguageConfig>,
     pub(crate) light_theme: Arc<HighlightTheme>,
     pub(crate) dark_theme: Arc<HighlightTheme>,
 }
@@ -292,42 +290,14 @@ impl LanguageRegistry {
 
     pub fn new() -> Self {
         Self {
-            highlighter: Arc::new(RwLock::new(Highlighter::new())),
             languages: HashMap::new(),
             light_theme: Arc::new(HighlightTheme::default_light()),
             dark_theme: Arc::new(HighlightTheme::default_dark()),
         }
     }
 
-    pub fn register(
-        &mut self,
-        lang: &str,
-        config: impl Into<HighlightConfiguration>,
-    ) -> Arc<HighlightConfiguration> {
-        let mut config = config.into();
-        config.configure(&HIGHLIGHT_NAMES);
-        let config = Arc::new(config);
-
+    pub fn register(&mut self, lang: &str, config: &LanguageConfig) {
         self.languages.insert(lang.to_string(), config.clone());
-        config
-    }
-
-    pub(crate) fn with_language(&mut self, lang: &str) -> Option<Arc<HighlightConfiguration>> {
-        if let Some(config) = self.languages.get(lang) {
-            return Some(config.clone());
-        }
-
-        if let Some(language) = Language::from_str(&lang) {
-            let config = self.register(lang, language.build());
-
-            for injection_lang in language.injection_languages() {
-                self.register(injection_lang.name(), injection_lang.build());
-            }
-
-            return Some(config);
-        }
-
-        None
     }
 
     #[allow(unused)]
@@ -343,74 +313,5 @@ impl LanguageRegistry {
         } else {
             &self.light_theme
         }
-    }
-
-    fn injection_callback(&self, lang: &str) -> Option<&HighlightConfiguration> {
-        if let Some(config) = self.languages.get(lang) {
-            return Some(config.as_ref());
-        }
-
-        None
-    }
-
-    /// Highlight a line and returns a vector of ranges and highlight styles.
-    ///
-    /// The Ranges in Vec is connected all bytes offsets of the line.
-    pub fn highlight(
-        &mut self,
-        lang: &str,
-        line: &str,
-        is_dark: bool,
-    ) -> Vec<(Range<usize>, HighlightStyle)> {
-        let default_styles = vec![(0..line.len(), HighlightStyle::default())];
-        let config = self.with_language(lang).unwrap();
-
-        let theme = self.theme(is_dark).clone();
-        let mut highlighter = self.highlighter.write().unwrap();
-        let Ok(highlights) =
-            highlighter.highlight(config.as_ref(), line.as_bytes(), None, |lang| {
-                self.injection_callback(lang)
-            })
-        else {
-            return default_styles;
-        };
-
-        let mut styles = vec![];
-        let mut last_range = 0..0;
-        let mut current_range = None;
-        let mut current_style = None;
-        for event in highlights.flatten() {
-            match event {
-                HighlightEvent::Source { start, end } => {
-                    current_range = Some(start..end);
-                }
-                HighlightEvent::HighlightStart(scope) => {
-                    if let Some(style) = theme.style_for_index(scope.0) {
-                        current_style = Some(style);
-                    }
-                }
-                HighlightEvent::HighlightEnd => {
-                    if let (Some(range), Some(style)) = (current_range, current_style) {
-                        // Ensure every range is connected.
-                        if last_range.end < range.start {
-                            styles.push((last_range.end..range.start, HighlightStyle::default()))
-                        }
-
-                        styles.push((range.clone(), style));
-                        last_range = range;
-                    }
-
-                    current_range = None;
-                    current_style = None;
-                }
-            }
-        }
-
-        // Ensure the last range is connected to the end of the line.
-        if last_range.end < line.len() {
-            styles.push((last_range.end..line.len(), HighlightStyle::default()));
-        }
-
-        styles
     }
 }

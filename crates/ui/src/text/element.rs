@@ -8,7 +8,7 @@ use gpui::{
 };
 use markdown::mdast;
 
-use crate::{h_flex, highlighter::LanguageRegistry, v_flex, ActiveTheme as _, Icon, IconName};
+use crate::{h_flex, highlighter::SyntaxHighlighter, v_flex, ActiveTheme as _, Icon, IconName};
 
 use super::{utils::list_item_prefix, TextViewStyle};
 
@@ -210,16 +210,14 @@ impl CodeBlock {
     pub fn new(
         code: SharedString,
         lang: Option<SharedString>,
-        text_view_style: &TextViewStyle,
+        _: &TextViewStyle,
         cx: &mut App,
     ) -> Self {
         let mut styles = vec![];
         if let Some(lang) = &lang {
-            styles = LanguageRegistry::global_mut(cx).highlight(
-                lang,
-                code.as_ref(),
-                text_view_style.is_dark,
-            );
+            let mut highlighter = SyntaxHighlighter::new(lang.clone());
+            highlighter.update(&(0..0), &code, &code, cx);
+            styles = highlighter.styles(&(0..code.len()));
         };
 
         Self { code, lang, styles }

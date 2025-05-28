@@ -10,8 +10,8 @@ use super::{Language, LanguageRegistry};
 /// A syntax highlighter that supports incremental parsing, multiline text,
 /// and caching of highlight results.
 pub struct SyntaxHighlighter {
-    language: Language,
-    query: Query,
+    language: Option<Language>,
+    query: Option<Query>,
     parser: Parser,
     old_tree: Option<Tree>,
     text: SharedString,
@@ -28,12 +28,14 @@ impl SyntaxHighlighter {
     pub fn new(lang: impl Into<SharedString>) -> Self {
         let mut parser = Parser::new();
         let lang: SharedString = lang.into();
-        let language = Language::from_str(&lang).unwrap();
-        parser.set_language(&language.language_info().0).unwrap();
+        let language = Language::from_str(&lang);
+        if let Some(language) = language {
+            _ = parser.set_language(&language.config().language);
+        }
 
         SyntaxHighlighter {
             language,
-            query: language.query(),
+            query: language.map(|l| l.query()),
             parser,
             old_tree: None,
             text: SharedString::new(""),
@@ -45,17 +47,17 @@ impl SyntaxHighlighter {
 
     pub fn set_language(&mut self, lang: impl Into<SharedString>) {
         let lang = lang.into();
-        let language = Language::from_str(&lang).unwrap();
+        let language = Language::from_str(&lang);
         if self.language == language {
             return;
         }
 
-        self.parser
-            .set_language(&language.language_info().0)
-            .unwrap();
+        if let Some(language) = language {
+            _ = self.parser.set_language(&language.config().language);
+        }
 
         self.language = language;
-        self.query = language.query();
+        self.query = language.map(|l| l.query());
         self.old_tree = None;
         self.text = SharedString::new("");
         self.highlighter = Highlighter::new();
@@ -109,12 +111,16 @@ impl SyntaxHighlighter {
             return;
         };
 
+        let Some(query) = &self.query else {
+            return;
+        };
+
         self.cache.clear();
 
         let theme = LanguageRegistry::global(cx).theme(cx.theme().is_dark());
         let mut query_cursor = QueryCursor::new();
 
-        let mut matches = query_cursor.matches(&self.query, tree.root_node(), self.text.as_bytes());
+        let mut matches = query_cursor.matches(&query, tree.root_node(), self.text.as_bytes());
 
         let mut last_end = 0;
         while let Some(m) = matches.next() {
@@ -127,7 +133,7 @@ impl SyntaxHighlighter {
                     continue;
                 }
 
-                let highlight_name = self.query.capture_names()[cap.index as usize];
+                let highlight_name = query.capture_names()[cap.index as usize];
 
                 last_end = node_range.end;
                 if let Some(style) = theme.style(highlight_name) {
