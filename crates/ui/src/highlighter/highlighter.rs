@@ -17,7 +17,9 @@ pub struct SyntaxHighlighter {
     text: SharedString,
     highlighter: Highlighter,
     config: Option<Arc<HighlightConfiguration>>,
-    /// Cache of highlight results: stable_node_id -> Vec<(Range<usize>, named scope)>
+    /// Cache of highlight, the range is offset of the token in the tree.
+    ///
+    /// The Vec is ordered by the range from 0 to the end of the line.
     cache: Vec<(Range<usize>, HighlightStyle)>,
 }
 
@@ -99,7 +101,6 @@ impl SyntaxHighlighter {
         // Update state
         self.old_tree = Some(new_tree);
         self.text = SharedString::from(pending_text.to_string());
-        self.cache.clear();
         self.build_styles(cx);
     }
 
@@ -115,12 +116,20 @@ impl SyntaxHighlighter {
 
         let mut matches = query_cursor.matches(&self.query, tree.root_node(), self.text.as_bytes());
 
+        let mut last_end = 0;
         while let Some(m) = matches.next() {
             for cap in m.captures {
                 let node = cap.node;
+
                 let node_range: Range<usize> = (node.start_byte()..node.end_byte()).into();
+
+                if node_range.start < last_end {
+                    continue;
+                }
+
                 let highlight_name = self.query.capture_names()[cap.index as usize];
 
+                last_end = node_range.end;
                 if let Some(style) = theme.style(highlight_name) {
                     self.cache.push((node_range, style.clone()));
                 } else {
@@ -138,7 +147,8 @@ impl SyntaxHighlighter {
         let start_offset = range.start;
         let line_len = range.len();
 
-        let mut last_end = 0;
+        let mut last_range = 0..0;
+        // NOTE: the ranges in the cache may have duplicates, so we need to merge them.
         for (node_range, style) in self.cache.iter() {
             if node_range.start < range.start {
                 continue;
@@ -151,20 +161,26 @@ impl SyntaxHighlighter {
             let range_in_line = node_range.start.saturating_sub(start_offset)
                 ..node_range.end.saturating_sub(start_offset);
 
-            if range_in_line.start > last_end {
-                styles.push((last_end..range_in_line.start, HighlightStyle::default()));
+            // Ensure every range is connected.
+            if last_range.end < range_in_line.start {
+                styles.push((
+                    last_range.end..range_in_line.start,
+                    HighlightStyle::default(),
+                ));
             }
 
-            last_end = range_in_line.end;
-            styles.push((range_in_line, style.clone()));
+            styles.push((range_in_line.clone(), style.clone()));
+            last_range = range_in_line;
         }
 
-        if last_end == 0 {
-            styles.insert(0, (0..line_len, HighlightStyle::default()));
+        // If the matched styles is empty, return a default range.
+        if styles.len() == 0 {
+            return vec![(0..line_len, HighlightStyle::default())];
         }
 
-        if last_end < line_len {
-            styles.push((last_end..line_len, HighlightStyle::default()));
+        // Ensure the last range is connected to the end of the line.
+        if last_range.end < line_len {
+            styles.push((last_range.end..line_len, HighlightStyle::default()));
         }
 
         styles
