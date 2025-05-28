@@ -1,4 +1,4 @@
-use gpui::{App, FontWeight, HighlightStyle, Hsla};
+use gpui::{App, FontWeight, HighlightStyle, Hsla, SharedString};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -11,7 +11,7 @@ use tree_sitter_highlight::{HighlightConfiguration, HighlightEvent, Highlighter}
 use super::Language;
 use crate::ThemeMode;
 
-const HIGHLIGHT_NAMES: [&str; 40] = [
+pub(super) const HIGHLIGHT_NAMES: [&str; 40] = [
     "attribute",
     "boolean",
     "comment",
@@ -162,6 +162,10 @@ impl From<ThemeStyle> for HighlightStyle {
 
 impl SyntaxColors {
     pub fn style(&self, name: &str) -> Option<HighlightStyle> {
+        if name.is_empty() {
+            return None;
+        }
+
         match name {
             "attribute" => self.attribute,
             "boolean" => self.boolean,
@@ -203,7 +207,7 @@ impl SyntaxColors {
             "variable" => self.variable,
             "variable.special" => self.variable_special,
             "variant" => self.variant,
-            _ => unreachable!("unknown highlight name: {}", name),
+            _ => self.variable,
         }
         .map(|s| s.into())
     }

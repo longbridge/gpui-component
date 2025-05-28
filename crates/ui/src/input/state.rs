@@ -5,7 +5,7 @@
 
 use serde::Deserialize;
 use smallvec::SmallVec;
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::ops::Range;
 use std::rc::Rc;
 use unicode_segmentation::*;
@@ -32,6 +32,7 @@ use super::{
     number_input,
     text_wrapper::TextWrapper,
 };
+use crate::highlighter::SyntaxHighlighter;
 use crate::{history::History, scroll::ScrollbarState, Root};
 
 #[derive(Clone, PartialEq, Eq, Deserialize)]
@@ -367,7 +368,7 @@ impl InputState {
         self.mode = InputMode::CodeEditor {
             rows: 2,
             tab: TabSize::default(),
-            highlighter: CodeHighlighter::new(language),
+            highlighter: Rc::new(RefCell::new(SyntaxHighlighter::new(language))),
             line_number: true,
             height: Some(relative(1.)),
         };
@@ -433,7 +434,7 @@ impl InputState {
     pub fn set_highlighter(&mut self, language: impl Into<SharedString>, cx: &mut Context<Self>) {
         match &mut self.mode {
             InputMode::CodeEditor { highlighter, .. } => {
-                highlighter.set_language(language, cx);
+                highlighter.borrow_mut().set_language(language);
             }
             _ => {}
         }
@@ -1969,6 +1970,11 @@ impl EntityInputHandler for InputState {
         let new_pos = (range.start + new_text_len).min(mask_text.len());
 
         self.push_history(&range, &new_text, window, cx);
+        self.mode.highlighter().map(|highlighter| {
+            highlighter
+                .borrow_mut()
+                .update(&range, &mask_text, &new_text, cx);
+        });
         self.text = mask_text;
         self.text_wrapper.update(self.text.clone(), false, cx);
         self.selected_range = new_pos..new_pos;
@@ -2007,6 +2013,11 @@ impl EntityInputHandler for InputState {
         }
 
         self.push_history(&range, new_text, window, cx);
+        self.mode.highlighter().map(|highlighter| {
+            highlighter
+                .borrow_mut()
+                .update(&range, &pending_text, &new_text, cx);
+        });
         self.text = pending_text;
         self.text_wrapper.update(self.text.clone(), false, cx);
         if new_text.is_empty() {
@@ -2111,6 +2122,11 @@ impl Focusable for InputState {
 impl Render for InputState {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.text_wrapper.update(self.text.clone(), false, cx);
+        self.mode.highlighter().map(|highlighter| {
+            if highlighter.borrow().is_empty() {
+                highlighter.borrow_mut().update(&(0..0), &self.text, "", cx);
+            }
+        });
 
         div()
             .id("text-element")

@@ -6,7 +6,7 @@ use crate::{highlighter::LanguageRegistry, ActiveTheme, ThemeMode};
 
 #[derive(Debug, Clone)]
 pub(crate) struct LineHighlightStyle {
-    offset: usize,
+    pub(crate) offset: usize,
     pub(crate) styles: Rc<Vec<(Range<usize>, HighlightStyle)>>,
 }
 

@@ -1,4 +1,5 @@
 use gpui::SharedString;
+use tree_sitter::Query;
 use tree_sitter_highlight::HighlightConfiguration;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, enum_iterator::Sequence)]
@@ -125,7 +126,15 @@ impl Language {
         }
     }
 
-    fn _language_info(&self) -> (tree_sitter::Language, &str, &str, &str) {
+    pub(super) fn query(&self) -> Query {
+        let (language, query, _, _) = self.language_info();
+        Query::new(&language, query).unwrap()
+    }
+
+    /// Return the language info for the language.
+    ///
+    /// (language, query, injection, locals)
+    pub(super) fn language_info(&self) -> (tree_sitter::Language, &str, &str, &str) {
         let (language, query, injection, locals) = match self {
             Self::Json => (
                 tree_sitter_json::LANGUAGE,
@@ -289,7 +298,7 @@ impl Language {
     }
 
     pub fn build(&self) -> HighlightConfiguration {
-        let (language, query, injection, locals) = self._language_info();
+        let (language, query, injection, locals) = self.language_info();
         let name = language.name().unwrap_or("plaintext");
         let config = tree_sitter_highlight::HighlightConfiguration::new(
             language, name, query, injection, locals,

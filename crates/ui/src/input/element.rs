@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use gpui::{
     fill, point, px, relative, size, App, Bounds, Corners, Element, ElementId, ElementInputHandler,
     Entity, GlobalElementId, IntoElement, LayoutId, MouseButton, MouseMoveEvent, PaintQuad, Path,
@@ -323,8 +325,17 @@ impl TextElement {
     fn highlight_lines(&mut self, cx: &mut App) -> Option<Vec<LineHighlightStyle>> {
         self.input.update(cx, |state, cx| match &mut state.mode {
             InputMode::CodeEditor { highlighter, .. } => {
-                highlighter.update(state.text.clone(), false, cx);
-                Some(highlighter.lines.clone())
+                let mut offset = 0;
+                let mut lines = vec![];
+                for line in state.text.split('\n') {
+                    let styles = highlighter.borrow().styles(offset..offset + line.len());
+                    lines.push(LineHighlightStyle {
+                        offset,
+                        styles: Rc::new(styles),
+                    });
+                    offset += line.len() + 1;
+                }
+                Some(lines)
             }
             _ => None,
         })
