@@ -72,6 +72,8 @@ pub struct HighlightColors {
     variable_builtin: Option<ThemeStyle>,
     #[serde(rename = "variable.parameter")]
     variable_parameter: Option<ThemeStyle>,
+    #[serde(rename = "text.title")]
+    text_title: Option<ThemeStyle>,
     #[serde(rename = "text.uri")]
     text_uri: Option<ThemeStyle>,
     #[serde(rename = "text.reference")]
@@ -113,6 +115,7 @@ impl HighlightColors {
             "variable" => Some(self.variable),
             "variable.builtin" => Some(self.variable_builtin),
             "variable.parameter" => Some(self.variable_parameter),
+            "text.title" => Some(self.text_title),
             "text.uri" => Some(self.text_uri),
             "text.reference" => Some(self.text_reference),
             "text.strong" => Some(self.text_strong),
@@ -149,7 +152,7 @@ impl Deref for HighlightTheme {
     }
 }
 
-const HIGHLIGHT_NAMES: [&str; 32] = [
+const HIGHLIGHT_NAMES: [&str; 33] = [
     "attribute",
     "comment",
     "constant",
@@ -177,6 +180,7 @@ const HIGHLIGHT_NAMES: [&str; 32] = [
     "variable",
     "variable.builtin",
     "variable.parameter",
+    "text.title",
     "text.uri",
     "text.reference",
     "text.strong",

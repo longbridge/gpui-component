@@ -119,8 +119,8 @@ impl Language {
 
     pub(super) fn injection_languages(&self) -> Vec<Self> {
         match self {
-            Self::Markdown => vec![Self::MarkdownInline, Self::Html],
-            Self::MarkdownInline => vec![],
+            Self::Markdown => vec![Self::MarkdownInline, Self::Html, Self::Toml, Self::Yaml],
+            Self::MarkdownInline => vec![Self::Html],
             _ => vec![],
         }
     }
@@ -142,7 +142,7 @@ impl Language {
             Self::MarkdownInline => (
                 tree_sitter_md::INLINE_LANGUAGE,
                 include_str!("languages/markdown_inline/highlights.scm"),
-                include_str!("languages/markdown_inline/injections.scm"),
+                "",
                 "",
             ),
             Self::Toml => (
