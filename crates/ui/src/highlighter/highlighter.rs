@@ -257,6 +257,8 @@ impl SyntaxHighlighter {
         let mut query_cursor = QueryCursor::new();
         let mut matches = query_cursor.matches(&query, tree.root_node(), source);
 
+        // TODO: Merge duplicate ranges.
+
         let mut last_end = 0;
         while let Some(m) = matches.next() {
             // Ref:
@@ -282,13 +284,17 @@ impl SyntaxHighlighter {
                     continue;
                 }
 
-                let node_range: Range<usize> = node.start_byte()..node.end_byte();
                 let highlight_name = query.capture_names()[cap.index as usize];
+                let node_range: Range<usize> = node.start_byte()..node.end_byte();
                 self.cache
                     .push((node_range.clone(), highlight_name.to_string()));
                 last_end = node_range.end;
             }
         }
+
+        // for item in self.cache.iter() {
+        //     println!("---------- item: {:?}", item);
+        // }
     }
 
     /// TODO: Use incremental parsing to handle the injection.

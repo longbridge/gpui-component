@@ -146,6 +146,7 @@ impl Language {
             Self::Markdown => vec![Self::MarkdownInline, Self::Html, Self::Toml, Self::Yaml],
             Self::MarkdownInline => vec![],
             Self::Html => vec![Self::JavaScript, Self::Css],
+            Self::Rust => vec![Self::Rust],
             _ => vec![],
         }
     }
