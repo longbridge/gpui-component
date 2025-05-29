@@ -21,7 +21,7 @@ use super::element::{
 };
 use super::TextViewStyle;
 
-const BLOCK_ELEMENTS: [&str; 33] = [
+const BLOCK_ELEMENTS: [&str; 35] = [
     "html",
     "body",
     "head",
@@ -55,6 +55,8 @@ const BLOCK_ELEMENTS: [&str; 33] = [
     "section",
     "table",
     "ul",
+    "style",
+    "script",
 ];
 
 pub(super) fn parse_html(source: &str) -> Result<element::Node, SharedString> {
@@ -725,6 +727,7 @@ fn parse_node(node: &Rc<Node>, paragraph: &mut Paragraph) -> element::Node {
 
                 element::Node::Root { children: children }
             }
+            local_name!("style") | local_name!("script") => element::Node::Ignore,
             _ => {
                 if BLOCK_ELEMENTS.contains(&name.local.trim()) {
                     let mut children: Vec<element::Node> = vec![];
