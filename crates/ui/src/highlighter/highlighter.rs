@@ -264,6 +264,10 @@ impl SyntaxHighlighter {
             let (language_name, content_node, _) = self.injection_for_match(None, query, m, source);
             if let Some(language_name) = language_name {
                 if let Some(content_node) = content_node {
+                    if content_node.start_byte() < last_end {
+                        continue;
+                    }
+
                     self.cache
                         .extend(self.handle_injection(&language_name, content_node, source));
                     last_end = content_node.end_byte();
@@ -274,12 +278,11 @@ impl SyntaxHighlighter {
 
             for cap in m.captures {
                 let node = cap.node;
-
-                let node_range: Range<usize> = node.start_byte()..node.end_byte();
-                if node_range.start < last_end {
+                if node.start_byte() < last_end {
                     continue;
                 }
 
+                let node_range: Range<usize> = node.start_byte()..node.end_byte();
                 let highlight_name = query.capture_names()[cap.index as usize];
                 self.cache
                     .push((node_range.clone(), highlight_name.to_string()));
@@ -288,6 +291,7 @@ impl SyntaxHighlighter {
         }
     }
 
+    /// TODO: Use incremental parsing to handle the injection.
     fn handle_injection(
         &self,
         injection_language: &str,
@@ -295,6 +299,7 @@ impl SyntaxHighlighter {
         source: &[u8],
     ) -> Vec<(Range<usize>, String)> {
         let start_offset = node.start_byte();
+        let end_offset = node.end_byte();
         let mut cache = vec![];
         let Some(query) = &self.injection_queries.get(injection_language) else {
             return cache;
@@ -309,7 +314,6 @@ impl SyntaxHighlighter {
             return cache;
         };
         let lang_config = lang.config();
-
         let mut parser = Parser::new();
         if parser.set_language(&lang_config.language).is_err() {
             return cache;
@@ -331,6 +335,9 @@ impl SyntaxHighlighter {
 
                 if node_range.start < last_end {
                     continue;
+                }
+                if node_range.end > end_offset {
+                    break;
                 }
 
                 let highlight_name = query.capture_names()[cap.index as usize];
