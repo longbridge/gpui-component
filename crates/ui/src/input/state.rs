@@ -364,10 +364,11 @@ impl InputState {
     /// - Auto Indent
     /// - Line Number
     pub fn code_editor(mut self, language: impl Into<SharedString>) -> Self {
+        let language: SharedString = language.into();
         self.mode = InputMode::CodeEditor {
             rows: 2,
             tab: TabSize::default(),
-            highlighter: Rc::new(RefCell::new(SyntaxHighlighter::new(language))),
+            highlighter: Rc::new(RefCell::new(SyntaxHighlighter::new(&language))),
             line_number: true,
             height: Some(relative(1.)),
         };
