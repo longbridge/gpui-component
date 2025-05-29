@@ -441,13 +441,14 @@ impl SyntaxHighlighter {
         let mut styles = vec![];
         let start_offset = range.start;
         let line_len = range.len();
-
         let mut last_range = 0..0;
 
         // NOTE: the ranges in the cache may have duplicates, so we need to merge them.
         for (node_range, highlight_name) in
             self.cache.iter().skip_while(|(r, _)| r.start < range.start)
         {
+            // TODO: If break, the `comment.doc` will not work.
+            // Ref: https://github.com/longbridge/gpui-component/pull/904/commits/d8f886939d3b472f228c1ce72154a951e98f32c5
             if node_range.end > range.end {
                 break;
             }

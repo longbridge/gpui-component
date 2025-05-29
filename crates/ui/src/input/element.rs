@@ -1,5 +1,6 @@
-use std::rc::Rc;
+use std::{ops::Range, rc::Rc};
 
+use chrono::offset;
 use gpui::{
     fill, point, px, relative, size, App, Bounds, Corners, Element, ElementId, ElementInputHandler,
     Entity, GlobalElementId, IntoElement, LayoutId, MouseButton, MouseMoveEvent, PaintQuad, Path,
@@ -323,7 +324,11 @@ impl TextElement {
     }
 
     /// First usize is the offset of skiped.
-    fn highlight_lines(&mut self, cx: &mut App) -> Option<(usize, Vec<LineHighlightStyle>)> {
+    fn highlight_lines(
+        &mut self,
+        visible_lines: &Range<usize>,
+        cx: &mut App,
+    ) -> Option<(usize, Vec<LineHighlightStyle>)> {
         let theme = LanguageRegistry::global(cx)
             .theme(cx.theme().is_dark())
             .clone();
@@ -332,21 +337,15 @@ impl TextElement {
                 let mut offset = 0;
                 let mut skiped_offset = 0;
                 let mut lines = vec![];
-                let top_line = (-state.scroll_handle.offset().y / state.last_line_height) as usize;
-                let visible_lines =
-                    (state.input_bounds.size.height / state.last_line_height) as usize;
-                let end_line = top_line + visible_lines;
+
                 for (ix, line) in state.text.split('\n').enumerate() {
-                    if ix < top_line {
+                    if ix < visible_lines.start {
                         offset += line.len() + 1;
+                        skiped_offset = offset;
                         continue;
                     }
-                    if ix > end_line {
+                    if ix > visible_lines.end {
                         break;
-                    }
-
-                    if skiped_offset == 0 {
-                        skiped_offset = offset;
                     }
 
                     let range = offset..offset + line.len();
@@ -374,6 +373,8 @@ pub(super) struct PrepaintState {
     current_line_index: usize,
     selection_path: Option<Path<Pixels>>,
     bounds: Bounds<Pixels>,
+    /// The range of lines that are visible in the viewport.
+    visible_lines: Range<usize>,
 }
 
 impl IntoElement for TextElement {
@@ -462,7 +463,13 @@ impl Element for TextElement {
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
-        let highlight_lines = self.highlight_lines(cx);
+        let state = self.input.read(cx);
+        let top_line = (-state.scroll_handle.offset().y / state.last_line_height) as usize;
+        let end_line =
+            top_line + (state.input_bounds.size.height / state.last_line_height) as usize;
+        let visible_lines = top_line..end_line;
+
+        let highlight_lines = self.highlight_lines(&visible_lines, cx);
         let multi_line = self.input.read(cx).is_multi_line();
         let line_height = window.line_height();
         let input = self.input.read(cx);
@@ -510,7 +517,16 @@ impl Element for TextElement {
                 strikethrough: None,
             }];
 
-            for (i, line_wrap) in input.text_wrapper.lines.iter().enumerate() {
+            // build line numbers
+            for (i, line_wrap) in input
+                .text_wrapper
+                .lines
+                .iter()
+                .skip(visible_lines.start)
+                .take(visible_lines.end - visible_lines.start)
+                .enumerate()
+            {
+                let i = i + visible_lines.start;
                 let line_no = if run_len == 4 {
                     format!("{:>4}", i + 1).into()
                 } else {
@@ -569,10 +585,12 @@ impl Element for TextElement {
         let runs = if !is_empty {
             if let Some((skiped_offset, highlight_lines)) = highlight_lines {
                 let mut runs = vec![];
-                runs.push(TextRun {
-                    len: skiped_offset,
-                    ..run.clone()
-                });
+                if skiped_offset > 0 {
+                    runs.push(TextRun {
+                        len: skiped_offset,
+                        ..run.clone()
+                    });
+                }
 
                 for style in highlight_lines {
                     runs.extend(style.to_run(&text_style, &input.marked_range, &marked_run));
@@ -674,6 +692,7 @@ impl Element for TextElement {
             cursor_scroll_offset,
             current_line_index,
             selection_path,
+            visible_lines,
         }
     }
 
@@ -691,6 +710,7 @@ impl Element for TextElement {
         let focused = focus_handle.is_focused(window);
         let bounds = prepaint.bounds;
         let selected_range = self.input.read(cx).selected_range.clone();
+        let visible_lines = &prepaint.visible_lines;
 
         window.handle_input(
             &focus_handle,
@@ -736,8 +756,10 @@ impl Element for TextElement {
             }
         }
 
+        // TODO: Line numbers is not correct when scroll
         if let Some(line_numbers) = prepaint.line_numbers.as_ref() {
             for (ix, line) in line_numbers.iter().enumerate() {
+                let ix = visible_lines.start + ix;
                 let p = point(origin.x, origin.y + offset_y);
                 let line_size = line.size(line_height);
 
