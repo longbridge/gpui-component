@@ -266,16 +266,16 @@ impl SyntaxHighlighter {
                 if let Some(content_node) = content_node {
                     self.cache
                         .extend(self.handle_injection(&language_name, content_node, source));
-                    last_end = content_node.range().end_byte;
+                    last_end = content_node.end_byte();
                 }
+
                 continue;
             }
 
             for cap in m.captures {
                 let node = cap.node;
 
-                let node_range: Range<usize> = (node.start_byte()..node.end_byte()).into();
-
+                let node_range: Range<usize> = node.start_byte()..node.end_byte();
                 if node_range.start < last_end {
                     continue;
                 }
@@ -294,33 +294,46 @@ impl SyntaxHighlighter {
         node: Node,
         source: &[u8],
     ) -> Vec<(Range<usize>, String)> {
+        let start_offset = node.start_byte();
         let mut cache = vec![];
         let Some(query) = &self.injection_queries.get(injection_language) else {
             return cache;
         };
+        let Some(content) = source.get(node.start_byte()..node.end_byte()) else {
+            return cache;
+        };
+        if content.is_empty() {
+            return cache;
+        };
+        let Some(lang) = super::Language::from_str(injection_language) else {
+            return cache;
+        };
+        let lang_config = lang.config();
+
+        let mut parser = Parser::new();
+        if parser.set_language(&lang_config.language).is_err() {
+            return cache;
+        }
+        let Some(tree) = parser.parse(content, None) else {
+            return cache;
+        };
 
         let mut query_cursor = QueryCursor::new();
-        query_cursor.set_byte_range(node.start_byte()..node.end_byte());
-        let mut matches = query_cursor.matches(query, node, source);
+        let mut matches = query_cursor.matches(query, tree.root_node(), content);
 
-        let mut last_end = 0;
+        let mut last_end = start_offset;
         while let Some(m) = matches.next() {
             for cap in m.captures {
                 let cap_node = cap.node;
 
-                if cap_node.start_byte() < last_end {
+                let node_range: Range<usize> =
+                    start_offset + cap_node.start_byte()..start_offset + cap_node.end_byte();
+
+                if node_range.start < last_end {
                     continue;
                 }
 
-                let node_range: Range<usize> = (cap_node.start_byte()..cap_node.end_byte()).into();
-
                 let highlight_name = query.capture_names()[cap.index as usize];
-                if injection_language == "markdown_inline" {
-                    println!(
-                        "node_range: {:?}, highlight_name: {:?}",
-                        node_range, highlight_name
-                    );
-                }
                 last_end = node_range.end;
                 cache.push((node_range, highlight_name.to_string()));
             }
