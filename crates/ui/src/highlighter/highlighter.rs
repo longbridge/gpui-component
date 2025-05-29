@@ -1,7 +1,7 @@
 use gpui::{App, HighlightStyle, SharedString};
-use std::{ops::Range, sync::Arc};
+use std::{collections::HashMap, ops::Range, sync::Arc};
 use tree_sitter::{
-    InputEdit, Node, Parser, Point, Query, QueryCursor, StreamingIterator as _, Tree,
+    InputEdit, Node, Parser, Point, Query, QueryCursor, QueryMatch, StreamingIterator, Tree,
 };
 use tree_sitter_highlight::{HighlightConfiguration, Highlighter};
 
@@ -9,16 +9,18 @@ use super::{HighlightTheme, Language};
 
 /// A syntax highlighter that supports incremental parsing, multiline text,
 /// and caching of highlight results.
+#[allow(unused)]
 pub struct SyntaxHighlighter {
+    language_name: &'static str,
     language: Option<Language>,
     query: Option<Query>,
+    injection_queries: HashMap<&'static str, Query>,
     parser: Parser,
     old_tree: Option<Tree>,
     text: SharedString,
     highlighter: Highlighter,
     config: Option<Arc<HighlightConfiguration>>,
 
-    combined_injections_query: Option<Query>,
     locals_pattern_index: usize,
     highlights_pattern_index: usize,
     // highlight_indices: Vec<Option<Highlight>>,
@@ -42,21 +44,34 @@ impl SyntaxHighlighter {
         Self::build_combined_injections_query(&lang).unwrap()
     }
 
+    /// Build the combined injections query for the given language.
+    ///
+    /// https://github.com/tree-sitter/tree-sitter/blob/v0.25.5/highlight/src/lib.rs#L336
     fn build_combined_injections_query(lang: &str) -> Option<Self> {
         let language = Language::from_str(&lang);
         let Some(language) = language else {
             return None;
         };
-
-        let mut parser = Parser::new();
-        _ = parser.set_language(&language.config().language);
         let config = language.config();
 
-        let mut query = Query::new(&config.language, &config.highlights).unwrap();
+        let mut parser = Parser::new();
+        _ = parser.set_language(&config.language);
 
-        let locals_query_offset = config.locals.len();
+        // Concatenate the query strings, keeping track of the start offset of each section.
+        let mut query_source = String::new();
+        query_source.push_str(&config.injections);
+        let locals_query_offset = query_source.len();
+        query_source.push_str(&config.locals);
+        let highlights_query_offset = query_source.len();
+        query_source.push_str(&config.highlights);
+
+        // Construct a single query by concatenating the three query strings, but record the
+        // range of pattern indices that belong to each individual string.
+        let Some(query) = Query::new(&config.language, &query_source).ok() else {
+            return None;
+        };
+
         let mut locals_pattern_index = 0;
-        let highlights_query_offset = config.highlights.len();
         let mut highlights_pattern_index = 0;
         for i in 0..(query.pattern_count()) {
             let pattern_offset = query.start_byte_for_pattern(i);
@@ -70,27 +85,27 @@ impl SyntaxHighlighter {
             }
         }
 
-        let Some(mut combined_injections_query) =
-            Query::new(&config.language, &config.injections).ok()
-        else {
-            return None;
-        };
+        // let Some(mut combined_injections_query) =
+        //     Query::new(&config.language, &config.injections).ok()
+        // else {
+        //     return None;
+        // };
 
-        let mut has_combined_queries = false;
-        for pattern_index in 0..locals_pattern_index {
-            let settings = query.property_settings(pattern_index);
-            if settings.iter().any(|s| &*s.key == "injection.combined") {
-                has_combined_queries = true;
-                query.disable_pattern(pattern_index);
-            } else {
-                combined_injections_query.disable_pattern(pattern_index);
-            }
-        }
-        let combined_injections_query = if has_combined_queries {
-            Some(combined_injections_query)
-        } else {
-            None
-        };
+        // let mut has_combined_queries = false;
+        // for pattern_index in 0..locals_pattern_index {
+        //     let settings = query.property_settings(pattern_index);
+        //     if settings.iter().any(|s| &*s.key == "injection.combined") {
+        //         has_combined_queries = true;
+        //         query.disable_pattern(pattern_index);
+        //     } else {
+        //         combined_injections_query.disable_pattern(pattern_index);
+        //     }
+        // }
+        // let combined_injections_query = if has_combined_queries {
+        //     Some(combined_injections_query)
+        // } else {
+        //     None
+        // };
 
         // Find all of the highlighting patterns that are disabled for nodes that
         // have been identified as local variables.
@@ -123,18 +138,36 @@ impl SyntaxHighlighter {
             }
         }
 
+        let mut injection_queries = HashMap::new();
+        for inj_language in language.injection_languages() {
+            let inj_config = inj_language.config();
+
+            match Query::new(&inj_config.language, &inj_config.highlights) {
+                Ok(q) => {
+                    injection_queries.insert(inj_language.name(), q);
+                }
+                Err(e) => {
+                    println!(
+                        "failed to build injection query for {:?}: {:?}",
+                        inj_language, e
+                    );
+                }
+            }
+        }
+
         // let highlight_indices = vec![None; query.capture_names().len()];
 
         Some(Self {
+            language_name: language.name(),
             language: Some(language),
             query: Some(query),
+            injection_queries,
             parser,
             old_tree: None,
             text: SharedString::new(""),
             highlighter: Highlighter::new(),
             config: None,
             cache: vec![],
-            combined_injections_query,
             locals_pattern_index,
             highlights_pattern_index,
             non_local_variable_patterns,
@@ -153,6 +186,8 @@ impl SyntaxHighlighter {
         if self.language == language {
             return;
         }
+
+        // FIXME: use build_combined_injections_query to build the query.
 
         if let Some(language) = language {
             _ = self.parser.set_language(&language.config().language);
@@ -218,12 +253,24 @@ impl SyntaxHighlighter {
         };
 
         self.cache.clear();
+        let source = self.text.as_bytes();
         let mut query_cursor = QueryCursor::new();
-
-        let mut matches = query_cursor.matches(&query, tree.root_node(), self.text.as_bytes());
+        let mut matches = query_cursor.matches(&query, tree.root_node(), source);
 
         let mut last_end = 0;
         while let Some(m) = matches.next() {
+            // Ref:
+            // https://github.com/tree-sitter/tree-sitter/blob/460118b4c82318b083b4d527c9c750426730f9c0/highlight/src/lib.rs#L556
+            let (language_name, content_node, _) = self.injection_for_match(None, query, m, source);
+            if let Some(language_name) = language_name {
+                if let Some(content_node) = content_node {
+                    self.cache
+                        .extend(self.handle_injection(&language_name, content_node, source));
+                    last_end = content_node.range().end_byte;
+                }
+                continue;
+            }
+
             for cap in m.captures {
                 let node = cap.node;
 
@@ -241,6 +288,47 @@ impl SyntaxHighlighter {
         }
     }
 
+    fn handle_injection(
+        &self,
+        injection_language: &str,
+        node: Node,
+        source: &[u8],
+    ) -> Vec<(Range<usize>, String)> {
+        let mut cache = vec![];
+        let Some(query) = &self.injection_queries.get(injection_language) else {
+            return cache;
+        };
+
+        let mut query_cursor = QueryCursor::new();
+        query_cursor.set_byte_range(node.start_byte()..node.end_byte());
+        let mut matches = query_cursor.matches(query, node, source);
+
+        let mut last_end = 0;
+        while let Some(m) = matches.next() {
+            for cap in m.captures {
+                let cap_node = cap.node;
+
+                if cap_node.start_byte() < last_end {
+                    continue;
+                }
+
+                let node_range: Range<usize> = (cap_node.start_byte()..cap_node.end_byte()).into();
+
+                let highlight_name = query.capture_names()[cap.index as usize];
+                if injection_language == "markdown_inline" {
+                    println!(
+                        "node_range: {:?}, highlight_name: {:?}",
+                        node_range, highlight_name
+                    );
+                }
+                last_end = node_range.end;
+                cache.push((node_range, highlight_name.to_string()));
+            }
+        }
+
+        cache
+    }
+
     /// The argument `range` is the range of the line in the text.
     ///
     /// Returns `range` is the range in the line.
@@ -254,6 +342,7 @@ impl SyntaxHighlighter {
         let line_len = range.len();
 
         let mut last_range = 0..0;
+
         // NOTE: the ranges in the cache may have duplicates, so we need to merge them.
         for (node_range, highlight_name) in self.cache.iter() {
             if node_range.start < range.start {
@@ -292,5 +381,80 @@ impl SyntaxHighlighter {
         }
 
         styles
+    }
+
+    /// Ref:
+    /// https://github.com/tree-sitter/tree-sitter/blob/v0.25.5/highlight/src/lib.rs#L1229
+    ///
+    /// Returns:
+    /// - `language_name`: The language name of the injection.
+    /// - `content_node`: The content node of the injection.
+    /// - `include_children`: Whether to include the children of the content node.
+    fn injection_for_match<'a>(
+        &self,
+        parent_name: Option<&'a str>,
+        query: &'a Query,
+        query_match: &QueryMatch<'a, 'a>,
+        source: &'a [u8],
+    ) -> (Option<&'a str>, Option<Node<'a>>, bool) {
+        let content_capture_index = self.injection_content_capture_index;
+        let language_capture_index = self.injection_language_capture_index;
+
+        let mut language_name = None;
+        let mut content_node = None;
+
+        for capture in query_match.captures {
+            let index = Some(capture.index);
+            if index == language_capture_index {
+                language_name = capture.node.utf8_text(source).ok();
+            } else if index == content_capture_index {
+                content_node = Some(capture.node);
+            }
+        }
+
+        let mut include_children = false;
+        for prop in query.property_settings(query_match.pattern_index) {
+            match prop.key.as_ref() {
+                // In addition to specifying the language name via the text of a
+                // captured node, it can also be hard-coded via a `#set!` predicate
+                // that sets the injection.language key.
+                "injection.language" => {
+                    if language_name.is_none() {
+                        language_name = prop
+                            .value
+                            .as_ref()
+                            .map(std::convert::AsRef::as_ref)
+                            .to_owned();
+                    }
+                }
+
+                // Setting the `injection.self` key can be used to specify that the
+                // language name should be the same as the language of the current
+                // layer.
+                "injection.self" => {
+                    if language_name.is_none() {
+                        language_name = Some(self.language_name);
+                    }
+                }
+
+                // Setting the `injection.parent` key can be used to specify that
+                // the language name should be the same as the language of the
+                // parent layer
+                "injection.parent" => {
+                    if language_name.is_none() {
+                        language_name = parent_name;
+                    }
+                }
+
+                // By default, injections do not include the *children* of an
+                // `injection.content` node - only the ranges that belong to the
+                // node itself. This can be changed using a `#set!` predicate that
+                // sets the `injection.include-children` key.
+                "injection.include-children" => include_children = true,
+                _ => {}
+            }
+        }
+
+        (language_name, content_node, include_children)
     }
 }

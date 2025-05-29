@@ -145,6 +145,7 @@ impl Language {
         match self {
             Self::Markdown => vec![Self::MarkdownInline, Self::Html, Self::Toml, Self::Yaml],
             Self::MarkdownInline => vec![],
+            Self::Html => vec![Self::JavaScript, Self::Css],
             _ => vec![],
         }
     }
@@ -191,8 +192,8 @@ impl Language {
             ),
             Self::Rust => (
                 tree_sitter_rust::LANGUAGE,
-                tree_sitter_rust::HIGHLIGHTS_QUERY,
-                tree_sitter_rust::INJECTIONS_QUERY,
+                include_str!("languages/rust/highlights.scm"),
+                include_str!("languages/rust/injections.scm"),
                 "",
             ),
             Self::Go => (
@@ -251,8 +252,8 @@ impl Language {
             ),
             Self::Html => (
                 tree_sitter_html::LANGUAGE,
-                tree_sitter_html::HIGHLIGHTS_QUERY,
-                "",
+                include_str!("languages/html/highlights.scm"),
+                include_str!("languages/html/injections.scm"),
                 "",
             ),
             Self::Css => (
