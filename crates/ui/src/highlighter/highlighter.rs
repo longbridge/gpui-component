@@ -355,60 +355,6 @@ impl SyntaxHighlighter {
         cache
     }
 
-    /// The argument `range` is the range of the line in the text.
-    ///
-    /// Returns `range` is the range in the line.
-    pub fn styles(
-        &self,
-        range: &Range<usize>,
-        theme: &HighlightTheme,
-    ) -> Vec<(Range<usize>, HighlightStyle)> {
-        let mut styles = vec![];
-        let start_offset = range.start;
-        let line_len = range.len();
-
-        let mut last_range = 0..0;
-
-        // NOTE: the ranges in the cache may have duplicates, so we need to merge them.
-        for (node_range, highlight_name) in self.cache.iter() {
-            if node_range.start < range.start {
-                continue;
-            }
-
-            if node_range.end > range.end {
-                break;
-            }
-
-            let range_in_line = node_range.start.saturating_sub(start_offset)
-                ..node_range.end.saturating_sub(start_offset);
-
-            // Ensure every range is connected.
-            if last_range.end < range_in_line.start {
-                styles.push((
-                    last_range.end..range_in_line.start,
-                    HighlightStyle::default(),
-                ));
-            }
-
-            let style = theme.style(&highlight_name).unwrap_or_default();
-
-            styles.push((range_in_line.clone(), style));
-            last_range = range_in_line;
-        }
-
-        // If the matched styles is empty, return a default range.
-        if styles.len() == 0 {
-            return vec![(0..line_len, HighlightStyle::default())];
-        }
-
-        // Ensure the last range is connected to the end of the line.
-        if last_range.end < line_len {
-            styles.push((last_range.end..line_len, HighlightStyle::default()));
-        }
-
-        styles
-    }
-
     /// Ref:
     /// https://github.com/tree-sitter/tree-sitter/blob/v0.25.5/highlight/src/lib.rs#L1229
     ///
@@ -482,5 +428,55 @@ impl SyntaxHighlighter {
         }
 
         (language_name, content_node, include_children)
+    }
+
+    /// The argument `range` is the range of the line in the text.
+    ///
+    /// Returns `range` is the range in the line.
+    pub fn styles(
+        &self,
+        range: &Range<usize>,
+        theme: &HighlightTheme,
+    ) -> Vec<(Range<usize>, HighlightStyle)> {
+        let mut styles = vec![];
+        let start_offset = range.start;
+        let line_len = range.len();
+
+        let mut last_range = 0..0;
+
+        // NOTE: the ranges in the cache may have duplicates, so we need to merge them.
+        for (node_range, highlight_name) in self.cache.iter() {
+            if node_range.start < range.start {
+                continue;
+            }
+
+            let range_in_line = node_range.start.saturating_sub(start_offset)
+                ..node_range.end.saturating_sub(start_offset);
+
+            // Ensure every range is connected.
+            if last_range.end < range_in_line.start {
+                styles.push((
+                    last_range.end..range_in_line.start,
+                    HighlightStyle::default(),
+                ));
+            }
+
+            let style = theme.style(&highlight_name).unwrap_or_default();
+
+            styles.push((range_in_line.clone(), style));
+            last_range = range_in_line;
+        }
+
+        // If the matched styles is empty, return a default range.
+        if styles.len() == 0 {
+            return vec![(0..line_len, HighlightStyle::default())];
+        }
+
+        // Ensure the last range is connected to the end of the line.
+        if last_range.end < line_len {
+            styles.push((last_range.end..line_len, HighlightStyle::default()));
+        }
+
+        styles
     }
 }
