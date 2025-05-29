@@ -322,15 +322,33 @@ impl TextElement {
         builder.build().ok()
     }
 
-    fn highlight_lines(&mut self, cx: &mut App) -> Option<Vec<LineHighlightStyle>> {
+    /// First usize is the offset of skiped.
+    fn highlight_lines(&mut self, cx: &mut App) -> Option<(usize, Vec<LineHighlightStyle>)> {
         let theme = LanguageRegistry::global(cx)
             .theme(cx.theme().is_dark())
             .clone();
         self.input.update(cx, |state, _| match &mut state.mode {
             InputMode::CodeEditor { highlighter, .. } => {
                 let mut offset = 0;
+                let mut skiped_offset = 0;
                 let mut lines = vec![];
-                for line in state.text.split('\n') {
+                let top_line = (-state.scroll_handle.offset().y / state.last_line_height) as usize;
+                let visible_lines =
+                    (state.input_bounds.size.height / state.last_line_height) as usize;
+                let end_line = top_line + visible_lines;
+                for (ix, line) in state.text.split('\n').enumerate() {
+                    if ix < top_line {
+                        offset += line.len() + 1;
+                        continue;
+                    }
+                    if ix > end_line {
+                        break;
+                    }
+
+                    if skiped_offset == 0 {
+                        skiped_offset = offset;
+                    }
+
                     let range = offset..offset + line.len();
                     let styles = highlighter.borrow().styles(&range, &theme);
 
@@ -340,7 +358,7 @@ impl TextElement {
                     });
                     offset += line.len() + 1;
                 }
-                Some(lines)
+                Some((skiped_offset, lines))
             }
             _ => None,
         })
@@ -549,8 +567,13 @@ impl Element for TextElement {
         };
 
         let runs = if !is_empty {
-            if let Some(highlight_lines) = highlight_lines {
+            if let Some((skiped_offset, highlight_lines)) = highlight_lines {
                 let mut runs = vec![];
+                runs.push(TextRun {
+                    len: skiped_offset,
+                    ..run.clone()
+                });
+
                 for style in highlight_lines {
                     runs.extend(style.to_run(&text_style, &input.marked_range, &marked_run));
                 }

@@ -445,9 +445,11 @@ impl SyntaxHighlighter {
         let mut last_range = 0..0;
 
         // NOTE: the ranges in the cache may have duplicates, so we need to merge them.
-        for (node_range, highlight_name) in self.cache.iter() {
-            if node_range.start < range.start {
-                continue;
+        for (node_range, highlight_name) in
+            self.cache.iter().skip_while(|(r, _)| r.start < range.start)
+        {
+            if node_range.end > range.end {
+                break;
             }
 
             let range_in_line = node_range.start.saturating_sub(start_offset)
