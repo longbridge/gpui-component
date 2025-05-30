@@ -6,7 +6,6 @@ use gpui::{
     Pixels, Point, SharedString, Size, Style, TextAlign, TextRun, UnderlineStyle, Window,
     WrappedLine,
 };
-use itertools::Itertools;
 use smallvec::SmallVec;
 
 use crate::{highlighter::LanguageRegistry, ActiveTheme as _, Root};
