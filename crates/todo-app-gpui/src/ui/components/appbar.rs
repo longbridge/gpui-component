@@ -98,7 +98,7 @@ impl Render for AppTitleBar {
                                         height: px(800.),
                                     }),
 
-                                    kind: WindowKind::Normal,
+                                    kind: WindowKind::PopUp,
                                     #[cfg(target_os = "linux")]
                                     window_background:
                                         gpui::WindowBackgroundAppearance::Transparent,
