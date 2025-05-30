@@ -8,6 +8,7 @@ use gpui_component::{
     button::{Button, ButtonGroup, ButtonVariants},
     date_picker::{DatePicker, DatePickerEvent, DatePickerState, DateRangePreset},
     h_flex, hsl,
+    indicator::Indicator,
     label::Label,
     list::{List, ListDelegate, ListEvent, ListItem},
     tab::TabBar,
@@ -75,7 +76,7 @@ impl TodoItem {
             base: ListItem::new(id),
             selected,
             date_picker,
-            hovered: false,
+            hovered: true,
             star: false,
             alert: false,
             completed: false,
@@ -153,10 +154,18 @@ impl RenderOnce for TodoItem {
                                                     .on_click(|event, win, app| {}),
                                             )
                                         })
+                                        .when(self.hovered, |div| {
+                                            div.child(
+                                                Indicator::new()
+                                                    .with_size(px(16.))
+                                                    .icon(IconName::LoaderCircle)
+                                                    .color(blue_500()),
+                                            )
+                                        })
                                         .child(
-                                            Button::new("button-redo")
+                                            Button::new("button-retry")
                                                 .ghost()
-                                                .icon(IconName::Redo)
+                                                .icon(IconName::Retry)
                                                 .xsmall()
                                                 .on_click(|event, win, app| {}),
                                         )
