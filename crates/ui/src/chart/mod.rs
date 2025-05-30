@@ -20,7 +20,7 @@ where
 {
     fn x(&self) -> X;
     fn y(&self) -> Y;
-    fn label(&self) -> SharedString {
-        self.x().into()
+    fn label(&self) -> impl Into<SharedString> {
+        self.x()
     }
 }
