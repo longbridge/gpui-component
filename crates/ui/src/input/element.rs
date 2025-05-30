@@ -10,7 +10,7 @@ use smallvec::SmallVec;
 
 use crate::{highlighter::LanguageRegistry, ActiveTheme as _, Root};
 
-use super::{code_highlighter::LineHighlightStyle, mode::InputMode, InputState};
+use super::{code_highlighter::LineHighlightStyle, mode::InputMode, InputState, LastLayout};
 
 const RIGHT_MARGIN: Pixels = px(5.);
 const BOTTOM_MARGIN_ROWS: usize = 1;
@@ -367,8 +367,8 @@ impl TextElement {
 pub(super) struct PrepaintState {
     /// The visible range of lines in the viewport.
     visible_range: Range<usize>,
-    /// The lines in visible viewport, based on `visible_range`.
-    lines: SmallVec<[WrappedLine; 1]>,
+    /// The lines of entire lines.
+    last_layout: LastLayout,
     /// The lines only contains the visible lines in the viewport, based on `visible_range`.
     line_numbers: Option<SmallVec<[WrappedLine; 1]>>,
     line_number_width: Pixels,
@@ -493,7 +493,7 @@ impl Element for TextElement {
                 cx.theme().foreground,
             )
         } else {
-            (text, cx.theme().foreground)
+            (text.clone(), cx.theme().foreground)
         };
 
         let text_style = window.text_style();
@@ -634,10 +634,14 @@ impl Element for TextElement {
             None
         };
 
+        let t = std::time::Instant::now();
+        // NOTE: If there have about 10K lines, this will take about 5~6ms.
         let lines = window
             .text_system()
             .shape_text(display_text, font_size, &runs, wrap_width, None)
             .expect("failed to shape text");
+        tracing::trace!("shaped {} lines in {:?}", lines.len(), t.elapsed());
+
         let max_line_width = lines
             .iter()
             .map(|line| line.width())
@@ -699,7 +703,9 @@ impl Element for TextElement {
 
         PrepaintState {
             bounds,
-            lines: lines.into(),
+            last_layout: LastLayout {
+                lines: Rc::new(lines),
+            },
             scroll_size,
             line_numbers,
             line_number_width,
@@ -811,7 +817,7 @@ impl Element for TextElement {
         let mut offset_y = px(0.) + invisible_top_padding;
 
         for line in prepaint
-            .lines
+            .last_layout
             .iter()
             .skip(visible_range.start)
             .take(visible_range.len())
@@ -833,7 +839,7 @@ impl Element for TextElement {
         let scroll_size = prepaint.scroll_size;
 
         self.input.update(cx, |input, cx| {
-            input.last_layout = Some(prepaint.lines.clone());
+            input.last_layout = Some(prepaint.last_layout.clone());
             input.last_bounds = Some(bounds);
             input.last_cursor_offset = Some(input.cursor_offset());
             input.last_line_height = line_height;

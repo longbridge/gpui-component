@@ -1,5 +1,9 @@
 use gpui::{App, HighlightStyle, SharedString};
-use std::{collections::HashMap, ops::Range, sync::Arc};
+use std::{
+    collections::{BTreeMap, HashMap},
+    ops::Range,
+    sync::Arc,
+};
 use tree_sitter::{
     InputEdit, Node, Parser, Point, Query, QueryCursor, QueryMatch, StreamingIterator, Tree,
 };
@@ -34,8 +38,10 @@ pub struct SyntaxHighlighter {
 
     /// Cache of highlight, the range is offset of the token in the tree.
     ///
-    /// The Vec is ordered by the range from 0 to the end of the line.
-    cache: Vec<(Range<usize>, String)>,
+    /// The BTreeMap is ordered by the range from 0 to the end of the line.
+    ///
+    /// The `key` is the `start` of the range.
+    cache: BTreeMap<usize, (Range<usize>, String)>,
 }
 
 impl SyntaxHighlighter {
@@ -167,7 +173,7 @@ impl SyntaxHighlighter {
             text: SharedString::new(""),
             highlighter: Highlighter::new(),
             config: None,
-            cache: vec![],
+            cache: BTreeMap::new(),
             locals_pattern_index,
             highlights_pattern_index,
             non_local_variable_patterns,
@@ -270,8 +276,11 @@ impl SyntaxHighlighter {
                         continue;
                     }
 
-                    self.cache
-                        .extend(self.handle_injection(&language_name, content_node, source));
+                    let styles = self.handle_injection(&language_name, content_node, source);
+                    for (node_range, highlight_name) in styles {
+                        self.cache
+                            .insert(node_range.start, (node_range, highlight_name.to_string()));
+                    }
                     last_end = content_node.end_byte();
                 }
 
@@ -286,8 +295,10 @@ impl SyntaxHighlighter {
 
                 let highlight_name = query.capture_names()[cap.index as usize];
                 let node_range: Range<usize> = node.start_byte()..node.end_byte();
-                self.cache
-                    .push((node_range.clone(), highlight_name.to_string()));
+                self.cache.insert(
+                    node_range.start,
+                    (node_range.clone(), highlight_name.to_string()),
+                );
                 last_end = node_range.end;
             }
         }
@@ -444,9 +455,7 @@ impl SyntaxHighlighter {
         let mut last_range = 0..0;
 
         // NOTE: the ranges in the cache may have duplicates, so we need to merge them.
-        for (node_range, highlight_name) in
-            self.cache.iter().skip_while(|(r, _)| r.start < range.start)
-        {
+        for (_, (node_range, highlight_name)) in self.cache.range(range.start..) {
             // TODO: If break, the `comment.doc` will not work.
             // Ref: https://github.com/longbridge/gpui-component/pull/904/commits/d8f886939d3b472f228c1ce72154a951e98f32c5
             if node_range.end > range.end {

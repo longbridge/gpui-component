@@ -88,6 +88,7 @@ pub use textarea_story::TextareaStory;
 pub use title_bar::AppTitleBar;
 pub use toggle_story::ToggleStory;
 pub use tooltip_story::TooltipStory;
+use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
 pub use webview_story::WebViewStory;
 pub use welcome_story::WelcomeStory;
 
@@ -237,6 +238,11 @@ impl Render for StoryRoot {
 impl Global for AppState {}
 
 pub fn init(cx: &mut App) {
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer())
+        .with(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
+
     gpui_component::init(cx);
     AppState::init(cx);
     input_story::init(cx);

@@ -2,11 +2,10 @@
 //!
 //! Based on the `Input` example from the `gpui` crate.
 //! https://github.com/zed-industries/zed/blob/main/crates/gpui/examples/input.rs
-
 use serde::Deserialize;
 use smallvec::SmallVec;
 use std::cell::{Cell, RefCell};
-use std::ops::Range;
+use std::ops::{Deref, Range};
 use std::rc::Rc;
 use unicode_segmentation::*;
 
@@ -201,6 +200,19 @@ pub fn init(cx: &mut App) {
     number_input::init(cx);
 }
 
+#[derive(Clone)]
+pub(super) struct LastLayout {
+    pub(super) lines: Rc<SmallVec<[WrappedLine; 1]>>,
+}
+
+impl Deref for LastLayout {
+    type Target = Rc<SmallVec<[WrappedLine; 1]>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.lines
+    }
+}
+
 /// InputState to keep editing state of the [`super::TextInput`].
 pub struct InputState {
     pub(super) focus_handle: FocusHandle,
@@ -222,7 +234,8 @@ pub struct InputState {
     pub(super) current_line_index: Option<usize>,
     /// The marked range is the temporary insert text on IME typing.
     pub(super) marked_range: Option<Range<usize>>,
-    pub(super) last_layout: Option<SmallVec<[WrappedLine; 1]>>,
+    /// The last layout lines.
+    pub(super) last_layout: Option<LastLayout>,
     pub(super) last_cursor_offset: Option<usize>,
     /// The line_height of text layout, this will change will InputElement painted.
     pub(super) last_line_height: Pixels,

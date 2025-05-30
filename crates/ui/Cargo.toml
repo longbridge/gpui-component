@@ -36,6 +36,7 @@ schemars = "0.8.22"
 futures-util = "0.3.31"
 wry = { version = "0.48.0", optional = true }
 enum-iterator = "2.1.0"
+tracing = "0.1.41"
 # Markdown Parser
 markdown = "1.0.0-alpha.22"
 # HTML Parser
