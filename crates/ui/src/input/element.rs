@@ -1,6 +1,5 @@
 use std::{ops::Range, rc::Rc};
 
-use chrono::offset;
 use gpui::{
     fill, point, px, relative, size, App, Bounds, Corners, Element, ElementId, ElementInputHandler,
     Entity, GlobalElementId, IntoElement, LayoutId, MouseButton, MouseMoveEvent, PaintQuad, Path,
@@ -464,10 +463,11 @@ impl Element for TextElement {
         cx: &mut App,
     ) -> Self::PrepaintState {
         let state = self.input.read(cx);
+        let total_lines = state.text_wrapper.lines.len();
         let top_line = (-state.scroll_handle.offset().y / state.last_line_height) as usize;
         let end_line =
             top_line + (state.input_bounds.size.height / state.last_line_height) as usize;
-        let visible_lines = top_line..end_line;
+        let visible_lines = top_line.saturating_sub(1)..(end_line + 1).min(total_lines);
 
         let highlight_lines = self.highlight_lines(&visible_lines, cx);
         let multi_line = self.input.read(cx).is_multi_line();
@@ -756,11 +756,12 @@ impl Element for TextElement {
             }
         }
 
-        // TODO: Line numbers is not correct when scroll
+        // Offset for invisible lines to leave a space for line numbers.
+        let top_pad_height = visible_lines.start as f32 * line_height;
         if let Some(line_numbers) = prepaint.line_numbers.as_ref() {
             for (ix, line) in line_numbers.iter().enumerate() {
                 let ix = visible_lines.start + ix;
-                let p = point(origin.x, origin.y + offset_y);
+                let p = point(origin.x, origin.y + top_pad_height + offset_y);
                 let line_size = line.size(line_height);
 
                 // Paint the current line background
