@@ -1,3 +1,4 @@
+use crate::measure;
 use gpui::{App, HighlightStyle, SharedString};
 use std::{
     collections::{BTreeMap, HashMap},
@@ -153,9 +154,10 @@ impl SyntaxHighlighter {
                     injection_queries.insert(inj_language.name(), q);
                 }
                 Err(e) => {
-                    println!(
+                    tracing::error!(
                         "failed to build injection query for {:?}: {:?}",
-                        inj_language, e
+                        inj_language,
+                        e
                     );
                 }
             }
@@ -217,39 +219,56 @@ impl SyntaxHighlighter {
     pub fn update(
         &mut self,
         selected_range: &Range<usize>,
-        pending_text: &str,
+        full_text: &str,
         new_text: &str,
         cx: &mut App,
     ) {
-        if self.text == pending_text {
+        if self.text == full_text {
             return;
         }
 
         let new_tree = match &self.old_tree {
-            None => self.parser.parse(pending_text, None),
+            None => self.parser.parse(full_text, None),
             Some(old) => {
                 let edit = InputEdit {
                     start_byte: selected_range.start,
-                    old_end_byte: selected_range.end,
-                    new_end_byte: selected_range.end + new_text.len(),
+                    old_end_byte: selected_range.start,
+                    new_end_byte: selected_range.start + new_text.len(),
                     start_position: Point::new(0, 0),
                     old_end_position: Point::new(0, 0),
                     new_end_position: Point::new(0, 0),
                 };
                 let mut old_cloned = old.clone();
                 old_cloned.edit(&edit);
-                self.parser.parse(pending_text, Some(&old_cloned))
+                // NOTE: 10K lines, about 4.5ms
+                self.parser.parse(full_text, Some(&old_cloned))
             }
+        };
+
+        let Some(new_tree) = new_tree else {
+            return;
+        };
+
+        let mut changed_ranges = None;
+        if let Some(old_tree) = &self.old_tree {
+            changed_ranges = Some(new_tree.changed_ranges(old_tree));
         }
-        .expect("failed to parse");
+
+        measure("build_styles", || {
+            self.build_styles(changed_ranges, cx);
+        });
 
         // Update state
         self.old_tree = Some(new_tree);
-        self.text = SharedString::from(pending_text.to_string());
-        self.build_styles(cx);
+        self.text = SharedString::from(full_text.to_string());
     }
 
-    fn build_styles(&mut self, _: &mut App) {
+    /// NOTE: 10K lines, about 180ms
+    fn build_styles(
+        &mut self,
+        changed_ranges: Option<impl ExactSizeIterator<Item = tree_sitter::Range>>,
+        _: &mut App,
+    ) {
         let Some(tree) = &self.old_tree else {
             return;
         };
@@ -258,14 +277,45 @@ impl SyntaxHighlighter {
             return;
         };
 
-        self.cache.clear();
         let source = self.text.as_bytes();
         let mut query_cursor = QueryCursor::new();
-        let mut matches = query_cursor.matches(&query, tree.root_node(), source);
+        let mut root_node = tree.root_node();
+
+        // Incremental parsing to only update changed ranges.
+        let mut full_changed_range = 0..0;
+        if let Some(changed_ranges) = changed_ranges {
+            for change_range in changed_ranges {
+                if full_changed_range.start == 0 {
+                    full_changed_range.start = change_range.start_byte;
+                }
+                if full_changed_range.end == 0 {
+                    full_changed_range.end = change_range.end_byte;
+                }
+            }
+
+            if full_changed_range.len() == 0 {
+                return;
+            }
+
+            println!("---------- full_changed_range: {:?}", full_changed_range);
+            let Some(node) = tree
+                .root_node()
+                .descendant_for_byte_range(full_changed_range.start, full_changed_range.end)
+            else {
+                return;
+            };
+
+            root_node = node;
+        } else {
+            full_changed_range = 0..source.len();
+            self.cache.clear();
+        }
+
+        let mut matches = query_cursor.matches(&query, root_node, source);
 
         // TODO: Merge duplicate ranges.
 
-        let mut last_end = 0;
+        let mut last_end = full_changed_range.start;
         while let Some(m) = matches.next() {
             // Ref:
             // https://github.com/tree-sitter/tree-sitter/blob/460118b4c82318b083b4d527c9c750426730f9c0/highlight/src/lib.rs#L556
