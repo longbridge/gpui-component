@@ -3,8 +3,10 @@ use std::{ops::Range, rc::Rc};
 use gpui::{
     fill, point, px, relative, size, App, Bounds, Corners, Element, ElementId, ElementInputHandler,
     Entity, GlobalElementId, IntoElement, LayoutId, MouseButton, MouseMoveEvent, PaintQuad, Path,
-    Pixels, Point, SharedString, Style, TextAlign, TextRun, UnderlineStyle, Window, WrappedLine,
+    Pixels, Point, SharedString, Size, Style, TextAlign, TextRun, UnderlineStyle, Window,
+    WrappedLine,
 };
+use itertools::Itertools;
 use smallvec::SmallVec;
 
 use crate::{highlighter::LanguageRegistry, ActiveTheme as _, Root};
@@ -371,6 +373,8 @@ pub(super) struct PrepaintState {
     /// The lines only contains the visible lines in the viewport, based on `visible_range`.
     line_numbers: Option<SmallVec<[WrappedLine; 1]>>,
     line_number_width: Pixels,
+    /// Size of the scrollable area by entire lines.
+    scroll_size: Size<Pixels>,
     cursor: Option<PaintQuad>,
     cursor_scroll_offset: Point<Pixels>,
     current_line_index: usize,
@@ -634,7 +638,16 @@ impl Element for TextElement {
         let lines = window
             .text_system()
             .shape_text(display_text, font_size, &runs, wrap_width, None)
-            .unwrap();
+            .expect("failed to shape text");
+        let max_line_width = lines
+            .iter()
+            .map(|line| line.width())
+            .max()
+            .unwrap_or(bounds.size.width);
+        let scroll_size = size(
+            max_line_width + line_number_width + RIGHT_MARGIN,
+            (lines.len() as f32 * line_height).max(bounds.size.height),
+        );
 
         // `position_for_index` for example
         //
@@ -687,7 +700,8 @@ impl Element for TextElement {
 
         PrepaintState {
             bounds,
-            lines,
+            lines: lines.into(),
+            scroll_size,
             line_numbers,
             line_number_width,
             cursor,
@@ -749,7 +763,7 @@ impl Element for TextElement {
         let origin = bounds.origin;
 
         // Offset for invisible lines to leave a space for line numbers.
-        let top_pad_height = visible_range.start as f32 * line_height;
+        let invisible_top_padding = visible_range.start * line_height;
 
         let mut offset_y = px(0.);
         if self.input.read(cx).masked {
@@ -762,9 +776,11 @@ impl Element for TextElement {
         }
 
         if let Some(line_numbers) = prepaint.line_numbers.as_ref() {
+            offset_y += invisible_top_padding;
+
             for (ix, line) in line_numbers.iter().enumerate() {
                 let ix = visible_range.start + ix;
-                let p = point(origin.x, origin.y + top_pad_height + offset_y);
+                let p = point(origin.x, origin.y + offset_y);
                 let line_size = line.size(line_height);
 
                 // Paint the current line background
@@ -793,8 +809,14 @@ impl Element for TextElement {
         }
 
         // Paint text
-        let mut offset_y = px(0.);
-        for line in prepaint.lines.iter() {
+        let mut offset_y = px(0.) + invisible_top_padding;
+
+        for line in prepaint
+            .lines
+            .iter()
+            .skip(visible_range.start)
+            .take(visible_range.len())
+        {
             let p = point(origin.x + prepaint.line_number_width, origin.y + offset_y);
             let line_size = line.size(line_height);
             _ = line.paint(p, line_height, TextAlign::Left, None, window, cx);
@@ -807,14 +829,9 @@ impl Element for TextElement {
             }
         }
 
-        let width = prepaint
-            .lines
-            .iter()
-            .map(|l| l.width())
-            .max()
-            .unwrap_or_default();
-        let height = offset_y;
-        let scroll_size = size(width, height);
+        // let width = prepaint.max_line_width;
+        // let height = offset_y + invisible_bottom_padding;
+        let scroll_size = prepaint.scroll_size;
 
         self.input.update(cx, |input, cx| {
             input.last_layout = Some(prepaint.lines.clone());
