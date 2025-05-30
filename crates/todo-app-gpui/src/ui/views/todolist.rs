@@ -16,7 +16,7 @@ use gpui_component::{
 };
 use story::Story;
 
-use super::todo_view::TodoView;
+use super::todo_form::TodoFormView;
 
 actions!(list_story, [SelectedCompany]);
 
@@ -163,9 +163,9 @@ impl RenderOnce for TodoItem {
                                             )
                                         })
                                         .child(
-                                            Button::new("button-retry")
+                                            Button::new("button-refresh")
                                                 .ghost()
-                                                .icon(IconName::Retry)
+                                                .icon(IconName::RefreshCW)
                                                 .xsmall()
                                                 .on_click(|event, win, app| {}),
                                         )
@@ -584,10 +584,10 @@ impl Render for TodoList {
                                     window_decorations: Some(gpui::WindowDecorations::Client),
                                     ..Default::default()
                                 };
-                                story::create_new_window_options(
-                                    "xTodo",
+                                crate::ui::create_normal_window_options(
+                                    "Add Todo",
                                     options,
-                                    move |window, cx| TodoView::view(window, cx),
+                                    move |window, cx| TodoFormView::view(window, cx),
                                     cx,
                                 );
                             })),

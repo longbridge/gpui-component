@@ -1,14 +1,10 @@
 use gpui::*;
 
-pub struct TodoView {
-    root: SharedString,
-}
+pub struct Settings;
 
-impl TodoView {
+impl Settings {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        Self {
-            root: SharedString::new("hello todo"),
-        }
+        Self 
     }
 
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
@@ -16,8 +12,8 @@ impl TodoView {
     }
 }
 
-impl Render for TodoView {
+impl Render for Settings {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
-        div().p_4().size_full().child(self.root.clone())
+        div().p_4().size_full().child("")
     }
 }

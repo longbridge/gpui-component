@@ -1,67 +1,41 @@
+use gpui::size;
 use gpui::*;
 use gpui::{
-    div, img, prelude::FluentBuilder as _, px, AnyElement, App, AppContext, ClickEvent, Context,
-    Corner, Entity, FocusHandle, Hsla, Image, InteractiveElement as _, IntoElement, MouseButton,
-    ParentElement as _, Render, SharedString, Styled as _, Subscription, Window,
+    div, img, px, AnyElement, App, AppContext, Context, Corner, Entity, FocusHandle, Image,
+    IntoElement, MouseButton, Render, Subscription, Window,
 };
-use gpui::{size, Boundary};
 use gpui_component::{
     badge::Badge,
     button::{Button, ButtonVariants as _},
-    color_picker::{ColorPicker, ColorPickerEvent, ColorPickerState},
     locale,
     popup_menu::PopupMenuExt as _,
     scroll::ScrollbarShow,
-    set_locale, ActiveTheme as _, ContextModal as _, IconName, Sizable as _, Theme, ThemeMode,
-    TitleBar,
+    set_locale, ActiveTheme as _, ContextModal as _, IconName, Sizable as _, Theme, TitleBar,
 };
 use std::rc::Rc;
-use std::{path::Path, sync::Arc};
-
+use std::sync::Arc;
+use crate::ui::views::settings::Settings;
 use crate::ui::{SelectFont, SelectLocale, SelectRadius, SelectScrollbarShow};
 
 pub struct AppTitleBar {
-    title: SharedString,
     locale_selector: Entity<LocaleSelector>,
-    font_size_selector: Entity<FontSizeSelector>,
-    theme_color: Entity<ColorPickerState>,
     child: Rc<dyn Fn(&mut Window, &mut App) -> AnyElement>,
     _subscriptions: Vec<Subscription>,
 }
 
 impl AppTitleBar {
-    pub fn new(
-        title: impl Into<SharedString>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Self {
+    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let locale_selector = cx.new(|cx| LocaleSelector::new(window, cx));
-        let font_size_selector = cx.new(|cx| FontSizeSelector::new(window, cx));
-
         if cx.should_auto_hide_scrollbars() {
             Theme::global_mut(cx).scrollbar_show = ScrollbarShow::Scrolling;
         } else {
             Theme::global_mut(cx).scrollbar_show = ScrollbarShow::Hover;
         }
 
-        let theme_color =
-            cx.new(|cx| ColorPickerState::new(window, cx).default_value(cx.theme().primary));
-
-        let _subscriptions = vec![cx.subscribe_in(
-            &theme_color,
-            window,
-            |this, _, ev: &ColorPickerEvent, window, cx| match ev {
-                ColorPickerEvent::Change(color) => {
-                    this.set_theme_color(*color, window, cx);
-                }
-            },
-        )];
+        let _subscriptions = vec![];
 
         Self {
-            title: title.into(),
             locale_selector,
-            font_size_selector,
-            theme_color,
             child: Rc::new(|_, _| div().into_any_element()),
             _subscriptions,
         }
@@ -74,32 +48,6 @@ impl AppTitleBar {
     {
         self.child = Rc::new(move |window, cx| f(window, cx).into_any_element());
         self
-    }
-
-    fn set_theme_color(
-        &mut self,
-        color: Option<Hsla>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if let Some(color) = color {
-            let theme = cx.global_mut::<Theme>();
-            theme.apply_color(color);
-            self.theme_color.update(cx, |state, cx| {
-                state.set_value(color, window, cx);
-            });
-            window.refresh();
-        }
-    }
-
-    fn change_color_mode(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
-        let mode = match cx.theme().mode.is_dark() {
-            true => ThemeMode::Light,
-            false => ThemeMode::Dark,
-        };
-
-        Theme::change(mode, None, cx);
-        self.set_theme_color(self.theme_color.read(cx).value(), window, cx);
     }
 }
 
@@ -130,27 +78,7 @@ impl Render for AppTitleBar {
                     .gap_2()
                     .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                     .child((self.child.clone())(window, cx))
-                    // .child(
-                    //     ColorPicker::new(&self.theme_color)
-                    //         .small()
-                    //         .anchor(Corner::TopRight)
-                    //         .icon(IconName::Palette),
-                    // )
-                    // .child(
-                    //     Button::new("theme-mode")
-                    //         .map(|this| {
-                    //             if cx.theme().mode.is_dark() {
-                    //                 this.icon(IconName::Sun)
-                    //             } else {
-                    //                 this.icon(IconName::Moon)
-                    //             }
-                    //         })
-                    //         .small()
-                    //         .ghost()
-                    //         .on_click(cx.listener(Self::change_color_mode)),
-                    // )
                     .child(self.locale_selector.clone())
-                    // .child(self.font_size_selector.clone())
                     .child(
                         Button::new("setting")
                             .icon(IconName::Settings)
@@ -178,13 +106,7 @@ impl Render for AppTitleBar {
                                     window_decorations: Some(gpui::WindowDecorations::Client),
                                     ..Default::default()
                                 };
-
-                                // crate::create_new_window_options(
-                                //     "xTodo",
-                                //     options,
-                                //     move |window, cx| TodoView::view(window, cx),
-                                //     cx,
-                                // );
+                                crate::ui::create_normal_window_options("Settings", options, move |window, cx| Settings::view(window, cx), cx);
                             }),
                     )
                     .child(
