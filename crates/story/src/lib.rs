@@ -240,7 +240,10 @@ impl Global for AppState {}
 pub fn init(cx: &mut App) {
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer())
-        .with(tracing_subscriber::EnvFilter::from_default_env())
+        .with(
+            tracing_subscriber::EnvFilter::from_default_env()
+                .add_directive("gpui_component=trace".parse().unwrap()),
+        )
         .init();
 
     gpui_component::init(cx);

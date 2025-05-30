@@ -119,5 +119,27 @@ pub fn set_locale(locale: &str) {
 
 #[inline]
 pub(crate) fn measure_enable() -> bool {
-    std::env::var("ZED_MEASUREMENTS").is_ok()
+    std::env::var("ZED_MEASUREMENTS").is_ok() || std::env::var("GPUI_MEASUREMENTS").is_ok()
+}
+
+/// Measures the execution time of a function and logs it if `if_` is true.
+///
+/// And need env `GPUI_MEASUREMENTS=1`
+#[inline]
+#[track_caller]
+pub fn measure_if(name: &str, if_: bool, f: impl FnOnce()) {
+    if if_ && measure_enable() {
+        let start = std::time::Instant::now();
+        f();
+        let duration = start.elapsed();
+        tracing::trace!("{} in {:?}", name, duration);
+    } else {
+        f();
+    }
+}
+
+/// Measures the execution time.
+#[inline]
+pub fn measure(name: &str, f: impl FnOnce()) {
+    measure_if(name, true, f);
 }
