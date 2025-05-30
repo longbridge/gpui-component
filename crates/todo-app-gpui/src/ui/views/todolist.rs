@@ -158,17 +158,19 @@ impl RenderOnce for TodoItem {
                                             div.child(
                                                 Indicator::new()
                                                     .with_size(px(16.))
-                                                    .icon(IconName::LoaderCircle)
+                                                    .icon(IconName::RefreshCW)
                                                     .color(blue_500()),
                                             )
                                         })
-                                        .child(
-                                            Button::new("button-refresh")
-                                                .ghost()
-                                                .icon(IconName::RefreshCW)
-                                                .xsmall()
-                                                .on_click(|event, win, app| {}),
-                                        )
+                                        .when(!self.hovered, |div| {
+                                            div.child(
+                                                Button::new("button-refresh")
+                                                    .ghost()
+                                                    .icon(IconName::RefreshCW)
+                                                    .xsmall()
+                                                    .on_click(|event, win, app| {}),
+                                            )
+                                        })
                                         .child(
                                             Button::new("button-copy")
                                                 .ghost()
