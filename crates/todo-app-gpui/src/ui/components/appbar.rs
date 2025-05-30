@@ -18,7 +18,7 @@ use gpui_component::{
 use std::rc::Rc;
 use std::{path::Path, sync::Arc};
 
-use crate::{SelectFont, SelectLocale, SelectRadius, SelectScrollbarShow};
+use crate::ui::{SelectFont, SelectLocale, SelectRadius, SelectScrollbarShow};
 
 pub struct AppTitleBar {
     title: SharedString,
@@ -170,7 +170,7 @@ impl Render for AppTitleBar {
                                         height: px(800.),
                                     }),
 
-                                    kind: WindowKind::PopUp,
+                                    kind: WindowKind::Normal,
                                     #[cfg(target_os = "linux")]
                                     window_background:
                                         gpui::WindowBackgroundAppearance::Transparent,

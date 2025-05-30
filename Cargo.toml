@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/story", "crates/ui"]
+members = ["crates/story", "crates/ui", "crates/todo-app-gpui"]
 
 default-members = ["crates/story"]
 resolver = "2"

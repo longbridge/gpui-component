@@ -1,5 +1,6 @@
 mod accordion_story;
 mod alert_story;
+pub mod app_title_bar;
 mod assets;
 mod badge_story;
 mod button_story;
@@ -173,6 +174,39 @@ where
             ..Default::default()
         };
 
+        let window = cx
+            .open_window(options, |window, cx| {
+                let view = crate_view_fn(window, cx);
+                let root = cx.new(|cx| StoryRoot::new(title.clone(), view, window, cx));
+
+                cx.new(|cx| Root::new(root.into(), window, cx))
+            })
+            .expect("failed to open window");
+
+        window
+            .update(cx, |_, window, _| {
+                window.activate_window();
+                window.set_window_title(&title);
+            })
+            .expect("failed to update window");
+
+        Ok::<_, anyhow::Error>(())
+    })
+    .detach();
+}
+
+pub fn create_new_window_options<F, E>(
+    title: &str,
+    options: WindowOptions,
+    crate_view_fn: F,
+    cx: &mut App,
+) where
+    E: Into<AnyView>,
+    F: FnOnce(&mut Window, &mut App) -> E + Send + 'static,
+{
+    let title = SharedString::from(title.to_string());
+
+    cx.spawn(async move |cx| {
         let window = cx
             .open_window(options, |window, cx| {
                 let view = crate_view_fn(window, cx);

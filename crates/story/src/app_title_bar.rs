@@ -1,10 +1,11 @@
-use gpui::*;
+use std::rc::Rc;
+use std::{path::Path, sync::Arc};
+
 use gpui::{
     div, img, prelude::FluentBuilder as _, px, AnyElement, App, AppContext, ClickEvent, Context,
     Corner, Entity, FocusHandle, Hsla, Image, InteractiveElement as _, IntoElement, MouseButton,
     ParentElement as _, Render, SharedString, Styled as _, Subscription, Window,
 };
-use gpui::{size, Boundary};
 use gpui_component::{
     badge::Badge,
     button::{Button, ButtonVariants as _},
@@ -15,8 +16,6 @@ use gpui_component::{
     set_locale, ActiveTheme as _, ContextModal as _, IconName, Sizable as _, Theme, ThemeMode,
     TitleBar,
 };
-use std::rc::Rc;
-use std::{path::Path, sync::Arc};
 
 use crate::{SelectFont, SelectLocale, SelectRadius, SelectScrollbarShow};
 
@@ -118,7 +117,7 @@ impl Render for AppTitleBar {
                             .unwrap()
                             .to_vec(),
                     )))
-                    .size_12(),
+                    .size_10(),
                 ), // .child(self.title.clone()),
             )
             .child(
@@ -151,42 +150,15 @@ impl Render for AppTitleBar {
                     // )
                     .child(self.locale_selector.clone())
                     // .child(self.font_size_selector.clone())
-                    .child(
-                        Button::new("setting")
-                            .icon(IconName::Settings)
-                            .small()
-                            .ghost()
-                            .on_click(|_, _, cx| {
-                                cx.activate(true);
-
-                                let window_size = size(px(600.0), px(800.0));
-                                let window_bounds = Bounds::centered(None, window_size, cx);
-                                let options = WindowOptions {
-                                    app_id: Some("x-todo-app".to_string()),
-                                    window_bounds: Some(WindowBounds::Windowed(window_bounds)),
-                                    titlebar: None,
-                                    window_min_size: Some(gpui::Size {
-                                        width: px(600.),
-                                        height: px(800.),
-                                    }),
-
-                                    kind: WindowKind::PopUp,
-                                    #[cfg(target_os = "linux")]
-                                    window_background:
-                                        gpui::WindowBackgroundAppearance::Transparent,
-                                    #[cfg(target_os = "linux")]
-                                    window_decorations: Some(gpui::WindowDecorations::Client),
-                                    ..Default::default()
-                                };
-
-                                // crate::create_new_window_options(
-                                //     "xTodo",
-                                //     options,
-                                //     move |window, cx| TodoView::view(window, cx),
-                                //     cx,
-                                // );
-                            }),
-                    )
+                    // .child(
+                    //     Button::new("github")
+                    //         .icon(IconName::GitHub)
+                    //         .small()
+                    //         .ghost()
+                    //         .on_click(|_, _, cx| {
+                    //             cx.open_url("https://github.com/longbridge/gpui-component")
+                    //         }),
+                    // )
                     .child(
                         div().relative().child(
                             Badge::new().count(notifications_count).max(99).child(

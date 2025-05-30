@@ -1,15 +1,19 @@
+use crate::section;
 use gpui::{
     actions, div, App, AppContext as _, Context, Entity, FocusHandle, Focusable,
     InteractiveElement, IntoElement, KeyBinding, ParentElement as _, Render, Styled, Subscription,
     Window,
 };
-
-use crate::section;
 use gpui_component::{
     button::{Button, ButtonVariant, ButtonVariants as _},
     h_flex,
-    input::{InputEvent, InputState, MaskPattern, TextInput},
-    v_flex, ContextModal, FocusableCycle, Icon, IconName, Sizable,
+    input::{ChatInput, InputEvent, InputState, MaskPattern, TextInput}, // Added ChatInput
+    v_flex,
+    ContextModal,
+    FocusableCycle,
+    Icon,
+    IconName,
+    Sizable,
 };
 
 actions!(input_story, [Tab, TabPrev]);
@@ -37,6 +41,7 @@ pub struct InputStory {
     phone_input: Entity<InputState>,
     mask_input2: Entity<InputState>,
     currency_input: Entity<InputState>,
+    chat_input_state: Entity<InputState>, // Added state for ChatInput
 
     _subscriptions: Vec<Subscription>,
 }
@@ -92,11 +97,17 @@ impl InputStory {
 
         let phone_input = cx.new(|cx| InputState::new(window, cx).mask_pattern("(999)-999-9999"));
         let mask_input2 = cx.new(|cx| InputState::new(window, cx).mask_pattern("AAA-###-AAA"));
-        let currency_input = cx.new(|cx| {
-            InputState::new(window, cx).mask_pattern(MaskPattern::Number {
+        let currency_input = cx.new(|cx_model| {
+            InputState::new(window, cx_model).mask_pattern(MaskPattern::Number {
                 separator: Some(','),
                 fraction: Some(3),
             })
+        });
+
+        let chat_input_state = cx.new(|cx_model| {
+            InputState::new(window, cx_model)
+                .placeholder("询问 Copilot (可多行输入)")
+                .auto_grow(1, 5) // <--- 添加这样的配置来实现自动增长的多行输入
         });
 
         let _subscriptions = vec![
@@ -110,11 +121,13 @@ impl InputStory {
             input2,
             input_esc,
             mask_input,
-            disabled_input: cx
-                .new(|cx| InputState::new(window, cx).default_value("This is disabled input")),
-            large_input: cx.new(|cx| InputState::new(window, cx).placeholder("Large input")),
-            small_input: cx.new(|cx| {
-                InputState::new(window, cx)
+            disabled_input: cx.new(|cx_model| {
+                InputState::new(window, cx_model).default_value("This is disabled input")
+            }),
+            large_input: cx
+                .new(|cx_model| InputState::new(window, cx_model).placeholder("Large input")),
+            small_input: cx.new(|cx_model| {
+                InputState::new(window, cx_model)
                     .validate(|s| s.parse::<f32>().is_ok())
                     .placeholder("validate to limit float number.")
             }),
@@ -124,6 +137,7 @@ impl InputStory {
             phone_input,
             mask_input2,
             currency_input,
+            chat_input_state, // Assign new state
             _subscriptions,
         }
     }
@@ -165,6 +179,10 @@ impl FocusableCycle for InputStory {
             self.suffix_input1.focus_handle(cx),
             self.large_input.focus_handle(cx),
             self.small_input.focus_handle(cx),
+            self.phone_input.focus_handle(cx), // Assuming phone_input should be in cycle
+            self.mask_input2.focus_handle(cx), // Assuming mask_input2 should be in cycle
+            self.currency_input.focus_handle(cx), // Assuming currency_input should be in cycle
+            self.chat_input_state.focus_handle(cx), // Add chat_input_state's focus handle
         ]
         .to_vec()
     }
@@ -281,6 +299,10 @@ impl Render for InputStory {
                         "Value: {:?}",
                         window.focused_input(cx).map(|input| input.read(cx).value())
                     ))),
+            )
+            .child(
+                // 使用 ChatInput 组件
+                section("Chat Input").child(ChatInput::new(&self.chat_input_state)),
             )
             .child(
                 h_flex()

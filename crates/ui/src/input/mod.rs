@@ -1,5 +1,6 @@
 mod blink_cursor;
 mod change;
+mod chat_input;
 mod clear_button;
 mod code_highlighter;
 mod element;
@@ -11,6 +12,7 @@ mod state;
 mod text_input;
 mod text_wrapper;
 
+pub use chat_input::*;
 pub(crate) use clear_button::*;
 pub use mask_pattern::MaskPattern;
 pub use mode::TabSize;
