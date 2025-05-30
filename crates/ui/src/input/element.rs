@@ -325,7 +325,7 @@ impl TextElement {
     /// First usize is the offset of skiped.
     fn highlight_lines(
         &mut self,
-        visible_lines: &Range<usize>,
+        visible_range: &Range<usize>,
         cx: &mut App,
     ) -> Option<(usize, Vec<LineHighlightStyle>)> {
         let theme = LanguageRegistry::global(cx)
@@ -338,12 +338,12 @@ impl TextElement {
                 let mut lines = vec![];
 
                 for (ix, line) in state.text.split('\n').enumerate() {
-                    if ix < visible_lines.start {
+                    if ix < visible_range.start {
                         offset += line.len() + 1;
                         skiped_offset = offset;
                         continue;
                     }
-                    if ix > visible_lines.end {
+                    if ix > visible_range.end {
                         break;
                     }
 
@@ -364,7 +364,11 @@ impl TextElement {
 }
 
 pub(super) struct PrepaintState {
+    /// The visible range of lines in the viewport.
+    visible_range: Range<usize>,
+    /// The lines in visible viewport, based on `visible_range`.
     lines: SmallVec<[WrappedLine; 1]>,
+    /// The lines only contains the visible lines in the viewport, based on `visible_range`.
     line_numbers: Option<SmallVec<[WrappedLine; 1]>>,
     line_number_width: Pixels,
     cursor: Option<PaintQuad>,
@@ -372,8 +376,6 @@ pub(super) struct PrepaintState {
     current_line_index: usize,
     selection_path: Option<Path<Pixels>>,
     bounds: Bounds<Pixels>,
-    /// The range of lines that are visible in the viewport.
-    visible_lines: Range<usize>,
 }
 
 impl IntoElement for TextElement {
@@ -467,9 +469,9 @@ impl Element for TextElement {
         let top_line = (-state.scroll_handle.offset().y / state.last_line_height) as usize;
         let end_line =
             top_line + (state.input_bounds.size.height / state.last_line_height) as usize;
-        let visible_lines = top_line.saturating_sub(1)..(end_line + 1).min(total_lines);
+        let visible_range = top_line.saturating_sub(1)..(end_line + 1).min(total_lines);
 
-        let highlight_lines = self.highlight_lines(&visible_lines, cx);
+        let highlight_lines = self.highlight_lines(&visible_range, cx);
         let multi_line = self.input.read(cx).is_multi_line();
         let line_height = window.line_height();
         let input = self.input.read(cx);
@@ -522,11 +524,11 @@ impl Element for TextElement {
                 .text_wrapper
                 .lines
                 .iter()
-                .skip(visible_lines.start)
-                .take(visible_lines.end - visible_lines.start)
+                .skip(visible_range.start)
+                .take(visible_range.end - visible_range.start)
                 .enumerate()
             {
-                let i = i + visible_lines.start;
+                let i = i + visible_range.start;
                 let line_no = if run_len == 4 {
                     format!("{:>4}", i + 1).into()
                 } else {
@@ -692,7 +694,7 @@ impl Element for TextElement {
             cursor_scroll_offset,
             current_line_index,
             selection_path,
-            visible_lines,
+            visible_range,
         }
     }
 
@@ -710,7 +712,7 @@ impl Element for TextElement {
         let focused = focus_handle.is_focused(window);
         let bounds = prepaint.bounds;
         let selected_range = self.input.read(cx).selected_range.clone();
-        let visible_lines = &prepaint.visible_lines;
+        let visible_range = &prepaint.visible_range;
 
         window.handle_input(
             &focus_handle,
@@ -746,6 +748,9 @@ impl Element for TextElement {
         let line_height = window.line_height();
         let origin = bounds.origin;
 
+        // Offset for invisible lines to leave a space for line numbers.
+        let top_pad_height = visible_range.start as f32 * line_height;
+
         let mut offset_y = px(0.);
         if self.input.read(cx).masked {
             // Move down offset for vertical centering the *****
@@ -756,11 +761,9 @@ impl Element for TextElement {
             }
         }
 
-        // Offset for invisible lines to leave a space for line numbers.
-        let top_pad_height = visible_lines.start as f32 * line_height;
         if let Some(line_numbers) = prepaint.line_numbers.as_ref() {
             for (ix, line) in line_numbers.iter().enumerate() {
-                let ix = visible_lines.start + ix;
+                let ix = visible_range.start + ix;
                 let p = point(origin.x, origin.y + top_pad_height + offset_y);
                 let line_size = line.size(line_height);
 
