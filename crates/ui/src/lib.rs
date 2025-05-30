@@ -58,7 +58,7 @@ pub mod tooltip;
 #[cfg(feature = "webview")]
 pub mod webview;
 
-use gpui::App;
+use gpui::{App, SharedString};
 // re-export
 #[cfg(feature = "webview")]
 pub use wry;
@@ -127,12 +127,11 @@ pub(crate) fn measure_enable() -> bool {
 /// And need env `GPUI_MEASUREMENTS=1`
 #[inline]
 #[track_caller]
-pub fn measure_if(name: &str, if_: bool, f: impl FnOnce()) {
+pub fn measure_if(name: impl Into<SharedString>, if_: bool, f: impl FnOnce()) {
     if if_ && measure_enable() {
-        let start = std::time::Instant::now();
+        let measure = Measure::new(name);
         f();
-        let duration = start.elapsed();
-        tracing::trace!("{} in {:?}", name, duration);
+        measure.end();
     } else {
         f();
     }
@@ -140,6 +139,25 @@ pub fn measure_if(name: &str, if_: bool, f: impl FnOnce()) {
 
 /// Measures the execution time.
 #[inline]
-pub fn measure(name: &str, f: impl FnOnce()) {
+pub fn measure(name: impl Into<SharedString>, f: impl FnOnce()) {
     measure_if(name, true, f);
+}
+
+pub struct Measure {
+    name: SharedString,
+    start: std::time::Instant,
+}
+
+impl Measure {
+    pub fn new(name: impl Into<SharedString>) -> Self {
+        Self {
+            name: name.into(),
+            start: std::time::Instant::now(),
+        }
+    }
+
+    pub fn end(self) {
+        let duration = self.start.elapsed();
+        tracing::trace!("{} in {:?}", self.name, duration);
+    }
 }
