@@ -1,4 +1,4 @@
-use std::marker::PhantomData;
+use std::rc::Rc;
 
 use gpui::{px, rgb, rgba, App, Background, Bounds, Pixels, SharedString, TextAlign, Window};
 use macros::IntoPlot;
@@ -13,40 +13,40 @@ use crate::{
     ActiveTheme,
 };
 
-use super::ChartDelegate;
-
 #[derive(IntoPlot)]
 pub struct AreaChart<T, X, Y>
 where
-    T: ChartDelegate<X, Y> + 'static,
-    X: PartialEq + Into<SharedString> + 'static,
-    Y: Copy + PartialOrd + Num + ToPrimitive + Sealed + 'static,
+    T: 'static,
+    X: Clone + Copy + PartialEq + Into<SharedString> + 'static,
+    Y: Clone + Copy + PartialOrd + Num + ToPrimitive + Sealed + 'static,
 {
     data: Vec<T>,
     stroke_style: StrokeStyle,
-    fill: Option<Background>,
+    fill: Vec<Background>,
     tick_margin: usize,
-    _phantom: PhantomData<(X, Y)>,
+    x: Option<Rc<dyn Fn(&T) -> X>>,
+    y: Vec<Rc<dyn Fn(&T) -> Y>>,
 }
 
 impl<T, X, Y> AreaChart<T, X, Y>
 where
-    T: ChartDelegate<X, Y> + 'static,
-    X: PartialEq + Into<SharedString> + 'static,
-    Y: Copy + PartialOrd + Num + ToPrimitive + Sealed + 'static,
+    T: 'static,
+    X: Clone + Copy + PartialEq + Into<SharedString> + 'static,
+    Y: Clone + Copy + PartialOrd + Num + ToPrimitive + Sealed + 'static,
 {
     pub fn new(data: Vec<T>) -> Self {
         Self {
             data,
             stroke_style: Default::default(),
-            fill: None,
+            fill: vec![],
             tick_margin: 1,
-            _phantom: PhantomData,
+            x: None,
+            y: vec![],
         }
     }
 
     pub fn fill(mut self, fill: impl Into<Background>) -> Self {
-        self.fill = Some(fill.into());
+        self.fill.push(fill.into());
         self
     }
 
@@ -59,42 +59,61 @@ where
         self.tick_margin = tick_margin;
         self
     }
+
+    pub fn x(mut self, x: impl Fn(&T) -> X + 'static) -> Self {
+        self.x = Some(Rc::new(x));
+        self
+    }
+
+    pub fn y(mut self, y: impl Fn(&T) -> Y + 'static) -> Self {
+        self.y.push(Rc::new(y));
+        self
+    }
 }
 
 impl<T, X, Y> Plot for AreaChart<T, X, Y>
 where
-    T: ChartDelegate<X, Y> + 'static,
-    X: PartialEq + Into<SharedString> + 'static,
-    Y: Copy + PartialOrd + Num + ToPrimitive + Sealed + 'static,
+    T: 'static,
+    X: Clone + Copy + PartialEq + Into<SharedString> + 'static,
+    Y: Clone + Copy + PartialOrd + Num + ToPrimitive + Sealed + 'static,
 {
     fn paint(&mut self, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut App) {
+        let Some(x_fn) = self.x.as_ref() else {
+            return;
+        };
+
+        if self.y.len() == 0 {
+            return;
+        }
+
         let width = bounds.size.width.to_f64();
         let height = bounds.size.height.to_f64() - AXIS_GAP;
 
         // X scale
-        let x = ScalePoint::new(self.data.iter().map(|v| v.x()).collect(), vec![0., width]);
+        let x = ScalePoint::new(self.data.iter().map(|v| x_fn(v)).collect(), vec![0., width]);
 
-        // Y scale, ensure start from 0.
+        // Y scale
         let y = ScaleLinear::new(
             self.data
                 .iter()
-                .map(|v| v.y())
+                .flat_map(|v| self.y.iter().map(|y_fn| y_fn(v)))
                 .chain(Some(Y::zero()))
-                .collect(),
+                .collect::<Vec<_>>(),
             vec![0., height],
         );
 
         // Draw X axis
+        let x_fn = x_fn.clone();
         let data_len = self.data.len();
         let x_label = self.data.iter().enumerate().filter_map(|(i, d)| {
             if (i + 1) % self.tick_margin == 0 {
-                x.tick(&d.x()).map(|x_tick| {
+                x.tick(&x_fn(d)).map(|x_tick| {
                     let align = match i {
                         0 => TextAlign::Left,
                         i if i == data_len - 1 => TextAlign::Right,
                         _ => TextAlign::Center,
                     };
-                    AxisText::new(d.label(), x_tick, cx.theme().muted_foreground).align(align)
+                    AxisText::new(x_fn(d).into(), x_tick, cx.theme().muted_foreground).align(align)
                 })
             } else {
                 None
@@ -115,18 +134,23 @@ where
             .paint(&bounds, window);
 
         // Draw area
-        Area::new()
-            .data(&self.data)
-            .x(move |d| x.tick(&d.x()))
-            .y0(height)
-            .y1(move |d| y.tick(&d.y()))
-            .fill(if let Some(color) = self.fill {
-                color
-            } else {
-                rgba(0x2563eb66).into()
-            })
-            .stroke(rgb(0x2563eb))
-            .stroke_style(self.stroke_style)
-            .paint(&bounds, window);
+        for (i, y_fn) in self.y.iter().enumerate() {
+            let x = x.clone();
+            let y = y.clone();
+            let x_fn = x_fn.clone();
+            let y_fn = y_fn.clone();
+
+            let fill = *self.fill.get(i).unwrap_or(&rgba(0x2563eb66).into());
+
+            Area::new()
+                .data(&self.data)
+                .x(move |d| x.tick(&x_fn(d)))
+                .y0(height)
+                .y1(move |d| y.tick(&y_fn(d)))
+                .fill(fill)
+                .stroke(rgb(0x2563eb))
+                .stroke_style(self.stroke_style)
+                .paint(&bounds, window);
+        }
     }
 }

@@ -86,7 +86,7 @@ where
                     i if i == data_len - 1 => TextAlign::Right,
                     _ => TextAlign::Center,
                 };
-                AxisText::new(d.label(), x_tick, cx.theme().muted_foreground).align(align)
+                AxisText::new(d.x(), x_tick, cx.theme().muted_foreground).align(align)
             })
         });
 

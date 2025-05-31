@@ -141,9 +141,17 @@ impl Render for PlotStory {
                 div().h(px(400.)).child(chart_container(
                     "Area Chart - Stacked",
                     AreaChart::new(CHART_DATA_2.to_vec())
+                        .x(|d| d.date)
+                        .y(|d| d.desktop)
                         .fill(linear_gradient(
                             0.,
-                            linear_color_stop(rgba(0x2563eb66), 1.),
+                            linear_color_stop(rgba(0xf4a46266), 1.),
+                            linear_color_stop(cx.theme().background.opacity(0.3), 0.),
+                        ))
+                        .y(|d| d.mobile)
+                        .fill(linear_gradient(
+                            0.,
+                            linear_color_stop(rgba(0xe8c46866), 1.),
                             linear_color_stop(cx.theme().background.opacity(0.3), 0.),
                         ))
                         .tick_margin(8),
@@ -157,23 +165,31 @@ impl Render for PlotStory {
                     .h(px(400.))
                     .child(chart_container(
                         "Area Chart",
-                        AreaChart::new(CHART_DATA.to_vec()),
+                        AreaChart::new(CHART_DATA.to_vec())
+                            .x(|d| d.month)
+                            .y(|d| d.desktop),
                         false,
                         cx,
                     ))
                     .child(chart_container(
                         "Area Chart - Linear",
-                        AreaChart::new(CHART_DATA.to_vec()).linear(),
+                        AreaChart::new(CHART_DATA.to_vec())
+                            .x(|d| d.month)
+                            .y(|d| d.desktop)
+                            .linear(),
                         false,
                         cx,
                     ))
                     .child(chart_container(
                         "Area Chart - Linear Gradient",
-                        AreaChart::new(CHART_DATA.to_vec()).fill(linear_gradient(
-                            0.,
-                            linear_color_stop(rgba(0x2563eb66), 1.),
-                            linear_color_stop(cx.theme().background.opacity(0.3), 0.),
-                        )),
+                        AreaChart::new(CHART_DATA.to_vec())
+                            .x(|d| d.month)
+                            .y(|d| d.desktop)
+                            .fill(linear_gradient(
+                                0.,
+                                linear_color_stop(rgba(0x2563eb66), 1.),
+                                linear_color_stop(cx.theme().background.opacity(0.3), 0.),
+                            )),
                         false,
                         cx,
                     )),
