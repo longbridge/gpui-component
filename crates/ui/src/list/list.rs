@@ -2,7 +2,9 @@ use std::time::Duration;
 use std::{cell::Cell, rc::Rc};
 
 use crate::actions::{Cancel, Confirm, SelectNext, SelectPrev};
+use crate::context_menu::ContextMenuExt;
 use crate::input::InputState;
+use crate::popup_menu::PopupMenu;
 use crate::{
     input::{InputEvent, TextInput},
     scroll::{Scrollbar, ScrollbarState},
@@ -88,6 +90,9 @@ pub trait ListDelegate: Sized + 'static {
         cx: &mut Context<List<Self>>,
     ) -> Option<AnyElement> {
         None
+    }
+    fn context_menu(&self, row_ix: usize, menu: PopupMenu, window: &Window, cx: &App) -> PopupMenu {
+        menu
     }
 
     /// Returns the loading state to show the loading view.
@@ -605,6 +610,18 @@ where
                     .on_action(cx.listener(Self::on_action_confirm))
                     .on_action(cx.listener(Self::on_action_select_next))
                     .on_action(cx.listener(Self::on_action_select_prev))
+                    .context_menu({
+                        let view = view.clone();
+                        move |this, window: &mut Window, cx: &mut Context<PopupMenu>| {
+                            if let Some(row_ix) = view.read(cx).right_clicked_index {
+                                view.read(cx)
+                                    .delegate
+                                    .context_menu(row_ix, this, window, cx)
+                            } else {
+                                this
+                            }
+                        }
+                    })
                     .map(|this| {
                         if let Some(view) = initial_view {
                             this.child(view)

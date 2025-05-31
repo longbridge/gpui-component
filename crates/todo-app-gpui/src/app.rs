@@ -33,6 +33,8 @@ impl AppState {
 }
 
 pub fn run() {
+    const WIDTH: f32 = 400.0;
+    const HEIGHT: f32 = WIDTH * 2.5;
     let app = Application::new().with_assets(Assets);
     app.run(move |cx| {
         AppState::init(cx);
@@ -41,15 +43,15 @@ pub fn run() {
             cx.quit();
         });
         cx.activate(true);
-        let window_size = size(px(400.0), px(600.0));
+        let window_size = size(px(WIDTH), px(HEIGHT));
         let window_bounds = Bounds::centered(None, window_size, cx);
         let options = WindowOptions {
             app_id: Some("x-todo-app".to_string()),
             window_bounds: Some(WindowBounds::Windowed(window_bounds)),
             titlebar: Some(TitleBar::title_bar_options()),
             window_min_size: Some(gpui::Size {
-                width: px(400.),
-                height: px(600.),
+                width: px(WIDTH),
+                height: px(HEIGHT),
             }),
 
             kind: WindowKind::Normal,
