@@ -22,6 +22,7 @@ pub mod animation;
 pub mod badge;
 pub mod breadcrumb;
 pub mod button;
+pub mod chart;
 pub mod checkbox;
 pub mod clipboard;
 pub mod color_picker;
@@ -40,6 +41,7 @@ pub mod link;
 pub mod list;
 pub mod modal;
 pub mod notification;
+pub mod plot;
 pub mod popover;
 pub mod progress;
 pub mod radio;
@@ -55,6 +57,7 @@ pub mod tag;
 pub mod text;
 pub mod theme;
 pub mod tooltip;
+
 #[cfg(feature = "webview")]
 pub mod webview;
 

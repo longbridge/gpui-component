@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/story", "crates/ui"]
+members = ["crates/macros", "crates/story", "crates/ui"]
 
 default-members = ["crates/story"]
 resolver = "2"
@@ -7,6 +7,7 @@ resolver = "2"
 [workspace.dependencies]
 gpui = { git = "https://github.com/huacnlee/zed.git", branch = "webview" }
 gpui-component = { path = "crates/ui" }
+macros = { path = "crates/macros" }
 story = { path = "crates/story" }
 
 anyhow = "1"
@@ -16,8 +17,8 @@ serde_json = "1"
 smallvec = "1"
 
 [workspace.dependencies.windows]
-version = "0.58.0"
 features = ["Wdk", "Wdk_System", "Wdk_System_SystemServices"]
+version = "0.58.0"
 
 [workspace.lints.clippy]
 almost_complete_range = "allow"
