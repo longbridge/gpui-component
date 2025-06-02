@@ -22,7 +22,7 @@ impl Example {
         let input_state = cx.new(|cx| {
             InputState::new(window, cx)
                 .code_editor(Language::Markdown)
-                .line_number(false)
+                .line_number(true)
                 .tab_size(TabSize {
                     tab_size: 2,
                     ..Default::default()

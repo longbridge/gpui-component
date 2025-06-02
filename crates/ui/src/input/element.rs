@@ -182,7 +182,7 @@ impl TextElement {
             };
 
             // Calculate the current line index
-            current_line_index = (cursor_pos.y.0 / line_height.0) as usize;
+            current_line_index = (cursor_pos.y / line_height) as usize;
         }
 
         (cursor, scroll_offset, current_line_index)
@@ -365,8 +365,10 @@ impl TextElement {
 }
 
 pub(super) struct PrepaintState {
-    /// The visible range of lines in the viewport.
+    /// The visible range (no wrap) of lines in the viewport.
     visible_range: Range<usize>,
+    /// Offset top for invisible lines to leave a space for line numbers and consider with wraped lines.
+    invisible_top_padding: Pixels,
     /// The lines of entire lines.
     last_layout: LastLayout,
     /// The lines only contains the visible lines in the viewport, based on `visible_range`.
@@ -376,6 +378,7 @@ pub(super) struct PrepaintState {
     scroll_size: Size<Pixels>,
     cursor: Option<PaintQuad>,
     cursor_scroll_offset: Point<Pixels>,
+    /// Wrapped line index
     current_line_index: usize,
     selection_path: Option<Path<Pixels>>,
     bounds: Bounds<Pixels>,
@@ -472,7 +475,7 @@ impl Element for TextElement {
         let top_line = (-state.scroll_handle.offset().y / state.last_line_height) as usize;
         let end_line =
             top_line + (state.input_bounds.size.height / state.last_line_height) as usize;
-        let visible_range = top_line.saturating_sub(1)..(end_line + 1).min(total_lines);
+        let visible_range = top_line.saturating_sub(1)..(end_line + 1).max(total_lines);
 
         let highlight_lines = self.highlight_lines(&visible_range, cx);
         let multi_line = self.input.read(cx).is_multi_line();
@@ -644,6 +647,20 @@ impl Element for TextElement {
                 .expect("failed to shape text");
         });
 
+        let mut invisible_top_padding = px(0.);
+        for (ix, line) in lines.iter().enumerate() {
+            if ix >= visible_range.start {
+                break;
+            }
+
+            invisible_top_padding += line_height + line_height * line.wrap_boundaries.len();
+        }
+
+        let total_wraped_lines = lines
+            .iter()
+            .map(|line| 1 + line.wrap_boundaries.len())
+            .sum::<usize>();
+
         let max_line_width = lines
             .iter()
             .map(|line| line.width())
@@ -651,7 +668,7 @@ impl Element for TextElement {
             .unwrap_or(bounds.size.width);
         let scroll_size = size(
             max_line_width + line_number_width + RIGHT_MARGIN,
-            (lines.len() as f32 * line_height).max(bounds.size.height),
+            (total_wraped_lines as f32 * line_height).max(bounds.size.height),
         );
 
         // `position_for_index` for example
@@ -716,6 +733,7 @@ impl Element for TextElement {
             current_line_index,
             selection_path,
             visible_range,
+            invisible_top_padding,
         }
     }
 
@@ -769,9 +787,6 @@ impl Element for TextElement {
         let line_height = window.line_height();
         let origin = bounds.origin;
 
-        // Offset for invisible lines to leave a space for line numbers.
-        let invisible_top_padding = visible_range.start * line_height;
-
         let mut offset_y = px(0.);
         if self.input.read(cx).masked {
             // Move down offset for vertical centering the *****
@@ -782,9 +797,15 @@ impl Element for TextElement {
             }
         }
 
-        if let Some(line_numbers) = prepaint.line_numbers.as_ref() {
-            offset_y += invisible_top_padding;
+        let active_line_color = LanguageRegistry::global(cx)
+            .theme(cx.theme().is_dark())
+            .style
+            .active_line;
 
+        if let Some(line_numbers) = prepaint.line_numbers.as_ref() {
+            offset_y += prepaint.invisible_top_padding;
+
+            // Each item is the normal lines.
             for (ix, line) in line_numbers.iter().enumerate() {
                 let ix = visible_range.start + ix;
                 let p = point(origin.x, origin.y + offset_y);
@@ -792,12 +813,11 @@ impl Element for TextElement {
 
                 // Paint the current line background
                 if prepaint.current_line_index == ix {
-                    let is_dark = cx.theme().is_dark();
-                    if let Some(bg_color) = LanguageRegistry::global(cx)
-                        .theme(is_dark)
-                        .style
-                        .active_line
-                    {
+                    println!(
+                        "-------------- {}, ix: {}, current_line_index: {}",
+                        line.text, ix, prepaint.current_line_index
+                    );
+                    if let Some(bg_color) = active_line_color {
                         window.paint_quad(fill(
                             Bounds::new(p, size(bounds.size.width, line_height)),
                             bg_color,
@@ -816,7 +836,7 @@ impl Element for TextElement {
         }
 
         // Paint text
-        let mut offset_y = px(0.) + invisible_top_padding;
+        let mut offset_y = px(0.) + prepaint.invisible_top_padding;
 
         for line in prepaint
             .last_layout
