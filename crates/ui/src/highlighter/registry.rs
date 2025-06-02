@@ -165,7 +165,7 @@ impl SyntaxColors {
             return None;
         }
 
-        match name {
+        let style = match name {
             "attribute" => self.attribute,
             "boolean" => self.boolean,
             "comment" => self.comment,
@@ -206,9 +206,24 @@ impl SyntaxColors {
             "variable" => self.variable,
             "variable.special" => self.variable_special,
             "variant" => self.variant,
-            _ => self.variable,
+            _ => None,
         }
-        .map(|s| s.into())
+        .map(|s| s.into());
+
+        if style.is_some() {
+            style
+        } else {
+            // Fallback `keyword.modifier` to `keyword`
+            if name.contains(".") {
+                if let Some(prefix) = name.split(".").next() {
+                    return self.style(prefix);
+                }
+
+                None
+            } else {
+                None
+            }
+        }
     }
 
     #[inline]
@@ -313,5 +328,23 @@ impl LanguageRegistry {
         } else {
             &self.light_theme
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use gpui::rgb;
+
+    #[test]
+    fn test_syntax_colors() {
+        use super::{HighlightTheme, SyntaxColors};
+
+        let theme: HighlightTheme =
+            serde_json::from_str(include_str!("./themes/light.json")).unwrap();
+        let syntax: &SyntaxColors = &theme.style.syntax;
+
+        assert_eq!(syntax.style("keyword"), Some(rgb(0x0433ff).into()));
+        assert_eq!(syntax.style("keyword.repeat"), Some(rgb(0x0433ff).into()));
+        assert_eq!(syntax.style("foo"), None);
     }
 }
