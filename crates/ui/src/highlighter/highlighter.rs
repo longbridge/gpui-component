@@ -227,6 +227,12 @@ impl SyntaxHighlighter {
             return;
         }
 
+        // If insert a chart, this is 1.
+        // If backspace or delete, this is -1.
+        // If selected to delete, this is the length of the selected text.
+        let changed_len =
+            new_text.len() as isize - (selected_range.end - selected_range.start) as isize;
+
         let new_tree = match &self.old_tree {
             None => self.parser.parse(full_text, None),
             Some(old) => {
@@ -254,19 +260,20 @@ impl SyntaxHighlighter {
             changed_ranges = Some(new_tree.changed_ranges(old_tree));
         }
 
-        measure("build_styles", || {
-            self.build_styles(changed_ranges, cx);
-        });
-
         // Update state
         self.old_tree = Some(new_tree);
         self.text = SharedString::from(full_text.to_string());
+
+        measure("build_styles", || {
+            self.build_styles(changed_ranges, changed_len, cx);
+        });
     }
 
     /// NOTE: 10K lines, about 180ms
     fn build_styles(
         &mut self,
         changed_ranges: Option<impl ExactSizeIterator<Item = tree_sitter::Range>>,
+        changed_len: isize,
         _: &mut App,
     ) {
         let Some(tree) = &self.old_tree else {
@@ -282,32 +289,49 @@ impl SyntaxHighlighter {
         let mut root_node = tree.root_node();
 
         // Incremental parsing to only update changed ranges.
-        let mut full_changed_range = 0..0;
+        let mut last_end = 0;
         if let Some(changed_ranges) = changed_ranges {
+            // FIXME: This is not working correctly, currently is not enable.
+            let mut total_range = 0..0;
             for change_range in changed_ranges {
-                if full_changed_range.start == 0 {
-                    full_changed_range.start = change_range.start_byte;
+                if total_range.start == 0 {
+                    total_range.start = change_range.start_byte;
                 }
-                if full_changed_range.end == 0 {
-                    full_changed_range.end = change_range.end_byte;
+                if total_range.end == 0 {
+                    total_range.end = change_range.end_byte;
                 }
             }
 
-            if full_changed_range.len() == 0 {
+            if total_range.len() == 0 {
                 return;
             }
 
-            println!("---------- full_changed_range: {:?}", full_changed_range);
-            let Some(node) = tree
-                .root_node()
-                .descendant_for_byte_range(full_changed_range.start, full_changed_range.end)
-            else {
-                return;
-            };
+            if let Some(node) =
+                root_node.descendant_for_byte_range(total_range.start, total_range.end)
+            {
+                root_node = node;
+            }
 
-            root_node = node;
+            // Remove the cache entries that are inside the changed range.
+            self.cache
+                .retain(|&start, _| !(start >= total_range.start && start <= total_range.end));
+
+            // Apply changed_len to reorder the cache to move the range offset
+            let old_cache = self.cache.clone();
+            self.cache.clear();
+            for (start, (node_range, highlight_name)) in old_cache.into_iter() {
+                if node_range.start >= total_range.start {
+                    let new_range = Range {
+                        start: (node_range.start as isize + changed_len) as usize,
+                        end: (node_range.end as isize + changed_len) as usize,
+                    };
+                    self.cache
+                        .insert(new_range.start, (new_range, highlight_name));
+                } else {
+                    self.cache.insert(start, (node_range, highlight_name));
+                }
+            }
         } else {
-            full_changed_range = 0..source.len();
             self.cache.clear();
         }
 
@@ -315,7 +339,6 @@ impl SyntaxHighlighter {
 
         // TODO: Merge duplicate ranges.
 
-        let mut last_end = full_changed_range.start;
         while let Some(m) = matches.next() {
             // Ref:
             // https://github.com/tree-sitter/tree-sitter/blob/460118b4c82318b083b4d527c9c750426730f9c0/highlight/src/lib.rs#L556
@@ -345,6 +368,7 @@ impl SyntaxHighlighter {
 
                 let highlight_name = query.capture_names()[cap.index as usize];
                 let node_range: Range<usize> = node.start_byte()..node.end_byte();
+
                 self.cache.insert(
                     node_range.start,
                     (node_range.clone(), highlight_name.to_string()),
