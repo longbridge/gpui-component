@@ -528,7 +528,7 @@ impl Element for TextElement {
                 .lines
                 .iter()
                 .skip(visible_range.start)
-                .take(visible_range.end - visible_range.start)
+                .take(visible_range.end.saturating_sub(visible_range.start))
                 .enumerate()
             {
                 let i = i + visible_range.start;

@@ -290,7 +290,6 @@ impl SyntaxHighlighter {
         // Incremental parsing to only update changed ranges.
         let mut last_end = 0;
         if let Some(changed_ranges) = changed_ranges {
-            // FIXME: This is not working correctly, currently is not enable.
             let mut total_range = 0..0;
             for change_range in changed_ranges {
                 if total_range.start == 0 {
@@ -311,25 +310,45 @@ impl SyntaxHighlighter {
                 root_node = node;
             }
 
-            // Remove the cache entries that are inside the changed range.
-            self.cache
-                .retain(|&start, _| !(start > total_range.start && start < total_range.end));
+            let byte_range = root_node.byte_range();
 
+            let measure = Measure::new("update cache to change range offset");
+
+            // Remove the cache entries that are range is intersecting with the byte_range.
+            self.cache.retain(|_, (range, _)| {
+                if range.start < byte_range.end && range.end > byte_range.start {
+                    // Remove the item if it is intersecting with the byte_range.
+                    false
+                } else {
+                    // Keep the item if it is not intersecting with the byte_range.
+                    true
+                }
+            });
+
+            for (item) in self.cache.iter() {
+                println!("---------OLD - item: {:?}", item);
+            }
+
+            println!(
+                "------------ total_range: {:?} byte_range: {:?}",
+                total_range, byte_range
+            );
             // Apply changed_len to reorder the cache to move the range offset
-            let old_cache = self.cache.clone();
-            self.cache.clear();
-            let measure = Measure::new("update_cache range offset");
+            let mut old_cache: BTreeMap<usize, (Range<usize>, String)> = BTreeMap::new();
+            std::mem::swap(&mut self.cache, &mut old_cache);
+
             // NOTE: 10K lines, about 35ms
-            for (start, (node_range, highlight_name)) in old_cache.into_iter() {
-                if node_range.start > total_range.start {
+            for (start, (old_range, highlight_name)) in old_cache.into_iter() {
+                if old_range.end >= byte_range.start {
                     let new_range = Range {
-                        start: (node_range.start as isize + changed_len) as usize,
-                        end: (node_range.end as isize + changed_len) as usize,
+                        start: (old_range.start as isize + changed_len) as usize,
+                        end: (old_range.end as isize + changed_len) as usize,
                     };
+
                     self.cache
                         .insert(new_range.start, (new_range, highlight_name));
                 } else {
-                    self.cache.insert(start, (node_range, highlight_name));
+                    self.cache.insert(start, (old_range, highlight_name));
                 }
             }
             measure.end();
@@ -379,9 +398,9 @@ impl SyntaxHighlighter {
             }
         }
 
-        // for item in self.cache.iter() {
-        //     println!("---------- item: {:?}", item);
-        // }
+        for item in self.cache.iter() {
+            println!("---------- item: {:?}", item);
+        }
     }
 
     /// TODO: Use incremental parsing to handle the injection.
