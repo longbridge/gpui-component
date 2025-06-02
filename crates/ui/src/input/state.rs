@@ -1983,12 +1983,12 @@ impl EntityInputHandler for InputState {
         let new_pos = (range.start + new_text_len).min(mask_text.len());
 
         self.push_history(&range, &new_text, window, cx);
+        self.text = mask_text.clone();
         if let Some(highlighter) = self.mode.highlighter() {
             highlighter
                 .borrow_mut()
-                .update(&range, &mask_text, &new_text, cx);
+                .update(&range, self.text.clone(), &new_text, cx);
         }
-        self.text = mask_text;
         self.text_wrapper.update(self.text.clone(), false, cx);
         self.selected_range = new_pos..new_pos;
         self.marked_range.take();
@@ -2026,12 +2026,12 @@ impl EntityInputHandler for InputState {
         }
 
         self.push_history(&range, new_text, window, cx);
+        self.text = pending_text;
         if let Some(highlighter) = self.mode.highlighter() {
             highlighter
                 .borrow_mut()
-                .update(&range, &pending_text, &new_text, cx);
+                .update(&range, self.text.clone(), &new_text, cx);
         }
-        self.text = pending_text;
         self.text_wrapper.update(self.text.clone(), false, cx);
         if new_text.is_empty() {
             // Cancel selection, when cancel IME input.
@@ -2136,7 +2136,9 @@ impl Render for InputState {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.text_wrapper.update(self.text.clone(), false, cx);
         if let Some(highlighter) = self.mode.highlighter() {
-            highlighter.borrow_mut().update(&(0..0), &self.text, "", cx);
+            highlighter
+                .borrow_mut()
+                .update(&(0..0), self.text.clone(), "", cx);
         }
 
         div()

@@ -1,4 +1,4 @@
-use crate::measure;
+use crate::{measure, Measure};
 use gpui::{App, HighlightStyle, SharedString};
 use std::{
     collections::{BTreeMap, HashMap},
@@ -219,7 +219,7 @@ impl SyntaxHighlighter {
     pub fn update(
         &mut self,
         selected_range: &Range<usize>,
-        full_text: &str,
+        full_text: SharedString,
         new_text: &str,
         cx: &mut App,
     ) {
@@ -230,16 +230,15 @@ impl SyntaxHighlighter {
         // If insert a chart, this is 1.
         // If backspace or delete, this is -1.
         // If selected to delete, this is the length of the selected text.
-        let changed_len =
-            new_text.len() as isize - (selected_range.end - selected_range.start) as isize;
+        let changed_len = new_text.len() as isize - selected_range.len() as isize;
 
         let new_tree = match &self.old_tree {
-            None => self.parser.parse(full_text, None),
+            None => self.parser.parse(full_text.as_ref(), None),
             Some(old) => {
                 let edit = InputEdit {
                     start_byte: selected_range.start,
-                    old_end_byte: selected_range.start,
-                    new_end_byte: selected_range.start + new_text.len(),
+                    old_end_byte: selected_range.end,
+                    new_end_byte: (selected_range.end as isize + changed_len) as usize,
                     start_position: Point::new(0, 0),
                     old_end_position: Point::new(0, 0),
                     new_end_position: Point::new(0, 0),
@@ -247,7 +246,7 @@ impl SyntaxHighlighter {
                 let mut old_cloned = old.clone();
                 old_cloned.edit(&edit);
                 // NOTE: 10K lines, about 4.5ms
-                self.parser.parse(full_text, Some(&old_cloned))
+                self.parser.parse(full_text.as_ref(), Some(&old_cloned))
             }
         };
 
@@ -262,7 +261,7 @@ impl SyntaxHighlighter {
 
         // Update state
         self.old_tree = Some(new_tree);
-        self.text = SharedString::from(full_text.to_string());
+        self.text = full_text;
 
         measure("build_styles", || {
             self.build_styles(changed_ranges, changed_len, cx);
@@ -319,6 +318,8 @@ impl SyntaxHighlighter {
             // Apply changed_len to reorder the cache to move the range offset
             let old_cache = self.cache.clone();
             self.cache.clear();
+            let measure = Measure::new("update_cache");
+            // NOTE: 10K lines, about 35ms
             for (start, (node_range, highlight_name)) in old_cache.into_iter() {
                 if node_range.start >= total_range.start {
                     let new_range = Range {
@@ -331,6 +332,7 @@ impl SyntaxHighlighter {
                     self.cache.insert(start, (node_range, highlight_name));
                 }
             }
+            measure.end();
         } else {
             self.cache.clear();
         }
