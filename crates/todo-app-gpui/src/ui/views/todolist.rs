@@ -21,7 +21,7 @@ use super::todo_form::TodoFormView;
 
 actions!(
     list_story,
-    [SelectedCompany, Copy, Paste, Cut, SearchAll, ToggleCheck]
+    [SelectedCompany, Open, Completed, Pause, Clone, Star, Delete]
 );
 
 #[derive(Clone, Default)]
@@ -36,7 +36,7 @@ struct TodoItem {
     ix: usize,
     item: Todo,
     selected: bool,
-    hovered: bool,
+    in_progress: bool,
     star: bool,
     alert: bool,
     completed: bool,
@@ -49,7 +49,7 @@ impl TodoItem {
             ix,
             base: ListItem::new(id),
             selected,
-            hovered: true,
+            in_progress: true,
             star: false,
             alert: true,
             completed: false,
@@ -90,6 +90,7 @@ impl RenderOnce for TodoItem {
                             .gap_2()
                             .max_w(px(500.))
                             .overflow_x_hidden()
+                            .text_sm()
                             .child(Label::new(self.item.title.clone()).whitespace_nowrap())
                             .child(
                                 div().text_ellipsis().text_sm().overflow_x_hidden().child(
@@ -110,7 +111,7 @@ impl RenderOnce for TodoItem {
                                         .gap_1()
                                         .items_center()
                                         .justify_end()
-                                        .when(self.hovered, |div| {
+                                        .when(self.in_progress, |div| {
                                             div.child(
                                                 Indicator::new()
                                                     .with_size(px(16.))
@@ -118,7 +119,7 @@ impl RenderOnce for TodoItem {
                                                     .color(blue_500()),
                                             )
                                         })
-                                        .when(!self.hovered, |div| {
+                                        .when(!self.in_progress, |div| {
                                             div.child(
                                                 Button::new("button-refresh")
                                                     .ghost()
@@ -141,13 +142,13 @@ impl RenderOnce for TodoItem {
                                                 .small()
                                                 .on_click(|event, win, app| {}),
                                         )
-                                        .child(
-                                            Button::new("button-trash")
-                                                .ghost()
-                                                .icon(IconName::Trash)
-                                                .small()
-                                                .on_click(|event, win, app| {}),
-                                        ),
+                                        // .child(
+                                        //     Button::new("button-trash")
+                                        //         .ghost()
+                                        //         .icon(IconName::Trash)
+                                        //         .small()
+                                        //         .on_click(|event, win, app| {}),
+                                        // ),
                                 )
                             })
                             .child(
@@ -158,10 +159,7 @@ impl RenderOnce for TodoItem {
                                             .whitespace_nowrap()
                                             .text_xs()
                                             .text_color(text_color.opacity(0.5)),
-                                    )
-                                    .on_mouse_up(MouseButton::Left, |a, b, c| {
-                                        println!("Mouse up on date picker: {:?}", a,);
-                                    }),
+                                    ),
                             ),
                     ),
             )
@@ -186,7 +184,7 @@ impl RenderOnce for TodoItem {
                             })
                             .child(Icon::new(IconName::Paperclip).xsmall())
                             .child(if self.completed {
-                                Icon::new(IconName::Done).xsmall()
+                                Icon::new(IconName::RefreshCW).xsmall()
                             } else {
                                 Icon::new(IconName::TimerReset)
                                     .xsmall()
@@ -246,6 +244,42 @@ impl ListDelegate for TodoListDelegate {
         window.dispatch_action(Box::new(SelectedCompany), cx);
     }
 
+    fn on_double_click(
+        &mut self,
+        ev: &gpui::ClickEvent,
+        window: &mut Window,
+        cx: &mut Context<List<Self>>,
+    ) {
+      
+         println!("Double clicked: {:?} {:?}", ev, self.selected_index);
+ window.dispatch_action(Box::new(Open), cx);
+        // cx.activate(true);
+        // let window_size = size(px(600.0), px(800.0));
+        // let window_bounds = Bounds::centered(None, window_size, cx);
+        // let options = WindowOptions {
+        //     app_id: Some("x-todo-app".to_string()),
+        //     window_bounds: Some(WindowBounds::Windowed(window_bounds)),
+        //     titlebar: None,
+        //     window_min_size: Some(gpui::Size {
+        //         width: px(600.),
+        //         height: px(800.),
+        //     }),
+
+        //     kind: WindowKind::PopUp,
+        //     #[cfg(target_os = "linux")]
+        //     window_background: gpui::WindowBackgroundAppearance::Transparent,
+        //     #[cfg(target_os = "linux")]
+        //     window_decorations: Some(gpui::WindowDecorations::Client),
+        //     ..Default::default()
+        // };
+        // crate::ui::create_normal_window_options(
+        //     format!("todo-{}", self.selected_index.unwrap_or(0)),
+        //     options,
+        //     move |window, cx| TodoFormView::view(window, cx),
+        //     cx,
+        // );
+    }
+
     fn set_selected_index(
         &mut self,
         ix: Option<usize>,
@@ -279,24 +313,17 @@ impl ListDelegate for TodoListDelegate {
     ) -> PopupMenu {
         println!("Context menu for row: {}", row_ix);
         menu.external_link_icon(true)
-            .link("About", "https://github.com/longbridge/gpui-component")
+            // .link("About", "https://github.com/longbridge/gpui-component")
+            .menu("打开", Box::new(Open))
             .separator()
-            .menu("Copy", Box::new(Copy))
-            .menu("Cut", Box::new(Cut))
-            .menu("Paste", Box::new(Paste))
+            .menu_with_icon("克隆", IconName::Copy,Box::new(Clone))
+            .menu_with_icon("暂停", IconName::Pause,Box::new(Pause))
+            .menu_with_icon("完成", IconName::Done,Box::new(Completed))
+             .menu_with_icon("关注", IconName::Star, Box::new(Completed))
+            // .separator()
+            // .menu_with_check("删除", true, Box::new(ToggleCheck))
             .separator()
-            .menu_with_check("Toggle Check", true, Box::new(ToggleCheck))
-            .separator()
-            .menu_with_icon("Search", IconName::Search, Box::new(SearchAll))
-        // menu.menu(
-        //     format!("Selected Row: {}", row_ix),
-        //     Box::new(OpenDetail(row_ix)),
-        // )
-        // .separator()
-        // .menu("Size Large", Box::new(ChangeSize(Size::Large)))
-        // .menu("Size Medium", Box::new(ChangeSize(Size::Medium)))
-        // .menu("Size Small", Box::new(ChangeSize(Size::Small)))
-        // .menu("Size XSmall", Box::new(ChangeSize(Size::XSmall)))
+            .menu_with_icon("删除", IconName::Trash, Box::new(Delete))
     }
 
     fn loading(&self, _: &App) -> bool {
@@ -437,8 +464,39 @@ impl TodoList {
 
     fn selected_company(&mut self, _: &SelectedCompany, _: &mut Window, cx: &mut Context<Self>) {
         let picker = self.company_list.read(cx);
-        if let Some(company) = picker.delegate().selected_company() {
-            self.selected_company = Some(company);
+        self.selected_company = picker.delegate().selected_company();
+    }
+
+    fn clone(&mut self, _: &Clone, _: &mut Window, cx: &mut Context<Self>) {
+        println!("Clone action triggered");
+    }
+
+    fn open_todo(&mut self, _: &Open, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(todo) = self.selected_company.clone() {
+            cx.activate(true);
+            let window_size = size(px(600.0), px(800.0));
+            let window_bounds = Bounds::centered(None, window_size, cx);
+            let options = WindowOptions {
+                app_id: Some("x-todo-app".to_string()),
+                window_bounds: Some(WindowBounds::Windowed(window_bounds)),
+                titlebar: None,
+                window_min_size: Some(gpui::Size {
+                    width: px(600.),
+                    height: px(800.),
+                }),
+                kind: WindowKind::PopUp,
+                #[cfg(target_os = "linux")]
+                window_background: gpui::WindowBackgroundAppearance::Transparent,
+                #[cfg(target_os = "linux")]
+                window_decorations: Some(gpui::WindowDecorations::Client),
+                ..Default::default()
+            };
+            crate::ui::create_normal_window_options(
+                format!("todo-{}", todo.title),
+                options,
+                move |window, cx| TodoFormView::view(window, cx),
+                cx,
+            );
         }
     }
 
@@ -712,9 +770,12 @@ impl Render for TodoList {
         v_flex()
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::selected_company))
+            .on_action(cx.listener(Self::clone))
+             .on_action(cx.listener(Self::open_todo))
             .size_full()
             .gap_4()
             .child(
+                // 顶部工具栏
                 h_flex()
                     .gap_2()
                     .flex_nowrap()
@@ -766,7 +827,6 @@ impl Render for TodoList {
                             .compact()
                             .ghost()
                             .on_click(cx.listener(|this, ev, widnow, cx| {
-                                // let _ = cx.open_window(WindowOptions::default(), TodoView::view);
                                 cx.activate(true);
                                 let window_size = size(px(600.0), px(800.0));
                                 let window_bounds = Bounds::centered(None, window_size, cx);
@@ -797,6 +857,7 @@ impl Render for TodoList {
                     ),
             )
             .child(
+                // 待办事项列表
                 div()
                     .flex_1()
                     .w_full()

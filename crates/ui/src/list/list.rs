@@ -10,7 +10,7 @@ use crate::{
     scroll::{Scrollbar, ScrollbarState},
     v_flex, ActiveTheme, IconName, Size,
 };
-use crate::{Icon, Sizable as _};
+use crate::{Icon, InteractiveElementExt, Sizable as _};
 use gpui::{
     div, prelude::FluentBuilder, uniform_list, AnyElement, AppContext, Entity, FocusHandle,
     Focusable, InteractiveElement, IntoElement, KeyBinding, Length, ListSizingBehavior,
@@ -122,6 +122,14 @@ pub trait ListDelegate: Sized + 'static {
     /// This will always to `set_selected_index` before confirm.
     fn confirm(&mut self, secondary: bool, window: &mut Window, cx: &mut Context<List<Self>>) {}
 
+    fn on_double_click(
+        &mut self,
+        ev: &gpui::ClickEvent,
+        window: &mut Window,
+        cx: &mut Context<List<Self>>,
+    ) {
+        // Default is do nothing
+    }
     /// Cancel the selection, e.g.: Pressed ESC.
     fn cancel(&mut self, window: &mut Window, cx: &mut Context<List<Self>>) {}
 
@@ -483,6 +491,16 @@ where
         self.select_item(selected_index, window, cx);
     }
 
+    fn on_double_click(
+        &mut self,
+        ev: &gpui::ClickEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.delegate.on_double_click(ev,window, cx);
+       
+    }
+
     fn render_list_item(
         &mut self,
         ix: usize,
@@ -531,7 +549,9 @@ where
                         this.right_clicked_index = Some(ix);
                         cx.notify();
                     }),
-                )
+                ).on_double_click(cx.listener(|this,ev,window,cx|{
+                    this.on_double_click(ev, window, cx);
+                }))
             })
     }
 }
@@ -610,6 +630,7 @@ where
                     .on_action(cx.listener(Self::on_action_confirm))
                     .on_action(cx.listener(Self::on_action_select_next))
                     .on_action(cx.listener(Self::on_action_select_prev))
+                    .on_double_click(cx.listener(Self::on_double_click))
                     .context_menu({
                         let view = view.clone();
                         move |this, window: &mut Window, cx: &mut Context<PopupMenu>| {
