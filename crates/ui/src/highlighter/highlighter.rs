@@ -313,15 +313,15 @@ impl SyntaxHighlighter {
 
             // Remove the cache entries that are inside the changed range.
             self.cache
-                .retain(|&start, _| !(start >= total_range.start && start <= total_range.end));
+                .retain(|&start, _| !(start > total_range.start && start < total_range.end));
 
             // Apply changed_len to reorder the cache to move the range offset
             let old_cache = self.cache.clone();
             self.cache.clear();
-            let measure = Measure::new("update_cache");
+            let measure = Measure::new("update_cache range offset");
             // NOTE: 10K lines, about 35ms
             for (start, (node_range, highlight_name)) in old_cache.into_iter() {
-                if node_range.start >= total_range.start {
+                if node_range.start > total_range.start {
                     let new_range = Range {
                         start: (node_range.start as isize + changed_len) as usize,
                         end: (node_range.end as isize + changed_len) as usize,

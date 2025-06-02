@@ -6719,7 +6719,6 @@ dependencies = [
  "rust-embed",
  "serde",
  "serde_json",
- "tracing",
  "tracing-subscriber",
  "unindent",
 ]
