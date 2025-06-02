@@ -289,9 +289,14 @@ impl From<Pixels> for Size {
 
 /// A trait for defining element that can be selected.
 pub trait Selectable: Sized {
+    /// Returns the element id of the element.
     fn element_id(&self) -> &ElementId;
+
     /// Set the selected state of the element.
     fn selected(self, selected: bool) -> Self;
+
+    /// Returns true if the element is selected.
+    fn is_selected(&self) -> bool;
 }
 
 /// A trait for defining element that can be disabled.

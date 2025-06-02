@@ -32,6 +32,10 @@ impl Selectable for SidebarFooter {
     fn element_id(&self) -> &gpui::ElementId {
         &self.id
     }
+
+    fn is_selected(&self) -> bool {
+        self.selected
+    }
 }
 impl Collapsible for SidebarFooter {
     fn is_collapsed(&self) -> bool {

@@ -6,7 +6,7 @@ use gpui::{
 use crate::{
     h_flex,
     popup_menu::{PopupMenu, PopupMenuExt},
-    IconName, Sizable, Size,
+    IconName, Selectable, Sizable, Size,
 };
 
 use super::{Button, ButtonRounded, ButtonVariant, ButtonVariants};
@@ -18,6 +18,7 @@ pub struct DropdownButton {
     button: Option<Button>,
     popup_menu:
         Option<Box<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static>>,
+    selected: bool,
 
     // The button props
     compact: Option<bool>,
@@ -34,7 +35,7 @@ impl DropdownButton {
             id: id.into(),
             button: None,
             popup_menu: None,
-
+            selected: false,
             compact: None,
             outline: None,
             variant: None,
@@ -70,6 +71,11 @@ impl DropdownButton {
         self.outline = Some(true);
         self
     }
+
+    pub fn selected(mut self, selected: bool) -> Self {
+        self.selected = selected;
+        self
+    }
 }
 
 impl Styled for DropdownButton {
@@ -89,6 +95,21 @@ impl ButtonVariants for DropdownButton {
     fn with_variant(mut self, variant: ButtonVariant) -> Self {
         self.variant = Some(variant);
         self
+    }
+}
+
+impl Selectable for DropdownButton {
+    fn element_id(&self) -> &ElementId {
+        &self.id
+    }
+
+    fn selected(mut self, selected: bool) -> Self {
+        self.selected = selected;
+        self
+    }
+
+    fn is_selected(&self) -> bool {
+        self.selected
     }
 }
 
@@ -112,6 +133,7 @@ impl RenderOnce for DropdownButton {
                             right: true,
                             bottom: true,
                         })
+                        .selected(self.selected)
                         .when_some(self.compact, |this, _| this.compact())
                         .when_some(self.outline, |this, _| this.outline())
                         .when_some(self.size, |this, size| this.with_size(size))
@@ -119,7 +141,7 @@ impl RenderOnce for DropdownButton {
                 )
                 .when_some(self.popup_menu, |this, popup_menu| {
                     this.child(
-                        Button::new("btn")
+                        Button::new("popup")
                             .icon(IconName::ChevronDown)
                             .rounded(self.rounded)
                             .border_edges(Edges {
@@ -134,6 +156,7 @@ impl RenderOnce for DropdownButton {
                                 bottom_left: false,
                                 bottom_right: true,
                             })
+                            .selected(self.selected)
                             .when_some(self.compact, |this, _| this.compact())
                             .when_some(self.outline, |this, _| this.outline())
                             .when_some(self.size, |this, size| this.with_size(size))

@@ -79,6 +79,10 @@ impl Selectable for Checkbox {
     fn selected(self, selected: bool) -> Self {
         self.checked(selected)
     }
+
+    fn is_selected(&self) -> bool {
+        self.checked
+    }
 }
 
 impl ParentElement for Checkbox {

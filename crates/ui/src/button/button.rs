@@ -331,6 +331,10 @@ impl Selectable for Button {
         self.selected = selected;
         self
     }
+
+    fn is_selected(&self) -> bool {
+        self.selected
+    }
 }
 
 impl Sizable for Button {

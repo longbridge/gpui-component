@@ -108,7 +108,8 @@ where
         T: Selectable + IntoElement + 'static,
     {
         self.trigger = Some(Box::new(|is_open, _, _| {
-            trigger.selected(is_open).into_any_element()
+            let selected = trigger.is_selected();
+            trigger.selected(selected || is_open).into_any_element()
         }));
         self
     }
