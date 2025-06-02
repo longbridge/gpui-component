@@ -314,6 +314,8 @@ impl SyntaxHighlighter {
 
             let measure = Measure::new("update cache to change range offset");
 
+            // FIXME: If we delete 1 char in a node, that node will not highlighted.
+
             // Remove the cache entries that are range is intersecting with the byte_range.
             self.cache.retain(|_, (range, _)| {
                 if range.start < byte_range.end && range.end > byte_range.start {
@@ -325,14 +327,6 @@ impl SyntaxHighlighter {
                 }
             });
 
-            for (item) in self.cache.iter() {
-                println!("---------OLD - item: {:?}", item);
-            }
-
-            println!(
-                "------------ total_range: {:?} byte_range: {:?}",
-                total_range, byte_range
-            );
             // Apply changed_len to reorder the cache to move the range offset
             let mut old_cache: BTreeMap<usize, (Range<usize>, String)> = BTreeMap::new();
             std::mem::swap(&mut self.cache, &mut old_cache);
@@ -398,9 +392,9 @@ impl SyntaxHighlighter {
             }
         }
 
-        for item in self.cache.iter() {
-            println!("---------- item: {:?}", item);
-        }
+        // for item in self.cache.iter() {
+        //     println!("---------- item: {:?}", item);
+        // }
     }
 
     /// TODO: Use incremental parsing to handle the injection.
