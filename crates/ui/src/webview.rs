@@ -187,7 +187,7 @@ impl Element for WebViewElement {
             .unwrap();
 
         // Create a hitbox to handle mouse event
-        Some(window.insert_hitbox(bounds, false))
+        Some(window.insert_hitbox(bounds, gpui::HitboxBehavior::Normal))
     }
 
     fn paint(

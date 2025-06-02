@@ -25,10 +25,8 @@ We built multi-theme support in the application. This feature is not included in
 
 GPUI and GPUI Component are still in development, so you need to add dependencies by git.
 
-GPUI Component depends on a specific version of `gpui` (kept updated with upstream) to include WebView support.
-
 ```toml
-gpui = { git = "https://github.com/huacnlee/zed.git", branch = "webview" }
+gpui = { git = "https://github.com/zed-industries/zed.git" }
 gpui-component = { git = "https://github.com/longbridge/gpui-component.git" }
 ```
 

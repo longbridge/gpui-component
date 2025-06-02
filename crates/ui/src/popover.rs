@@ -351,7 +351,10 @@ impl<M: ManagedView> Element for Popover<M> {
             .popover_layout_id
             .map(|id| window.layout_bounds(id));
 
-        let hitbox = window.insert_hitbox(trigger_bounds.unwrap_or_default(), false);
+        let hitbox = window.insert_hitbox(
+            trigger_bounds.unwrap_or_default(),
+            gpui::HitboxBehavior::Normal,
+        );
 
         PrepaintState {
             trigger_bounds,
