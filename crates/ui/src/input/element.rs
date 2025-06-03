@@ -2,9 +2,8 @@ use std::{ops::Range, rc::Rc};
 
 use gpui::{
     fill, point, px, relative, size, App, Bounds, Corners, Element, ElementId, ElementInputHandler,
-    Entity, GlobalElementId, IntoElement, LayoutId, MouseButton, MouseMoveEvent, PaintQuad, Path,
-    Pixels, Point, SharedString, Size, Style, TextAlign, TextRun, UnderlineStyle, Window,
-    WrappedLine,
+    Entity, GlobalElementId, IntoElement, LayoutId, MouseButton, MouseMoveEvent, Path, Pixels,
+    Point, SharedString, Size, Style, TextAlign, TextRun, UnderlineStyle, Window, WrappedLine,
 };
 use smallvec::SmallVec;
 
@@ -51,7 +50,7 @@ impl TextElement {
 
     /// Returns the:
     ///
-    /// - cursor position
+    /// - cursor bounds
     /// - scroll offset
     /// - current line index
     fn layout_cursor(
@@ -62,7 +61,7 @@ impl TextElement {
         line_number_width: Pixels,
         window: &mut Window,
         cx: &mut App,
-    ) -> (Option<PaintQuad>, Point<Pixels>, Option<usize>) {
+    ) -> (Option<Bounds<Pixels>>, Point<Pixels>, Option<usize>) {
         let input = self.input.read(cx);
         let mut selected_range = input.selected_range.clone();
         if let Some(marked_range) = &input.marked_range {
@@ -72,7 +71,7 @@ impl TextElement {
         let cursor_offset = input.cursor_offset();
         let mut current_line_index = None;
         let mut scroll_offset = input.scroll_handle.offset();
-        let mut cursor = None;
+        let mut cursor_bounds = None;
 
         // If the input has a fixed height (Otherwise is auto-grow), we need to add a bottom margin to the input.
         let bottom_margin = if input.is_auto_grow() {
@@ -169,26 +168,23 @@ impl TextElement {
                 }
             }
 
-            bounds.origin = bounds.origin + scroll_offset;
-
             if input.show_cursor(window, cx) {
                 // cursor blink
                 let cursor_height =
                     window.text_style().font_size.to_pixels(window.rem_size()) + px(2.);
-                cursor = Some(fill(
-                    Bounds::new(
-                        point(
-                            bounds.left() + cursor_pos.x + line_number_width,
-                            bounds.top() + cursor_pos.y + ((line_height - cursor_height) / 2.),
-                        ),
-                        size(px(1.), cursor_height),
+                cursor_bounds = Some(Bounds::new(
+                    point(
+                        bounds.left() + cursor_pos.x + line_number_width,
+                        bounds.top() + cursor_pos.y + ((line_height - cursor_height) / 2.),
                     ),
-                    cx.theme().caret,
-                ))
+                    size(px(1.), cursor_height),
+                ));
             };
         }
 
-        (cursor, scroll_offset, current_line_index)
+        bounds.origin = bounds.origin + scroll_offset;
+
+        (cursor_bounds, scroll_offset, current_line_index)
     }
 
     fn layout_selections(
@@ -404,7 +400,7 @@ pub(super) struct PrepaintState {
     line_number_width: Pixels,
     /// Size of the scrollable area by entire lines.
     scroll_size: Size<Pixels>,
-    cursor: Option<PaintQuad>,
+    cursor_bounds: Option<Bounds<Pixels>>,
     cursor_scroll_offset: Point<Pixels>,
     /// line index (zero based), no wrap, same line as the cursor.
     current_line_index: Option<usize>,
@@ -672,7 +668,7 @@ impl Element for TextElement {
 
         // Calculate the scroll offset to keep the cursor in view
 
-        let (cursor, cursor_scroll_offset, current_line_index) = self.layout_cursor(
+        let (cursor_bounds, cursor_scroll_offset, current_line_index) = self.layout_cursor(
             &lines,
             line_height,
             &mut bounds,
@@ -751,7 +747,7 @@ impl Element for TextElement {
             scroll_size,
             line_numbers,
             line_number_width,
-            cursor,
+            cursor_bounds,
             cursor_scroll_offset,
             current_line_index,
             selection_path,
@@ -872,8 +868,9 @@ impl Element for TextElement {
         }
 
         if focused {
-            if let Some(cursor) = prepaint.cursor.take() {
-                window.paint_quad(cursor);
+            if let Some(mut cursor_bounds) = prepaint.cursor_bounds.take() {
+                cursor_bounds.origin.y += prepaint.cursor_scroll_offset.y;
+                window.paint_quad(fill(cursor_bounds, cx.theme().caret));
             }
         }
 
