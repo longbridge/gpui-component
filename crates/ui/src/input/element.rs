@@ -6,6 +6,7 @@ use gpui::{
     Pixels, Point, SharedString, Size, Style, TextAlign, TextRun, UnderlineStyle, Window,
     WrappedLine,
 };
+use itertools::Itertools;
 use smallvec::SmallVec;
 
 use crate::{highlighter::LanguageRegistry, measure_if, ActiveTheme as _, Root};
@@ -367,8 +368,6 @@ impl TextElement {
 pub(super) struct PrepaintState {
     /// The visible range (no wrap) of lines in the viewport.
     visible_range: Range<usize>,
-    /// Offset top for invisible lines to leave a space for line numbers and consider with wraped lines.
-    invisible_top_padding: Pixels,
     /// The lines of entire lines.
     last_layout: LastLayout,
     /// The lines only contains the visible lines in the viewport, based on `visible_range`.
@@ -378,7 +377,7 @@ pub(super) struct PrepaintState {
     scroll_size: Size<Pixels>,
     cursor: Option<PaintQuad>,
     cursor_scroll_offset: Point<Pixels>,
-    /// Wrapped line index
+    /// Wrapped line index, same line as the cursor.
     current_line_index: usize,
     selection_path: Option<Path<Pixels>>,
     bounds: Bounds<Pixels>,
@@ -505,7 +504,6 @@ impl Element for TextElement {
         let mut line_number_width = px(0.);
         let line_numbers = if input.mode.line_number() {
             let mut line_numbers = SmallVec::new();
-            let total_lines = input.text_wrapper.lines.len();
             let run_len = if total_lines > 999 { 4 } else { 3 };
 
             let other_line_runs = vec![TextRun {
@@ -637,9 +635,9 @@ impl Element for TextElement {
             None
         };
 
-        // NOTE: If there have about 10K lines, this will take about 5~6ms.
         let mut lines = SmallVec::new();
 
+        // NOTE: If there have about 10K lines, this will take about 5~6ms.
         measure_if("shape_text", display_text.len() > 5000, || {
             lines = window
                 .text_system()
@@ -647,18 +645,12 @@ impl Element for TextElement {
                 .expect("failed to shape text");
         });
 
-        let mut invisible_top_padding = px(0.);
-        for (ix, line) in lines.iter().enumerate() {
-            if ix >= visible_range.start {
-                break;
-            }
-
-            invisible_top_padding += line_height + line_height * line.wrap_boundaries.len();
-        }
-
         let total_wraped_lines = lines
             .iter()
-            .map(|line| 1 + line.wrap_boundaries.len())
+            .map(|line| {
+                // +1 is the first line, `wrap_boundaries` is the wrapped lines after the `\n`.
+                1 + line.wrap_boundaries.len()
+            })
             .sum::<usize>();
 
         let max_line_width = lines
@@ -733,7 +725,6 @@ impl Element for TextElement {
             current_line_index,
             selection_path,
             visible_range,
-            invisible_top_padding,
         }
     }
 
@@ -797,13 +788,14 @@ impl Element for TextElement {
             }
         }
 
+        let invisible_top_padding = visible_range.start * line_height;
         let active_line_color = LanguageRegistry::global(cx)
             .theme(cx.theme().is_dark())
             .style
             .active_line;
 
         if let Some(line_numbers) = prepaint.line_numbers.as_ref() {
-            offset_y += prepaint.invisible_top_padding;
+            offset_y += invisible_top_padding;
 
             // Each item is the normal lines.
             for (ix, line) in line_numbers.iter().enumerate() {
@@ -836,7 +828,7 @@ impl Element for TextElement {
         }
 
         // Paint text
-        let mut offset_y = px(0.) + prepaint.invisible_top_padding;
+        let mut offset_y = px(0.) + invisible_top_padding;
 
         for line in prepaint
             .last_layout
@@ -856,8 +848,6 @@ impl Element for TextElement {
             }
         }
 
-        // let width = prepaint.max_line_width;
-        // let height = offset_y + invisible_bottom_padding;
         let scroll_size = prepaint.scroll_size;
 
         self.input.update(cx, |input, cx| {
