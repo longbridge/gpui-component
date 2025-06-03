@@ -347,7 +347,7 @@ impl TextElement {
         visible_range
     }
 
-    /// First usize is the offset of skiped.
+    /// First usize is the offset of skipped.
     fn highlight_lines(
         &mut self,
         visible_range: &Range<usize>,
@@ -359,13 +359,13 @@ impl TextElement {
         self.input.update(cx, |state, _| match &mut state.mode {
             InputMode::CodeEditor { highlighter, .. } => {
                 let mut offset = 0;
-                let mut skiped_offset = 0;
+                let mut skipped_offset = 0;
                 let mut lines = vec![];
 
                 for (ix, line) in state.text.split('\n').enumerate() {
                     if ix < visible_range.start {
                         offset += line.len() + 1;
-                        skiped_offset = offset;
+                        skipped_offset = offset;
                         continue;
                     }
                     if ix > visible_range.end {
@@ -381,7 +381,7 @@ impl TextElement {
                     });
                     offset += line.len() + 1;
                 }
-                Some((skiped_offset, lines))
+                Some((skipped_offset, lines))
             }
             _ => None,
         })
@@ -563,11 +563,11 @@ impl Element for TextElement {
         };
 
         let runs = if !is_empty {
-            if let Some((skiped_offset, highlight_lines)) = highlight_lines {
+            if let Some((skipped_offset, highlight_lines)) = highlight_lines {
                 let mut runs = vec![];
-                if skiped_offset > 0 {
+                if skipped_offset > 0 {
                     runs.push(TextRun {
-                        len: skiped_offset,
+                        len: skipped_offset,
                         ..run.clone()
                     });
                 }
@@ -618,7 +618,7 @@ impl Element for TextElement {
                 .expect("failed to shape text");
         });
 
-        let total_wraped_lines = lines
+        let total_wrapped_lines = lines
             .iter()
             .map(|line| {
                 // +1 is the first line, `wrap_boundaries` is the wrapped lines after the `\n`.
@@ -633,7 +633,7 @@ impl Element for TextElement {
             .unwrap_or(bounds.size.width);
         let scroll_size = size(
             max_line_width + line_number_width + RIGHT_MARGIN,
-            (total_wraped_lines as f32 * line_height).max(bounds.size.height),
+            (total_wrapped_lines as f32 * line_height).max(bounds.size.height),
         );
 
         let line_numbers = if input.mode.line_number() {
