@@ -335,15 +335,16 @@ impl TextElement {
         line_height: Pixels,
         bounds: &Bounds<Pixels>,
     ) -> Range<usize> {
+        let scroll_top = -state.scroll_handle.offset().y;
         let mut visible_range = 0..state.text_wrapper.lines.len();
         let mut line_top = px(0.);
         for (ix, line) in state.text_wrapper.lines.iter().enumerate() {
             line_top += line.height(line_height);
 
-            if line_top < -state.scroll_handle.offset().y {
+            if line_top < scroll_top {
                 visible_range.start = ix;
             }
-            if line_top > -state.scroll_handle.offset().y + bounds.size.height {
+            if line_top > scroll_top + bounds.size.height {
                 visible_range.end = ix;
                 break;
             }
