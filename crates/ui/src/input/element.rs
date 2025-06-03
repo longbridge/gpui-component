@@ -321,6 +321,32 @@ impl TextElement {
         builder.build().ok()
     }
 
+    /// Calculate the visible range of lines in the viewport.
+    ///
+    /// The visible range is based on unwrapped lines (Zero based).
+    fn calculate_visible_range(
+        &self,
+        state: &InputState,
+        line_height: Pixels,
+        bounds: &Bounds<Pixels>,
+    ) -> Range<usize> {
+        let mut visible_range = 0..state.text_wrapper.lines.len();
+        let mut line_top = px(0.);
+        for (ix, line) in state.text_wrapper.lines.iter().enumerate() {
+            line_top += line.height(line_height);
+
+            if line_top < -state.scroll_handle.offset().y {
+                visible_range.start = ix;
+            }
+            if line_top > -state.scroll_handle.offset().y + bounds.size.height {
+                visible_range.end = ix;
+                break;
+            }
+        }
+
+        visible_range
+    }
+
     /// First usize is the offset of skiped.
     fn highlight_lines(
         &mut self,
@@ -468,12 +494,10 @@ impl Element for TextElement {
     ) -> Self::PrepaintState {
         let state = self.input.read(cx);
         let line_height = window.line_height();
-        let total_lines = state.text_wrapper.lines.len();
-        let top_line = (-state.scroll_handle.offset().y / line_height) as usize;
-        let end_line = top_line + (state.input_bounds.size.height / line_height) as usize;
-        let visible_range = top_line.saturating_sub(1)..(end_line + 1).max(total_lines);
 
+        let visible_range = self.calculate_visible_range(&state, line_height, &bounds);
         let highlight_lines = self.highlight_lines(&visible_range, cx);
+
         let multi_line = self.input.read(cx).is_multi_line();
         let input = self.input.read(cx);
         let text = input.text.clone();
@@ -500,7 +524,7 @@ impl Element for TextElement {
         let empty_line_number = window
             .text_system()
             .shape_text(
-                "    ".into(),
+                "++++".into(),
                 font_size,
                 &[TextRun {
                     len: 4,
@@ -614,8 +638,7 @@ impl Element for TextElement {
 
         let line_numbers = if input.mode.line_number() {
             let mut line_numbers = vec![];
-            let run_len = if total_lines > 999 { 4 } else { 3 };
-
+            let run_len = 4;
             let other_line_runs = vec![TextRun {
                 len: run_len,
                 font: style.font(),
@@ -634,34 +657,31 @@ impl Element for TextElement {
             }];
 
             // build line numbers
-            for (i, line_wrap) in lines
+            for (ix, line) in lines
                 .iter()
                 .skip(visible_range.start)
                 .take(visible_range.len())
                 .enumerate()
             {
-                let i = i + visible_range.start;
-                let line_no = i + 1;
-                let mut line_no_text = if run_len == 4 {
-                    format!("{:>4}", line_no)
-                } else {
-                    format!("{:>3}", line_no)
-                };
-                if !line_wrap.wrap_boundaries.is_empty() {
-                    line_no_text.push_str(&"\n    ".repeat(line_wrap.wrap_boundaries.len()));
+                let ix = ix + visible_range.start;
+                let line_no = ix + 1;
+
+                let mut line_no_text = format!("{:>4}", line_no);
+                if !line.wrap_boundaries.is_empty() {
+                    line_no_text.push_str(&"\n    ".repeat(line.wrap_boundaries.len()));
                 }
 
-                let runs = if input.current_line_index == Some(i) {
+                let runs = if input.current_line_index == Some(ix) {
                     &current_line_runs
                 } else {
                     &other_line_runs
                 };
 
-                let line = window
+                let shape_line = window
                     .text_system()
                     .shape_text(line_no_text.into(), font_size, &runs, None, None)
                     .unwrap();
-                line_numbers.push(line);
+                line_numbers.push(shape_line);
             }
             Some(line_numbers)
         } else {

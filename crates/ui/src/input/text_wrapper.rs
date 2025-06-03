@@ -10,12 +10,18 @@ pub(super) struct LineWrap {
     pub(super) range: Range<usize>,
 }
 
+impl LineWrap {
+    pub(super) fn height(&self, line_height: Pixels) -> Pixels {
+        line_height * (self.wrap_lines + 1)
+    }
+}
+
 /// Used to prepare the text with soft_wrap to be get lines to displayed in the TextArea
 ///
 /// After use lines to calculate the scroll size of the TextArea
 pub(super) struct TextWrapper {
     pub(super) text: SharedString,
-    /// The wrapped lines, value is start and end index of the line (by split \n).
+    /// The wrapped lines, value is start and end index of the line.
     pub(super) wrapped_lines: Vec<Range<usize>>,
     /// The lines by split \n
     pub(super) lines: Vec<LineWrap>,
