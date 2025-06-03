@@ -1768,6 +1768,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "dummy"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3bbcf21279103a67372982cb1156a2154a452451dff2b884cf897ccecce389e0"
+dependencies = [
+ "darling",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.101",
+]
+
+[[package]]
 name = "dunce"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1972,8 +1984,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2d391ba4af7f1d93f01fcf7b2f29e2bc9348e109dfdbf4dcbdc51dfa38dab0b6"
 dependencies = [
  "deunicode",
- "dummy",
+ "dummy 0.8.0",
  "rand 0.8.5",
+]
+
+[[package]]
+name = "fake"
+version = "4.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2f5f203b70a419cb8880d1cfe6bebe488add0a0307d404e9f24021e5fd864b80"
+dependencies = [
+ "deunicode",
+ "dummy 0.11.0",
+ "rand 0.9.1",
 ]
 
 [[package]]
@@ -6688,7 +6711,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
- "fake",
+ "fake 2.10.0",
  "gpui",
  "gpui-component",
  "gtk",
@@ -7248,7 +7271,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
- "fake",
+ "fake 4.3.0",
  "gpui",
  "gpui-component",
  "gtk",
@@ -7261,6 +7284,7 @@ dependencies = [
  "serde_json",
  "story",
  "unindent",
+ "windows 0.61.1",
 ]
 
 [[package]]

@@ -1,11 +1,11 @@
 use super::views::todolist::TodoList;
 use gpui::*;
 
-pub struct TodoMainView {
+pub struct TodoMainWindow {
     root: Entity<TodoList>,
 }
 
-impl TodoMainView {
+impl TodoMainWindow {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let root = TodoList::view(window, cx);
 
@@ -17,7 +17,7 @@ impl TodoMainView {
     }
 }
 
-impl Render for TodoMainView {
+impl Render for TodoMainWindow {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         div().p_4().size_full().child(self.root.clone())
     }

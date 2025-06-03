@@ -1,21 +1,20 @@
-use chrono::Days;
-use fake::Fake;
 use gpui::prelude::*;
 use gpui::*;
 use std::time::Duration;
 
 use gpui_component::{
     button::{Button, ButtonGroup, ButtonVariants},
-    h_flex, hsl,
+    h_flex,
     indicator::Indicator,
     label::Label,
     list::{List, ListDelegate, ListEvent, ListItem},
     popup_menu::PopupMenu,
     tab::TabBar,
-    text::{Text, TextView},
-    v_flex, ActiveTheme, IconName, Selectable, Sizable, Size, *,
+    v_flex, ActiveTheme, IconName, Sizable, *,
 };
 use story::Story;
+
+use crate::ui::AppExt;
 
 use super::todo_form::TodoFormView;
 
@@ -141,14 +140,13 @@ impl RenderOnce for TodoItem {
                                                 .icon(IconName::Star)
                                                 .small()
                                                 .on_click(|event, win, app| {}),
-                                        )
-                                        // .child(
-                                        //     Button::new("button-trash")
-                                        //         .ghost()
-                                        //         .icon(IconName::Trash)
-                                        //         .small()
-                                        //         .on_click(|event, win, app| {}),
-                                        // ),
+                                        ), // .child(
+                                           //     Button::new("button-trash")
+                                           //         .ghost()
+                                           //         .icon(IconName::Trash)
+                                           //         .small()
+                                           //         .on_click(|event, win, app| {}),
+                                           // ),
                                 )
                             })
                             .child(
@@ -250,9 +248,8 @@ impl ListDelegate for TodoListDelegate {
         window: &mut Window,
         cx: &mut Context<List<Self>>,
     ) {
-      
-         println!("Double clicked: {:?} {:?}", ev, self.selected_index);
- window.dispatch_action(Box::new(Open), cx);
+        println!("Double clicked: {:?} {:?}", ev, self.selected_index);
+        window.dispatch_action(Box::new(Open), cx);
         // cx.activate(true);
         // let window_size = size(px(600.0), px(800.0));
         // let window_bounds = Bounds::centered(None, window_size, cx);
@@ -316,10 +313,10 @@ impl ListDelegate for TodoListDelegate {
             // .link("About", "https://github.com/longbridge/gpui-component")
             .menu("打开", Box::new(Open))
             .separator()
-            .menu_with_icon("克隆", IconName::Copy,Box::new(Clone))
-            .menu_with_icon("暂停", IconName::Pause,Box::new(Pause))
-            .menu_with_icon("完成", IconName::Done,Box::new(Completed))
-             .menu_with_icon("关注", IconName::Star, Box::new(Completed))
+            .menu_with_icon("克隆", IconName::Copy, Box::new(Clone))
+            .menu_with_icon("暂停", IconName::Pause, Box::new(Pause))
+            .menu_with_icon("完成", IconName::Done, Box::new(Completed))
+            .menu_with_icon("关注", IconName::Star, Box::new(Completed))
             // .separator()
             // .menu_with_check("删除", true, Box::new(ToggleCheck))
             .separator()
@@ -479,7 +476,7 @@ impl TodoList {
             let options = WindowOptions {
                 app_id: Some("x-todo-app".to_string()),
                 window_bounds: Some(WindowBounds::Windowed(window_bounds)),
-                titlebar: None,
+                titlebar: Some(TitleBar::title_bar_options()),
                 window_min_size: Some(gpui::Size {
                     width: px(600.),
                     height: px(800.),
@@ -491,11 +488,10 @@ impl TodoList {
                 window_decorations: Some(gpui::WindowDecorations::Client),
                 ..Default::default()
             };
-            crate::ui::create_normal_window_options(
+            cx.create_normal_window(
                 format!("todo-{}", todo.title),
                 options,
                 move |window, cx| TodoFormView::view(window, cx),
-                cx,
             );
         }
     }
@@ -771,7 +767,7 @@ impl Render for TodoList {
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::selected_company))
             .on_action(cx.listener(Self::clone))
-             .on_action(cx.listener(Self::open_todo))
+            .on_action(cx.listener(Self::open_todo))
             .size_full()
             .gap_4()
             .child(
@@ -833,7 +829,7 @@ impl Render for TodoList {
                                 let options = WindowOptions {
                                     app_id: Some("x-todo-app".to_string()),
                                     window_bounds: Some(WindowBounds::Windowed(window_bounds)),
-                                    titlebar: None,
+                                    titlebar: Some(TitleBar::title_bar_options()),
                                     window_min_size: Some(gpui::Size {
                                         width: px(600.),
                                         height: px(800.),
@@ -847,12 +843,9 @@ impl Render for TodoList {
                                     window_decorations: Some(gpui::WindowDecorations::Client),
                                     ..Default::default()
                                 };
-                                crate::ui::create_normal_window_options(
-                                    "Add Todo",
-                                    options,
-                                    move |window, cx| TodoFormView::view(window, cx),
-                                    cx,
-                                );
+                                cx.create_normal_window("Add Todo", options, move |window, cx| {
+                                    TodoFormView::view(window, cx)
+                                });
                             })),
                     ),
             )

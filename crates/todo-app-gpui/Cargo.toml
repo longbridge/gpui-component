@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 anyhow.workspace = true
 chrono = "0.4"
-fake = { version = "2.10.0", features = ["dummy"] }
+fake = { version = "4.3.0", features = ["dummy"] }
 gpui.workspace = true
 gpui-component = { workspace = true, features = ["webview"] }
 story = { workspace = true }
@@ -18,6 +18,15 @@ rust-embed = "8.5.0"
 serde = "1"
 serde_json = "1"
 unindent = "0.2.3"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.61.1", features = [
+    "Wdk",
+    "Wdk_System",
+    "Wdk_System_SystemServices",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = { version = "0.18" }

@@ -1,8 +1,8 @@
-use crate::ui::{main_window::TodoMainView, CloseWindow, Quit};
+use crate::ui::components::titlebar::TitleBar;
+use crate::ui::{main_window::TodoMainWindow, AppExt, CloseWindow, Quit};
 use gpui::*;
-use gpui_component::TitleBar;
-use story::Assets;
 
+use story::Assets;
 /// 应用程序状态，管理全局状态
 pub struct AppState {
     /// 不可见面板的列表
@@ -43,6 +43,12 @@ pub fn run() {
             cx.quit();
         });
         cx.activate(true);
+        cx.on_window_closed(|cx| {
+            if cx.windows().is_empty() {
+                cx.quit();
+            }
+        })
+        .detach();
         let window_size = size(px(WIDTH), px(HEIGHT));
         let window_bounds = Bounds::centered(None, window_size, cx);
         let options = WindowOptions {
@@ -61,11 +67,6 @@ pub fn run() {
             window_decorations: Some(gpui::WindowDecorations::Client),
             ..Default::default()
         };
-
-        crate::ui::create_todo_window_options(
-            options,
-            move |window, cx| TodoMainView::view(window, cx),
-            cx,
-        );
+        cx.create_todo_window(options, move |window, cx| TodoMainWindow::view(window, cx));
     });
 }
