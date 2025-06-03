@@ -6,7 +6,6 @@ use gpui::{
     Pixels, Point, SharedString, Size, Style, TextAlign, TextRun, UnderlineStyle, Window,
     WrappedLine,
 };
-use itertools::Itertools;
 use smallvec::SmallVec;
 
 use crate::{highlighter::LanguageRegistry, measure_if, ActiveTheme as _, Root};
@@ -501,71 +500,25 @@ impl Element for TextElement {
         let text_style = window.text_style();
 
         // Calculate the width of the line numbers
-        let mut line_number_width = px(0.);
-        let line_numbers = if input.mode.line_number() {
-            let mut line_numbers = SmallVec::new();
-            let run_len = if total_lines > 999 { 4 } else { 3 };
-
-            let other_line_runs = vec![TextRun {
-                len: run_len,
-                font: style.font(),
-                color: cx.theme().muted_foreground,
-                background_color: None,
-                underline: None,
-                strikethrough: None,
-            }];
-            let current_line_runs = vec![TextRun {
-                len: run_len,
-                font: style.font(),
-                color: cx.theme().foreground,
-                background_color: None,
-                underline: None,
-                strikethrough: None,
-            }];
-
-            // build line numbers
-            for (i, line_wrap) in input
-                .text_wrapper
-                .lines
-                .iter()
-                .skip(visible_range.start)
-                .take(visible_range.end.saturating_sub(visible_range.start))
-                .enumerate()
-            {
-                let i = i + visible_range.start;
-                let line_no = if run_len == 4 {
-                    format!("{:>4}", i + 1).into()
-                } else {
-                    format!("{:>3}", i + 1).into()
-                };
-
-                let runs = if input.current_line_index == Some(i) {
-                    &current_line_runs
-                } else {
-                    &other_line_runs
-                };
-
-                let line = window
-                    .text_system()
-                    .shape_text(line_no, font_size, &runs, None, None)
-                    .unwrap();
-                line_number_width = (line.last().unwrap().width() + LINE_NUMBER_MARGIN_RIGHT)
-                    .max(line_number_width);
-                line_numbers.extend(line);
-
-                for _ in 0..line_wrap.wrap_lines {
-                    // Empty line no for wrapped lines
-                    let line = window
-                        .text_system()
-                        .shape_text("    ".into(), font_size, &runs, None, None)
-                        .unwrap();
-                    line_numbers.extend(line);
-                }
-            }
-            Some(line_numbers)
-        } else {
-            None
-        };
+        let empty_line_number = window
+            .text_system()
+            .shape_text(
+                "    ".into(),
+                font_size,
+                &[TextRun {
+                    len: 4,
+                    font: style.font(),
+                    color: gpui::black(),
+                    background_color: None,
+                    underline: None,
+                    strikethrough: None,
+                }],
+                None,
+                None,
+            )
+            .unwrap();
+        let line_number_width =
+            empty_line_number.last().unwrap().width() + LINE_NUMBER_MARGIN_RIGHT;
 
         let run = TextRun {
             len: display_text.len(),
@@ -662,6 +615,64 @@ impl Element for TextElement {
             max_line_width + line_number_width + RIGHT_MARGIN,
             (total_wraped_lines as f32 * line_height).max(bounds.size.height),
         );
+
+        let line_numbers = if input.mode.line_number() {
+            let mut line_numbers = SmallVec::new();
+            let run_len = if total_lines > 999 { 4 } else { 3 };
+
+            let other_line_runs = vec![TextRun {
+                len: run_len,
+                font: style.font(),
+                color: cx.theme().muted_foreground,
+                background_color: None,
+                underline: None,
+                strikethrough: None,
+            }];
+            let current_line_runs = vec![TextRun {
+                len: run_len,
+                font: style.font(),
+                color: cx.theme().foreground,
+                background_color: None,
+                underline: None,
+                strikethrough: None,
+            }];
+
+            // build line numbers
+            for (i, line_wrap) in lines
+                .iter()
+                .skip(visible_range.start)
+                .take(visible_range.end.saturating_sub(visible_range.start))
+                .enumerate()
+            {
+                let i = i + visible_range.start;
+                let line_no = i + 1;
+                let line_no_text = if run_len == 4 {
+                    format!("{:>4}", line_no).into()
+                } else {
+                    format!("{:>3}", line_no).into()
+                };
+
+                let runs = if input.current_line_index == Some(i) {
+                    &current_line_runs
+                } else {
+                    &other_line_runs
+                };
+
+                let line = window
+                    .text_system()
+                    .shape_text(line_no_text, font_size, &runs, None, None)
+                    .unwrap();
+                line_numbers.extend(line);
+
+                for _ in 0..line_wrap.wrap_boundaries.len() {
+                    // Empty line no for wrapped lines
+                    line_numbers.extend(empty_line_number.clone());
+                }
+            }
+            Some(line_numbers)
+        } else {
+            None
+        };
 
         // `position_for_index` for example
         //
@@ -805,10 +816,10 @@ impl Element for TextElement {
 
                 // Paint the current line background
                 if prepaint.current_line_index == ix {
-                    println!(
-                        "-------------- {}, ix: {}, current_line_index: {}",
-                        line.text, ix, prepaint.current_line_index
-                    );
+                    // println!(
+                    //     "-------------- {}, ix: {}, current_line_index: {}",
+                    //     line.text, ix, prepaint.current_line_index
+                    // );
                     if let Some(bg_color) = active_line_color {
                         window.paint_quad(fill(
                             Bounds::new(p, size(bounds.size.width, line_height)),
@@ -848,8 +859,6 @@ impl Element for TextElement {
             }
         }
 
-        let scroll_size = prepaint.scroll_size;
-
         self.input.update(cx, |input, cx| {
             input.last_layout = Some(prepaint.last_layout.clone());
             input.last_bounds = Some(bounds);
@@ -857,7 +866,7 @@ impl Element for TextElement {
             input.last_line_height = line_height;
             input.set_input_bounds(input_bounds, cx);
             input.last_selected_range = Some(selected_range);
-            input.scroll_size = scroll_size;
+            input.scroll_size = prepaint.scroll_size;
             input.line_number_width = prepaint.line_number_width;
             input.current_line_index = Some(prepaint.current_line_index);
             input
