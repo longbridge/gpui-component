@@ -8,7 +8,7 @@ use gpui::{
 };
 use smallvec::SmallVec;
 
-use crate::{highlighter::LanguageRegistry, measure_if, ActiveTheme as _, Root};
+use crate::{highlighter::LanguageRegistry, ActiveTheme as _, Root};
 
 use super::{code_highlighter::LineHighlightStyle, mode::InputMode, InputState, LastLayout};
 
@@ -609,14 +609,13 @@ impl Element for TextElement {
             None
         };
 
-        let mut lines = SmallVec::new();
         // NOTE: If there have about 10K lines, this will take about 5~6ms.
-        measure_if("shape_text", display_text.len() > 5000, || {
-            lines = window
-                .text_system()
-                .shape_text(display_text, font_size, &runs, wrap_width, None)
-                .expect("failed to shape text");
-        });
+        // let measure = Measure::new("shape_text");
+        let lines = window
+            .text_system()
+            .shape_text(display_text, font_size, &runs, wrap_width, None)
+            .expect("failed to shape text");
+        // measure.end();
 
         let total_wrapped_lines = lines
             .iter()

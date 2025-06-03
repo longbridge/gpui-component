@@ -1,4 +1,3 @@
-use crate::{measure, Measure};
 use gpui::{App, HighlightStyle, SharedString};
 use std::{
     collections::{BTreeMap, HashMap},
@@ -263,9 +262,9 @@ impl SyntaxHighlighter {
         self.old_tree = Some(new_tree);
         self.text = full_text;
 
-        measure("build_styles", || {
-            self.build_styles(changed_ranges, changed_len, cx);
-        });
+        // let measure = Measure::new("build_styles");
+        self.build_styles(changed_ranges, changed_len, cx);
+        // measure.end();
     }
 
     /// NOTE: 10K lines, about 180ms
@@ -312,7 +311,7 @@ impl SyntaxHighlighter {
 
             let byte_range = root_node.byte_range();
 
-            let measure = Measure::new("update cache to change range offset");
+            // let measure = Measure::new("update cache to change range offset");
 
             // FIXME: If we delete 1 char in a node, that node will not highlighted.
 
@@ -345,7 +344,7 @@ impl SyntaxHighlighter {
                     self.cache.insert(start, (old_range, highlight_name));
                 }
             }
-            measure.end();
+            // measure.end();
         } else {
             self.cache.clear();
         }
