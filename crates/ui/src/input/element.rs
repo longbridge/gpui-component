@@ -82,7 +82,7 @@ impl TextElement {
 
         let mut prev_lines_offset = 0;
         let mut offset_y = px(0.);
-        for line in lines.iter() {
+        for (line_ix, line) in lines.iter().enumerate() {
             // break loop if all cursor positions are found
             if cursor_pos.is_some() && cursor_start.is_some() && cursor_end.is_some() {
                 break;
@@ -92,6 +92,7 @@ impl TextElement {
             if cursor_pos.is_none() {
                 let offset = cursor_offset.saturating_sub(prev_lines_offset);
                 if let Some(pos) = line.position_for_index(offset, line_height) {
+                    current_line_index = line_ix;
                     cursor_pos = Some(line_origin + pos);
                 }
             }
@@ -180,9 +181,6 @@ impl TextElement {
                     cx.theme().caret,
                 ))
             };
-
-            // Calculate the current line index
-            current_line_index = (cursor_pos.y / line_height) as usize;
         }
 
         (cursor, scroll_offset, current_line_index)
@@ -370,13 +368,13 @@ pub(super) struct PrepaintState {
     /// The lines of entire lines.
     last_layout: LastLayout,
     /// The lines only contains the visible lines in the viewport, based on `visible_range`.
-    line_numbers: Option<SmallVec<[WrappedLine; 1]>>,
+    line_numbers: Option<Vec<SmallVec<[WrappedLine; 1]>>>,
     line_number_width: Pixels,
     /// Size of the scrollable area by entire lines.
     scroll_size: Size<Pixels>,
     cursor: Option<PaintQuad>,
     cursor_scroll_offset: Point<Pixels>,
-    /// Wrapped line index, same line as the cursor.
+    /// line index (zero based), no wrap, same line as the cursor.
     current_line_index: usize,
     selection_path: Option<Path<Pixels>>,
     bounds: Bounds<Pixels>,
@@ -588,7 +586,6 @@ impl Element for TextElement {
         };
 
         let mut lines = SmallVec::new();
-
         // NOTE: If there have about 10K lines, this will take about 5~6ms.
         measure_if("shape_text", display_text.len() > 5000, || {
             lines = window
@@ -616,7 +613,7 @@ impl Element for TextElement {
         );
 
         let line_numbers = if input.mode.line_number() {
-            let mut line_numbers = SmallVec::new();
+            let mut line_numbers = vec![];
             let run_len = if total_lines > 999 { 4 } else { 3 };
 
             let other_line_runs = vec![TextRun {
@@ -640,16 +637,19 @@ impl Element for TextElement {
             for (i, line_wrap) in lines
                 .iter()
                 .skip(visible_range.start)
-                .take(visible_range.end.saturating_sub(visible_range.start))
+                .take(visible_range.len())
                 .enumerate()
             {
                 let i = i + visible_range.start;
                 let line_no = i + 1;
-                let line_no_text = if run_len == 4 {
-                    format!("{:>4}", line_no).into()
+                let mut line_no_text = if run_len == 4 {
+                    format!("{:>4}", line_no)
                 } else {
-                    format!("{:>3}", line_no).into()
+                    format!("{:>3}", line_no)
                 };
+                if !line_wrap.wrap_boundaries.is_empty() {
+                    line_no_text.push_str(&"\n    ".repeat(line_wrap.wrap_boundaries.len()));
+                }
 
                 let runs = if input.current_line_index == Some(i) {
                     &current_line_runs
@@ -659,14 +659,9 @@ impl Element for TextElement {
 
                 let line = window
                     .text_system()
-                    .shape_text(line_no_text, font_size, &runs, None, None)
+                    .shape_text(line_no_text.into(), font_size, &runs, None, None)
                     .unwrap();
-                line_numbers.extend(line);
-
-                for _ in 0..line_wrap.wrap_boundaries.len() {
-                    // Empty line no for wrapped lines
-                    line_numbers.extend(empty_line_number.clone());
-                }
+                line_numbers.push(line);
             }
             Some(line_numbers)
         } else {
@@ -788,6 +783,11 @@ impl Element for TextElement {
         let line_height = window.line_height();
         let origin = bounds.origin;
 
+        let mut invisible_top_padding = px(0.);
+        for line in prepaint.last_layout.lines.iter().take(visible_range.start) {
+            invisible_top_padding += line.size(line_height).height;
+        }
+
         let mut offset_y = px(0.);
         if self.input.read(cx).masked {
             // Move down offset for vertical centering the *****
@@ -798,7 +798,6 @@ impl Element for TextElement {
             }
         }
 
-        let invisible_top_padding = visible_range.start * line_height;
         let active_line_color = LanguageRegistry::global(cx)
             .theme(cx.theme().is_dark())
             .style
@@ -808,27 +807,23 @@ impl Element for TextElement {
             offset_y += invisible_top_padding;
 
             // Each item is the normal lines.
-            for (ix, line) in line_numbers.iter().enumerate() {
-                let ix = visible_range.start + ix;
-                let p = point(origin.x, origin.y + offset_y);
-                let line_size = line.size(line_height);
-
-                // Paint the current line background
-                if prepaint.current_line_index == ix {
-                    // println!(
-                    //     "-------------- {}, ix: {}, current_line_index: {}",
-                    //     line.text, ix, prepaint.current_line_index
-                    // );
-                    if let Some(bg_color) = active_line_color {
-                        window.paint_quad(fill(
-                            Bounds::new(p, size(bounds.size.width, line_height)),
-                            bg_color,
-                        ));
+            for (ix, lines) in line_numbers.iter().enumerate() {
+                let is_active = prepaint.current_line_index == visible_range.start + ix;
+                for line in lines {
+                    let p = point(origin.x, origin.y + offset_y);
+                    let line_size = line.size(line_height);
+                    // Paint the current line background
+                    if is_active {
+                        if let Some(bg_color) = active_line_color {
+                            window.paint_quad(fill(
+                                Bounds::new(p, size(bounds.size.width, line_height)),
+                                bg_color,
+                            ));
+                        }
                     }
+                    _ = line.paint(p, line_height, TextAlign::Left, None, window, cx);
+                    offset_y += line_size.height;
                 }
-
-                _ = line.paint(p, line_height, TextAlign::Left, None, window, cx);
-                offset_y += line_size.height;
             }
         }
 
@@ -838,8 +833,7 @@ impl Element for TextElement {
         }
 
         // Paint text
-        let mut offset_y = px(0.) + invisible_top_padding;
-
+        let mut offset_y = invisible_top_padding;
         for line in prepaint
             .last_layout
             .iter()
@@ -847,9 +841,8 @@ impl Element for TextElement {
             .take(visible_range.len())
         {
             let p = point(origin.x + prepaint.line_number_width, origin.y + offset_y);
-            let line_size = line.size(line_height);
             _ = line.paint(p, line_height, TextAlign::Left, None, window, cx);
-            offset_y += line_size.height;
+            offset_y += line.size(line_height).height;
         }
 
         if focused {

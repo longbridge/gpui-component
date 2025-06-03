@@ -230,7 +230,7 @@ pub struct InputState {
     /// Range for save the selected word, use to keep word range when drag move.
     pub(super) selected_word_range: Option<Range<usize>>,
     pub(super) selection_reversed: bool,
-    /// The index of the current line (wrappped), zero-based, same line as the cursor.
+    /// The index of the current line (no wrap), zero-based, same line as the cursor.
     pub(super) current_line_index: Option<usize>,
     /// The marked range is the temporary insert text on IME typing.
     pub(super) marked_range: Option<Range<usize>>,
