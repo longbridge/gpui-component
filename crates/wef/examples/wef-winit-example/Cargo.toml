@@ -1,0 +1,11 @@
+[package]
+name = "wef-winit-example"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+wef.workspace = true
+
+image = "0.25.6"
+winit = "0.30.9"
+softbuffer = "0.4.6"
