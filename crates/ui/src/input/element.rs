@@ -469,15 +469,14 @@ impl Element for TextElement {
         cx: &mut App,
     ) -> Self::PrepaintState {
         let state = self.input.read(cx);
+        let line_height = window.line_height();
         let total_lines = state.text_wrapper.lines.len();
-        let top_line = (-state.scroll_handle.offset().y / state.last_line_height) as usize;
-        let end_line =
-            top_line + (state.input_bounds.size.height / state.last_line_height) as usize;
+        let top_line = (-state.scroll_handle.offset().y / line_height) as usize;
+        let end_line = top_line + (state.input_bounds.size.height / line_height) as usize;
         let visible_range = top_line.saturating_sub(1)..(end_line + 1).max(total_lines);
 
         let highlight_lines = self.highlight_lines(&visible_range, cx);
         let multi_line = self.input.read(cx).is_multi_line();
-        let line_height = window.line_height();
         let input = self.input.read(cx);
         let text = input.text.clone();
         let is_empty = text.is_empty();
