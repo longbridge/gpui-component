@@ -540,8 +540,11 @@ impl Element for TextElement {
                 None,
             )
             .unwrap();
-        let line_number_width =
-            empty_line_number.last().unwrap().width() + LINE_NUMBER_MARGIN_RIGHT;
+        let line_number_width = if input.mode.line_number() {
+            empty_line_number.last().unwrap().width() + LINE_NUMBER_MARGIN_RIGHT
+        } else {
+            px(0.)
+        };
 
         let run = TextRun {
             len: display_text.len(),
