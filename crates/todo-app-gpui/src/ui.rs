@@ -9,7 +9,7 @@ use gpui_component::{scroll::ScrollbarShow, v_flex, Root};
 use raw_window_handle::HasWindowHandle;
 use raw_window_handle::RawWindowHandle;
 use serde::Deserialize;
-use windows::Win32::Foundation::HWND;
+
 
 #[derive(Clone, PartialEq, Eq, Deserialize)]
 pub struct SelectScrollbarShow(ScrollbarShow);
@@ -157,43 +157,45 @@ impl AppExt for App {
         self.spawn(async move |cx| {
             let window = cx
                 .open_window(options, |window, cx| {
-                    #[cfg(target_os = "windows")]
-                    if let Ok(hwnd) = window.window_handle() {
-                        match hwnd.as_raw() {
-                            RawWindowHandle::Win32(hwnd) => {
-                                use windows::Win32::UI::WindowsAndMessaging::{
-                                    GetWindowLongW, SetWindowLongW, GWL_STYLE, WS_MAXIMIZEBOX,
-                                    WS_MINIMIZEBOX, WS_SIZEBOX, WS_SYSMENU,
-                                };
-                                let hwnd = HWND(hwnd.hwnd.get() as _);
-                                unsafe {
-                                    let mut style = GetWindowLongW(hwnd, GWL_STYLE);
-                                    style ^= WS_SIZEBOX.0 as i32; //设置窗体不可调整大小
-                                    style ^= WS_MINIMIZEBOX.0 as i32; //设置窗体取消最小化按钮
-                                    style ^= WS_SYSMENU.0 as i32; //设置窗体取消系统菜单
-                                    style ^= WS_MAXIMIZEBOX.0 as i32; //设置窗体取消最大化按钮
-                                    SetWindowLongW(hwnd, GWL_STYLE, style);
-                                }
-                                window.refresh();
-                            }
-                            RawWindowHandle::WinRt(hwnd) => {
-                                let hwnd = hwnd.core_window.as_ptr();
-                                use windows::Win32::UI::WindowsAndMessaging::{
-                                    GetWindowLongW, SetWindowLongW, GWL_STYLE, WS_MAXIMIZEBOX,
-                                    WS_MINIMIZEBOX, WS_SIZEBOX,
-                                };
-                                let hwnd = HWND(hwnd);
-                                unsafe {
-                                    let mut style = GetWindowLongW(hwnd, GWL_STYLE);
-                                    style ^= WS_SIZEBOX.0 as i32; //设置窗体不可调整大小
-                                    style ^= WS_MINIMIZEBOX.0 as i32; //设置窗体取消最小化按钮
-                                    style ^= WS_MAXIMIZEBOX.0 as i32; //设置窗体取消最大化按钮
-                                    SetWindowLongW(hwnd, GWL_STYLE, style);
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
+                    // #[cfg(target_os = "windows")]
+                    // if let Ok(hwnd) = window.window_handle() {
+                    //     match hwnd.as_raw() {
+                    //         RawWindowHandle::Win32(hwnd) => {
+                    //             use windows::Win32::UI::WindowsAndMessaging::{
+                    //                 GetWindowLongW, SetWindowLongW, GWL_STYLE, WS_MAXIMIZEBOX,
+                    //                 WS_MINIMIZEBOX, WS_SIZEBOX, WS_SYSMENU,
+                    //             };
+                    //             use windows::Win32::Foundation::HWND;
+                    //             let hwnd = HWND(hwnd.hwnd.get() as _);
+                    //             unsafe {
+                    //                 let mut style = GetWindowLongW(hwnd, GWL_STYLE);
+                    //                 style ^= WS_SIZEBOX.0 as i32; //设置窗体不可调整大小
+                    //                 style ^= WS_MINIMIZEBOX.0 as i32; //设置窗体取消最小化按钮
+                    //                 style ^= WS_SYSMENU.0 as i32; //设置窗体取消系统菜单
+                    //                 style ^= WS_MAXIMIZEBOX.0 as i32; //设置窗体取消最大化按钮
+                    //                 SetWindowLongW(hwnd, GWL_STYLE, style);
+                    //             }
+                    //             window.refresh();
+                    //         }
+                    //         RawWindowHandle::WinRt(hwnd) => {
+                    //             let hwnd = hwnd.core_window.as_ptr();
+                    //             use windows::Win32::UI::WindowsAndMessaging::{
+                    //                 GetWindowLongW, SetWindowLongW, GWL_STYLE, WS_MAXIMIZEBOX,
+                    //                 WS_MINIMIZEBOX, WS_SIZEBOX,
+                    //             };
+                    //             use windows::Win32::Foundation::HWND;
+                    //             let hwnd = HWND(hwnd);
+                    //             unsafe {
+                    //                 let mut style = GetWindowLongW(hwnd, GWL_STYLE);
+                    //                 style ^= WS_SIZEBOX.0 as i32; //设置窗体不可调整大小
+                    //                 style ^= WS_MINIMIZEBOX.0 as i32; //设置窗体取消最小化按钮
+                    //                 style ^= WS_MAXIMIZEBOX.0 as i32; //设置窗体取消最大化按钮
+                    //                 SetWindowLongW(hwnd, GWL_STYLE, style);
+                    //             }
+                    //         }
+                    //         _ => {}
+                    //     }
+                    // }
                     let view = crate_view_fn(window, cx);
                     let root = cx.new(|cx| TodoRoot::with_no_title_bar(view, window, cx));
 
@@ -227,6 +229,7 @@ impl AppExt for App {
                                     GetWindowLongW, SetWindowLongW, GWL_STYLE, WS_MAXIMIZEBOX,
                                     WS_SIZEBOX,
                                 };
+                                use windows::Win32::Foundation::HWND;
                                 let hwnd = HWND(hwnd.hwnd.get() as _);
                                 unsafe {
                                     let mut style = GetWindowLongW(hwnd, GWL_STYLE);
@@ -242,11 +245,11 @@ impl AppExt for App {
                                     GetWindowLongW, SetWindowLongW, GWL_STYLE, WS_MAXIMIZEBOX,
                                     WS_MINIMIZEBOX, WS_SIZEBOX,
                                 };
+                                use windows::Win32::Foundation::HWND;
                                 let hwnd = HWND(hwnd);
                                 unsafe {
                                     let mut style = GetWindowLongW(hwnd, GWL_STYLE);
                                     style ^= WS_SIZEBOX.0 as i32; //设置窗体不可调整大小
-                                    style ^= WS_MINIMIZEBOX.0 as i32; //设置窗体取消最小化按钮
                                     style ^= WS_MAXIMIZEBOX.0 as i32; //设置窗体取消最大化按钮
                                     SetWindowLongW(hwnd, GWL_STYLE, style);
                                 }
@@ -295,6 +298,7 @@ impl AppExt for App {
                                     GetWindowLongW, SetWindowLongW, GWL_STYLE, WS_MAXIMIZEBOX,
                                     WS_MINIMIZEBOX, WS_SIZEBOX,
                                 };
+                                use windows::Win32::Foundation::HWND;
                                 let hwnd = HWND(hwnd.hwnd.get() as _);
                                 unsafe {
                                     let mut style = GetWindowLongW(hwnd, GWL_STYLE);
@@ -310,6 +314,7 @@ impl AppExt for App {
                                     GetWindowLongW, SetWindowLongW, GWL_STYLE, WS_MAXIMIZEBOX,
                                     WS_MINIMIZEBOX, WS_SIZEBOX,
                                 };
+                                use windows::Win32::Foundation::HWND;
                                 let hwnd = HWND(hwnd);
                                 unsafe {
                                     let mut style = GetWindowLongW(hwnd, GWL_STYLE);

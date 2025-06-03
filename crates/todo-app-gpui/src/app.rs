@@ -55,10 +55,7 @@ pub fn run() {
             app_id: Some("x-todo-app".to_string()),
             window_bounds: Some(WindowBounds::Windowed(window_bounds)),
             titlebar: Some(TitleBar::title_bar_options()),
-            window_min_size: Some(gpui::Size {
-                width: px(WIDTH),
-                height: px(HEIGHT),
-            }),
+            window_min_size:None,
 
             kind: WindowKind::Normal,
             #[cfg(target_os = "linux")]
