@@ -49,6 +49,11 @@ impl TextElement {
         });
     }
 
+    /// Returns the:
+    ///
+    /// - cursor position
+    /// - scroll offset
+    /// - current line index
     fn layout_cursor(
         &self,
         lines: &[WrappedLine],
@@ -57,7 +62,7 @@ impl TextElement {
         line_number_width: Pixels,
         window: &mut Window,
         cx: &mut App,
-    ) -> (Option<PaintQuad>, Point<Pixels>, usize) {
+    ) -> (Option<PaintQuad>, Point<Pixels>, Option<usize>) {
         let input = self.input.read(cx);
         let mut selected_range = input.selected_range.clone();
         if let Some(marked_range) = &input.marked_range {
@@ -65,7 +70,7 @@ impl TextElement {
         }
 
         let cursor_offset = input.cursor_offset();
-        let mut current_line_index = 0;
+        let mut current_line_index = None;
         let mut scroll_offset = input.scroll_handle.offset();
         let mut cursor = None;
 
@@ -92,7 +97,7 @@ impl TextElement {
             if cursor_pos.is_none() {
                 let offset = cursor_offset.saturating_sub(prev_lines_offset);
                 if let Some(pos) = line.position_for_index(offset, line_height) {
-                    current_line_index = line_ix;
+                    current_line_index = Some(line_ix);
                     cursor_pos = Some(line_origin + pos);
                 }
             }
@@ -401,7 +406,7 @@ pub(super) struct PrepaintState {
     cursor: Option<PaintQuad>,
     cursor_scroll_offset: Point<Pixels>,
     /// line index (zero based), no wrap, same line as the cursor.
-    current_line_index: usize,
+    current_line_index: Option<usize>,
     selection_path: Option<Path<Pixels>>,
     bounds: Bounds<Pixels>,
 }
@@ -635,58 +640,6 @@ impl Element for TextElement {
             (total_wrapped_lines as f32 * line_height).max(bounds.size.height),
         );
 
-        let line_numbers = if input.mode.line_number() {
-            let mut line_numbers = vec![];
-            let run_len = 4;
-            let other_line_runs = vec![TextRun {
-                len: run_len,
-                font: style.font(),
-                color: cx.theme().muted_foreground,
-                background_color: None,
-                underline: None,
-                strikethrough: None,
-            }];
-            let current_line_runs = vec![TextRun {
-                len: run_len,
-                font: style.font(),
-                color: cx.theme().foreground,
-                background_color: None,
-                underline: None,
-                strikethrough: None,
-            }];
-
-            // build line numbers
-            for (ix, line) in lines
-                .iter()
-                .skip(visible_range.start)
-                .take(visible_range.len())
-                .enumerate()
-            {
-                let ix = ix + visible_range.start;
-                let line_no = ix + 1;
-
-                let mut line_no_text = format!("{:>4}", line_no);
-                if !line.wrap_boundaries.is_empty() {
-                    line_no_text.push_str(&"\n    ".repeat(line.wrap_boundaries.len()));
-                }
-
-                let runs = if input.current_line_index == Some(ix) {
-                    &current_line_runs
-                } else {
-                    &other_line_runs
-                };
-
-                let shape_line = window
-                    .text_system()
-                    .shape_text(line_no_text.into(), font_size, &runs, None, None)
-                    .unwrap();
-                line_numbers.push(shape_line);
-            }
-            Some(line_numbers)
-        } else {
-            None
-        };
-
         // `position_for_index` for example
         //
         // #### text
@@ -735,6 +688,59 @@ impl Element for TextElement {
             window,
             cx,
         );
+
+        let input = self.input.read(cx);
+        let line_numbers = if input.mode.line_number() {
+            let mut line_numbers = vec![];
+            let run_len = 4;
+            let other_line_runs = vec![TextRun {
+                len: run_len,
+                font: style.font(),
+                color: cx.theme().muted_foreground,
+                background_color: None,
+                underline: None,
+                strikethrough: None,
+            }];
+            let current_line_runs = vec![TextRun {
+                len: run_len,
+                font: style.font(),
+                color: cx.theme().foreground,
+                background_color: None,
+                underline: None,
+                strikethrough: None,
+            }];
+
+            // build line numbers
+            for (ix, line) in lines
+                .iter()
+                .skip(visible_range.start)
+                .take(visible_range.len())
+                .enumerate()
+            {
+                let ix = ix + visible_range.start;
+                let line_no = ix + 1;
+
+                let mut line_no_text = format!("{:>4}", line_no);
+                if !line.wrap_boundaries.is_empty() {
+                    line_no_text.push_str(&"\n    ".repeat(line.wrap_boundaries.len()));
+                }
+
+                let runs = if current_line_index == Some(ix) {
+                    &current_line_runs
+                } else {
+                    &other_line_runs
+                };
+
+                let shape_line = window
+                    .text_system()
+                    .shape_text(line_no_text.into(), font_size, &runs, None, None)
+                    .unwrap();
+                line_numbers.push(shape_line);
+            }
+            Some(line_numbers)
+        } else {
+            None
+        };
 
         PrepaintState {
             bounds,
@@ -827,7 +833,7 @@ impl Element for TextElement {
 
             // Each item is the normal lines.
             for (ix, lines) in line_numbers.iter().enumerate() {
-                let is_active = prepaint.current_line_index == visible_range.start + ix;
+                let is_active = prepaint.current_line_index == Some(visible_range.start + ix);
                 for line in lines {
                     let p = point(origin.x, origin.y + offset_y);
                     let line_size = line.size(line_height);
@@ -879,7 +885,6 @@ impl Element for TextElement {
             input.last_selected_range = Some(selected_range);
             input.scroll_size = prepaint.scroll_size;
             input.line_number_width = prepaint.line_number_width;
-            input.current_line_index = Some(prepaint.current_line_index);
             input
                 .scroll_handle
                 .set_offset(prepaint.cursor_scroll_offset);
