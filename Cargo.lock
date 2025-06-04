@@ -2853,13 +2853,16 @@ dependencies = [
  "enum-iterator",
  "futures-util",
  "gpui",
+ "gpui-component-macros",
  "html5ever 0.27.0",
  "image",
  "indoc",
  "itertools 0.13.0",
+ "lyon",
  "markdown",
  "markup5ever_rcdom",
  "minify-html",
+ "num-traits",
  "once_cell",
  "paste",
  "regex",
@@ -2904,6 +2907,15 @@ dependencies = [
  "usvg",
  "uuid",
  "wry",
+]
+
+[[package]]
+name = "gpui-component-macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.101",
 ]
 
 [[package]]

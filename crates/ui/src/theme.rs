@@ -79,6 +79,16 @@ pub struct ThemeColor {
     pub card_foreground: Hsla,
     /// Input caret color (Blinking cursor).
     pub caret: Hsla,
+    /// Chart 1 color.
+    pub chart_1: Hsla,
+    /// Chart 2 color.
+    pub chart_2: Hsla,
+    /// Chart 3 color.
+    pub chart_3: Hsla,
+    /// Chart 4 color.
+    pub chart_4: Hsla,
+    /// Chart 5 color.
+    pub chart_5: Hsla,
     /// Danger background color.
     pub danger: Hsla,
     /// Danger active background color.
@@ -254,6 +264,11 @@ impl ThemeColor {
             card: hsl(0.0, 0.0, 100.0),
             card_foreground: hsl(240.0, 10.0, 3.9),
             caret: hsl(240.0, 10., 3.9),
+            chart_1: crate::blue_300(),
+            chart_2: crate::blue_500(),
+            chart_3: crate::blue_600(),
+            chart_4: crate::blue_700(),
+            chart_5: crate::blue_800(),
             danger: crate::red_500(),
             danger_active: crate::red_600(),
             danger_foreground: crate::red_50(),
@@ -347,6 +362,11 @@ impl ThemeColor {
             card: hsl(0.0, 0.0, 8.0),
             card_foreground: hsl(0.0, 0.0, 78.0),
             caret: hsl(0., 0., 78.),
+            chart_1: crate::blue_300(),
+            chart_2: crate::blue_500(),
+            chart_3: crate::blue_600(),
+            chart_4: crate::blue_700(),
+            chart_5: crate::blue_800(),
             danger: crate::red_800(),
             danger_active: crate::red_800().darken(0.2),
             danger_foreground: crate::red_50(),
