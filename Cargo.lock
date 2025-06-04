@@ -7282,7 +7282,6 @@ dependencies = [
  "rust-embed",
  "serde",
  "serde_json",
- "story",
  "unindent",
  "windows 0.61.1",
 ]

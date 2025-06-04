@@ -20,7 +20,8 @@ use gpui_component::{
     v_flex, white, ActiveTheme, Icon, IconName, Side, Sizable,
 };
 use serde::Deserialize;
-use story::Story;
+
+use super::View;
 
 #[derive(Clone, PartialEq, Eq, Deserialize)]
 pub struct SelectCompany(SharedString);
@@ -72,7 +73,7 @@ impl Settings {
     }
 }
 
-impl Story for Settings {
+impl View for Settings {
     fn title() -> &'static str {
         "Sidebar"
     }

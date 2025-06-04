@@ -1,8 +1,8 @@
+use crate::ui::assets::Assets;
 use crate::ui::components::titlebar::TitleBar;
 use crate::ui::{main_window::TodoMainWindow, AppExt, CloseWindow, Quit};
 use gpui::*;
 
-use story::Assets;
 /// 应用程序状态，管理全局状态
 pub struct AppState {
     /// 不可见面板的列表
@@ -34,7 +34,7 @@ impl AppState {
 
 pub fn run() {
     const WIDTH: f32 = 400.0;
-    const HEIGHT: f32 = WIDTH * 2.5;
+    const HEIGHT: f32 = WIDTH * 2.2;
     let app = Application::new().with_assets(Assets);
     app.run(move |cx| {
         AppState::init(cx);
@@ -55,7 +55,7 @@ pub fn run() {
             app_id: Some("x-todo-app".to_string()),
             window_bounds: Some(WindowBounds::Windowed(window_bounds)),
             titlebar: Some(TitleBar::title_bar_options()),
-            window_min_size:None,
+            window_min_size: None,
 
             kind: WindowKind::Normal,
             #[cfg(target_os = "linux")]

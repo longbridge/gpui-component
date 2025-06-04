@@ -1,7 +1,7 @@
-mod assets;
+pub(crate) mod assets;
 pub(crate) mod components;
 pub(crate) mod main_window;
-mod views;
+pub(crate) mod views;
 
 use crate::ui::components::{titlebar::AppTitleBar, titlebar::NormalTitleBar};
 use gpui::{prelude::FluentBuilder, Window, *};
@@ -47,11 +47,7 @@ impl TodoRoot {
         }
     }
 
-    pub fn with_no_title_bar(
-        view: impl Into<AnyView>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Self {
+    pub fn with_no_title_bar(view: impl Into<AnyView>) -> Self {
         Self {
             title_bar: None, // 不使用标题栏
             view: view.into(),
@@ -160,14 +156,19 @@ impl AppExt for App {
                 .open_window(options, |window, cx| {
                     #[cfg(target_os = "windows")]
                     {
-                        use windows::Win32::UI::WindowsAndMessaging::WS_SIZEBOX;
+                        use windows::Win32::UI::WindowsAndMessaging::{
+                            WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_SIZEBOX, WS_SYSMENU,
+                        };
                         window.set_display_affinity(0x00000017);
                         let mut style = window.style();
-                        style ^= WS_SIZEBOX.0 as i32; //设置窗体不可调整大小
+                        style &= !(WS_SIZEBOX.0 as i32
+                            | WS_MINIMIZEBOX.0 as i32
+                            | WS_MAXIMIZEBOX.0 as i32
+                            | WS_SYSMENU.0 as i32);
                         window.set_style(style);
                     }
                     let view = crate_view_fn(window, cx);
-                    let root = cx.new(|cx| TodoRoot::with_no_title_bar(view, window, cx));
+                    let root = cx.new(|cx| TodoRoot::with_no_title_bar(view));
 
                     cx.new(|cx| Root::new(root.into(), window, cx))
                 })
@@ -193,10 +194,15 @@ impl AppExt for App {
                 .open_window(options, |window, cx| {
                     #[cfg(target_os = "windows")]
                     {
-                        use windows::Win32::UI::WindowsAndMessaging::WS_SIZEBOX;
+                        use windows::Win32::UI::WindowsAndMessaging::{
+                            WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_SIZEBOX, WS_SYSMENU,
+                        };
                         window.set_display_affinity(0x00000017);
                         let mut style = window.style();
-                        style ^= WS_SIZEBOX.0 as i32; //设置窗体不可调整大小
+                        style &= !(WS_SIZEBOX.0 as i32
+                            | WS_MINIMIZEBOX.0 as i32
+                            | WS_MAXIMIZEBOX.0 as i32
+                            | WS_SYSMENU.0 as i32);
                         window.set_style(style);
                     }
                     let view = crate_view_fn(window, cx);
@@ -234,10 +240,15 @@ impl AppExt for App {
                 .open_window(options, |window, cx| {
                     #[cfg(target_os = "windows")]
                     {
-                        use windows::Win32::UI::WindowsAndMessaging::WS_SIZEBOX;
-                        window.set_display_affinity(0x00000017);
+                        use windows::Win32::UI::WindowsAndMessaging::{
+                            WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_SIZEBOX, WS_SYSMENU,
+                        };
+                        window.set_display_affinity(0x00000011);
                         let mut style = window.style();
-                        style ^= WS_SIZEBOX.0 as i32; //设置窗体不可调整大小
+                        style &= !(WS_SIZEBOX.0 as i32
+                            | WS_MINIMIZEBOX.0 as i32
+                            | WS_MAXIMIZEBOX.0 as i32
+                            | WS_SYSMENU.0 as i32);
                         window.set_style(style);
                     }
                     let view = crate_view_fn(window, cx);

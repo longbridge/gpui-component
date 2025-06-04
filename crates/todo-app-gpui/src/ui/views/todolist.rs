@@ -12,11 +12,10 @@ use gpui_component::{
     tab::TabBar,
     v_flex, ActiveTheme, IconName, Sizable, *,
 };
-use story::Story;
 
 use crate::ui::AppExt;
 
-use super::todo_form::TodoFormView;
+use super::{todo_form::TodoFormView, View};
 
 actions!(
     list_story,
@@ -379,7 +378,7 @@ pub struct TodoList {
     active_tab_ix: usize,
 }
 
-impl Story for TodoList {
+impl View for TodoList {
     fn title() -> &'static str {
         "Todo List"
     }

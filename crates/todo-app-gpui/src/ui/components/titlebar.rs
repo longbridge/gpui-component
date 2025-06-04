@@ -15,8 +15,7 @@ use gpui_component::{
     h_flex, locale,
     popup_menu::PopupMenuExt as _,
     scroll::ScrollbarShow,
-    set_locale, ActiveTheme, ContextModal as _, Icon, IconName, InteractiveElementExt as _,
-    Sizable as _, Theme,
+    set_locale, ActiveTheme, ContextModal as _, Icon, IconName, Sizable as _, Theme,
 };
 use std::rc::Rc;
 use std::sync::Arc;
@@ -65,7 +64,7 @@ impl Render for AppTitleBar {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let notifications_count = window.notifications(cx).len();
         TitleBar::new()
-           // .show_maximize(false)
+            // .show_maximize(false)
             // left side
             .child(
                 div().flex().items_center().child(
@@ -103,12 +102,11 @@ impl Render for AppTitleBar {
                                 let options = WindowOptions {
                                     app_id: Some("x-todo-app".to_string()),
                                     window_bounds: Some(WindowBounds::Windowed(window_bounds)),
-                                    titlebar:None,
+                                    titlebar: None,
                                     // window_min_size: Some(gpui::Size {
                                     //     width: px(800.),
                                     //     height: px(800.),
                                     // }),
-
                                     kind: WindowKind::PopUp,
                                     #[cfg(target_os = "linux")]
                                     window_background:
@@ -330,7 +328,7 @@ impl Render for NormalTitleBar {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         TitleBar::new()
             //.show_minimize(false)
-        //.show_maximize(false)
+            //.show_maximize(false)
             // left side
             .child(self.title.clone())
             .child(
@@ -518,23 +516,23 @@ impl RenderOnce for ControlIcon {
                 .on_click(move |_, window, cx| match icon {
                     Self::Minimize => {
                         println!("Minimize window");
-                      //  window.minimize_window()
+                        // window.minimize_window()
                     }
                     Self::Restore => {
                         println!("Restore window");
-                       // window.zoom_window()
+                        // window.zoom_window()
                     }
                     Self::Maximize => {
                         println!("Maximize window");
-                       // window.zoom_window()
+                        // window.zoom_window()
                     }
                     Self::Close { .. } => {
                         println!("Close window");
-                        // if let Some(f) = on_close_window.clone() {
-                        //     f(&ClickEvent::default(), window, cx);
-                        // } else {
-                        //     window.remove_window();
-                        // }
+                        if let Some(f) = on_close_window.clone() {
+                            f(&ClickEvent::default(), window, cx);
+                        } else {
+                            window.remove_window();
+                        }
                     }
                 })
             })
