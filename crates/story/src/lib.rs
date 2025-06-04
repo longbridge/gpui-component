@@ -737,7 +737,7 @@ impl Render for StoryContainer {
                         .id("story-children")
                         .w_full()
                         .flex_1()
-                        .p_4()
+                        // .p_4()
                         .child(story),
                 )
             })

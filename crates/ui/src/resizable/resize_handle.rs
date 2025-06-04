@@ -99,7 +99,7 @@ impl<T: 'static, E: 'static + Render> Element for ResizeHandle<T, E> {
         window: &mut Window,
         cx: &mut App,
     ) -> (gpui::LayoutId, Self::RequestLayoutState) {
-        let neg_offset = -HANDLE_PADDING;
+        let neg_offset = -HANDLE_PADDING + HANDLE_SIZE / 2.;
         let axis = self.axis;
 
         window.with_element_state(id.unwrap(), |state, window| {
