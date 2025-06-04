@@ -2,6 +2,8 @@ use gpui::{
     actions, div, prelude::*, px, rgb, size, App, Application, Bounds, Context, KeyBinding,
     PromptLevel, SharedString, Timer, Window, WindowBounds, WindowKind, WindowOptions,
 };
+use raw_window_handle::HasWindowHandle;
+use raw_window_handle::RawWindowHandle;
 
 struct SubWindow {
     custom_titlebar: bool,
@@ -51,8 +53,8 @@ impl Render for SubWindow {
             })
             .child(
                 div()
-                    .p_8()
-                    .gap_2()
+                    // .p_8()
+                    // .gap_2()
                     .child("SubWindow")
                     .child(button("Close", |window, _| {
                         window.remove_window();
@@ -82,11 +84,55 @@ impl Render for WindowDemo {
                     WindowOptions {
                         window_bounds: Some(window_bounds),
                         titlebar: None,
+                        //window_background: gpui::WindowBackgroundAppearance::Transparent,
+                       // window_decorations: Some(gpui::WindowDecorations::Client),
                         ..Default::default()
                     },
-                    |_, cx| {
+                    |window, cx| {
+                        // #[cfg(target_os = "windows")]
+                        // if let Ok(hwnd) = window.window_handle() {
+                        //     match hwnd.as_raw() {
+                        //         RawWindowHandle::Win32(hwnd) => {
+                        //             use windows::Win32::Foundation::HWND;
+                        //             use windows::Win32::UI::WindowsAndMessaging::{
+                        //                 GetWindowLongW, SetWindowLongW, GWL_STYLE, WS_MAXIMIZEBOX,
+                        //                 WS_MINIMIZEBOX, WS_SIZEBOX, WS_SYSMENU,WS_CAPTION
+                        //             };
+                        //             let hwnd = HWND(hwnd.hwnd.get() as _);
+                        //             unsafe {
+                        //                 let mut style = GetWindowLongW(hwnd, GWL_STYLE);
+                        //               //  style ^= WS_SIZEBOX.0 as i32; //设置窗体不可调整大小
+                        //                // style ^= WS_MINIMIZEBOX.0 as i32; //设置窗体取消最小化按钮
+                        //               //  style ^= WS_SYSMENU.0 as i32; //设置窗体取消系统菜单
+                        //              //   style ^= WS_MAXIMIZEBOX.0 as i32; //设置窗体取消最大化按钮
+                        //               //  style ^= WS_CAPTION.0 as i32;
+                        //                 SetWindowLongW(hwnd, GWL_STYLE, style);
+                        //             }
+                        //             window.refresh();
+                        //         }
+                        //         RawWindowHandle::WinRt(hwnd) => {
+                        //             let hwnd = hwnd.core_window.as_ptr();
+                        //             use windows::Win32::Foundation::HWND;
+                        //             use windows::Win32::UI::WindowsAndMessaging::{
+                        //                 GetWindowLongW, SetWindowLongW, GWL_STYLE, WS_MAXIMIZEBOX,
+                        //                 WS_MINIMIZEBOX, WS_SIZEBOX, WS_SYSMENU,WS_CAPTION
+                        //             };
+                        //             let hwnd = HWND(hwnd);
+                        //             unsafe {
+                        //                 let mut style = GetWindowLongW(hwnd, GWL_STYLE);
+                        //                 // style ^= WS_SIZEBOX.0 as i32; //设置窗体不可调整大小
+                        //                 // style ^= WS_MINIMIZEBOX.0 as i32; //设置窗体取消最小化按钮
+                        //                 // style ^= WS_SYSMENU.0 as i32; //设置窗体取消系统菜单
+                        //                 // style ^= WS_MAXIMIZEBOX.0 as i32; //设置窗体取消最大化按钮
+                        //                // style ^= WS_CAPTION.0 as i32;
+                        //                 SetWindowLongW(hwnd, GWL_STYLE, style);
+                        //             }
+                        //         }
+                        //         _ => {}
+                        //     }
+                        // }
                         cx.new(|_| SubWindow {
-                            custom_titlebar: false,
+                            custom_titlebar: true,
                         })
                     },
                 )
@@ -99,7 +145,49 @@ impl Render for WindowDemo {
                         kind: WindowKind::PopUp,
                         ..Default::default()
                     },
-                    |_, cx| {
+                    |window, cx| {
+                        // #[cfg(target_os = "windows")]
+                        // if let Ok(hwnd) = window.window_handle() {
+                        //     match hwnd.as_raw() {
+                        //         RawWindowHandle::Win32(hwnd) => {
+                        //             use windows::Win32::Foundation::HWND;
+                        //             use windows::Win32::UI::WindowsAndMessaging::{
+                        //                 GetWindowLongW, SetWindowLongW, GWL_STYLE, WS_MAXIMIZEBOX,
+                        //                 WS_MINIMIZEBOX, WS_SIZEBOX, WS_SYSMENU,WS_CAPTION
+                        //             };
+                        //             let hwnd = HWND(hwnd.hwnd.get() as _);
+                        //             unsafe {
+                        //                 let mut style = GetWindowLongW(hwnd, GWL_STYLE);
+                        //                 style ^= WS_SIZEBOX.0 as i32; //设置窗体不可调整大小
+                        //                 style ^= WS_MINIMIZEBOX.0 as i32; //设置窗体取消最小化按钮
+                        //                 style ^= WS_SYSMENU.0 as i32; //设置窗体取消系统菜单
+                        //                 style ^= WS_MAXIMIZEBOX.0 as i32; //设置窗体取消最大化按钮
+                        //                 // style ^= WS_CAPTION.0 as i32;
+                        //                 SetWindowLongW(hwnd, GWL_STYLE, style);
+                        //             }
+                        //             window.refresh();
+                        //         }
+                        //         RawWindowHandle::WinRt(hwnd) => {
+                        //             let hwnd = hwnd.core_window.as_ptr();
+                        //             use windows::Win32::Foundation::HWND;
+                        //             use windows::Win32::UI::WindowsAndMessaging::{
+                        //                 GetWindowLongW, SetWindowLongW, GWL_STYLE, WS_MAXIMIZEBOX,
+                        //                 WS_MINIMIZEBOX, WS_SIZEBOX, WS_SYSMENU,WS_CAPTION
+                        //             };
+                        //             let hwnd = HWND(hwnd);
+                        //             unsafe {
+                        //                 let mut style = GetWindowLongW(hwnd, GWL_STYLE);
+                        //                 style ^= WS_SIZEBOX.0 as i32; //设置窗体不可调整大小
+                        //                 style ^= WS_MINIMIZEBOX.0 as i32; //设置窗体取消最小化按钮
+                        //                 style ^= WS_SYSMENU.0 as i32; //设置窗体取消系统菜单
+                        //                 // style ^= WS_CAPTION.0 as i32;
+                        //                 style ^= WS_MAXIMIZEBOX.0 as i32; //设置窗体取消最大化按钮
+                        //                 SetWindowLongW(hwnd, GWL_STYLE, style);
+                        //             }
+                        //         }
+                        //         _ => {}
+                        //     }
+                        // }
                         cx.new(|_| SubWindow {
                             custom_titlebar: false,
                         })
