@@ -210,13 +210,14 @@ impl Render for Settings {
                                                         |item, icon| item.icon(icon),
                                                     )
                                                     .active(
-                                                        self.active_group_index == Some(group_ix)
+                                                        self.active_group_index
+                                                            == Some(group_ix + 1)
                                                             && self.active_index == Some(ix),
                                                     )
                                                     .on_click(cx.listener(
                                                         move |this, _: &ClickEvent, _, cx| {
                                                             this.active_group_index =
-                                                                Some(group_ix);
+                                                                Some(group_ix + 1);
                                                             this.active_index = Some(ix);
                                                             cx.notify();
                                                         },
