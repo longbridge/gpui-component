@@ -88,7 +88,7 @@ impl Render for AppTitleBar {
                     .gap_2()
                     .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                     .child((self.child.clone())(window, cx))
-                    .child(self.locale_selector.clone())
+                    // .child(self.locale_selector.clone())
                     .child(
                         Button::new("setting")
                             .icon(IconName::Settings)
@@ -97,7 +97,7 @@ impl Render for AppTitleBar {
                             .on_click(|_, _, cx| {
                                 cx.activate(true);
 
-                                let window_size = size(px(800.0), px(800.0));
+                                let window_size = size(px(900.0), px(800.0));
                                 let window_bounds = Bounds::centered(None, window_size, cx);
                                 let options = WindowOptions {
                                     app_id: Some("x-todo-app".to_string()),
@@ -116,7 +116,7 @@ impl Render for AppTitleBar {
                                     ..Default::default()
                                 };
                                 cx.create_normal_window("Settings", options, move |window, cx| {
-                                    Settings::view(window, cx)
+                                    Settings::view(Some("模型配置"), window, cx)
                                 });
                             }),
                     )
@@ -524,7 +524,7 @@ impl RenderOnce for ControlIcon {
                     }
                     Self::Maximize => {
                         println!("Maximize window");
-                        // window.zoom_window()
+                        //window.zoom_window()
                     }
                     Self::Close { .. } => {
                         println!("Close window");

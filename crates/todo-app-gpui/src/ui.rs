@@ -29,8 +29,6 @@ impl_internal_actions!(
     [SelectLocale, SelectFont, SelectRadius, SelectScrollbarShow]
 );
 
-actions!(story, [Quit, Open, CloseWindow, ToggleSearch]);
-
 /// 故事根组件，包含标题栏和主视图
 struct TodoRoot {
     title_bar: Option<Entity<AppTitleBar>>, // 应用程序标题栏

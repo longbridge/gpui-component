@@ -15,7 +15,7 @@ use gpui_component::{
 
 use crate::ui::AppExt;
 
-use super::{todo_form::TodoFormView, View};
+use super::todo_form::TodoFormView;
 
 actions!(
     list_story,
@@ -376,20 +376,6 @@ pub struct TodoList {
     _subscriptions: Vec<Subscription>,
     todo_filter: TodoFilter,
     active_tab_ix: usize,
-}
-
-impl View for TodoList {
-    fn title() -> &'static str {
-        "Todo List"
-    }
-
-    fn description() -> &'static str {
-        "The list displays a series of to-do items."
-    }
-
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
-        Self::view(window, cx)
-    }
 }
 
 impl TodoList {
