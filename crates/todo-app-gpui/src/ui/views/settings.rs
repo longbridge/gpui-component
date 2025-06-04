@@ -10,7 +10,8 @@ use gpui::prelude::*;
 use gpui::*;
 use gpui_component::{
     amber_500, badge::Badge, blue_500, label::Label, orange_300, orange_500,
-    popup_menu::PopupMenuExt, purple_500, sidebar::SidebarFooter, violet_500, yellow_500, Sizable,
+    popup_menu::PopupMenuExt, purple_500, sidebar::SidebarFooter, violet_500, yellow_500,
+    Selectable, Sizable,
 };
 use gpui_component::{
     h_flex,
@@ -149,8 +150,18 @@ impl Render for Settings {
                             .header(
                                 SidebarHeader::new()
                                     .justify_between()
+                                    .selected(
+                                        self.active_group_index == Some(0)
+                                            && self.active_index == Some(0),
+                                    )
+                                    .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                                        this.active_group_index = Some(0);
+                                        this.active_index = Some(0);
+                                        cx.notify();
+                                    }))
                                     .child(
                                         div()
+                                            .id("profile-item")
                                             .flex()
                                             .items_center()
                                             .justify_center()
@@ -188,12 +199,16 @@ impl Render for Settings {
                                         )
                                     }),
                             )
-                            .children(self.stories.clone().into_iter().enumerate().map(
+                            .children(self.stories.clone().into_iter().skip(1).enumerate().map(
                                 |(group_ix, (group_name, sub_stories))| {
                                     SidebarGroup::new(group_name.to_string()).child(
                                         SidebarMenu::new().children(
                                             sub_stories.iter().enumerate().map(|(ix, story)| {
                                                 SidebarMenuItem::new(story.read(cx).name.clone())
+                                                    .when_some(
+                                                        story.read(cx).icon.clone(),
+                                                        |item, icon| item.icon(icon),
+                                                    )
                                                     .active(
                                                         self.active_group_index == Some(group_ix)
                                                             && self.active_index == Some(ix),
@@ -210,13 +225,6 @@ impl Render for Settings {
                                         ),
                                     )
                                 },
-                            ))
-                            .child(SidebarGroup::new("Projects").child(
-                                SidebarMenu::new().children(self.stories.iter().enumerate().map(
-                                    |(ix, view)| {
-                                        SidebarMenuItem::new("jsont").icon(IconName::PanelRight)
-                                    },
-                                )),
                             ))
                             .footer(
                                 SidebarFooter::new()
@@ -257,27 +265,14 @@ impl Render for Settings {
                                                         .text_xs(),
                                                 ),
                                         )
-                                    }), // .when(!self.collapsed, |this| {
-                                        //     this.child(
-                                        //         Icon::new(IconName::ChevronsUpDown)
-                                        //             .size_4()
-                                        //             .flex_shrink_0(),
-                                        //     )
-                                        // }),
-                                        // .popup_menu(|menu, _, _| {
-                                        //     menu.menu(
-                                        //         "Twitter Inc.",
-                                        //         Box::new(SelectCompany(SharedString::from("twitter"))),
-                                        //     )
-                                        //     .menu(
-                                        //         "Meta Platforms",
-                                        //         Box::new(SelectCompany(SharedString::from("meta"))),
-                                        //     )
-                                        //     .menu(
-                                        //         "Google Inc.",
-                                        //         Box::new(SelectCompany(SharedString::from("google"))),
-                                        //     )
-                                        // }),
+                                    })
+                                    .when(self.collapsed, |this| {
+                                        this.child(
+                                            Icon::new(IconName::GalleryVerticalEnd)
+                                                .size_4()
+                                                .flex_shrink_0(),
+                                        )
+                                    }),
                             ),
                     ),
             )

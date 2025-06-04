@@ -1,6 +1,8 @@
+use std::rc::Rc;
+
 use gpui::{
-    prelude::FluentBuilder as _, Div, ElementId, InteractiveElement, IntoElement, ParentElement,
-    RenderOnce, SharedString, Styled,
+    prelude::FluentBuilder as _, App, ClickEvent, Div, ElementId, InteractiveElement, IntoElement,
+    ParentElement, RenderOnce, SharedString, StatefulInteractiveElement, Styled, Window,
 };
 
 use crate::{h_flex, popup_menu::PopupMenuExt, ActiveTheme as _, Collapsible, Selectable};
@@ -11,6 +13,7 @@ pub struct SidebarHeader {
     base: Div,
     selected: bool,
     collapsed: bool,
+    handler: Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>,
 }
 
 impl SidebarHeader {
@@ -20,7 +23,16 @@ impl SidebarHeader {
             base: h_flex().gap_2().w_full(),
             selected: false,
             collapsed: false,
+            handler: Rc::new(|_, _, _| {}),
         }
+    }
+
+    pub fn on_click(
+        mut self,
+        handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.handler = Rc::new(handler);
+        self
     }
 }
 impl Selectable for SidebarHeader {
@@ -57,6 +69,7 @@ impl Styled for SidebarHeader {
 impl PopupMenuExt for SidebarHeader {}
 impl RenderOnce for SidebarHeader {
     fn render(self, _: &mut gpui::Window, cx: &mut gpui::App) -> impl gpui::IntoElement {
+        let handler = self.handler.clone();
         h_flex()
             .id(self.id)
             .gap_2()
@@ -73,5 +86,6 @@ impl RenderOnce for SidebarHeader {
                     .text_color(cx.theme().sidebar_accent_foreground)
             })
             .child(self.base)
+            .on_click(move |ev, window, cx| handler(ev, window, cx))
     }
 }

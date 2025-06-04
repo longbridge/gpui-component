@@ -22,6 +22,7 @@ pub struct Container {
     pub story_klass: Option<SharedString>, // 故事类名
     pub closable: bool,                    // 是否可关闭
     pub zoomable: Option<PanelControl>,    // 是否可缩放
+    pub icon: Option<IconName>,            // 图标
     pub on_active: Option<fn(AnyView, bool, &mut Window, &mut App)>, // 激活回调
 }
 
@@ -52,6 +53,7 @@ impl Container {
             story_klass: None,
             closable: true,
             zoomable: Some(PanelControl::default()),
+            icon: None,
             on_active: None,
         }
     }
@@ -71,6 +73,7 @@ impl Container {
             story.focus_handle = focus_handle;
             story.closable = S::closable();
             story.zoomable = S::zoomable();
+            story.icon = S::icon();
             story.name = name.into();
             story.description = description.into();
             story.title_bg = S::title_bg();
