@@ -112,11 +112,11 @@ impl<T: 'static, E: 'static + Render> Element for ResizeHandle<T, E> {
             };
 
             let mut el = div()
-                .id(self.id.clone())
+                .id("handle")
+                .group("handle")
                 .occlude()
                 .absolute()
                 .flex_shrink_0()
-                .group("handle")
                 .when_some(self.on_drag.clone(), |this, on_drag| {
                     this.on_drag(
                         self.drag_value.clone().unwrap(),
