@@ -12,6 +12,7 @@ version = "0.1.0"
 doctest = false
 
 [features]
+decimal = ["dep:rust_decimal"]
 inspector = []
 webview = ["dep:wry"]
 
@@ -25,7 +26,6 @@ futures-util = "0.3.31"
 image = "0.25.1"
 itertools = "0.13.0"
 lyon = "1.0"
-num-traits = "0.2"
 once_cell = "1.19.0"
 paste = "1"
 regex = "1"
@@ -41,6 +41,10 @@ unicode-segmentation = "1.12.0"
 usvg = { version = "0.45.0", default-features = false, features = ["text"] }
 uuid = "1.10"
 wry = { version = "0.48.0", optional = true }
+
+# Chart
+num-traits = "0.2"
+rust_decimal = { version = "1.37.0", optional = true }
 
 # Markdown Parser
 markdown = "1.0.0-alpha.22"
@@ -78,8 +82,8 @@ tree-sitter-python = "0.23.6"
 tree-sitter-ruby = "0.23.1"
 tree-sitter-rust = "0.24.0"
 tree-sitter-scala = "0.23.4"
-tree-sitter-swift = "0.7.0"
 tree-sitter-sequel = "0.3.8"
+tree-sitter-swift = "0.7.0"
 tree-sitter-toml-ng = "0.7.0"
 tree-sitter-typescript = "0.23.2"
 tree-sitter-yaml = "0.7.1"
