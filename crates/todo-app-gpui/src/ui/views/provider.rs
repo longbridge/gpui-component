@@ -537,9 +537,9 @@ impl Render for LlmProvider {
             .size_full()
             .gap_4()
             .child(
-                // 添加按钮（移到顶部）
+                // 添加按钮（移到左侧）
                 h_flex()
-                    .justify_end()
+                    .justify_start()
                     .child(
                         Button::new("add-provider")
                             .with_variant(ButtonVariant::Primary)
@@ -592,10 +592,10 @@ impl Render for LlmProvider {
                                                     .child(provider_name.clone())
                                             )
                                             .child(
-                                                // 右侧：API类型标签和开关
+                                                // 右侧：API类型标签、开关和操作按钮
                                                 h_flex()
                                                     .items_center()
-                                                    .gap_3()
+                                                    .gap_2()
                                                     .child(
                                                         div()
                                                             .px_2()
@@ -611,6 +611,25 @@ impl Render for LlmProvider {
                                                             .checked(provider_enabled)
                                                             .on_click(cx.listener(move |this, checked, window, cx| {
                                                                 this.toggle_provider_enabled(index, *checked, window, cx);
+                                                            }))
+                                                    )
+                                                    .child(
+                                                        Button::new(("edit-provider", index))
+                                                            .icon(IconName::SquarePen)
+                                                            .small()
+                                                            .ghost()
+                                                            .on_click(cx.listener(move |this, _, window, cx| {
+                                                                this.edit_provider(index, window, cx);
+                                                            }))
+                                                    )
+                                                    .child(
+                                                        Button::new(("delete-provider", index))
+                                                            .icon(IconName::Trash2)
+                                                            .small()
+                                                            .ghost()
+                                                            .text_color(gpui::rgb(0xEF4444)) // 红色
+                                                            .on_click(cx.listener(move |this, _, window, cx| {
+                                                                this.delete_provider(index, window, cx);
                                                             }))
                                                     )
                                             )
@@ -731,29 +750,6 @@ impl Render for LlmProvider {
                                                                             .checked(model_enabled)
                                                                             .small()
                                                                     )
-                                                            }))
-                                                    )
-                                            )
-                                            .child(
-                                                // 操作按钮
-                                                h_flex()
-                                                    .justify_end()
-                                                    .gap_2()
-                                                    .child(
-                                                        Button::new(("edit-provider", index))
-                                                            .label("编辑")
-                                                            .icon(IconName::SquarePen)
-                                                            .on_click(cx.listener(move |this, _, window, cx| {
-                                                                this.edit_provider(index, window, cx);
-                                                            }))
-                                                    )
-                                                    .child(
-                                                        Button::new(("delete-provider", index))
-                                                            .with_variant(ButtonVariant::Danger)
-                                                            .label("删除")
-                                                            .icon(IconName::Trash2)
-                                                            .on_click(cx.listener(move |this, _, window, cx| {
-                                                                this.delete_provider(index, window, cx);
                                                             }))
                                                     )
                                             )
