@@ -197,7 +197,7 @@ impl RenderOnce for TodoItem {
                             .child(Icon::new(IconName::Mic).xsmall())
                             .child(Icon::new(IconName::Image).xsmall())
                             .child(Icon::new(IconName::Brain).xsmall())
-                            .child(Icon::new(IconName::Wrehch).xsmall()),
+                            .child(Icon::new(IconName::Wrench).xsmall()),
                     ),
             )
     }

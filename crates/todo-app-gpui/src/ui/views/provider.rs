@@ -8,6 +8,7 @@ use gpui_component::{
     h_flex,
     input::{InputEvent, InputState, TextInput},
     switch::Switch,
+    tooltip::Tooltip,
     v_flex, ContextModal, FocusableCycle, Icon, IconName, Sizable, StyledExt,
 };
 
@@ -63,7 +64,7 @@ impl ModelCapability {
             ModelCapability::Text => IconName::LetterText,
             ModelCapability::Vision => IconName::Eye,
             ModelCapability::Audio => IconName::Mic,
-            ModelCapability::Tools => IconName::Wrehch,
+            ModelCapability::Tools => IconName::Wrench, // 修正拼写错误
         }
     }
 
@@ -383,29 +384,6 @@ impl LlmProvider {
         };
     }
 
-    fn render_model_capabilities(&self, capabilities: &[ModelCapability]) -> impl IntoElement {
-        h_flex()
-            .gap_1()
-            .items_center()
-            .children(capabilities.iter().map(|cap| {
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_1()
-                    .px_2()
-                    .py_1()
-                    .bg(gpui::rgb(0xF3F4F6))
-                    .rounded_md()
-                    .child(Icon::new(cap.icon()).xsmall())
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(gpui::rgb(0x6B7280))
-                            .child(cap.label()),
-                    )
-            }))
-    }
-
     fn render_provider_form(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .gap_3()
@@ -618,6 +596,7 @@ impl Render for LlmProvider {
                                                             .icon(IconName::SquarePen)
                                                             .small()
                                                             .ghost()
+                                                            .tooltip("编辑")
                                                             .on_click(cx.listener(move |this, _, window, cx| {
                                                                 this.edit_provider(index, window, cx);
                                                             }))
@@ -628,6 +607,7 @@ impl Render for LlmProvider {
                                                             .small()
                                                             .ghost()
                                                             .text_color(gpui::rgb(0xEF4444)) // 红色
+                                                            .tooltip("删除")
                                                             .on_click(cx.listener(move |this, _, window, cx| {
                                                                 this.delete_provider(index, window, cx);
                                                             }))
@@ -726,22 +706,19 @@ impl Render for LlmProvider {
                                                                                 h_flex()
                                                                                     .gap_1()
                                                                                     .items_center()
-                                                                                    .children(model_capabilities.iter().map(|cap| {
+                                                                                    .children(model_capabilities.iter().enumerate().map(|(cap_index, cap)| {
+                                                                                        let capability_id = format!("capability-{}-{}-{}", index, model_index, cap_index);
+                                                                                        let cap_label = cap.label();
+                                                                                        
                                                                                         div()
-                                                                                            .flex()
-                                                                                            .items_center()
-                                                                                            .gap_1()
-                                                                                            .px_2()
-                                                                                            .py_1()
-                                                                                            .bg(gpui::rgb(0xF3F4F6))
+                                                                                            .id("capability_id")
+                                                                                            .p_1()
                                                                                             .rounded_md()
+                                                                                            .bg(gpui::rgb(0xF3F4F6))
                                                                                             .child(Icon::new(cap.icon()).xsmall())
-                                                                                            .child(
-                                                                                                div()
-                                                                                                    .text_xs()
-                                                                                                    .text_color(gpui::rgb(0x6B7280))
-                                                                                                    .child(cap.label())
-                                                                                            )
+                                                                                            .tooltip(move |window, cx| {
+                                                                                                Tooltip::new(cap_label).build(window, cx)
+                                                                                            })
                                                                                     }))
                                                                             )
                                                                     )

@@ -106,7 +106,7 @@ pub enum IconName {
     WindowMaximize,
     WindowMinimize,
     WindowRestore,
-    Wrehch,
+    Wrench,
 }
 
 impl IconName {
@@ -211,7 +211,7 @@ impl IconName {
             Self::WindowMaximize => "icons/window-maximize.svg",
             Self::WindowMinimize => "icons/window-minimize.svg",
             Self::WindowRestore => "icons/window-restore.svg",
-            Self::Wrehch => "icons/wrench.svg",
+            Self::Wrench => "icons/wrench.svg",
         }
         .into()
     }
