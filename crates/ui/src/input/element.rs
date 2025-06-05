@@ -396,8 +396,11 @@ impl TextElement {
                 let mut marker_styles = vec![];
                 for marker in markers.iter() {
                     if let Some(range) = marker.byte_range(&state) {
-                        let node_range = range.start.saturating_sub(skipped_offset)
-                            ..range.end.saturating_sub(skipped_offset);
+                        if range.start < skipped_offset {
+                            continue;
+                        }
+
+                        let node_range = range.start..range.end;
                         if node_range.start >= visible_range.start
                             || node_range.end <= visible_range.end
                         {
