@@ -90,11 +90,11 @@ impl Example {
         }
 
         let markers = vec![
-            Marker::new("warning", (2, 0), (2, 22), ""),
-            Marker::new("error", (7, 16), (7, 31), ""),
-            Marker::new("info", (6, 0), (6, 10), ""),
-            Marker::new("info", (8, 0), (8, 10), ""),
-            Marker::new("hint", (10, 0), (10, 10), ""),
+            Marker::new("warning", (2, 1), (2, 31), ""),
+            Marker::new("error", (16, 10), (16, 46), ""),
+            Marker::new("info", (25, 10), (25, 20), ""),
+            Marker::new("info", (36, 9), (40, 10), ""),
+            Marker::new("hint", (47, 13), (47, 51), ""),
         ];
         self.input_state.update(cx, |state, cx| {
             state.set_markers(markers, window, cx);

@@ -1,5 +1,6 @@
 use crate::{highlighter::HighlightTheme, input::InputState};
 use gpui::{px, HighlightStyle, SharedString, UnderlineStyle};
+use itertools::Itertools;
 use std::ops::Range;
 
 /// Marker represents a diagnostic message, such as an error or warning, in the code editor.
@@ -29,25 +30,33 @@ impl Marker {
     }
 
     /// Returns the range (zero-based) of bytes in the source code that this marker covers.
-    #[allow(unused)]
     pub(super) fn byte_range(&self, state: &InputState) -> Option<Range<usize>> {
         let start_line = state
             .text_wrapper
             .lines
             .get(self.start.line.saturating_sub(1))?;
+        let start_line_str = state.text.get(start_line.range.clone())?;
+
         let end_line = state
             .text_wrapper
             .lines
             .get(self.end.line.saturating_sub(1))?;
+        let end_line_str = state.text.get(end_line.range.clone())?;
 
-        let start_byte = start_line
-            .range
-            .start
-            .saturating_add(self.start.column.saturating_sub(1));
-        let end_byte = end_line
-            .range
-            .start
-            .saturating_add(self.end.column.saturating_sub(1));
+        let start_byte = start_line.range.start
+            + start_line_str
+                .chars()
+                .take(self.start.column.saturating_sub(1))
+                .counts_by(|c| c.len_utf8())
+                .values()
+                .sum::<usize>();
+        let end_byte = end_line.range.start
+            + end_line_str
+                .chars()
+                .take(self.end.column.saturating_sub(1))
+                .counts_by(|c| c.len_utf8())
+                .values()
+                .sum::<usize>();
 
         Some(start_byte..end_byte)
     }
@@ -65,8 +74,8 @@ pub struct LineColumn {
 impl From<(usize, usize)> for LineColumn {
     fn from(value: (usize, usize)) -> Self {
         Self {
-            line: value.0,
-            column: value.1,
+            line: value.0.max(1),
+            column: value.1.max(1),
         }
     }
 }
@@ -96,14 +105,12 @@ impl From<&str> for MarkerSeverity {
 
 impl MarkerSeverity {
     /// Returns the [`HighlightStyle`] for the marker severity with the given theme style.
-    #[allow(unused)]
     pub(super) fn highlight_style(&self, theme: &HighlightTheme) -> HighlightStyle {
         let color = match self {
             Self::Error => Some(theme.style.status.error()),
             Self::Warning => Some(theme.style.status.warning()),
             Self::Info => Some(theme.style.status.info()),
             Self::Hint => Some(theme.style.status.hint()),
-            _ => theme.style.foreground,
         };
 
         let mut style = HighlightStyle::default();

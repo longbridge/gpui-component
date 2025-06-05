@@ -299,7 +299,7 @@ impl StatusColors {
 
     #[inline]
     pub fn hint(&self) -> Hsla {
-        self.hint.unwrap_or(crate::purple_500())
+        self.hint.unwrap_or(crate::cyan_500().opacity(0.5))
     }
 
     #[inline]
