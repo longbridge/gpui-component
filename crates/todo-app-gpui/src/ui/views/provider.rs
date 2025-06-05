@@ -804,6 +804,11 @@ impl Render for LlmProvider {
                                                                             .child(
                                                                                 div()
                                                                                     .font_medium()
+                                                                                    .text_color(if model_enabled {
+                                                                                        gpui::rgb(0x111827) // 启用时的正常颜色
+                                                                                    } else {
+                                                                                        gpui::rgb(0xD1D5DB) // 禁用时的淡色
+                                                                                    })
                                                                                     .child(model_name.clone())
                                                                             )
                                                                             .child(
@@ -817,8 +822,18 @@ impl Render for LlmProvider {
                                                                                             .id(("capability", capability_unique_id))
                                                                                             .p_1()
                                                                                             .rounded_md()
-                                                                                            .bg(gpui::rgb(0xF3F4F6))
-                                                                                            .child(Icon::new(cap.icon()).xsmall())
+                                                                                            .bg(if model_enabled {
+                                                                                                gpui::rgb(0xF3F4F6) // 启用时的正常背景
+                                                                                            } else {
+                                                                                                gpui::rgb(0xFAFAFA) // 禁用时的更淡背景
+                                                                                            })
+                                                                                            .child(
+                                                                                                Icon::new(cap.icon())
+                                                                                                    .xsmall()
+                                                                                                    .when(!model_enabled, |icon| {
+                                                                                                        icon.text_color(gpui::rgb(0xD1D5DB)) // 禁用时图标变淡
+                                                                                                    })
+                                                                                            )
                                                                                     }))
                                                                             )
                                                                     )
