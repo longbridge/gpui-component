@@ -1,60 +1,153 @@
 use crate::ui::components::{section::section, ViewKit};
-use gpui::{
-    actions, div, App, AppContext as _, Context, Entity, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, KeyBinding, ParentElement as _, Render, Styled, Subscription,
-    Window,
-};
+use gpui::prelude::*;
+use gpui::*;
 use gpui_component::{
-    button::{Button, ButtonVariant, ButtonVariants as _},
+    accordion::Accordion,
+    button::{Button, ButtonGroup, ButtonVariant, ButtonVariants as _},
+    dropdown::{Dropdown, DropdownState},
     h_flex,
-    input::{ChatInput, InputEvent, InputState, MaskPattern, TextInput}, // Added ChatInput
-    v_flex,
-    ContextModal,
-    FocusableCycle,
-    Icon,
-    IconName,
-    Sizable,
+    input::{InputEvent, InputState, TextInput},
+    switch::Switch,
+    v_flex, ContextModal, FocusableCycle, Icon, IconName, Sizable, StyledExt,
 };
 
-actions!(input_story, [Tab, TabPrev]);
+actions!(
+    provider,
+    [Tab, TabPrev, AddProvider, SaveProvider, DeleteProvider]
+);
 
 const CONTEXT: &str = "LlmProvider";
 
-pub struct LlmProvider {
-    input1: Entity<InputState>,
-    input2: Entity<InputState>,
-    input_esc: Entity<InputState>,
-    mask_input: Entity<InputState>,
-    disabled_input: Entity<InputState>,
-    prefix_input1: Entity<InputState>,
-    suffix_input1: Entity<InputState>,
-    both_input1: Entity<InputState>,
-    large_input: Entity<InputState>,
-    small_input: Entity<InputState>,
-    phone_input: Entity<InputState>,
-    mask_input2: Entity<InputState>,
-    currency_input: Entity<InputState>,
-    chat_input_state: Entity<InputState>, // Added state for ChatInput
-
-    _subscriptions: Vec<Subscription>,
+#[derive(Debug, Clone)]
+pub enum ApiType {
+    OpenAI,
+    OpenAIResponse,
+    Gemini,
+    Anthropic,
+    AzureOpenAI,
 }
 
-impl LlmProvider {
-    pub fn init(cx: &mut App) {
-        cx.bind_keys([
-            KeyBinding::new("shift-tab", TabPrev, Some(CONTEXT)),
-            KeyBinding::new("tab", Tab, Some(CONTEXT)),
-        ])
+impl ApiType {
+    fn as_str(&self) -> &'static str {
+        match self {
+            ApiType::OpenAI => "OpenAI",
+            ApiType::OpenAIResponse => "OpenAI-Response",
+            ApiType::Gemini => "Gemini",
+            ApiType::Anthropic => "Anthropic",
+            ApiType::AzureOpenAI => "Azure-OpenAI",
+        }
     }
+
+    fn all() -> Vec<SharedString> {
+        vec![
+            "OpenAI".into(),
+            "OpenAI-Response".into(),
+            "Gemini".into(),
+            "Anthropic".into(),
+            "Azure-OpenAI".into(),
+        ]
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum ModelCapability {
+    Text,
+    Vision,
+    Audio,
+    Tools,
+}
+
+impl ModelCapability {
+    fn icon(&self) -> IconName {
+        match self {
+            ModelCapability::Text => IconName::LetterText,
+            ModelCapability::Vision => IconName::Eye,
+            ModelCapability::Audio => IconName::Mic,
+            ModelCapability::Tools => IconName::Wrehch,
+        }
+    }
+
+    fn label(&self) -> &'static str {
+        match self {
+            ModelCapability::Text => "文本",
+            ModelCapability::Vision => "视觉",
+            ModelCapability::Audio => "音频",
+            ModelCapability::Tools => "工具",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ModelInfo {
+    name: String,
+    capabilities: Vec<ModelCapability>,
+    enabled: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct LlmProviderInfo {
+    id: String,
+    name: String,
+    api_url: String,
+    api_key: String,
+    api_type: ApiType,
+    enabled: bool,
+    models: Vec<ModelInfo>,
+}
+
+impl Default for LlmProviderInfo {
+    fn default() -> Self {
+        Self {
+            id: uuid::Uuid::new_v4().to_string(),
+            name: String::new(),
+            api_url: String::new(),
+            api_key: String::new(),
+            api_type: ApiType::OpenAI,
+            enabled: true,
+            models: vec![
+                ModelInfo {
+                    name: "gpt-4o".to_string(),
+                    capabilities: vec![
+                        ModelCapability::Text,
+                        ModelCapability::Vision,
+                        ModelCapability::Tools,
+                    ],
+                    enabled: true,
+                },
+                ModelInfo {
+                    name: "gpt-4o-mini".to_string(),
+                    capabilities: vec![ModelCapability::Text, ModelCapability::Tools],
+                    enabled: true,
+                },
+            ],
+        }
+    }
+}
+
+pub struct LlmProvider {
+    focus_handle: FocusHandle,
+    providers: Vec<LlmProviderInfo>,
+    expanded_providers: Vec<usize>,
+
+    // 编辑表单字段
+    editing_provider: Option<usize>,
+    name_input: Entity<InputState>,
+    api_url_input: Entity<InputState>,
+    api_key_input: Entity<InputState>,
+    api_type_dropdown: Entity<DropdownState<Vec<SharedString>>>,
+
+    _subscriptions: Vec<Subscription>,
 }
 
 impl ViewKit for LlmProvider {
     fn title() -> &'static str {
         "模型配置"
     }
+
     fn description() -> &'static str {
-        "配置和管理模型提供者"
+        "配置和管理LLM服务提供商"
     }
+
     fn closable() -> bool {
         false
     }
@@ -65,83 +158,73 @@ impl ViewKit for LlmProvider {
 }
 
 impl LlmProvider {
+    pub fn init(cx: &mut App) {
+        cx.bind_keys([
+            KeyBinding::new("shift-tab", TabPrev, Some(CONTEXT)),
+            KeyBinding::new("tab", Tab, Some(CONTEXT)),
+            KeyBinding::new("ctrl-n", AddProvider, Some(CONTEXT)),
+        ])
+    }
+
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| Self::new(window, cx))
     }
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let input1 = cx.new(|cx| {
-            InputState::new(window, cx)
-                .default_value("Hello 世界，this is GPUI component, this is a long text.")
-        });
+        let name_input = cx.new(|cx| InputState::new(window, cx).placeholder("服务提供商名称"));
 
-        let input2 = cx.new(|cx| InputState::new(window, cx).placeholder("Enter text here..."));
-        let input_esc = cx.new(|cx| {
-            InputState::new(window, cx)
-                .placeholder("Enter text and clear it by pressing ESC")
-                .clean_on_escape()
-        });
+        let api_url_input = cx.new(|cx| InputState::new(window, cx).placeholder("API 地址"));
 
-        let mask_input = cx.new(|cx| {
+        let api_key_input = cx.new(|cx| {
             InputState::new(window, cx)
+                .placeholder("API 密钥")
                 .masked(true)
-                .default_value("this-is-password")
         });
 
-        let prefix_input1 =
-            cx.new(|cx| InputState::new(window, cx).placeholder("Search some thing..."));
-        let suffix_input1 = cx.new(|cx| {
-            InputState::new(window, cx)
-                .placeholder("This input only support [a-zA-Z0-9] characters.")
-                .pattern(regex::Regex::new(r"^[a-zA-Z0-9]*$").unwrap())
-        });
-        let both_input1 = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("This input have prefix and suffix.")
-        });
-
-        let phone_input = cx.new(|cx| InputState::new(window, cx).mask_pattern("(999)-999-9999"));
-        let mask_input2 = cx.new(|cx| InputState::new(window, cx).mask_pattern("AAA-###-AAA"));
-        let currency_input = cx.new(|cx_model| {
-            InputState::new(window, cx_model).mask_pattern(MaskPattern::Number {
-                separator: Some(','),
-                fraction: Some(3),
-            })
-        });
-
-        let chat_input_state = cx.new(|cx_model| {
-            InputState::new(window, cx_model)
-                .placeholder("询问 Copilot (可多行输入)")
-                .auto_grow(1, 5) // <--- 添加这样的配置来实现自动增长的多行输入
-        });
+        let api_type_dropdown =
+            cx.new(|cx| DropdownState::new(ApiType::all(), Some(0), window, cx));
 
         let _subscriptions = vec![
-            cx.subscribe_in(&input1, window, Self::on_input_event),
-            cx.subscribe_in(&input2, window, Self::on_input_event),
-            cx.subscribe_in(&phone_input, window, Self::on_input_event),
+            cx.subscribe_in(&name_input, window, Self::on_input_event),
+            cx.subscribe_in(&api_url_input, window, Self::on_input_event),
+            cx.subscribe_in(&api_key_input, window, Self::on_input_event),
+        ];
+
+        // 初始化一些示例数据
+        let mut default_provider = LlmProviderInfo::default();
+        default_provider.name = "OpenAI".to_string();
+        default_provider.api_url = "https://api.openai.com/v1".to_string();
+
+        let mut anthropic_provider = LlmProviderInfo::default();
+        anthropic_provider.name = "Anthropic".to_string();
+        anthropic_provider.api_url = "https://api.anthropic.com".to_string();
+        anthropic_provider.api_type = ApiType::Anthropic;
+        anthropic_provider.models = vec![
+            ModelInfo {
+                name: "claude-3.5-sonnet".to_string(),
+                capabilities: vec![
+                    ModelCapability::Text,
+                    ModelCapability::Vision,
+                    ModelCapability::Tools,
+                ],
+                enabled: true,
+            },
+            ModelInfo {
+                name: "claude-3-haiku".to_string(),
+                capabilities: vec![ModelCapability::Text, ModelCapability::Tools],
+                enabled: true,
+            },
         ];
 
         Self {
-            input1,
-            input2,
-            input_esc,
-            mask_input,
-            disabled_input: cx.new(|cx_model| {
-                InputState::new(window, cx_model).default_value("This is disabled input")
-            }),
-            large_input: cx
-                .new(|cx_model| InputState::new(window, cx_model).placeholder("Large input")),
-            small_input: cx.new(|cx_model| {
-                InputState::new(window, cx_model)
-                    .validate(|s| s.parse::<f32>().is_ok())
-                    .placeholder("validate to limit float number.")
-            }),
-            prefix_input1,
-            suffix_input1,
-            both_input1,
-            phone_input,
-            mask_input2,
-            currency_input,
-            chat_input_state, // Assign new state
+            focus_handle: cx.focus_handle(),
+            providers: vec![default_provider, anthropic_provider],
+            expanded_providers: vec![0],
+            editing_provider: None,
+            name_input,
+            api_url_input,
+            api_key_input,
+            api_type_dropdown,
             _subscriptions,
         }
     }
@@ -154,180 +237,511 @@ impl LlmProvider {
         self.cycle_focus(false, window, cx);
     }
 
+    fn add_provider(&mut self, _: &AddProvider, window: &mut Window, cx: &mut Context<Self>) {
+        self.editing_provider = Some(self.providers.len());
+        self.providers.push(LlmProviderInfo::default());
+        self.clear_form(window, cx);
+        cx.notify();
+    }
+
+    fn save_provider(&mut self, _: &SaveProvider, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(index) = self.editing_provider {
+            if let Some(provider) = self.providers.get_mut(index) {
+                provider.name = self.name_input.read(cx).value().to_string();
+                provider.api_url = self.api_url_input.read(cx).value().to_string();
+                provider.api_key = self.api_key_input.read(cx).value().to_string();
+
+                if let Some(selected) = self.api_type_dropdown.read(cx).selected_value() {
+                    provider.api_type = match selected.as_ref() {
+                        "OpenAI" => ApiType::OpenAI,
+                        "OpenAI-Response" => ApiType::OpenAIResponse,
+                        "Gemini" => ApiType::Gemini,
+                        "Anthropic" => ApiType::Anthropic,
+                        "Azure-OpenAI" => ApiType::AzureOpenAI,
+                        _ => ApiType::OpenAI,
+                    };
+                }
+            }
+        }
+
+        self.editing_provider = None;
+        self.clear_form(window, cx);
+        cx.notify();
+    }
+
+    fn delete_provider(&mut self, index: usize, _: &mut Window, cx: &mut Context<Self>) {
+        if index < self.providers.len() {
+            self.providers.remove(index);
+
+            // 更新展开状态
+            self.expanded_providers.retain(|&i| i != index);
+            self.expanded_providers = self
+                .expanded_providers
+                .iter()
+                .map(|&i| if i > index { i - 1 } else { i })
+                .collect();
+
+            // 如果正在编辑被删除的提供商，清除编辑状态
+            if self.editing_provider == Some(index) {
+                self.editing_provider = None;
+            } else if let Some(editing) = self.editing_provider {
+                if editing > index {
+                    self.editing_provider = Some(editing - 1);
+                }
+            }
+
+            cx.notify();
+        }
+    }
+
+    fn toggle_provider_enabled(
+        &mut self,
+        index: usize,
+        enabled: bool,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(provider) = self.providers.get_mut(index) {
+            provider.enabled = enabled;
+            cx.notify();
+        }
+    }
+
+    fn edit_provider(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
+        self.editing_provider = Some(index);
+
+        if let Some(provider) = self.providers.get(index) {
+            self.name_input.update(cx, |state, cx| {
+                *state = InputState::new(window, cx).default_value(&provider.name);
+            });
+
+            self.api_url_input.update(cx, |state, cx| {
+                *state = InputState::new(window, cx).default_value(&provider.api_url);
+            });
+
+            self.api_key_input.update(cx, |state, cx| {
+                *state = InputState::new(window, cx)
+                    .default_value(&provider.api_key)
+                    .masked(true);
+            });
+
+            let type_index = match provider.api_type {
+                ApiType::OpenAI => 0,
+                ApiType::OpenAIResponse => 1,
+                ApiType::Gemini => 2,
+                ApiType::Anthropic => 3,
+                ApiType::AzureOpenAI => 4,
+            };
+
+            self.api_type_dropdown.update(cx, |state, cx| {
+                state.set_selected_index(Some(type_index), window, cx);
+            });
+        }
+
+        cx.notify();
+    }
+
+    fn clear_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.name_input.update(cx, |state, cx| {
+            *state = InputState::new(window, cx).placeholder("服务提供商名称");
+        });
+
+        self.api_url_input.update(cx, |state, cx| {
+            *state = InputState::new(window, cx).placeholder("API 地址");
+        });
+
+        self.api_key_input.update(cx, |state, cx| {
+            *state = InputState::new(window, cx)
+                .placeholder("API 密钥")
+                .masked(true);
+        });
+
+        self.api_type_dropdown.update(cx, |state, cx| {
+            state.set_selected_index(Some(0), window, cx);
+        });
+    }
+
+    fn toggle_accordion(&mut self, open_ixs: Vec<usize>, _: &mut Window, cx: &mut Context<Self>) {
+        self.expanded_providers = open_ixs;
+        cx.notify();
+    }
+
     fn on_input_event(
         &mut self,
         _: &Entity<InputState>,
         event: &InputEvent,
-        _window: &mut Window,
-        _cx: &mut Context<Self>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
     ) {
         match event {
-            InputEvent::Change(text) => println!("Change: {}", text),
-            InputEvent::PressEnter { secondary } => println!("PressEnter secondary: {}", secondary),
-            InputEvent::Focus => println!("Focus"),
-            InputEvent::Blur => println!("Blur"),
+            InputEvent::PressEnter { .. } => {
+                if self.editing_provider.is_some() {
+                    self.save_provider(&SaveProvider, window, cx);
+                }
+            }
+            _ => {}
         };
+    }
+
+    fn render_model_capabilities(&self, capabilities: &[ModelCapability]) -> impl IntoElement {
+        h_flex()
+            .gap_1()
+            .items_center()
+            .children(capabilities.iter().map(|cap| {
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_1()
+                    .px_2()
+                    .py_1()
+                    .bg(gpui::rgb(0xF3F4F6))
+                    .rounded_md()
+                    .child(Icon::new(cap.icon()).xsmall())
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(gpui::rgb(0x6B7280))
+                            .child(cap.label()),
+                    )
+            }))
+    }
+
+    fn render_provider_form(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
+        v_flex()
+            .gap_3()
+            .p_4()
+            .bg(gpui::rgb(0xF9FAFB))
+            .rounded_lg()
+            .border_1()
+            .border_color(gpui::rgb(0xE5E7EB))
+            .child(
+                div()
+                    .text_lg()
+                    .font_semibold()
+                    .text_color(gpui::rgb(0x374151))
+                    .child(if self.editing_provider.is_some() {
+                        "编辑服务提供商"
+                    } else {
+                        "添加服务提供商"
+                    }),
+            )
+            .child(
+                h_flex()
+                    .gap_3()
+                    .child(
+                        v_flex()
+                            .gap_1()
+                            .flex_1()
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .text_color(gpui::rgb(0x6B7280))
+                                    .child("名称 *"),
+                            )
+                            .child(TextInput::new(&self.name_input).cleanable()),
+                    )
+                    .child(
+                        v_flex()
+                            .gap_1()
+                            .flex_1()
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .text_color(gpui::rgb(0x6B7280))
+                                    .child("接口类型"),
+                            )
+                            .child(
+                                Dropdown::new(&self.api_type_dropdown)
+                                    .placeholder("选择接口类型")
+                                    .small(),
+                            ),
+                    ),
+            )
+            .child(
+                v_flex()
+                    .gap_1()
+                    .child(
+                        div()
+                            .text_sm()
+                            .text_color(gpui::rgb(0x6B7280))
+                            .child("API 地址 *"),
+                    )
+                    .child(TextInput::new(&self.api_url_input).cleanable()),
+            )
+            .child(
+                v_flex()
+                    .gap_1()
+                    .child(
+                        div()
+                            .text_sm()
+                            .text_color(gpui::rgb(0x6B7280))
+                            .child("API 密钥 *"),
+                    )
+                    .child(
+                        TextInput::new(&self.api_key_input)
+                            .cleanable()
+                            .mask_toggle(),
+                    ),
+            )
+            .child(
+                h_flex()
+                    .justify_end()
+                    .gap_2()
+                    .child(
+                        Button::new("cancel-edit")
+                            .label("取消")
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.editing_provider = None;
+                                this.clear_form(window, cx);
+                                cx.notify();
+                            })),
+                    )
+                    .child(
+                        Button::new("save-provider")
+                            .with_variant(ButtonVariant::Primary)
+                            .label("保存")
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.save_provider(&SaveProvider, window, cx);
+                            })),
+                    ),
+            )
     }
 }
 
 impl FocusableCycle for LlmProvider {
     fn cycle_focus_handles(&self, _: &mut Window, cx: &mut App) -> Vec<FocusHandle> {
-        [
-            self.input1.focus_handle(cx),
-            self.input2.focus_handle(cx),
-            self.input_esc.focus_handle(cx),
-            self.disabled_input.focus_handle(cx),
-            self.mask_input.focus_handle(cx),
-            self.prefix_input1.focus_handle(cx),
-            self.both_input1.focus_handle(cx),
-            self.suffix_input1.focus_handle(cx),
-            self.large_input.focus_handle(cx),
-            self.small_input.focus_handle(cx),
-            self.phone_input.focus_handle(cx), // Assuming phone_input should be in cycle
-            self.mask_input2.focus_handle(cx), // Assuming mask_input2 should be in cycle
-            self.currency_input.focus_handle(cx), // Assuming currency_input should be in cycle
-            self.chat_input_state.focus_handle(cx), // Add chat_input_state's focus handle
+        vec![
+            self.name_input.focus_handle(cx),
+            self.api_url_input.focus_handle(cx),
+            self.api_key_input.focus_handle(cx),
+            self.api_type_dropdown.focus_handle(cx),
         ]
-        .to_vec()
     }
 }
+
 impl Focusable for LlmProvider {
-    fn focus_handle(&self, cx: &gpui::App) -> gpui::FocusHandle {
-        self.input1.focus_handle(cx)
+    fn focus_handle(&self, _: &gpui::App) -> gpui::FocusHandle {
+        self.focus_handle.clone()
     }
 }
 
 impl Render for LlmProvider {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .key_context(CONTEXT)
-            .id("input-story")
+            .id("llm-provider")
             .on_action(cx.listener(Self::tab))
             .on_action(cx.listener(Self::tab_prev))
+            .on_action(cx.listener(Self::add_provider))
+            .on_action(cx.listener(Self::save_provider))
             .size_full()
-            .justify_start()
-            .gap_3()
+            .gap_4()
             .child(
-                section("Normal Input")
-                    .max_w_md()
-                    .child(TextInput::new(&self.input1).cleanable())
-                    .child(self.input2.clone()),
-            )
-            .child(
-                section("Input State")
-                    .max_w_md()
-                    .child(TextInput::new(&self.disabled_input).disabled(true))
-                    .child(TextInput::new(&self.mask_input).mask_toggle().cleanable()),
-            )
-            .child(
-                section("Prefix and Suffix")
-                    .max_w_md()
-                    .child(
-                        TextInput::new(&self.prefix_input1)
-                            .cleanable()
-                            .prefix(Icon::new(IconName::Search).small().ml_3()),
-                    )
-                    .child(
-                        TextInput::new(&self.both_input1)
-                            .cleanable()
-                            .prefix(div().child(Icon::new(IconName::Search).small()).ml_3())
-                            .suffix(
-                                Button::new("info")
-                                    .ghost()
-                                    .icon(IconName::Info)
-                                    .xsmall()
-                                    .mr_3(),
-                            ),
-                    )
-                    .child(
-                        TextInput::new(&self.suffix_input1).cleanable().suffix(
-                            Button::new("info")
-                                .ghost()
-                                .icon(IconName::Info)
-                                .xsmall()
-                                .mr_3(),
-                        ),
-                    ),
-            )
-            .child(
-                section("Currency Input with thousands separator")
-                    .max_w_md()
-                    .child(TextInput::new(&self.currency_input))
-                    .child(
-                        div().child(format!("Value: {:?}", self.currency_input.read(cx).value())),
-                    ),
-            )
-            .child(
-                section("Input with mask pattern: (999)-999-9999")
-                    .max_w_md()
-                    .child(TextInput::new(&self.phone_input))
-                    .child(
-                        v_flex()
-                            .child(format!("Value: {:?}", self.phone_input.read(cx).value()))
-                            .child(format!(
-                                "Unmask Value: {:?}",
-                                self.phone_input.read(cx).unmask_value()
-                            )),
-                    ),
-            )
-            .child(
-                section("Input with mask pattern: AAA-###-AAA")
-                    .max_w_md()
-                    .child(TextInput::new(&self.mask_input2))
-                    .child(
-                        v_flex()
-                            .child(format!("Value: {:?}", self.mask_input2.read(cx).value()))
-                            .child(format!(
-                                "Unmask Value: {:?}",
-                                self.mask_input2.read(cx).unmask_value()
-                            )),
-                    ),
-            )
-            .child(
-                section("Input Size")
-                    .max_w_md()
-                    .child(TextInput::new(&self.large_input).large())
-                    .child(TextInput::new(&self.small_input).small()),
-            )
-            .child(
-                section("Cleanable and ESC to clean")
-                    .max_w_md()
-                    .child(TextInput::new(&self.input_esc).cleanable()),
-            )
-            .child(
-                section("Focused Input")
-                    .max_w_md()
-                    .whitespace_normal()
-                    .overflow_hidden()
-                    .child(div().child(format!(
-                        "Value: {:?}",
-                        window.focused_input(cx).map(|input| input.read(cx).value())
-                    ))),
-            )
-            .child(
-                // 使用 ChatInput 组件
-                section("Chat Input").child(ChatInput::new(&self.chat_input_state)),
-            )
-            .child(
+                // 标题和添加按钮
                 h_flex()
+                    .justify_between()
                     .items_center()
-                    .w_full()
-                    .gap_3()
                     .child(
-                        Button::new("btn-submit")
-                            .flex_1()
-                            .with_variant(ButtonVariant::Primary)
-                            .label("Submit")
-                            .on_click(cx.listener(|_, _, window, cx| {
-                                window.dispatch_action(Box::new(Tab), cx)
-                            })),
+                        v_flex()
+                            .child(
+                                div()
+                                    .text_xl()
+                                    .font_semibold()
+                                    .text_color(gpui::rgb(0x111827))
+                                    .child("LLM 服务提供商")
+                            )
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .text_color(gpui::rgb(0x6B7280))
+                                    .child("管理您的AI模型服务提供商配置")
+                            )
                     )
                     .child(
-                        Button::new("btn-cancel")
-                            .flex_1()
-                            .label("Cancel")
-                            .into_element(),
-                    ),
+                        Button::new("add-provider")
+                            .with_variant(ButtonVariant::Primary)
+                            .label("添加提供商")
+                            .icon(IconName::Plus)
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.add_provider(&AddProvider, window, cx);
+                            }))
+                    )
+            )
+            .child(
+                // 编辑表单（条件显示）
+                div().when(self.editing_provider.is_some(), |this| {
+                    this.child(self.render_provider_form(cx))
+                })
+            )
+            .child(
+                // 提供商列表
+                section("已配置的服务提供商")
+                    .child(
+                        Accordion::new("providers")
+                            .multiple(true)
+                            .children(
+                                self.providers.iter().enumerate().map(|(index, provider)| {
+                                    move |accordion| {
+                                        accordion
+                                            .open(self.expanded_providers.contains(&index))
+                                            .icon(if provider.enabled { IconName::CircleCheck } else { IconName::CircleX })
+                                            .title(
+                                                h_flex()
+                                                    .items_center()
+                                                    .justify_between()
+                                                    .w_full()
+                                                    .child(
+                                                        h_flex()
+                                                            .items_center()
+                                                            .gap_2()
+                                                            .child(
+                                                                div()
+                                                                    .font_medium()
+                                                                    .child(provider.name.as_str())
+                                                            )
+                                                            .child(
+                                                                div()
+                                                                    .px_2()
+                                                                    .py_1()
+                                                                    .bg(gpui::rgb(0xDDD6FE))
+                                                                    .text_color(gpui::rgb(0x7C3AED))
+                                                                    .rounded_md()
+                                                                    .text_xs()
+                                                                    .child(provider.api_type.as_str())
+                                                            )
+                                                    )
+                                                    .child(
+                                                        Switch::new(format!("provider-enabled-{}", index).as_str())
+                                                            .checked(provider.enabled)
+                                                            .on_click(cx.listener(move |this, checked, window, cx| {
+                                                                this.toggle_provider_enabled(index, *checked, window, cx);
+                                                            }))
+                                                    )
+                                            )
+                                            .content(
+                                                v_flex()
+                                                    .gap_4()
+                                                    .child(
+                                                        // 基本信息
+                                                        v_flex()
+                                                            .gap_2()
+                                                            .child(
+                                                                h_flex()
+                                                                    .gap_4()
+                                                                    .child(
+                                                                        v_flex()
+                                                                            .gap_1()
+                                                                            .child(
+                                                                                div()
+                                                                                    .text_sm()
+                                                                                    .font_medium()
+                                                                                    .text_color(gpui::rgb(0x374151))
+                                                                                    .child("API 地址")
+                                                                            )
+                                                                            .child(
+                                                                                div()
+                                                                                    .text_sm()
+                                                                                    .text_color(gpui::rgb(0x6B7280))
+                                                                                    .child(provider.api_url.as_str())
+                                                                            )
+                                                                    )
+                                                                    .child(
+                                                                        v_flex()
+                                                                            .gap_1()
+                                                                            .child(
+                                                                                div()
+                                                                                    .text_sm()
+                                                                                    .font_medium()
+                                                                                    .text_color(gpui::rgb(0x374151))
+                                                                                    .child("API 密钥")
+                                                                            )
+                                                                            .child(
+                                                                                div()
+                                                                                    .text_sm()
+                                                                                    .text_color(gpui::rgb(0x6B7280))
+                                                                                    .child(if provider.api_key.is_empty() {
+                                                                                        "未配置"
+                                                                                    } else {
+                                                                                        "••••••••"
+                                                                                    })
+                                                                            )
+                                                                    )
+                                                            )
+                                                    )
+                                                    .child(
+                                                        // 模型列表
+                                                        v_flex()
+                                                            .gap_2()
+                                                            .child(
+                                                                div()
+                                                                    .text_sm()
+                                                                    .font_medium()
+                                                                    .text_color(gpui::rgb(0x374151))
+                                                                    .child("支持的模型")
+                                                            )
+                                                            .child(
+                                                                v_flex()
+                                                                    .gap_2()
+                                                                    .children(provider.models.iter().map(|model| {
+                                                                        h_flex()
+                                                                            .items_center()
+                                                                            .justify_between()
+                                                                            .p_3()
+                                                                            .bg(gpui::rgb(0xF9FAFB))
+                                                                            .rounded_md()
+                                                                            .border_1()
+                                                                            .border_color(gpui::rgb(0xE5E7EB))
+                                                                            .child(
+                                                                                h_flex()
+                                                                                    .items_center()
+                                                                                    .gap_3()
+                                                                                    .child(
+                                                                                        div()
+                                                                                            .font_medium()
+                                                                                            .text_color(gpui::rgb(0x111827))
+                                                                                            .child(model.name.as_str())
+                                                                                    )
+                                                                                    .child(self.render_model_capabilities(&model.capabilities))
+                                                                            )
+                                                                            .child(
+                                                                                Switch::new(format!("model-{}-enabled", model.name).as_str())
+                                                                                    .checked(model.enabled)
+                                                                                    .small()
+                                                                            )
+                                                                    }))
+                                                            )
+                                                    )
+                                                    .child(
+                                                        // 操作按钮
+                                                        h_flex()
+                                                            .justify_end()
+                                                            .gap_2()
+                                                            .child(
+                                                                Button::new(format!("edit-provider-{}", index).as_str())
+                                                                    .label("编辑")
+                                                                    .icon(IconName::SquarePen)
+                                                                    .on_click(cx.listener(move |this, _, window, cx| {
+                                                                        this.edit_provider(index, window, cx);
+                                                                    }))
+                                                            )
+                                                            .child(
+                                                                Button::new(format!("delete-provider-{}", index).as_str())
+                                                                    .with_variant(ButtonVariant::Danger)
+                                                                    .label("删除")
+                                                                    .icon(IconName::Trash2)
+                                                                    .on_click(cx.listener(move |this, _, window, cx| {
+                                                                        this.delete_provider(index, window, cx);
+                                                                    }))
+                                                            )
+                                                    )
+                                            )
+                                    }
+                                })
+                            )
+                            .on_toggle_click(cx.listener(|this, open_ixs: &[usize], window, cx| {
+                                this.toggle_accordion(open_ixs.to_vec(), window, cx);
+                            }))
+                    )
             )
     }
 }

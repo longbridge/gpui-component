@@ -7283,6 +7283,7 @@ dependencies = [
  "serde",
  "serde_json",
  "unindent",
+ "uuid",
  "windows 0.61.1",
 ]
 

@@ -4,6 +4,7 @@ use gpui::*;
 use gpui_component::{
     button::{Button, ButtonVariant, ButtonVariants as _},
     dock::PanelControl,
+    dropdown::{Dropdown, DropdownState},
     h_flex,
     input::{InputEvent, InputState, TextInput},
     text::TextView,
@@ -28,9 +29,9 @@ pub struct Profile {
     // 设置字段
     username_input: Entity<InputState>,
 
-    // 偏好设置
-    theme_preference: SharedString,
-    language_preference: SharedString,
+    // 偏好设置 - 修正类型
+    theme_dropdown: Entity<DropdownState<Vec<SharedString>>>,
+    language_dropdown: Entity<DropdownState<Vec<SharedString>>>,
 
     _subscriptions: Vec<Subscription>,
 }
@@ -70,13 +71,33 @@ impl Profile {
         let bio_input = cx.new(|cx| {
             InputState::new(window, cx)
                 .placeholder("简单介绍一下自己...")
-                .auto_grow(3, 6)
+                .auto_grow(6, 15)
         });
 
         let username_input = cx.new(|cx| {
             InputState::new(window, cx)
                 .placeholder("用户名")
                 .pattern(regex::Regex::new(r"^[a-zA-Z0-9_]{3,20}$").unwrap())
+        });
+
+        // 创建主题下拉框 - 参考 dropdown_story.rs 的方式
+        let theme_dropdown = cx.new(|cx| {
+            DropdownState::new(
+                vec!["系统".into(), "明亮".into(), "暗黑".into()],
+                Some(0), // 默认选择第一项
+                window,
+                cx,
+            )
+        });
+
+        // 创建语言下拉框 - 参考 dropdown_story.rs 的方式
+        let language_dropdown = cx.new(|cx| {
+            DropdownState::new(
+                vec!["中文".into(), "English".into()],
+                Some(0), // 默认选择第一项
+                window,
+                cx,
+            )
         });
 
         let _subscriptions = vec![
@@ -93,8 +114,8 @@ impl Profile {
             phone_input,
             bio_input,
             username_input,
-            theme_preference: "系统".into(),
-            language_preference: "中文".into(),
+            theme_dropdown,
+            language_dropdown,
             _subscriptions,
         }
     }
@@ -115,15 +136,25 @@ impl Profile {
             phone: self.phone_input.read(cx).unmask_value().to_string(),
             bio: self.bio_input.read(cx).value().to_string(),
             username: self.username_input.read(cx).value().to_string(),
-            theme: self.theme_preference.to_string(),
-            language: self.language_preference.to_string(),
+            theme: self
+                .theme_dropdown
+                .read(cx)
+                .selected_value()
+                .map(|v| v.to_string())
+                .unwrap_or_default(),
+            language: self
+                .language_dropdown
+                .read(cx)
+                .selected_value()
+                .map(|v| v.to_string())
+                .unwrap_or_default(),
         };
 
         println!("保存个人资料: {:?}", profile_data);
     }
 
     fn reset(&mut self, _: &Reset, _window: &mut Window, cx: &mut Context<Self>) {
-        // 重置所有输入字段 - 参考 form_story.rs，直接设置新的值
+        // 重置所有输入字段
         self.name_input.update(cx, |state, cx| {
             *state = InputState::new(_window, cx).default_value("用户");
         });
@@ -148,8 +179,14 @@ impl Profile {
             *state = InputState::new(_window, cx).placeholder("用户名");
         });
 
-        self.theme_preference = "系统".into();
-        self.language_preference = "中文".into();
+        // 重置下拉框选择到第一项
+        self.theme_dropdown.update(cx, |state, cx| {
+            state.set_selected_index(Some(0), _window, cx);
+        });
+
+        self.language_dropdown.update(cx, |state, cx| {
+            state.set_selected_index(Some(0), _window, cx);
+        });
 
         cx.notify();
         println!("已重置个人资料");
@@ -203,7 +240,7 @@ impl Profile {
     fn v_form_field(label: &'static str, input: impl gpui::IntoElement) -> impl gpui::IntoElement {
         v_flex()
             .gap_1()
-            .min_w_48() // 添加最小宽度
+            .min_w_48()
             .child(
                 gpui::div()
                     .text_sm()
@@ -212,10 +249,11 @@ impl Profile {
             )
             .child(input)
     }
+
     fn h_form_field(label: &'static str, input: impl gpui::IntoElement) -> impl gpui::IntoElement {
         h_flex()
             .gap_1()
-            .min_w_48() // 添加最小宽度
+            .min_w_48()
             .child(
                 gpui::div()
                     .text_sm()
@@ -263,6 +301,8 @@ impl FocusableCycle for Profile {
             self.phone_input.focus_handle(cx),
             self.bio_input.focus_handle(cx),
             self.username_input.focus_handle(cx),
+            self.theme_dropdown.focus_handle(cx),
+            self.language_dropdown.focus_handle(cx),
         ]
     }
 }
@@ -279,10 +319,6 @@ impl Render for Profile {
         _window: &mut gpui::Window,
         cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
-        // 先克隆需要在 UI 中显示的值
-        let theme_preference = self.theme_preference.clone();
-        let language_preference = self.language_preference.clone();
-
         v_flex()
             .key_context(CONTEXT)
             .id("profile-view")
@@ -292,7 +328,6 @@ impl Render for Profile {
             .on_action(cx.listener(Self::reset))
             .on_action(cx.listener(Self::authorize_feishu))
             .size_full()
-            // .p_2()
             .gap_2()
             .child(
                 // 基本信息
@@ -359,54 +394,28 @@ impl Render for Profile {
                     .child(
                         h_flex()
                             .gap_2()
-                            .child(
-                                v_flex()
-                                    .gap_1()
-                                    .child(
-                                        div()
-                                            .text_sm()
-                                            .text_color(gpui::rgb(0x6B7280))
-                                            .child("主题偏好"),
-                                    )
-                                    .child(
-                                        div()
-                                            .p_2()
-                                            .border_1()
-                                            .border_color(gpui::rgb(0xD1D5DB))
-                                            .rounded_md()
-                                            .child(theme_preference), // 使用克隆的值
-                                    )
-                                    .flex_1(),
-                            )
-                            .child(
-                                v_flex()
-                                    .gap_1()
-                                    .child(
-                                        gpui::div()
-                                            .text_sm()
-                                            .text_color(gpui::rgb(0x6B7280))
-                                            .child("语言偏好"),
-                                    )
-                                    .child(
-                                        gpui::div()
-                                            .p_2()
-                                            .border_1()
-                                            .border_color(gpui::rgb(0xD1D5DB))
-                                            .rounded_md()
-                                            .child(language_preference), // 使用克隆的值
-                                    )
-                                    .flex_1(),
-                            ),
+                            .child(Self::v_form_field(
+                                "主题偏好",
+                                Dropdown::new(&self.theme_dropdown)
+                                    .placeholder("选择主题")
+                                    .small(),
+                            ))
+                            .child(Self::v_form_field(
+                                "语言偏好",
+                                Dropdown::new(&self.language_dropdown)
+                                    .placeholder("选择语言")
+                                    .small(),
+                            )),
                     ),
             )
             .child(
                 // 操作按钮
                 h_flex()
-                    .justify_end()
+                    .justify_center()
                     .gap_3()
                     .pt_4()
-                    .border_t_1()
-                    .border_color(gpui::rgb(0xE5E7EB))
+                    //.border_t_1()
+                    // .border_color(gpui::rgb(0xE5E7EB))
                     .child(
                         Button::new("reset-btn")
                             .label("重置")
