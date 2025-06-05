@@ -270,8 +270,46 @@ impl LlmProvider {
         cx.notify();
     }
 
-    fn delete_provider(&mut self, index: usize, _: &mut Window, cx: &mut Context<Self>) {
+    fn delete_provider(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
+        // 获取提供商名称用于确认对话框
+        let provider_name = if let Some(provider) = self.providers.get(index) {
+            provider.name.clone()
+        } else {
+            return;
+        };
+let entity = cx.entity().downgrade();
+
+        // 打开确认对话框
+        window.open_modal(cx, move |modal, _, _| {
+            let entity = entity.clone(); // 在这里克隆
+            modal
+                .confirm()
+                .child(format!("确定要删除服务提供商 \"{}\" 吗？\n\n此操作无法撤销。", provider_name))
+                .button_props(
+                    gpui_component::modal::ModalButtonProps::default()
+                        .cancel_text("取消")
+                        .cancel_variant(ButtonVariant::Secondary)
+                        .ok_text("删除")
+                        .ok_variant(ButtonVariant::Danger),
+                )
+                .on_ok(move |_, window, cx| {
+                    if let Some(entity) = entity.upgrade() {
+                    entity.update(cx, |this, cx| {
+                        this.confirm_delete_provider(index, window, cx);
+                    });
+                }
+                    true // 关闭对话框
+                })
+                .on_cancel(|_, window, cx| {
+                    window.push_notification("已取消删除操作", cx);
+                    true // 关闭对话框
+                })
+        });
+    }
+
+    fn confirm_delete_provider(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
         if index < self.providers.len() {
+            let provider_name = self.providers[index].name.clone();
             self.providers.remove(index);
 
             // 更新展开状态
@@ -285,12 +323,15 @@ impl LlmProvider {
             // 如果正在编辑被删除的提供商，清除编辑状态
             if self.editing_provider == Some(index) {
                 self.editing_provider = None;
+                self.clear_form(window, cx);
             } else if let Some(editing) = self.editing_provider {
                 if editing > index {
                     self.editing_provider = Some(editing - 1);
                 }
             }
 
+            // 显示删除成功通知
+            window.push_notification(format!("已成功删除服务提供商 \"{}\"", provider_name), cx);
             cx.notify();
         }
     }
