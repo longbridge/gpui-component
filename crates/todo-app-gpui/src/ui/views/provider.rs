@@ -711,6 +711,32 @@ impl Render for LlmProvider {
                                                                     )
                                                             )
                                                     )
+                                                    .child(
+                                                        // 新增：完整的接口地址
+                                                        v_flex()
+                                                            //.gap_1()
+                                                            // .child(
+                                                            //     div()
+                                                            //         .text_sm()
+                                                            //         .font_medium()
+                                                            //         .text_color(gpui::rgb(0x374151))
+                                                            //         .child("完整接口地址")
+                                                            // )
+                                                            .child(
+                                                                div()
+                                                                    .text_xs()
+                                                                    .text_color(gpui::rgb(0x6B7280))
+                                                                    //.font_mono() // 使用等宽字体显示 URL
+                                                                    .child({
+                                                                        let full_url = if provider_api_url.is_empty() {
+                                                                            "请先配置 API 地址".to_string()
+                                                                        } else {
+                                                                            format!("{}/chat/completions", provider_api_url.trim_end_matches('/'))
+                                                                        };
+                                                                        full_url
+                                                                    })
+                                                            )
+                                                    )
                                             )
                                             .child(
                                                 // 模型列表
