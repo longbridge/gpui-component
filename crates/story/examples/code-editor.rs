@@ -18,7 +18,7 @@ pub struct Example {
     _subscribes: Vec<Subscription>,
 }
 
-const LANGUAGES: [(Language, &'static str); 7] = [
+const LANGUAGES: [(Language, &'static str); 8] = [
     (Language::Rust, include_str!("./fixtures/test.rs")),
     (Language::JavaScript, include_str!("./fixtures/test.js")),
     (Language::Go, include_str!("./fixtures/test.go")),
@@ -26,6 +26,7 @@ const LANGUAGES: [(Language, &'static str); 7] = [
     (Language::Ruby, include_str!("./fixtures/test.rb")),
     (Language::Zig, include_str!("./fixtures/test.zig")),
     (Language::C, include_str!("./fixtures/test.c")),
+    (Language::Sql, include_str!("./fixtures/test.sql")),
 ];
 
 impl Example {

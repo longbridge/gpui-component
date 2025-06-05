@@ -22,6 +22,7 @@ pub enum Language {
     Css,
     Swift,
     Scala,
+    Sql,
     CSharp,
     GraphQL,
     Proto,
@@ -90,6 +91,7 @@ impl Language {
             Self::Css => "css",
             Self::Swift => "swift",
             Self::Scala => "scala",
+            Self::Sql => "sql",
             Self::CSharp => "csharp",
             Self::GraphQL => "graphql",
             Self::Proto => "proto",
@@ -125,6 +127,7 @@ impl Language {
             "css" | "scss" => Some(Self::Css),
             "swift" => Some(Self::Swift),
             "scala" => Some(Self::Scala),
+            "sql" => Some(Self::Sql),
             "csharp" | "cs" => Some(Self::CSharp),
             "graphql" => Some(Self::GraphQL),
             "proto" | "protobuf" => Some(Self::Proto),
@@ -270,6 +273,12 @@ impl Language {
                 "",
                 tree_sitter_scala::LOCALS_QUERY,
             ),
+            Self::Sql => (
+                tree_sitter_sequel::LANGUAGE,
+                tree_sitter_sequel::HIGHLIGHTS_QUERY,
+                "",
+                "",
+            ),
             Self::CSharp => (tree_sitter_c_sharp::LANGUAGE, "", "", ""),
             Self::GraphQL => (tree_sitter_graphql::LANGUAGE, "", "", ""),
             Self::Proto => (tree_sitter_proto::LANGUAGE, "", "", ""),
@@ -338,6 +347,7 @@ mod tests {
         assert_eq!(Language::Go.name(), "go");
         assert_eq!(Language::C.name(), "c");
         assert_eq!(Language::Cpp.name(), "cpp");
+        assert_eq!(Language::Sql.name(), "sql");
         assert_eq!(Language::JavaScript.name(), "javascript");
         assert_eq!(Language::Zig.name(), "zig");
         assert_eq!(Language::CSharp.name(), "csharp");
