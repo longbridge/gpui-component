@@ -610,16 +610,23 @@ impl Render for LlmProvider {
                             accordion = accordion.item(|item| {
                                 item
                                     .open(self.expanded_providers.contains(&index))
-                                    .icon(if provider_enabled { 
-                                        IconName::CircleCheck 
-                                    } else { 
-                                        IconName::CircleX 
+                                    .icon({
+                                        let icon_name = if provider_enabled { 
+                                            IconName::CircleCheck 
+                                        } else { 
+                                            IconName::CircleX 
+                                        };
+                                        
+                                        if provider_enabled {
+                                            Icon::new(icon_name)
+                                        } else {
+                                            Icon::new(icon_name).text_color(gpui::rgb(0xD1D5DB))
+                                        }
                                     })
                                     .title(
                                         h_flex() // 外层 h_flex，用于整个标题行
                                             .w_full() // 确保占满可用宽度
                                             .items_center() // 垂直居中对齐子元素
-                                            // 使用 justify_between 或依赖 flex_1 将元素推向两端
                                             .justify_between() 
                                             .child(
                                                 // 左侧：提供商名称
@@ -629,6 +636,11 @@ impl Render for LlmProvider {
                                                     .min_w_0() // 关键：允许此 div 在空间不足时收缩并配合 ellipsis
                                                     .overflow_hidden() // 配合 ellipsis
                                                     .text_ellipsis()   // 文本过长时显示省略号
+                                                    .text_color(if provider_enabled {
+                                                        gpui::rgb(0x111827) // 启用时的正常颜色
+                                                    } else {
+                                                        gpui::rgb(0xD1D5DB) // 禁用时的淡色
+                                                    })
                                                     .child(provider_name.clone())
                                             )
                                             .child(
@@ -641,8 +653,16 @@ impl Render for LlmProvider {
                                                         div() // API 类型标签
                                                             .px_2()
                                                             .py_1()
-                                                            .bg(gpui::rgb(0xDDD6FE))
-                                                            .text_color(gpui::rgb(0x7C3AED))
+                                                            .bg(if provider_enabled {
+                                                                gpui::rgb(0xDDD6FE) // 启用时的正常背景色
+                                                            } else {
+                                                                gpui::rgb(0xF3F4F6) // 禁用时的淡背景色
+                                                            })
+                                                            .text_color(if provider_enabled {
+                                                                gpui::rgb(0x7C3AED) // 启用时的正常文字颜色
+                                                            } else {
+                                                                gpui::rgb(0xD1D5DB) // 禁用时的淡文字颜色
+                                                            })
                                                             .rounded_md()
                                                             .text_xs()
                                                             .whitespace_nowrap() // 防止标签文字换行
@@ -657,7 +677,7 @@ impl Render for LlmProvider {
                                                     )
                                                     .child(
                                                         Button::new(("edit-provider", index))
-                                                            .icon(IconName::SquarePen)
+                                                            .icon(if provider_enabled {Icon::new(IconName::SquarePen)}else{Icon::new(IconName::SquarePen).text_color(gpui::rgb(0xD1D5DB))})
                                                             .small()
                                                             .ghost()
                                                             .tooltip("编辑")
@@ -667,10 +687,9 @@ impl Render for LlmProvider {
                                                     )
                                                     .child(
                                                         Button::new(("delete-provider", index))
-                                                            .icon(IconName::Trash2)
+                                                            .icon(if provider_enabled {Icon::new(IconName::Trash2).text_color(gpui::rgb(0xEF4444))}else{Icon::new(IconName::Trash2).text_color(gpui::rgb(0xD1D5DB))})
                                                             .small()
                                                             .ghost()
-                                                            .text_color(gpui::rgb(0xEF4444))
                                                             .tooltip("删除")
                                                             .on_click(cx.listener(move |this, _, window, cx| {
                                                                 this.delete_provider(index, window, cx);
@@ -789,7 +808,11 @@ impl Render for LlmProvider {
                                                                             .child(
                                                                                 div()
                                                                                     .font_medium()
-                                                                                    .text_color(gpui::rgb(0x111827))
+                                                                                    .text_color(if model_enabled {
+                                                                                        gpui::rgb(0x111827) // 启用时的正常颜色
+                                                                                    } else {
+                                                                                        gpui::rgb(0xD1D5DB) // 禁用时的淡色
+                                                                                    })
                                                                                     .child(model_name.clone())
                                                                             )
                                                                             .child(
@@ -804,8 +827,18 @@ impl Render for LlmProvider {
                                                                                             .id(("capability", capability_unique_id))  // 使用元组形式的ID
                                                                                             .p_1()
                                                                                             .rounded_md()
-                                                                                            .bg(gpui::rgb(0xF3F4F6))
-                                                                                            .child(Icon::new(cap.icon()).xsmall())
+                                                                                            .bg(if model_enabled {
+                                                                                                gpui::rgb(0xF3F4F6) // 启用时的正常背景色
+                                                                                            } else {
+                                                                                                gpui::rgb(0xF9FAFB) // 禁用时的更淡背景色
+                                                                                            })
+                                                                                            .child(
+                                                                                                Icon::new(cap.icon())
+                                                                                                    .xsmall()
+                                                                                                    .when(!model_enabled, |icon| {
+                                                                                                        icon.text_color(gpui::rgb(0xD1D5DB)) // 禁用时图标变淡
+                                                                                                    })
+                                                                                            )
                                                                                     }))
                                                                             )
                                                                     )
