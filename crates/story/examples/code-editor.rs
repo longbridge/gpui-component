@@ -4,7 +4,7 @@ use gpui_component::{
     dropdown::{Dropdown, DropdownEvent, DropdownState},
     h_flex,
     highlighter::Language,
-    input::{InputEvent, InputState, TabSize, TextInput},
+    input::{InputEvent, InputState, LineColumn, Marker, MarkerSeverity, TabSize, TextInput},
     v_flex,
 };
 use story::Assets;
@@ -82,6 +82,14 @@ impl Example {
 
     fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| Self::new(window, cx))
+    }
+
+    fn set_markers(&mut self, cx: &mut Context<Self>) {
+        if self.language.name() != "rust" {
+            return;
+        }
+
+        let markers = vec![Marker::new("warning", (2, 0), (2, 10), "")];
     }
 
     fn update_highlighter(&mut self, window: &mut Window, cx: &mut Context<Self>) {

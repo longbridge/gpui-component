@@ -31,6 +31,7 @@ use super::{
     text_wrapper::TextWrapper,
 };
 use crate::highlighter::SyntaxHighlighter;
+use crate::input::marker::Marker;
 use crate::{history::History, scroll::ScrollbarState, Root};
 
 #[derive(Clone, PartialEq, Eq, Deserialize)]
@@ -381,6 +382,7 @@ impl InputState {
             highlighter: Rc::new(RefCell::new(SyntaxHighlighter::new(&language))),
             line_number: true,
             height: Some(relative(1.)),
+            markets: vec![],
         };
         self
     }
@@ -449,6 +451,16 @@ impl InputState {
             _ => {}
         }
         cx.notify();
+    }
+
+    /// Set markers, only for [`InputMode::CodeEditor`] mode.
+    ///
+    /// For example to set the diagnostic markers in the code editor.
+    pub fn set_markers(&mut self, markers: Vec<Marker>, _: &mut Window, cx: &mut Context<Self>) {
+        if let InputMode::CodeEditor { markets, .. } = &mut self.mode {
+            *markets = markers;
+            cx.notify();
+        }
     }
 
     /// Set placeholder
