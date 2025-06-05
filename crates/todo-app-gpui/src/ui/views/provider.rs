@@ -8,8 +8,7 @@ use gpui_component::{
     h_flex,
     input::{InputEvent, InputState, TextInput},
     switch::Switch,
-    tooltip::Tooltip,
-    v_flex, ContextModal, FocusableCycle, Icon, IconName, Sizable, StyledExt,
+    v_flex, ContextModal, FocusableCycle, Icon, IconName, Sizable, StyledExt,Disableable
 };
 
 actions!(
@@ -677,23 +676,43 @@ impl Render for LlmProvider {
                                                     )
                                                     .child(
                                                         Button::new(("edit-provider", index))
-                                                            .icon(if provider_enabled {Icon::new(IconName::SquarePen)}else{Icon::new(IconName::SquarePen).text_color(gpui::rgb(0xD1D5DB))})
+                                                            .icon(if provider_enabled {
+                                                                Icon::new(IconName::SquarePen)
+                                                            } else {
+                                                                Icon::new(IconName::SquarePen).text_color(gpui::rgb(0xD1D5DB))
+                                                            })
                                                             .small()
                                                             .ghost()
-                                                            .tooltip("编辑")
-                                                            .on_click(cx.listener(move |this, _, window, cx| {
-                                                                this.edit_provider(index, window, cx);
-                                                            }))
+                                                            .tooltip(if provider_enabled { "编辑" } else { "提供商已禁用" })
+                                                            .disabled(!provider_enabled) // 禁用时不可点击
+                                                            .when(!provider_enabled, |button| {
+                                                                button.text_color(gpui::rgb(0xD1D5DB)) // 确保按钮文字也变淡
+                                                            })
+                                                            .when(provider_enabled, |button| {
+                                                                button.on_click(cx.listener(move |this, _, window, cx| {
+                                                                    this.edit_provider(index, window, cx);
+                                                                }))
+                                                            })
                                                     )
                                                     .child(
                                                         Button::new(("delete-provider", index))
-                                                            .icon(if provider_enabled {Icon::new(IconName::Trash2).text_color(gpui::rgb(0xEF4444))}else{Icon::new(IconName::Trash2).text_color(gpui::rgb(0xD1D5DB))})
+                                                            .icon(if provider_enabled {
+                                                                Icon::new(IconName::Trash2).text_color(gpui::rgb(0xEF4444))
+                                                            } else {
+                                                                Icon::new(IconName::Trash2).text_color(gpui::rgb(0xD1D5DB))
+                                                            })
                                                             .small()
                                                             .ghost()
-                                                            .tooltip("删除")
-                                                            .on_click(cx.listener(move |this, _, window, cx| {
-                                                                this.delete_provider(index, window, cx);
-                                                            }))
+                                                            .tooltip(if provider_enabled { "删除" } else { "提供商已禁用" })
+                                                            .disabled(!provider_enabled) // 禁用时不可点击
+                                                            .when(!provider_enabled, |button| {
+                                                                button.text_color(gpui::rgb(0xD1D5DB)) // 确保按钮文字也变淡
+                                                            })
+                                                            .when(provider_enabled, |button| {
+                                                                button.on_click(cx.listener(move |this, _, window, cx| {
+                                                                    this.delete_provider(index, window, cx);
+                                                                }))
+                                                            })
                                                     )
                                             )
                                     )
@@ -797,10 +816,21 @@ impl Render for LlmProvider {
                                                                     .items_center()
                                                                     .justify_between()
                                                                     .p_3()
-                                                                    .bg(gpui::rgb(0xF9FAFB))
+                                                                    .bg(if provider_enabled {
+                                                                        gpui::rgb(0xF9FAFB)
+                                                                    } else {
+                                                                        gpui::rgb(0xFCFCFD) // 更淡的背景
+                                                                    })
                                                                     .rounded_md()
                                                                     .border_1()
-                                                                    .border_color(gpui::rgb(0xE5E7EB))
+                                                                    .border_color(if provider_enabled {
+                                                                        gpui::rgb(0xE5E7EB)
+                                                                    } else {
+                                                                        gpui::rgb(0xF3F4F6) // 更淡的边框
+                                                                    })
+                                                                    .when(!provider_enabled, |flex| {
+                                                                        flex.opacity(0.6) // 整体透明度降低
+                                                                    })
                                                                     .child(
                                                                         h_flex()
                                                                             .items_center()
@@ -808,10 +838,10 @@ impl Render for LlmProvider {
                                                                             .child(
                                                                                 div()
                                                                                     .font_medium()
-                                                                                    .text_color(if model_enabled {
-                                                                                        gpui::rgb(0x111827) // 启用时的正常颜色
+                                                                                    .text_color(if model_enabled && provider_enabled {
+                                                                                        gpui::rgb(0x111827) // 正常颜色
                                                                                     } else {
-                                                                                        gpui::rgb(0xD1D5DB) // 禁用时的淡色
+                                                                                        gpui::rgb(0xD1D5DB) // 淡色
                                                                                     })
                                                                                     .child(model_name.clone())
                                                                             )
@@ -827,15 +857,15 @@ impl Render for LlmProvider {
                                                                                             .id(("capability", capability_unique_id))  // 使用元组形式的ID
                                                                                             .p_1()
                                                                                             .rounded_md()
-                                                                                            .bg(if model_enabled {
-                                                                                                gpui::rgb(0xF3F4F6) // 启用时的正常背景色
+                                                                                            .bg(if model_enabled && provider_enabled {
+                                                                                                gpui::rgb(0xF3F4F6) // 正常背景色
                                                                                             } else {
-                                                                                                gpui::rgb(0xF9FAFB) // 禁用时的更淡背景色
+                                                                                                gpui::rgb(0xF9FAFB) // 淡背景色
                                                                                             })
                                                                                             .child(
                                                                                                 Icon::new(cap.icon())
                                                                                                     .xsmall()
-                                                                                                    .when(!model_enabled, |icon| {
+                                                                                                    .when(!model_enabled || !provider_enabled, |icon| {
                                                                                                         icon.text_color(gpui::rgb(0xD1D5DB)) // 禁用时图标变淡
                                                                                                     })
                                                                                             )
@@ -844,11 +874,14 @@ impl Render for LlmProvider {
                                                                     )
                                                                     .child(
                                                                         Switch::new(("model-enabled", unique_model_id))
-                                                                            .checked(model_enabled)
+                                                                            .checked(model_enabled && provider_enabled) // 只有在提供商启用且模型启用时才显示为选中
                                                                             .small()
-                                                                            .on_click(cx.listener(move |this, checked, window, cx| {
-                                                                                this.toggle_model_enabled(index, model_index, *checked, window, cx);
-                                                                            }))
+                                                                            .disabled(!provider_enabled) // 当提供商被禁用时禁用开关
+                                                                            .when(provider_enabled, |switch| {
+                                                                                switch.on_click(cx.listener(move |this, checked, window, cx| {
+                                                                                    this.toggle_model_enabled(index, model_index, *checked, window, cx);
+                                                                                }))
+                                                                            })
                                                                     )
                                                             }))
                                                     )
