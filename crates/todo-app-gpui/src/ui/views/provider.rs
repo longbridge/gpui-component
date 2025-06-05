@@ -349,6 +349,22 @@ let entity = cx.entity().downgrade();
         }
     }
 
+    fn toggle_model_enabled(
+        &mut self,
+        provider_index: usize,
+        model_index: usize,
+        enabled: bool,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(provider) = self.providers.get_mut(provider_index) {
+            if let Some(model) = provider.models.get_mut(model_index) {
+                model.enabled = enabled;
+                cx.notify();
+            }
+        }
+    }
+
     fn edit_provider(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
         self.editing_provider = Some(index);
 
@@ -797,6 +813,9 @@ impl Render for LlmProvider {
                                                                         Switch::new(("model-enabled", unique_model_id))
                                                                             .checked(model_enabled)
                                                                             .small()
+                                                                            .on_click(cx.listener(move |this, checked, window, cx| {
+                                                                                this.toggle_model_enabled(index, model_index, *checked, window, cx);
+                                                                            }))
                                                                     )
                                                             }))
                                                     )
