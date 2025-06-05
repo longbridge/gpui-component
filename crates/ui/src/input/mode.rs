@@ -50,7 +50,7 @@ pub enum InputMode {
         /// Show line number
         line_number: bool,
         highlighter: Rc<RefCell<SyntaxHighlighter>>,
-        markets: Vec<Marker>,
+        markers: Vec<Marker>,
     },
     AutoGrow {
         rows: usize,
@@ -165,8 +165,15 @@ impl InputMode {
     #[allow(unused)]
     pub(super) fn markers(&self) -> Option<&Vec<Marker>> {
         match &self {
-            InputMode::CodeEditor { markets, .. } => Some(markets),
+            InputMode::CodeEditor { markers, .. } => Some(markers),
             _ => None,
+        }
+    }
+
+    pub(super) fn clear_markers(&mut self) {
+        match self {
+            InputMode::CodeEditor { markers, .. } => markers.clear(),
+            _ => {}
         }
     }
 }

@@ -65,7 +65,7 @@ const DEFAULT_LIGHT: LazyLock<HighlightTheme> = LazyLock::new(|| {
 /// Theme for Tree-sitter Highlight
 ///
 /// https://docs.rs/tree-sitter-highlight/0.25.4/tree_sitter_highlight/
-#[derive(Debug, Clone, PartialEq, Eq, Hash, JsonSchema, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash, JsonSchema, Serialize, Deserialize)]
 pub struct SyntaxColors {
     pub attribute: Option<ThemeStyle>,
     pub boolean: Option<ThemeStyle>,
@@ -232,7 +232,83 @@ impl SyntaxColors {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, JsonSchema, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash, JsonSchema, Serialize, Deserialize)]
+pub struct StatusColors {
+    #[serde(rename = "error")]
+    error: Option<Hsla>,
+    #[serde(rename = "error.background")]
+    error_background: Option<Hsla>,
+    #[serde(rename = "warning")]
+    warning: Option<Hsla>,
+    #[serde(rename = "warning.background")]
+    warning_background: Option<Hsla>,
+    #[serde(rename = "info")]
+    info: Option<Hsla>,
+    #[serde(rename = "info.background")]
+    info_background: Option<Hsla>,
+    #[serde(rename = "success")]
+    success: Option<Hsla>,
+    #[serde(rename = "success.background")]
+    success_background: Option<Hsla>,
+    #[serde(rename = "hint")]
+    hint: Option<Hsla>,
+    #[serde(rename = "hint.background")]
+    hint_background: Option<Hsla>,
+}
+
+impl StatusColors {
+    #[inline]
+    pub fn error(&self) -> Hsla {
+        self.error.unwrap_or(crate::red_500())
+    }
+
+    #[inline]
+    pub fn error_background(&self) -> Hsla {
+        self.error_background.unwrap_or(self.error())
+    }
+
+    #[inline]
+    pub fn warning(&self) -> Hsla {
+        self.warning.unwrap_or(crate::yellow_500())
+    }
+
+    #[inline]
+    pub fn warning_background(&self) -> Hsla {
+        self.warning_background.unwrap_or(self.warning())
+    }
+
+    #[inline]
+    pub fn info(&self) -> Hsla {
+        self.info.unwrap_or(crate::blue_500())
+    }
+
+    #[inline]
+    pub fn info_background(&self) -> Hsla {
+        self.info_background.unwrap_or(self.info())
+    }
+
+    #[inline]
+    pub fn success(&self) -> Hsla {
+        self.success.unwrap_or(crate::green_500())
+    }
+
+    #[inline]
+    pub fn success_background(&self) -> Hsla {
+        self.success_background.unwrap_or(self.success())
+    }
+
+    #[inline]
+    pub fn hint(&self) -> Hsla {
+        self.hint.unwrap_or(crate::purple_500())
+    }
+
+    #[inline]
+    pub fn hint_background(&self) -> Hsla {
+        self.hint_background.unwrap_or(self.hint())
+    }
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash, JsonSchema, Serialize, Deserialize)]
 pub struct HighlightThemeStyle {
     #[serde(rename = "editor.background")]
     pub background: Option<Hsla>,
@@ -244,6 +320,9 @@ pub struct HighlightThemeStyle {
     pub line_number: Option<Hsla>,
     #[serde(rename = "editor.active_line_number")]
     pub active_line_number: Option<Hsla>,
+    #[serde(flatten)]
+    pub status: StatusColors,
+    #[serde(rename = "syntax")]
     pub syntax: SyntaxColors,
 }
 

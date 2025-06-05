@@ -2,8 +2,9 @@ use std::{ops::Range, rc::Rc};
 
 use gpui::{
     fill, point, px, relative, size, App, Bounds, Corners, Element, ElementId, ElementInputHandler,
-    Entity, GlobalElementId, IntoElement, LayoutId, MouseButton, MouseMoveEvent, Path, Pixels,
-    Point, SharedString, Size, Style, TextAlign, TextRun, UnderlineStyle, Window, WrappedLine,
+    Entity, GlobalElementId, HighlightStyle, IntoElement, LayoutId, MouseButton, MouseMoveEvent,
+    Path, Pixels, Point, SharedString, Size, Style, TextAlign, TextRun, UnderlineStyle, Window,
+    WrappedLine,
 };
 use smallvec::SmallVec;
 
@@ -358,19 +359,25 @@ impl TextElement {
         &mut self,
         visible_range: &Range<usize>,
         cx: &mut App,
-    ) -> Option<(usize, Vec<LineHighlightStyle>)> {
+    ) -> Option<(usize, Vec<(Range<usize>, HighlightStyle)>)> {
         let theme = LanguageRegistry::global(cx)
             .theme(cx.theme().is_dark())
             .clone();
-        self.input.update(cx, |state, _| match &mut state.mode {
-            InputMode::CodeEditor { highlighter, .. } => {
+        self.input.update(cx, |state, _| match &state.mode {
+            InputMode::CodeEditor {
+                highlighter,
+                markers,
+                ..
+            } => {
                 let mut offset = 0;
                 let mut skipped_offset = 0;
-                let mut lines = vec![];
+                let mut styles = vec![];
 
                 for (ix, line) in state.text.split('\n').enumerate() {
+                    // +1 for last `\n`.
+                    let line_len = line.len() + 1;
                     if ix < visible_range.start {
-                        offset += line.len() + 1;
+                        offset += line_len;
                         skipped_offset = offset;
                         continue;
                     }
@@ -378,16 +385,28 @@ impl TextElement {
                         break;
                     }
 
-                    let range = offset..offset + line.len();
-                    let styles = highlighter.borrow().styles(&range, &theme);
+                    let range = offset..offset + line_len;
+                    let line_styles = highlighter.borrow().styles(&range, &theme);
 
-                    lines.push(LineHighlightStyle {
-                        offset,
-                        styles: Rc::new(styles),
-                    });
-                    offset += line.len() + 1;
+                    println!("------------ range {:?}", range);
+
+                    styles = gpui::combine_highlights(styles, line_styles).collect();
+
+                    offset = range.end;
                 }
-                Some((skipped_offset, lines))
+
+                let mut marker_styles = vec![];
+                for marker in markers.iter() {
+                    if let Some(range) = marker.byte_range(&state) {
+                        if range.start >= visible_range.start || range.end <= visible_range.end {
+                            marker_styles.push((range, marker.severity.highlight_style(&theme)));
+                        }
+                    }
+                }
+
+                styles = gpui::combine_highlights(marker_styles, styles).collect();
+
+                Some((skipped_offset, styles))
             }
             _ => None,
         })
@@ -502,7 +521,7 @@ impl Element for TextElement {
         let line_height = window.line_height();
 
         let visible_range = self.calculate_visible_range(&state, line_height, &bounds);
-        let highlight_lines = self.highlight_lines(&visible_range, cx);
+        let highlight_styles = self.highlight_lines(&visible_range, cx);
 
         let multi_line = self.input.read(cx).is_multi_line();
         let input = self.input.read(cx);
@@ -572,7 +591,7 @@ impl Element for TextElement {
         };
 
         let runs = if !is_empty {
-            if let Some((skipped_offset, highlight_lines)) = highlight_lines {
+            if let Some((skipped_offset, highlight_styles)) = highlight_styles {
                 let mut runs = vec![];
                 if skipped_offset > 0 {
                     runs.push(TextRun {
@@ -581,9 +600,25 @@ impl Element for TextElement {
                     });
                 }
 
-                for style in highlight_lines {
-                    runs.extend(style.to_run(&text_style, &input.marked_range, &marked_run));
-                }
+                runs.extend(
+                    highlight_styles
+                        .iter()
+                        .map(|(range, style)| {
+                            let mut run = text_style.clone().highlight(*style).to_run(range.len());
+                            if let Some(marked_range) = &input.marked_range {
+                                if range.start >= marked_range.start
+                                    && range.end <= marked_range.end
+                                {
+                                    run.color = marked_run.color;
+                                    run.strikethrough = marked_run.strikethrough;
+                                    run.underline = marked_run.underline;
+                                }
+                            }
+                            run
+                        })
+                        .collect::<Vec<TextRun>>(),
+                );
+
                 runs.into_iter().filter(|run| run.len > 0).collect()
             } else {
                 vec![run]

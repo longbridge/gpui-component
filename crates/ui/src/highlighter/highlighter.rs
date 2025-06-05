@@ -539,42 +539,37 @@ impl SyntaxHighlighter {
     ) -> Vec<(Range<usize>, HighlightStyle)> {
         let mut styles = vec![];
         let start_offset = range.start;
-        let line_len = range.len();
-        let mut last_range = 0..0;
+        let mut last_range = start_offset..start_offset;
 
         // NOTE: the ranges in the cache may have duplicates, so we need to merge them.
-        for (_, (node_range, highlight_name)) in self.cache.range(range.start..) {
+        for (_, (node_range, name)) in self.cache.range(range.start..) {
             // TODO: If break, the `comment.doc` will not work.
             // Ref: https://github.com/longbridge/gpui-component/pull/904/commits/d8f886939d3b472f228c1ce72154a951e98f32c5
             if node_range.end > range.end {
                 break;
             }
 
-            let range_in_line = node_range.start.saturating_sub(start_offset)
-                ..node_range.end.saturating_sub(start_offset);
+            // let range_in_line = node_range.start..node_range.end;
 
             // Ensure every range is connected.
-            if last_range.end < range_in_line.start {
-                styles.push((
-                    last_range.end..range_in_line.start,
-                    HighlightStyle::default(),
-                ));
+            if last_range.end < node_range.start {
+                styles.push((last_range.end..node_range.start, HighlightStyle::default()));
             }
 
-            let style = theme.style(&highlight_name).unwrap_or_default();
+            let style = theme.style(&name).unwrap_or_default();
 
-            styles.push((range_in_line.clone(), style));
-            last_range = range_in_line;
+            styles.push((node_range.clone(), style));
+            last_range = node_range.clone();
         }
 
         // If the matched styles is empty, return a default range.
         if styles.len() == 0 {
-            return vec![(0..line_len, HighlightStyle::default())];
+            return vec![(0..range.end, HighlightStyle::default())];
         }
 
         // Ensure the last range is connected to the end of the line.
-        if last_range.end < line_len {
-            styles.push((last_range.end..line_len, HighlightStyle::default()));
+        if last_range.end < range.end {
+            styles.push((last_range.end..range.end, HighlightStyle::default()));
         }
 
         styles

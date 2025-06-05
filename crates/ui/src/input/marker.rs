@@ -1,7 +1,6 @@
-use gpui::SharedString;
+use crate::{highlighter::HighlightTheme, input::InputState};
+use gpui::{px, HighlightStyle, SharedString, UnderlineStyle};
 use std::ops::Range;
-
-use crate::input::InputState;
 
 /// Marker represents a diagnostic message, such as an error or warning, in the code editor.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -29,7 +28,8 @@ impl Marker {
         }
     }
 
-    /// Returns the range of bytes in the source code that this marker covers.
+    /// Returns the range (zero-based) of bytes in the source code that this marker covers.
+    #[allow(unused)]
     pub(super) fn byte_range(&self, state: &InputState) -> Option<Range<usize>> {
         let start_line = state
             .text_wrapper
@@ -53,7 +53,7 @@ impl Marker {
     }
 }
 
-/// Line and column position in the source code.
+/// Line and column position (1-based) in the source code.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct LineColumn {
     /// Line number (1-based)
@@ -68,13 +68,6 @@ impl From<(usize, usize)> for LineColumn {
             line: value.0,
             column: value.1,
         }
-    }
-}
-
-impl LineColumn {
-    /// Creates a new LineColumn with the specified line and column.
-    pub fn new(line: usize, column: usize) -> Self {
-        Self { line, column }
     }
 }
 
@@ -98,5 +91,28 @@ impl From<&str> for MarkerSeverity {
             "hint" => Self::Hint,
             _ => Self::Info, // Default to Info if unknown
         }
+    }
+}
+
+impl MarkerSeverity {
+    /// Returns the [`HighlightStyle`] for the marker severity with the given theme style.
+    #[allow(unused)]
+    pub(super) fn highlight_style(&self, theme: &HighlightTheme) -> HighlightStyle {
+        let color = match self {
+            Self::Error => Some(theme.style.status.error()),
+            Self::Warning => Some(theme.style.status.warning()),
+            Self::Info => Some(theme.style.status.info()),
+            Self::Hint => Some(theme.style.status.hint()),
+            _ => theme.style.foreground,
+        };
+
+        let mut style = HighlightStyle::default();
+        style.underline = Some(UnderlineStyle {
+            color: color,
+            thickness: px(1.),
+            wavy: true,
+        });
+
+        style
     }
 }

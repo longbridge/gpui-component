@@ -1,133 +1,175 @@
 {
-    "name": "macOS Classic Light",
-    "appearance": "light",
-    "style": {
-        "editor.foreground": "#000000",
-        "editor.background": "#ffffff",
-        "editor.active_line.background": "#F0F0F0",
-        "editor.line_number": "#929292",
-        "editor.active_line_number": "#000000",
-        "syntax": {
-            "attribute": {
-                "color": "#957931",
-                "font_style": null,
-                "font_weight": null
-            },
-            "boolean": {
-                "color": "#C5060B",
-                "font_style": null,
-                "font_weight": null
-            },
-            "comment": {
-                "color": "#007fff",
-                "font_style": null,
-                "font_weight": null
-            },
-            "comment.doc": {
-                "color": "#007fff",
-                "font_style": null,
-                "font_weight": null
-            },
-            "constant": {
-                "color": "#C5060B",
-                "font_style": null,
-                "font_weight": null
-            },
-            "constructor": {
-                "color": "#0433ff",
-                "font_style": null,
-                "font_weight": null
-            },
-            "embedded": {
-                "color": "#333333",
-                "font_style": null,
-                "font_weight": null
-            },
-            "function": {
-                "color": "#0000A2",
-                "font_style": null,
-                "font_weight": null
-            },
-            "keyword": {
-                "color": "#0433ff",
-                "font_style": null,
-                "font_weight": null
-            },
-            "link_text": {
-                "color": "#0000A2",
-                "font_style": "normal",
-                "font_weight": null
-            },
-            "link_uri": {
-                "color": "#6A7293",
-                "font_style": "italic",
-                "font_weight": null
-            },
-            "number": {
-                "color": "#0433ff",
-                "font_style": null,
-                "font_weight": null
-            },
-            "string": {
-                "color": "#036A07",
-                "font_style": null,
-                "font_weight": null
-            },
-            "string.escape": {
-                "color": "#036A07",
-                "font_style": null,
-                "font_weight": null
-            },
-            "string.regex": {
-                "color": "#036A07",
-                "font_style": null,
-                "font_weight": null
-            },
-            "string.special": {
-                "color": "#d21f07",
-                "font_style": null,
-                "font_weight": null
-            },
-            "string.special.symbol": {
-                "color": "#d21f07",
-                "font_style": null,
-                "font_weight": null
-            },
-            "tag": {
-                "color": "#0433ff",
-                "font_style": null,
-                "font_weight": null
-            },
-            "text.literal": {
-                "color": "#6F42C1",
-                "font_style": null,
-                "font_weight": null
-            },
-            "title": {
-                "color": "#0433FF",
-                "font_style": null,
-                "font_weight": null
-            },
-            "type": {
-                "color": "#6f42c1",
-                "font_style": null,
-                "font_weight": null
-            },
-            "property": {
-                "color": "#333333",
-                "font_style": null,
-                "font_weight": null
-            },
-            "variable": {
-                "color": "#333333",
-                "font_style": null,
-                "font_weight": null
-            },
-            "variable.special": {
-                "color": "#C5060B",
-                "font_style": null,
-                "font_weight": null
-            }
-        }
+  "name": "macOS Classic Light",
+  "appearance": "light",
+  "style": {
+    "editor.foreground": "#000000",
+    "editor.background": "#ffffff",
+    "editor.active_line.background": "#F0F0F0",
+    "editor.line_number": "#929292",
+    "editor.active_line_number": "#000000",
+    "conflict": "#C5060B",
+    "conflict.background": null,
+    "conflict.border": null,
+    "created": "#1642FF",
+    "created.background": "#e5ffe9",
+    "created.border": null,
+    "deleted": null,
+    "deleted.background": "#FBEAE5",
+    "deleted.border": null,
+    "error": null,
+    "error.background": "#FBEAE5",
+    "error.border": "#EC9F89",
+    "hidden": "#6D6D6D",
+    "hidden.background": null,
+    "hidden.border": null,
+    "hint": null,
+    "hint.background": "#E5F2FF",
+    "hint.border": "#99CCFF",
+    "ignored": null,
+    "ignored.background": null,
+    "ignored.border": null,
+    "info": null,
+    "info.background": "#E5EAFF",
+    "info.border": "#8DA1FF",
+    "modified": "#9e7008",
+    "modified.background": "#fff2e5",
+    "modified.border": null,
+    "predictive": "#A4ABB6",
+    "predictive.background": null,
+    "predictive.border": null,
+    "renamed": null,
+    "renamed.background": null,
+    "renamed.border": null,
+    "success": null,
+    "success.background": "#E5FFE5",
+    "success.border": null,
+    "unreachable": null,
+    "unreachable.background": null,
+    "unreachable.border": null,
+    "warning": "#C99401",
+    "warning.background": "#FFFBE5",
+    "warning.border": "#D9CC89",
+    "syntax": {
+      "attribute": {
+        "color": "#957931",
+        "font_style": null,
+        "font_weight": null
+      },
+      "boolean": {
+        "color": "#C5060B",
+        "font_style": null,
+        "font_weight": null
+      },
+      "comment": {
+        "color": "#007fff",
+        "font_style": null,
+        "font_weight": null
+      },
+      "comment.doc": {
+        "color": "#007fff",
+        "font_style": null,
+        "font_weight": null
+      },
+      "constant": {
+        "color": "#C5060B",
+        "font_style": null,
+        "font_weight": null
+      },
+      "constructor": {
+        "color": "#0433ff",
+        "font_style": null,
+        "font_weight": null
+      },
+      "embedded": {
+        "color": "#333333",
+        "font_style": null,
+        "font_weight": null
+      },
+      "function": {
+        "color": "#0000A2",
+        "font_style": null,
+        "font_weight": null
+      },
+      "keyword": {
+        "color": "#0433ff",
+        "font_style": null,
+        "font_weight": null
+      },
+      "link_text": {
+        "color": "#0000A2",
+        "font_style": "normal",
+        "font_weight": null
+      },
+      "link_uri": {
+        "color": "#6A7293",
+        "font_style": "italic",
+        "font_weight": null
+      },
+      "number": {
+        "color": "#0433ff",
+        "font_style": null,
+        "font_weight": null
+      },
+      "string": {
+        "color": "#036A07",
+        "font_style": null,
+        "font_weight": null
+      },
+      "string.escape": {
+        "color": "#036A07",
+        "font_style": null,
+        "font_weight": null
+      },
+      "string.regex": {
+        "color": "#036A07",
+        "font_style": null,
+        "font_weight": null
+      },
+      "string.special": {
+        "color": "#d21f07",
+        "font_style": null,
+        "font_weight": null
+      },
+      "string.special.symbol": {
+        "color": "#d21f07",
+        "font_style": null,
+        "font_weight": null
+      },
+      "tag": {
+        "color": "#0433ff",
+        "font_style": null,
+        "font_weight": null
+      },
+      "text.literal": {
+        "color": "#6F42C1",
+        "font_style": null,
+        "font_weight": null
+      },
+      "title": {
+        "color": "#0433FF",
+        "font_style": null,
+        "font_weight": null
+      },
+      "type": {
+        "color": "#6f42c1",
+        "font_style": null,
+        "font_weight": null
+      },
+      "property": {
+        "color": "#333333",
+        "font_style": null,
+        "font_weight": null
+      },
+      "variable": {
+        "color": "#333333",
+        "font_style": null,
+        "font_weight": null
+      },
+      "variable.special": {
+        "color": "#C5060B",
+        "font_style": null,
+        "font_weight": null
+      }
     }
+  }
 }
