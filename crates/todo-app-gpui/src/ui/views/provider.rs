@@ -361,8 +361,8 @@ impl LlmProvider {
         });
     }
 
-    fn toggle_accordion(&mut self, open_ixs: Vec<usize>, _: &mut Window, cx: &mut Context<Self>) {
-        self.expanded_providers = open_ixs;
+    fn toggle_accordion(&mut self, open_ixs: &[usize], _: &mut Window, cx: &mut Context<Self>) {
+        self.expanded_providers = open_ixs.to_vec();
         cx.notify();
     }
 
@@ -576,172 +576,208 @@ impl Render for LlmProvider {
             .child(
                 // 提供商列表
                 section("已配置的服务提供商")
-                    .child(
-                        Accordion::new("providers")
-                            .multiple(true)
-                            .children(
-                                self.providers.iter().enumerate().map(|(index, provider)| {
-                                    move |accordion| {
-                                        accordion
-                                            .open(self.expanded_providers.contains(&index))
-                                            .icon(if provider.enabled { IconName::CircleCheck } else { IconName::CircleX })
-                                            .title(
+                    .child({
+                        let mut accordion = Accordion::new("providers").multiple(true);
+                        
+                        for (index, provider) in self.providers.iter().enumerate() {
+                            // 克隆需要在 UI 中使用的数据
+                            let provider_name = provider.name.clone();
+                            let provider_api_url = provider.api_url.clone();
+                            let provider_api_key = provider.api_key.clone();
+                            let provider_api_type = provider.api_type.as_str().to_string();
+                            let provider_enabled = provider.enabled;
+                            let provider_models = provider.models.clone();
+                            
+                            accordion = accordion.item(|item| {
+                                item
+                                    .open(self.expanded_providers.contains(&index))
+                                    .icon(if provider_enabled { 
+                                        IconName::CircleCheck 
+                                    } else { 
+                                        IconName::CircleX 
+                                    })
+                                    .title(
+                                        h_flex()
+                                            .items_center()
+                                            .justify_between()
+                                            .w_full()
+                                            .child(
                                                 h_flex()
                                                     .items_center()
-                                                    .justify_between()
-                                                    .w_full()
+                                                    .gap_2()
                                                     .child(
-                                                        h_flex()
-                                                            .items_center()
-                                                            .gap_2()
-                                                            .child(
-                                                                div()
-                                                                    .font_medium()
-                                                                    .child(provider.name.as_str())
-                                                            )
-                                                            .child(
-                                                                div()
-                                                                    .px_2()
-                                                                    .py_1()
-                                                                    .bg(gpui::rgb(0xDDD6FE))
-                                                                    .text_color(gpui::rgb(0x7C3AED))
-                                                                    .rounded_md()
-                                                                    .text_xs()
-                                                                    .child(provider.api_type.as_str())
-                                                            )
+                                                        div()
+                                                            .font_medium()
+                                                            .child(provider_name.clone())
                                                     )
                                                     .child(
-                                                        Switch::new(format!("provider-enabled-{}", index).as_str())
-                                                            .checked(provider.enabled)
-                                                            .on_click(cx.listener(move |this, checked, window, cx| {
-                                                                this.toggle_provider_enabled(index, *checked, window, cx);
-                                                            }))
+                                                        div()
+                                                            .px_2()
+                                                            .py_1()
+                                                            .bg(gpui::rgb(0xDDD6FE))
+                                                            .text_color(gpui::rgb(0x7C3AED))
+                                                            .rounded_md()
+                                                            .text_xs()
+                                                            .child(provider_api_type.clone())
                                                     )
                                             )
-                                            .content(
+                                            .child(
+                                                Switch::new(("provider-enabled", index))
+                                                    .checked(provider_enabled)
+                                                    .on_click(cx.listener(move |this, checked, window, cx| {
+                                                        this.toggle_provider_enabled(index, *checked, window, cx);
+                                                    }))
+                                            )
+                                    )
+                                    .content(
+                                        v_flex()
+                                            .gap_4()
+                                            .child(
+                                                // 基本信息
                                                 v_flex()
-                                                    .gap_4()
+                                                    .gap_2()
                                                     .child(
-                                                        // 基本信息
-                                                        v_flex()
-                                                            .gap_2()
+                                                        h_flex()
+                                                            .gap_4()
                                                             .child(
-                                                                h_flex()
-                                                                    .gap_4()
+                                                                v_flex()
+                                                                    .gap_1()
                                                                     .child(
-                                                                        v_flex()
-                                                                            .gap_1()
-                                                                            .child(
-                                                                                div()
-                                                                                    .text_sm()
-                                                                                    .font_medium()
-                                                                                    .text_color(gpui::rgb(0x374151))
-                                                                                    .child("API 地址")
-                                                                            )
-                                                                            .child(
-                                                                                div()
-                                                                                    .text_sm()
-                                                                                    .text_color(gpui::rgb(0x6B7280))
-                                                                                    .child(provider.api_url.as_str())
-                                                                            )
+                                                                        div()
+                                                                            .text_sm()
+                                                                            .font_medium()
+                                                                            .text_color(gpui::rgb(0x374151))
+                                                                            .child("API 地址")
                                                                     )
                                                                     .child(
-                                                                        v_flex()
-                                                                            .gap_1()
-                                                                            .child(
-                                                                                div()
-                                                                                    .text_sm()
-                                                                                    .font_medium()
-                                                                                    .text_color(gpui::rgb(0x374151))
-                                                                                    .child("API 密钥")
-                                                                            )
-                                                                            .child(
-                                                                                div()
-                                                                                    .text_sm()
-                                                                                    .text_color(gpui::rgb(0x6B7280))
-                                                                                    .child(if provider.api_key.is_empty() {
-                                                                                        "未配置"
-                                                                                    } else {
-                                                                                        "••••••••"
-                                                                                    })
-                                                                            )
+                                                                        div()
+                                                                            .text_sm()
+                                                                            .text_color(gpui::rgb(0x6B7280))
+                                                                            .child(provider_api_url.clone())
                                                                     )
-                                                            )
-                                                    )
-                                                    .child(
-                                                        // 模型列表
-                                                        v_flex()
-                                                            .gap_2()
-                                                            .child(
-                                                                div()
-                                                                    .text_sm()
-                                                                    .font_medium()
-                                                                    .text_color(gpui::rgb(0x374151))
-                                                                    .child("支持的模型")
                                                             )
                                                             .child(
                                                                 v_flex()
-                                                                    .gap_2()
-                                                                    .children(provider.models.iter().map(|model| {
-                                                                        h_flex()
-                                                                            .items_center()
-                                                                            .justify_between()
-                                                                            .p_3()
-                                                                            .bg(gpui::rgb(0xF9FAFB))
-                                                                            .rounded_md()
-                                                                            .border_1()
-                                                                            .border_color(gpui::rgb(0xE5E7EB))
-                                                                            .child(
-                                                                                h_flex()
-                                                                                    .items_center()
-                                                                                    .gap_3()
-                                                                                    .child(
-                                                                                        div()
-                                                                                            .font_medium()
-                                                                                            .text_color(gpui::rgb(0x111827))
-                                                                                            .child(model.name.as_str())
-                                                                                    )
-                                                                                    .child(self.render_model_capabilities(&model.capabilities))
-                                                                            )
-                                                                            .child(
-                                                                                Switch::new(format!("model-{}-enabled", model.name).as_str())
-                                                                                    .checked(model.enabled)
-                                                                                    .small()
-                                                                            )
-                                                                    }))
-                                                            )
-                                                    )
-                                                    .child(
-                                                        // 操作按钮
-                                                        h_flex()
-                                                            .justify_end()
-                                                            .gap_2()
-                                                            .child(
-                                                                Button::new(format!("edit-provider-{}", index).as_str())
-                                                                    .label("编辑")
-                                                                    .icon(IconName::SquarePen)
-                                                                    .on_click(cx.listener(move |this, _, window, cx| {
-                                                                        this.edit_provider(index, window, cx);
-                                                                    }))
-                                                            )
-                                                            .child(
-                                                                Button::new(format!("delete-provider-{}", index).as_str())
-                                                                    .with_variant(ButtonVariant::Danger)
-                                                                    .label("删除")
-                                                                    .icon(IconName::Trash2)
-                                                                    .on_click(cx.listener(move |this, _, window, cx| {
-                                                                        this.delete_provider(index, window, cx);
-                                                                    }))
+                                                                    .gap_1()
+                                                                    .child(
+                                                                        div()
+                                                                            .text_sm()
+                                                                            .font_medium()
+                                                                            .text_color(gpui::rgb(0x374151))
+                                                                            .child("API 密钥")
+                                                                    )
+                                                                    .child(
+                                                                        div()
+                                                                            .text_sm()
+                                                                            .text_color(gpui::rgb(0x6B7280))
+                                                                            .child(if provider_api_key.is_empty() {
+                                                                                "未配置"
+                                                                            } else {
+                                                                                "••••••••"
+                                                                            })
+                                                                    )
                                                             )
                                                     )
                                             )
-                                    }
-                                })
-                            )
-                            .on_toggle_click(cx.listener(|this, open_ixs: &[usize], window, cx| {
-                                this.toggle_accordion(open_ixs.to_vec(), window, cx);
-                            }))
-                    )
+                                            .child(
+                                                // 模型列表
+                                                v_flex()
+                                                    .gap_2()
+                                                    .child(
+                                                        div()
+                                                            .text_sm()
+                                                            .font_medium()
+                                                            .text_color(gpui::rgb(0x374151))
+                                                            .child("支持的模型")
+                                                    )
+                                                    .child(
+                                                        v_flex()
+                                                            .gap_2()
+                                                            .children(provider_models.iter().enumerate().map(|(model_index, model)| {
+                                                                let model_name = model.name.clone();
+                                                                let model_enabled = model.enabled;
+                                                                let model_capabilities = model.capabilities.clone();
+                                                                // 使用一个计算出的唯一索引
+                                                                let unique_model_id = index * 1000 + model_index;
+                                                                
+                                                                h_flex()
+                                                                    .items_center()
+                                                                    .justify_between()
+                                                                    .p_3()
+                                                                    .bg(gpui::rgb(0xF9FAFB))
+                                                                    .rounded_md()
+                                                                    .border_1()
+                                                                    .border_color(gpui::rgb(0xE5E7EB))
+                                                                    .child(
+                                                                        h_flex()
+                                                                            .items_center()
+                                                                            .gap_3()
+                                                                            .child(
+                                                                                div()
+                                                                                    .font_medium()
+                                                                                    .text_color(gpui::rgb(0x111827))
+                                                                                    .child(model_name.clone())
+                                                                            )
+                                                                            .child(
+                                                                                h_flex()
+                                                                                    .gap_1()
+                                                                                    .items_center()
+                                                                                    .children(model_capabilities.iter().map(|cap| {
+                                                                                        div()
+                                                                                            .flex()
+                                                                                            .items_center()
+                                                                                            .gap_1()
+                                                                                            .px_2()
+                                                                                            .py_1()
+                                                                                            .bg(gpui::rgb(0xF3F4F6))
+                                                                                            .rounded_md()
+                                                                                            .child(Icon::new(cap.icon()).xsmall())
+                                                                                            .child(
+                                                                                                div()
+                                                                                                    .text_xs()
+                                                                                                    .text_color(gpui::rgb(0x6B7280))
+                                                                                                    .child(cap.label())
+                                                                                            )
+                                                                                    }))
+                                                                            )
+                                                                    )
+                                                                    .child(
+                                                                        Switch::new(("model-enabled", unique_model_id))
+                                                                            .checked(model_enabled)
+                                                                            .small()
+                                                                    )
+                                                            }))
+                                                    )
+                                            )
+                                            .child(
+                                                // 操作按钮
+                                                h_flex()
+                                                    .justify_end()
+                                                    .gap_2()
+                                                    .child(
+                                                        Button::new(("edit-provider", index))
+                                                            .label("编辑")
+                                                            .icon(IconName::SquarePen)
+                                                            .on_click(cx.listener(move |this, _, window, cx| {
+                                                                this.edit_provider(index, window, cx);
+                                                            }))
+                                                    )
+                                                    .child(
+                                                        Button::new(("delete-provider", index))
+                                                            .with_variant(ButtonVariant::Danger)
+                                                            .label("删除")
+                                                            .icon(IconName::Trash2)
+                                                            .on_click(cx.listener(move |this, _, window, cx| {
+                                                                this.delete_provider(index, window, cx);
+                                                            }))
+                                                    )
+                                            )
+                                    )
+                            });
+                        }
+                        
+                        accordion.on_toggle_click(cx.listener(Self::toggle_accordion))
+                    })
             )
     }
 }
