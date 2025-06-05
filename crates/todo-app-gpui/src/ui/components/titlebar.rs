@@ -97,7 +97,7 @@ impl Render for AppTitleBar {
                             .on_click(|_, _, cx| {
                                 cx.activate(true);
 
-                                let window_size = size(px(900.0), px(800.0));
+                                let window_size = size(px(1024.0), px(800.0));
                                 let window_bounds = Bounds::centered(None, window_size, cx);
                                 let options = WindowOptions {
                                     app_id: Some("x-todo-app".to_string()),
