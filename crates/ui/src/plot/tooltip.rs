@@ -109,7 +109,7 @@ impl RenderOnce for Dot {
             .border_1()
             .border_color(self.stroke)
             .bg(self.fill)
-            .left(self.point.x)
+            .left(self.point.x - self.size / 2.)
             .top(self.point.y - self.size / 2.)
     }
 }
