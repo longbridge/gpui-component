@@ -229,9 +229,9 @@ impl RenderOnce for AccordionItem {
                 })
                 .text_size(text_size)
                 .child(
-                    h_flex()
+                    h_flex() // This is the main title bar container for an AccordionItem
                         .id(self.index)
-                        .justify_between()
+                        .justify_between() // This separates the (icon + user_title) from the chevron
                         .gap_3()
                         .map(|this| match self.size {
                             Size::XSmall => this.py_0().px_1p5(),
@@ -251,7 +251,11 @@ impl RenderOnce for AccordionItem {
                             this.border_b_1().border_color(cx.theme().border)
                         })
                         .child(
+                            // This h_flex contains the optional icon and the user-provided title.
+                            // It needs to be able to grow to allow the user's title (with its own flex_1) to work.
                             h_flex()
+                                .flex_1() // <<< KEY CHANGE: Allow this section to take available space
+                                .min_w_0() // <<< KEY CHANGE: Allow shrinking for ellipsis if the user's title is long
                                 .items_center()
                                 .map(|this| match self.size {
                                     Size::XSmall => this.gap_1(),
@@ -264,9 +268,10 @@ impl RenderOnce for AccordionItem {
                                             .text_color(cx.theme().muted_foreground),
                                     )
                                 })
-                                .child(self.title),
+                                .child(self.title), // self.title is the complex h_flex from provider.rs
                         )
                         .when(!self.disabled, |this| {
+                            // This section is for the chevron icon
                             this.hover(|this| this.bg(cx.theme().accordion_hover))
                                 .child(
                                     Icon::new(if self.open {
