@@ -192,8 +192,8 @@ impl LlmProvider {
 
         // 初始化一些示例数据
         let mut default_provider = LlmProviderInfo::default();
-        default_provider.name = "OpenAI".to_string();
-        default_provider.api_url = "https://api.openai.com/v1".to_string();
+        default_provider.name = "收钱吧".to_string();
+        default_provider.api_url = "https://hcb.aliyunddos1117.com/v1".to_string();
 
         let mut anthropic_provider = LlmProviderInfo::default();
         anthropic_provider.name = "Anthropic".to_string();
@@ -344,6 +344,12 @@ let entity = cx.entity().downgrade();
     ) {
         if let Some(provider) = self.providers.get_mut(index) {
             provider.enabled = enabled;
+            
+            // 如果禁用提供商，自动关闭其 accordion
+            if !enabled {
+                self.expanded_providers.retain(|&i| i != index);
+            }
+            
             cx.notify();
         }
     }
@@ -608,33 +614,26 @@ impl Render for LlmProvider {
                             
                             accordion = accordion.item(|item| {
                                 item
-                                    .open(self.expanded_providers.contains(&index))
-                                    .icon({
-                                        let icon_name = if provider_enabled { 
-                                            IconName::CircleCheck 
-                                        } else { 
-                                            IconName::CircleX 
-                                        };
-                                        
-                                        if provider_enabled {
-                                            Icon::new(icon_name)
-                                        } else {
-                                            Icon::new(icon_name).text_color(gpui::rgb(0xD1D5DB))
-                                        }
+                                    .open(self.expanded_providers.contains(&index) && provider_enabled) // 只有启用时才能展开
+                                    .disabled(!provider_enabled) // 禁用时不可点击
+                                    .icon(if provider_enabled { 
+                                        IconName::CircleCheck 
+                                    } else { 
+                                        IconName::CircleX 
                                     })
                                     .title(
-                                        h_flex() // 外层 h_flex，用于整个标题行
-                                            .w_full() // 确保占满可用宽度
-                                            .items_center() // 垂直居中对齐子元素
-                                            .justify_between() 
+                                        h_flex()
+                                            .w_full()
+                                            .items_center()
+                                            .justify_between()
                                             .child(
                                                 // 左侧：提供商名称
-                                                div() 
+                                                div()
                                                     .font_medium()
-                                                    .flex_1() // 关键：让此 div 占据可用空间
-                                                    .min_w_0() // 关键：允许此 div 在空间不足时收缩并配合 ellipsis
-                                                    .overflow_hidden() // 配合 ellipsis
-                                                    .text_ellipsis()   // 文本过长时显示省略号
+                                                    .flex_1()
+                                                    .min_w_0()
+                                                    .overflow_hidden()
+                                                    .text_ellipsis()
                                                     .text_color(if provider_enabled {
                                                         gpui::rgb(0x111827) // 启用时的正常颜色
                                                     } else {
@@ -644,27 +643,27 @@ impl Render for LlmProvider {
                                             )
                                             .child(
                                                 // 右侧：API类型标签、开关和操作按钮组
-                                                h_flex() 
-                                                    .items_center() 
-                                                    .gap_2() 
-                                                    .flex_shrink_0() // 关键：防止此组收缩
+                                                h_flex()
+                                                    .items_center()
+                                                    .gap_2()
+                                                    .flex_shrink_0()
                                                     .child(
                                                         div() // API 类型标签
                                                             .px_2()
-                                                            .py_1()
+                                                            // .py_1()
                                                             .bg(if provider_enabled {
-                                                                gpui::rgb(0xDDD6FE) // 启用时的正常背景色
+                                                                gpui::rgb(0xDDD6FE) // 启用时的紫色背景
                                                             } else {
-                                                                gpui::rgb(0xF3F4F6) // 禁用时的淡背景色
+                                                                gpui::rgb(0xF3F4F6) // 禁用时的淡背景
                                                             })
                                                             .text_color(if provider_enabled {
-                                                                gpui::rgb(0x7C3AED) // 启用时的正常文字颜色
+                                                                gpui::rgb(0x7C3AED) // 启用时的紫色文字
                                                             } else {
-                                                                gpui::rgb(0xD1D5DB) // 禁用时的淡文字颜色
+                                                                gpui::rgb(0xD1D5DB) // 禁用时的淡文字
                                                             })
                                                             .rounded_md()
                                                             .text_xs()
-                                                            .whitespace_nowrap() // 防止标签文字换行
+                                                            .whitespace_nowrap()
                                                             .child(provider_api_type.clone())
                                                     )
                                                     .child(
@@ -679,40 +678,30 @@ impl Render for LlmProvider {
                                                             .icon(if provider_enabled {
                                                                 Icon::new(IconName::SquarePen)
                                                             } else {
-                                                                Icon::new(IconName::SquarePen).text_color(gpui::rgb(0xD1D5DB))
+                                                            Icon::new(IconName::SquarePen).text_color(gpui::rgb(0xD1D5DB))
                                                             })
                                                             .small()
                                                             .ghost()
-                                                            .tooltip(if provider_enabled { "编辑" } else { "提供商已禁用" })
-                                                            .disabled(!provider_enabled) // 禁用时不可点击
-                                                            .when(!provider_enabled, |button| {
-                                                                button.text_color(gpui::rgb(0xD1D5DB)) // 确保按钮文字也变淡
-                                                            })
-                                                            .when(provider_enabled, |button| {
-                                                                button.on_click(cx.listener(move |this, _, window, cx| {
-                                                                    this.edit_provider(index, window, cx);
-                                                                }))
-                                                            })
+                                                            .tooltip("编辑")
+                                                            .disabled(!provider_enabled)
+                                                            .on_click(cx.listener(move |this, _, window, cx| {
+                                                                this.edit_provider(index, window, cx);
+                                                            }))
                                                     )
                                                     .child(
                                                         Button::new(("delete-provider", index))
                                                             .icon(if provider_enabled {
                                                                 Icon::new(IconName::Trash2).text_color(gpui::rgb(0xEF4444))
                                                             } else {
-                                                                Icon::new(IconName::Trash2).text_color(gpui::rgb(0xD1D5DB))
+                                                            Icon::new(IconName::Trash2).text_color(gpui::rgb(0xD1D5DB))
                                                             })
                                                             .small()
                                                             .ghost()
-                                                            .tooltip(if provider_enabled { "删除" } else { "提供商已禁用" })
-                                                            .disabled(!provider_enabled) // 禁用时不可点击
-                                                            .when(!provider_enabled, |button| {
-                                                                button.text_color(gpui::rgb(0xD1D5DB)) // 确保按钮文字也变淡
-                                                            })
-                                                            .when(provider_enabled, |button| {
-                                                                button.on_click(cx.listener(move |this, _, window, cx| {
-                                                                    this.delete_provider(index, window, cx);
-                                                                }))
-                                                            })
+                                                            .tooltip("删除")
+                                                            .disabled(!provider_enabled)
+                                                            .on_click(cx.listener(move |this, _, window, cx| {
+                                                                this.delete_provider(index, window, cx);
+                                                            }))
                                                     )
                                             )
                                     )
@@ -720,7 +709,7 @@ impl Render for LlmProvider {
                                         v_flex()
                                             .gap_4()
                                             .child(
-                                                // 基本信息
+                                                // 基本信息保持原样
                                                 v_flex()
                                                     .gap_2()
                                                     .child(
@@ -766,34 +755,22 @@ impl Render for LlmProvider {
                                                             )
                                                     )
                                                     .child(
-                                                        // 新增：完整的接口地址
-                                                        v_flex()
-                                                            //.gap_1()
-                                                            // .child(
-                                                            //     div()
-                                                            //         .text_sm()
-                                                            //         .font_medium()
-                                                            //         .text_color(gpui::rgb(0x374151))
-                                                            //         .child("完整接口地址")
-                                                            // )
-                                                            .child(
-                                                                div()
-                                                                    .text_xs()
-                                                                    .text_color(gpui::rgb(0x6B7280))
-                                                                    //.font_mono() // 使用等宽字体显示 URL
-                                                                    .child({
-                                                                        let full_url = if provider_api_url.is_empty() {
-                                                                            "请先配置 API 地址".to_string()
-                                                                        } else {
-                                                                            format!("{}/chat/completions", provider_api_url.trim_end_matches('/'))
-                                                                        };
-                                                                        full_url
-                                                                    })
-                                                            )
+                                                        // 完整接口地址
+                                                        div()
+                                                            .text_xs()
+                                                            .text_color(gpui::rgb(0x9CA3AF))
+                                                            .child({
+                                                                let full_url = if provider_api_url.is_empty() {
+                                                                    "请先配置 API 地址".to_string()
+                                                                } else {
+                                                                    format!("{}/chat/completions", provider_api_url.trim_end_matches('/'))
+                                                                };
+                                                                full_url
+                                                            })
                                                     )
                                             )
                                             .child(
-                                                // 模型列表
+                                                // 模型列表保持原样
                                                 v_flex()
                                                     .gap_2()
                                                     .child(
@@ -816,21 +793,10 @@ impl Render for LlmProvider {
                                                                     .items_center()
                                                                     .justify_between()
                                                                     .p_3()
-                                                                    .bg(if provider_enabled {
-                                                                        gpui::rgb(0xF9FAFB)
-                                                                    } else {
-                                                                        gpui::rgb(0xFCFCFD) // 更淡的背景
-                                                                    })
+                                                                    .bg(gpui::rgb(0xF9FAFB))
                                                                     .rounded_md()
                                                                     .border_1()
-                                                                    .border_color(if provider_enabled {
-                                                                        gpui::rgb(0xE5E7EB)
-                                                                    } else {
-                                                                        gpui::rgb(0xF3F4F6) // 更淡的边框
-                                                                    })
-                                                                    .when(!provider_enabled, |flex| {
-                                                                        flex.opacity(0.6) // 整体透明度降低
-                                                                    })
+                                                                    .border_color(gpui::rgb(0xE5E7EB))
                                                                     .child(
                                                                         h_flex()
                                                                             .items_center()
@@ -838,11 +804,6 @@ impl Render for LlmProvider {
                                                                             .child(
                                                                                 div()
                                                                                     .font_medium()
-                                                                                    .text_color(if model_enabled && provider_enabled {
-                                                                                        gpui::rgb(0x111827) // 正常颜色
-                                                                                    } else {
-                                                                                        gpui::rgb(0xD1D5DB) // 淡色
-                                                                                    })
                                                                                     .child(model_name.clone())
                                                                             )
                                                                             .child(
@@ -850,38 +811,24 @@ impl Render for LlmProvider {
                                                                                     .gap_1()
                                                                                     .items_center()
                                                                                     .children(model_capabilities.iter().enumerate().map(|(cap_index, cap)| {
-                                                                                        // 创建一个唯一的数字ID，避免字符串生命周期问题
                                                                                         let capability_unique_id = index * 1000000 + model_index * 1000 + cap_index;
                                                                                         
                                                                                         div()
-                                                                                            .id(("capability", capability_unique_id))  // 使用元组形式的ID
+                                                                                            .id(("capability", capability_unique_id))
                                                                                             .p_1()
                                                                                             .rounded_md()
-                                                                                            .bg(if model_enabled && provider_enabled {
-                                                                                                gpui::rgb(0xF3F4F6) // 正常背景色
-                                                                                            } else {
-                                                                                                gpui::rgb(0xF9FAFB) // 淡背景色
-                                                                                            })
-                                                                                            .child(
-                                                                                                Icon::new(cap.icon())
-                                                                                                    .xsmall()
-                                                                                                    .when(!model_enabled || !provider_enabled, |icon| {
-                                                                                                        icon.text_color(gpui::rgb(0xD1D5DB)) // 禁用时图标变淡
-                                                                                                    })
-                                                                                            )
+                                                                                            .bg(gpui::rgb(0xF3F4F6))
+                                                                                            .child(Icon::new(cap.icon()).xsmall())
                                                                                     }))
                                                                             )
                                                                     )
                                                                     .child(
                                                                         Switch::new(("model-enabled", unique_model_id))
-                                                                            .checked(model_enabled && provider_enabled) // 只有在提供商启用且模型启用时才显示为选中
+                                                                            .checked(model_enabled)
                                                                             .small()
-                                                                            .disabled(!provider_enabled) // 当提供商被禁用时禁用开关
-                                                                            .when(provider_enabled, |switch| {
-                                                                                switch.on_click(cx.listener(move |this, checked, window, cx| {
-                                                                                    this.toggle_model_enabled(index, model_index, *checked, window, cx);
-                                                                                }))
-                                                                            })
+                                                                            .on_click(cx.listener(move |this, checked, window, cx| {
+                                                                                this.toggle_model_enabled(index, model_index, *checked, window, cx);
+                                                                            }))
                                                                     )
                                                             }))
                                                     )
