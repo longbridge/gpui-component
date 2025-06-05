@@ -226,17 +226,13 @@ pub struct McpProvider {
     focus_handle: FocusHandle,
     providers: Vec<McpProviderInfo>,
     expanded_providers: Vec<usize>,
-    // 新增：每个provider的活跃tab索引
     active_capability_tabs: std::collections::HashMap<usize, usize>,
-
-    // 编辑表单字段
     editing_provider: Option<usize>,
     name_input: Entity<InputState>,
     command_input: Entity<InputState>,
     args_input: Entity<InputState>,
     description_input: Entity<InputState>,
     transport_dropdown: Entity<DropdownState<Vec<SharedString>>>,
-
     _subscriptions: Vec<Subscription>,
 }
 
@@ -541,19 +537,15 @@ impl McpProvider {
         self.name_input.update(cx, |state, cx| {
             *state = InputState::new(window, cx).placeholder("MCP服务名称");
         });
-
         self.command_input.update(cx, |state, cx| {
             *state = InputState::new(window, cx).placeholder("可执行文件路径");
         });
-
         self.args_input.update(cx, |state, cx| {
             *state = InputState::new(window, cx).placeholder("启动参数 (用空格分隔)");
         });
-
         self.description_input.update(cx, |state, cx| {
             *state = InputState::new(window, cx).placeholder("服务描述");
         });
-
         self.transport_dropdown.update(cx, |state, cx| {
             state.set_selected_index(Some(0), window, cx);
         });
@@ -706,13 +698,14 @@ impl McpProvider {
         tab_index: usize,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        match tab_index {
-            0 => self.render_resources_content(&provider.resources, cx),
-            1 => self.render_tools_content(&provider.tools, cx),
-            2 => self.render_prompts_content(&provider.prompts, cx),
-            3 => self.render_logging_content(cx),
+        // 使用 div 容器来统一返回类型
+        div().child(match tab_index {
+            0 => div().child(self.render_resources_content(&provider.resources, cx)),
+            1 => div().child(self.render_tools_content(&provider.tools, cx)),
+            2 => div().child(self.render_prompts_content(&provider.prompts, cx)),
+            3 => div().child(self.render_logging_content(cx)),
             _ => div().child("未知能力"),
-        }
+        })
     }
 
     fn render_resources_content(
@@ -768,7 +761,6 @@ impl McpProvider {
                         div()
                             .text_xs()
                             .text_color(gpui::rgb(0x9CA3AF))
-                            .font_mono()
                             .child(resource.uri.clone()),
                     )
             }))
@@ -834,7 +826,6 @@ impl McpProvider {
                                         .child(
                                             div()
                                                 .text_xs()
-                                                .font_mono()
                                                 .text_color(if param.required {
                                                     gpui::rgb(0xDC2626)
                                                 } else {
@@ -931,7 +922,6 @@ impl McpProvider {
                                         .child(
                                             div()
                                                 .text_xs()
-                                                .font_mono()
                                                 .text_color(if arg.required {
                                                     gpui::rgb(0xDC2626)
                                                 } else {
@@ -1042,7 +1032,7 @@ impl Render for McpProvider {
             .child(div().when(self.editing_provider.is_some(), |this| {
                 this.child(self.render_provider_form(cx))
             }))
-            .child(div().w_full().child({ // Outer div for accordion
+            .child(div().w_full().child({
                 let mut accordion = Accordion::new("mcp-providers").multiple(true);
 
                 for (index, provider) in self.providers.iter().enumerate() {
@@ -1051,10 +1041,9 @@ impl Render for McpProvider {
                     let provider_args = provider.args.join(" ");
                     let provider_transport = provider.transport.as_str().to_string();
                     let provider_enabled = provider.enabled;
-                    // let provider_capabilities = provider.capabilities.clone(); // Not directly used in this snippet, but good to have if needed elsewhere
                     let provider_description = provider.description.clone();
 
-                    accordion = accordion.item(|item| { // Accordion item closure
+                    accordion = accordion.item(|item| {
                         item.open(self.expanded_providers.contains(&index) && provider_enabled)
                             .disabled(!provider_enabled)
                             .icon(if provider_enabled {
@@ -1062,7 +1051,7 @@ impl Render for McpProvider {
                             } else {
                                 IconName::CircleX
                             })
-                            .title( // Title for accordion item
+                            .title(
                                 h_flex()
                                     .w_full()
                                     .items_center()
@@ -1157,11 +1146,11 @@ impl Render for McpProvider {
                                                     )),
                                             ),
                                     )
-                            ) // End of .title()
-                            .content( // Content for accordion item
+                            )
+                            .content(
                                 v_flex()
                                     .gap_4()
-                                    .child( // Provider details section
+                                    .child(
                                         v_flex()
                                             .gap_2()
                                             .child(
@@ -1241,8 +1230,8 @@ impl Render for McpProvider {
                                                         }
                                                     }),
                                             ),
-                                    ) // End of provider details section
-                                    .child( // Service capabilities section
+                                    )
+                                    .child(
                                         v_flex()
                                             .gap_2()
                                             .child(
@@ -1263,26 +1252,10 @@ impl Render for McpProvider {
                                                             .copied()
                                                             .unwrap_or(0),
                                                     )
-                                                    .child(
-                                                        Tab::new("resources")
-                                                            .icon(IconName::Database)
-                                                            .label("资源"),
-                                                    )
-                                                    .child(
-                                                        Tab::new("tools")
-                                                            .icon(IconName::Wrench)
-                                                            .label("工具"),
-                                                    )
-                                                    .child(
-                                                        Tab::new("prompts")
-                                                            .icon(IconName::SquareTerminal)
-                                                            .label("提示"),
-                                                    )
-                                                    .child(
-                                                        Tab::new("logging")
-                                                            .icon(IconName::LetterText)
-                                                            .label("日志"),
-                                                    )
+                                                    .child(Tab::new("资源"))
+                                                    .child(Tab::new("工具"))
+                                                    .child(Tab::new("提示"))
+                                                    .child(Tab::new("日志"))
                                                     .on_click(cx.listener(
                                                         move |this, tab_ix: &usize, window, cx| {
                                                             this.set_active_capability_tab(
@@ -1295,7 +1268,7 @@ impl Render for McpProvider {
                                                 div()
                                                     .mt_2()
                                                     .child(self.render_capability_content(
-                                                        &self.providers[index], // Pass reference to provider
+                                                        &self.providers[index],
                                                         self.active_capability_tabs
                                                             .get(&index)
                                                             .copied()
@@ -1303,12 +1276,11 @@ impl Render for McpProvider {
                                                         cx,
                                                     )),
                                             ),
-                                    ), // End of service capabilities section
-                            ) // End of .content()
-                    }); // End of accordion.item closure
-                } // End of for loop
-
+                                    ),
+                            )
+                    });
+                }
                 accordion.on_toggle_click(cx.listener(Self::toggle_accordion))
-            })) // End of outer div for accordion and its .child()
-    } // End of render method
-} // End of impl Render for McpProvider
+            }))
+    }
+}
