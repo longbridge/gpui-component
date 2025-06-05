@@ -141,7 +141,7 @@ pub struct LlmProvider {
 
 impl ViewKit for LlmProvider {
     fn title() -> &'static str {
-        "模型配置"
+        "LLM服务提供商"
     }
 
     fn description() -> &'static str {
@@ -537,26 +537,9 @@ impl Render for LlmProvider {
             .size_full()
             .gap_4()
             .child(
-                // 标题和添加按钮
+                // 添加按钮（移到顶部）
                 h_flex()
-                    .justify_between()
-                    .items_center()
-                    .child(
-                        v_flex()
-                            .child(
-                                div()
-                                    .text_xl()
-                                    .font_semibold()
-                                    .text_color(gpui::rgb(0x111827))
-                                    .child("LLM 服务提供商")
-                            )
-                            .child(
-                                div()
-                                    .text_sm()
-                                    .text_color(gpui::rgb(0x6B7280))
-                                    .child("管理您的AI模型服务提供商配置")
-                            )
-                    )
+                    .justify_end()
                     .child(
                         Button::new("add-provider")
                             .with_variant(ButtonVariant::Primary)
@@ -574,8 +557,9 @@ impl Render for LlmProvider {
                 })
             )
             .child(
-                // 提供商列表
-                section("已配置的服务提供商")
+                // 提供商列表 - 填满剩余空间
+                div()
+                    .flex_1()
                     .child({
                         let mut accordion = Accordion::new("providers").multiple(true);
                         
@@ -602,14 +586,16 @@ impl Render for LlmProvider {
                                             .justify_between()
                                             .w_full()
                                             .child(
+                                                // 左侧：提供商名称
+                                                div()
+                                                    .font_medium()
+                                                    .child(provider_name.clone())
+                                            )
+                                            .child(
+                                                // 右侧：API类型标签和开关
                                                 h_flex()
                                                     .items_center()
-                                                    .gap_2()
-                                                    .child(
-                                                        div()
-                                                            .font_medium()
-                                                            .child(provider_name.clone())
-                                                    )
+                                                    .gap_3()
                                                     .child(
                                                         div()
                                                             .px_2()
@@ -620,13 +606,13 @@ impl Render for LlmProvider {
                                                             .text_xs()
                                                             .child(provider_api_type.clone())
                                                     )
-                                            )
-                                            .child(
-                                                Switch::new(("provider-enabled", index))
-                                                    .checked(provider_enabled)
-                                                    .on_click(cx.listener(move |this, checked, window, cx| {
-                                                        this.toggle_provider_enabled(index, *checked, window, cx);
-                                                    }))
+                                                    .child(
+                                                        Switch::new(("provider-enabled", index))
+                                                            .checked(provider_enabled)
+                                                            .on_click(cx.listener(move |this, checked, window, cx| {
+                                                                this.toggle_provider_enabled(index, *checked, window, cx);
+                                                            }))
+                                                    )
                                             )
                                     )
                                     .content(
@@ -697,7 +683,6 @@ impl Render for LlmProvider {
                                                                 let model_name = model.name.clone();
                                                                 let model_enabled = model.enabled;
                                                                 let model_capabilities = model.capabilities.clone();
-                                                                // 使用一个计算出的唯一索引
                                                                 let unique_model_id = index * 1000 + model_index;
                                                                 
                                                                 h_flex()
