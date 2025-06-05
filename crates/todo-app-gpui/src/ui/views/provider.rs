@@ -574,6 +574,7 @@ impl Render for LlmProvider {
                                                 h_flex()
                                                     .items_center()
                                                     .gap_2()
+                                                    .flex_shrink_0()  // 添加这行，防止收缩
                                                     .child(
                                                         div()
                                                             .px_2()
@@ -582,6 +583,7 @@ impl Render for LlmProvider {
                                                             .text_color(gpui::rgb(0x7C3AED))
                                                             .rounded_md()
                                                             .text_xs()
+                                                            .flex_shrink_0()  // 防止标签收缩
                                                             .child(provider_api_type.clone())
                                                     )
                                                     .child(
@@ -707,11 +709,12 @@ impl Render for LlmProvider {
                                                                                     .gap_1()
                                                                                     .items_center()
                                                                                     .children(model_capabilities.iter().enumerate().map(|(cap_index, cap)| {
-                                                                                        let capability_id = format!("capability-{}-{}-{}", index, model_index, cap_index);
+                                                                                        // 创建一个唯一的数字ID，避免字符串生命周期问题
+                                                                                        let capability_unique_id = index * 1000000 + model_index * 1000 + cap_index;
                                                                                         let cap_label = cap.label();
                                                                                         
                                                                                         div()
-                                                                                            .id("capability_id")
+                                                                                            .id(("capability", capability_unique_id))  // 使用元组形式的ID
                                                                                             .p_1()
                                                                                             .rounded_md()
                                                                                             .bg(gpui::rgb(0xF3F4F6))
