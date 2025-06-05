@@ -1,7 +1,6 @@
 mod blink_cursor;
 mod change;
 mod clear_button;
-mod code_highlighter;
 mod element;
 mod marker;
 mod mask_pattern;

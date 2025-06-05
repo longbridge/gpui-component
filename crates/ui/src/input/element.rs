@@ -10,7 +10,7 @@ use smallvec::SmallVec;
 
 use crate::{highlighter::LanguageRegistry, ActiveTheme as _, Root};
 
-use super::{code_highlighter::LineHighlightStyle, mode::InputMode, InputState, LastLayout};
+use super::{mode::InputMode, InputState, LastLayout};
 
 const RIGHT_MARGIN: Pixels = px(5.);
 const BOTTOM_MARGIN_ROWS: usize = 1;
@@ -388,8 +388,6 @@ impl TextElement {
                     let range = offset..offset + line_len;
                     let line_styles = highlighter.borrow().styles(&range, &theme);
 
-                    println!("------------ range {:?}", range);
-
                     styles = gpui::combine_highlights(styles, line_styles).collect();
 
                     offset = range.end;
@@ -398,8 +396,13 @@ impl TextElement {
                 let mut marker_styles = vec![];
                 for marker in markers.iter() {
                     if let Some(range) = marker.byte_range(&state) {
-                        if range.start >= visible_range.start || range.end <= visible_range.end {
-                            marker_styles.push((range, marker.severity.highlight_style(&theme)));
+                        let node_range = range.start.saturating_sub(skipped_offset)
+                            ..range.end.saturating_sub(skipped_offset);
+                        if node_range.start >= visible_range.start
+                            || node_range.end <= visible_range.end
+                        {
+                            marker_styles
+                                .push((node_range, marker.severity.highlight_style(&theme)));
                         }
                     }
                 }
@@ -600,24 +603,18 @@ impl Element for TextElement {
                     });
                 }
 
-                runs.extend(
-                    highlight_styles
-                        .iter()
-                        .map(|(range, style)| {
-                            let mut run = text_style.clone().highlight(*style).to_run(range.len());
-                            if let Some(marked_range) = &input.marked_range {
-                                if range.start >= marked_range.start
-                                    && range.end <= marked_range.end
-                                {
-                                    run.color = marked_run.color;
-                                    run.strikethrough = marked_run.strikethrough;
-                                    run.underline = marked_run.underline;
-                                }
-                            }
-                            run
-                        })
-                        .collect::<Vec<TextRun>>(),
-                );
+                runs.extend(highlight_styles.iter().map(|(range, style)| {
+                    let mut run = text_style.clone().highlight(*style).to_run(range.len());
+                    if let Some(marked_range) = &input.marked_range {
+                        if range.start >= marked_range.start && range.end <= marked_range.end {
+                            run.color = marked_run.color;
+                            run.strikethrough = marked_run.strikethrough;
+                            run.underline = marked_run.underline;
+                        }
+                    }
+
+                    run
+                }));
 
                 runs.into_iter().filter(|run| run.len > 0).collect()
             } else {

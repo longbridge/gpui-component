@@ -38,9 +38,10 @@ pub struct SyntaxHighlighter {
 
     /// Cache of highlight, the range is offset of the token in the tree.
     ///
-    /// The BTreeMap is ordered by the range from 0 to the end of the line.
+    /// The BTreeMap is ordered by the range in the entire text.
     ///
-    /// The `key` is the `start` of the range.
+    /// - The `key` is the `start` of the range.
+    /// -The `value` is a tuple of the range (in the entire text) and the highlight name.
     cache: BTreeMap<usize, (Range<usize>, String)>,
 }
 
@@ -564,7 +565,7 @@ impl SyntaxHighlighter {
 
         // If the matched styles is empty, return a default range.
         if styles.len() == 0 {
-            return vec![(0..range.end, HighlightStyle::default())];
+            return vec![(start_offset..range.end, HighlightStyle::default())];
         }
 
         // Ensure the last range is connected to the end of the line.
