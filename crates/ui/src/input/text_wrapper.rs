@@ -83,7 +83,7 @@ impl TextWrapper {
 
             lines.push(LineWrap {
                 wrap_lines: line_wraps.len(),
-                range: prev_line_ix..line.len(),
+                range: prev_line_ix..prev_line_ix + line.len(),
             });
 
             wrapped_lines.extend(line_wraps);
