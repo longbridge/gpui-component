@@ -310,11 +310,11 @@ impl WindowExt for Window {
         });
     }
     fn set_display_affinity(&self, dwaffinity: u32) {
-        use windows::Win32::UI::WindowsAndMessaging::{
-            SetWindowDisplayAffinity, WINDOW_DISPLAY_AFFINITY,
-        };
-        self.hwnd().map(|hwnd| unsafe {
-            SetWindowDisplayAffinity(hwnd, WINDOW_DISPLAY_AFFINITY(dwaffinity)).ok();
-        });
+        // use windows::Win32::UI::WindowsAndMessaging::{
+        //     SetWindowDisplayAffinity, WINDOW_DISPLAY_AFFINITY,
+        // };
+        // self.hwnd().map(|hwnd| unsafe {
+        //     SetWindowDisplayAffinity(hwnd, WINDOW_DISPLAY_AFFINITY(dwaffinity)).ok();
+        // });
     }
 }

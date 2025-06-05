@@ -537,7 +537,7 @@ impl Render for LlmProvider {
             .child(
                 // 提供商列表 - 填满剩余空间
                 div()
-                    .flex_1()
+                   .w_full()
                     .child({
                         let mut accordion = Accordion::new("providers").multiple(true);
                         
@@ -559,31 +559,36 @@ impl Render for LlmProvider {
                                         IconName::CircleX 
                                     })
                                     .title(
-                                        h_flex()
-                                            .items_center()
-                                            .justify_between()
-                                            .w_full()
+                                        h_flex() // 外层 h_flex，用于整个标题行
+                                            .w_full() // 确保占满可用宽度
+                                            .items_center() // 垂直居中对齐子元素
+                                            // 使用 justify_between 或依赖 flex_1 将元素推向两端
+                                            .justify_between() 
                                             .child(
                                                 // 左侧：提供商名称
-                                                div()
+                                                div() 
                                                     .font_medium()
+                                                    .flex_1() // 关键：让此 div 占据可用空间
+                                                    .min_w_0() // 关键：允许此 div 在空间不足时收缩并配合 ellipsis
+                                                    .overflow_hidden() // 配合 ellipsis
+                                                    .text_ellipsis()   // 文本过长时显示省略号
                                                     .child(provider_name.clone())
                                             )
                                             .child(
-                                                // 右侧：API类型标签、开关和操作按钮
-                                                h_flex()
-                                                    .items_center()
-                                                    .gap_2()
-                                                    .flex_shrink_0()  // 添加这行，防止收缩
+                                                // 右侧：API类型标签、开关和操作按钮组
+                                                h_flex() 
+                                                    .items_center() 
+                                                    .gap_2() 
+                                                    .flex_shrink_0() // 关键：防止此组收缩
                                                     .child(
-                                                        div()
+                                                        div() // API 类型标签
                                                             .px_2()
                                                             .py_1()
                                                             .bg(gpui::rgb(0xDDD6FE))
                                                             .text_color(gpui::rgb(0x7C3AED))
                                                             .rounded_md()
                                                             .text_xs()
-                                                            .flex_shrink_0()  // 防止标签收缩
+                                                            .whitespace_nowrap() // 防止标签文字换行
                                                             .child(provider_api_type.clone())
                                                     )
                                                     .child(
@@ -608,7 +613,7 @@ impl Render for LlmProvider {
                                                             .icon(IconName::Trash2)
                                                             .small()
                                                             .ghost()
-                                                            .text_color(gpui::rgb(0xEF4444)) // 红色
+                                                            .text_color(gpui::rgb(0xEF4444))
                                                             .tooltip("删除")
                                                             .on_click(cx.listener(move |this, _, window, cx| {
                                                                 this.delete_provider(index, window, cx);
