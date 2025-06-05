@@ -4,6 +4,7 @@ use crate::ui::components::container::Container;
 use crate::ui::components::titlebar::TitleBar;
 use crate::ui::components::ViewKit;
 use crate::ui::views::introduction::Introduction;
+use crate::ui::views::profile::Profile;
 use crate::ui::views::provider::LlmProvider;
 use crate::ui::views::settings::Settings;
 use crate::ui::{main_window::TodoMainWindow, AppExt};
@@ -112,6 +113,7 @@ pub fn run() {
     app.run(move |cx| {
         gpui_component::init(cx);
         AppState::init(cx);
+        Profile::init(cx);
         LlmProvider::init(cx);
         Settings::init(cx);
 

@@ -230,6 +230,11 @@ impl Render for Settings {
                             .footer(
                                 SidebarFooter::new()
                                     .justify_between()
+                                    .p_0()
+                                    .on_click(cx.listener(|this, _: &ClickEvent, window, cx| {
+                                        cx.open_url("https://www.shouqianba.com");
+                                        // cx.notify();
+                                    }))
                                     .child(
                                         div()
                                             .flex()
