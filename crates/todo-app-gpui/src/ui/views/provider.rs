@@ -783,7 +783,6 @@ impl Render for LlmProvider {
                                                                                     .children(model_capabilities.iter().enumerate().map(|(cap_index, cap)| {
                                                                                         // 创建一个唯一的数字ID，避免字符串生命周期问题
                                                                                         let capability_unique_id = index * 1000000 + model_index * 1000 + cap_index;
-                                                                                        let cap_label = cap.label();
                                                                                         
                                                                                         div()
                                                                                             .id(("capability", capability_unique_id))  // 使用元组形式的ID
@@ -791,9 +790,6 @@ impl Render for LlmProvider {
                                                                                             .rounded_md()
                                                                                             .bg(gpui::rgb(0xF3F4F6))
                                                                                             .child(Icon::new(cap.icon()).xsmall())
-                                                                                            .tooltip(move |window, cx| {
-                                                                                                Tooltip::new(cap_label).build(window, cx)
-                                                                                            })
                                                                                     }))
                                                                             )
                                                                     )
