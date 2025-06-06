@@ -156,12 +156,20 @@ where
             .map_or(Size::Medium, |dropdown| dropdown.read(cx).size);
 
         if let Some(item) = self.delegate.get(ix) {
+            // --- MODIFICATION START ---
+            let content = if let Some(display_element) = item.display_title() {
+                display_element
+            } else {
+                div().whitespace_nowrap().child(item.title().to_string()).into_any_element()
+            };
+            // --- MODIFICATION END ---
+
             let list_item = ListItem::new(("list-item", ix))
                 .check_icon(IconName::Check)
                 .selected(selected)
                 .input_text_size(size)
                 .list_size(size)
-                .child(div().whitespace_nowrap().child(item.title().to_string()));
+                .child(content); // Use the modified content
             Some(list_item)
         } else {
             None
@@ -604,7 +612,7 @@ where
             return default_title;
         };
 
-        let Some(title) = self
+        let Some(title_element) = self // Renamed for clarity
             .state
             .read(cx)
             .list
@@ -613,15 +621,14 @@ where
             .delegate
             .get(*selected_index)
             .map(|item| {
-                if let Some(el) = item.display_title() {
-                    el
+                // --- MODIFICATION START ---
+                // Always use item.title() for the input display to avoid checkbox and complex layouts
+                if let Some(prefix) = self.title_prefix.as_ref() {
+                    format!("{}{}", prefix, item.title()).into_any_element()
                 } else {
-                    if let Some(prefix) = self.title_prefix.as_ref() {
-                        format!("{}{}", prefix, item.title()).into_any_element()
-                    } else {
-                        item.title().into_any_element()
-                    }
+                    item.title().into_any_element()
                 }
+                // --- MODIFICATION END ---
             })
         else {
             return default_title;
@@ -631,7 +638,7 @@ where
             .when(self.disabled, |this| {
                 this.text_color(cx.theme().muted_foreground)
             })
-            .child(title)
+            .child(title_element)
     }
 }
 

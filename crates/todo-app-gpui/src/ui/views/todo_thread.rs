@@ -5,7 +5,7 @@ use gpui::*;
 use gpui_component::{
     button::{Button, ButtonVariant, ButtonVariants as _},
     date_picker::{DatePicker, DatePickerEvent, DatePickerState, DateRangePreset},
-    dropdown::{Dropdown, DropdownState},
+    dropdown::{Dropdown, DropdownDelegate, DropdownEvent, DropdownItem, DropdownState},
     h_flex,
     input::{InputEvent, InputState, TextInput},
     switch::Switch,
@@ -87,6 +87,195 @@ impl TodoStatus {
     }
 }
 
+// 新增：层级化的模型选项结构
+#[derive(Debug, Clone)]
+pub enum ModelOption {
+    Provider {
+        name: String,
+        expanded: bool,
+    },
+    Model {
+        name: String,
+        provider: String,
+        description: String,
+    },
+}
+
+impl DropdownItem for ModelOption {
+    type Value = String;
+
+    fn title(&self) -> SharedString {
+        match self {
+            ModelOption::Provider { name, .. } => name.clone().into(),
+            ModelOption::Model { name, .. } => name.clone().into(), // 移除缩进，只返回模型名
+        }
+    }
+
+    fn display_title(&self) -> Option<AnyElement> {
+        match self {
+            ModelOption::Provider { name, .. } => Some(
+                h_flex()
+                    .items_center()
+                    .py_1()
+                    .child(
+                        div()
+                            .font_semibold()
+                            .text_color(gpui::rgb(0x374151))
+                            .child(name.clone())
+                    )
+                    .into_any_element(),
+            ),
+            ModelOption::Model {
+                name,
+                provider,
+                description,
+            } => Some(
+                h_flex()
+                    .items_center()
+                    .gap_3()
+                    .pl_6() // 使用 pl_6 而不是 ml_4，确保在下拉菜单中缩进
+                    .py_1()
+                    .child(
+                        // Checkbox - 在下拉菜单中显示
+                        div()
+                            .w_4()
+                            .h_4()
+                            .border_1()
+                            .border_color(gpui::rgb(0xD1D5DB))
+                            .bg(gpui::rgb(0xFFFFFF))
+                            .rounded_sm()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            // 这里可以根据实际选中状态显示勾选标记
+                            // TODO: 根据选中状态显示 Check 图标
+                            // .child(Icon::new(IconName::Check).size_3().text_color(gpui::rgb(0xFFFFFF)))
+                    )
+                    .child(
+                        v_flex()
+                            .gap_1()
+                            .flex_1()
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .font_medium()
+                                    .text_color(gpui::rgb(0x6B7280))
+                                    .child(name.clone())
+                            )
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(gpui::rgb(0x9CA3AF))
+                                    .child(description.clone()),
+                            ),
+                    )
+                    .into_any_element(),
+            ),
+        }
+    }
+
+    fn value(&self) -> &Self::Value {
+        match self {
+            ModelOption::Provider { name, .. } => name,
+            ModelOption::Model { name, .. } => name,
+        }
+    }
+}
+
+// 新增：层级化的Dropdown委托
+pub struct HierarchicalModelDelegate {
+    providers: Vec<(String, Vec<(String, String)>)>, // (provider_name, [(model_name, description)])
+    flattened_options: Vec<ModelOption>,
+    selected_model: Option<String>,
+}
+
+impl HierarchicalModelDelegate {
+    pub fn new() -> Self {
+        let providers = vec![
+            (
+                "收钱吧".to_string(),
+                vec![
+                    ("sqb-chat-3.5".to_string(), "快速对话模型".to_string()),
+                    ("sqb-chat-4.0".to_string(), "高级推理模型".to_string()),
+                ],
+            ),
+            (
+                "Anthropic".to_string(),
+                vec![
+                    (
+                        "claude-3.5-sonnet".to_string(),
+                        "最新Claude模型".to_string(),
+                    ),
+                    ("claude-3-haiku".to_string(), "快速响应模型".to_string()),
+                    ("claude-3-opus".to_string(), "最强推理模型".to_string()),
+                ],
+            ),
+            (
+                "OpenAI".to_string(),
+                vec![
+                    ("gpt-4".to_string(), "GPT-4 模型".to_string()),
+                    ("gpt-4-turbo".to_string(), "GPT-4 Turbo".to_string()),
+                    ("gpt-3.5-turbo".to_string(), "GPT-3.5 Turbo".to_string()),
+                ],
+            ),
+        ];
+
+        let mut flattened_options = Vec::new();
+        for (provider_name, models) in &providers {
+            // 添加服务提供商选项
+            flattened_options.push(ModelOption::Provider {
+                name: provider_name.clone(),
+                expanded: true, // 默认展开
+            });
+
+            // 添加该服务提供商下的模型选项
+            for (model_name, description) in models {
+                flattened_options.push(ModelOption::Model {
+                    name: model_name.clone(),
+                    provider: provider_name.clone(),
+                    description: description.clone(),
+                });
+            }
+        }
+
+        Self {
+            providers,
+            flattened_options,
+            selected_model: None,
+        }
+    }
+
+    pub fn set_selected_model(&mut self, model: Option<String>) {
+        self.selected_model = model;
+    }
+
+    pub fn get_selected_model(&self) -> Option<&String> {
+        self.selected_model.as_ref()
+    }
+}
+
+impl DropdownDelegate for HierarchicalModelDelegate {
+    type Item = ModelOption;
+
+    fn len(&self) -> usize {
+        self.flattened_options.len()
+    }
+
+    fn get(&self, ix: usize) -> Option<&Self::Item> {
+        self.flattened_options.get(ix)
+    }
+
+    fn position<V>(&self, value: &V) -> Option<usize>
+    where
+        Self::Item: DropdownItem<Value = V>,
+        V: PartialEq,
+    {
+        self.flattened_options
+            .iter()
+            .position(|item| item.value() == value)
+    }
+}
+
 pub struct TodoThreadView {
     focus_handle: FocusHandle,
 
@@ -98,9 +287,8 @@ pub struct TodoThreadView {
     status_dropdown: Entity<DropdownState<Vec<SharedString>>>,
     priority_dropdown: Entity<DropdownState<Vec<SharedString>>>,
 
-    // AI助手配置
-    llm_provider_dropdown: Entity<DropdownState<Vec<SharedString>>>,
-    model_dropdown: Entity<DropdownState<Vec<SharedString>>>,
+    // AI助手配置 - 修改为层级化模型选择
+    model_dropdown: Entity<DropdownState<HierarchicalModelDelegate>>, // 改为层级化
     mcp_tools_dropdown: Entity<DropdownState<Vec<SharedString>>>,
 
     // 时间设置
@@ -134,17 +322,9 @@ impl TodoThreadView {
         let priority_dropdown =
             cx.new(|cx| DropdownState::new(TodoPriority::all(), Some(1), window, cx));
 
-        // AI助手配置下拉框
-        let llm_providers = vec!["收钱吧".into(), "Anthropic".into(), "OpenAI".into()];
-        let llm_provider_dropdown =
-            cx.new(|cx| DropdownState::new(llm_providers, Some(0), window, cx));
-
-        let models = vec![
-            "claude-3.5-sonnet".into(),
-            "gpt-4".into(),
-            "gpt-3.5-turbo".into(),
-        ];
-        let model_dropdown = cx.new(|cx| DropdownState::new(models, Some(0), window, cx));
+        // AI助手配置 - 层级化模型选择
+        let model_delegate = HierarchicalModelDelegate::new();
+        let model_dropdown = cx.new(|cx| DropdownState::new(model_delegate, None, window, cx));
 
         let mcp_tools = vec![
             "文件操作".into(),
@@ -156,7 +336,6 @@ impl TodoThreadView {
 
         // 时间选择器
         let due_date_picker = cx.new(|cx| DatePickerState::new(window, cx));
-
         let reminder_date_picker = cx.new(|cx| DatePickerState::new(window, cx));
 
         let recurring_options = vec!["每日".into(), "每周".into(), "每月".into(), "每年".into()];
@@ -178,6 +357,15 @@ impl TodoThreadView {
                     cx.notify();
                 }
             }),
+            // 监听模型选择变化
+            cx.subscribe(&model_dropdown, |this, _, event, cx| match event {
+                DropdownEvent::Confirm(selected_value) => {
+                    if let Some(model_name) = selected_value {
+                        println!("选择了模型: {}", model_name);
+                    }
+                    cx.notify();
+                }
+            }),
         ];
 
         Self {
@@ -186,8 +374,7 @@ impl TodoThreadView {
             description_input,
             status_dropdown,
             priority_dropdown,
-            llm_provider_dropdown,
-            model_dropdown,
+            model_dropdown, // 层级化模型选择
             mcp_tools_dropdown,
             due_date_picker,
             reminder_date_picker,
@@ -212,6 +399,13 @@ impl TodoThreadView {
     }
 
     fn save(&mut self, _: &Save, _window: &mut Window, cx: &mut Context<Self>) {
+        let selected_model = self
+            .model_dropdown
+            .read(cx)
+            .selected_value()
+            .map(|v| v.to_string())
+            .unwrap_or_default();
+
         let todo_data = TodoData {
             title: self.title_input.read(cx).value().to_string(),
             description: self.description_input.read(cx).value().to_string(),
@@ -227,18 +421,7 @@ impl TodoThreadView {
                 .selected_value()
                 .map(|v| v.to_string())
                 .unwrap_or_default(),
-            llm_provider: self
-                .llm_provider_dropdown
-                .read(cx)
-                .selected_value()
-                .map(|v| v.to_string())
-                .unwrap_or_default(),
-            model: self
-                .model_dropdown
-                .read(cx)
-                .selected_value()
-                .map(|v| v.to_string())
-                .unwrap_or_default(),
+            selected_model, // 改为selected_model
             mcp_tools: self
                 .mcp_tools_dropdown
                 .read(cx)
@@ -325,8 +508,7 @@ struct TodoData {
     description: String,
     status: String,
     priority: String,
-    llm_provider: String,
-    model: String,
+    selected_model: String, // 改为selected_model
     mcp_tools: String,
     recurring_enabled: bool,
     auto_execute: bool,
@@ -354,8 +536,7 @@ impl FocusableCycle for TodoThreadView {
             self.description_input.focus_handle(cx),
             self.status_dropdown.focus_handle(cx),
             self.priority_dropdown.focus_handle(cx),
-            self.llm_provider_dropdown.focus_handle(cx),
-            self.model_dropdown.focus_handle(cx),
+            self.model_dropdown.focus_handle(cx), // 层级化模型选择
             self.mcp_tools_dropdown.focus_handle(cx),
             self.due_date_picker.focus_handle(cx),
             self.reminder_date_picker.focus_handle(cx),
@@ -490,7 +671,7 @@ impl Render for TodoThreadView {
                     ),
             )
             .child(
-                // AI助手配置
+                // AI助手配置 - 简化为单个层级化选择
                 v_flex()
                     .gap_3()
                     .p_2()
@@ -498,16 +679,19 @@ impl Render for TodoThreadView {
                     .rounded_lg()
                     .child(Self::section_title("AI助手配置"))
                     .child(Self::form_row(
-                        "服务提供商",
-                        Dropdown::new(&self.llm_provider_dropdown)
-                            .placeholder("选择LLM服务")
-                            .small(),
-                    ))
-                    .child(Self::form_row(
-                        "模型",
+                        "模型选择",
                         Dropdown::new(&self.model_dropdown)
-                            .placeholder("选择模型")
-                            .small(),
+                            .placeholder("选择服务提供商和模型")
+                            .small()
+                            .empty(
+                                h_flex()
+                                    .h_8()
+                                    .justify_center()
+                                    .items_center()
+                                    .text_color(gpui::rgb(0x9CA3AF))
+                                    .text_xs()
+                                    .child("暂无可用模型"),
+                            ),
                     ))
                     .child(Self::form_row(
                         "MCP工具",
