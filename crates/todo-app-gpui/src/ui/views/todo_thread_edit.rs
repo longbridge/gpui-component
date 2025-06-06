@@ -265,7 +265,7 @@ impl DropdownDelegate for HierarchicalModelDelegate {
     }
 }
 
-pub struct TodoThreadChat {
+pub struct TodoThreadEdit {
     focus_handle: FocusHandle,
 
     // 基本信息
@@ -293,7 +293,7 @@ pub struct TodoThreadChat {
     _subscriptions: Vec<Subscription>,
 }
 
-impl TodoThreadChat {
+impl TodoThreadEdit {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         // 基本信息输入框
         let title_input = cx.new(|cx| InputState::new(window, cx).placeholder("输入任务标题..."));
@@ -504,7 +504,7 @@ struct TodoData {
     enable_notifications: bool,
 }
 
-impl ViewKit for TodoThreadChat {
+impl ViewKit for TodoThreadEdit {
     fn title() -> &'static str {
         "任务编辑"
     }
@@ -518,7 +518,7 @@ impl ViewKit for TodoThreadChat {
     }
 }
 
-impl FocusableCycle for TodoThreadChat {
+impl FocusableCycle for TodoThreadEdit {
     fn cycle_focus_handles(&self, _: &mut Window, cx: &mut App) -> Vec<FocusHandle> {
         vec![
             self.title_input.focus_handle(cx),
@@ -534,13 +534,13 @@ impl FocusableCycle for TodoThreadChat {
     }
 }
 
-impl Focusable for TodoThreadChat {
+impl Focusable for TodoThreadEdit {
     fn focus_handle(&self, _: &App) -> FocusHandle {
         self.focus_handle.clone()
     }
 }
 
-impl Render for TodoThreadChat {
+impl Render for TodoThreadEdit {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let due_date_presets = vec![
             DateRangePreset::single("今天", Utc::now().naive_local().date()),

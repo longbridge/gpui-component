@@ -4,5 +4,6 @@ pub(crate) mod profile;
 pub(crate) mod provider;
 pub(crate) mod settings;
 pub(crate) mod todo_thread;
+pub(crate) mod todo_thread_edit;
 pub(crate) mod todolist;
 pub(crate) mod user_guide;
