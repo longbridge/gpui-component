@@ -15,11 +15,20 @@ use gpui_component::{
 
 use crate::ui::AppExt;
 
-use super::todo_form::TodoFormView;
+use super::todo_thread::TodoThreadView;
 
 actions!(
     list_story,
-    [SelectedCompany, Open, Completed, Pause, Clone, Star, Delete]
+    [
+        SelectedCompany,
+        Open,
+        Edit,
+        Completed,
+        Pause,
+        Clone,
+        Star,
+        Delete
+    ]
 );
 
 #[derive(Clone, Default)]
@@ -286,6 +295,7 @@ impl ListDelegate for TodoListDelegate {
         menu.external_link_icon(true)
             // .link("About", "https://github.com/longbridge/gpui-component")
             .menu("打开", Box::new(Open))
+            .menu("编辑", Box::new(Edit))
             .separator()
             .menu_with_icon("克隆", IconName::Copy, Box::new(Clone))
             .menu_with_icon("暂停", IconName::Pause, Box::new(Pause))
@@ -451,7 +461,35 @@ impl TodoList {
             cx.create_normal_window(
                 format!("todo-{}", todo.title),
                 options,
-                move |window, cx| TodoFormView::view(window, cx),
+                move |window, cx| TodoThreadView::view(window, cx),
+            );
+        }
+    }
+
+    fn edit_todo(&mut self, _: &Edit, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(todo) = self.selected_company.clone() {
+            cx.activate(true);
+            let window_size = size(px(600.0), px(650.0));
+            let window_bounds = Bounds::centered(None, window_size, cx);
+            let options = WindowOptions {
+                app_id: Some("x-todo-app".to_string()),
+                window_bounds: Some(WindowBounds::Windowed(window_bounds)),
+                titlebar: Some(TitleBar::title_bar_options()),
+                // window_min_size: Some(gpui::Size {
+                //     width: px(600.),
+                //     height: px(600.),
+                // }),
+                kind: WindowKind::PopUp,
+                #[cfg(target_os = "linux")]
+                window_background: gpui::WindowBackgroundAppearance::Transparent,
+                #[cfg(target_os = "linux")]
+                window_decorations: Some(gpui::WindowDecorations::Client),
+                ..Default::default()
+            };
+            cx.create_normal_window(
+                format!("todo-{}", todo.title),
+                options,
+                move |window, cx| TodoThreadView::view(window, cx),
             );
         }
     }
@@ -728,6 +766,7 @@ impl Render for TodoList {
             .on_action(cx.listener(Self::selected_company))
             .on_action(cx.listener(Self::clone))
             .on_action(cx.listener(Self::open_todo))
+            .on_action(cx.listener(Self::edit_todo))
             .size_full()
             .gap_4()
             .child(
@@ -804,7 +843,7 @@ impl Render for TodoList {
                                     ..Default::default()
                                 };
                                 cx.create_normal_window("Add Todo", options, move |window, cx| {
-                                    TodoFormView::view(window, cx)
+                                    TodoThreadView::view(window, cx)
                                 });
                             })),
                     ),

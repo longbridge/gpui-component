@@ -23,6 +23,7 @@ pub enum IconName {
     Bot,
     Brain,
     Calendar,
+    Caption,
     ChartPie,
     Check,
     ChevronDown,
@@ -109,6 +110,7 @@ pub enum IconName {
     WindowMinimize,
     WindowRestore,
     Wrench,
+    X,
 }
 
 impl IconName {
@@ -130,6 +132,7 @@ impl IconName {
             Self::Bot => "icons/bot.svg",
             Self::Brain => "icons/brain.svg",
             Self::Calendar => "icons/calendar.svg",
+            Self::Caption => "icons/caption.svg",
             Self::ChartPie => "icons/chart-pie.svg",
             Self::Check => "icons/check.svg",
             Self::ChevronDown => "icons/chevron-down.svg",
@@ -216,6 +219,7 @@ impl IconName {
             Self::WindowMinimize => "icons/window-minimize.svg",
             Self::WindowRestore => "icons/window-restore.svg",
             Self::Wrench => "icons/wrench.svg",
+            Self::X => "icons/x.svg",
         }
         .into()
     }
