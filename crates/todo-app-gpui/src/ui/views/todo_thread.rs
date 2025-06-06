@@ -149,22 +149,18 @@ impl DropdownItem for ModelOption {
                             .justify_center(),
                     )
                     .child(
-                        v_flex()
-                            .gap_1()
-                            .flex_1()
-                            .child(
-                                div()
-                                    .text_sm()
-                                    .font_medium()
-                                    .text_color(gpui::rgb(0x6B7280))
-                                    .child(name.clone()),
-                            )
-                            // .child( // 移除 description 的显示
-                            //     div()
-                            //         .text_xs()
-                            //         .text_color(gpui::rgb(0x9CA3AF))
-                            //         .child(description.clone()),
-                            // ),
+                        v_flex().gap_1().flex_1().child(
+                            div()
+                                .text_sm()
+                                .font_medium()
+                                .text_color(gpui::rgb(0x6B7280))
+                                .child(name.clone()),
+                        ), // .child( // 移除 description 的显示
+                           //     div()
+                           //         .text_xs()
+                           //         .text_color(gpui::rgb(0x9CA3AF))
+                           //         .child(description.clone()),
+                           // ),
                     )
                     .into_any_element(),
             ),
@@ -221,7 +217,8 @@ impl HierarchicalModelDelegate {
                 expanded: true,
             });
 
-            for model_name in models { // 移除了 description
+            for model_name in models {
+                // 移除了 description
                 flattened_options.push(ModelOption::Model {
                     name: model_name.clone(),
                     provider: provider_name.clone(),
@@ -567,7 +564,7 @@ impl Render for TodoThreadView {
             ),
         ];
 
-        v_flex()
+        v_flex() // Root v_flex
             .key_context(CONTEXT)
             .id("todo-thread-view")
             .on_action(cx.listener(Self::tab))
@@ -576,164 +573,178 @@ impl Render for TodoThreadView {
             .on_action(cx.listener(Self::cancel))
             .on_action(cx.listener(Self::delete))
             .size_full()
-            .gap_1() // 从 gap_2() 改为 gap_1()，减小section间距
-            .p_2()
+            .p_2() // Padding for the entire view
+            .gap_2() // Gap between the content area and the button area
             .child(
-                // 基本信息
+                // Content area - scrollable and takes up available space
                 v_flex()
-                    .gap_3()
-                    .p_2()
-                    .bg(gpui::rgb(0xF9FAFB))
-                    .rounded_lg()
+                    .flex_1()
+                    // .overflow_y_auto() // Ensure content area is scrollable
+                    .gap_1() // Gap between sections inside the content area
                     .child(
-                        v_flex()
-                            .gap_1()
-                            .child(Self::section_title("任务描述"))
-                            .text_sm()
-                            .child(
-                                TextInput::new(&self.description_input).cleanable(),
-                            ),
-                    ),
-            )
-            .child(
-                // 附件拖拽上传区域
-                v_flex()
-                    .gap_3()
-                    .p_2()
-                    .bg(gpui::rgb(0xF9FAFB))
-                    .rounded_lg()
-                    .child(
-                        div()
-                            .id("file-drop-zone")
-                            .h_24() // 从 h_32() 改为 h_24()，减小拖拽区域高度
-                            .w_full()
-                            .border_2()
-                            .border_color(gpui::rgb(0xD1D5DB))
-                            .border_dashed()
+                        // 基本信息
+                        v_flex() // Section container for "任务描述"
+                            .gap_3()
+                            .pt_1()
+                            .px_2()
+                            .pb_2() // Reduced top padding
+                            .bg(gpui::rgb(0xF9FAFB))
                             .rounded_lg()
-                            .bg(gpui::rgb(0xFAFAFA))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .cursor_pointer()
-                            .hover(|style| {
-                                style
-                                    .border_color(gpui::rgb(0x3B82F6))
-                                    .bg(gpui::rgb(0xF0F9FF))
-                            })
-                            .active(|style| {
-                                style
-                                    .border_color(gpui::rgb(0x1D4ED8))
-                                    .bg(gpui::rgb(0xE0F2FE))
-                            })
                             .child(
-                                v_flex()
-                                    .items_center()
-                                    .gap_2()
-                                    .child(
-                                        Icon::new(IconName::Upload)
-                                            .size_6()
-                                            .text_color(gpui::rgb(0x6B7280)),
-                                    )
-                                    .child(
-                                        div()
-                                            .text_xs()
-                                            .text_color(gpui::rgb(0x9CA3AF))
-                                            .child("拖拽文件到此处上传或点击选择文件"),
-                                    )
-                                    .child(
-                                        div()
-                                            .text_xs()
-                                            .text_color(gpui::rgb(0xB91C1C))
-                                            .child("支持 PDF、DOC、TXT、图片等格式"),
-                                    ),
-                            )
-                            .on_click(cx.listener(|this, _, _window, cx| {
-                                println!("点击上传文件");
-                                cx.notify();
-                            })),
-                    ),
-            )
-            .child(
-                // AI助手配置
-                v_flex()
-                    .gap_3()
-                    .p_2()
-                    .bg(gpui::rgb(0xF9FAFB))
-                    .rounded_lg()
-                    .child(Self::section_title("AI助手配置"))
-                    .child(Self::form_row(
-                        "模型选择",
-                        Dropdown::new(&self.model_dropdown)
-                            .placeholder("选择服务提供商和模型")
-                            .small()
-                            .empty(
-                                h_flex()
-                                    .h_8()
-                                    .justify_center()
-                                    .items_center()
-                                    .text_color(gpui::rgb(0x9CA3AF))
-                                    .text_xs()
-                                    .child("暂无可用模型"),
+                                v_flex() // Inner v_flex for title and input
+                                    .gap_1()
+                                    .child(Self::section_title("任务描述"))
+                                    // Removed misplaced .text_sm() from here
+                                    .child(TextInput::new(&self.description_input).cleanable()),
                             ),
-                    ))
-                    .child(Self::form_row(
-                        "MCP工具",
-                        Dropdown::new(&self.mcp_tools_dropdown)
-                            .placeholder("选择工具集")
-                            .small(),
-                    )),
-            )
-            .child(
-                // 时间安排
-                v_flex()
-                    .gap_3()
-                    .p_2()
-                    .bg(gpui::rgb(0xF9FAFB))
-                    .rounded_lg()
-                    .child(Self::section_title("时间安排"))
-                    .child(
-                        Self::form_row(
-                            "截止日期",
-                            DatePicker::new(&self.due_date_picker)
-                                .placeholder("选择截止日期")
-                                .cleanable()
-                                .presets(due_date_presets.clone())
-                                .small(),
-                        ),
                     )
                     .child(
-                        h_flex()
-                            .gap_4()
-                            .items_center()
+                        // 附件拖拽上传区域
+                        v_flex() // Section container for "附件上传"
+                            .gap_3()
+                            .pt_1()
+                            .px_2()
+                            .pb_2() // Reduced top padding
+                            .bg(gpui::rgb(0xF9FAFB))
+                            .rounded_lg()
+                            //.child(Self::section_title("附件上传"))
                             .child(
                                 div()
-                                    .text_sm()
-                                    .text_color(gpui::rgb(0x6B7280))
-                                    .min_w_24()
-                                    .child("周期重复"),
-                            )
-                            .child(
-                                Switch::new("recurring")
-                                    .checked(self.recurring_enabled)
-                                    .on_click(cx.listener(move |this, checked, window, cx| {
-                                        this.toggle_recurring(*checked, window, cx);
+                                    .id("file-drop-zone")
+                                    .h_24()
+                                    .w_full()
+                                    .border_2()
+                                    .border_color(gpui::rgb(0xD1D5DB))
+                                    .border_dashed()
+                                    .rounded_lg()
+                                    .bg(gpui::rgb(0xFAFAFA))
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .cursor_pointer()
+                                    .hover(|style| {
+                                        style
+                                            .border_color(gpui::rgb(0x3B82F6))
+                                            .bg(gpui::rgb(0xF0F9FF))
+                                    })
+                                    .active(|style| {
+                                        style
+                                            .border_color(gpui::rgb(0x1D4ED8))
+                                            .bg(gpui::rgb(0xE0F2FE))
+                                    })
+                                    .child(
+                                        v_flex()
+                                            .items_center()
+                                            .gap_2()
+                                            .child(
+                                                Icon::new(IconName::Upload)
+                                                    .size_6()
+                                                    .text_color(gpui::rgb(0x6B7280)),
+                                            )
+                                            .child(
+                                                div()
+                                                    .text_xs()
+                                                    .text_color(gpui::rgb(0x9CA3AF))
+                                                    .child("拖拽文件到此处上传或点击选择文件"),
+                                            )
+                                            .child(
+                                                div()
+                                                    .text_xs()
+                                                    .text_color(gpui::rgb(0xB91C1C))
+                                                    .child("支持 PDF、DOC、TXT、图片等格式"),
+                                            ),
+                                    )
+                                    .on_click(cx.listener(|this, _, _window, cx| {
+                                        println!("点击上传文件");
+                                        cx.notify();
                                     })),
-                            )
-                            .when(self.recurring_enabled, |this| {
-                                this.child(
-                                    div().ml_4().child(
-                                        Dropdown::new(&self.recurring_dropdown)
-                                            .placeholder("选择周期")
-                                            .small(),
+                            ),
+                    )
+                    .child(
+                        // AI助手配置
+                        v_flex() // Section container for "AI助手配置"
+                            .gap_3()
+                            .pt_1()
+                            .px_2()
+                            .pb_2() // Reduced top padding
+                            .bg(gpui::rgb(0xF9FAFB))
+                            .rounded_lg()
+                            .child(Self::section_title("AI助手配置"))
+                            .child(Self::form_row(
+                                "模型选择",
+                                Dropdown::new(&self.model_dropdown)
+                                    .placeholder("选择服务提供商和模型")
+                                    .small()
+                                    .empty(
+                                        h_flex()
+                                            .h_8()
+                                            .justify_center()
+                                            .items_center()
+                                            .text_color(gpui::rgb(0x9CA3AF))
+                                            .text_xs()
+                                            .child("暂无可用模型"),
                                     ),
-                                )
-                            }),
+                            ))
+                            .child(Self::form_row(
+                                "MCP工具",
+                                Dropdown::new(&self.mcp_tools_dropdown)
+                                    .placeholder("选择工具集")
+                                    .small(),
+                            )),
+                    )
+                    .child(
+                        // 时间安排
+                        v_flex() // Section container for "时间安排"
+                            .gap_3()
+                            .pt_1()
+                            .px_2()
+                            .pb_2() // Reduced top padding
+                            .bg(gpui::rgb(0xF9FAFB))
+                            .rounded_lg()
+                            .child(Self::section_title("时间安排"))
+                            .child(Self::form_row(
+                                "截止日期",
+                                DatePicker::new(&self.due_date_picker)
+                                    .placeholder("选择截止日期")
+                                    .cleanable()
+                                    .presets(due_date_presets.clone())
+                                    .small(),
+                            ))
+                            .child(
+                                h_flex()
+                                    .gap_4()
+                                    .items_center()
+                                    .child(
+                                        div()
+                                            .text_sm()
+                                            .text_color(gpui::rgb(0x6B7280))
+                                            .min_w_24()
+                                            .child("周期重复"),
+                                    )
+                                    .child(
+                                        Switch::new("recurring")
+                                            .checked(self.recurring_enabled)
+                                            .on_click(cx.listener(
+                                                move |this, checked, window, cx| {
+                                                    this.toggle_recurring(*checked, window, cx);
+                                                },
+                                            )),
+                                    )
+                                    .when(self.recurring_enabled, |this| {
+                                        this.child(
+                                            div().ml_4().child(
+                                                Dropdown::new(&self.recurring_dropdown)
+                                                    .placeholder("选择周期")
+                                                    .small(),
+                                            ),
+                                        )
+                                    }),
+                            ),
                     ),
             )
             .child(
-                // 操作按钮
-                h_flex().items_center().justify_center().pt_1().child( // 稍微减小按钮上边距
+                // 操作按钮区域
+                h_flex().items_center().justify_center().pt_2().child(
                     h_flex().gap_3().child(
                         Button::new("save-btn")
                             .with_variant(ButtonVariant::Primary)
