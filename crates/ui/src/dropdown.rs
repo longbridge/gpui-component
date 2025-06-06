@@ -125,12 +125,18 @@ impl<T: DropdownItem> DropdownDelegate for Vec<T> {
     }
 }
 
-struct DropdownListDelegate<D: DropdownDelegate + 'static> {
+pub struct DropdownListDelegate<D: DropdownDelegate + 'static> {
     delegate: D,
     dropdown: WeakEntity<DropdownState<D>>,
     selected_index: Option<usize>,
 }
 
+impl<D: DropdownDelegate + 'static> DropdownListDelegate<D> {
+
+    pub fn delegate(&self) -> &D {
+        &self.delegate
+    }
+}
 impl<D> ListDelegate for DropdownListDelegate<D>
 where
     D: DropdownDelegate + 'static,
@@ -256,6 +262,12 @@ pub struct DropdownState<D: DropdownDelegate + 'static> {
     open: bool,
     selected_value: Option<<D::Item as DropdownItem>::Value>,
     _subscriptions: Vec<Subscription>,
+}
+
+impl<D: DropdownDelegate + 'static>  DropdownState<D> {
+    pub fn list(&self) -> &Entity<List<DropdownListDelegate<D>>> {
+       &self.list
+    }
 }
 
 /// A Dropdown element.

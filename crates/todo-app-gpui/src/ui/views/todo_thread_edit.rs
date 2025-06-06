@@ -164,92 +164,191 @@ impl DropdownItem for MultiSelectModel {
     }
 }
 
+// 服务商标题
+#[derive(Debug, Clone)]
+pub struct ProviderTitle {
+    pub name: String,
+}
+
+impl DropdownItem for ProviderTitle {
+    type Value = String;
+
+    fn title(&self) -> SharedString {
+        self.name.clone().into()
+    }
+
+    fn display_title(&self) -> Option<AnyElement> {
+        Some(
+            h_flex()
+                .items_center()
+                .py_2()
+                .px_3()
+                .bg(gpui::rgb(0xF3F4F6)) // 灰色背景区分服务商标题
+                .child(
+                    div()
+                        .text_sm()
+                        .font_semibold()
+                        .text_color(gpui::rgb(0x374151))
+                        .child(self.name.clone()),
+                )
+                .into_any_element(),
+        )
+    }
+
+    fn value(&self) -> &Self::Value {
+        &self.name
+    }
+}
+
+// 模型列表项，可以是服务商标题或模型
+#[derive(Debug, Clone)]
+pub enum ModelListItem {
+    Provider(ProviderTitle),
+    Model(MultiSelectModel),
+}
+
+impl DropdownItem for ModelListItem {
+    type Value = String;
+
+    fn title(&self) -> SharedString {
+        match self {
+            ModelListItem::Provider(provider) => provider.title(),
+            ModelListItem::Model(model) => model.title(),
+        }
+    }
+
+    fn display_title(&self) -> Option<AnyElement> {
+        match self {
+            ModelListItem::Provider(provider) => provider.display_title(),
+            ModelListItem::Model(model) => {
+                // 给模型添加缩进，表示它们属于上面的服务商
+                Some(
+                    div()
+                        .pl_4() // 缩进
+                        .child(model.display_title().unwrap())
+                        .into_any_element(),
+                )
+            }
+        }
+    }
+
+    fn value(&self) -> &Self::Value {
+        match self {
+            ModelListItem::Provider(provider) => provider.value(),
+            ModelListItem::Model(model) => model.value(),
+        }
+    }
+}
+
 // 多选模型委托
 pub struct MultiSelectModelDelegate {
-    models: Vec<MultiSelectModel>,
+    items: Vec<ModelListItem>, // 改为包含服务商和模型的混合列表
 }
 
 impl MultiSelectModelDelegate {
     pub fn new() -> Self {
-        let mut models = Vec::new();
+        let mut items = Vec::new();
 
-        // 收钱吧模型
-        models.push(MultiSelectModel {
+        // 收钱吧
+        items.push(ModelListItem::Provider(ProviderTitle {
+            name: "收钱吧".to_string(),
+        }));
+        items.push(ModelListItem::Model(MultiSelectModel {
             name: "sqb-chat-3.5".to_string(),
             provider: "收钱吧".to_string(),
             is_selected: false,
-        });
-        models.push(MultiSelectModel {
+        }));
+        items.push(ModelListItem::Model(MultiSelectModel {
             name: "sqb-chat-4.0".to_string(),
             provider: "收钱吧".to_string(),
             is_selected: false,
-        });
+        }));
 
-        // Anthropic模型
-        models.push(MultiSelectModel {
+        // Anthropic
+        items.push(ModelListItem::Provider(ProviderTitle {
+            name: "Anthropic".to_string(),
+        }));
+        items.push(ModelListItem::Model(MultiSelectModel {
             name: "claude-3.5-sonnet".to_string(),
             provider: "Anthropic".to_string(),
             is_selected: false,
-        });
-        models.push(MultiSelectModel {
+        }));
+        items.push(ModelListItem::Model(MultiSelectModel {
             name: "claude-3-haiku".to_string(),
             provider: "Anthropic".to_string(),
             is_selected: false,
-        });
-        models.push(MultiSelectModel {
+        }));
+        items.push(ModelListItem::Model(MultiSelectModel {
             name: "claude-3-opus".to_string(),
             provider: "Anthropic".to_string(),
             is_selected: false,
-        });
+        }));
 
-        // OpenAI模型
-        models.push(MultiSelectModel {
+        // OpenAI
+        items.push(ModelListItem::Provider(ProviderTitle {
+            name: "OpenAI".to_string(),
+        }));
+        items.push(ModelListItem::Model(MultiSelectModel {
             name: "gpt-4".to_string(),
             provider: "OpenAI".to_string(),
             is_selected: false,
-        });
-        models.push(MultiSelectModel {
+        }));
+        items.push(ModelListItem::Model(MultiSelectModel {
             name: "gpt-4-turbo".to_string(),
             provider: "OpenAI".to_string(),
             is_selected: false,
-        });
-        models.push(MultiSelectModel {
+        }));
+        items.push(ModelListItem::Model(MultiSelectModel {
             name: "gpt-3.5-turbo".to_string(),
             provider: "OpenAI".to_string(),
             is_selected: false,
-        });
+        }));
 
-        Self { models }
+        Self { items }
     }
 
     pub fn toggle_selection(&mut self, model_name: &str) {
-        if let Some(model) = self.models.iter_mut().find(|m| m.name == model_name) {
-            model.is_selected = !model.is_selected;
+        // 只有模型可以被选择，服务商标题不可选择
+        for item in self.items.iter_mut() {
+            if let ModelListItem::Model(model) = item {
+                if model.name == model_name {
+                    model.is_selected = !model.is_selected;
+                    break;
+                }
+            }
         }
     }
 
     pub fn get_selected_models(&self) -> Vec<String> {
-        self.models
+        self.items
             .iter()
-            .filter(|m| m.is_selected)
-            .map(|m| m.name.clone())
+            .filter_map(|item| match item {
+                ModelListItem::Model(model) if model.is_selected => Some(model.name.clone()),
+                _ => None,
+            })
             .collect()
     }
 
     pub fn get_selected_count(&self) -> usize {
-        self.models.iter().filter(|m| m.is_selected).count()
+        self.items
+            .iter()
+            .filter(|item| match item {
+                ModelListItem::Model(model) => model.is_selected,
+                _ => false,
+            })
+            .count()
     }
 }
 
 impl DropdownDelegate for MultiSelectModelDelegate {
-    type Item = MultiSelectModel;
+    type Item = ModelListItem; // 改为新的类型
 
     fn len(&self) -> usize {
-        self.models.len()
+        self.items.len()
     }
 
     fn get(&self, ix: usize) -> Option<&Self::Item> {
-        self.models.get(ix)
+        self.items.get(ix)
     }
 
     fn position<V>(&self, value: &V) -> Option<usize>
@@ -257,7 +356,7 @@ impl DropdownDelegate for MultiSelectModelDelegate {
         Self::Item: DropdownItem<Value = V>,
         V: PartialEq,
     {
-        self.models
+        self.items
             .iter()
             .position(|item| item.value() == value)
     }
@@ -344,15 +443,26 @@ impl TodoThreadEdit {
             }),
             // 监听模型选择变化 - 多选逻辑
             cx.subscribe(&model_dropdown, |this, _, event, cx| match event {
-                DropdownEvent::Confirm(Some(model_name)) => {
-                    // 切换模型选择状态
-                    this.model_dropdown.update(cx, |dropdown_state, dropdown_cx| {
-                        // 访问底层delegate并切换选择
-                        dropdown_state.update_delegate(dropdown_cx, |delegate| {
-                            delegate.toggle_selection(model_name);
+                DropdownEvent::Confirm(Some(item_name)) => {
+                    // 检查点击的是模型还是服务商标题
+                    let is_model = this.model_dropdown.read(cx).list().read(cx).delegate().delegate().items
+                        .iter()
+                        .any(|item| match item {
+                            ModelListItem::Model(model) => model.name == *item_name,
+                            _ => false,
                         });
-                    });
-                    println!("切换模型选择: {}", model_name);
+                    
+                    if is_model {
+                        // 只有点击模型时才切换选择状态
+                        this.model_dropdown.update(cx, |dropdown_state, dropdown_cx| {
+                            dropdown_state.update_delegate(dropdown_cx, |delegate| {
+                                delegate.toggle_selection(item_name);
+                            });
+                        });
+                        println!("切换模型选择: {}", item_name);
+                    } else {
+                        println!("点击了服务商标题: {}", item_name);
+                    }
                     cx.notify();
                 }
                 DropdownEvent::Confirm(None) => {
