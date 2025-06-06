@@ -229,7 +229,7 @@ impl TodoThreadChat {
             InputState::new(window, cx)
                 .placeholder("输入消息与AI助手对话...\n支持多行输入，按Ctrl+Enter发送")
                 .multi_line()
-                .auto_grow(1, 5)
+                .auto_grow(2, 6)
         });
 
         // AI助手配置
@@ -386,7 +386,7 @@ impl TodoThreadChat {
         cx: &mut Context<Self>,
     ) {
         match event {
-            InputEvent::PressEnter { .. } => {
+            InputEvent::PressEnter { secondary, .. } if !secondary => {
                 // Ctrl+Enter 发送消息
                 self.send_message(&SendMessage, window, cx);
             }
@@ -541,7 +541,7 @@ impl Render for TodoThreadChat {
                     .child(
                         // 聊天消息列表 - 可滚动区域
                         div().flex_1().overflow_hidden().child(
-                            div().h_full().child(
+                            div().h_full().flex_wrap().child(
                                 v_flex()
                                     .p_4()
                                     .gap_2()
@@ -618,9 +618,9 @@ impl Render for TodoThreadChat {
                     )
                     .child(
                         // 聊天输入区域 - 固定在底部
-                        h_flex()
+                        v_flex()
                             .gap_2()
-                            .p_2()
+                            .p_4()
                             .child(
                                 // 多行输入框
                                 div().w_full().child(TextInput::new(&self.chat_input)),
