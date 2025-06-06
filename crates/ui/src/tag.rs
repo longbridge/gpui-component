@@ -1,7 +1,8 @@
 use crate::{theme::ActiveTheme as _, ColorName, Sizable, Size};
 use gpui::{
-    div, prelude::FluentBuilder as _, relative, transparent_black, AnyElement, App, Div, Hsla,
-    InteractiveElement as _, IntoElement, ParentElement, RenderOnce, Styled, Window,
+    div, prelude::FluentBuilder as _, relative, rems, transparent_black, AbsoluteLength,
+    AnyElement, App, Div, Hsla, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
+    Styled, Window,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -80,6 +81,7 @@ pub struct Tag {
     base: Div,
     variant: TagVariant,
     size: Size,
+    rounded: Option<AbsoluteLength>,
 }
 impl Tag {
     fn new() -> Self {
@@ -87,6 +89,7 @@ impl Tag {
             base: div().flex().items_center().border_1(),
             variant: TagVariant::default(),
             size: Size::default(),
+            rounded: None,
         }
     }
 
@@ -130,7 +133,20 @@ impl Tag {
     pub fn color(color: impl Into<ColorName>) -> Self {
         Self::new().with_variant(TagVariant::Color(color.into()))
     }
+
+    /// Set rounded corners.
+    pub fn rounded(mut self, radius: impl Into<AbsoluteLength>) -> Self {
+        self.rounded = Some(radius.into());
+        self
+    }
+
+    /// Set rounded full
+    pub fn rounded_full(mut self) -> Self {
+        self.rounded = Some(rems(1.).into());
+        self
+    }
 }
+
 impl Sizable for Tag {
     fn with_size(mut self, size: impl Into<Size>) -> Self {
         self.size = size.into();
@@ -147,17 +163,25 @@ impl RenderOnce for Tag {
         let bg = self.variant.bg(cx);
         let fg = self.variant.fg(cx);
         let border = self.variant.border(cx);
+        let rounded = self.rounded.unwrap_or(
+            match self.size {
+                Size::XSmall | Size::Small => cx.theme().radius / 2.,
+                _ => cx.theme().radius,
+            }
+            .into(),
+        );
 
         self.base
-            .line_height(relative(1.3))
+            .line_height(relative(1.))
             .text_xs()
             .map(|this| match self.size {
-                Size::XSmall | Size::Small => this.px_1p5().py_0().rounded(cx.theme().radius / 2.),
-                _ => this.px_2p5().py_0p5().rounded(cx.theme().radius),
+                Size::XSmall | Size::Small => this.px_1p5().py_0p5(),
+                _ => this.px_2p5().py_1(),
             })
             .bg(bg)
             .text_color(fg)
             .border_color(border)
+            .rounded(rounded)
             .hover(|this| this.opacity(0.9))
     }
 }

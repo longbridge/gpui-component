@@ -1,5 +1,6 @@
 use gpui::{
-    App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render, Styled, Window,
+    px, App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render, Styled,
+    Window,
 };
 
 use gpui_component::{h_flex, tag::Tag, v_flex, yellow_500, yellow_800, ColorName, Sizable};
@@ -45,32 +46,79 @@ impl Render for TagStory {
         v_flex()
             .gap_6()
             .child(
-                section("Tag")
-                    .child(
-                        h_flex()
-                            .gap_2()
-                            .child(Tag::primary().small().child("Tag"))
-                            .child(Tag::secondary().small().child("Secondary"))
-                            .child(Tag::outline().small().child("Outline"))
-                            .child(Tag::danger().small().child("danger"))
-                            .child(
-                                Tag::custom(yellow_500(), yellow_800(), yellow_500())
-                                    .small()
-                                    .child("Custom"),
-                            ),
-                    )
-                    .child(
-                        h_flex()
-                            .gap_2()
-                            .child(Tag::primary().child("Tag"))
-                            .child(Tag::secondary().child("Secondary"))
-                            .child(Tag::outline().child("Outline"))
-                            .child(Tag::danger().child("danger"))
-                            .child(
-                                Tag::custom(yellow_500(), yellow_800(), yellow_500())
-                                    .child("Custom"),
-                            ),
-                    ),
+                section("Tag (default)").child(
+                    h_flex()
+                        .gap_2()
+                        .child(Tag::primary().child("Tag"))
+                        .child(Tag::secondary().child("Secondary"))
+                        .child(Tag::outline().child("Outline"))
+                        .child(Tag::danger().child("danger"))
+                        .child(
+                            Tag::custom(yellow_500(), yellow_800(), yellow_500()).child("Custom"),
+                        ),
+                ),
+            )
+            .child(
+                section("Tag (small)").child(
+                    h_flex()
+                        .gap_2()
+                        .child(Tag::primary().small().child("Tag"))
+                        .child(Tag::secondary().small().child("Secondary"))
+                        .child(Tag::outline().small().child("Outline"))
+                        .child(Tag::danger().small().child("danger"))
+                        .child(
+                            Tag::custom(yellow_500(), yellow_800(), yellow_500())
+                                .small()
+                                .child("Custom"),
+                        ),
+                ),
+            )
+            .child(
+                section("Tag (rounded full)").child(
+                    h_flex()
+                        .gap_2()
+                        .child(Tag::primary().rounded_full().child("Tag"))
+                        .child(Tag::secondary().rounded_full().child("Secondary"))
+                        .child(Tag::outline().rounded_full().child("Outline"))
+                        .child(Tag::danger().rounded_full().child("danger"))
+                        .child(
+                            Tag::custom(yellow_500(), yellow_800(), yellow_500())
+                                .rounded_full()
+                                .child("Custom"),
+                        ),
+                ),
+            )
+            .child(
+                section("Tag (small with rounded full)").child(
+                    h_flex()
+                        .gap_2()
+                        .child(Tag::primary().small().rounded_full().child("Tag"))
+                        .child(Tag::secondary().small().rounded_full().child("Secondary"))
+                        .child(Tag::outline().small().rounded_full().child("Outline"))
+                        .child(Tag::danger().small().rounded_full().child("danger"))
+                        .child(
+                            Tag::custom(yellow_500(), yellow_800(), yellow_500())
+                                .small()
+                                .rounded_full()
+                                .child("Custom"),
+                        ),
+                ),
+            )
+            .child(
+                section("Tag (rounded 0px)").child(
+                    h_flex()
+                        .gap_2()
+                        .child(Tag::primary().small().rounded(px(0.)).child("Tag"))
+                        .child(Tag::secondary().small().rounded(px(0.)).child("Secondary"))
+                        .child(Tag::outline().small().rounded(px(0.)).child("Outline"))
+                        .child(Tag::danger().small().rounded(px(0.)).child("danger"))
+                        .child(
+                            Tag::custom(yellow_500(), yellow_800(), yellow_500())
+                                .small()
+                                .rounded(px(0.))
+                                .child("Custom"),
+                        ),
+                ),
             )
             .child(
                 section("Color Tags").child(
