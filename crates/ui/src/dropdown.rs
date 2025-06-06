@@ -132,11 +132,15 @@ pub struct DropdownListDelegate<D: DropdownDelegate + 'static> {
 }
 
 impl<D: DropdownDelegate + 'static> DropdownListDelegate<D> {
+    pub fn delegate_mut(&mut self) -> &mut D {
+        &mut self.delegate
+    }
 
     pub fn delegate(&self) -> &D {
         &self.delegate
     }
 }
+
 impl<D> ListDelegate for DropdownListDelegate<D>
 where
     D: DropdownDelegate + 'static,
@@ -264,11 +268,11 @@ pub struct DropdownState<D: DropdownDelegate + 'static> {
     _subscriptions: Vec<Subscription>,
 }
 
-impl<D: DropdownDelegate + 'static>  DropdownState<D> {
-    pub fn list(&self) -> &Entity<List<DropdownListDelegate<D>>> {
-       &self.list
-    }
-}
+// impl<D: DropdownDelegate + 'static>  DropdownState<D> {
+//     pub fn list_entity(&self) -> &Entity<List<DropdownListDelegate<D>>> {
+//        &self.list
+//     }
+// }
 
 /// A Dropdown element.
 #[derive(IntoElement)]
@@ -524,6 +528,10 @@ where
         self.list.update(cx, |list, _| {
             list.delegate_mut().delegate = items;
         });
+    }
+
+     pub fn list_entity(&self) -> &Entity<List<DropdownListDelegate<D>>> {
+       &self.list
     }
 
     // 添加多选支持方法

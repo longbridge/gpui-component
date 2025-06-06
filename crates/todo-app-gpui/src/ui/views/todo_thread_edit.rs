@@ -439,7 +439,7 @@ impl TodoThreadEdit {
             cx.subscribe(&model_dropdown, |this, _, event, cx| match event {
                 DropdownEvent::Confirm(Some(item_name)) => {
                     // 检查点击的是模型还是服务商标题
-                    let is_model = this.model_dropdown.read(cx).list().read(cx).delegate().delegate().items
+                    let is_model = this.model_dropdown.read(cx).list_entity().read(cx).delegate().delegate().items
                         .iter()
                         .any(|item| match item {
                             ModelListItem::Model(model) => model.name == *item_name,
@@ -497,7 +497,13 @@ impl TodoThreadEdit {
 
     fn save(&mut self, _: &Save, _window: &mut Window, cx: &mut Context<Self>) {
         // 获取选中的模型列表
-        let selected_models = self.model_dropdown.read(cx).get_selected_models();
+        let selected_models = self.model_dropdown
+            .read(cx)
+            .list_entity()
+            .read(cx)
+            .delegate()
+            .delegate()
+            .get_selected_models();
 
         let todo_data = TodoData {
             title: self.title_input.read(cx).value().to_string(),
@@ -595,7 +601,15 @@ impl TodoThreadEdit {
 
     // 获取模型选择显示文本 - 显示选中的模型名称
     fn get_model_display_text(&self, cx: &App) -> String {
-        let selected_models = self.model_dropdown.read(cx).get_selected_models();
+        // 直接访问底层委托数据
+        let selected_models = self.model_dropdown
+            .read(cx)
+            .list_entity()
+            .read(cx)
+            .delegate()
+            .delegate()
+            .get_selected_models();
+        
         let selected_count = selected_models.len();
         
         if selected_count == 0 {
