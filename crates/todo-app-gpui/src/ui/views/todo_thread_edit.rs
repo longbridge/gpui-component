@@ -439,7 +439,13 @@ impl TodoThreadEdit {
             cx.subscribe(&model_dropdown, |this, _, event, cx| match event {
                 DropdownEvent::Confirm(Some(item_name)) => {
                     // 检查点击的是模型还是服务商标题
-                    let is_model = this.model_dropdown.read(cx).list_entity().read(cx).delegate().delegate().items
+                    let is_model = this.model_dropdown
+                        .read(cx)
+                        .list_entity()
+                        .read(cx)
+                        .delegate()
+                        .delegate()
+                        .items
                         .iter()
                         .any(|item| match item {
                             ModelListItem::Model(model) => model.name == *item_name,
