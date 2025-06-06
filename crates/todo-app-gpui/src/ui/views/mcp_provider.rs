@@ -660,32 +660,18 @@ impl McpProvider {
                         ),
                 )
                 .child(
-                    h_flex()
-                        .gap_3()
-                        // .child(
-                        //     v_flex()
-                        //         .gap_1()
-                        //         .flex_1()
-                        //         .child(
-                        //             div()
-                        //                 .text_sm()
-                        //                 .text_color(gpui::rgb(0x6B7280))
-                        //                 .child("可执行文件路径 *"),
-                        //         )
-                        //         .child(TextInput::new(&inputs.command_input).cleanable()),
-                        // )
-                        .child(
-                            v_flex()
-                                .gap_1()
-                                .flex_1()
-                                .child(
-                                    div()
-                                        .text_sm()
-                                        .text_color(gpui::rgb(0x6B7280))
-                                        .child("启动命令&参数"),
-                                )
-                                .child(TextInput::new(&inputs.args_input).cleanable()),
-                        ),
+                    h_flex().gap_3().child(
+                        v_flex()
+                            .gap_1()
+                            .flex_1()
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .text_color(gpui::rgb(0x6B7280))
+                                    .child("启动命令&参数"),
+                            )
+                            .child(TextInput::new(&inputs.args_input).cleanable()),
+                    ),
                 )
                 .child(
                     v_flex()
@@ -1294,61 +1280,24 @@ impl Render for McpProvider {
                                                             ),
                                                     )
                                                     .child(
-                                                        h_flex()
-                                                            .gap_3()
-                                                            // .child(
-                                                            //     v_flex()
-                                                            //         .gap_1()
-                                                            //         .flex_1()
-                                                            //         .child(
-                                                            //             div()
-                                                            //                 .text_sm()
-                                                            //                 .text_color(gpui::rgb(
-                                                            //                     0x6B7280,
-                                                            //                 ))
-                                                            //                 .child(
-                                                            //                     "可执行文件路径 *",
-                                                            //                 ),
-                                                            //         )
-                                                            //         .child(
-                                                            //             TextInput::new(
-                                                            //                 command_input,
-                                                            //             )
-                                                            //             .cleanable(),
-                                                            //         ),
-                                                            // )
-                                                            .child(
-                                                                v_flex()
-                                                                    .gap_1()
-                                                                    .flex_1()
-                                                                    .child(
-                                                                        div()
-                                                                            .text_sm()
-                                                                            .text_color(gpui::rgb(
-                                                                                0x6B7280,
-                                                                            ))
-                                                                            .child("启动命令&参数"),
-                                                                    )
-                                                                    .child(
-                                                                        TextInput::new(args_input)
-                                                                            .cleanable(),
-                                                                    ),
-                                                            ),
+                                                        h_flex().gap_3().child(
+                                                            v_flex()
+                                                                .gap_1()
+                                                                .flex_1()
+                                                                .child(
+                                                                    div()
+                                                                        .text_sm()
+                                                                        .text_color(gpui::rgb(
+                                                                            0x6B7280,
+                                                                        ))
+                                                                        .child("启动命令&参数"),
+                                                                )
+                                                                .child(
+                                                                    TextInput::new(args_input)
+                                                                        .cleanable(),
+                                                                ),
+                                                        ),
                                                     )
-                                                    // .child(
-                                                    //     v_flex()
-                                                    //         .gap_1()
-                                                    //         .child(
-                                                    //             div()
-                                                    //                 .text_sm()
-                                                    //                 .text_color(gpui::rgb(0x6B7280))
-                                                    //                 .child("服务描述"),
-                                                    //         )
-                                                    //         .child(
-                                                    //             TextInput::new(description_input)
-                                                    //                 .cleanable(),
-                                                    //         ),
-                                                    // )
                                                     .child(
                                                         v_flex()
                                                             .gap_1()
@@ -1409,62 +1358,30 @@ impl Render for McpProvider {
                                             v_flex()
                                                 .gap_2()
                                                 .child(
-                                                    h_flex()
-                                                        .gap_4()
-                                                        // .child(
-                                                        //     v_flex()
-                                                        //         .gap_1()
-                                                        //         .child(
-                                                        //             div()
-                                                        //                 .text_sm()
-                                                        //                 .font_medium()
-                                                        //                 .text_color(gpui::rgb(
-                                                        //                     0x374151,
-                                                        //                 ))
-                                                        //                 .child("可执行文件"),
-                                                        //         )
-                                                        //         .child(
-                                                        //             div()
-                                                        //                 .text_sm()
-                                                        //                 .text_color(gpui::rgb(
-                                                        //                     0x6B7280,
-                                                        //                 ))
-                                                        //                 .child(
-                                                        //                     provider_command
-                                                        //                         .clone(),
-                                                        //                 ),
-                                                        //         ),
-                                                        // )
-                                                        .child(
-                                                            v_flex()
-                                                                .gap_1()
-                                                                .child(
-                                                                    div()
-                                                                        .text_sm()
-                                                                        .font_medium()
-                                                                        .text_color(gpui::rgb(
-                                                                            0x374151,
-                                                                        ))
-                                                                        .child("启动命令&参数"),
-                                                                )
-                                                                .child(
-                                                                    div()
-                                                                        .text_sm()
-                                                                        .text_color(gpui::rgb(
-                                                                            0x6B7280,
-                                                                        ))
-                                                                        .child(
-                                                                            if provider_args
-                                                                                .is_empty()
-                                                                            {
-                                                                                "无".to_string()
-                                                                            } else {
-                                                                                provider_args
-                                                                                    .clone()
-                                                                            },
-                                                                        ),
-                                                                ),
-                                                        ),
+                                                    h_flex().gap_4().child(
+                                                        v_flex()
+                                                            .gap_1()
+                                                            .child(
+                                                                div()
+                                                                    .text_sm()
+                                                                    .font_medium()
+                                                                    .text_color(gpui::rgb(0x374151))
+                                                                    .child("启动命令&参数"),
+                                                            )
+                                                            .child(
+                                                                div()
+                                                                    .text_sm()
+                                                                    .text_color(gpui::rgb(0x6B7280))
+                                                                    .child(
+                                                                        if provider_args.is_empty()
+                                                                        {
+                                                                            "无".to_string()
+                                                                        } else {
+                                                                            provider_args.clone()
+                                                                        },
+                                                                    ),
+                                                            ),
+                                                    ),
                                                 )
                                                 .when(!provider_description.is_empty(), |this| {
                                                     this.child(
