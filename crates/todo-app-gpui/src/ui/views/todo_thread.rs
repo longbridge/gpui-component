@@ -229,7 +229,7 @@ impl TodoThreadChat {
             InputState::new(window, cx)
                 .placeholder("输入消息与AI助手对话...\n支持多行输入，按Ctrl+Enter发送")
                 .multi_line()
-                .auto_grow(2, 6)
+                .auto_grow(1, 6)
         });
 
         // AI助手配置
@@ -512,38 +512,13 @@ impl Render for TodoThreadChat {
                     .rounded_lg()
                     .border_1()
                     .border_color(gpui::rgb(0xE5E7EB))
-                    .child(
-                        // 聊天头部 - 简化版，只显示标题
-                        h_flex()
-                            .items_center()
-                            .justify_center()
-                            .p_4()
-                            .border_b_1()
-                            .border_color(gpui::rgb(0xE5E7EB))
-                            .child(
-                                h_flex()
-                                    .items_center()
-                                    .gap_3()
-                                    .child(
-                                        Icon::new(IconName::MessageCircle)
-                                            .size_6()
-                                            .text_color(gpui::rgb(0x3B82F6)),
-                                    )
-                                    .child(
-                                        div()
-                                            .text_xl()
-                                            .font_semibold()
-                                            .text_color(gpui::rgb(0x374151))
-                                            .child("Todo AI助手"),
-                                    ),
-                            ),
-                    )
+                    
                     .child(
                         // 聊天消息列表 - 可滚动区域
                         div().flex_1().overflow_hidden().child(
                             div().h_full().flex_wrap().child(
                                 v_flex()
-                                    .p_4()
+                                    .p_2()
                                     .gap_2()
                                     .min_h_full()
                                     .children(
@@ -572,7 +547,7 @@ impl Render for TodoThreadChat {
                             .items_center()
                             .justify_center()
                             .gap_4()
-                            .p_3()
+                            .p_2()
                             .border_t_1()
                             .border_b_1()
                             .border_color(gpui::rgb(0xE5E7EB))
@@ -618,9 +593,9 @@ impl Render for TodoThreadChat {
                     )
                     .child(
                         // 聊天输入区域 - 固定在底部
-                        v_flex()
+                        h_flex()
                             .gap_2()
-                            .p_4()
+                            .p_2()
                             .child(
                                 // 多行输入框
                                 div().w_full().child(TextInput::new(&self.chat_input)),
