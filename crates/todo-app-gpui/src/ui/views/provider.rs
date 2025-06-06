@@ -8,12 +8,20 @@ use gpui_component::{
     h_flex,
     input::{InputEvent, InputState, TextInput},
     switch::Switch,
-    v_flex, ContextModal, FocusableCycle, Icon, IconName, Sizable, StyledExt,Disableable
+    tab::{Tab, TabBar},
+    v_flex, ContextModal, Disableable, FocusableCycle, Icon, IconName, Sizable, StyledExt,
 };
 
 actions!(
     provider,
-    [Tab, TabPrev, AddProvider, SaveProvider, DeleteProvider]
+    [
+        Tab1,
+        TabPrev,
+        AddProvider,
+        SaveProvider,
+        DeleteProvider,
+        CancelEdit,
+    ]
 );
 
 const CONTEXT: &str = "LlmProvider";
@@ -124,18 +132,23 @@ impl Default for LlmProviderInfo {
     }
 }
 
-pub struct LlmProvider {
-    focus_handle: FocusHandle,
-    providers: Vec<LlmProviderInfo>,
-    expanded_providers: Vec<usize>,
-
-    // 编辑表单字段
-    editing_provider: Option<usize>,
+// 用于存储每个Provider的编辑状态输入框
+#[derive(Clone)]
+struct ProviderInputs {
     name_input: Entity<InputState>,
     api_url_input: Entity<InputState>,
     api_key_input: Entity<InputState>,
     api_type_dropdown: Entity<DropdownState<Vec<SharedString>>>,
+}
 
+pub struct LlmProvider {
+    focus_handle: FocusHandle,
+    providers: Vec<LlmProviderInfo>,
+    expanded_providers: Vec<usize>,
+    active_provider_tabs: std::collections::HashMap<usize, usize>,
+    editing_provider: Option<usize>,
+    // 每个Provider的编辑状态输入框
+    provider_inputs: std::collections::HashMap<usize, ProviderInputs>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -161,8 +174,9 @@ impl LlmProvider {
     pub fn init(cx: &mut App) {
         cx.bind_keys([
             KeyBinding::new("shift-tab", TabPrev, Some(CONTEXT)),
-            KeyBinding::new("tab", Tab, Some(CONTEXT)),
+            KeyBinding::new("tab", Tab1, Some(CONTEXT)),
             KeyBinding::new("ctrl-n", AddProvider, Some(CONTEXT)),
+            KeyBinding::new("escape", CancelEdit, Some(CONTEXT)),
         ])
     }
 
@@ -171,26 +185,7 @@ impl LlmProvider {
     }
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let name_input = cx.new(|cx| InputState::new(window, cx).placeholder("服务提供商名称"));
-
-        let api_url_input = cx.new(|cx| InputState::new(window, cx).placeholder("API 地址"));
-
-        let api_key_input = cx.new(|cx| {
-            InputState::new(window, cx)
-                .placeholder("API 密钥")
-                .masked(true)
-        });
-
-        let api_type_dropdown =
-            cx.new(|cx| DropdownState::new(ApiType::all(), Some(0), window, cx));
-
-        let _subscriptions = vec![
-            cx.subscribe_in(&name_input, window, Self::on_input_event),
-            cx.subscribe_in(&api_url_input, window, Self::on_input_event),
-            cx.subscribe_in(&api_key_input, window, Self::on_input_event),
-        ];
-
-        // 初始化一些示例数据
+        // 初始化示例数据保持不变
         let mut default_provider = LlmProviderInfo::default();
         default_provider.name = "收钱吧".to_string();
         default_provider.api_url = "https://hcb.aliyunddos1117.com/v1".to_string();
@@ -219,17 +214,15 @@ impl LlmProvider {
         Self {
             focus_handle: cx.focus_handle(),
             providers: vec![default_provider, anthropic_provider],
-            expanded_providers: vec![0],
+            expanded_providers: vec![],
+            active_provider_tabs: std::collections::HashMap::new(),
             editing_provider: None,
-            name_input,
-            api_url_input,
-            api_key_input,
-            api_type_dropdown,
-            _subscriptions,
+            provider_inputs: std::collections::HashMap::new(),
+            _subscriptions: vec![],
         }
     }
 
-    fn tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
+    fn tab(&mut self, _: &Tab1, window: &mut Window, cx: &mut Context<Self>) {
         self.cycle_focus(true, window, cx);
     }
 
@@ -238,20 +231,45 @@ impl LlmProvider {
     }
 
     fn add_provider(&mut self, _: &AddProvider, window: &mut Window, cx: &mut Context<Self>) {
-        self.editing_provider = Some(self.providers.len());
+        let new_index = self.providers.len();
         self.providers.push(LlmProviderInfo::default());
-        self.clear_form(window, cx);
+        self.expanded_providers.push(new_index);
+        self.start_editing(new_index, window, cx);
+        cx.notify();
+    }
+
+    fn cancel_edit(&mut self, _: &CancelEdit, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(editing_index) = self.editing_provider {
+            // 如果是新添加的空Provider，删除它
+            if let Some(provider) = self.providers.get(editing_index) {
+                if provider.name.is_empty() && provider.api_url.is_empty() {
+                    self.providers.remove(editing_index);
+                    self.expanded_providers.retain(|&i| i != editing_index);
+                    self.expanded_providers = self
+                        .expanded_providers
+                        .iter()
+                        .map(|&i| if i > editing_index { i - 1 } else { i })
+                        .collect();
+                }
+            }
+            // 清理输入框
+            self.provider_inputs.remove(&editing_index);
+        }
+        self.editing_provider = None;
         cx.notify();
     }
 
     fn save_provider(&mut self, _: &SaveProvider, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(index) = self.editing_provider {
-            if let Some(provider) = self.providers.get_mut(index) {
-                provider.name = self.name_input.read(cx).value().to_string();
-                provider.api_url = self.api_url_input.read(cx).value().to_string();
-                provider.api_key = self.api_key_input.read(cx).value().to_string();
+            if let (Some(provider), Some(inputs)) = (
+                self.providers.get_mut(index),
+                self.provider_inputs.get(&index),
+            ) {
+                provider.name = inputs.name_input.read(cx).value().to_string();
+                provider.api_url = inputs.api_url_input.read(cx).value().to_string();
+                provider.api_key = inputs.api_key_input.read(cx).value().to_string();
 
-                if let Some(selected) = self.api_type_dropdown.read(cx).selected_value() {
+                if let Some(selected) = inputs.api_type_dropdown.read(cx).selected_value() {
                     provider.api_type = match selected.as_ref() {
                         "OpenAI" => ApiType::OpenAI,
                         "OpenAI-Response" => ApiType::OpenAIResponse,
@@ -264,26 +282,31 @@ impl LlmProvider {
             }
         }
 
+        // 清理编辑状态
+        if let Some(index) = self.editing_provider {
+            self.provider_inputs.remove(&index);
+        }
         self.editing_provider = None;
-        self.clear_form(window, cx);
         cx.notify();
     }
 
     fn delete_provider(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
-        // 获取提供商名称用于确认对话框
         let provider_name = if let Some(provider) = self.providers.get(index) {
             provider.name.clone()
         } else {
             return;
         };
-let entity = cx.entity().downgrade();
 
-        // 打开确认对话框
+        let entity = cx.entity().downgrade();
+
         window.open_modal(cx, move |modal, _, _| {
-            let entity = entity.clone(); // 在这里克隆
+            let entity = entity.clone();
             modal
                 .confirm()
-                .child(format!("确定要删除服务提供商 \"{}\" 吗？\n\n此操作无法撤销。", provider_name))
+                .child(format!(
+                    "确定要删除服务提供商 \"{}\" 吗？\n\n此操作无法撤销。",
+                    provider_name
+                ))
                 .button_props(
                     gpui_component::modal::ModalButtonProps::default()
                         .cancel_text("取消")
@@ -293,23 +316,29 @@ let entity = cx.entity().downgrade();
                 )
                 .on_ok(move |_, window, cx| {
                     if let Some(entity) = entity.upgrade() {
-                    entity.update(cx, |this, cx| {
-                        this.confirm_delete_provider(index, window, cx);
-                    });
-                }
-                    true // 关闭对话框
+                        entity.update(cx, |this, cx| {
+                            this.confirm_delete_provider(index, window, cx);
+                        });
+                    }
+                    true
                 })
                 .on_cancel(|_, window, cx| {
                     window.push_notification("已取消删除操作", cx);
-                    true // 关闭对话框
+                    true
                 })
         });
     }
 
-    fn confirm_delete_provider(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
+    fn confirm_delete_provider(
+        &mut self,
+        index: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if index < self.providers.len() {
             let provider_name = self.providers[index].name.clone();
             self.providers.remove(index);
+            self.provider_inputs.remove(&index);
 
             // 更新展开状态
             self.expanded_providers.retain(|&i| i != index);
@@ -322,14 +351,12 @@ let entity = cx.entity().downgrade();
             // 如果正在编辑被删除的提供商，清除编辑状态
             if self.editing_provider == Some(index) {
                 self.editing_provider = None;
-                self.clear_form(window, cx);
             } else if let Some(editing) = self.editing_provider {
                 if editing > index {
                     self.editing_provider = Some(editing - 1);
                 }
             }
 
-            // 显示删除成功通知
             window.push_notification(format!("已成功删除服务提供商 \"{}\"", provider_name), cx);
             cx.notify();
         }
@@ -344,12 +371,12 @@ let entity = cx.entity().downgrade();
     ) {
         if let Some(provider) = self.providers.get_mut(index) {
             provider.enabled = enabled;
-            
+
             // 如果禁用提供商，自动关闭其 accordion
             if !enabled {
                 self.expanded_providers.retain(|&i| i != index);
             }
-            
+
             cx.notify();
         }
     }
@@ -370,62 +397,67 @@ let entity = cx.entity().downgrade();
         }
     }
 
-    fn edit_provider(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
+    fn start_editing(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
         self.editing_provider = Some(index);
 
-        if let Some(provider) = self.providers.get(index) {
-            self.name_input.update(cx, |state, cx| {
-                *state = InputState::new(window, cx).default_value(&provider.name);
-            });
+        let provider = &self.providers[index];
 
-            self.api_url_input.update(cx, |state, cx| {
-                *state = InputState::new(window, cx).default_value(&provider.api_url);
-            });
+        let name_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("服务提供商名称")
+                .default_value(&provider.name)
+        });
 
-            self.api_key_input.update(cx, |state, cx| {
-                *state = InputState::new(window, cx)
-                    .default_value(&provider.api_key)
-                    .masked(true);
-            });
+        let api_url_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("API 地址")
+                .default_value(&provider.api_url)
+        });
 
-            let type_index = match provider.api_type {
-                ApiType::OpenAI => 0,
-                ApiType::OpenAIResponse => 1,
-                ApiType::Gemini => 2,
-                ApiType::Anthropic => 3,
-                ApiType::AzureOpenAI => 4,
-            };
+        let api_key_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("API 密钥")
+                .masked(true)
+                .default_value(&provider.api_key)
+        });
 
-            self.api_type_dropdown.update(cx, |state, cx| {
-                state.set_selected_index(Some(type_index), window, cx);
-            });
-        }
+        let type_index = match provider.api_type {
+            ApiType::OpenAI => 0,
+            ApiType::OpenAIResponse => 1,
+            ApiType::Gemini => 2,
+            ApiType::Anthropic => 3,
+            ApiType::AzureOpenAI => 4,
+        };
+
+        let api_type_dropdown =
+            cx.new(|cx| DropdownState::new(ApiType::all(), Some(type_index), window, cx));
+
+        self.provider_inputs.insert(
+            index,
+            ProviderInputs {
+                name_input,
+                api_url_input,
+                api_key_input,
+                api_type_dropdown,
+            },
+        );
 
         cx.notify();
     }
 
-    fn clear_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.name_input.update(cx, |state, cx| {
-            *state = InputState::new(window, cx).placeholder("服务提供商名称");
-        });
-
-        self.api_url_input.update(cx, |state, cx| {
-            *state = InputState::new(window, cx).placeholder("API 地址");
-        });
-
-        self.api_key_input.update(cx, |state, cx| {
-            *state = InputState::new(window, cx)
-                .placeholder("API 密钥")
-                .masked(true);
-        });
-
-        self.api_type_dropdown.update(cx, |state, cx| {
-            state.set_selected_index(Some(0), window, cx);
-        });
-    }
-
     fn toggle_accordion(&mut self, open_ixs: &[usize], _: &mut Window, cx: &mut Context<Self>) {
         self.expanded_providers = open_ixs.to_vec();
+        cx.notify();
+    }
+
+    fn set_active_provider_tab(
+        &mut self,
+        provider_index: usize,
+        tab_index: usize,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.active_provider_tabs.insert(provider_index, tab_index);
         cx.notify();
     }
 
@@ -437,125 +469,388 @@ let entity = cx.entity().downgrade();
         cx: &mut Context<Self>,
     ) {
         match event {
-            InputEvent::PressEnter { .. } => {
-                if self.editing_provider.is_some() {
-                    self.save_provider(&SaveProvider, window, cx);
-                }
-            }
+            // InputEvent::PressEnter { .. } => {
+            //     if self.editing_provider.is_some() {
+            //         self.save_provider(&SaveProvider, window, cx);
+            //     }
+            // }
             _ => {}
         };
     }
 
-    fn render_provider_form(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
+    // 静态方法渲染Tab内容
+    fn render_provider_content_static(
+        provider: &LlmProviderInfo,
+        tab_index: usize,
+    ) -> impl IntoElement {
+        div().child(match tab_index {
+            0 => div().child(Self::render_config_content_static(provider)),
+            1 => div().child(Self::render_models_content_static(&provider.models)),
+            _ => div().child("未知Tab"),
+        })
+    }
+
+    fn render_config_content_static(provider: &LlmProviderInfo) -> impl IntoElement {
+        v_flex().gap_4().child(
+            v_flex()
+                .gap_2()
+                // .child(
+                //     h_flex()
+                //         .gap_4()
+                //         // .child(
+                //         //     v_flex()
+                //         //         .gap_1()
+                //         //         .flex_1()
+                //         //         .child(
+                //         //             div()
+                //         //                 .text_sm()
+                //         //                 .font_medium()
+                //         //                 .text_color(gpui::rgb(0x374151))
+                //         //                 .child("API 类型"),
+                //         //         )
+                //         //         .child(
+                //         //             div()
+                //         //                 .px_2()
+                //         //                 .bg(gpui::rgb(0xDDD6FE))
+                //         //                 .text_color(gpui::rgb(0x7C3AED))
+                //         //                 .rounded_md()
+                //         //                 .text_sm()
+                //         //                 .child(provider.api_type.as_str()),
+                //         //         ),
+                //         // )
+                //         .child(
+                //             v_flex()
+                //                 .gap_1()
+                //                 .flex_1()
+                //                 .child(
+                //                     div()
+                //                         .text_sm()
+                //                         .font_medium()
+                //                         .text_color(gpui::rgb(0x374151))
+                //                         .child("服务状态"),
+                //                 )
+                //                 .child(
+                //                     h_flex()
+                //                         .items_center()
+                //                         .gap_2()
+                //                         .child(
+                //                             Icon::new(if provider.enabled {
+                //                                 IconName::CircleCheck
+                //                             } else {
+                //                                 IconName::CircleX
+                //                             })
+                //                             .small()
+                //                             .text_color(if provider.enabled {
+                //                                 gpui::rgb(0x059669)
+                //                             } else {
+                //                                 gpui::rgb(0xDC2626)
+                //                             }),
+                //                         )
+                //                         .child(
+                //                             div()
+                //                                 .text_sm()
+                //                                 .text_color(if provider.enabled {
+                //                                     gpui::rgb(0x059669)
+                //                                 } else {
+                //                                     gpui::rgb(0xDC2626)
+                //                                 })
+                //                                 .child(if provider.enabled {
+                //                                     "已启用"
+                //                                 } else {
+                //                                     "已禁用"
+                //                                 }),
+                //                         ),
+                //                 ),
+                //         ),
+                // )
+                .child(
+                    v_flex()
+                        .gap_1()
+                        .child(
+                            div()
+                                .text_sm()
+                                .font_medium()
+                                .text_color(gpui::rgb(0x374151))
+                                .child("API 地址"),
+                        )
+                        .child(
+                            div()
+                                .p_2()
+                                .bg(gpui::rgb(0xF9FAFB))
+                                .rounded_md()
+                                .border_1()
+                                .border_color(gpui::rgb(0xE5E7EB))
+                                .child(
+                                    div()
+                                        .text_sm()
+                                        .text_color(gpui::rgb(0x374151))
+                                        .font_light()
+                                        .child(if provider.api_url.is_empty() {
+                                            "未设置API地址".to_string()
+                                        } else {
+                                            provider.api_url.clone()
+                                        }),
+                                ),
+                        ),
+                )
+                .when(!provider.api_url.is_empty(), |divv| {
+                    divv.child(v_flex().gap_1().child(
+                        div().text_xs().text_color(gpui::rgb(0x9CA3AF)).child({
+                            let full_url = if provider.api_url.is_empty() {
+                                "".to_string()
+                            } else {
+                                format!(
+                                    "{}/chat/completions",
+                                    provider.api_url.trim_end_matches('/')
+                                )
+                            };
+                            full_url
+                        }),
+                    ))
+                })
+                .child(
+                    v_flex()
+                        .gap_1()
+                        .child(
+                            div()
+                                .text_sm()
+                                .font_medium()
+                                .text_color(gpui::rgb(0x374151))
+                                .child("API 密钥"),
+                        )
+                        .child(div().text_sm().text_color(gpui::rgb(0x6B7280)).child(
+                            if provider.api_key.is_empty() {
+                                "未配置"
+                            } else {
+                                "••••••••"
+                            },
+                        )),
+                ),
+        )
+    }
+
+    fn render_models_content_static(models: &[ModelInfo]) -> impl IntoElement {
         v_flex()
-            .gap_3()
-            .p_4()
-            .bg(gpui::rgb(0xF9FAFB))
-            .rounded_lg()
-            .border_1()
-            .border_color(gpui::rgb(0xE5E7EB))
-            .child(
-                div()
-                    .text_lg()
-                    .font_semibold()
-                    .text_color(gpui::rgb(0x374151))
-                    .child(if self.editing_provider.is_some() {
-                        "编辑服务提供商"
-                    } else {
-                        "添加服务提供商"
-                    }),
-            )
-            .child(
+            .gap_2()
+            .children(models.iter().enumerate().map(|(model_index, model)| {
+                let model_name = model.name.clone();
+                let model_enabled = model.enabled;
+                let model_capabilities = model.capabilities.clone();
+
                 h_flex()
-                    .gap_3()
+                    .items_center()
+                    .justify_between()
+                    .p_1()
+                    .bg(gpui::rgb(0xFAFAFA))
+                    .rounded_md()
+                    .border_1()
+                    .border_color(gpui::rgb(0xE5E7EB))
                     .child(
-                        v_flex()
-                            .gap_1()
-                            .flex_1()
+                        h_flex()
+                            .items_center()
+                            .gap_3()
                             .child(
                                 div()
-                                    .text_sm()
-                                    .text_color(gpui::rgb(0x6B7280))
-                                    .child("名称 *"),
-                            )
-                            .child(TextInput::new(&self.name_input).cleanable()),
-                    )
-                    .child(
-                        v_flex()
-                            .gap_1()
-                            .flex_1()
-                            .child(
-                                div()
-                                    .text_sm()
-                                    .text_color(gpui::rgb(0x6B7280))
-                                    .child("接口类型"),
+                                    .font_medium()
+                                    .text_color(if model_enabled {
+                                        gpui::rgb(0x111827)
+                                    } else {
+                                        gpui::rgb(0xD1D5DB)
+                                    })
+                                    .child(model_name.clone()),
                             )
                             .child(
-                                Dropdown::new(&self.api_type_dropdown)
-                                    .placeholder("选择接口类型")
-                                    .small(),
+                                h_flex().gap_1().items_center().children(
+                                    model_capabilities.iter().enumerate().map(
+                                        |(cap_index, cap)| {
+                                            let capability_unique_id =
+                                                model_index * 1000 + cap_index;
+
+                                            div()
+                                                .id(("capability", capability_unique_id))
+                                                .p_1()
+                                                .rounded_md()
+                                                .bg(if model_enabled {
+                                                    gpui::rgb(0xF3F4F6)
+                                                } else {
+                                                    gpui::rgb(0xFAFAFA)
+                                                })
+                                                .child(
+                                                    Icon::new(cap.icon())
+                                                        .xsmall()
+                                                        .when(!model_enabled, |icon| {
+                                                            icon.text_color(gpui::rgb(0xD1D5DB))
+                                                        }),
+                                                )
+                                        },
+                                    ),
+                                ),
                             ),
-                    ),
-            )
-            .child(
-                v_flex()
-                    .gap_1()
-                    .child(
-                        div()
-                            .text_sm()
-                            .text_color(gpui::rgb(0x6B7280))
-                            .child("API 地址 *"),
-                    )
-                    .child(TextInput::new(&self.api_url_input).cleanable()),
-            )
-            .child(
-                v_flex()
-                    .gap_1()
-                    .child(
-                        div()
-                            .text_sm()
-                            .text_color(gpui::rgb(0x6B7280))
-                            .child("API 密钥 *"),
                     )
                     .child(
-                        TextInput::new(&self.api_key_input)
-                            .cleanable()
-                            .mask_toggle(),
-                    ),
-            )
-            .child(
+                        div()
+                            .px_2()
+                            .py_1()
+                            .bg(if model_enabled {
+                                gpui::rgb(0xDEF7EC)
+                            } else {
+                                gpui::rgb(0xFEF2F2)
+                            })
+                            .text_color(if model_enabled {
+                                gpui::rgb(0x047857)
+                            } else {
+                                gpui::rgb(0xDC2626)
+                            })
+                            .rounded_md()
+                            .text_xs()
+                            .child(if model_enabled {
+                                "已启用"
+                            } else {
+                                "已禁用"
+                            }),
+                    )
+            }))
+            .when(models.is_empty(), |this| {
+                this.child(
+                    div()
+                        .text_sm()
+                        .text_color(gpui::rgb(0x9CA3AF))
+                        .child("暂无可用模型"),
+                )
+            })
+    }
+
+    // 添加非静态方法来渲染带Switch的模型列表
+    fn render_models_content_with_switch(
+        &self,
+        models: &[ModelInfo],
+        provider_index: usize,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        v_flex()
+            .gap_2()
+            .children(models.iter().enumerate().map(|(model_index, model)| {
+                let model_name = model.name.clone();
+                let model_enabled = model.enabled;
+                let model_capabilities = model.capabilities.clone();
+
                 h_flex()
-                    .justify_end()
-                    .gap_2()
+                    .items_center()
+                    .justify_between()
+                    .p_1()
+                    .bg(gpui::rgb(0xFAFAFA))
+                    .rounded_md()
+                    .border_1()
+                    .border_color(gpui::rgb(0xE5E7EB))
                     .child(
-                        Button::new("cancel-edit")
-                            .label("取消")
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.editing_provider = None;
-                                this.clear_form(window, cx);
-                                cx.notify();
-                            })),
+                        h_flex()
+                            .items_center()
+                            .gap_3()
+                            .child(
+                                div()
+                                    .font_medium()
+                                    .text_color(if model_enabled {
+                                        gpui::rgb(0x111827)
+                                    } else {
+                                        gpui::rgb(0xD1D5DB)
+                                    })
+                                    .child(model_name.clone()),
+                            )
+                            .child(
+                                h_flex().gap_1().items_center().children(
+                                    model_capabilities.iter().enumerate().map(
+                                        |(cap_index, cap)| {
+                                            let capability_unique_id = provider_index * 10000
+                                                + model_index * 1000
+                                                + cap_index;
+
+                                            div()
+                                                .id(("capability", capability_unique_id))
+                                                .p_1()
+                                                .rounded_md()
+                                                .bg(if model_enabled {
+                                                    gpui::rgb(0xF3F4F6)
+                                                } else {
+                                                    gpui::rgb(0xFAFAFA)
+                                                })
+                                                .child(
+                                                    Icon::new(cap.icon())
+                                                        .xsmall()
+                                                        .when(!model_enabled, |icon| {
+                                                            icon.text_color(gpui::rgb(0xD1D5DB))
+                                                        }),
+                                                )
+                                        },
+                                    ),
+                                ),
+                            ),
                     )
                     .child(
-                        Button::new("save-provider")
-                            .with_variant(ButtonVariant::Primary)
-                            .label("保存")
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.save_provider(&SaveProvider, window, cx);
-                            })),
-                    ),
-            )
+                        h_flex()
+                            .items_center()
+                            .gap_2()
+                            // .child(
+                            //     div()
+                            //         .px_2()
+                            //         .py_1()
+                            //         .bg(if model_enabled {
+                            //             gpui::rgb(0xDEF7EC)
+                            //         } else {
+                            //             gpui::rgb(0xFEF2F2)
+                            //         })
+                            //         .text_color(if model_enabled {
+                            //             gpui::rgb(0x047857)
+                            //         } else {
+                            //             gpui::rgb(0xDC2626)
+                            //         })
+                            //         .rounded_md()
+                            //         .text_xs()
+                            //         .child(if model_enabled {
+                            //             "已启用"
+                            //         } else {
+                            //             "已禁用"
+                            //         }),
+                            // )
+                            .child(
+                                // 修复：使用二元组格式，参考mcp_provider.rs的实现
+                                Switch::new(("model-enabled", provider_index * 1000 + model_index))
+                                    .checked(model_enabled)
+                                    .on_click(cx.listener(move |this, checked, window, cx| {
+                                        this.toggle_model_enabled(
+                                            provider_index,
+                                            model_index,
+                                            *checked,
+                                            window,
+                                            cx,
+                                        );
+                                    })),
+                            ),
+                    )
+            }))
+            .when(models.is_empty(), |this| {
+                this.child(
+                    div()
+                        .text_sm()
+                        .text_color(gpui::rgb(0x9CA3AF))
+                        .child("暂无可用模型"),
+                )
+            })
     }
 }
 
 impl FocusableCycle for LlmProvider {
     fn cycle_focus_handles(&self, _: &mut Window, cx: &mut App) -> Vec<FocusHandle> {
-        vec![
-            self.name_input.focus_handle(cx),
-            self.api_url_input.focus_handle(cx),
-            self.api_key_input.focus_handle(cx),
-            self.api_type_dropdown.focus_handle(cx),
-        ]
+        if let Some(editing_index) = self.editing_provider {
+            if let Some(inputs) = self.provider_inputs.get(&editing_index) {
+                return vec![
+                    inputs.name_input.focus_handle(cx),
+                    inputs.api_url_input.focus_handle(cx),
+                    inputs.api_key_input.focus_handle(cx),
+                    inputs.api_type_dropdown.focus_handle(cx),
+                ];
+            }
+        }
+        vec![self.focus_handle.clone()]
     }
 }
 
@@ -574,286 +869,321 @@ impl Render for LlmProvider {
             .on_action(cx.listener(Self::tab_prev))
             .on_action(cx.listener(Self::add_provider))
             .on_action(cx.listener(Self::save_provider))
+            .on_action(cx.listener(Self::cancel_edit))
             .size_full()
             .gap_4()
             .child(
-                // 添加按钮（移到左侧）
-                h_flex()
-                    .justify_start()
-                    .child(
-                        Button::new("add-provider")
-                            .with_variant(ButtonVariant::Primary)
-                            .label("添加提供商")
-                            .icon(IconName::Plus)
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.add_provider(&AddProvider, window, cx);
-                            }))
-                    )
+                h_flex().justify_start().child(
+                    Button::new("add-provider")
+                        .with_variant(ButtonVariant::Primary)
+                        .label("添加提供商")
+                        .icon(IconName::Plus)
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            this.add_provider(&AddProvider, window, cx);
+                        })),
+                ),
             )
-            .child(
-                // 编辑表单（条件显示）
-                div().when(self.editing_provider.is_some(), |this| {
-                    this.child(self.render_provider_form(cx))
-                })
-            )
-            .child(
-                // 提供商列表 - 填满剩余空间
-                div()
-                   .w_full()
-                    .child({
-                        let mut accordion = Accordion::new("providers").multiple(true);
-                        
-                        for (index, provider) in self.providers.iter().enumerate() {
-                            // 克隆需要在 UI 中使用的数据
-                            let provider_name = provider.name.clone();
-                            let provider_api_url = provider.api_url.clone();
-                            let provider_api_key = provider.api_key.clone();
-                            let provider_api_type = provider.api_type.as_str().to_string();
-                            let provider_enabled = provider.enabled;
-                            let provider_models = provider.models.clone();
-                            
-                            accordion = accordion.item(|item| {
-                                item
-                                    .open(self.expanded_providers.contains(&index) && provider_enabled) // 只有启用时才能展开
-                                    .disabled(!provider_enabled) // 禁用时不可点击
-                                    .icon(if provider_enabled { 
-                                        IconName::CircleCheck 
-                                    } else { 
-                                        IconName::CircleX 
-                                    })
-                                    .title(
-                                        h_flex()
-                                            .w_full()
-                                            .items_center()
-                                            .justify_between()
-                                            .child(
-                                                // 左侧：提供商名称
-                                                div()
-                                                    .font_medium()
-                                                    .flex_1()
-                                                    .min_w_0()
-                                                    .overflow_hidden()
-                                                    .text_ellipsis()
-                                                    .text_color(if provider_enabled {
-                                                        gpui::rgb(0x111827) // 启用时的正常颜色
-                                                    } else {
-                                                        gpui::rgb(0xD1D5DB) // 禁用时的淡色
-                                                    })
-                                                    .child(provider_name.clone())
-                                            )
-                                            .child(
-                                                // 右侧：API类型标签、开关和操作按钮组
-                                                h_flex()
-                                                    .items_center()
-                                                    .gap_2()
-                                                    .flex_shrink_0()
-                                                    .child(
-                                                        div() // API 类型标签
-                                                            .px_2()
-                                                            // .py_1()
-                                                            .bg(if provider_enabled {
-                                                                gpui::rgb(0xDDD6FE) // 启用时的紫色背景
-                                                            } else {
-                                                                gpui::rgb(0xF3F4F6) // 禁用时的淡背景
-                                                            })
-                                                            .text_color(if provider_enabled {
-                                                                gpui::rgb(0x7C3AED) // 启用时的紫色文字
-                                                            } else {
-                                                                gpui::rgb(0xD1D5DB) // 禁用时的淡文字
-                                                            })
-                                                            .rounded_md()
-                                                            .text_xs()
-                                                            .whitespace_nowrap()
-                                                            .child(provider_api_type.clone())
-                                                    )
-                                                    .child(
-                                                        Switch::new(("provider-enabled", index))
-                                                            .checked(provider_enabled)
-                                                            .on_click(cx.listener(move |this, checked, window, cx| {
-                                                                this.toggle_provider_enabled(index, *checked, window, cx);
-                                                            }))
-                                                    )
-                                                    .child(
-                                                        Button::new(("edit-provider", index))
-                                                            .icon(if provider_enabled {
-                                                                Icon::new(IconName::SquarePen)
-                                                            } else {
-                                                            Icon::new(IconName::SquarePen).text_color(gpui::rgb(0xD1D5DB))
-                                                            })
-                                                            .small()
-                                                            .ghost()
-                                                            .tooltip("编辑")
-                                                            .disabled(!provider_enabled)
-                                                            .on_click(cx.listener(move |this, _, window, cx| {
-                                                                this.edit_provider(index, window, cx);
-                                                            }))
-                                                    )
-                                                    .child(
-                                                        Button::new(("delete-provider", index))
-                                                            .icon(if provider_enabled {
-                                                                Icon::new(IconName::Trash2).text_color(gpui::rgb(0xEF4444))
-                                                            } else {
-                                                            Icon::new(IconName::Trash2).text_color(gpui::rgb(0xD1D5DB))
-                                                            })
-                                                            .small()
-                                                            .ghost()
-                                                            .tooltip("删除")
-                                                            .disabled(!provider_enabled)
-                                                            .on_click(cx.listener(move |this, _, window, cx| {
-                                                                this.delete_provider(index, window, cx);
-                                                            }))
-                                                    )
-                                            )
+            .child(div().w_full().child({
+                let mut accordion = Accordion::new("providers").multiple(true);
+
+                let expanded_providers = self.expanded_providers.clone();
+                let editing_provider = self.editing_provider;
+                let active_provider_tabs = self.active_provider_tabs.clone();
+
+                let edit_inputs = if let Some(editing_index) = editing_provider {
+                    self.provider_inputs.get(&editing_index).map(|inputs| {
+                        (
+                            inputs.name_input.clone(),
+                            inputs.api_url_input.clone(),
+                            inputs.api_key_input.clone(),
+                            inputs.api_type_dropdown.clone(),
+                        )
+                    })
+                } else {
+                    None
+                };
+
+                for (index, provider) in self.providers.iter().enumerate() {
+                    let provider_name = provider.name.clone();
+                    let provider_api_type = provider.api_type.as_str().to_string();
+                    let provider_enabled = provider.enabled;
+                    let provider_clone = provider.clone();
+                    let is_editing = editing_provider == Some(index);
+
+                    accordion = accordion.item(|item| {
+                        item.open(expanded_providers.contains(&index) && provider_enabled)
+                            .disabled(!provider_enabled)
+                            .icon(if provider_enabled {
+                                IconName::CircleCheck
+                            } else {
+                                IconName::CircleX
+                            })
+                            .title(
+                                h_flex()
+                                    .w_full()
+                                    .items_center()
+                                    .justify_between()
+                                    .child(
+                                        div()
+                                            .font_medium()
+                                            .flex_1()
+                                            .min_w_0()
+                                            .overflow_hidden()
+                                            .text_ellipsis()
+                                            .text_color(if provider_enabled {
+                                                gpui::rgb(0x111827)
+                                            } else {
+                                                gpui::rgb(0xD1D5DB)
+                                            })
+                                            .child(if provider_name.is_empty() {
+                                                "新建服务提供商".to_string()
+                                            } else {
+                                                provider_name.clone()
+                                            }),
                                     )
-                                    .content(
-                                        v_flex()
-                                            .gap_4()
+                                    .child(
+                                        h_flex()
+                                            .items_center()
+                                            .gap_2()
+                                            .flex_shrink_0()
                                             .child(
-                                                // 基本信息保持原样
-                                                v_flex()
-                                                    .gap_2()
-                                                    .child(
-                                                        h_flex()
-                                                            .gap_4()
-                                                            .child(
-                                                                v_flex()
-                                                                    .gap_1()
-                                                                    .child(
-                                                                        div()
-                                                                            .text_sm()
-                                                                            .font_medium()
-                                                                            .text_color(gpui::rgb(0x374151))
-                                                                            .child("API 地址")
-                                                                    )
-                                                                    .child(
-                                                                        div()
-                                                                            .text_sm()
-                                                                            .text_color(gpui::rgb(0x6B7280))
-                                                                            .child(provider_api_url.clone())
-                                                                    )
-                                                            )
-                                                            .child(
-                                                                v_flex()
-                                                                    .gap_1()
-                                                                    .child(
-                                                                        div()
-                                                                            .text_sm()
-                                                                            .font_medium()
-                                                                            .text_color(gpui::rgb(0x374151))
-                                                                            .child("API 密钥")
-                                                                    )
-                                                                    .child(
-                                                                        div()
-                                                                            .text_sm()
-                                                                            .text_color(gpui::rgb(0x6B7280))
-                                                                            .child(if provider_api_key.is_empty() {
-                                                                                "未配置"
-                                                                            } else {
-                                                                                "••••••••"
-                                                                            })
-                                                                    )
-                                                            )
-                                                    )
-                                                    .child(
-                                                        // 完整接口地址
-                                                        div()
-                                                            .text_xs()
-                                                            .text_color(gpui::rgb(0x9CA3AF))
-                                                            .child({
-                                                                let full_url = if provider_api_url.is_empty() {
-                                                                    "请先配置 API 地址".to_string()
-                                                                } else {
-                                                                    format!("{}/chat/completions", provider_api_url.trim_end_matches('/'))
-                                                                };
-                                                                full_url
-                                                            })
-                                                    )
+                                                div()
+                                                    .px_2()
+                                                    .bg(if provider_enabled {
+                                                        gpui::rgb(0xDDD6FE)
+                                                    } else {
+                                                        gpui::rgb(0xF3F4F6)
+                                                    })
+                                                    .text_color(if provider_enabled {
+                                                        gpui::rgb(0x7C3AED)
+                                                    } else {
+                                                        gpui::rgb(0xD1D5DB)
+                                                    })
+                                                    .rounded_md()
+                                                    .text_xs()
+                                                    .whitespace_nowrap()
+                                                    .child(provider_api_type.clone()),
                                             )
                                             .child(
-                                                // 模型列表保持原样
-                                                v_flex()
-                                                    .gap_2()
+                                                Switch::new(("provider-enabled", index))
+                                                    .checked(provider_enabled)
+                                                    .on_click(cx.listener(
+                                                        move |this, checked, window, cx| {
+                                                            this.toggle_provider_enabled(
+                                                                index, *checked, window, cx,
+                                                            );
+                                                        },
+                                                    )),
+                                            )
+                                            .child(
+                                                Button::new(("edit-provider", index))
+                                                    .icon(if provider_enabled {
+                                                        Icon::new(IconName::SquarePen)
+                                                    } else {
+                                                        Icon::new(IconName::SquarePen)
+                                                            .text_color(gpui::rgb(0xD1D5DB))
+                                                    })
+                                                    .small()
+                                                    .ghost()
+                                                    .tooltip("编辑")
+                                                    .disabled(!provider_enabled || is_editing)
+                                                    .on_click(cx.listener(
+                                                        move |this, _, window, cx| {
+                                                            this.start_editing(index, window, cx);
+                                                        },
+                                                    )),
+                                            )
+                                            .child(
+                                                Button::new(("delete-provider", index))
+                                                    .icon(if provider_enabled {
+                                                        Icon::new(IconName::Trash2)
+                                                            .text_color(gpui::rgb(0xEF4444))
+                                                    } else {
+                                                        Icon::new(IconName::Trash2)
+                                                            .text_color(gpui::rgb(0xD1D5DB))
+                                                    })
+                                                    .small()
+                                                    .ghost()
+                                                    .tooltip("删除")
+                                                    .disabled(!provider_enabled || is_editing)
+                                                    .on_click(cx.listener(
+                                                        move |this, _, window, cx| {
+                                                            this.delete_provider(index, window, cx);
+                                                        },
+                                                    )),
+                                            ),
+                                    ),
+                            )
+                            .content(v_flex().gap_4().child(if is_editing {
+                                // 内联编辑表单
+                                if let Some((
+                                    name_input,
+                                    api_url_input,
+                                    api_key_input,
+                                    api_type_dropdown,
+                                )) = &edit_inputs
+                                {
+                                    div().child(
+                                        v_flex()
+                                            .gap_3()
+                                            .p_4()
+                                            .bg(gpui::rgb(0xF0F9FF))
+                                            .rounded_lg()
+                                            .border_1()
+                                            .border_color(gpui::rgb(0x0EA5E9))
+                                            .child(
+                                                h_flex()
+                                                    .gap_3()
                                                     .child(
-                                                        div()
-                                                            .text_sm()
-                                                            .font_medium()
-                                                            .text_color(gpui::rgb(0x374151))
-                                                            .child("支持的模型")
+                                                        v_flex()
+                                                            .gap_1()
+                                                            .flex_1()
+                                                            .child(
+                                                                div()
+                                                                    .text_sm()
+                                                                    .text_color(gpui::rgb(0x6B7280))
+                                                                    .child("名称 *"),
+                                                            )
+                                                            .child(
+                                                                TextInput::new(name_input)
+                                                                    .cleanable(),
+                                                            ),
                                                     )
                                                     .child(
                                                         v_flex()
-                                                            .gap_2()
-                                                            .children(provider_models.iter().enumerate().map(|(model_index, model)| {
-                                                                let model_name = model.name.clone();
-                                                                let model_enabled = model.enabled;
-                                                                let model_capabilities = model.capabilities.clone();
-                                                                let unique_model_id = index * 1000 + model_index;
-                                                                
-                                                                h_flex()
-                                                                    .items_center()
-                                                                    .justify_between()
-                                                                    .p_1()
-                                                                    .bg(gpui::rgb(0xF9FAFB))
-                                                                    .rounded_md()
-                                                                   // .border_1()
-                                                                   // .border_color(gpui::rgb(0xE5E7EB))
-                                                                    .child(
-                                                                        h_flex()
-                                                                            .items_center()
-                                                                            .gap_3()
-                                                                            .child(
-                                                                                div()
-                                                                                    .font_medium()
-                                                                                    .text_color(if model_enabled {
-                                                                                        gpui::rgb(0x111827) // 启用时的正常颜色
-                                                                                    } else {
-                                                                                        gpui::rgb(0xD1D5DB) // 禁用时的淡色
-                                                                                    })
-                                                                                    .child(model_name.clone())
-                                                                            )
-                                                                            .child(
-                                                                                h_flex()
-                                                                                    .gap_1()
-                                                                                    .items_center()
-                                                                                    .children(model_capabilities.iter().enumerate().map(|(cap_index, cap)| {
-                                                                                        let capability_unique_id = index * 1000000 + model_index * 1000 + cap_index;
-                                                                                        
-                                                                                        div()
-                                                                                            .id(("capability", capability_unique_id))
-                                                                                            .p_1()
-                                                                                            .rounded_md()
-                                                                                            .bg(if model_enabled {
-                                                                                                gpui::rgb(0xF3F4F6) // 启用时的正常背景
-                                                                                            } else {
-                                                                                                gpui::rgb(0xFAFAFA) // 禁用时的更淡背景
-                                                                                            })
-                                                                                            .child(
-                                                                                                Icon::new(cap.icon())
-                                                                                                    .xsmall()
-                                                                                                    .when(!model_enabled, |icon| {
-                                                                                                        icon.text_color(gpui::rgb(0xD1D5DB)) // 禁用时图标变淡
-                                                                                                    })
-                                                                                            )
-                                                                                    }))
-                                                                            )
-                                                                    )
-                                                                    .child(
-                                                                        Switch::new(("model-enabled", unique_model_id))
-                                                                            .checked(model_enabled)
-                                                                            .small()
-                                                                            .on_click(cx.listener(move |this, checked, window, cx| {
-                                                                                this.toggle_model_enabled(index, model_index, *checked, window, cx);
-                                                                            }))
-                                                                    )
-                                                            }))
-                                                    )
+                                                            .gap_1()
+                                                            .flex_1()
+                                                            .child(
+                                                                div()
+                                                                    .text_sm()
+                                                                    .text_color(gpui::rgb(0x6B7280))
+                                                                    .child("接口类型"),
+                                                            )
+                                                            .child(
+                                                                Dropdown::new(api_type_dropdown)
+                                                                    .placeholder("选择接口类型")
+                                                                    .small(),
+                                                            ),
+                                                    ),
                                             )
+                                            .child(
+                                                v_flex()
+                                                    .gap_1()
+                                                    .child(
+                                                        div()
+                                                            .text_sm()
+                                                            .text_color(gpui::rgb(0x6B7280))
+                                                            .child("API 地址 *"),
+                                                    )
+                                                    .child(
+                                                        TextInput::new(api_url_input).cleanable(),
+                                                    ),
+                                            )
+                                            .child(
+                                                v_flex()
+                                                    .gap_1()
+                                                    .child(
+                                                        div()
+                                                            .text_sm()
+                                                            .text_color(gpui::rgb(0x6B7280))
+                                                            .child("API 密钥 *"),
+                                                    )
+                                                    .child(
+                                                        TextInput::new(api_key_input)
+                                                            .cleanable()
+                                                            .mask_toggle(),
+                                                    ),
+                                            )
+                                            .child(
+                                                h_flex()
+                                                    .justify_end()
+                                                    .gap_2()
+                                                    .child(
+                                                        Button::new(("cancel-edit", index))
+                                                            .label("取消")
+                                                            .on_click(cx.listener(
+                                                                |this, _, window, cx| {
+                                                                    this.cancel_edit(
+                                                                        &CancelEdit,
+                                                                        window,
+                                                                        cx,
+                                                                    );
+                                                                },
+                                                            )),
+                                                    )
+                                                    .child(
+                                                        Button::new(("save-provider", index))
+                                                            .with_variant(ButtonVariant::Primary)
+                                                            .label("保存")
+                                                            .on_click(cx.listener(
+                                                                |this, _, window, cx| {
+                                                                    this.save_provider(
+                                                                        &SaveProvider,
+                                                                        window,
+                                                                        cx,
+                                                                    );
+                                                                },
+                                                            )),
+                                                    ),
+                                            ),
                                     )
-                            });
-                        }
-                        
-                        accordion.on_toggle_click(cx.listener(Self::toggle_accordion))
-                    })
-            )
+                                } else {
+                                    div().child("加载中...")
+                                }
+                            } else {
+                                // Tab页显示配置信息和模型列表
+                                div().child(
+                                    v_flex()
+                                        .gap_2()
+                                        .child(
+                                            TabBar::new(("provider-tabs", index))
+                                                .w_full()
+                                                .pill()
+                                                .small()
+                                                .selected_index(
+                                                    active_provider_tabs
+                                                        .get(&index)
+                                                        .copied()
+                                                        .unwrap_or(0),
+                                                )
+                                                .child(Tab::new("配置信息"))
+                                                .child(Tab::new("模型列表"))
+                                                .on_click(cx.listener(
+                                                    move |this, tab_ix: &usize, window, cx| {
+                                                        this.set_active_provider_tab(
+                                                            index, *tab_ix, window, cx,
+                                                        );
+                                                    },
+                                                )),
+                                        )
+                                        .child(
+                                            div().mt_2().child(
+                                                match active_provider_tabs
+                                                    .get(&index)
+                                                    .copied()
+                                                    .unwrap_or(0)
+                                                {
+                                                    0 => div().child(
+                                                        Self::render_config_content_static(
+                                                            &provider_clone,
+                                                        ),
+                                                    ),
+                                                    1 => div().child(
+                                                        self.render_models_content_with_switch(
+                                                            &provider_clone.models,
+                                                            index,
+                                                            cx,
+                                                        ),
+                                                    ),
+                                                    _ => div().child("未知Tab"),
+                                                },
+                                            ),
+                                        ),
+                                )
+                            }))
+                    });
+                }
+                accordion.on_toggle_click(cx.listener(Self::toggle_accordion))
+            }))
     }
 }
