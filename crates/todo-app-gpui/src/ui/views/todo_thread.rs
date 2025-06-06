@@ -458,24 +458,15 @@ impl Render for TodoThreadView {
                     .rounded_lg()
                     .child(Self::section_title("时间安排"))
                     .child(
-                        h_flex().gap_6().child(
-                            v_flex()
-                                .gap_1()
-                                .flex_1()
-                                .child(
-                                    div()
-                                        .text_sm()
-                                        .text_color(gpui::rgb(0x6B7280))
-                                        .child("截止日期"),
-                                )
-                                .child(
-                                    DatePicker::new(&self.due_date_picker)
-                                        .placeholder("选择截止日期")
-                                        .cleanable()
-                                        .presets(due_date_presets.clone())
-                                        .small(),
-                                ),
-                        ),
+                        // 使用 form_row 保持一致的对齐
+                        Self::form_row(
+                            "截止日期",
+                            DatePicker::new(&self.due_date_picker)
+                                .placeholder("选择截止日期")
+                                .cleanable()
+                                .presets(due_date_presets.clone())
+                                .small(),
+                        )
                     )
                     .child(
                         h_flex()
@@ -508,7 +499,7 @@ impl Render for TodoThreadView {
             )
             .child(
                 // 操作按钮
-                h_flex().items_center().justify_end().pt_2().child(
+                h_flex().items_center().justify_center().pt_2().child(
                     h_flex().gap_3().child(
                         Button::new("save-btn")
                             .with_variant(ButtonVariant::Primary)
