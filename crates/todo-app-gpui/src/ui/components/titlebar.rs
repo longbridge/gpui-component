@@ -116,7 +116,7 @@ impl Render for AppTitleBar {
                                     ..Default::default()
                                 };
                                 cx.create_normal_window("Settings", options, move |window, cx| {
-                                    Settings::view(Some("模型配置"), window, cx)
+                                    Settings::view(Some("服务提供商"), window, cx)
                                 });
                             }),
                     )

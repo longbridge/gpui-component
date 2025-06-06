@@ -253,7 +253,7 @@ pub struct McpProvider {
 
 impl ViewKit for McpProvider {
     fn title() -> &'static str {
-        "MCP服务"
+        "工具集"
     }
 
     fn description() -> &'static str {

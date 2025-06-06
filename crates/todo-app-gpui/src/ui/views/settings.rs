@@ -99,17 +99,25 @@ impl Settings {
     }
 
     fn set_active_story(&mut self, name: &str, cx: &mut App) {
-        let group_index = 1;
-        let Some(story_index) = self
-            .stories
-            .get(group_index)
-            .and_then(|(_, stories)| stories.iter().position(|story| story.read(cx).name == name))
-        else {
-            return;
-        };
+        // let group_index = 1;
+        // let Some(story_index) = self
+        //     .stories
+        //     .get(group_index)
+        //     .and_then(|(_, stories)| stories.iter().position(|story| story.read(cx).name == name))
+        // else {
+        //     return;
+        // };
 
-        self.active_group_index = Some(group_index);
-        self.active_index = Some(story_index);
+        // self.active_group_index = Some(group_index);
+        // self.active_index = Some(story_index);
+        for (group_index, (_, stories)) in self.stories.iter().enumerate() {
+            if let Some(story_index) = stories.iter().position(|story| story.read(cx).name == name)
+            {
+                self.active_group_index = Some(group_index);
+                self.active_index = Some(story_index);
+                return;
+            }
+        }
     }
 
     pub fn view(init_view: Option<&str>, window: &mut Window, cx: &mut App) -> Entity<Self> {

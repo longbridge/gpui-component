@@ -154,7 +154,7 @@ pub struct LlmProvider {
 
 impl ViewKit for LlmProvider {
     fn title() -> &'static str {
-        "LLM服务提供商"
+        "服务提供商"
     }
 
     fn description() -> &'static str {
@@ -211,9 +211,36 @@ impl LlmProvider {
             },
         ];
 
+        let mut gemini_provider = LlmProviderInfo::default();
+        gemini_provider.name = "Gemini".to_string();
+        gemini_provider.api_url = "https://generativelanguage.googleapis.com".to_string();
+        gemini_provider.api_type = ApiType::Gemini;
+        gemini_provider.models = vec![
+            ModelInfo {
+                name: "gemini-2.5-pro-exp-03-25".to_string(),
+                capabilities: vec![
+                    ModelCapability::Text,
+                    ModelCapability::Vision,
+                    ModelCapability::Audio,
+                    ModelCapability::Tools,
+                ],
+                enabled: true,
+            },
+            ModelInfo {
+                name: "gemini-2.5-pro-preview-03-25".to_string(),
+                capabilities: vec![
+                    ModelCapability::Text,
+                    ModelCapability::Vision,
+                    ModelCapability::Audio,
+                    ModelCapability::Tools,
+                ],
+                enabled: true,
+            },
+        ];
+
         Self {
             focus_handle: cx.focus_handle(),
-            providers: vec![default_provider, anthropic_provider],
+            providers: vec![default_provider, anthropic_provider, gemini_provider],
             expanded_providers: vec![],
             active_provider_tabs: std::collections::HashMap::new(),
             editing_provider: None,
