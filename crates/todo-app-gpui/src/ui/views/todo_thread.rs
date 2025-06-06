@@ -403,7 +403,7 @@ impl Render for TodoThreadView {
             .on_action(cx.listener(Self::cancel))
             .on_action(cx.listener(Self::delete))
             .size_full()
-            .gap_4()
+            .gap_2()
             .p_2()
             .child(
                 // 基本信息
