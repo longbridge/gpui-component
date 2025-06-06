@@ -805,18 +805,21 @@ impl Render for TodoThreadEdit {
                             .child(Self::section_title("AI助手配置"))
                             .child(Self::form_row(
                                 "模型选择",
-                                Dropdown::new(&self.model_dropdown)
-                                    .placeholder(&self.get_model_display_text(cx))
-                                    .small()
-                                    .empty(
-                                        h_flex()
-                                            .h_8()
-                                            .justify_center()
-                                            .items_center()
-                                            .text_color(gpui::rgb(0x9CA3AF))
-                                            .text_xs()
-                                            .child("暂无可用模型"),
-                                    ),
+                                {
+                                    let display_text = self.get_model_display_text(cx);
+                                    Dropdown::new(&self.model_dropdown)
+                                        .placeholder(display_text)  // 使用动态计算的文本
+                                        .small()
+                                        .empty(
+                                            h_flex()
+                                                .h_8()
+                                                .justify_center()
+                                                .items_center()
+                                                .text_color(gpui::rgb(0x9CA3AF))
+                                                .text_xs()
+                                                .child("暂无可用模型"),
+                                        )
+                                },
                             ))
                             .child(Self::form_row(
                                 "MCP工具",
