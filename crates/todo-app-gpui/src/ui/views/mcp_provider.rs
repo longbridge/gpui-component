@@ -333,7 +333,7 @@ impl McpProvider {
         Self {
             focus_handle: cx.focus_handle(),
             providers: vec![filesystem_provider, database_provider],
-            expanded_providers: vec![0],
+            expanded_providers: vec![],
             active_capability_tabs: std::collections::HashMap::new(),
             editing_provider: None,
             provider_inputs: std::collections::HashMap::new(),
@@ -1103,11 +1103,7 @@ impl Render for McpProvider {
                     let provider_args = provider.args.join(" ");
                     let provider_transport = provider.transport.as_str().to_string();
                     let provider_enabled = provider.enabled;
-                    let provider_description = provider.description.clone();
-                    let provider_env_vars = provider.env_vars.clone();
-                    let provider_resources = provider.resources.clone();
-                    let provider_tools = provider.tools.clone();
-                    let provider_prompts = provider.prompts.clone();
+                    let provider_clone = provider.clone(); // 为Tab内容克隆整个provider
                     let is_editing = editing_provider == Some(index);
 
                     accordion = accordion.item(|item| {
@@ -1216,289 +1212,179 @@ impl Render for McpProvider {
                                             ),
                                     ),
                             )
-                            .content(
-                                v_flex()
-                                    .gap_4()
-                                    .child(if is_editing {
-                                        // 直接构建编辑表单，而不是使用预先渲染的
-                                        if let Some((
-                                            name_input,
-                                            command_input,
-                                            args_input,
-                                            description_input,
-                                            env_input,
-                                            transport_dropdown,
-                                        )) = &edit_inputs
-                                        {
-                                            div().child(
-                                                v_flex()
+                            .content(v_flex().gap_4().child(if is_editing {
+                                // 编辑表单保持不变
+                                if let Some((
+                                    name_input,
+                                    command_input,
+                                    args_input,
+                                    description_input,
+                                    env_input,
+                                    transport_dropdown,
+                                )) = &edit_inputs
+                                {
+                                    div().child(
+                                        v_flex()
+                                            .gap_3()
+                                            .p_4()
+                                            .bg(gpui::rgb(0xF0F9FF))
+                                            .rounded_lg()
+                                            .border_1()
+                                            .border_color(gpui::rgb(0x0EA5E9))
+                                            .child(
+                                                h_flex()
                                                     .gap_3()
-                                                    .p_4()
-                                                    .bg(gpui::rgb(0xF0F9FF))
-                                                    .rounded_lg()
-                                                    .border_1()
-                                                    .border_color(gpui::rgb(0x0EA5E9))
-                                                    .child(
-                                                        h_flex()
-                                                            .gap_3()
-                                                            .child(
-                                                                v_flex()
-                                                                    .gap_1()
-                                                                    .flex_1()
-                                                                    .child(
-                                                                        div()
-                                                                            .text_sm()
-                                                                            .text_color(gpui::rgb(
-                                                                                0x6B7280,
-                                                                            ))
-                                                                            .child("服务名称 *"),
-                                                                    )
-                                                                    .child(
-                                                                        TextInput::new(name_input)
-                                                                            .cleanable(),
-                                                                    ),
-                                                            )
-                                                            .child(
-                                                                v_flex()
-                                                                    .gap_1()
-                                                                    .flex_1()
-                                                                    .child(
-                                                                        div()
-                                                                            .text_sm()
-                                                                            .text_color(gpui::rgb(
-                                                                                0x6B7280,
-                                                                            ))
-                                                                            .child("传输方式"),
-                                                                    )
-                                                                    .child(
-                                                                        Dropdown::new(
-                                                                            transport_dropdown,
-                                                                        )
-                                                                        .placeholder("选择传输方式")
-                                                                        .small(),
-                                                                    ),
-                                                            ),
-                                                    )
-                                                    .child(
-                                                        h_flex().gap_3().child(
-                                                            v_flex()
-                                                                .gap_1()
-                                                                .flex_1()
-                                                                .child(
-                                                                    div()
-                                                                        .text_sm()
-                                                                        .text_color(gpui::rgb(
-                                                                            0x6B7280,
-                                                                        ))
-                                                                        .child("启动命令&参数"),
-                                                                )
-                                                                .child(
-                                                                    TextInput::new(args_input)
-                                                                        .cleanable(),
-                                                                ),
-                                                        ),
-                                                    )
                                                     .child(
                                                         v_flex()
                                                             .gap_1()
+                                                            .flex_1()
                                                             .child(
                                                                 div()
                                                                     .text_sm()
                                                                     .text_color(gpui::rgb(0x6B7280))
-                                                                    .child("环境变量"),
+                                                                    .child("服务名称 *"),
                                                             )
                                                             .child(
-                                                                TextInput::new(env_input)
+                                                                TextInput::new(name_input)
                                                                     .cleanable(),
                                                             ),
                                                     )
                                                     .child(
-                                                        h_flex()
-                                                            .justify_end()
-                                                            .gap_2()
+                                                        v_flex()
+                                                            .gap_1()
+                                                            .flex_1()
                                                             .child(
-                                                                Button::new(("cancel-edit", index))
-                                                                    .label("取消")
-                                                                    .on_click(cx.listener(
-                                                                        |this, _, window, cx| {
-                                                                            this.cancel_edit(
-                                                                                &CancelEdit,
-                                                                                window,
-                                                                                cx,
-                                                                            );
-                                                                        },
-                                                                    )),
+                                                                div()
+                                                                    .text_sm()
+                                                                    .text_color(gpui::rgb(0x6B7280))
+                                                                    .child("传输方式"),
                                                             )
                                                             .child(
-                                                                Button::new((
-                                                                    "save-provider",
-                                                                    index,
-                                                                ))
-                                                                .with_variant(
-                                                                    ButtonVariant::Primary,
-                                                                )
-                                                                .label("保存")
-                                                                .on_click(cx.listener(
-                                                                    |this, _, window, cx| {
-                                                                        this.save_mcp_provider(
-                                                                            &SaveMcpProvider,
-                                                                            window,
-                                                                            cx,
-                                                                        );
-                                                                    },
-                                                                )),
+                                                                Dropdown::new(transport_dropdown)
+                                                                    .placeholder("选择传输方式")
+                                                                    .small(),
                                                             ),
                                                     ),
                                             )
-                                        } else {
-                                            div().child("加载中...")
-                                        }
-                                    } else {
-                                        div().child(
-                                            v_flex()
-                                                .gap_2()
-                                                .child(
-                                                    h_flex().gap_4().child(
-                                                        v_flex()
-                                                            .gap_1()
-                                                            .child(
-                                                                div()
-                                                                    .text_sm()
-                                                                    .font_medium()
-                                                                    .text_color(gpui::rgb(0x374151))
-                                                                    .child("启动命令&参数"),
-                                                            )
-                                                            .child(
-                                                                div()
-                                                                    .text_sm()
-                                                                    .text_color(gpui::rgb(0x6B7280))
-                                                                    .child(
-                                                                        if provider_args.is_empty()
-                                                                        {
-                                                                            "无".to_string()
-                                                                        } else {
-                                                                            provider_args.clone()
-                                                                        },
-                                                                    ),
-                                                            ),
-                                                    ),
-                                                )
-                                                .when(!provider_description.is_empty(), |this| {
-                                                    this.child(
-                                                        v_flex()
-                                                            .gap_1()
-                                                            .child(
-                                                                div()
-                                                                    .text_sm()
-                                                                    .font_medium()
-                                                                    .text_color(gpui::rgb(0x374151))
-                                                                    .child("服务描述"),
-                                                            )
-                                                            .child(
-                                                                div()
-                                                                    .text_sm()
-                                                                    .text_color(gpui::rgb(0x6B7280))
-                                                                    .child(
-                                                                        provider_description
-                                                                            .clone(),
-                                                                    ),
-                                                            ),
+                                            .child(
+                                                h_flex().gap_3().child(
+                                                    v_flex()
+                                                        .gap_1()
+                                                        .flex_1()
+                                                        .child(
+                                                            div()
+                                                                .text_sm()
+                                                                .text_color(gpui::rgb(0x6B7280))
+                                                                .child("启动命令&参数"),
+                                                        )
+                                                        .child(
+                                                            TextInput::new(args_input).cleanable(),
+                                                        ),
+                                                ),
+                                            )
+                                            .child(
+                                                v_flex()
+                                                    .gap_1()
+                                                    .child(
+                                                        div()
+                                                            .text_sm()
+                                                            .text_color(gpui::rgb(0x6B7280))
+                                                            .child("服务描述"),
                                                     )
-                                                })
-                                                .when(!provider_env_vars.is_empty(), |this| {
-                                                    this.child(
-                                                        v_flex()
-                                                            .gap_1()
-                                                            .child(
-                                                                div()
-                                                                    .text_sm()
-                                                                    .font_medium()
-                                                                    .text_color(gpui::rgb(0x374151))
-                                                                    .child("环境变量"),
-                                                            )
-                                                            .child(v_flex().gap_1().children(
-                                                                provider_env_vars.iter().map(
-                                                                    |(key, value)| {
-                                                                        div()
-                                                                            .text_xs()
-                                                                            .text_color(gpui::rgb(
-                                                                                0x6B7280,
-                                                                            ))
-                                                                            .child(format!(
-                                                                                "{}={}",
-                                                                                key, value
-                                                                            ))
-                                                                    },
-                                                                ),
+                                                    .child(
+                                                        TextInput::new(description_input)
+                                                            .cleanable(),
+                                                    ),
+                                            )
+                                            .child(
+                                                v_flex()
+                                                    .gap_1()
+                                                    .child(
+                                                        div()
+                                                            .text_sm()
+                                                            .text_color(gpui::rgb(0x6B7280))
+                                                            .child("环境变量"),
+                                                    )
+                                                    .child(TextInput::new(env_input).cleanable()),
+                                            )
+                                            .child(
+                                                h_flex()
+                                                    .justify_end()
+                                                    .gap_2()
+                                                    .child(
+                                                        Button::new(("cancel-edit", index))
+                                                            .label("取消")
+                                                            .on_click(cx.listener(
+                                                                |this, _, window, cx| {
+                                                                    this.cancel_edit(
+                                                                        &CancelEdit,
+                                                                        window,
+                                                                        cx,
+                                                                    );
+                                                                },
                                                             )),
                                                     )
-                                                })
-                                                .child(
-                                                    div()
-                                                        .text_xs()
-                                                        .text_color(gpui::rgb(0x9CA3AF))
-                                                        .child({
-                                                            if provider_args.is_empty() {
-                                                                provider_command.clone()
-                                                            } else {
-                                                                format!(
-                                                                    "{} {}",
-                                                                    provider_command.clone(),
-                                                                    provider_args.clone()
-                                                                )
-                                                            }
-                                                        }),
-                                                ),
-                                        )
-                                    })
-                                    .child(
-                                        v_flex()
-                                            .gap_2()
-                                            .child(
-                                                div()
-                                                    .text_sm()
-                                                    .font_medium()
-                                                    .text_color(gpui::rgb(0x374151))
-                                                    .child("服务能力"),
-                                            )
-                                            .child(
-                                                TabBar::new(("mcp-capabilities", index))
-                                                    .w_full()
-                                                    .pill()
-                                                    .small()
-                                                    .selected_index(
-                                                        active_capability_tabs
-                                                            .get(&index)
-                                                            .copied()
-                                                            .unwrap_or(0),
-                                                    )
-                                                    .child(Tab::new("资源"))
-                                                    .child(Tab::new("工具"))
-                                                    .child(Tab::new("提示"))
-                                                    .child(Tab::new("日志"))
-                                                    .on_click(cx.listener(
-                                                        move |this, tab_ix: &usize, window, cx| {
-                                                            this.set_active_capability_tab(
-                                                                index, *tab_ix, window, cx,
-                                                            );
-                                                        },
-                                                    )),
-                                            )
-                                            .child(
-                                                div().mt_2().child(
-                                                    Self::render_capability_content_static(
-                                                        &provider_resources,
-                                                        &provider_tools,
-                                                        &provider_prompts,
-                                                        active_capability_tabs
-                                                            .get(&index)
-                                                            .copied()
-                                                            .unwrap_or(0),
+                                                    .child(
+                                                        Button::new(("save-provider", index))
+                                                            .with_variant(ButtonVariant::Primary)
+                                                            .label("保存")
+                                                            .on_click(cx.listener(
+                                                                |this, _, window, cx| {
+                                                                    this.save_mcp_provider(
+                                                                        &SaveMcpProvider,
+                                                                        window,
+                                                                        cx,
+                                                                    );
+                                                                },
+                                                            )),
                                                     ),
+                                            ),
+                                    )
+                                } else {
+                                    div().child("加载中...")
+                                }
+                            } else {
+                                // 使用Tab页显示服务信息
+                                div().child(
+                                    v_flex()
+                                        .gap_2()
+                                        .child(
+                                            TabBar::new(("mcp-capabilities", index))
+                                                .w_full()
+                                                .pill()
+                                                .small()
+                                                .selected_index(
+                                                    active_capability_tabs
+                                                        .get(&index)
+                                                        .copied()
+                                                        .unwrap_or(0),
+                                                )
+                                                .child(Tab::new("配置信息"))
+                                                .child(Tab::new("资源"))
+                                                .child(Tab::new("工具"))
+                                                .child(Tab::new("提示"))
+                                                .child(Tab::new("日志"))
+                                                .on_click(cx.listener(
+                                                    move |this, tab_ix: &usize, window, cx| {
+                                                        this.set_active_capability_tab(
+                                                            index, *tab_ix, window, cx,
+                                                        );
+                                                    },
+                                                )),
+                                        )
+                                        .child(
+                                            div().mt_2().child(
+                                                Self::render_capability_content_static(
+                                                    &provider_clone,
+                                                    active_capability_tabs
+                                                        .get(&index)
+                                                        .copied()
+                                                        .unwrap_or(0),
                                                 ),
                                             ),
-                                    ),
-                            )
+                                        ),
+                                )
+                            }))
                     });
                 }
                 accordion.on_toggle_click(cx.listener(Self::toggle_accordion))
@@ -1511,18 +1397,153 @@ impl McpProvider {
 
     // 添加静态方法来渲染能力内容
     fn render_capability_content_static(
-        resources: &[McpResource],
-        tools: &[McpTool],
-        prompts: &[McpPrompt],
+        provider: &McpProviderInfo,
         tab_index: usize,
     ) -> impl IntoElement {
         div().child(match tab_index {
-            0 => div().child(Self::render_resources_content_static(resources)),
-            1 => div().child(Self::render_tools_content_static(tools)),
-            2 => div().child(Self::render_prompts_content_static(prompts)),
-            3 => div().child(Self::render_logging_content_static()),
+            0 => div().child(Self::render_config_content_static(provider)),
+            1 => div().child(Self::render_resources_content_static(&provider.resources)),
+            2 => div().child(Self::render_tools_content_static(&provider.tools)),
+            3 => div().child(Self::render_prompts_content_static(&provider.prompts)),
+            4 => div().child(Self::render_logging_content_static()),
             _ => div().child("未知能力"),
         })
+    }
+
+    fn render_config_content_static(provider: &McpProviderInfo) -> impl IntoElement {
+        v_flex().gap_4().child(
+            v_flex()
+                .gap_2()
+                .child(
+                    h_flex()
+                        .gap_4()
+                        // .child(
+                        //     v_flex()
+                        //         .gap_1()
+                        //         .flex_1()
+                        //         .child(
+                        //             div()
+                        //                 .text_sm()
+                        //                 .font_medium()
+                        //                 .text_color(gpui::rgb(0x374151))
+                        //                 .child("服务名称"),
+                        //         )
+                        //         .child(div().text_sm().text_color(gpui::rgb(0x6B7280)).child(
+                        //             if provider.name.is_empty() {
+                        //                 "未设置".to_string()
+                        //             } else {
+                        //                 provider.name.clone()
+                        //             },
+                        //         )),
+                        // )
+                        .child(
+                            h_flex()
+                                .gap_1()
+                                .flex_1()
+                                .child(
+                                    div()
+                                        .text_sm()
+                                        .font_medium()
+                                        .text_color(gpui::rgb(0x374151))
+                                        .child("传输方式"),
+                                )
+                                .child(
+                                    div()
+                                        .px_2()
+                                        // .py_1()
+                                        .bg(gpui::rgb(0xDEF7EC))
+                                        .text_color(gpui::rgb(0x047857))
+                                        .rounded_md()
+                                        .text_sm()
+                                        .child(provider.transport.as_str()),
+                                ),
+                        ),
+                )
+                .child(
+                    v_flex()
+                        .gap_1()
+                        .child(
+                            div()
+                                .text_sm()
+                                .font_medium()
+                                .text_color(gpui::rgb(0x374151))
+                                .child("启动命令"),
+                        )
+                        .child(
+                            div()
+                                .p_2()
+                                .bg(gpui::rgb(0xF9FAFB))
+                                .rounded_md()
+                                .border_1()
+                                .border_color(gpui::rgb(0xE5E7EB))
+                                .child(
+                                    div()
+                                        .text_sm()
+                                        .text_color(gpui::rgb(0x374151))
+                                        .font_light()
+                                        .child(if provider.command.is_empty() {
+                                            "未设置启动命令".to_string()
+                                        } else if provider.args.is_empty() {
+                                            provider.command.clone()
+                                        } else {
+                                            format!(
+                                                "{} {}",
+                                                provider.command,
+                                                provider.args.join(" ")
+                                            )
+                                        }),
+                                ),
+                        ),
+                )
+                .when(!provider.description.is_empty(), |this| {
+                    this.child(
+                        v_flex()
+                            .gap_1()
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .font_medium()
+                                    .text_color(gpui::rgb(0x374151))
+                                    .child("服务描述"),
+                            )
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .text_color(gpui::rgb(0x6B7280))
+                                    .child(provider.description.clone()),
+                            ),
+                    )
+                })
+                .when(!provider.env_vars.is_empty(), |this| {
+                    this.child(
+                        v_flex()
+                            .gap_1()
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .font_medium()
+                                    .text_color(gpui::rgb(0x374151))
+                                    .child("环境变量"),
+                            )
+                            .child(
+                                v_flex()
+                                    .gap_1()
+                                    .p_2()
+                                    .bg(gpui::rgb(0xF9FAFB))
+                                    .rounded_md()
+                                    .border_1()
+                                    .border_color(gpui::rgb(0xE5E7EB))
+                                    .children(provider.env_vars.iter().map(|(key, value)| {
+                                        div()
+                                            .text_sm()
+                                            .text_color(gpui::rgb(0x374151))
+                                            .font_light()
+                                            .child(format!("{}={}", key, value))
+                                    })),
+                            ),
+                    )
+                }),
+        )
     }
 
     fn render_resources_content_static(resources: &[McpResource]) -> impl IntoElement {
