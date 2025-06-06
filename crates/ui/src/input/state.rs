@@ -1057,7 +1057,7 @@ impl InputState {
         // ignore if offset is "\n"
         if self
             .text_for_range(
-                self.range_to_utf16(&(offset - 1..offset)),
+                self.range_to_utf16(&(offset.saturating_sub(1)..offset)),
                 &mut None,
                 window,
                 cx,
