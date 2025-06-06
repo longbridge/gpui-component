@@ -3,7 +3,7 @@ use gpui::{
     Window,
 };
 
-use gpui_component::{h_flex, tag::Tag, v_flex, yellow_500, yellow_800, ColorName, Sizable};
+use gpui_component::{h_flex, indigo_500, tag::Tag, v_flex, ColorName, Sizable};
 
 use crate::section;
 
@@ -51,10 +51,29 @@ impl Render for TagStory {
                         .gap_2()
                         .child(Tag::primary().child("Tag"))
                         .child(Tag::secondary().child("Secondary"))
-                        .child(Tag::outline().child("Outline"))
-                        .child(Tag::danger().child("danger"))
+                        .child(Tag::danger().child("Danger"))
+                        .child(Tag::success().child("Success"))
+                        .child(Tag::warning().child("Warning"))
+                        .child(Tag::info().child("Info"))
                         .child(
-                            Tag::custom(yellow_500(), yellow_800(), yellow_500()).child("Custom"),
+                            Tag::custom(indigo_500(), indigo_500(), indigo_500()).child("Custom"),
+                        ),
+                ),
+            )
+            .child(
+                section("Tag (outline)").child(
+                    h_flex()
+                        .gap_2()
+                        .child(Tag::primary().outline().child("Tag"))
+                        .child(Tag::secondary().outline().child("Secondary"))
+                        .child(Tag::danger().outline().child("Danger"))
+                        .child(Tag::success().outline().child("Success"))
+                        .child(Tag::warning().outline().child("Warning"))
+                        .child(Tag::info().outline().child("Info"))
+                        .child(
+                            Tag::custom(indigo_500(), indigo_500(), indigo_500())
+                                .outline()
+                                .child("Custom"),
                         ),
                 ),
             )
@@ -64,13 +83,10 @@ impl Render for TagStory {
                         .gap_2()
                         .child(Tag::primary().small().child("Tag"))
                         .child(Tag::secondary().small().child("Secondary"))
-                        .child(Tag::outline().small().child("Outline"))
-                        .child(Tag::danger().small().child("danger"))
-                        .child(
-                            Tag::custom(yellow_500(), yellow_800(), yellow_500())
-                                .small()
-                                .child("Custom"),
-                        ),
+                        .child(Tag::danger().small().child("Danger"))
+                        .child(Tag::success().small().child("Success"))
+                        .child(Tag::warning().small().child("Warning"))
+                        .child(Tag::info().small().child("Info")),
                 ),
             )
             .child(
@@ -79,13 +95,10 @@ impl Render for TagStory {
                         .gap_2()
                         .child(Tag::primary().rounded_full().child("Tag"))
                         .child(Tag::secondary().rounded_full().child("Secondary"))
-                        .child(Tag::outline().rounded_full().child("Outline"))
-                        .child(Tag::danger().rounded_full().child("danger"))
-                        .child(
-                            Tag::custom(yellow_500(), yellow_800(), yellow_500())
-                                .rounded_full()
-                                .child("Custom"),
-                        ),
+                        .child(Tag::danger().rounded_full().child("Danger"))
+                        .child(Tag::success().rounded_full().child("Success"))
+                        .child(Tag::warning().rounded_full().child("Warning"))
+                        .child(Tag::info().rounded_full().child("Info")),
                 ),
             )
             .child(
@@ -94,14 +107,10 @@ impl Render for TagStory {
                         .gap_2()
                         .child(Tag::primary().small().rounded_full().child("Tag"))
                         .child(Tag::secondary().small().rounded_full().child("Secondary"))
-                        .child(Tag::outline().small().rounded_full().child("Outline"))
-                        .child(Tag::danger().small().rounded_full().child("danger"))
-                        .child(
-                            Tag::custom(yellow_500(), yellow_800(), yellow_500())
-                                .small()
-                                .rounded_full()
-                                .child("Custom"),
-                        ),
+                        .child(Tag::danger().small().rounded_full().child("Danger"))
+                        .child(Tag::success().small().rounded_full().child("Success"))
+                        .child(Tag::warning().small().rounded_full().child("Warning"))
+                        .child(Tag::info().small().rounded_full().child("Info")),
                 ),
             )
             .child(
@@ -110,14 +119,10 @@ impl Render for TagStory {
                         .gap_2()
                         .child(Tag::primary().small().rounded(px(0.)).child("Tag"))
                         .child(Tag::secondary().small().rounded(px(0.)).child("Secondary"))
-                        .child(Tag::outline().small().rounded(px(0.)).child("Outline"))
-                        .child(Tag::danger().small().rounded(px(0.)).child("danger"))
-                        .child(
-                            Tag::custom(yellow_500(), yellow_800(), yellow_500())
-                                .small()
-                                .rounded(px(0.))
-                                .child("Custom"),
-                        ),
+                        .child(Tag::danger().small().rounded(px(0.)).child("Danger"))
+                        .child(Tag::success().small().rounded(px(0.)).child("Success"))
+                        .child(Tag::warning().small().rounded(px(0.)).child("Warning"))
+                        .child(Tag::info().small().rounded(px(0.)).child("Info")),
                 ),
             )
             .child(
