@@ -148,12 +148,12 @@ impl DropdownItem for MultiSelectModel {
                                 .text_color(gpui::rgb(0x374151))
                                 .child(self.name.clone()),
                         )
-                        .child(
-                            div()
-                                .text_xs()
-                                .text_color(gpui::rgb(0x6B7280))
-                                .child(format!("提供商: {}", self.provider)),
-                        ),
+                        // .child(
+                        //     div()
+                        //         .text_xs()
+                        //         .text_color(gpui::rgb(0x6B7280))
+                        //         .child(format!("提供商: {}", self.provider)),
+                        // ),
                 )
                 .into_any_element(),
         )
