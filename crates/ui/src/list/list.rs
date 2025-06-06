@@ -256,7 +256,7 @@ where
     }
 
     /// Set the selected index of the list, this will also scroll to the selected item.
-    pub fn set_selected_index(
+    fn _set_selected_index(
         &mut self,
         ix: Option<usize>,
         window: &mut Window,
@@ -265,6 +265,17 @@ where
         self.selected_index = ix;
         self.delegate.set_selected_index(ix, window, cx);
         self.scroll_to_selected_item(window, cx);
+    }
+
+    /// Set the selected index of the list, this method will not scroll to the selected item.
+    pub fn set_selected_index(
+        &mut self,
+        ix: Option<usize>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.selected_index = ix;
+        self.delegate.set_selected_index(ix, window, cx);
     }
 
     pub fn selected_index(&self) -> Option<usize> {
@@ -295,7 +306,7 @@ where
         &self.vertical_scroll_handle
     }
 
-    fn scroll_to_selected_item(&mut self, _window: &mut Window, _cx: &mut Context<Self>) {
+    pub fn scroll_to_selected_item(&mut self, _window: &mut Window, _cx: &mut Context<Self>) {
         if let Some(ix) = self.selected_index {
             self.vertical_scroll_handle
                 .scroll_to_item(ix, ScrollStrategy::Top);
@@ -320,9 +331,9 @@ where
                 let search = self.delegate.perform_search(&text, window, cx);
 
                 if self.delegate.items_count(cx) > 0 {
-                    self.set_selected_index(Some(0), window, cx);
+                    self._set_selected_index(Some(0), window, cx);
                 } else {
-                    self.set_selected_index(None, window, cx);
+                    self._set_selected_index(None, window, cx);
                 }
 
                 self._search_task = cx.spawn_in(window, async move |this, window| {
@@ -394,7 +405,7 @@ where
         }
 
         if self.reset_on_cancel {
-            self.set_selected_index(None, window, cx);
+            self._set_selected_index(None, window, cx);
         }
 
         self.delegate.cancel(window, cx);
@@ -408,7 +419,7 @@ where
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.delegate.items_count(cx) == 0 {
+        if self.delegate.items_count(cx) <= 0 {
             return;
         }
 
@@ -438,15 +449,15 @@ where
         cx: &mut Context<Self>,
     ) {
         let items_count = self.delegate.items_count(cx);
-        if items_count == 0 {
+        if items_count <= 0 {
             return;
         }
 
         let mut selected_index = self.selected_index.unwrap_or(0);
         if selected_index > 0 {
-            selected_index = selected_index - 1;
+            selected_index = selected_index.saturating_sub(1);
         } else {
-            selected_index = items_count - 1;
+            selected_index = items_count.saturating_sub(1);
         }
         self.select_item(selected_index, window, cx);
     }
@@ -464,7 +475,7 @@ where
 
         let selected_index;
         if let Some(ix) = self.selected_index {
-            if ix < items_count - 1 {
+            if ix < items_count.saturating_sub(1) {
                 selected_index = ix + 1;
             } else {
                 // When the last item is selected, select the first item.
