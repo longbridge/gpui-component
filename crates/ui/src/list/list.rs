@@ -419,7 +419,7 @@ where
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.delegate.items_count(cx) <= 0 {
+        if self.delegate.items_count(cx) == 0 {
             return;
         }
 
