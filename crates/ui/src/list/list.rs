@@ -449,7 +449,7 @@ where
         cx: &mut Context<Self>,
     ) {
         let items_count = self.delegate.items_count(cx);
-        if items_count <= 0 {
+        if items_count == 0 {
             return;
         }
 
