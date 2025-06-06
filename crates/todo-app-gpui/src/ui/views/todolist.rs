@@ -13,7 +13,7 @@ use gpui_component::{
     v_flex, ActiveTheme, IconName, Sizable, *,
 };
 
-use crate::ui::AppExt;
+use crate::ui::{views::todo_thread::TodoThreadChat, AppExt};
 
 use super::todo_thread_edit::TodoThreadEdit;
 
@@ -451,7 +451,7 @@ impl TodoList {
                     width: px(600.),
                     height: px(800.),
                 }),
-                kind: WindowKind::PopUp,
+                kind: WindowKind::Normal,
                 #[cfg(target_os = "linux")]
                 window_background: gpui::WindowBackgroundAppearance::Transparent,
                 #[cfg(target_os = "linux")]
@@ -461,7 +461,7 @@ impl TodoList {
             cx.create_normal_window(
                 format!("todo-{}", todo.title),
                 options,
-                move |window, cx| TodoThreadEdit::view(window, cx),
+                move |window, cx| TodoThreadChat::view(window, cx),
             );
         }
     }

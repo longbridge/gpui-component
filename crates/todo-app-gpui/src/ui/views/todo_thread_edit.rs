@@ -16,7 +16,7 @@ use crate::ui::components::ViewKit;
 
 actions!(todo_thread, [Tab, TabPrev, Save, Cancel, Delete]);
 
-const CONTEXT: &str = "TodoThread";
+const CONTEXT: &str = "TodoThreadEdit";
 
 #[derive(Debug, Clone)]
 pub enum TodoPriority {

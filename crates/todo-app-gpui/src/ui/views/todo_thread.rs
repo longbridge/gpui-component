@@ -4,101 +4,59 @@ use gpui::*;
 
 use gpui_component::{
     button::{Button, ButtonVariant, ButtonVariants as _},
-    date_picker::{DatePicker, DatePickerEvent, DatePickerState, DateRangePreset},
     dropdown::{Dropdown, DropdownDelegate, DropdownEvent, DropdownItem, DropdownState},
     h_flex,
     input::{InputEvent, InputState, TextInput},
-    switch::Switch,
-    v_flex, FocusableCycle, Icon, IconName, Sizable, StyledExt,
+    v_flex, Disableable, FocusableCycle, Icon, IconName, Sizable, StyledExt,
 };
 
 use crate::ui::components::ViewKit;
 
-actions!(todo_thread, [Tab, TabPrev, Save, Cancel, Delete]);
+actions!(todo_thread, [Tab, TabPrev, SendMessage]);
 
 const CONTEXT: &str = "TodoThread";
 
+// 聊天消息结构
 #[derive(Debug, Clone)]
-pub enum TodoPriority {
-    Low,
-    Medium,
-    High,
-    Urgent,
+pub struct ChatMessage {
+    pub id: String,
+    pub role: MessageRole,
+    pub content: String,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub model: Option<String>,
+    pub tools_used: Vec<String>,
 }
 
-impl TodoPriority {
-    fn as_str(&self) -> &'static str {
-        match self {
-            TodoPriority::Low => "低",
-            TodoPriority::Medium => "中",
-            TodoPriority::High => "高",
-            TodoPriority::Urgent => "紧急",
-        }
-    }
+#[derive(Debug, Clone)]
+pub enum MessageRole {
+    User,
+    Assistant,
+    System,
+}
 
-    fn all() -> Vec<SharedString> {
-        vec!["低".into(), "中".into(), "高".into(), "紧急".into()]
-    }
-
-    fn icon(&self) -> IconName {
+impl MessageRole {
+    fn display_name(&self) -> &'static str {
         match self {
-            TodoPriority::Low => IconName::ArrowDown,
-            TodoPriority::Medium => IconName::Minus,
-            TodoPriority::High => IconName::ArrowUp,
-            TodoPriority::Urgent => IconName::TriangleAlert,
+            MessageRole::User => "你",
+            MessageRole::Assistant => "AI助手",
+            MessageRole::System => "系统",
         }
     }
 
     fn color(&self) -> gpui::Rgba {
         match self {
-            TodoPriority::Low => gpui::rgb(0x6B7280),
-            TodoPriority::Medium => gpui::rgb(0x3B82F6),
-            TodoPriority::High => gpui::rgb(0xF59E0B),
-            TodoPriority::Urgent => gpui::rgb(0xEF4444),
+            MessageRole::User => gpui::rgb(0x3B82F6),
+            MessageRole::Assistant => gpui::rgb(0x10B981),
+            MessageRole::System => gpui::rgb(0x6B7280),
         }
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum TodoStatus {
-    Todo,
-    InProgress,
-    Done,
-    Cancelled,
-}
-
-impl TodoStatus {
-    fn as_str(&self) -> &'static str {
-        match self {
-            TodoStatus::Todo => "待办",
-            TodoStatus::InProgress => "进行中",
-            TodoStatus::Done => "已完成",
-            TodoStatus::Cancelled => "已取消",
-        }
-    }
-
-    fn all() -> Vec<SharedString> {
-        vec![
-            "待办".into(),
-            "进行中".into(),
-            "已完成".into(),
-            "已取消".into(),
-        ]
-    }
-}
-
-// 新增：层级化的模型选项结构
+// 层级化的模型选项结构
 #[derive(Debug, Clone)]
 pub enum ModelOption {
-    Provider {
-        name: String,
-        expanded: bool,
-    },
-    Model {
-        name: String,
-        provider: String,
-        // description: String, // 移除 description
-    },
+    Provider { name: String, expanded: bool },
+    Model { name: String, provider: String },
 }
 
 impl DropdownItem for ModelOption {
@@ -125,18 +83,13 @@ impl DropdownItem for ModelOption {
                     )
                     .into_any_element(),
             ),
-            ModelOption::Model {
-                name,
-                provider,
-                // description, // 移除 description
-            } => Some(
+            ModelOption::Model { name, provider } => Some(
                 h_flex()
                     .items_center()
                     .gap_3()
-                    .pl_6() // 使用 pl_6 而不是 ml_4，确保在下拉菜单中缩进
+                    .pl_6()
                     .py_1()
                     .child(
-                        // Checkbox - 在下拉菜单中显示
                         div()
                             .w_4()
                             .h_4()
@@ -149,18 +102,11 @@ impl DropdownItem for ModelOption {
                             .justify_center(),
                     )
                     .child(
-                        v_flex().gap_1().flex_1().child(
-                            div()
-                                .text_sm()
-                                .font_medium()
-                                .text_color(gpui::rgb(0x6B7280))
-                                .child(name.clone()),
-                        ), // .child( // 移除 description 的显示
-                           //     div()
-                           //         .text_xs()
-                           //         .text_color(gpui::rgb(0x9CA3AF))
-                           //         .child(description.clone()),
-                           // ),
+                        div()
+                            .text_sm()
+                            .font_medium()
+                            .text_color(gpui::rgb(0x6B7280))
+                            .child(name.clone()),
                     )
                     .into_any_element(),
             ),
@@ -175,9 +121,9 @@ impl DropdownItem for ModelOption {
     }
 }
 
-// 新增：层级化的Dropdown委托
+// 层级化的Dropdown委托
 pub struct HierarchicalModelDelegate {
-    providers: Vec<(String, Vec<String>)>, // (provider_name, [model_name]) // 移除了 description
+    providers: Vec<(String, Vec<String>)>,
     flattened_options: Vec<ModelOption>,
     selected_model: Option<String>,
 }
@@ -187,25 +133,22 @@ impl HierarchicalModelDelegate {
         let providers = vec![
             (
                 "收钱吧".to_string(),
-                vec![
-                    "sqb-chat-3.5".to_string(), // "快速对话模型".to_string()
-                    "sqb-chat-4.0".to_string(), // "高级推理模型".to_string()
-                ],
+                vec!["sqb-chat-3.5".to_string(), "sqb-chat-4.0".to_string()],
             ),
             (
                 "Anthropic".to_string(),
                 vec![
-                    "claude-3.5-sonnet".to_string(), // "最新Claude模型".to_string()
-                    "claude-3-haiku".to_string(),    // "快速响应模型".to_string()
-                    "claude-3-opus".to_string(),     // "最强推理模型".to_string()
+                    "claude-3.5-sonnet".to_string(),
+                    "claude-3-haiku".to_string(),
+                    "claude-3-opus".to_string(),
                 ],
             ),
             (
                 "OpenAI".to_string(),
                 vec![
-                    "gpt-4".to_string(),         // "GPT-4 模型".to_string()
-                    "gpt-4-turbo".to_string(),   // "GPT-4 Turbo".to_string()
-                    "gpt-3.5-turbo".to_string(), // "GPT-3.5 Turbo".to_string()
+                    "gpt-4".to_string(),
+                    "gpt-4-turbo".to_string(),
+                    "gpt-3.5-turbo".to_string(),
                 ],
             ),
         ];
@@ -218,11 +161,9 @@ impl HierarchicalModelDelegate {
             });
 
             for model_name in models {
-                // 移除了 description
                 flattened_options.push(ModelOption::Model {
                     name: model_name.clone(),
                     provider: provider_name.clone(),
-                    // description: description.clone(), // 移除 description
                 });
             }
         }
@@ -268,50 +209,26 @@ impl DropdownDelegate for HierarchicalModelDelegate {
 pub struct TodoThreadChat {
     focus_handle: FocusHandle,
 
-    // 基本信息
-    title_input: Entity<InputState>,
-    description_input: Entity<InputState>,
+    // 聊天功能
+    chat_messages: Vec<ChatMessage>,
+    chat_input: Entity<InputState>,
+    is_loading: bool,
+    scroll_handle: ScrollHandle,
 
-    // 状态和优先级
-    status_dropdown: Entity<DropdownState<Vec<SharedString>>>,
-    priority_dropdown: Entity<DropdownState<Vec<SharedString>>>,
-
-    // AI助手配置 - 修改为层级化模型选择
-    model_dropdown: Entity<DropdownState<HierarchicalModelDelegate>>, // 改为层级化
+    // AI助手配置
+    model_dropdown: Entity<DropdownState<HierarchicalModelDelegate>>,
     mcp_tools_dropdown: Entity<DropdownState<Vec<SharedString>>>,
-
-    // 时间设置
-    due_date_picker: Entity<DatePickerState>,
-    reminder_date_picker: Entity<DatePickerState>,
-    recurring_enabled: bool,
-    recurring_dropdown: Entity<DropdownState<Vec<SharedString>>>,
-
-    // 其他设置
-    auto_execute: bool,
-    enable_notifications: bool,
 
     _subscriptions: Vec<Subscription>,
 }
 
 impl TodoThreadChat {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        // 基本信息输入框
-        let title_input = cx.new(|cx| InputState::new(window, cx).placeholder("输入任务标题..."));
+        // 聊天输入框
+        let chat_input =
+            cx.new(|cx| InputState::new(window, cx).placeholder("输入消息与AI助手对话..."));
 
-        let description_input = cx.new(|cx| {
-            InputState::new(window, cx)
-                .placeholder("详细描述任务内容和要求...")
-                .auto_grow(5, 10)
-        });
-
-        // 状态和优先级下拉框
-        let status_dropdown =
-            cx.new(|cx| DropdownState::new(TodoStatus::all(), Some(0), window, cx));
-
-        let priority_dropdown =
-            cx.new(|cx| DropdownState::new(TodoPriority::all(), Some(1), window, cx));
-
-        // AI助手配置 - 层级化模型选择
+        // AI助手配置
         let model_delegate = HierarchicalModelDelegate::new();
         let model_dropdown = cx.new(|cx| DropdownState::new(model_delegate, None, window, cx));
 
@@ -323,29 +240,8 @@ impl TodoThreadChat {
         ];
         let mcp_tools_dropdown = cx.new(|cx| DropdownState::new(mcp_tools, None, window, cx));
 
-        // 时间选择器
-        let due_date_picker = cx.new(|cx| DatePickerState::new(window, cx));
-        let reminder_date_picker = cx.new(|cx| DatePickerState::new(window, cx));
-
-        let recurring_options = vec!["每日".into(), "每周".into(), "每月".into(), "每年".into()];
-        let recurring_dropdown =
-            cx.new(|cx| DropdownState::new(recurring_options, Some(1), window, cx));
-
         let _subscriptions = vec![
-            cx.subscribe_in(&title_input, window, Self::on_input_event),
-            cx.subscribe_in(&description_input, window, Self::on_input_event),
-            cx.subscribe(&due_date_picker, |this, _, ev, cx| match ev {
-                DatePickerEvent::Change(_) => {
-                    println!("截止日期已更改");
-                    cx.notify();
-                }
-            }),
-            cx.subscribe(&reminder_date_picker, |this, _, ev, cx| match ev {
-                DatePickerEvent::Change(_) => {
-                    println!("提醒日期已更改");
-                    cx.notify();
-                }
-            }),
+            cx.subscribe_in(&chat_input, window, Self::on_chat_input_event),
             // 监听模型选择变化
             cx.subscribe(&model_dropdown, |this, _, event, cx| match event {
                 DropdownEvent::Confirm(selected_value) => {
@@ -357,20 +253,25 @@ impl TodoThreadChat {
             }),
         ];
 
+        // 初始化欢迎消息
+        let chat_messages = vec![ChatMessage {
+            id: "1".to_string(),
+            role: MessageRole::System,
+            content: "AI助手已准备就绪，我可以帮助您管理任务、回答问题和提供建议。请随时与我对话！"
+                .to_string(),
+            timestamp: chrono::Utc::now(),
+            model: None,
+            tools_used: vec![],
+        }];
+
         Self {
             focus_handle: cx.focus_handle(),
-            title_input,
-            description_input,
-            status_dropdown,
-            priority_dropdown,
-            model_dropdown, // 层级化模型选择
+            chat_messages,
+            chat_input,
+            is_loading: false,
+            scroll_handle: ScrollHandle::new(),
+            model_dropdown,
             mcp_tools_dropdown,
-            due_date_picker,
-            reminder_date_picker,
-            recurring_enabled: false,
-            recurring_dropdown,
-            auto_execute: false,
-            enable_notifications: true,
             _subscriptions,
         }
     }
@@ -383,134 +284,186 @@ impl TodoThreadChat {
         self.cycle_focus(true, window, cx);
     }
 
-    fn tab_prev(&mut self, _: &TabPrev, window: &mut Window, cx: &mut Context<Self>) {
-        self.cycle_focus(false, window, cx);
+    fn send_message(&mut self, _: &SendMessage, window: &mut Window, cx: &mut Context<Self>) {
+        let message_content = self
+            .chat_input
+            .read(cx)
+            .value()
+            .to_string()
+            .trim()
+            .to_string();
+
+        if message_content.is_empty() {
+            return;
+        }
+
+        // 添加用户消息
+        let user_message = ChatMessage {
+            id: format!("user_{}", chrono::Utc::now().timestamp()),
+            role: MessageRole::User,
+            content: message_content.clone(),
+            timestamp: chrono::Utc::now(),
+            model: None,
+            tools_used: vec![],
+        };
+
+        self.chat_messages.push(user_message);
+
+        // 清空输入框
+        self.chat_input
+            .update(cx, |input, cx| input.set_value("", window, cx));
+
+        // 设置加载状态
+        self.is_loading = true;
+
+        // 模拟AI响应
+        self.simulate_ai_response(message_content, cx);
+
+        cx.notify();
     }
 
-    fn save(&mut self, _: &Save, _window: &mut Window, cx: &mut Context<Self>) {
+    fn simulate_ai_response(&mut self, user_message: String, cx: &mut Context<Self>) {
+        // 获取当前选择的模型和工具
         let selected_model = self
             .model_dropdown
             .read(cx)
             .selected_value()
-            .map(|v| v.to_string())
+            .map(|v| v.to_string());
+
+        let selected_tools = self
+            .mcp_tools_dropdown
+            .read(cx)
+            .selected_value()
+            .map(|v| vec![v.to_string()])
             .unwrap_or_default();
 
-        let todo_data = TodoData {
-            title: self.title_input.read(cx).value().to_string(),
-            description: self.description_input.read(cx).value().to_string(),
-            status: self
-                .status_dropdown
-                .read(cx)
-                .selected_value()
-                .map(|v| v.to_string())
-                .unwrap_or_default(),
-            priority: self
-                .priority_dropdown
-                .read(cx)
-                .selected_value()
-                .map(|v| v.to_string())
-                .unwrap_or_default(),
-            selected_model, // 改为selected_model
-            mcp_tools: self
-                .mcp_tools_dropdown
-                .read(cx)
-                .selected_value()
-                .map(|v| v.to_string())
-                .unwrap_or_default(),
-            recurring_enabled: self.recurring_enabled,
-            auto_execute: self.auto_execute,
-            enable_notifications: self.enable_notifications,
+        // 模拟AI响应内容
+        let response_content = match user_message.to_lowercase().as_str() {
+            msg if msg.contains("任务") => {
+                "我可以帮您创建、管理和跟踪任务。请告诉我任务的具体要求，我会为您提供专业的建议和解决方案。"
+            }
+            msg if msg.contains("时间") || msg.contains("日期") => {
+                "我可以帮您规划时间和设置提醒。请告诉我您的具体需求，我会为您制定合理的时间安排。"
+            }
+            msg if msg.contains("优先级") => {
+                "我会根据任务的重要性和紧急程度帮您设置优先级。这个任务对您来说有多重要？有具体的截止时间吗？"
+            }
+            msg if msg.contains("帮助") || msg.contains("功能") => {
+                "我是您的AI助手，可以帮助您：\n• 创建和管理任务\n• 设置提醒和截止时间\n• 分析任务优先级\n• 提供工作建议\n• 回答各种问题\n\n有什么具体需要帮助的吗？"
+            }
+            _ => &format!(
+                "我理解您的问题：\"{}\"。我正在使用{}模型为您提供帮助。请告诉我更多详细信息，我会给出更精准的建议。",
+                user_message,
+                selected_model.as_deref().unwrap_or("默认")
+            ),
         };
 
-        println!("保存Todo: {:?}", todo_data);
+        // 添加AI响应消息
+        let ai_message = ChatMessage {
+            id: format!("ai_{}", chrono::Utc::now().timestamp()),
+            role: MessageRole::Assistant,
+            content: response_content.to_string(),
+            timestamp: chrono::Utc::now(),
+            model: selected_model,
+            tools_used: selected_tools,
+        };
+
+        self.chat_messages.push(ai_message);
+        self.is_loading = false;
+
         cx.notify();
     }
 
-    fn cancel(&mut self, _: &Cancel, _window: &mut Window, cx: &mut Context<Self>) {
-        println!("取消编辑");
-        cx.notify();
-    }
-
-    fn delete(&mut self, _: &Delete, _window: &mut Window, cx: &mut Context<Self>) {
-        println!("删除Todo");
-        cx.notify();
-    }
-
-    fn toggle_recurring(&mut self, enabled: bool, _: &mut Window, cx: &mut Context<Self>) {
-        self.recurring_enabled = enabled;
-        cx.notify();
-    }
-
-    fn toggle_auto_execute(&mut self, enabled: bool, _: &mut Window, cx: &mut Context<Self>) {
-        self.auto_execute = enabled;
-        cx.notify();
-    }
-
-    fn toggle_notifications(&mut self, enabled: bool, _: &mut Window, cx: &mut Context<Self>) {
-        self.enable_notifications = enabled;
-        cx.notify();
-    }
-
-    fn on_input_event(
+    fn on_chat_input_event(
         &mut self,
         _entity: &Entity<InputState>,
         event: &InputEvent,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         match event {
             InputEvent::PressEnter { .. } => {
-                // 按回车键保存
-                self.save(&Save, _window, cx);
+                self.send_message(&SendMessage, window, cx);
             }
             _ => {}
         }
     }
 
-    fn section_title(title: &'static str) -> impl IntoElement {
-        div()
-            .text_lg()
-            .font_semibold()
-            .text_color(gpui::rgb(0x374151))
-            .pb_2()
-            .child(title)
-    }
+    fn render_chat_message(&self, message: &ChatMessage) -> impl IntoElement {
+        let is_user = matches!(message.role, MessageRole::User);
 
-    fn form_row(label: &'static str, content: impl IntoElement) -> impl IntoElement {
         h_flex()
-            .gap_4()
-            .items_center()
+            .w_full()
+            .py_2()
+            .px_3()
+            .when(is_user, |this| this.justify_end())
+            .when(!is_user, |this| this.justify_start())
             .child(
-                div()
-                    .text_sm()
-                    .text_color(gpui::rgb(0x6B7280))
-                    .min_w_24()
-                    .child(label),
+                div().max_w_96().child(
+                    v_flex()
+                        .gap_1()
+                        .child(
+                            // 消息头部：角色和时间
+                            h_flex()
+                                .items_center()
+                                .gap_2()
+                                .when(is_user, |this| this.justify_end())
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(message.role.color())
+                                        .font_medium()
+                                        .child(message.role.display_name()),
+                                )
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(gpui::rgb(0x9CA3AF))
+                                        .child(message.timestamp.format("%H:%M").to_string()),
+                                )
+                                .when_some(message.model.as_ref(), |this, model| {
+                                    this.child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(gpui::rgb(0x6B7280))
+                                            .child(format!("({})", model)),
+                                    )
+                                }),
+                        )
+                        .child(
+                            // 消息内容
+                            div()
+                                .p_3()
+                                .rounded_lg()
+                                .text_sm()
+                                .when(is_user, |this| {
+                                    this.bg(gpui::rgb(0x3B82F6)).text_color(gpui::rgb(0xFFFFFF))
+                                })
+                                .when(!is_user, |this| {
+                                    this.bg(gpui::rgb(0xF3F4F6)).text_color(gpui::rgb(0x374151))
+                                })
+                                .child(message.content.clone()),
+                        )
+                        .when(!message.tools_used.is_empty(), |this| {
+                            this.child(
+                                div()
+                                    .text_xs()
+                                    .text_color(gpui::rgb(0x6B7280))
+                                    .child(format!("使用工具: {}", message.tools_used.join(", "))),
+                            )
+                        }),
+                ),
             )
-            .child(div().flex_1().max_w_80().child(content))
     }
-}
-
-#[derive(Debug)]
-struct TodoData {
-    title: String,
-    description: String,
-    status: String,
-    priority: String,
-    selected_model: String, // 改为selected_model
-    mcp_tools: String,
-    recurring_enabled: bool,
-    auto_execute: bool,
-    enable_notifications: bool,
 }
 
 impl ViewKit for TodoThreadChat {
     fn title() -> &'static str {
-        "任务编辑"
+        "Todo对话"
     }
 
     fn description() -> &'static str {
-        "创建和编辑任务，配置AI助手和时间安排"
+        "与AI助手对话，管理您的任务和计划"
     }
 
     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
@@ -521,15 +474,9 @@ impl ViewKit for TodoThreadChat {
 impl FocusableCycle for TodoThreadChat {
     fn cycle_focus_handles(&self, _: &mut Window, cx: &mut App) -> Vec<FocusHandle> {
         vec![
-            self.title_input.focus_handle(cx),
-            self.description_input.focus_handle(cx),
-            self.status_dropdown.focus_handle(cx),
-            self.priority_dropdown.focus_handle(cx),
-            self.model_dropdown.focus_handle(cx), // 层级化模型选择
+            self.chat_input.focus_handle(cx),
+            self.model_dropdown.focus_handle(cx),
             self.mcp_tools_dropdown.focus_handle(cx),
-            self.due_date_picker.focus_handle(cx),
-            self.reminder_date_picker.focus_handle(cx),
-            self.recurring_dropdown.focus_handle(cx),
         ]
     }
 }
@@ -541,220 +488,113 @@ impl Focusable for TodoThreadChat {
 }
 
 impl Render for TodoThreadChat {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let due_date_presets = vec![
-            DateRangePreset::single("今天", Utc::now().naive_local().date()),
-            DateRangePreset::single(
-                "明天",
-                (Utc::now() + chrono::Duration::days(1))
-                    .naive_local()
-                    .date(),
-            ),
-            DateRangePreset::single(
-                "下周",
-                (Utc::now() + chrono::Duration::weeks(1))
-                    .naive_local()
-                    .date(),
-            ),
-            DateRangePreset::single(
-                "下个月",
-                (Utc::now() + chrono::Duration::days(30))
-                    .naive_local()
-                    .date(),
-            ),
-        ];
-
-        v_flex() // Root v_flex
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        v_flex()
             .key_context(CONTEXT)
             .id("todo-thread-view")
             .on_action(cx.listener(Self::tab))
-            .on_action(cx.listener(Self::tab_prev))
-            .on_action(cx.listener(Self::save))
-            .on_action(cx.listener(Self::cancel))
-            .on_action(cx.listener(Self::delete))
+            .on_action(cx.listener(Self::send_message))
             .size_full()
-            .p_2() // Padding for the entire view
-            .gap_2() // Gap between the content area and the button area
+            .p_4()
             .child(
-                // Content area - scrollable and takes up available space
+                // 聊天面板 - 全屏显示
                 v_flex()
                     .flex_1()
-                    // .overflow_y_auto() // Ensure content area is scrollable
-                    .gap_1() // Gap between sections inside the content area
+                    .bg(gpui::rgb(0xFAFAFA))
+                    .rounded_lg()
+                    .border_1()
+                    .border_color(gpui::rgb(0xE5E7EB))
                     .child(
-                        // 基本信息
-                        v_flex() // Section container for "任务描述"
-                            .gap_3()
-                            .pt_1()
-                            .px_2()
-                            .pb_2() // Reduced top padding
-                            .bg(gpui::rgb(0xF9FAFB))
-                            .rounded_lg()
-                            .child(
-                                v_flex() // Inner v_flex for title and input
-                                    .gap_1()
-                                    .child(Self::section_title("任务描述"))
-                                    // Removed misplaced .text_sm() from here
-                                    .child(TextInput::new(&self.description_input).cleanable()),
-                            ),
-                    )
-                    .child(
-                        // 附件拖拽上传区域
-                        v_flex() // Section container for "附件上传"
-                            .gap_3()
-                            .pt_1()
-                            .px_2()
-                            .pb_2() // Reduced top padding
-                            .bg(gpui::rgb(0xF9FAFB))
-                            .rounded_lg()
-                            //.child(Self::section_title("附件上传"))
-                            .child(
-                                div()
-                                    .id("file-drop-zone")
-                                    .h_24()
-                                    .w_full()
-                                    .border_2()
-                                    .border_color(gpui::rgb(0xD1D5DB))
-                                    .border_dashed()
-                                    .rounded_lg()
-                                    .bg(gpui::rgb(0xFAFAFA))
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .cursor_pointer()
-                                    .hover(|style| {
-                                        style
-                                            .border_color(gpui::rgb(0x3B82F6))
-                                            .bg(gpui::rgb(0xF0F9FF))
-                                    })
-                                    .active(|style| {
-                                        style
-                                            .border_color(gpui::rgb(0x1D4ED8))
-                                            .bg(gpui::rgb(0xE0F2FE))
-                                    })
-                                    .child(
-                                        v_flex()
-                                            .items_center()
-                                            .gap_2()
-                                            .child(
-                                                Icon::new(IconName::Upload)
-                                                    .size_6()
-                                                    .text_color(gpui::rgb(0x6B7280)),
-                                            )
-                                            .child(
-                                                div()
-                                                    .text_xs()
-                                                    .text_color(gpui::rgb(0x9CA3AF))
-                                                    .child("拖拽文件到此处上传或点击选择文件"),
-                                            )
-                                            .child(
-                                                div()
-                                                    .text_xs()
-                                                    .text_color(gpui::rgb(0xB91C1C))
-                                                    .child("支持 PDF、DOC、TXT、图片等格式"),
-                                            ),
-                                    )
-                                    .on_click(cx.listener(|this, _, _window, cx| {
-                                        println!("点击上传文件");
-                                        cx.notify();
-                                    })),
-                            ),
-                    )
-                    .child(
-                        // AI助手配置
-                        v_flex() // Section container for "AI助手配置"
-                            .gap_3()
-                            .pt_1()
-                            .px_2()
-                            .pb_2() // Reduced top padding
-                            .bg(gpui::rgb(0xF9FAFB))
-                            .rounded_lg()
-                            .child(Self::section_title("AI助手配置"))
-                            .child(Self::form_row(
-                                "模型选择",
-                                Dropdown::new(&self.model_dropdown)
-                                    .placeholder("选择服务提供商和模型")
-                                    .small()
-                                    .empty(
-                                        h_flex()
-                                            .h_8()
-                                            .justify_center()
-                                            .items_center()
-                                            .text_color(gpui::rgb(0x9CA3AF))
-                                            .text_xs()
-                                            .child("暂无可用模型"),
-                                    ),
-                            ))
-                            .child(Self::form_row(
-                                "MCP工具",
-                                Dropdown::new(&self.mcp_tools_dropdown)
-                                    .placeholder("选择工具集")
-                                    .small(),
-                            )),
-                    )
-                    .child(
-                        // 时间安排
-                        v_flex() // Section container for "时间安排"
-                            .gap_3()
-                            .pt_1()
-                            .px_2()
-                            .pb_2() // Reduced top padding
-                            .bg(gpui::rgb(0xF9FAFB))
-                            .rounded_lg()
-                            .child(Self::section_title("时间安排"))
-                            .child(Self::form_row(
-                                "截止日期",
-                                DatePicker::new(&self.due_date_picker)
-                                    .placeholder("选择截止日期")
-                                    .cleanable()
-                                    .presets(due_date_presets.clone())
-                                    .small(),
-                            ))
+                        // 聊天头部
+                        h_flex()
+                            .items_center()
+                            .justify_between()
+                            .p_4()
+                            .border_b_1()
+                            .border_color(gpui::rgb(0xE5E7EB))
                             .child(
                                 h_flex()
-                                    .gap_4()
                                     .items_center()
+                                    .gap_3()
+                                    .child(
+                                        Icon::new(IconName::MessageCircle)
+                                            .size_6()
+                                            .text_color(gpui::rgb(0x3B82F6)),
+                                    )
                                     .child(
                                         div()
-                                            .text_sm()
-                                            .text_color(gpui::rgb(0x6B7280))
-                                            .min_w_24()
-                                            .child("周期重复"),
+                                            .text_xl()
+                                            .font_semibold()
+                                            .text_color(gpui::rgb(0x374151))
+                                            .child("Todo AI助手"),
+                                    ),
+                            )
+                            .child(
+                                // 模型和工具选择
+                                h_flex()
+                                    .items_center()
+                                    .gap_3()
+                                    .child(
+                                        div().w_48().child(
+                                            Dropdown::new(&self.model_dropdown)
+                                                .placeholder("选择模型")
+                                                .small(),
+                                        ),
                                     )
                                     .child(
-                                        Switch::new("recurring")
-                                            .checked(self.recurring_enabled)
-                                            .on_click(cx.listener(
-                                                move |this, checked, window, cx| {
-                                                    this.toggle_recurring(*checked, window, cx);
-                                                },
-                                            )),
+                                        div().w_48().child(
+                                            Dropdown::new(&self.mcp_tools_dropdown)
+                                                .placeholder("选择工具")
+                                                .small(),
+                                        ),
+                                    ),
+                            ),
+                    )
+                    .child(
+                        // 聊天消息列表
+                        div().flex_1().child(
+                            v_flex()
+                                .p_4()
+                                .gap_2()
+                                .children(
+                                    self.chat_messages
+                                        .iter()
+                                        .map(|msg| self.render_chat_message(msg)),
+                                )
+                                .when(self.is_loading, |this| {
+                                    this.child(
+                                        h_flex().justify_start().py_2().child(
+                                            div()
+                                                .p_3()
+                                                .bg(gpui::rgb(0xF3F4F6))
+                                                .rounded_lg()
+                                                .text_color(gpui::rgb(0x6B7280))
+                                                .child("AI正在思考中..."),
+                                        ),
                                     )
-                                    .when(self.recurring_enabled, |this| {
-                                        this.child(
-                                            div().ml_4().child(
-                                                Dropdown::new(&self.recurring_dropdown)
-                                                    .placeholder("选择周期")
-                                                    .small(),
-                                            ),
-                                        )
-                                    }),
+                                }),
+                        ),
+                    )
+                    .child(
+                        // 聊天输入区域
+                        h_flex()
+                            .items_end()
+                            .gap_3()
+                            .p_4()
+                            .border_t_1()
+                            .border_color(gpui::rgb(0xE5E7EB))
+                            .child(div().flex_1().child(TextInput::new(&self.chat_input)))
+                            .child(
+                                Button::new("send-message")
+                                    .with_variant(ButtonVariant::Primary)
+                                    .icon(IconName::Send)
+                                    .label("发送")
+                                    .disabled(self.is_loading)
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.send_message(&SendMessage, window, cx)
+                                    })),
                             ),
                     ),
-            )
-            .child(
-                // 操作按钮区域
-                h_flex().items_center().justify_center().pt_2().child(
-                    h_flex().gap_3().child(
-                        Button::new("save-btn")
-                            .with_variant(ButtonVariant::Primary)
-                            .label("保存任务")
-                            .icon(IconName::Check)
-                            .on_click(
-                                cx.listener(|this, _, window, cx| this.save(&Save, window, cx)),
-                            ),
-                    ),
-                ),
             )
     }
 }
