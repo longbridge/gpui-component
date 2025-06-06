@@ -93,7 +93,7 @@ impl Element for ScrollableMask {
             size: bounds.size,
         };
 
-        window.insert_hitbox(cover_bounds, false)
+        window.insert_hitbox(cover_bounds, gpui::HitboxBehavior::Normal)
     }
 
     fn paint(

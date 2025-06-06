@@ -83,7 +83,7 @@ impl RenderOnce for WindowBorder {
                                         point(px(0.0), px(0.0)),
                                         window.window_bounds().get_bounds().size,
                                     ),
-                                    false,
+                                    gpui::HitboxBehavior::Normal,
                                 )
                             },
                             move |_bounds, hitbox, window, _| {

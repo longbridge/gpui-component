@@ -37,7 +37,7 @@ impl Render for WindowShadow {
                                         point(px(0.0), px(0.0)),
                                         window.window_bounds().get_bounds().size,
                                     ),
-                                    true,
+                                    gpui::HitboxBehavior::Normal,
                                 )
                             },
                             move |_bounds, hitbox, window, _cx| {

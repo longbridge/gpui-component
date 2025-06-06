@@ -464,7 +464,7 @@ impl Element for Scrollbar {
         cx: &mut App,
     ) -> Self::PrepaintState {
         let hitbox = window.with_content_mask(Some(ContentMask { bounds }), |window| {
-            window.insert_hitbox(bounds, false)
+            window.insert_hitbox(bounds, gpui::HitboxBehavior::Normal)
         });
 
         let mut states = vec![];
@@ -613,7 +613,7 @@ impl Element for Scrollbar {
             };
 
             let bar_hitbox = window.with_content_mask(Some(ContentMask { bounds }), |window| {
-                window.insert_hitbox(bounds, false)
+                window.insert_hitbox(bounds, gpui::HitboxBehavior::Normal)
             });
 
             states.push(AxisPrepaintState {

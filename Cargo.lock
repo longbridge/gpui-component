@@ -787,9 +787,9 @@ checksum = "56ed6191a7e78c36abdb16ab65341eefd73d64d303fffccdbb00d51e4205967b"
 
 [[package]]
 name = "bumpalo"
-version = "3.17.0"
+version = "3.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1628fb46dfa0b37568d12e5edd512553eccf6a22a78e8bde00bb4aed84d5bdbf"
+checksum = "793db76d6187cd04dff33004d8e6c9cc4e05cd330500379d2394209271b4aeee"
 
 [[package]]
 name = "bytecheck"
@@ -931,9 +931,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.2.25"
+version = "1.2.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d0fc897dc1e865cc67c0e05a836d9d3f1df3cbe442aa4a9473b18e12624a4951"
+checksum = "956a5e21988b87f372569b66183b78babf23ebc2e744b733e4350a752c4dafac"
 dependencies = [
  "jobserver",
  "libc",
@@ -1114,7 +1114,7 @@ dependencies = [
 [[package]]
 name = "collections"
 version = "0.1.0"
-source = "git+https://github.com/huacnlee/zed.git?branch=webview#85befe24cc564f1f526ead3b09fd22d98b146248"
+source = "git+https://github.com/huacnlee/zed.git?branch=webview#a3de08a1fca76a321e935462dfa7ec72a36037b8"
 dependencies = [
  "indexmap 2.9.0",
  "rustc-hash 2.1.1",
@@ -1611,7 +1611,7 @@ dependencies = [
 [[package]]
 name = "derive_refineable"
 version = "0.1.0"
-source = "git+https://github.com/huacnlee/zed.git?branch=webview#85befe24cc564f1f526ead3b09fd22d98b146248"
+source = "git+https://github.com/huacnlee/zed.git?branch=webview#a3de08a1fca76a321e935462dfa7ec72a36037b8"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2685,7 +2685,7 @@ dependencies = [
 [[package]]
 name = "gpui"
 version = "0.1.0"
-source = "git+https://github.com/huacnlee/zed.git?branch=webview#85befe24cc564f1f526ead3b09fd22d98b146248"
+source = "git+https://github.com/huacnlee/zed.git?branch=webview#a3de08a1fca76a321e935462dfa7ec72a36037b8"
 dependencies = [
  "anyhow",
  "as-raw-xcb-connection",
@@ -2722,6 +2722,7 @@ dependencies = [
  "image",
  "inventory",
  "itertools 0.14.0",
+ "libc",
  "log",
  "lyon",
  "media",
@@ -2838,7 +2839,7 @@ dependencies = [
 [[package]]
 name = "gpui_macros"
 version = "0.1.0"
-source = "git+https://github.com/huacnlee/zed.git?branch=webview#85befe24cc564f1f526ead3b09fd22d98b146248"
+source = "git+https://github.com/huacnlee/zed.git?branch=webview#a3de08a1fca76a321e935462dfa7ec72a36037b8"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -3108,7 +3109,7 @@ dependencies = [
 [[package]]
 name = "http_client"
 version = "0.1.0"
-source = "git+https://github.com/huacnlee/zed.git?branch=webview#85befe24cc564f1f526ead3b09fd22d98b146248"
+source = "git+https://github.com/huacnlee/zed.git?branch=webview#a3de08a1fca76a321e935462dfa7ec72a36037b8"
 dependencies = [
  "anyhow",
  "bytes",
@@ -3125,7 +3126,7 @@ dependencies = [
 [[package]]
 name = "http_client_tls"
 version = "0.1.0"
-source = "git+https://github.com/huacnlee/zed.git?branch=webview#85befe24cc564f1f526ead3b09fd22d98b146248"
+source = "git+https://github.com/huacnlee/zed.git?branch=webview#a3de08a1fca76a321e935462dfa7ec72a36037b8"
 dependencies = [
  "rustls",
  "rustls-platform-verifier",
@@ -3160,9 +3161,9 @@ dependencies = [
 
 [[package]]
 name = "hyper-rustls"
-version = "0.27.6"
+version = "0.27.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "03a01595e11bdcec50946522c32dde3fc6914743000a68b93000965f2f02406d"
+checksum = "e3c93eb611681b207e1fe55d5a71ecf91572ec8a6705cdb6857f7d8d5242cf58"
 dependencies = [
  "http",
  "hyper",
@@ -3177,9 +3178,9 @@ dependencies = [
 
 [[package]]
 name = "hyper-util"
-version = "0.1.13"
+version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1c293b6b3d21eca78250dc7dbebd6b9210ec5530e038cbfe0661b5c47ab06e8"
+checksum = "dc2fdfdbff08affe55bb779f33b053aa1fe5dd5b54c257343c17edfa55711bdb"
 dependencies = [
  "bytes",
  "futures-channel",
@@ -3990,7 +3991,7 @@ dependencies = [
 [[package]]
 name = "media"
 version = "0.1.0"
-source = "git+https://github.com/huacnlee/zed.git?branch=webview#85befe24cc564f1f526ead3b09fd22d98b146248"
+source = "git+https://github.com/huacnlee/zed.git?branch=webview#a3de08a1fca76a321e935462dfa7ec72a36037b8"
 dependencies = [
  "anyhow",
  "bindgen 0.71.1",
@@ -4350,11 +4351,11 @@ dependencies = [
 
 [[package]]
 name = "num_cpus"
-version = "1.16.0"
+version = "1.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4161fcb6d602d4d2081af7c3a45852d875a03dd337a6bfdd6e06407b61342a43"
+checksum = "91df4bbde75afed763b708b7eee1e8e7651e02d97f6d5dd763e89367e957b23b"
 dependencies = [
- "hermit-abi 0.3.9",
+ "hermit-abi 0.5.1",
  "libc",
 ]
 
@@ -5249,9 +5250,9 @@ checksum = "925383efa346730478fb4838dbe9137d2a47675ad789c546d150a6e1dd4ab31c"
 
 [[package]]
 name = "prettyplease"
-version = "0.2.32"
+version = "0.2.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "664ec5419c51e34154eec046ebcba56312d5a2fc3b09a06da188e1ad21afadf6"
+checksum = "9dee91521343f4c5c6a63edd65e54f31f5c92fe8978c40a4282f8372194c6a7d"
 dependencies = [
  "proc-macro2",
  "syn 2.0.101",
@@ -5678,9 +5679,9 @@ dependencies = [
 
 [[package]]
 name = "read-fonts"
-version = "0.29.2"
+version = "0.29.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6f96bfbb7df43d34a2b7b8582fcbcb676ba02a763265cb90bc8aabfd62b57d64"
+checksum = "04ca636dac446b5664bd16c069c00a9621806895b8bb02c2dc68542b23b8f25d"
 dependencies = [
  "bytemuck",
  "font-types",
@@ -5709,7 +5710,7 @@ dependencies = [
 [[package]]
 name = "refineable"
 version = "0.1.0"
-source = "git+https://github.com/huacnlee/zed.git?branch=webview#85befe24cc564f1f526ead3b09fd22d98b146248"
+source = "git+https://github.com/huacnlee/zed.git?branch=webview#a3de08a1fca76a321e935462dfa7ec72a36037b8"
 dependencies = [
  "derive_refineable",
  "workspace-hack",
@@ -5804,7 +5805,7 @@ dependencies = [
 [[package]]
 name = "reqwest_client"
 version = "0.1.0"
-source = "git+https://github.com/huacnlee/zed.git?branch=webview#85befe24cc564f1f526ead3b09fd22d98b146248"
+source = "git+https://github.com/huacnlee/zed.git?branch=webview#a3de08a1fca76a321e935462dfa7ec72a36037b8"
 dependencies = [
  "anyhow",
  "bytes",
@@ -6338,7 +6339,7 @@ checksum = "0f7d95a54511e0c7be3f51e8867aa8cf35148d7b9445d44de2f943e2b206e749"
 [[package]]
 name = "semantic_version"
 version = "0.1.0"
-source = "git+https://github.com/huacnlee/zed.git?branch=webview#85befe24cc564f1f526ead3b09fd22d98b146248"
+source = "git+https://github.com/huacnlee/zed.git?branch=webview#a3de08a1fca76a321e935462dfa7ec72a36037b8"
 dependencies = [
  "anyhow",
  "serde",
@@ -6818,7 +6819,7 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 [[package]]
 name = "sum_tree"
 version = "0.1.0"
-source = "git+https://github.com/huacnlee/zed.git?branch=webview#85befe24cc564f1f526ead3b09fd22d98b146248"
+source = "git+https://github.com/huacnlee/zed.git?branch=webview#a3de08a1fca76a321e935462dfa7ec72a36037b8"
 dependencies = [
  "arrayvec",
  "log",
@@ -7440,9 +7441,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-attributes"
-version = "0.1.28"
+version = "0.1.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "395ae124c09f9e6918a2310af6038fba074bcf474ac352496d5910dd59a2226d"
+checksum = "1b1ffbcf9c6f6b99d386e7444eb608ba646ae452a36b39737deb9663b610f662"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -7451,18 +7452,18 @@ dependencies = [
 
 [[package]]
 name = "tracing-core"
-version = "0.1.33"
+version = "0.1.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e672c95779cf947c5311f83787af4fa8fffd12fb27e4993211a84bdfd9610f9c"
+checksum = "b9d12581f227e93f094d3af2ae690a574abb8a2b9b7a96e7cfe9647b2b617678"
 dependencies = [
  "once_cell",
 ]
 
 [[package]]
 name = "tree-sitter"
-version = "0.25.5"
+version = "0.25.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac5fff5c47490dfdf473b5228039bfacad9d765d9b6939d26bf7cc064c1c7822"
+checksum = "a7cf18d43cbf0bfca51f657132cc616a5097edc4424d538bae6fa60142eaf9f0"
 dependencies = [
  "cc",
  "regex",
@@ -7584,9 +7585,9 @@ dependencies = [
 
 [[package]]
 name = "tree-sitter-highlight"
-version = "0.25.5"
+version = "0.25.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b95a758838aa4272d7c5c40fe35a4c8266fd3e3a36e019eef952ec5840b60ed"
+checksum = "6eea684ab5dd71e19f6c0add355be96f2b4eb58327cb305337415208681761aa"
 dependencies = [
  "regex",
  "streaming-iterator",
@@ -7982,7 +7983,7 @@ checksum = "b6c140620e7ffbb22c2dee59cafe6084a59b5ffc27a8859a5f0d494b5d52b6be"
 [[package]]
 name = "util"
 version = "0.1.0"
-source = "git+https://github.com/huacnlee/zed.git?branch=webview#85befe24cc564f1f526ead3b09fd22d98b146248"
+source = "git+https://github.com/huacnlee/zed.git?branch=webview#a3de08a1fca76a321e935462dfa7ec72a36037b8"
 dependencies = [
  "anyhow",
  "async-fs 2.1.2",
@@ -8006,8 +8007,6 @@ dependencies = [
  "tempfile",
  "tendril",
  "unicase",
- "unicode-script",
- "unicode-segmentation",
  "walkdir",
  "workspace-hack",
 ]
@@ -9511,9 +9510,9 @@ dependencies = [
 
 [[package]]
 name = "zune-jpeg"
-version = "0.4.14"
+version = "0.4.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "99a5bab8d7dedf81405c4bb1f2b83ea057643d9cb28778cea9eecddeedd2e028"
+checksum = "3e4a518c0ea2576f4da876349d7f67a7be489297cd77c2cf9e04c2e05fcd3974"
 dependencies = [
  "zune-core",
 ]
