@@ -1,9 +1,9 @@
-use crate::ui::components::{section::section, ViewKit};
+use crate::ui::components::ViewKit;
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::{
     accordion::Accordion,
-    button::{Button, ButtonGroup, ButtonVariant, ButtonVariants as _},
+    button::{Button, ButtonVariant, ButtonVariants as _},
     dropdown::{Dropdown, DropdownState},
     h_flex,
     input::{InputEvent, InputState, TextInput},
@@ -184,7 +184,7 @@ impl LlmProvider {
         cx.new(|cx| Self::new(window, cx))
     }
 
-    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+    fn new(_window: &mut Window, cx: &mut Context<Self>) -> Self {
         // 初始化示例数据保持不变
         let mut default_provider = LlmProviderInfo::default();
         default_provider.name = "收钱吧".to_string();
@@ -478,18 +478,6 @@ impl LlmProvider {
         };
     }
 
-    // 静态方法渲染Tab内容
-    fn render_provider_content_static(
-        provider: &LlmProviderInfo,
-        tab_index: usize,
-    ) -> impl IntoElement {
-        div().child(match tab_index {
-            0 => div().child(Self::render_config_content_static(provider)),
-            1 => div().child(Self::render_models_content_static(&provider.models)),
-            _ => div().child("未知Tab"),
-        })
-    }
-
     fn render_config_content_static(provider: &LlmProviderInfo) -> impl IntoElement {
         v_flex().gap_4().child(
             v_flex()
@@ -629,97 +617,6 @@ impl LlmProvider {
         )
     }
 
-    fn render_models_content_static(models: &[ModelInfo]) -> impl IntoElement {
-        v_flex()
-            .gap_2()
-            .children(models.iter().enumerate().map(|(model_index, model)| {
-                let model_name = model.name.clone();
-                let model_enabled = model.enabled;
-                let model_capabilities = model.capabilities.clone();
-
-                h_flex()
-                    .items_center()
-                    .justify_between()
-                    .p_1()
-                    .bg(gpui::rgb(0xFAFAFA))
-                    .rounded_md()
-                    .border_1()
-                    .border_color(gpui::rgb(0xE5E7EB))
-                    .child(
-                        h_flex()
-                            .items_center()
-                            .gap_3()
-                            .child(
-                                div()
-                                    .font_medium()
-                                    .text_color(if model_enabled {
-                                        gpui::rgb(0x111827)
-                                    } else {
-                                        gpui::rgb(0xD1D5DB)
-                                    })
-                                    .child(model_name.clone()),
-                            )
-                            .child(
-                                h_flex().gap_1().items_center().children(
-                                    model_capabilities.iter().enumerate().map(
-                                        |(cap_index, cap)| {
-                                            let capability_unique_id =
-                                                model_index * 1000 + cap_index;
-
-                                            div()
-                                                .id(("capability", capability_unique_id))
-                                                .p_1()
-                                                .rounded_md()
-                                                .bg(if model_enabled {
-                                                    gpui::rgb(0xF3F4F6)
-                                                } else {
-                                                    gpui::rgb(0xFAFAFA)
-                                                })
-                                                .child(
-                                                    Icon::new(cap.icon())
-                                                        .xsmall()
-                                                        .when(!model_enabled, |icon| {
-                                                            icon.text_color(gpui::rgb(0xD1D5DB))
-                                                        }),
-                                                )
-                                        },
-                                    ),
-                                ),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .px_2()
-                            .py_1()
-                            .bg(if model_enabled {
-                                gpui::rgb(0xDEF7EC)
-                            } else {
-                                gpui::rgb(0xFEF2F2)
-                            })
-                            .text_color(if model_enabled {
-                                gpui::rgb(0x047857)
-                            } else {
-                                gpui::rgb(0xDC2626)
-                            })
-                            .rounded_md()
-                            .text_xs()
-                            .child(if model_enabled {
-                                "已启用"
-                            } else {
-                                "已禁用"
-                            }),
-                    )
-            }))
-            .when(models.is_empty(), |this| {
-                this.child(
-                    div()
-                        .text_sm()
-                        .text_color(gpui::rgb(0x9CA3AF))
-                        .child("暂无可用模型"),
-                )
-            })
-    }
-
     // 添加非静态方法来渲染带Switch的模型列表
     fn render_models_content_with_switch(
         &self,
@@ -786,45 +683,20 @@ impl LlmProvider {
                             ),
                     )
                     .child(
-                        h_flex()
-                            .items_center()
-                            .gap_2()
-                            // .child(
-                            //     div()
-                            //         .px_2()
-                            //         .py_1()
-                            //         .bg(if model_enabled {
-                            //             gpui::rgb(0xDEF7EC)
-                            //         } else {
-                            //             gpui::rgb(0xFEF2F2)
-                            //         })
-                            //         .text_color(if model_enabled {
-                            //             gpui::rgb(0x047857)
-                            //         } else {
-                            //             gpui::rgb(0xDC2626)
-                            //         })
-                            //         .rounded_md()
-                            //         .text_xs()
-                            //         .child(if model_enabled {
-                            //             "已启用"
-                            //         } else {
-                            //             "已禁用"
-                            //         }),
-                            // )
-                            .child(
-                                // 修复：使用二元组格式，参考mcp_provider.rs的实现
-                                Switch::new(("model-enabled", provider_index * 1000 + model_index))
-                                    .checked(model_enabled)
-                                    .on_click(cx.listener(move |this, checked, window, cx| {
-                                        this.toggle_model_enabled(
-                                            provider_index,
-                                            model_index,
-                                            *checked,
-                                            window,
-                                            cx,
-                                        );
-                                    })),
-                            ),
+                        h_flex().items_center().gap_2().child(
+                            // 修复：使用二元组格式，参考mcp_provider.rs的实现
+                            Switch::new(("model-enabled", provider_index * 1000 + model_index))
+                                .checked(model_enabled)
+                                .on_click(cx.listener(move |this, checked, window, cx| {
+                                    this.toggle_model_enabled(
+                                        provider_index,
+                                        model_index,
+                                        *checked,
+                                        window,
+                                        cx,
+                                    );
+                                })),
+                        ),
                     )
             }))
             .when(models.is_empty(), |this| {
