@@ -87,171 +87,169 @@ impl TodoStatus {
     }
 }
 
-// 新增：层级化的模型选项结构
+// 多选模型选项
 #[derive(Debug, Clone)]
-pub enum ModelOption {
-    Provider {
-        name: String,
-        expanded: bool,
-    },
-    Model {
-        name: String,
-        provider: String,
-        // description: String, // 移除 description
-    },
+pub struct MultiSelectModel {
+    pub name: String,
+    pub provider: String,
+    pub is_selected: bool,
 }
 
-impl DropdownItem for ModelOption {
+impl DropdownItem for MultiSelectModel {
     type Value = String;
 
     fn title(&self) -> SharedString {
-        match self {
-            ModelOption::Provider { name, .. } => name.clone().into(),
-            ModelOption::Model { name, .. } => name.clone().into(),
-        }
+        self.name.clone().into()
     }
 
     fn display_title(&self) -> Option<AnyElement> {
-        match self {
-            ModelOption::Provider { name, .. } => Some(
-                h_flex()
-                    .items_center()
-                    .py_1()
-                    .child(
-                        div()
-                            .font_semibold()
-                            .text_color(gpui::rgb(0x374151))
-                            .child(name.clone()),
-                    )
-                    .into_any_element(),
-            ),
-            ModelOption::Model {
-                name,
-                provider,
-                // description, // 移除 description
-            } => Some(
-                h_flex()
-                    .items_center()
-                    .gap_3()
-                    .pl_6() // 使用 pl_6 而不是 ml_4，确保在下拉菜单中缩进
-                    .py_1()
-                    .child(
-                        // Checkbox - 在下拉菜单中显示
-                        div()
-                            .w_4()
-                            .h_4()
-                            .border_1()
-                            .border_color(gpui::rgb(0xD1D5DB))
-                            .bg(gpui::rgb(0xFFFFFF))
-                            .rounded_sm()
-                            .flex()
-                            .items_center()
-                            .justify_center(),
-                    )
-                    .child(
-                        v_flex().gap_1().flex_1().child(
+        Some(
+            h_flex()
+                .items_center()
+                .gap_3()
+                .py_2()
+                .px_3()
+                .child(
+                    // 复选框
+                    div()
+                        .w_4()
+                        .h_4()
+                        .border_1()
+                        .border_color(if self.is_selected {
+                            gpui::rgb(0x3B82F6)
+                        } else {
+                            gpui::rgb(0xD1D5DB)
+                        })
+                        .bg(if self.is_selected {
+                            gpui::rgb(0x3B82F6)
+                        } else {
+                            gpui::rgb(0xFFFFFF)
+                        })
+                        .rounded_sm()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .child(if self.is_selected {
+                            Icon::new(IconName::Check)
+                                .size_3()
+                                .text_color(gpui::rgb(0xFFFFFF))
+                                .into_any_element()
+                        } else {
+                            div().into_any_element()
+                        }),
+                )
+                .child(
+                    v_flex()
+                        .flex_1()
+                        .child(
                             div()
                                 .text_sm()
                                 .font_medium()
+                                .text_color(gpui::rgb(0x374151))
+                                .child(self.name.clone()),
+                        )
+                        .child(
+                            div()
+                                .text_xs()
                                 .text_color(gpui::rgb(0x6B7280))
-                                .child(name.clone()),
-                        ), // .child( // 移除 description 的显示
-                           //     div()
-                           //         .text_xs()
-                           //         .text_color(gpui::rgb(0x9CA3AF))
-                           //         .child(description.clone()),
-                           // ),
-                    )
-                    .into_any_element(),
-            ),
-        }
+                                .child(format!("提供商: {}", self.provider)),
+                        ),
+                )
+                .into_any_element(),
+        )
     }
 
     fn value(&self) -> &Self::Value {
-        match self {
-            ModelOption::Provider { name, .. } => name,
-            ModelOption::Model { name, .. } => name,
-        }
+        &self.name
     }
 }
 
-// 新增：层级化的Dropdown委托
-pub struct HierarchicalModelDelegate {
-    providers: Vec<(String, Vec<String>)>, // (provider_name, [model_name]) // 移除了 description
-    flattened_options: Vec<ModelOption>,
-    selected_model: Option<String>,
+// 多选模型委托
+pub struct MultiSelectModelDelegate {
+    models: Vec<MultiSelectModel>,
 }
 
-impl HierarchicalModelDelegate {
+impl MultiSelectModelDelegate {
     pub fn new() -> Self {
-        let providers = vec![
-            (
-                "收钱吧".to_string(),
-                vec![
-                    "sqb-chat-3.5".to_string(), // "快速对话模型".to_string()
-                    "sqb-chat-4.0".to_string(), // "高级推理模型".to_string()
-                ],
-            ),
-            (
-                "Anthropic".to_string(),
-                vec![
-                    "claude-3.5-sonnet".to_string(), // "最新Claude模型".to_string()
-                    "claude-3-haiku".to_string(),    // "快速响应模型".to_string()
-                    "claude-3-opus".to_string(),     // "最强推理模型".to_string()
-                ],
-            ),
-            (
-                "OpenAI".to_string(),
-                vec![
-                    "gpt-4".to_string(),         // "GPT-4 模型".to_string()
-                    "gpt-4-turbo".to_string(),   // "GPT-4 Turbo".to_string()
-                    "gpt-3.5-turbo".to_string(), // "GPT-3.5 Turbo".to_string()
-                ],
-            ),
-        ];
+        let mut models = Vec::new();
 
-        let mut flattened_options = Vec::new();
-        for (provider_name, models) in &providers {
-            flattened_options.push(ModelOption::Provider {
-                name: provider_name.clone(),
-                expanded: true,
-            });
+        // 收钱吧模型
+        models.push(MultiSelectModel {
+            name: "sqb-chat-3.5".to_string(),
+            provider: "收钱吧".to_string(),
+            is_selected: false,
+        });
+        models.push(MultiSelectModel {
+            name: "sqb-chat-4.0".to_string(),
+            provider: "收钱吧".to_string(),
+            is_selected: false,
+        });
 
-            for model_name in models {
-                // 移除了 description
-                flattened_options.push(ModelOption::Model {
-                    name: model_name.clone(),
-                    provider: provider_name.clone(),
-                    // description: description.clone(), // 移除 description
-                });
-            }
-        }
+        // Anthropic模型
+        models.push(MultiSelectModel {
+            name: "claude-3.5-sonnet".to_string(),
+            provider: "Anthropic".to_string(),
+            is_selected: false,
+        });
+        models.push(MultiSelectModel {
+            name: "claude-3-haiku".to_string(),
+            provider: "Anthropic".to_string(),
+            is_selected: false,
+        });
+        models.push(MultiSelectModel {
+            name: "claude-3-opus".to_string(),
+            provider: "Anthropic".to_string(),
+            is_selected: false,
+        });
 
-        Self {
-            providers,
-            flattened_options,
-            selected_model: None,
+        // OpenAI模型
+        models.push(MultiSelectModel {
+            name: "gpt-4".to_string(),
+            provider: "OpenAI".to_string(),
+            is_selected: false,
+        });
+        models.push(MultiSelectModel {
+            name: "gpt-4-turbo".to_string(),
+            provider: "OpenAI".to_string(),
+            is_selected: false,
+        });
+        models.push(MultiSelectModel {
+            name: "gpt-3.5-turbo".to_string(),
+            provider: "OpenAI".to_string(),
+            is_selected: false,
+        });
+
+        Self { models }
+    }
+
+    pub fn toggle_selection(&mut self, model_name: &str) {
+        if let Some(model) = self.models.iter_mut().find(|m| m.name == model_name) {
+            model.is_selected = !model.is_selected;
         }
     }
 
-    pub fn set_selected_model(&mut self, model: Option<String>) {
-        self.selected_model = model;
+    pub fn get_selected_models(&self) -> Vec<String> {
+        self.models
+            .iter()
+            .filter(|m| m.is_selected)
+            .map(|m| m.name.clone())
+            .collect()
     }
 
-    pub fn get_selected_model(&self) -> Option<&String> {
-        self.selected_model.as_ref()
+    pub fn get_selected_count(&self) -> usize {
+        self.models.iter().filter(|m| m.is_selected).count()
     }
 }
 
-impl DropdownDelegate for HierarchicalModelDelegate {
-    type Item = ModelOption;
+impl DropdownDelegate for MultiSelectModelDelegate {
+    type Item = MultiSelectModel;
 
     fn len(&self) -> usize {
-        self.flattened_options.len()
+        self.models.len()
     }
 
     fn get(&self, ix: usize) -> Option<&Self::Item> {
-        self.flattened_options.get(ix)
+        self.models.get(ix)
     }
 
     fn position<V>(&self, value: &V) -> Option<usize>
@@ -259,7 +257,7 @@ impl DropdownDelegate for HierarchicalModelDelegate {
         Self::Item: DropdownItem<Value = V>,
         V: PartialEq,
     {
-        self.flattened_options
+        self.models
             .iter()
             .position(|item| item.value() == value)
     }
@@ -276,8 +274,8 @@ pub struct TodoThreadEdit {
     status_dropdown: Entity<DropdownState<Vec<SharedString>>>,
     priority_dropdown: Entity<DropdownState<Vec<SharedString>>>,
 
-    // AI助手配置 - 修改为层级化模型选择
-    model_dropdown: Entity<DropdownState<HierarchicalModelDelegate>>, // 改为层级化
+    // AI助手配置 - 多选模型
+    model_dropdown: Entity<DropdownState<MultiSelectModelDelegate>>,
     mcp_tools_dropdown: Entity<DropdownState<Vec<SharedString>>>,
 
     // 时间设置
@@ -311,8 +309,8 @@ impl TodoThreadEdit {
         let priority_dropdown =
             cx.new(|cx| DropdownState::new(TodoPriority::all(), Some(1), window, cx));
 
-        // AI助手配置 - 层级化模型选择
-        let model_delegate = HierarchicalModelDelegate::new();
+        // 多选模型下拉框
+        let model_delegate = MultiSelectModelDelegate::new();
         let model_dropdown = cx.new(|cx| DropdownState::new(model_delegate, None, window, cx));
 
         let mcp_tools = vec![
@@ -334,24 +332,30 @@ impl TodoThreadEdit {
         let _subscriptions = vec![
             cx.subscribe_in(&title_input, window, Self::on_input_event),
             cx.subscribe_in(&description_input, window, Self::on_input_event),
-            cx.subscribe(&due_date_picker, |this, _, ev, cx| match ev {
+            cx.subscribe(&due_date_picker, |_, _, ev, cx| match ev {
                 DatePickerEvent::Change(_) => {
-                    println!("截止日期已更改");
                     cx.notify();
                 }
             }),
-            cx.subscribe(&reminder_date_picker, |this, _, ev, cx| match ev {
+            cx.subscribe(&reminder_date_picker, |_, _, ev, cx| match ev {
                 DatePickerEvent::Change(_) => {
-                    println!("提醒日期已更改");
                     cx.notify();
                 }
             }),
-            // 监听模型选择变化
+            // 监听模型选择变化 - 多选逻辑
             cx.subscribe(&model_dropdown, |this, _, event, cx| match event {
-                DropdownEvent::Confirm(selected_value) => {
-                    if let Some(model_name) = selected_value {
-                        println!("选择了模型: {}", model_name);
-                    }
+                DropdownEvent::Confirm(Some(model_name)) => {
+                    // 切换模型选择状态
+                    this.model_dropdown.update(cx, |dropdown_state, dropdown_cx| {
+                        // 访问底层delegate并切换选择
+                        dropdown_state.update_delegate(dropdown_cx, |delegate| {
+                            delegate.toggle_selection(model_name);
+                        });
+                    });
+                    println!("切换模型选择: {}", model_name);
+                    cx.notify();
+                }
+                DropdownEvent::Confirm(None) => {
                     cx.notify();
                 }
             }),
@@ -363,7 +367,7 @@ impl TodoThreadEdit {
             description_input,
             status_dropdown,
             priority_dropdown,
-            model_dropdown, // 层级化模型选择
+            model_dropdown,
             mcp_tools_dropdown,
             due_date_picker,
             reminder_date_picker,
@@ -388,12 +392,8 @@ impl TodoThreadEdit {
     }
 
     fn save(&mut self, _: &Save, _window: &mut Window, cx: &mut Context<Self>) {
-        let selected_model = self
-            .model_dropdown
-            .read(cx)
-            .selected_value()
-            .map(|v| v.to_string())
-            .unwrap_or_default();
+        // 获取选中的模型列表
+        let selected_models = self.model_dropdown.read(cx).get_selected_models();
 
         let todo_data = TodoData {
             title: self.title_input.read(cx).value().to_string(),
@@ -410,7 +410,7 @@ impl TodoThreadEdit {
                 .selected_value()
                 .map(|v| v.to_string())
                 .unwrap_or_default(),
-            selected_model, // 改为selected_model
+            selected_models, // 多选模型列表
             mcp_tools: self
                 .mcp_tools_dropdown
                 .read(cx)
@@ -455,13 +455,12 @@ impl TodoThreadEdit {
         &mut self,
         _entity: &Entity<InputState>,
         event: &InputEvent,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         match event {
             InputEvent::PressEnter { .. } => {
-                // 按回车键保存
-                self.save(&Save, _window, cx);
+                self.save(&Save, window, cx);
             }
             _ => {}
         }
@@ -489,6 +488,16 @@ impl TodoThreadEdit {
             )
             .child(div().flex_1().max_w_80().child(content))
     }
+
+    // 获取模型选择显示文本
+    fn get_model_display_text(&self, cx: &App) -> String {
+        let selected_count = self.model_dropdown.read(cx).get_selected_count();
+        if selected_count == 0 {
+            "选择AI模型".to_string()
+        } else {
+            format!("已选择 {} 个模型", selected_count)
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -497,7 +506,7 @@ struct TodoData {
     description: String,
     status: String,
     priority: String,
-    selected_model: String, // 改为selected_model
+    selected_models: Vec<String>, // 多选模型列表
     mcp_tools: String,
     recurring_enabled: bool,
     auto_execute: bool,
@@ -525,7 +534,7 @@ impl FocusableCycle for TodoThreadEdit {
             self.description_input.focus_handle(cx),
             self.status_dropdown.focus_handle(cx),
             self.priority_dropdown.focus_handle(cx),
-            self.model_dropdown.focus_handle(cx), // 层级化模型选择
+            self.model_dropdown.focus_handle(cx),
             self.mcp_tools_dropdown.focus_handle(cx),
             self.due_date_picker.focus_handle(cx),
             self.reminder_date_picker.focus_handle(cx),
@@ -541,7 +550,7 @@ impl Focusable for TodoThreadEdit {
 }
 
 impl Render for TodoThreadEdit {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let due_date_presets = vec![
             DateRangePreset::single("今天", Utc::now().naive_local().date()),
             DateRangePreset::single(
@@ -564,7 +573,7 @@ impl Render for TodoThreadEdit {
             ),
         ];
 
-        v_flex() // Root v_flex
+        v_flex()
             .key_context(CONTEXT)
             .id("todo-thread-view")
             .on_action(cx.listener(Self::tab))
@@ -573,41 +582,35 @@ impl Render for TodoThreadEdit {
             .on_action(cx.listener(Self::cancel))
             .on_action(cx.listener(Self::delete))
             .size_full()
-            .p_2() // Padding for the entire view
-            .gap_2() // Gap between the content area and the button area
+            .p_2()
+            .gap_2()
             .child(
-                // Content area - scrollable and takes up available space
                 v_flex()
                     .flex_1()
-                    // .overflow_y_auto() // Ensure content area is scrollable
-                    .gap_1() // Gap between sections inside the content area
+                    .gap_1()
                     .child(
-                        // 基本信息
-                        v_flex() // Section container for "任务描述"
+                        v_flex()
                             .gap_3()
                             .pt_1()
                             .px_2()
-                            .pb_2() // Reduced top padding
+                            .pb_2()
                             .bg(gpui::rgb(0xF9FAFB))
                             .rounded_lg()
                             .child(
-                                v_flex() // Inner v_flex for title and input
+                                v_flex()
                                     .gap_1()
                                     .child(Self::section_title("任务描述"))
-                                    // Removed misplaced .text_sm() from here
                                     .child(TextInput::new(&self.description_input).cleanable()),
                             ),
                     )
                     .child(
-                        // 附件拖拽上传区域
-                        v_flex() // Section container for "附件上传"
+                        v_flex()
                             .gap_3()
                             .pt_1()
                             .px_2()
-                            .pb_2() // Reduced top padding
+                            .pb_2()
                             .bg(gpui::rgb(0xF9FAFB))
                             .rounded_lg()
-                            //.child(Self::section_title("附件上传"))
                             .child(
                                 div()
                                     .id("file-drop-zone")
@@ -654,26 +657,25 @@ impl Render for TodoThreadEdit {
                                                     .child("支持 PDF、DOC、TXT、图片等格式"),
                                             ),
                                     )
-                                    .on_click(cx.listener(|this, _, _window, cx| {
+                                    .on_click(cx.listener(|_, _, _, cx| {
                                         println!("点击上传文件");
                                         cx.notify();
                                     })),
                             ),
                     )
                     .child(
-                        // AI助手配置
-                        v_flex() // Section container for "AI助手配置"
+                        v_flex()
                             .gap_3()
                             .pt_1()
                             .px_2()
-                            .pb_2() // Reduced top padding
+                            .pb_2()
                             .bg(gpui::rgb(0xF9FAFB))
                             .rounded_lg()
                             .child(Self::section_title("AI助手配置"))
                             .child(Self::form_row(
                                 "模型选择",
                                 Dropdown::new(&self.model_dropdown)
-                                    .placeholder("选择服务提供商和模型")
+                                    .placeholder(&self.get_model_display_text(cx))
                                     .small()
                                     .empty(
                                         h_flex()
@@ -693,12 +695,11 @@ impl Render for TodoThreadEdit {
                             )),
                     )
                     .child(
-                        // 时间安排
-                        v_flex() // Section container for "时间安排"
+                        v_flex()
                             .gap_3()
                             .pt_1()
                             .px_2()
-                            .pb_2() // Reduced top padding
+                            .pb_2()
                             .bg(gpui::rgb(0xF9FAFB))
                             .rounded_lg()
                             .child(Self::section_title("时间安排"))
@@ -743,7 +744,6 @@ impl Render for TodoThreadEdit {
                     ),
             )
             .child(
-                // 操作按钮区域
                 h_flex().items_center().justify_center().pt_2().child(
                     h_flex().gap_3().child(
                         Button::new("save-btn")

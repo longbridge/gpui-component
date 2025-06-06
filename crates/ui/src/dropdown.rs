@@ -513,6 +513,30 @@ where
             list.delegate_mut().delegate = items;
         });
     }
+
+    // 添加多选支持方法
+    pub fn update_delegate<F>(&mut self, cx: &mut Context<Self>, f: F)
+    where
+        F: FnOnce(&mut D),
+    {
+        self.list.update(cx, |list, _| {
+            f(&mut list.delegate_mut().delegate);
+        });
+    }
+
+    // 获取选中模型数量（仅对 MultiSelectModelDelegate 有效）
+    pub fn get_selected_count(&self) -> usize {
+        // 这个方法需要在具体的委托类型中实现
+        // 这里先返回0，实际使用时需要根据具体委托类型来实现
+        0
+    }
+
+    // 获取选中的模型列表（仅对 MultiSelectModelDelegate 有效）
+    pub fn get_selected_models(&self) -> Vec<String> {
+        // 这个方法需要在具体的委托类型中实现
+        // 这里先返回空Vec，实际使用时需要根据具体委托类型来实现
+        Vec::new()
+    }
 }
 
 impl<D> Render for DropdownState<D>
