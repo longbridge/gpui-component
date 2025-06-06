@@ -423,63 +423,71 @@ impl Render for TodoThreadView {
                     ),
             )
             .child(
-                // 附件拖拽上传区域
-                div()
-                    .id("file-drop-zone")
-                    .h_32()
-                    .w_full()
-                    .border_2()
-                    .border_color(gpui::rgb(0xD1D5DB))
-                    .border_dashed()
+                // 附件拖拽上传区域 - 添加section结构保持一致
+                v_flex()
+                    .gap_3()
+                    .p_2()
+                    .bg(gpui::rgb(0xF9FAFB))
                     .rounded_lg()
-                    .bg(gpui::rgb(0xFAFAFA))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .cursor_pointer()
-                    .hover(|style| {
-                        style
-                            .border_color(gpui::rgb(0x3B82F6))
-                            .bg(gpui::rgb(0xF0F9FF))
-                    })
-                    .active(|style| {
-                        style
-                            .border_color(gpui::rgb(0x1D4ED8))
-                            .bg(gpui::rgb(0xE0F2FE))
-                    })
+                    // .child(Self::section_title("附件上传"))
                     .child(
-                        v_flex()
+                        div()
+                            .id("file-drop-zone")
+                            .h_32()
+                            .w_full()
+                            .border_2()
+                            .border_color(gpui::rgb(0xD1D5DB))
+                            .border_dashed()
+                            .rounded_lg()
+                            .bg(gpui::rgb(0xFAFAFA))
+                            .flex()
                             .items_center()
-                            .gap_2()
+                            .justify_center()
+                            .cursor_pointer()
+                            .hover(|style| {
+                                style
+                                    .border_color(gpui::rgb(0x3B82F6))
+                                    .bg(gpui::rgb(0xF0F9FF))
+                            })
+                            .active(|style| {
+                                style
+                                    .border_color(gpui::rgb(0x1D4ED8))
+                                    .bg(gpui::rgb(0xE0F2FE))
+                            })
                             .child(
-                                // 上传图标
-                                Icon::new(IconName::Upload)
-                                    .size_6()
-                                    .text_color(gpui::rgb(0x6B7280)),
+                                v_flex()
+                                    .items_center()
+                                    .gap_2()
+                                    .child(
+                                        // 上传图标
+                                        Icon::new(IconName::Upload)
+                                            .size_6()
+                                            .text_color(gpui::rgb(0x6B7280)),
+                                    )
+                                    .child(
+                                        // 副标题提示
+                                        div()
+                                            .text_xs()
+                                            .text_color(gpui::rgb(0x9CA3AF))
+                                            .child("拖拽文件到此处上传或点击选择文件"),
+                                    )
+                                    .child(
+                                        // 支持的文件类型提示
+                                        div()
+                                            .text_xs()
+                                            .text_color(gpui::rgb(0xB91C1C))
+                                            .child("支持 PDF、DOC、TXT、图片等格式"),
+                                    ),
                             )
-                            .child(
-                                // 副标题提示
-                                div()
-                                    .text_xs()
-                                    .text_color(gpui::rgb(0x9CA3AF))
-                                    .child("拖拽文件到此处上传或点击选择文件"),
-                            )
-                            .child(
-                                // 支持的文件类型提示
-                                div()
-                                    .text_xs()
-                                    .text_color(gpui::rgb(0xB91C1C))
-                                    .child("支持 PDF、DOC、TXT、图片等格式"),
-                            ),
-                    )
-                    .on_click(cx.listener(|this, _, _window, cx| {
-                        // TODO: 处理点击上传逻辑
-                        println!("点击上传文件");
-                        cx.notify();
-                    })), // TODO: 添加拖拽事件处理
-                         // .on_drag_enter(...)
-                         // .on_drag_over(...)
-                         // .on_drop(...)
+                            .on_click(cx.listener(|this, _, _window, cx| {
+                                // TODO: 处理点击上传逻辑
+                                println!("点击上传文件");
+                                cx.notify();
+                            })), // TODO: 添加拖拽事件处理
+                                 // .on_drag_enter(...)
+                                 // .on_drag_over(...)
+                                 // .on_drop(...)
+                    ),
             )
             .child(
                 // AI助手配置
