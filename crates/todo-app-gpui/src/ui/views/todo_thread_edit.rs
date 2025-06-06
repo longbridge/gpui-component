@@ -148,12 +148,6 @@ impl DropdownItem for MultiSelectModel {
                                 .text_color(gpui::rgb(0x374151))
                                 .child(self.name.clone()),
                         )
-                        // .child(
-                        //     div()
-                        //         .text_xs()
-                        //         .text_color(gpui::rgb(0x6B7280))
-                        //         .child(format!("提供商: {}", self.provider)),
-                        // ),
                 )
                 .into_any_element(),
         )
@@ -599,13 +593,20 @@ impl TodoThreadEdit {
             .child(div().flex_1().max_w_80().child(content))
     }
 
-    // 获取模型选择显示文本
+    // 获取模型选择显示文本 - 显示选中的模型名称
     fn get_model_display_text(&self, cx: &App) -> String {
-        let selected_count = self.model_dropdown.read(cx).get_selected_count();
+        let selected_models = self.model_dropdown.read(cx).get_selected_models();
+        let selected_count = selected_models.len();
+        
         if selected_count == 0 {
             "选择AI模型".to_string()
+        } else if selected_count <= 2 {
+            // 如果选中的模型不超过2个，直接显示模型名称
+            selected_models.join(", ")
         } else {
-            format!("已选择 {} 个模型", selected_count)
+            // 如果选中的模型超过2个，显示前2个模型名称 + "等X个模型"
+            let first_two = selected_models.iter().take(2).cloned().collect::<Vec<_>>().join(", ");
+            format!("{} 等{}个模型", first_two, selected_count)
         }
     }
 }
