@@ -19,7 +19,8 @@ actions!(
         TabPrev,
         AddMcpProvider,
         SaveMcpProvider,
-        DeleteMcpProvider
+        DeleteMcpProvider,
+        CancelEdit,
     ]
 );
 
@@ -124,7 +125,7 @@ pub struct McpProviderInfo {
     resources: Vec<McpResource>,
     tools: Vec<McpTool>,
     prompts: Vec<McpPrompt>,
-    env_vars: std::collections::HashMap<String, String>, // 新增：环境变量
+    env_vars: std::collections::HashMap<String, String>,
 }
 
 impl Default for McpProviderInfo {
@@ -228,18 +229,25 @@ impl Default for McpProviderInfo {
     }
 }
 
+// 用于存储每个Provider的编辑状态输入框
+#[derive(Clone)]
+struct ProviderInputs {
+    name_input: Entity<InputState>,
+    command_input: Entity<InputState>,
+    args_input: Entity<InputState>,
+    description_input: Entity<InputState>,
+    env_input: Entity<InputState>,
+    transport_dropdown: Entity<DropdownState<Vec<SharedString>>>,
+}
+
 pub struct McpProvider {
     focus_handle: FocusHandle,
     providers: Vec<McpProviderInfo>,
     expanded_providers: Vec<usize>,
     active_capability_tabs: std::collections::HashMap<usize, usize>,
     editing_provider: Option<usize>,
-    name_input: Entity<InputState>,
-    command_input: Entity<InputState>,
-    args_input: Entity<InputState>,
-    description_input: Entity<InputState>,
-    env_input: Entity<InputState>, // 新增：环境变量输入
-    transport_dropdown: Entity<DropdownState<Vec<SharedString>>>,
+    // 每个Provider的编辑状态输入框
+    provider_inputs: std::collections::HashMap<usize, ProviderInputs>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -267,6 +275,7 @@ impl McpProvider {
             KeyBinding::new("shift-tab", TabPrev, Some(CONTEXT)),
             KeyBinding::new("tab", Tab1, Some(CONTEXT)),
             KeyBinding::new("ctrl-n", AddMcpProvider, Some(CONTEXT)),
+            KeyBinding::new("escape", CancelEdit, Some(CONTEXT)),
         ])
     }
 
@@ -275,33 +284,6 @@ impl McpProvider {
     }
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let name_input = cx.new(|cx| InputState::new(window, cx).placeholder("MCP服务名称"));
-
-        let command_input = cx.new(|cx| InputState::new(window, cx).placeholder("可执行文件路径"));
-
-        let args_input =
-            cx.new(|cx| InputState::new(window, cx).placeholder("启动参数 (用空格分隔)"));
-
-        let description_input = cx.new(|cx| InputState::new(window, cx).placeholder("服务描述"));
-
-        // 新增：环境变量输入框
-        let env_input = cx.new(|cx| {
-            InputState::new(window, cx)
-                .placeholder("环境变量 (每行一个 KEY=value)")
-                .auto_grow(3, 6)
-        });
-
-        let transport_dropdown =
-            cx.new(|cx| DropdownState::new(McpTransport::all(), Some(0), window, cx));
-
-        let _subscriptions = vec![
-            cx.subscribe_in(&name_input, window, Self::on_input_event),
-            cx.subscribe_in(&command_input, window, Self::on_input_event),
-            cx.subscribe_in(&args_input, window, Self::on_input_event),
-            cx.subscribe_in(&description_input, window, Self::on_input_event),
-            cx.subscribe_in(&env_input, window, Self::on_input_event), // 新增
-        ];
-
         // 初始化一些示例数据
         let mut filesystem_provider = McpProviderInfo::default();
         filesystem_provider.name = "文件系统".to_string();
@@ -354,13 +336,8 @@ impl McpProvider {
             expanded_providers: vec![0],
             active_capability_tabs: std::collections::HashMap::new(),
             editing_provider: None,
-            name_input,
-            command_input,
-            args_input,
-            description_input,
-            env_input,
-            transport_dropdown,
-            _subscriptions,
+            provider_inputs: std::collections::HashMap::new(),
+            _subscriptions: vec![],
         }
     }
 
@@ -378,9 +355,31 @@ impl McpProvider {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.editing_provider = Some(self.providers.len());
+        let new_index = self.providers.len();
         self.providers.push(McpProviderInfo::default());
-        self.clear_form(window, cx);
+        self.expanded_providers.push(new_index);
+        self.start_editing(new_index, window, cx);
+        cx.notify();
+    }
+
+    fn cancel_edit(&mut self, _: &CancelEdit, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(editing_index) = self.editing_provider {
+            // 如果是新添加的空Provider，删除它
+            if let Some(provider) = self.providers.get(editing_index) {
+                if provider.name.is_empty() && provider.command.is_empty() {
+                    self.providers.remove(editing_index);
+                    self.expanded_providers.retain(|&i| i != editing_index);
+                    self.expanded_providers = self
+                        .expanded_providers
+                        .iter()
+                        .map(|&i| if i > editing_index { i - 1 } else { i })
+                        .collect();
+                }
+            }
+            // 清理输入框
+            self.provider_inputs.remove(&editing_index);
+        }
+        self.editing_provider = None;
         cx.notify();
     }
 
@@ -391,20 +390,23 @@ impl McpProvider {
         cx: &mut Context<Self>,
     ) {
         if let Some(index) = self.editing_provider {
-            if let Some(provider) = self.providers.get_mut(index) {
-                provider.name = self.name_input.read(cx).value().to_string();
-                provider.command = self.command_input.read(cx).value().to_string();
-                provider.description = self.description_input.read(cx).value().to_string();
+            if let (Some(provider), Some(inputs)) = (
+                self.providers.get_mut(index),
+                self.provider_inputs.get(&index),
+            ) {
+                provider.name = inputs.name_input.read(cx).value().to_string();
+                provider.command = inputs.command_input.read(cx).value().to_string();
+                provider.description = inputs.description_input.read(cx).value().to_string();
 
                 // 解析启动参数
-                let args_text = self.args_input.read(cx).value().to_string();
+                let args_text = inputs.args_input.read(cx).value().to_string();
                 provider.args = args_text
                     .split_whitespace()
                     .map(|s| s.to_string())
                     .collect();
 
                 // 解析环境变量
-                let env_text = self.env_input.read(cx).value().to_string();
+                let env_text = inputs.env_input.read(cx).value().to_string();
                 provider.env_vars.clear();
                 for line in env_text.lines() {
                     let line = line.trim();
@@ -417,7 +419,7 @@ impl McpProvider {
                     }
                 }
 
-                if let Some(selected) = self.transport_dropdown.read(cx).selected_value() {
+                if let Some(selected) = inputs.transport_dropdown.read(cx).selected_value() {
                     provider.transport = match selected.as_ref() {
                         "Stdio" => McpTransport::Stdio,
                         "HTTP" => McpTransport::Http,
@@ -428,8 +430,11 @@ impl McpProvider {
             }
         }
 
+        // 清理编辑状态
+        if let Some(index) = self.editing_provider {
+            self.provider_inputs.remove(&index);
+        }
         self.editing_provider = None;
-        self.clear_form(window, cx);
         cx.notify();
     }
 
@@ -481,6 +486,7 @@ impl McpProvider {
         if index < self.providers.len() {
             let provider_name = self.providers[index].name.clone();
             self.providers.remove(index);
+            self.provider_inputs.remove(&index);
 
             // 更新展开状态
             self.expanded_providers.retain(|&i| i != index);
@@ -493,7 +499,6 @@ impl McpProvider {
             // 如果正在编辑被删除的提供商，清除编辑状态
             if self.editing_provider == Some(index) {
                 self.editing_provider = None;
-                self.clear_form(window, cx);
             } else if let Some(editing) = self.editing_provider {
                 if editing > index {
                     self.editing_provider = Some(editing - 1);
@@ -524,73 +529,71 @@ impl McpProvider {
         }
     }
 
-    fn edit_mcp_provider(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
+    fn start_editing(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
         self.editing_provider = Some(index);
 
-        if let Some(provider) = self.providers.get(index) {
-            self.name_input.update(cx, |state, cx| {
-                *state = InputState::new(window, cx).default_value(&provider.name);
-            });
+        // 创建输入框实例
+        let provider = &self.providers[index];
 
-            self.command_input.update(cx, |state, cx| {
-                *state = InputState::new(window, cx).default_value(&provider.command);
-            });
+        let name_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("MCP服务名称")
+                .default_value(&provider.name)
+        });
 
-            self.args_input.update(cx, |state, cx| {
-                let args_text = provider.args.join(" ");
-                *state = InputState::new(window, cx).default_value(&args_text);
-            });
+        let command_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("可执行文件路径")
+                .default_value(&provider.command)
+        });
 
-            self.description_input.update(cx, |state, cx| {
-                *state = InputState::new(window, cx).default_value(&provider.description);
-            });
+        let args_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("启动参数 (用空格分隔)")
+                .default_value(&provider.args.join(" "))
+        });
 
-            // 填充环境变量
-            self.env_input.update(cx, |state, cx| {
-                let env_text = provider
-                    .env_vars
-                    .iter()
-                    .map(|(key, value)| format!("{}={}", key, value))
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                *state = InputState::new(window, cx).default_value(&env_text);
-            });
+        let description_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("服务描述")
+                .default_value(&provider.description)
+        });
 
-            let transport_index = match provider.transport {
-                McpTransport::Stdio => 0,
-                McpTransport::Http => 1,
-                McpTransport::WebSocket => 2,
-            };
+        let env_input = cx.new(|cx| {
+            let env_text = provider
+                .env_vars
+                .iter()
+                .map(|(key, value)| format!("{}={}", key, value))
+                .collect::<Vec<_>>()
+                .join("\n");
+            InputState::new(window, cx)
+                .placeholder("环境变量 (每行一个 KEY=value)")
+                .auto_grow(3, 6)
+                .default_value(&env_text)
+        });
 
-            self.transport_dropdown.update(cx, |state, cx| {
-                state.set_selected_index(Some(transport_index), window, cx);
-            });
-        }
+        let transport_index = match provider.transport {
+            McpTransport::Stdio => 0,
+            McpTransport::Http => 1,
+            McpTransport::WebSocket => 2,
+        };
+
+        let transport_dropdown =
+            cx.new(|cx| DropdownState::new(McpTransport::all(), Some(transport_index), window, cx));
+
+        self.provider_inputs.insert(
+            index,
+            ProviderInputs {
+                name_input,
+                command_input,
+                args_input,
+                description_input,
+                env_input,
+                transport_dropdown,
+            },
+        );
 
         cx.notify();
-    }
-
-    fn clear_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.name_input.update(cx, |state, cx| {
-            *state = InputState::new(window, cx).placeholder("MCP服务名称");
-        });
-        self.command_input.update(cx, |state, cx| {
-            *state = InputState::new(window, cx).placeholder("可执行文件路径");
-        });
-        self.args_input.update(cx, |state, cx| {
-            *state = InputState::new(window, cx).placeholder("启动参数 (用空格分隔)");
-        });
-        self.description_input.update(cx, |state, cx| {
-            *state = InputState::new(window, cx).placeholder("服务描述");
-        });
-        self.env_input.update(cx, |state, cx| {
-            *state = InputState::new(window, cx)
-                .placeholder("环境变量 (每行一个 KEY=value)")
-                .auto_grow(3, 6);
-        });
-        self.transport_dropdown.update(cx, |state, cx| {
-            state.set_selected_index(Some(0), window, cx);
-        });
     }
 
     fn toggle_accordion(&mut self, open_ixs: &[usize], _: &mut Window, cx: &mut Context<Self>) {
@@ -615,101 +618,118 @@ impl McpProvider {
         };
     }
 
-    fn render_provider_form(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
-        v_flex()
-            .gap_3()
-            .p_4()
-            .bg(gpui::rgb(0xF9FAFB))
-            .rounded_lg()
-            .border_1()
-            .border_color(gpui::rgb(0xE5E7EB))
-            .child(
-                div()
-                    .text_lg()
-                    .font_semibold()
-                    .text_color(gpui::rgb(0x374151))
-                    .child(if self.editing_provider.is_some() {
-                        "编辑MCP服务"
-                    } else {
-                        "添加MCP服务"
-                    }),
-            )
-            .child(
-                h_flex()
-                    .gap_3()
-                    .child(
-                        v_flex()
-                            .gap_1()
-                            .flex_1()
-                            .child(
-                                div()
-                                    .text_sm()
-                                    .text_color(gpui::rgb(0x6B7280))
-                                    .child("服务名称 *"),
-                            )
-                            .child(TextInput::new(&self.name_input).cleanable()),
-                    )
-                    .child(
-                        v_flex()
-                            .gap_1()
-                            .flex_1()
-                            .child(
-                                div()
-                                    .text_sm()
-                                    .text_color(gpui::rgb(0x6B7280))
-                                    .child("传输方式"),
-                            )
-                            .child(
-                                Dropdown::new(&self.transport_dropdown)
-                                    .placeholder("选择传输方式")
-                                    .small(),
-                            ),
-                    ),
-            )
-            .child(
-                v_flex()
-                    .gap_1()
-                    .child(
-                        div()
-                            .text_sm()
-                            .text_color(gpui::rgb(0x6B7280))
-                            .child("启动命令&参数"),
-                    )
-                    .child(TextInput::new(&self.args_input).cleanable()),
-            )
-            .child(
-                v_flex()
-                    .gap_1()
-                    .child(
-                        div()
-                            .text_sm()
-                            .text_color(gpui::rgb(0x6B7280))
-                            .child("环境变量"),
-                    )
-                    .child(TextInput::new(&self.env_input).cleanable()),
-            )
-            .child(
-                h_flex()
-                    .justify_end()
-                    .gap_2()
-                    .child(
-                        Button::new("cancel-edit")
-                            .label("取消")
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.editing_provider = None;
-                                this.clear_form(window, cx);
-                                cx.notify();
-                            })),
-                    )
-                    .child(
-                        Button::new("save-provider")
-                            .with_variant(ButtonVariant::Primary)
-                            .label("保存")
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.save_mcp_provider(&SaveMcpProvider, window, cx);
-                            })),
-                    ),
-            )
+    fn render_edit_form(&mut self, index: usize, cx: &mut Context<Self>) -> impl IntoElement {
+        if let Some(inputs) = self.provider_inputs.get(&index) {
+            v_flex()
+                .gap_3()
+                .p_4()
+                .bg(gpui::rgb(0xF0F9FF))
+                .rounded_lg()
+                .border_1()
+                .border_color(gpui::rgb(0x0EA5E9))
+                .child(
+                    h_flex()
+                        .gap_3()
+                        .child(
+                            v_flex()
+                                .gap_1()
+                                .flex_1()
+                                .child(
+                                    div()
+                                        .text_sm()
+                                        .text_color(gpui::rgb(0x6B7280))
+                                        .child("服务名称 *"),
+                                )
+                                .child(TextInput::new(&inputs.name_input).cleanable()),
+                        )
+                        .child(
+                            v_flex()
+                                .gap_1()
+                                .flex_1()
+                                .child(
+                                    div()
+                                        .text_sm()
+                                        .text_color(gpui::rgb(0x6B7280))
+                                        .child("传输方式"),
+                                )
+                                .child(
+                                    Dropdown::new(&inputs.transport_dropdown)
+                                        .placeholder("选择传输方式")
+                                        .small(),
+                                ),
+                        ),
+                )
+                .child(
+                    h_flex()
+                        .gap_3()
+                        // .child(
+                        //     v_flex()
+                        //         .gap_1()
+                        //         .flex_1()
+                        //         .child(
+                        //             div()
+                        //                 .text_sm()
+                        //                 .text_color(gpui::rgb(0x6B7280))
+                        //                 .child("可执行文件路径 *"),
+                        //         )
+                        //         .child(TextInput::new(&inputs.command_input).cleanable()),
+                        // )
+                        .child(
+                            v_flex()
+                                .gap_1()
+                                .flex_1()
+                                .child(
+                                    div()
+                                        .text_sm()
+                                        .text_color(gpui::rgb(0x6B7280))
+                                        .child("启动命令&参数"),
+                                )
+                                .child(TextInput::new(&inputs.args_input).cleanable()),
+                        ),
+                )
+                .child(
+                    v_flex()
+                        .gap_1()
+                        .child(
+                            div()
+                                .text_sm()
+                                .text_color(gpui::rgb(0x6B7280))
+                                .child("服务描述"),
+                        )
+                        .child(TextInput::new(&inputs.description_input).cleanable()),
+                )
+                .child(
+                    v_flex()
+                        .gap_1()
+                        .child(
+                            div()
+                                .text_sm()
+                                .text_color(gpui::rgb(0x6B7280))
+                                .child("环境变量"),
+                        )
+                        .child(TextInput::new(&inputs.env_input).cleanable()),
+                )
+                .child(
+                    h_flex()
+                        .justify_end()
+                        .gap_2()
+                        .child(Button::new(("cancel-edit", index)).label("取消").on_click(
+                            cx.listener(|this, _, window, cx| {
+                                this.cancel_edit(&CancelEdit, window, cx);
+                            }),
+                        ))
+                        .child(
+                            Button::new(("save-provider", index))
+                                .with_variant(ButtonVariant::Primary)
+                                .label("保存")
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    this.save_mcp_provider(&SaveMcpProvider, window, cx);
+                                })),
+                        ),
+                )
+        } else {
+            div().child("加载中...")
+        }
     }
 
     fn set_active_capability_tab(
@@ -730,7 +750,6 @@ impl McpProvider {
         tab_index: usize,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        // 使用 div 容器来统一返回类型
         div().child(match tab_index {
             0 => div().child(self.render_resources_content(&provider.resources, cx)),
             1 => div().child(self.render_tools_content(&provider.tools, cx)),
@@ -1023,14 +1042,19 @@ impl McpProvider {
 
 impl FocusableCycle for McpProvider {
     fn cycle_focus_handles(&self, _: &mut Window, cx: &mut App) -> Vec<FocusHandle> {
-        vec![
-            self.name_input.focus_handle(cx),
-            self.command_input.focus_handle(cx),
-            self.args_input.focus_handle(cx),
-            self.env_input.focus_handle(cx), // 新增
-            self.description_input.focus_handle(cx),
-            self.transport_dropdown.focus_handle(cx),
-        ]
+        if let Some(editing_index) = self.editing_provider {
+            if let Some(inputs) = self.provider_inputs.get(&editing_index) {
+                return vec![
+                    inputs.name_input.focus_handle(cx),
+                    inputs.command_input.focus_handle(cx),
+                    inputs.args_input.focus_handle(cx),
+                    inputs.description_input.focus_handle(cx),
+                    inputs.env_input.focus_handle(cx),
+                    inputs.transport_dropdown.focus_handle(cx),
+                ];
+            }
+        }
+        vec![self.focus_handle.clone()]
     }
 }
 
@@ -1049,6 +1073,7 @@ impl Render for McpProvider {
             .on_action(cx.listener(Self::tab_prev))
             .on_action(cx.listener(Self::add_mcp_provider))
             .on_action(cx.listener(Self::save_mcp_provider))
+            .on_action(cx.listener(Self::cancel_edit))
             .size_full()
             .gap_4()
             .child(
@@ -1062,11 +1087,29 @@ impl Render for McpProvider {
                         })),
                 ),
             )
-            .child(div().when(self.editing_provider.is_some(), |this| {
-                this.child(self.render_provider_form(cx))
-            }))
             .child(div().w_full().child({
                 let mut accordion = Accordion::new("mcp-providers").multiple(true);
+
+                // 预先收集所有需要的数据，避免在闭包中借用self
+                let expanded_providers = self.expanded_providers.clone();
+                let editing_provider = self.editing_provider;
+                let active_capability_tabs = self.active_capability_tabs.clone();
+
+                // 预先收集编辑表单的输入框数据
+                let edit_inputs = if let Some(editing_index) = editing_provider {
+                    self.provider_inputs.get(&editing_index).map(|inputs| {
+                        (
+                            inputs.name_input.clone(),
+                            inputs.command_input.clone(),
+                            inputs.args_input.clone(),
+                            inputs.description_input.clone(),
+                            inputs.env_input.clone(),
+                            inputs.transport_dropdown.clone(),
+                        )
+                    })
+                } else {
+                    None
+                };
 
                 for (index, provider) in self.providers.iter().enumerate() {
                     let provider_name = provider.name.clone();
@@ -1075,9 +1118,14 @@ impl Render for McpProvider {
                     let provider_transport = provider.transport.as_str().to_string();
                     let provider_enabled = provider.enabled;
                     let provider_description = provider.description.clone();
+                    let provider_env_vars = provider.env_vars.clone();
+                    let provider_resources = provider.resources.clone();
+                    let provider_tools = provider.tools.clone();
+                    let provider_prompts = provider.prompts.clone();
+                    let is_editing = editing_provider == Some(index);
 
                     accordion = accordion.item(|item| {
-                        item.open(self.expanded_providers.contains(&index) && provider_enabled)
+                        item.open(expanded_providers.contains(&index) && provider_enabled)
                             .disabled(!provider_enabled)
                             .icon(if provider_enabled {
                                 IconName::CircleCheck
@@ -1101,7 +1149,11 @@ impl Render for McpProvider {
                                             } else {
                                                 gpui::rgb(0xD1D5DB)
                                             })
-                                            .child(provider_name.clone()),
+                                            .child(if provider_name.is_empty() {
+                                                "新建MCP服务".to_string()
+                                            } else {
+                                                provider_name.clone()
+                                            }),
                                     )
                                     .child(
                                         h_flex()
@@ -1148,12 +1200,10 @@ impl Render for McpProvider {
                                                     .small()
                                                     .ghost()
                                                     .tooltip("编辑")
-                                                    .disabled(!provider_enabled)
+                                                    .disabled(!provider_enabled || is_editing)
                                                     .on_click(cx.listener(
                                                         move |this, _, window, cx| {
-                                                            this.edit_mcp_provider(
-                                                                index, window, cx,
-                                                            );
+                                                            this.start_editing(index, window, cx);
                                                         },
                                                     )),
                                             )
@@ -1169,7 +1219,7 @@ impl Render for McpProvider {
                                                     .small()
                                                     .ghost()
                                                     .tooltip("删除")
-                                                    .disabled(!provider_enabled)
+                                                    .disabled(!provider_enabled || is_editing)
                                                     .on_click(cx.listener(
                                                         move |this, _, window, cx| {
                                                             this.delete_mcp_provider(
@@ -1183,32 +1233,241 @@ impl Render for McpProvider {
                             .content(
                                 v_flex()
                                     .gap_4()
-                                    .child(
-                                        v_flex()
-                                            .gap_2()
-                                            .child(
-                                                h_flex()
-                                                    .gap_4()
+                                    .child(if is_editing {
+                                        // 直接构建编辑表单，而不是使用预先渲染的
+                                        if let Some((
+                                            name_input,
+                                            command_input,
+                                            args_input,
+                                            description_input,
+                                            env_input,
+                                            transport_dropdown,
+                                        )) = &edit_inputs
+                                        {
+                                            div().child(
+                                                v_flex()
+                                                    .gap_3()
+                                                    .p_4()
+                                                    .bg(gpui::rgb(0xF0F9FF))
+                                                    .rounded_lg()
+                                                    .border_1()
+                                                    .border_color(gpui::rgb(0x0EA5E9))
                                                     .child(
-                                                        v_flex()
-                                                            .gap_1()
+                                                        h_flex()
+                                                            .gap_3()
                                                             .child(
-                                                                div()
-                                                                    .text_sm()
-                                                                    .font_medium()
-                                                                    .text_color(gpui::rgb(0x374151))
-                                                                    .child("可执行文件"),
+                                                                v_flex()
+                                                                    .gap_1()
+                                                                    .flex_1()
+                                                                    .child(
+                                                                        div()
+                                                                            .text_sm()
+                                                                            .text_color(gpui::rgb(
+                                                                                0x6B7280,
+                                                                            ))
+                                                                            .child("服务名称 *"),
+                                                                    )
+                                                                    .child(
+                                                                        TextInput::new(name_input)
+                                                                            .cleanable(),
+                                                                    ),
                                                             )
                                                             .child(
-                                                                div()
-                                                                    .text_sm()
-                                                                    .text_color(gpui::rgb(0x6B7280))
+                                                                v_flex()
+                                                                    .gap_1()
+                                                                    .flex_1()
                                                                     .child(
-                                                                        provider_command.clone(),
+                                                                        div()
+                                                                            .text_sm()
+                                                                            .text_color(gpui::rgb(
+                                                                                0x6B7280,
+                                                                            ))
+                                                                            .child("传输方式"),
+                                                                    )
+                                                                    .child(
+                                                                        Dropdown::new(
+                                                                            transport_dropdown,
+                                                                        )
+                                                                        .placeholder("选择传输方式")
+                                                                        .small(),
                                                                     ),
                                                             ),
                                                     )
                                                     .child(
+                                                        h_flex()
+                                                            .gap_3()
+                                                            // .child(
+                                                            //     v_flex()
+                                                            //         .gap_1()
+                                                            //         .flex_1()
+                                                            //         .child(
+                                                            //             div()
+                                                            //                 .text_sm()
+                                                            //                 .text_color(gpui::rgb(
+                                                            //                     0x6B7280,
+                                                            //                 ))
+                                                            //                 .child(
+                                                            //                     "可执行文件路径 *",
+                                                            //                 ),
+                                                            //         )
+                                                            //         .child(
+                                                            //             TextInput::new(
+                                                            //                 command_input,
+                                                            //             )
+                                                            //             .cleanable(),
+                                                            //         ),
+                                                            // )
+                                                            .child(
+                                                                v_flex()
+                                                                    .gap_1()
+                                                                    .flex_1()
+                                                                    .child(
+                                                                        div()
+                                                                            .text_sm()
+                                                                            .text_color(gpui::rgb(
+                                                                                0x6B7280,
+                                                                            ))
+                                                                            .child("启动命令&参数"),
+                                                                    )
+                                                                    .child(
+                                                                        TextInput::new(args_input)
+                                                                            .cleanable(),
+                                                                    ),
+                                                            ),
+                                                    )
+                                                    // .child(
+                                                    //     v_flex()
+                                                    //         .gap_1()
+                                                    //         .child(
+                                                    //             div()
+                                                    //                 .text_sm()
+                                                    //                 .text_color(gpui::rgb(0x6B7280))
+                                                    //                 .child("服务描述"),
+                                                    //         )
+                                                    //         .child(
+                                                    //             TextInput::new(description_input)
+                                                    //                 .cleanable(),
+                                                    //         ),
+                                                    // )
+                                                    .child(
+                                                        v_flex()
+                                                            .gap_1()
+                                                            .child(
+                                                                div()
+                                                                    .text_sm()
+                                                                    .text_color(gpui::rgb(0x6B7280))
+                                                                    .child("环境变量"),
+                                                            )
+                                                            .child(
+                                                                TextInput::new(env_input)
+                                                                    .cleanable(),
+                                                            ),
+                                                    )
+                                                    .child(
+                                                        h_flex()
+                                                            .justify_end()
+                                                            .gap_2()
+                                                            .child(
+                                                                Button::new(("cancel-edit", index))
+                                                                    .label("取消")
+                                                                    .on_click(cx.listener(
+                                                                        |this, _, window, cx| {
+                                                                            this.cancel_edit(
+                                                                                &CancelEdit,
+                                                                                window,
+                                                                                cx,
+                                                                            );
+                                                                        },
+                                                                    )),
+                                                            )
+                                                            .child(
+                                                                Button::new((
+                                                                    "save-provider",
+                                                                    index,
+                                                                ))
+                                                                .with_variant(
+                                                                    ButtonVariant::Primary,
+                                                                )
+                                                                .label("保存")
+                                                                .on_click(cx.listener(
+                                                                    |this, _, window, cx| {
+                                                                        this.save_mcp_provider(
+                                                                            &SaveMcpProvider,
+                                                                            window,
+                                                                            cx,
+                                                                        );
+                                                                    },
+                                                                )),
+                                                            ),
+                                                    ),
+                                            )
+                                        } else {
+                                            div().child("加载中...")
+                                        }
+                                    } else {
+                                        div().child(
+                                            v_flex()
+                                                .gap_2()
+                                                .child(
+                                                    h_flex()
+                                                        .gap_4()
+                                                        // .child(
+                                                        //     v_flex()
+                                                        //         .gap_1()
+                                                        //         .child(
+                                                        //             div()
+                                                        //                 .text_sm()
+                                                        //                 .font_medium()
+                                                        //                 .text_color(gpui::rgb(
+                                                        //                     0x374151,
+                                                        //                 ))
+                                                        //                 .child("可执行文件"),
+                                                        //         )
+                                                        //         .child(
+                                                        //             div()
+                                                        //                 .text_sm()
+                                                        //                 .text_color(gpui::rgb(
+                                                        //                     0x6B7280,
+                                                        //                 ))
+                                                        //                 .child(
+                                                        //                     provider_command
+                                                        //                         .clone(),
+                                                        //                 ),
+                                                        //         ),
+                                                        // )
+                                                        .child(
+                                                            v_flex()
+                                                                .gap_1()
+                                                                .child(
+                                                                    div()
+                                                                        .text_sm()
+                                                                        .font_medium()
+                                                                        .text_color(gpui::rgb(
+                                                                            0x374151,
+                                                                        ))
+                                                                        .child("启动命令&参数"),
+                                                                )
+                                                                .child(
+                                                                    div()
+                                                                        .text_sm()
+                                                                        .text_color(gpui::rgb(
+                                                                            0x6B7280,
+                                                                        ))
+                                                                        .child(
+                                                                            if provider_args
+                                                                                .is_empty()
+                                                                            {
+                                                                                "无".to_string()
+                                                                            } else {
+                                                                                provider_args
+                                                                                    .clone()
+                                                                            },
+                                                                        ),
+                                                                ),
+                                                        ),
+                                                )
+                                                .when(!provider_description.is_empty(), |this| {
+                                                    this.child(
                                                         v_flex()
                                                             .gap_1()
                                                             .child(
@@ -1216,90 +1475,65 @@ impl Render for McpProvider {
                                                                     .text_sm()
                                                                     .font_medium()
                                                                     .text_color(gpui::rgb(0x374151))
-                                                                    .child("启动参数"),
+                                                                    .child("服务描述"),
                                                             )
                                                             .child(
                                                                 div()
                                                                     .text_sm()
                                                                     .text_color(gpui::rgb(0x6B7280))
                                                                     .child(
-                                                                        if provider_args.is_empty()
-                                                                        {
-                                                                            "无".to_string()
-                                                                        } else {
-                                                                            provider_args.clone()
-                                                                        },
+                                                                        provider_description
+                                                                            .clone(),
                                                                     ),
                                                             ),
-                                                    ),
-                                            )
-                                            .when(!provider_description.is_empty(), |this| {
-                                                this.child(
-                                                    v_flex()
-                                                        .gap_1()
-                                                        .child(
-                                                            div()
-                                                                .text_sm()
-                                                                .font_medium()
-                                                                .text_color(gpui::rgb(0x374151))
-                                                                .child("服务描述"),
-                                                        )
-                                                        .child(
-                                                            div()
-                                                                .text_sm()
-                                                                .text_color(gpui::rgb(0x6B7280))
-                                                                .child(
-                                                                    provider_description.clone(),
-                                                                ),
-                                                        ),
-                                                )
-                                            })
-                                            // 新增：显示环境变量
-                                            .when(!provider.env_vars.is_empty(), |this| {
-                                                this.child(
-                                                    v_flex()
-                                                        .gap_1()
-                                                        .child(
-                                                            div()
-                                                                .text_sm()
-                                                                .font_medium()
-                                                                .text_color(gpui::rgb(0x374151))
-                                                                .child("环境变量"),
-                                                        )
-                                                        .child(v_flex().gap_1().children(
-                                                            provider.env_vars.iter().map(
-                                                                |(key, value)| {
-                                                                    div()
-                                                                        .text_xs()
-                                                                        .text_color(gpui::rgb(
-                                                                            0x6B7280,
-                                                                        ))
-                                                                        .child(format!(
-                                                                            "{}={}",
-                                                                            key, value
-                                                                        ))
-                                                                },
-                                                            ),
-                                                        )),
-                                                )
-                                            })
-                                            .child(
-                                                div()
-                                                    .text_xs()
-                                                    .text_color(gpui::rgb(0x9CA3AF))
-                                                    .child({
-                                                        if provider_args.is_empty() {
-                                                            provider_command.clone()
-                                                        } else {
-                                                            format!(
-                                                                "{} {}",
-                                                                provider_command.clone(),
-                                                                provider_args.clone()
+                                                    )
+                                                })
+                                                .when(!provider_env_vars.is_empty(), |this| {
+                                                    this.child(
+                                                        v_flex()
+                                                            .gap_1()
+                                                            .child(
+                                                                div()
+                                                                    .text_sm()
+                                                                    .font_medium()
+                                                                    .text_color(gpui::rgb(0x374151))
+                                                                    .child("环境变量"),
                                                             )
-                                                        }
-                                                    }),
-                                            ),
-                                    )
+                                                            .child(v_flex().gap_1().children(
+                                                                provider_env_vars.iter().map(
+                                                                    |(key, value)| {
+                                                                        div()
+                                                                            .text_xs()
+                                                                            .text_color(gpui::rgb(
+                                                                                0x6B7280,
+                                                                            ))
+                                                                            .child(format!(
+                                                                                "{}={}",
+                                                                                key, value
+                                                                            ))
+                                                                    },
+                                                                ),
+                                                            )),
+                                                    )
+                                                })
+                                                .child(
+                                                    div()
+                                                        .text_xs()
+                                                        .text_color(gpui::rgb(0x9CA3AF))
+                                                        .child({
+                                                            if provider_args.is_empty() {
+                                                                provider_command.clone()
+                                                            } else {
+                                                                format!(
+                                                                    "{} {}",
+                                                                    provider_command.clone(),
+                                                                    provider_args.clone()
+                                                                )
+                                                            }
+                                                        }),
+                                                ),
+                                        )
+                                    })
                                     .child(
                                         v_flex()
                                             .gap_2()
@@ -1316,7 +1550,7 @@ impl Render for McpProvider {
                                                     .pill()
                                                     .small()
                                                     .selected_index(
-                                                        self.active_capability_tabs
+                                                        active_capability_tabs
                                                             .get(&index)
                                                             .copied()
                                                             .unwrap_or(0),
@@ -1335,13 +1569,14 @@ impl Render for McpProvider {
                                             )
                                             .child(
                                                 div().mt_2().child(
-                                                    self.render_capability_content(
-                                                        &self.providers[index],
-                                                        self.active_capability_tabs
+                                                    Self::render_capability_content_static(
+                                                        &provider_resources,
+                                                        &provider_tools,
+                                                        &provider_prompts,
+                                                        active_capability_tabs
                                                             .get(&index)
                                                             .copied()
                                                             .unwrap_or(0),
-                                                        cx,
                                                     ),
                                                 ),
                                             ),
@@ -1351,5 +1586,297 @@ impl Render for McpProvider {
                 }
                 accordion.on_toggle_click(cx.listener(Self::toggle_accordion))
             }))
+    }
+}
+
+impl McpProvider {
+    // ...existing methods...
+
+    // 添加静态方法来渲染能力内容
+    fn render_capability_content_static(
+        resources: &[McpResource],
+        tools: &[McpTool],
+        prompts: &[McpPrompt],
+        tab_index: usize,
+    ) -> impl IntoElement {
+        div().child(match tab_index {
+            0 => div().child(Self::render_resources_content_static(resources)),
+            1 => div().child(Self::render_tools_content_static(tools)),
+            2 => div().child(Self::render_prompts_content_static(prompts)),
+            3 => div().child(Self::render_logging_content_static()),
+            _ => div().child("未知能力"),
+        })
+    }
+
+    fn render_resources_content_static(resources: &[McpResource]) -> impl IntoElement {
+        v_flex()
+            .gap_2()
+            .children(resources.iter().map(|resource| {
+                v_flex()
+                    .gap_2()
+                    .p_3()
+                    .bg(gpui::rgb(0xFAFAFA))
+                    .rounded_md()
+                    .border_1()
+                    .border_color(gpui::rgb(0xE5E7EB))
+                    .child(
+                        h_flex()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                Icon::new(IconName::Database)
+                                    .small()
+                                    .text_color(gpui::rgb(0x059669)),
+                            )
+                            .child(
+                                div()
+                                    .font_medium()
+                                    .text_color(gpui::rgb(0x111827))
+                                    .child(resource.name.clone()),
+                            )
+                            .when(resource.mime_type.is_some(), |this| {
+                                this.child(
+                                    div()
+                                        .px_2()
+                                        .py_1()
+                                        .bg(gpui::rgb(0xE0F2FE))
+                                        .text_color(gpui::rgb(0x0369A1))
+                                        .rounded_md()
+                                        .text_xs()
+                                        .child(resource.mime_type.as_ref().unwrap().clone()),
+                                )
+                            }),
+                    )
+                    .child(
+                        div()
+                            .text_sm()
+                            .text_color(gpui::rgb(0x6B7280))
+                            .child(resource.description.clone()),
+                    )
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(gpui::rgb(0x9CA3AF))
+                            .child(resource.uri.clone()),
+                    )
+            }))
+            .when(resources.is_empty(), |this| {
+                this.child(
+                    div()
+                        .text_sm()
+                        .text_color(gpui::rgb(0x9CA3AF))
+                        .child("暂无可用资源"),
+                )
+            })
+    }
+
+    fn render_tools_content_static(tools: &[McpTool]) -> impl IntoElement {
+        v_flex()
+            .gap_3()
+            .children(tools.iter().map(|tool| {
+                v_flex()
+                    .gap_2()
+                    .p_3()
+                    .bg(gpui::rgb(0xFAFAFA))
+                    .rounded_md()
+                    .border_1()
+                    .border_color(gpui::rgb(0xE5E7EB))
+                    .child(
+                        h_flex()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                Icon::new(IconName::Wrench)
+                                    .small()
+                                    .text_color(gpui::rgb(0xDC2626)),
+                            )
+                            .child(
+                                div()
+                                    .font_medium()
+                                    .text_color(gpui::rgb(0x111827))
+                                    .child(tool.name.clone()),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .text_sm()
+                            .text_color(gpui::rgb(0x6B7280))
+                            .child(tool.description.clone()),
+                    )
+                    .when(!tool.parameters.is_empty(), |this| {
+                        this.child(
+                            v_flex()
+                                .gap_1()
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .font_medium()
+                                        .text_color(gpui::rgb(0x374151))
+                                        .child("参数:"),
+                                )
+                                .children(tool.parameters.iter().map(|param| {
+                                    h_flex()
+                                        .items_center()
+                                        .gap_2()
+                                        .pl_2()
+                                        .child(
+                                            div()
+                                                .text_xs()
+                                                .text_color(if param.required {
+                                                    gpui::rgb(0xDC2626)
+                                                } else {
+                                                    gpui::rgb(0x059669)
+                                                })
+                                                .child(format!(
+                                                    "{}{}",
+                                                    param.name,
+                                                    if param.required { "*" } else { "" }
+                                                )),
+                                        )
+                                        .child(
+                                            div()
+                                                .px_1()
+                                                .bg(gpui::rgb(0xF3F4F6))
+                                                .rounded_sm()
+                                                .text_xs()
+                                                .text_color(gpui::rgb(0x6B7280))
+                                                .child(param.param_type.clone()),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_xs()
+                                                .text_color(gpui::rgb(0x9CA3AF))
+                                                .child(param.description.clone()),
+                                        )
+                                })),
+                        )
+                    })
+            }))
+            .when(tools.is_empty(), |this| {
+                this.child(
+                    div()
+                        .text_sm()
+                        .text_color(gpui::rgb(0x9CA3AF))
+                        .child("暂无可用工具"),
+                )
+            })
+    }
+
+    fn render_prompts_content_static(prompts: &[McpPrompt]) -> impl IntoElement {
+        v_flex()
+            .gap_3()
+            .children(prompts.iter().map(|prompt| {
+                v_flex()
+                    .gap_2()
+                    .p_3()
+                    .bg(gpui::rgb(0xFAFAFA))
+                    .rounded_md()
+                    .border_1()
+                    .border_color(gpui::rgb(0xE5E7EB))
+                    .child(
+                        h_flex()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                Icon::new(IconName::SquareTerminal)
+                                    .small()
+                                    .text_color(gpui::rgb(0x7C3AED)),
+                            )
+                            .child(
+                                div()
+                                    .font_medium()
+                                    .text_color(gpui::rgb(0x111827))
+                                    .child(prompt.name.clone()),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .text_sm()
+                            .text_color(gpui::rgb(0x6B7280))
+                            .child(prompt.description.clone()),
+                    )
+                    .when(!prompt.arguments.is_empty(), |this| {
+                        this.child(
+                            v_flex()
+                                .gap_1()
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .font_medium()
+                                        .text_color(gpui::rgb(0x374151))
+                                        .child("参数:"),
+                                )
+                                .children(prompt.arguments.iter().map(|arg| {
+                                    h_flex()
+                                        .items_center()
+                                        .gap_2()
+                                        .pl_2()
+                                        .child(
+                                            div()
+                                                .text_xs()
+                                                .text_color(if arg.required {
+                                                    gpui::rgb(0xDC2626)
+                                                } else {
+                                                    gpui::rgb(0x059669)
+                                                })
+                                                .child(format!(
+                                                    "{}{}",
+                                                    arg.name,
+                                                    if arg.required { "*" } else { "" }
+                                                )),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_xs()
+                                                .text_color(gpui::rgb(0x9CA3AF))
+                                                .child(arg.description.clone()),
+                                        )
+                                })),
+                        )
+                    })
+            }))
+            .when(prompts.is_empty(), |this| {
+                this.child(
+                    div()
+                        .text_sm()
+                        .text_color(gpui::rgb(0x9CA3AF))
+                        .child("暂无可用提示"),
+                )
+            })
+    }
+
+    fn render_logging_content_static() -> impl IntoElement {
+        div()
+            .p_3()
+            .bg(gpui::rgb(0xFAFAFA))
+            .rounded_md()
+            .border_1()
+            .border_color(gpui::rgb(0xE5E7EB))
+            .child(
+                v_flex()
+                    .gap_2()
+                    .child(
+                        h_flex()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                Icon::new(IconName::LetterText)
+                                    .small()
+                                    .text_color(gpui::rgb(0xF59E0B)),
+                            )
+                            .child(
+                                div()
+                                    .font_medium()
+                                    .text_color(gpui::rgb(0x111827))
+                                    .child("日志记录"),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .text_sm()
+                            .text_color(gpui::rgb(0x6B7280))
+                            .child("此服务支持日志记录功能，可以输出调试和运行状态信息。"),
+                    ),
+            )
     }
 }
