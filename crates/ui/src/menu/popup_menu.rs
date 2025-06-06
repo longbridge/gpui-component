@@ -5,13 +5,13 @@ use crate::{
     Selectable, Sizable as _,
 };
 use crate::{Kbd, StyledExt};
-use gpui::Subscription;
 use gpui::{
     anchored, canvas, div, prelude::FluentBuilder, px, rems, Action, AnyElement, App, AppContext,
     Bounds, Context, Corner, DismissEvent, Edges, Entity, EventEmitter, FocusHandle, Focusable,
     InteractiveElement, IntoElement, KeyBinding, ParentElement, Pixels, Render, ScrollHandle,
     SharedString, StatefulInteractiveElement, Styled, WeakEntity, Window,
 };
+use gpui::{MouseDownEvent, Subscription};
 use std::cell::Cell;
 use std::ops::Deref;
 use std::rc::Rc;
@@ -883,7 +883,18 @@ impl Render for PopupMenu {
             .on_action(cx.listener(Self::select_prev))
             .on_action(cx.listener(Self::confirm))
             .on_action(cx.listener(Self::dismiss))
-            .on_mouse_down_out(cx.listener(|this, _, window, cx| this.dismiss(&Cancel, window, cx)))
+            .on_mouse_down_out(cx.listener(|this, ev: &MouseDownEvent, window, cx| {
+                // Do not dismiss, if click inside the parent menu
+                if let Some(parent) = this.parent_menu.as_ref() {
+                    if let Some(parent) = parent.upgrade() {
+                        if parent.read(cx).bounds.contains(&ev.position) {
+                            return;
+                        }
+                    }
+                }
+
+                this.dismiss(&Cancel, window, cx);
+            }))
             .popover_style(cx)
             .text_color(cx.theme().popover_foreground)
             .relative()
