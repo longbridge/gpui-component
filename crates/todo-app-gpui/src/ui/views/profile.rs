@@ -52,8 +52,9 @@ impl Profile {
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let name_input = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("请输入您的姓名")
-            // .default_value("用户")
+            InputState::new(window, cx)
+                .placeholder("请输入您的姓名")
+                .default_value("高庆丰")
         });
 
         let email_input = cx.new(|cx| {
@@ -65,7 +66,7 @@ impl Profile {
         let phone_input = cx.new(|cx| {
             InputState::new(window, cx)
                 .placeholder("请输入手机号码")
-                .mask_pattern("(999) 999-9999-9999")
+                .mask_pattern("999-9999-9999")
         });
 
         let bio_input = cx.new(|cx| {
@@ -332,20 +333,21 @@ impl Render for Profile {
             .child(
                 // 基本信息
                 v_flex()
-                    .gap_2()
-                    .p_2()
+                    .gap_3()
+                    .p_4()
                     .bg(gpui::rgb(0xF9FAFB))
                     .rounded_lg()
                     .child(Self::section_title("基本信息"))
                     .child(
-                        // 飞书授权按钮行
+                        // 飞书集成行 - 左对齐布局
                         h_flex()
-                            .gap_2()
-                            .justify_start()
+                            .gap_4()
+                            .items_center()
                             .child(
                                 div()
                                     .text_sm()
                                     .text_color(gpui::rgb(0x6B7280))
+                                    .min_w_24()
                                     .child("飞书集成"),
                             )
                             .child(
@@ -359,41 +361,93 @@ impl Render for Profile {
                             ),
                     )
                     .child(
-                        h_flex().gap_2().child(Self::h_form_field(
-                            "姓名 *",
-                            TextInput::new(&self.name_input)
-                                .cleanable()
-                                .prefix(Icon::new(IconName::CircleUser).small().ml_3()),
-                        )),
+                        // 姓名行 - 左对齐布局
+                        h_flex()
+                            .gap_4()
+                            .items_center()
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .text_color(gpui::rgb(0x6B7280))
+                                    .min_w_24()
+                                    .child("姓名 *"),
+                            )
+                            .child(
+                                div().flex_1().max_w_80().child(
+                                    TextInput::new(&self.name_input)
+                                        .cleanable()
+                                        .prefix(Icon::new(IconName::CircleUser).small().ml_3()),
+                                ),
+                            ),
                     )
-                    .child(Self::h_form_field(
-                        "邮箱地址 *",
-                        TextInput::new(&self.email_input)
-                            .cleanable()
-                            .prefix(Icon::new(IconName::Mail).small().ml_3()),
-                    ))
-                    .child(Self::h_form_field(
-                        "手机号码",
-                        TextInput::new(&self.phone_input)
-                            .cleanable()
-                            .prefix(Icon::new(IconName::Phone).small().ml_3()),
-                    ))
-                    .child(Self::v_form_field(
-                        "个人简介",
-                        TextInput::new(&self.bio_input).cleanable(),
-                    )),
+                    .child(
+                        // 邮箱地址行 - 左对齐布局
+                        h_flex()
+                            .gap_4()
+                            .items_center()
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .text_color(gpui::rgb(0x6B7280))
+                                    .min_w_24()
+                                    .child("邮箱地址 *"),
+                            )
+                            .child(
+                                div().flex_1().max_w_80().child(
+                                    TextInput::new(&self.email_input)
+                                        .cleanable()
+                                        .prefix(Icon::new(IconName::Mail).small().ml_3()),
+                                ),
+                            ),
+                    )
+                    .child(
+                        // 手机号码行 - 左对齐布局
+                        h_flex()
+                            .gap_4()
+                            .items_center()
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .text_color(gpui::rgb(0x6B7280))
+                                    .min_w_24()
+                                    .child("手机号码"),
+                            )
+                            .child(
+                                div().flex_1().max_w_80().child(
+                                    TextInput::new(&self.phone_input)
+                                        .cleanable()
+                                        .prefix(Icon::new(IconName::Phone).small().ml_3()),
+                                ),
+                            ),
+                    )
+                    .child(
+                        // 个人简介 - 垂直布局（因为是多行文本）
+                        v_flex()
+                            .gap_1()
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .text_color(gpui::rgb(0x6B7280))
+                                    .child("个人简介"),
+                            )
+                            .child(
+                                div()
+                                    .w_full()
+                                    .child(TextInput::new(&self.bio_input).cleanable()),
+                            ),
+                    ),
             )
             .child(
                 // 偏好设置
                 v_flex()
                     .gap_2()
-                    .p_2()
+                    .p_4()
                     .bg(gpui::rgb(0xF9FAFB))
                     .rounded_lg()
                     .child(Self::section_title("偏好设置"))
                     .child(
                         h_flex()
-                            .gap_2()
+                            .gap_6()
                             .child(Self::v_form_field(
                                 "主题偏好",
                                 Dropdown::new(&self.theme_dropdown)
@@ -414,8 +468,6 @@ impl Render for Profile {
                     .justify_center()
                     .gap_3()
                     .pt_4()
-                    //.border_t_1()
-                    // .border_color(gpui::rgb(0xE5E7EB))
                     .child(
                         Button::new("reset-btn")
                             .label("重置")

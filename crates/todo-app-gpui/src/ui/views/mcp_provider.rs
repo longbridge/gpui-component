@@ -1066,7 +1066,7 @@ impl Render for McpProvider {
                 h_flex().justify_start().child(
                     Button::new("add-mcp-provider")
                         .with_variant(ButtonVariant::Primary)
-                        .label("添加MCP服务")
+                        .label("添加工具集")
                         .icon(IconName::Plus)
                         .on_click(cx.listener(|this, _, window, cx| {
                             this.add_mcp_provider(&AddMcpProvider, window, cx);

@@ -775,7 +775,7 @@ impl Render for LlmProvider {
                 h_flex().justify_start().child(
                     Button::new("add-provider")
                         .with_variant(ButtonVariant::Primary)
-                        .label("添加提供商")
+                        .label("添加服务商")
                         .icon(IconName::Plus)
                         .on_click(cx.listener(|this, _, window, cx| {
                             this.add_provider(&AddProvider, window, cx);

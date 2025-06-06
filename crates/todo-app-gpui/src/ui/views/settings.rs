@@ -310,6 +310,7 @@ impl Render for Settings {
                                     .child(
                                         div()
                                             .text_color(cx.theme().muted_foreground)
+                                            .text_sm()
                                             .child(description),
                                     ),
                             ),

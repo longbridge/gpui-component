@@ -249,31 +249,6 @@ impl ListDelegate for TodoListDelegate {
     ) {
         println!("Double clicked: {:?} {:?}", ev, self.selected_index);
         window.dispatch_action(Box::new(Open), cx);
-        // cx.activate(true);
-        // let window_size = size(px(600.0), px(800.0));
-        // let window_bounds = Bounds::centered(None, window_size, cx);
-        // let options = WindowOptions {
-        //     app_id: Some("x-todo-app".to_string()),
-        //     window_bounds: Some(WindowBounds::Windowed(window_bounds)),
-        //     titlebar: None,
-        //     window_min_size: Some(gpui::Size {
-        //         width: px(600.),
-        //         height: px(800.),
-        //     }),
-
-        //     kind: WindowKind::PopUp,
-        //     #[cfg(target_os = "linux")]
-        //     window_background: gpui::WindowBackgroundAppearance::Transparent,
-        //     #[cfg(target_os = "linux")]
-        //     window_decorations: Some(gpui::WindowDecorations::Client),
-        //     ..Default::default()
-        // };
-        // crate::ui::create_normal_window_options(
-        //     format!("todo-{}", self.selected_index.unwrap_or(0)),
-        //     options,
-        //     move |window, cx| TodoFormView::view(window, cx),
-        //     cx,
-        // );
     }
 
     fn set_selected_index(
@@ -781,7 +756,7 @@ impl Render for TodoList {
                             )
                             .child(
                                 Button::new("icon-button-selected")
-                                    .icon(IconName::TextCursorInput)
+                                    .icon(IconName::MousePointerClick)
                                     .size(px(24.))
                                     .ghost(),
                             )
