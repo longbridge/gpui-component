@@ -124,6 +124,7 @@ pub struct McpProviderInfo {
     resources: Vec<McpResource>,
     tools: Vec<McpTool>,
     prompts: Vec<McpPrompt>,
+    env_vars: std::collections::HashMap<String, String>, // 新增：环境变量
 }
 
 impl Default for McpProviderInfo {
@@ -209,15 +210,20 @@ impl Default for McpProviderInfo {
                 McpPrompt {
                     name: "explain_concept".to_string(),
                     description: "解释技术概念".to_string(),
-                    arguments: vec![
-                        McpArgument {
-                            name: "concept".to_string(),
-                            description: "要解释的概念".to_string(),
-                            required: true,
-                        },
-                    ],
+                    arguments: vec![McpArgument {
+                        name: "concept".to_string(),
+                        description: "要解释的概念".to_string(),
+                        required: true,
+                    }],
                 },
             ],
+            env_vars: std::collections::HashMap::from([
+                (
+                    "PATH".to_string(),
+                    "/usr/local/bin:/usr/bin:/bin".to_string(),
+                ),
+                ("NODE_ENV".to_string(), "production".to_string()),
+            ]),
         }
     }
 }
@@ -232,6 +238,7 @@ pub struct McpProvider {
     command_input: Entity<InputState>,
     args_input: Entity<InputState>,
     description_input: Entity<InputState>,
+    env_input: Entity<InputState>, // 新增：环境变量输入
     transport_dropdown: Entity<DropdownState<Vec<SharedString>>>,
     _subscriptions: Vec<Subscription>,
 }
@@ -277,6 +284,13 @@ impl McpProvider {
 
         let description_input = cx.new(|cx| InputState::new(window, cx).placeholder("服务描述"));
 
+        // 新增：环境变量输入框
+        let env_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("环境变量 (每行一个 KEY=value)")
+                .auto_grow(3, 6)
+        });
+
         let transport_dropdown =
             cx.new(|cx| DropdownState::new(McpTransport::all(), Some(0), window, cx));
 
@@ -285,6 +299,7 @@ impl McpProvider {
             cx.subscribe_in(&command_input, window, Self::on_input_event),
             cx.subscribe_in(&args_input, window, Self::on_input_event),
             cx.subscribe_in(&description_input, window, Self::on_input_event),
+            cx.subscribe_in(&env_input, window, Self::on_input_event), // 新增
         ];
 
         // 初始化一些示例数据
@@ -308,34 +323,30 @@ impl McpProvider {
             McpCapability::Tools,
             McpCapability::Logging,
         ];
-        database_provider.tools = vec![
-            McpTool {
-                name: "execute_query".to_string(),
-                description: "执行SQL查询语句".to_string(),
-                parameters: vec![
-                    McpParameter {
-                        name: "query".to_string(),
-                        param_type: "string".to_string(),
-                        description: "SQL查询语句".to_string(),
-                        required: true,
-                    },
-                    McpParameter {
-                        name: "database".to_string(),
-                        param_type: "string".to_string(),
-                        description: "目标数据库名称".to_string(),
-                        required: false,
-                    },
-                ],
-            },
-        ];
-        database_provider.resources = vec![
-            McpResource {
-                uri: "db://localhost:5432/main".to_string(),
-                name: "主数据库".to_string(),
-                description: "主要的业务数据库连接".to_string(),
-                mime_type: Some("application/sql".to_string()),
-            },
-        ];
+        database_provider.tools = vec![McpTool {
+            name: "execute_query".to_string(),
+            description: "执行SQL查询语句".to_string(),
+            parameters: vec![
+                McpParameter {
+                    name: "query".to_string(),
+                    param_type: "string".to_string(),
+                    description: "SQL查询语句".to_string(),
+                    required: true,
+                },
+                McpParameter {
+                    name: "database".to_string(),
+                    param_type: "string".to_string(),
+                    description: "目标数据库名称".to_string(),
+                    required: false,
+                },
+            ],
+        }];
+        database_provider.resources = vec![McpResource {
+            uri: "db://localhost:5432/main".to_string(),
+            name: "主数据库".to_string(),
+            description: "主要的业务数据库连接".to_string(),
+            mime_type: Some("application/sql".to_string()),
+        }];
 
         Self {
             focus_handle: cx.focus_handle(),
@@ -347,6 +358,7 @@ impl McpProvider {
             command_input,
             args_input,
             description_input,
+            env_input,
             transport_dropdown,
             _subscriptions,
         }
@@ -390,6 +402,20 @@ impl McpProvider {
                     .split_whitespace()
                     .map(|s| s.to_string())
                     .collect();
+
+                // 解析环境变量
+                let env_text = self.env_input.read(cx).value().to_string();
+                provider.env_vars.clear();
+                for line in env_text.lines() {
+                    let line = line.trim();
+                    if !line.is_empty() && line.contains('=') {
+                        if let Some((key, value)) = line.split_once('=') {
+                            provider
+                                .env_vars
+                                .insert(key.trim().to_string(), value.trim().to_string());
+                        }
+                    }
+                }
 
                 if let Some(selected) = self.transport_dropdown.read(cx).selected_value() {
                     provider.transport = match selected.as_ref() {
@@ -519,6 +545,17 @@ impl McpProvider {
                 *state = InputState::new(window, cx).default_value(&provider.description);
             });
 
+            // 填充环境变量
+            self.env_input.update(cx, |state, cx| {
+                let env_text = provider
+                    .env_vars
+                    .iter()
+                    .map(|(key, value)| format!("{}={}", key, value))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                *state = InputState::new(window, cx).default_value(&env_text);
+            });
+
             let transport_index = match provider.transport {
                 McpTransport::Stdio => 0,
                 McpTransport::Http => 1,
@@ -546,6 +583,11 @@ impl McpProvider {
         self.description_input.update(cx, |state, cx| {
             *state = InputState::new(window, cx).placeholder("服务描述");
         });
+        self.env_input.update(cx, |state, cx| {
+            *state = InputState::new(window, cx)
+                .placeholder("环境变量 (每行一个 KEY=value)")
+                .auto_grow(3, 6);
+        });
         self.transport_dropdown.update(cx, |state, cx| {
             state.set_selected_index(Some(0), window, cx);
         });
@@ -564,11 +606,11 @@ impl McpProvider {
         cx: &mut Context<Self>,
     ) {
         match event {
-            InputEvent::PressEnter { .. } => {
-                if self.editing_provider.is_some() {
-                    self.save_mcp_provider(&SaveMcpProvider, window, cx);
-                }
-            }
+            // InputEvent::PressEnter { .. } => {
+            //     if self.editing_provider.is_some() {
+            //         self.save_mcp_provider(&SaveMcpProvider, window, cx);
+            //     }
+            // }
             _ => {}
         };
     }
@@ -631,18 +673,7 @@ impl McpProvider {
                         div()
                             .text_sm()
                             .text_color(gpui::rgb(0x6B7280))
-                            .child("可执行文件路径 *"),
-                    )
-                    .child(TextInput::new(&self.command_input).cleanable()),
-            )
-            .child(
-                v_flex()
-                    .gap_1()
-                    .child(
-                        div()
-                            .text_sm()
-                            .text_color(gpui::rgb(0x6B7280))
-                            .child("启动参数"),
+                            .child("启动命令&参数"),
                     )
                     .child(TextInput::new(&self.args_input).cleanable()),
             )
@@ -653,9 +684,9 @@ impl McpProvider {
                         div()
                             .text_sm()
                             .text_color(gpui::rgb(0x6B7280))
-                            .child("服务描述"),
+                            .child("环境变量"),
                     )
-                    .child(TextInput::new(&self.description_input).cleanable()),
+                    .child(TextInput::new(&self.env_input).cleanable()),
             )
             .child(
                 h_flex()
@@ -688,7 +719,8 @@ impl McpProvider {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.active_capability_tabs.insert(provider_index, tab_index);
+        self.active_capability_tabs
+            .insert(provider_index, tab_index);
         cx.notify();
     }
 
@@ -995,6 +1027,7 @@ impl FocusableCycle for McpProvider {
             self.name_input.focus_handle(cx),
             self.command_input.focus_handle(cx),
             self.args_input.focus_handle(cx),
+            self.env_input.focus_handle(cx), // 新增
             self.description_input.focus_handle(cx),
             self.transport_dropdown.focus_handle(cx),
         ]
@@ -1145,7 +1178,7 @@ impl Render for McpProvider {
                                                         },
                                                     )),
                                             ),
-                                    )
+                                    ),
                             )
                             .content(
                                 v_flex()
@@ -1170,7 +1203,9 @@ impl Render for McpProvider {
                                                                 div()
                                                                     .text_sm()
                                                                     .text_color(gpui::rgb(0x6B7280))
-                                                                    .child(provider_command.clone()),
+                                                                    .child(
+                                                                        provider_command.clone(),
+                                                                    ),
                                                             ),
                                                     )
                                                     .child(
@@ -1187,11 +1222,14 @@ impl Render for McpProvider {
                                                                 div()
                                                                     .text_sm()
                                                                     .text_color(gpui::rgb(0x6B7280))
-                                                                    .child(if provider_args.is_empty() {
-                                                                        "无".to_string()
-                                                                    } else {
-                                                                        provider_args.clone()
-                                                                    }),
+                                                                    .child(
+                                                                        if provider_args.is_empty()
+                                                                        {
+                                                                            "无".to_string()
+                                                                        } else {
+                                                                            provider_args.clone()
+                                                                        },
+                                                                    ),
                                                             ),
                                                     ),
                                             )
@@ -1210,8 +1248,39 @@ impl Render for McpProvider {
                                                             div()
                                                                 .text_sm()
                                                                 .text_color(gpui::rgb(0x6B7280))
-                                                                .child(provider_description.clone()),
+                                                                .child(
+                                                                    provider_description.clone(),
+                                                                ),
                                                         ),
+                                                )
+                                            })
+                                            // 新增：显示环境变量
+                                            .when(!provider.env_vars.is_empty(), |this| {
+                                                this.child(
+                                                    v_flex()
+                                                        .gap_1()
+                                                        .child(
+                                                            div()
+                                                                .text_sm()
+                                                                .font_medium()
+                                                                .text_color(gpui::rgb(0x374151))
+                                                                .child("环境变量"),
+                                                        )
+                                                        .child(v_flex().gap_1().children(
+                                                            provider.env_vars.iter().map(
+                                                                |(key, value)| {
+                                                                    div()
+                                                                        .text_xs()
+                                                                        .text_color(gpui::rgb(
+                                                                            0x6B7280,
+                                                                        ))
+                                                                        .child(format!(
+                                                                            "{}={}",
+                                                                            key, value
+                                                                        ))
+                                                                },
+                                                            ),
+                                                        )),
                                                 )
                                             })
                                             .child(
@@ -1265,16 +1334,16 @@ impl Render for McpProvider {
                                                     )),
                                             )
                                             .child(
-                                                div()
-                                                    .mt_2()
-                                                    .child(self.render_capability_content(
+                                                div().mt_2().child(
+                                                    self.render_capability_content(
                                                         &self.providers[index],
                                                         self.active_capability_tabs
                                                             .get(&index)
                                                             .copied()
                                                             .unwrap_or(0),
                                                         cx,
-                                                    )),
+                                                    ),
+                                                ),
                                             ),
                                     ),
                             )
