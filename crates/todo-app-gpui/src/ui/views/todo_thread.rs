@@ -97,7 +97,7 @@ pub enum ModelOption {
     Model {
         name: String,
         provider: String,
-        description: String,
+        // description: String, // 移除 description
     },
 }
 
@@ -107,7 +107,7 @@ impl DropdownItem for ModelOption {
     fn title(&self) -> SharedString {
         match self {
             ModelOption::Provider { name, .. } => name.clone().into(),
-            ModelOption::Model { name, .. } => name.clone().into(), // 移除缩进，只返回模型名
+            ModelOption::Model { name, .. } => name.clone().into(),
         }
     }
 
@@ -121,14 +121,14 @@ impl DropdownItem for ModelOption {
                         div()
                             .font_semibold()
                             .text_color(gpui::rgb(0x374151))
-                            .child(name.clone())
+                            .child(name.clone()),
                     )
                     .into_any_element(),
             ),
             ModelOption::Model {
                 name,
                 provider,
-                description,
+                // description, // 移除 description
             } => Some(
                 h_flex()
                     .items_center()
@@ -146,10 +146,7 @@ impl DropdownItem for ModelOption {
                             .rounded_sm()
                             .flex()
                             .items_center()
-                            .justify_center()
-                            // 这里可以根据实际选中状态显示勾选标记
-                            // TODO: 根据选中状态显示 Check 图标
-                            // .child(Icon::new(IconName::Check).size_3().text_color(gpui::rgb(0xFFFFFF)))
+                            .justify_center(),
                     )
                     .child(
                         v_flex()
@@ -160,14 +157,14 @@ impl DropdownItem for ModelOption {
                                     .text_sm()
                                     .font_medium()
                                     .text_color(gpui::rgb(0x6B7280))
-                                    .child(name.clone())
+                                    .child(name.clone()),
                             )
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .text_color(gpui::rgb(0x9CA3AF))
-                                    .child(description.clone()),
-                            ),
+                            // .child( // 移除 description 的显示
+                            //     div()
+                            //         .text_xs()
+                            //         .text_color(gpui::rgb(0x9CA3AF))
+                            //         .child(description.clone()),
+                            // ),
                     )
                     .into_any_element(),
             ),
@@ -184,7 +181,7 @@ impl DropdownItem for ModelOption {
 
 // 新增：层级化的Dropdown委托
 pub struct HierarchicalModelDelegate {
-    providers: Vec<(String, Vec<(String, String)>)>, // (provider_name, [(model_name, description)])
+    providers: Vec<(String, Vec<String>)>, // (provider_name, [model_name]) // 移除了 description
     flattened_options: Vec<ModelOption>,
     selected_model: Option<String>,
 }
@@ -195,45 +192,40 @@ impl HierarchicalModelDelegate {
             (
                 "收钱吧".to_string(),
                 vec![
-                    ("sqb-chat-3.5".to_string(), "快速对话模型".to_string()),
-                    ("sqb-chat-4.0".to_string(), "高级推理模型".to_string()),
+                    "sqb-chat-3.5".to_string(), // "快速对话模型".to_string()
+                    "sqb-chat-4.0".to_string(), // "高级推理模型".to_string()
                 ],
             ),
             (
                 "Anthropic".to_string(),
                 vec![
-                    (
-                        "claude-3.5-sonnet".to_string(),
-                        "最新Claude模型".to_string(),
-                    ),
-                    ("claude-3-haiku".to_string(), "快速响应模型".to_string()),
-                    ("claude-3-opus".to_string(), "最强推理模型".to_string()),
+                    "claude-3.5-sonnet".to_string(), // "最新Claude模型".to_string()
+                    "claude-3-haiku".to_string(),    // "快速响应模型".to_string()
+                    "claude-3-opus".to_string(),     // "最强推理模型".to_string()
                 ],
             ),
             (
                 "OpenAI".to_string(),
                 vec![
-                    ("gpt-4".to_string(), "GPT-4 模型".to_string()),
-                    ("gpt-4-turbo".to_string(), "GPT-4 Turbo".to_string()),
-                    ("gpt-3.5-turbo".to_string(), "GPT-3.5 Turbo".to_string()),
+                    "gpt-4".to_string(),         // "GPT-4 模型".to_string()
+                    "gpt-4-turbo".to_string(),   // "GPT-4 Turbo".to_string()
+                    "gpt-3.5-turbo".to_string(), // "GPT-3.5 Turbo".to_string()
                 ],
             ),
         ];
 
         let mut flattened_options = Vec::new();
         for (provider_name, models) in &providers {
-            // 添加服务提供商选项
             flattened_options.push(ModelOption::Provider {
                 name: provider_name.clone(),
-                expanded: true, // 默认展开
+                expanded: true,
             });
 
-            // 添加该服务提供商下的模型选项
-            for (model_name, description) in models {
+            for model_name in models { // 移除了 description
                 flattened_options.push(ModelOption::Model {
                     name: model_name.clone(),
                     provider: provider_name.clone(),
-                    description: description.clone(),
+                    // description: description.clone(), // 移除 description
                 });
             }
         }
@@ -584,7 +576,7 @@ impl Render for TodoThreadView {
             .on_action(cx.listener(Self::cancel))
             .on_action(cx.listener(Self::delete))
             .size_full()
-            .gap_2()
+            .gap_1() // 从 gap_2() 改为 gap_1()，减小section间距
             .p_2()
             .child(
                 // 基本信息
@@ -599,22 +591,21 @@ impl Render for TodoThreadView {
                             .child(Self::section_title("任务描述"))
                             .text_sm()
                             .child(
-                                TextInput::new(&self.description_input).cleanable(), // .prefix(Icon::new(IconName::LetterText).small().ml_3()),
+                                TextInput::new(&self.description_input).cleanable(),
                             ),
                     ),
             )
             .child(
-                // 附件拖拽上传区域 - 添加section结构保持一致
+                // 附件拖拽上传区域
                 v_flex()
                     .gap_3()
                     .p_2()
                     .bg(gpui::rgb(0xF9FAFB))
                     .rounded_lg()
-                    // .child(Self::section_title("附件上传"))
                     .child(
                         div()
                             .id("file-drop-zone")
-                            .h_32()
+                            .h_24() // 从 h_32() 改为 h_24()，减小拖拽区域高度
                             .w_full()
                             .border_2()
                             .border_color(gpui::rgb(0xD1D5DB))
@@ -640,20 +631,17 @@ impl Render for TodoThreadView {
                                     .items_center()
                                     .gap_2()
                                     .child(
-                                        // 上传图标
                                         Icon::new(IconName::Upload)
                                             .size_6()
                                             .text_color(gpui::rgb(0x6B7280)),
                                     )
                                     .child(
-                                        // 副标题提示
                                         div()
                                             .text_xs()
                                             .text_color(gpui::rgb(0x9CA3AF))
                                             .child("拖拽文件到此处上传或点击选择文件"),
                                     )
                                     .child(
-                                        // 支持的文件类型提示
                                         div()
                                             .text_xs()
                                             .text_color(gpui::rgb(0xB91C1C))
@@ -661,17 +649,13 @@ impl Render for TodoThreadView {
                                     ),
                             )
                             .on_click(cx.listener(|this, _, _window, cx| {
-                                // TODO: 处理点击上传逻辑
                                 println!("点击上传文件");
                                 cx.notify();
-                            })), // TODO: 添加拖拽事件处理
-                                 // .on_drag_enter(...)
-                                 // .on_drag_over(...)
-                                 // .on_drop(...)
+                            })),
                     ),
             )
             .child(
-                // AI助手配置 - 简化为单个层级化选择
+                // AI助手配置
                 v_flex()
                     .gap_3()
                     .p_2()
@@ -709,7 +693,6 @@ impl Render for TodoThreadView {
                     .rounded_lg()
                     .child(Self::section_title("时间安排"))
                     .child(
-                        // 使用 form_row 保持一致的对齐
                         Self::form_row(
                             "截止日期",
                             DatePicker::new(&self.due_date_picker)
@@ -750,7 +733,7 @@ impl Render for TodoThreadView {
             )
             .child(
                 // 操作按钮
-                h_flex().items_center().justify_center().pt_2().child(
+                h_flex().items_center().justify_center().pt_1().child( // 稍微减小按钮上边距
                     h_flex().gap_3().child(
                         Button::new("save-btn")
                             .with_variant(ButtonVariant::Primary)
