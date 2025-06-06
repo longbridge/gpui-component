@@ -2,6 +2,7 @@ mod blink_cursor;
 mod change;
 mod clear_button;
 mod element;
+mod hover_popover;
 mod marker;
 mod mask_pattern;
 mod mode;
