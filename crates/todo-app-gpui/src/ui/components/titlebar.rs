@@ -516,15 +516,15 @@ impl RenderOnce for ControlIcon {
                 .on_click(move |_, window, cx| match icon {
                     Self::Minimize => {
                         println!("Minimize window");
-                        // window.minimize_window()
+                         window.minimize_window()
                     }
                     Self::Restore => {
                         println!("Restore window");
-                        // window.zoom_window()
+                         window.zoom_window()
                     }
                     Self::Maximize => {
                         println!("Maximize window");
-                        //window.zoom_window()
+                        window.zoom_window()
                     }
                     Self::Close { .. } => {
                         println!("Close window");

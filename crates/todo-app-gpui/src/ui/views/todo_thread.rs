@@ -227,7 +227,8 @@ impl TodoThreadChat {
         // 聊天输入框 - 多行支持
         let chat_input = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder("输入消息与AI助手对话...\n支持多行输入，按Ctrl+Enter发送")
+                .placeholder("输入消息与AI助手对话...，按Ctrl+Enter发送，按ESC清除输入框")
+                .clean_on_escape()
                 .multi_line()
                 .auto_grow(1, 6)
         });
@@ -289,17 +290,11 @@ impl TodoThreadChat {
     }
 
     fn send_message(&mut self, _: &SendMessage, window: &mut Window, cx: &mut Context<Self>) {
-        let message_content = self
-            .chat_input
-            .read(cx)
-            .value()
-            .to_string()
-            .trim()
-            .to_string();
-
+        let message_content = self.chat_input.read(cx).value();
         if message_content.is_empty() {
             return;
         }
+        let message_content = message_content.to_string().trim().to_string();
 
         // 添加用户消息
         let user_message = ChatMessage {
@@ -386,7 +381,7 @@ impl TodoThreadChat {
         cx: &mut Context<Self>,
     ) {
         match event {
-            InputEvent::PressEnter { secondary, .. } if !secondary => {
+            InputEvent::PressEnter { secondary, .. } if *secondary => {
                 // Ctrl+Enter 发送消息
                 self.send_message(&SendMessage, window, cx);
             }
@@ -503,116 +498,107 @@ impl Render for TodoThreadChat {
             .on_action(cx.listener(Self::tab))
             .on_action(cx.listener(Self::send_message))
             .size_full()
-            .p_4()
+            .p_2()
             .child(
-                // 聊天面板 - 全屏显示
-                v_flex()
-                    .flex_1()
-                    .bg(gpui::rgb(0xFAFAFA))
-                    .rounded_lg()
-                    .border_1()
+                div().border_0().size_full().overflow_y_hidden().child(
+                    v_flex()
+                        .p_2()
+                        .gap_2()
+                        .scrollable(
+                            cx.entity().entity_id(),
+                            gpui_component::scroll::ScrollbarAxis::Vertical,
+                        )
+                        .min_h_full()
+                        .children(
+                            self.chat_messages
+                                .iter()
+                                .map(|msg| self.render_chat_message(msg)),
+                        )
+                        .when(self.is_loading, |this| {
+                            this.child(
+                                h_flex().justify_start().py_2().child(
+                                    div()
+                                        .p_3()
+                                        .bg(gpui::rgb(0xF3F4F6))
+                                        .rounded_lg()
+                                        .text_color(gpui::rgb(0x6B7280))
+                                        .child("AI正在思考中..."),
+                                ),
+                            )
+                        }),
+                ),
+            )
+            .child(
+                // 中间区域：模型和工具选择
+                h_flex()
+                    .items_center()
+                    .justify_center()
+                    .gap_4()
+                    .p_2()
+                    .border_t_1()
+                    .border_b_1()
                     .border_color(gpui::rgb(0xE5E7EB))
-                    
+                    .bg(gpui::rgb(0xF9FAFB))
                     .child(
-                        // 聊天消息列表 - 可滚动区域
-                        div().flex_1().overflow_hidden().child(
-                            div().h_full().flex_wrap().child(
-                                v_flex()
-                                    .p_2()
-                                    .gap_2()
-                                    .min_h_full()
-                                    .children(
-                                        self.chat_messages
-                                            .iter()
-                                            .map(|msg| self.render_chat_message(msg)),
-                                    )
-                                    .when(self.is_loading, |this| {
-                                        this.child(
-                                            h_flex().justify_start().py_2().child(
-                                                div()
-                                                    .p_3()
-                                                    .bg(gpui::rgb(0xF3F4F6))
-                                                    .rounded_lg()
-                                                    .text_color(gpui::rgb(0x6B7280))
-                                                    .child("AI正在思考中..."),
-                                            ),
-                                        )
-                                    }),
-                            ),
-                        ),
-                    )
-                    .child(
-                        // 中间区域：模型和工具选择
                         h_flex()
                             .items_center()
-                            .justify_center()
-                            .gap_4()
-                            .p_2()
-                            .border_t_1()
-                            .border_b_1()
-                            .border_color(gpui::rgb(0xE5E7EB))
-                            .bg(gpui::rgb(0xF9FAFB))
+                            .gap_2()
                             .child(
-                                h_flex()
-                                    .items_center()
-                                    .gap_2()
-                                    .child(
-                                        div()
-                                            .text_sm()
-                                            .font_medium()
-                                            .text_color(gpui::rgb(0x6B7280))
-                                            .child("模型:"),
-                                    )
-                                    .child(
-                                        div().w_48().child(
-                                            Dropdown::new(&self.model_dropdown)
-                                                .placeholder("选择模型")
-                                                .small(),
-                                        ),
-                                    ),
+                                div()
+                                    .text_sm()
+                                    .font_medium()
+                                    .text_color(gpui::rgb(0x6B7280))
+                                    .child("模型:"),
                             )
                             .child(
-                                h_flex()
-                                    .items_center()
-                                    .gap_2()
-                                    .child(
-                                        div()
-                                            .text_sm()
-                                            .font_medium()
-                                            .text_color(gpui::rgb(0x6B7280))
-                                            .child("工具:"),
-                                    )
-                                    .child(
-                                        div().w_48().child(
-                                            Dropdown::new(&self.mcp_tools_dropdown)
-                                                .placeholder("选择工具")
-                                                .small(),
-                                        ),
-                                    ),
+                                div().w_48().child(
+                                    Dropdown::new(&self.model_dropdown)
+                                        .placeholder("选择模型")
+                                        .small(),
+                                ),
                             ),
                     )
                     .child(
-                        // 聊天输入区域 - 固定在底部
                         h_flex()
+                            .items_center()
                             .gap_2()
-                            .p_2()
                             .child(
-                                // 多行输入框
-                                div().w_full().child(TextInput::new(&self.chat_input)),
+                                div()
+                                    .text_sm()
+                                    .font_medium()
+                                    .text_color(gpui::rgb(0x6B7280))
+                                    .child("工具:"),
                             )
                             .child(
-                                // 发送按钮区域
-                                h_flex().justify_end().child(
-                                    Button::new("send-message")
-                                        .with_variant(ButtonVariant::Primary)
-                                        .icon(IconName::Send)
-                                        .label("发送")
-                                        .disabled(self.is_loading)
-                                        .on_click(cx.listener(|this, _, window, cx| {
-                                            this.send_message(&SendMessage, window, cx)
-                                        })),
+                                div().w_48().child(
+                                    Dropdown::new(&self.mcp_tools_dropdown)
+                                        .placeholder("选择工具")
+                                        .small(),
                                 ),
                             ),
+                    ),
+            )
+            .child(
+                // 聊天输入区域 - 固定在底部
+                h_flex()
+                    .gap_2()
+                    .p_2()
+                    .child(
+                        // 多行输入框
+                        div().w_full().child(TextInput::new(&self.chat_input)),
+                    )
+                    .child(
+                        // 发送按钮区域
+                        h_flex().justify_end().child(
+                            Button::new("send-message")
+                                .with_variant(ButtonVariant::Primary)
+                                .icon(IconName::Send)
+                                .label("发送")
+                                .disabled(self.is_loading)
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    this.send_message(&SendMessage, window, cx)
+                                })),
+                        ),
                     ),
             )
     }

@@ -157,13 +157,13 @@ impl AppExt for App {
                         use windows::Win32::UI::WindowsAndMessaging::{
                             WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_SIZEBOX, WS_SYSMENU,
                         };
-                        window.set_display_affinity(0x00000017);
-                        let mut style = window.style();
-                        style &= !(WS_SIZEBOX.0 as i32
-                            | WS_MINIMIZEBOX.0 as i32
-                            | WS_MAXIMIZEBOX.0 as i32
-                            | WS_SYSMENU.0 as i32);
-                        window.set_style(style);
+                        // window.set_display_affinity(0x00000017);
+                        // let mut style = window.style();
+                        // style &= !(WS_SIZEBOX.0 as i32
+                        //     | WS_MINIMIZEBOX.0 as i32
+                        //     | WS_MAXIMIZEBOX.0 as i32
+                        //     | WS_SYSMENU.0 as i32);
+                        // window.set_style(style);
                     }
                     let view = crate_view_fn(window, cx);
                     let root = cx.new(|cx| TodoRoot::with_no_title_bar(view));
@@ -195,13 +195,13 @@ impl AppExt for App {
                         use windows::Win32::UI::WindowsAndMessaging::{
                             WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_SIZEBOX, WS_SYSMENU,
                         };
-                        window.set_display_affinity(0x00000017);
-                        let mut style = window.style();
-                        style &= !(WS_SIZEBOX.0 as i32
-                            | WS_MINIMIZEBOX.0 as i32
-                            | WS_MAXIMIZEBOX.0 as i32
-                            | WS_SYSMENU.0 as i32);
-                        window.set_style(style);
+                       // window.set_display_affinity(0x00000017);
+                        // let mut style = window.style();
+                        // style &= !(WS_SIZEBOX.0 as i32
+                        //     | WS_MINIMIZEBOX.0 as i32
+                        //     | WS_MAXIMIZEBOX.0 as i32
+                        //     | WS_SYSMENU.0 as i32);
+                        // window.set_style(style);
                     }
                     let view = crate_view_fn(window, cx);
                     let root = cx.new(|cx| TodoRoot::new(view, window, cx));
@@ -241,13 +241,13 @@ impl AppExt for App {
                         use windows::Win32::UI::WindowsAndMessaging::{
                             WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_SIZEBOX, WS_SYSMENU,
                         };
-                        window.set_display_affinity(0x00000011);
-                        let mut style = window.style();
-                        style &= !(WS_SIZEBOX.0 as i32
-                            | WS_MINIMIZEBOX.0 as i32
-                            | WS_MAXIMIZEBOX.0 as i32
-                            | WS_SYSMENU.0 as i32);
-                        window.set_style(style);
+                       // window.set_display_affinity(0x00000011);
+                        // let mut style = window.style();
+                        // style &= !(WS_SIZEBOX.0 as i32
+                        //     | WS_MINIMIZEBOX.0 as i32
+                        //     | WS_MAXIMIZEBOX.0 as i32
+                        //     | WS_SYSMENU.0 as i32);
+                        // window.set_style(style);
                     }
                     let view = crate_view_fn(window, cx);
                     let root = cx.new(|cx| NormalRoot::new(title.clone(), view, window, cx));
@@ -310,11 +310,11 @@ impl WindowExt for Window {
         });
     }
     fn set_display_affinity(&self, dwaffinity: u32) {
-        // use windows::Win32::UI::WindowsAndMessaging::{
-        //     SetWindowDisplayAffinity, WINDOW_DISPLAY_AFFINITY,
-        // };
-        // self.hwnd().map(|hwnd| unsafe {
-        //     SetWindowDisplayAffinity(hwnd, WINDOW_DISPLAY_AFFINITY(dwaffinity)).ok();
-        // });
+        use windows::Win32::UI::WindowsAndMessaging::{
+            SetWindowDisplayAffinity, WINDOW_DISPLAY_AFFINITY,
+        };
+        self.hwnd().map(|hwnd| unsafe {
+            SetWindowDisplayAffinity(hwnd, WINDOW_DISPLAY_AFFINITY(dwaffinity)).ok();
+        });
     }
 }
