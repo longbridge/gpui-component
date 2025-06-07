@@ -273,15 +273,12 @@ impl Render for ScrollableStory {
                                     .left_0()
                                     .right_0()
                                     .bottom_0()
-                                    .child(
-                                        Scrollbar::both(
-                                            view.entity_id(),
-                                            self.scroll_state.clone(),
-                                            self.scroll_handle.clone(),
-                                            self.scroll_size,
-                                        )
-                                        .axis(self.axis),
-                                    )
+                                    .child(Scrollbar::vertical(
+                                        view.entity_id(),
+                                        self.scroll_state.clone(),
+                                        self.scroll_handle.clone(),
+                                        self.scroll_size,
+                                    ))
                             }),
                     ),
                 ),

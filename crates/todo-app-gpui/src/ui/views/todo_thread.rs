@@ -1,3 +1,5 @@
+use std::{cell::Cell, rc::Rc};
+
 use chrono::{Days, Utc};
 use gpui::prelude::*;
 use gpui::*;
@@ -7,6 +9,7 @@ use gpui_component::{
     dropdown::{Dropdown, DropdownDelegate, DropdownEvent, DropdownItem, DropdownState},
     h_flex,
     input::{InputEvent, InputState, TextInput},
+    scroll::{Scrollable, Scrollbar, ScrollbarState},
     v_flex, Disableable, FocusableCycle, Icon, IconName, Sizable, StyledExt,
 };
 
@@ -214,6 +217,8 @@ pub struct TodoThreadChat {
     chat_input: Entity<InputState>,
     is_loading: bool,
     scroll_handle: ScrollHandle,
+    scroll_size: gpui::Size<Pixels>,
+    scroll_state: Rc<Cell<ScrollbarState>>,
 
     // AI助手配置
     model_dropdown: Entity<DropdownState<HierarchicalModelDelegate>>,
@@ -278,6 +283,8 @@ impl TodoThreadChat {
             model_dropdown,
             mcp_tools_dropdown,
             _subscriptions,
+            scroll_state: Rc::new(Cell::new(ScrollbarState::default())),
+            scroll_size: gpui::Size::default(),
         }
     }
 
@@ -317,6 +324,7 @@ impl TodoThreadChat {
 
         // 模拟AI响应
         self.simulate_ai_response(message_content, cx);
+        self.scroll_handle.scroll_to_bottom();
 
         cx.notify();
     }
@@ -500,32 +508,56 @@ impl Render for TodoThreadChat {
             .size_full()
             .p_2()
             .child(
-                div().border_0().size_full().overflow_y_hidden().child(
-                    v_flex()
-                        .p_2()
-                        .gap_2()
-                        .scrollable(
-                            cx.entity().entity_id(),
-                            gpui_component::scroll::ScrollbarAxis::Vertical,
-                        )
-                        .min_h_full()
-                        .children(
-                            self.chat_messages
-                                .iter()
-                                .map(|msg| self.render_chat_message(msg)),
-                        )
-                        .when(self.is_loading, |this| {
-                            this.child(
-                                h_flex().justify_start().py_2().child(
-                                    div()
-                                        .p_3()
-                                        .bg(gpui::rgb(0xF3F4F6))
-                                        .rounded_lg()
-                                        .text_color(gpui::rgb(0x6B7280))
-                                        .child("AI正在思考中..."),
-                                ),
+                div().w_full().flex_1().min_h_64().child(
+                    div().relative().border_1().size_full().child(
+                        v_flex().id("test-0")
+                            .relative()
+                            .size_full()
+                            .child(
+                                v_flex()
+                                    .id("id-todo-thread-chat")
+                                    .p_2()
+                                    .gap_2()
+                                    .relative()
+                                    .size_full()
+                                    .overflow_y_scroll()
+                                    .track_scroll(&self.scroll_handle)
+                                    .children(
+                                        self.chat_messages
+                                            .iter()
+                                            .map(|msg| self.render_chat_message(msg)),
+                                    )
+                                    .when(self.is_loading, |this| {
+                                        this.child(
+                                            h_flex().justify_start().py_2().child(
+                                                div()
+                                                    .p_3()
+                                                    .bg(gpui::rgb(0xF3F4F6))
+                                                    .rounded_lg()
+                                                    .text_color(gpui::rgb(0x6B7280))
+                                                    .child("AI正在思考中..."),
+                                            ),
+                                        )
+                                    }),
                             )
-                        }),
+                            .child({
+                                div()
+                                    .absolute()
+                                    .top_0()
+                                    .left_0()
+                                    .right_0()
+                                    .bottom_0()
+                                    .child(
+                                        Scrollbar::both(
+                                            cx.entity().entity_id(),
+                                            self.scroll_state.clone(),
+                                            self.scroll_handle.clone(),
+                                            self.scroll_size,
+                                        )
+                                        .axis(gpui_component::scroll::ScrollbarAxis::Vertical),
+                                    )
+                            }),
+                    ),
                 ),
             )
             .child(
