@@ -388,17 +388,17 @@ impl TodoList {
 
         let _subscriptions =
             vec![
-                cx.subscribe(&company_list, |_, _, ev: &ListEvent, _| match ev {
-                    ListEvent::Select(ix) => {
-                        println!("List Selected: {:?}", ix);
-                    }
-                    ListEvent::Confirm(ix) => {
-                        println!("List Confirmed: {:?}", ix);
-                    }
-                    ListEvent::Cancel => {
-                        println!("List Cancelled");
-                    }
-                }),
+                // cx.subscribe(&company_list, |_, _, ev: &ListEvent, _| match ev {
+                //     ListEvent::Select(ix) => {
+                //         println!("List Selected: {:?}", ix);
+                //     }
+                //     ListEvent::Confirm(ix) => {
+                //         println!("List Confirmed: {:?}", ix);
+                //     }
+                //     ListEvent::Cancel => {
+                //         println!("List Cancelled");
+                //     }
+                // }),
             ];
 
         // Spawn a background to random refresh the list
@@ -467,6 +467,7 @@ impl TodoList {
     }
 
     fn edit_todo(&mut self, _: &Edit, window: &mut Window, cx: &mut Context<Self>) {
+        
         if let Some(todo) = self.selected_company.clone() {
             cx.activate(true);
             let window_size = size(px(600.0), px(750.0));

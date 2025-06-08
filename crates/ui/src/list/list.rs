@@ -497,8 +497,7 @@ where
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.delegate.on_double_click(ev,window, cx);
-       
+        self.delegate.on_double_click(ev, window, cx);
     }
 
     fn render_list_item(
@@ -529,6 +528,9 @@ where
                             .border_color(cx.theme().list_active_border),
                     )
                 })
+                .on_double_click(cx.listener(|this, ev, window, cx| {
+                    this.on_double_click(ev, window, cx);
+                }))
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener(move |this, ev: &MouseDownEvent, window, cx| {
@@ -549,9 +551,7 @@ where
                         this.right_clicked_index = Some(ix);
                         cx.notify();
                     }),
-                ).on_double_click(cx.listener(|this,ev,window,cx|{
-                    this.on_double_click(ev, window, cx);
-                }))
+                )
             })
     }
 }

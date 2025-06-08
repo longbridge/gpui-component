@@ -5,12 +5,7 @@ use gpui::prelude::*;
 use gpui::*;
 
 use gpui_component::{
-    button::{Button, ButtonVariant, ButtonVariants as _},
-    dropdown::{Dropdown, DropdownDelegate, DropdownEvent, DropdownItem, DropdownState},
-    h_flex,
-    input::{InputEvent, InputState, TextInput},
-    scroll::{Scrollable, Scrollbar, ScrollbarState},
-    v_flex, Disableable, FocusableCycle, Icon, IconName, Sizable, StyledExt,
+    button::{Button, ButtonVariant, ButtonVariants as _}, dropdown::{Dropdown, DropdownDelegate, DropdownEvent, DropdownItem, DropdownState}, h_flex, input::{InputEvent, InputState, TextInput}, scroll::{Scrollable, Scrollbar, ScrollbarState}, v_flex, v_virtual_list, ActiveTheme, Disableable, FocusableCycle, Icon, IconName, Sizable, StyledExt
 };
 
 use crate::ui::components::ViewKit;
@@ -391,7 +386,8 @@ impl TodoThreadChat {
         match event {
             InputEvent::PressEnter { secondary, .. } if *secondary => {
                 // Ctrl+Enter 发送消息
-                self.send_message(&SendMessage, window, cx);
+               // self.send_message(&SendMessage, window, cx);
+                 window.dispatch_action(Box::new(SendMessage), cx);
             }
             InputEvent::PressEnter { .. } => {
                 // 普通Enter只是换行，不做任何处理
@@ -500,6 +496,7 @@ impl Focusable for TodoThreadChat {
 
 impl Render for TodoThreadChat {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        
         v_flex()
             .key_context(CONTEXT)
             .id("todo-thread-view")
@@ -508,19 +505,18 @@ impl Render for TodoThreadChat {
             .size_full()
             .p_2()
             .child(
-                div().w_full().flex_1().min_h_64().child(
-                    div().relative().border_1().size_full().child(
-                        v_flex().id("test-0")
+                div().size_full().min_h_32().child(
+                    div().relative().size_full().child(
+                        v_flex()
+                            .border_1().border_color(cx.theme().background)
                             .relative()
                             .size_full()
                             .child(
                                 v_flex()
                                     .id("id-todo-thread-chat")
-                                    .p_2()
-                                    .gap_2()
-                                    .relative()
-                                    .size_full()
-                                    .overflow_y_scroll()
+                                    .p_1()
+                                    .gap_1()
+                                     .overflow_y_scroll()
                                     .track_scroll(&self.scroll_handle)
                                     .children(
                                         self.chat_messages
@@ -540,7 +536,7 @@ impl Render for TodoThreadChat {
                                         )
                                     }),
                             )
-                            .child({
+                            .child(
                                 div()
                                     .absolute()
                                     .top_0()
@@ -555,8 +551,8 @@ impl Render for TodoThreadChat {
                                             self.scroll_size,
                                         )
                                         .axis(gpui_component::scroll::ScrollbarAxis::Vertical),
-                                    )
-                            }),
+                                    ),
+                            ),
                     ),
                 ),
             )
@@ -628,7 +624,8 @@ impl Render for TodoThreadChat {
                                 .label("发送")
                                 .disabled(self.is_loading)
                                 .on_click(cx.listener(|this, _, window, cx| {
-                                    this.send_message(&SendMessage, window, cx)
+                                    window.dispatch_action(Box::new(SendMessage), cx);
+                                    // this.send_message(&SendMessage, window, cx)
                                 })),
                         ),
                     ),
