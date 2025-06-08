@@ -5,7 +5,13 @@ use gpui::prelude::*;
 use gpui::*;
 
 use gpui_component::{
-    button::{Button, ButtonVariant, ButtonVariants as _}, dropdown::{Dropdown, DropdownDelegate, DropdownEvent, DropdownItem, DropdownState}, h_flex, input::{InputEvent, InputState, TextInput}, scroll::{Scrollable, Scrollbar, ScrollbarState}, v_flex, v_virtual_list, ActiveTheme, Disableable, FocusableCycle, Icon, IconName, Sizable, StyledExt
+    button::{Button, ButtonVariant, ButtonVariants as _},
+    dropdown::{Dropdown, DropdownDelegate, DropdownEvent, DropdownItem, DropdownState},
+    h_flex,
+    input::{InputEvent, InputState, TextInput},
+    scroll::{Scrollable, Scrollbar, ScrollbarState},
+    v_flex, v_virtual_list, ActiveTheme, Disableable, FocusableCycle, Icon, IconName, Sizable,
+    StyledExt,
 };
 
 use crate::ui::components::ViewKit;
@@ -320,7 +326,6 @@ impl TodoThreadChat {
         // 模拟AI响应
         self.simulate_ai_response(message_content, cx);
         self.scroll_handle.scroll_to_bottom();
-
         cx.notify();
     }
 
@@ -386,8 +391,8 @@ impl TodoThreadChat {
         match event {
             InputEvent::PressEnter { secondary, .. } if *secondary => {
                 // Ctrl+Enter 发送消息
-               // self.send_message(&SendMessage, window, cx);
-                 window.dispatch_action(Box::new(SendMessage), cx);
+                // self.send_message(&SendMessage, window, cx);
+                window.dispatch_action(Box::new(SendMessage), cx);
             }
             InputEvent::PressEnter { .. } => {
                 // 普通Enter只是换行，不做任何处理
@@ -496,7 +501,6 @@ impl Focusable for TodoThreadChat {
 
 impl Render for TodoThreadChat {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        
         v_flex()
             .key_context(CONTEXT)
             .id("todo-thread-view")
@@ -508,7 +512,8 @@ impl Render for TodoThreadChat {
                 div().size_full().min_h_32().child(
                     div().relative().size_full().child(
                         v_flex()
-                            .border_1().border_color(cx.theme().background)
+                            .border_1()
+                            .border_color(gpui::rgb(0xE5E7EB))
                             .relative()
                             .size_full()
                             .child(
@@ -516,7 +521,7 @@ impl Render for TodoThreadChat {
                                     .id("id-todo-thread-chat")
                                     .p_1()
                                     .gap_1()
-                                     .overflow_y_scroll()
+                                    .overflow_y_scroll()
                                     .track_scroll(&self.scroll_handle)
                                     .children(
                                         self.chat_messages
@@ -544,13 +549,13 @@ impl Render for TodoThreadChat {
                                     .right_0()
                                     .bottom_0()
                                     .child(
-                                        Scrollbar::both(
+                                        Scrollbar::vertical(
                                             cx.entity().entity_id(),
                                             self.scroll_state.clone(),
                                             self.scroll_handle.clone(),
                                             self.scroll_size,
                                         )
-                                        .axis(gpui_component::scroll::ScrollbarAxis::Vertical),
+                                       ,
                                     ),
                             ),
                     ),
