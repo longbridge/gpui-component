@@ -281,6 +281,15 @@ impl<T: DropdownItem + Clone> SearchableVec<T> {
     }
 }
 
+impl<T: DropdownItem + Clone> From<Vec<T>> for SearchableVec<T> {
+    fn from(items: Vec<T>) -> Self {
+        Self {
+            items: items.clone(),
+            matched_items: items,
+        }
+    }
+}
+
 impl<T: DropdownItem + Clone> DropdownDelegate for SearchableVec<T> {
     type Item = T;
 
@@ -319,15 +328,6 @@ impl<T: DropdownItem + Clone> DropdownDelegate for SearchableVec<T> {
             .collect();
 
         Task::ready(())
-    }
-}
-
-impl From<Vec<SharedString>> for SearchableVec<SharedString> {
-    fn from(items: Vec<SharedString>) -> Self {
-        Self {
-            items: items.clone(),
-            matched_items: items,
-        }
     }
 }
 
