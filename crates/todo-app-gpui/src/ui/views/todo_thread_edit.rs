@@ -3,17 +3,7 @@ use gpui::prelude::*;
 use gpui::*;
 
 use gpui_component::{
-    accordion::Accordion,
-    badge::Badge,
-    button::{Button, ButtonVariant, ButtonVariants as _},
-    checkbox::Checkbox,
-    date_picker::{DatePicker, DatePickerEvent, DatePickerState, DateRangePreset},
-    dropdown::{Dropdown, DropdownDelegate, DropdownEvent, DropdownItem, DropdownState},
-    input::{InputEvent, InputState, TextInput},
-    sidebar::{SidebarGroup, SidebarMenu, SidebarMenuItem},
-    switch::Switch,
-    scroll::{*},
-    *,
+    accordion::Accordion, badge::Badge, button::{Button, ButtonVariant, ButtonVariants as _}, checkbox::Checkbox, date_picker::{DatePicker, DatePickerEvent, DatePickerState, DateRangePreset}, dock::DragDrop, dropdown::{Dropdown, DropdownDelegate, DropdownEvent, DropdownItem, DropdownState}, input::{InputEvent, InputState, TextInput}, scroll::*, sidebar::{SidebarGroup, SidebarMenu, SidebarMenuItem}, switch::Switch, *
 };
 
 use crate::ui::components::ViewKit;
@@ -590,6 +580,7 @@ pub struct TodoThreadEdit {
 
 impl TodoThreadEdit {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+       
         // 基本信息输入框
         let title_input = cx.new(|cx| InputState::new(window, cx).placeholder("输入任务标题..."));
 
@@ -1383,7 +1374,15 @@ impl Render for TodoThreadEdit {
                                                     .text_color(gpui::rgb(0xB91C1C))
                                                     .child("支持 PDF、DOC、TXT、图片等格式"),
                                             ),
-                                    )
+                                    ).drag_over(|style, _path: &ExternalPaths, _window, _cx| {
+               
+                 style
+                                            .border_color(gpui::rgb(0x3B82F6))
+                                            .bg(gpui::rgb(0xF0F9FF))
+            }).on_drop(cx.listener(move |project_panel, external_paths: &ExternalPaths, window,cx| {
+              println!("Dropped paths: {:?}", external_paths);
+               cx.stop_propagation();
+            }))
                                     .on_click(cx.listener(|_, _, _, cx| {
                                         println!("点击上传文件");
                                         cx.notify();

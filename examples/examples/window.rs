@@ -1,7 +1,7 @@
 use gpui::{
-    App, Application, Bounds, Context, InteractiveElement, KeyBinding, PromptButton, PromptLevel,
-    SharedString, Timer, Window, WindowBounds, WindowKind, WindowOptions, actions, div, prelude::*,
-    px, rgb, size,
+    App, Application, Bounds, Context, DragMoveEvent, ExternalPaths, InteractiveElement,
+    KeyBinding, PromptButton, PromptLevel, SharedString, Timer, Window, WindowBounds, WindowKind,
+    WindowOptions, actions, div, prelude::*, px, rgb, rgba, size,
 };
 
 struct SubWindow {
@@ -64,6 +64,17 @@ impl Render for SubWindow {
 
 struct WindowDemo {}
 
+impl WindowDemo {
+    fn on_drag_move(
+        &mut self,
+        ev: &DragMoveEvent<WindowDemo>,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) {
+        // Handle drag move event if needed
+    }
+}
+
 impl Render for WindowDemo {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let window_bounds =
@@ -78,6 +89,13 @@ impl Render for WindowDemo {
             .justify_center()
             .content_center()
             .gap_2()
+            .drag_over(|style, path: &ExternalPaths, window, cx| {
+                println!("Drag over: {:?}", path);
+                style.bg(rgba(0xf0f0f0))
+            }).on_drop(cx.listener(move |project_panel, external_paths: &ExternalPaths, window,cx| {
+              println!("Dropped paths: {:?}", external_paths);
+               cx.stop_propagation();
+            }))
             .child(button("Normal", move |_, cx| {
                 cx.open_window(
                     WindowOptions {
