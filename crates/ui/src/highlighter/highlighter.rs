@@ -49,7 +49,7 @@ pub struct SyntaxHighlighter {
 impl SyntaxHighlighter {
     /// Create a new SyntaxHighlighter for HTML.
     pub fn new(lang: &str, cx: &App) -> Self {
-        Self::build_combined_injections_query(&lang, cx).expect(&format!(
+        Self::build_combined_injections_query(&lang, cx).unwrap_or_else(|| panic!(
             "failed to build language {}, please make sure have registered the language in LanguageRegistry",
             lang
         ))
@@ -59,8 +59,8 @@ impl SyntaxHighlighter {
     ///
     /// https://github.com/tree-sitter/tree-sitter/blob/v0.25.5/highlight/src/lib.rs#L336
     fn build_combined_injections_query(lang: &str, cx: &App) -> Option<Self> {
-        let language_registy = LanguageRegistry::global(cx);
-        let config = language_registy.language(&lang);
+        let registry = LanguageRegistry::global(cx);
+        let config = registry.language(&lang);
         let Some(config) = config else {
             return None;
         };
@@ -151,7 +151,7 @@ impl SyntaxHighlighter {
 
         let mut injection_queries = HashMap::new();
         for inj_language in config.injection_languages.iter() {
-            if let Some(inj_config) = language_registy.language(&inj_language) {
+            if let Some(inj_config) = registry.language(&inj_language) {
                 match Query::new(&inj_config.language, &inj_config.highlights) {
                     Ok(q) => {
                         injection_queries.insert(inj_config.name.clone(), q);
@@ -530,7 +530,7 @@ impl SyntaxHighlighter {
                 // parent layer
                 "injection.parent" => {
                     if language_name.is_none() {
-                        language_name = parent_name.clone().map(SharedString::from);
+                        language_name = parent_name.clone();
                     }
                 }
 
