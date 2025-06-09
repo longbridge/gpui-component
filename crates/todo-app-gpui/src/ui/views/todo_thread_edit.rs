@@ -12,6 +12,7 @@ use gpui_component::{
     input::{InputEvent, InputState, TextInput},
     sidebar::{SidebarGroup, SidebarMenu, SidebarMenuItem},
     switch::Switch,
+    scroll::{*},
     *,
 };
 
@@ -657,25 +658,7 @@ impl TodoThreadEdit {
                 .overlay(true)
                 .size(px(380.)) // 稍微增加宽度以适应手风琴
                 .title("选择模型")
-                .child(
-                    v_flex()
-                        .id("model-drawer-content")
-                        .size_full()
-                        .child(
-                            div()
-                                .id("id-drawer-view")
-                                .size_full()
-                                .overflow_y_scroll() // 直接在内容区域启用滚动
-                                .py_2()
-                                .px_1() // 给滚动条留出空间
-                                .child(
-                                    v_flex()
-                                        .gap_1()
-                                        .child(accordion)
-                                        .min_h_full() // 确保最小高度
-                                )
-                        )
-                )
+                .child(accordion) // 直接放置手风琴，不需要额外的滚动容器
                 .footer(
                     h_flex()
                         .justify_end() // 只保留右对齐的按钮
@@ -685,30 +668,20 @@ impl TodoThreadEdit {
                         .border_color(gpui::rgb(0xE5E7EB))
                         .bg(gpui::rgb(0xFAFAFA)) // 底部背景色
                         .child(
-                            h_flex()
-                                .gap_2()
-                                .child(Button::new("clear-all-models").label("清空选择").on_click(
-                                    move |_, _window, cx| {
-                                        // 清空所有模型选择
-                                        todo_edit_entity_for_clear.update(cx, |todo_edit, todo_cx| {
-                                            for provider in &mut todo_edit.model_manager.providers {
-                                                for model in &mut provider.models {
-                                                    model.is_selected = false;
-                                                }
+                            Button::new("clear-all-models")
+                                .label("清空选择")
+                                .on_click(move |_, _window, cx| {
+                                    // 清空所有模型选择
+                                    todo_edit_entity_for_clear.update(cx, |todo_edit, todo_cx| {
+                                        for provider in &mut todo_edit.model_manager.providers {
+                                            for model in &mut provider.models {
+                                                model.is_selected = false;
                                             }
-                                            todo_cx.notify(); // 通知主界面更新
-                                        });
-                                        println!("清空所有模型选择");
-                                    },
-                                ))
-                                .child(
-                                    Button::new("close-model-drawer")
-                                        .label("确定")
-                                        .with_variant(ButtonVariant::Primary)
-                                        .on_click(|_, window, cx| {
-                                            window.close_drawer(cx);
-                                        }),
-                                ),
+                                        }
+                                        todo_cx.notify(); // 通知主界面更新
+                                    });
+                                    println!("清空所有模型选择");
+                                }),
                         ),
                 )
         });
