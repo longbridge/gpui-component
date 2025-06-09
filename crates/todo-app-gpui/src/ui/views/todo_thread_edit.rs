@@ -948,32 +948,52 @@ impl Render for TodoThreadEdit {
                             .bg(gpui::rgb(0xF9FAFB))
                             .rounded_lg()
                             .child(Self::section_title("助手配置"))
-                            .child(Self::form_row("模型选择", {
-                                let display_text = self.get_model_display_text(cx);
-                                Dropdown::new(&self.model_dropdown)
-                                    .placeholder(display_text) // 使用动态计算的文本
-                                    .small()
-                                    .empty(
-                                        h_flex()
-                                            .h_8()
-                                            .justify_center()
-                                            .items_center()
-                                            .text_color(gpui::rgb(0x9CA3AF))
-                                            .text_xs()
-                                            .child("暂无可用模型"),
-                                    )
-                            }))
                             .child(Self::form_row(
                                 "MCP工具",
                                 Dropdown::new(&self.mcp_tools_dropdown)
                                     .placeholder("选择工具集")
                                     .small(),
                             ))
-                            .child(Button::new("show-drawer-left").label("选择模型").on_click(
-                                cx.listener(|this, _, window, cx| {
-                                    this.open_drawer_at(Placement::Left, window, cx)
-                                }),
-                            )),
+                            .child(
+                                h_flex()
+                                    .gap_4()
+                                    .items_center()
+                                    .child(
+                                        div()
+                                            .text_sm()
+                                            .text_color(gpui::rgb(0x6B7280))
+                                            .min_w_24()
+                                            .child("模型选择"),
+                                    )
+                                    .child(
+                                        div().flex_1().max_w_80().child(
+                                            Button::new("show-drawer-left")
+                                                .label({
+                                                    let display_text =
+                                                        self.get_model_display_text(cx);
+                                                    if display_text == "选择AI模型" {
+                                                        display_text
+                                                    } else {
+                                                        display_text
+                                                    }
+                                                })
+                                                .w_full()
+                                                .justify_start()
+                                                .text_color(
+                                                    if self.get_model_display_text(cx)
+                                                        == "选择AI模型"
+                                                    {
+                                                        gpui::rgb(0x9CA3AF)
+                                                    } else {
+                                                        gpui::rgb(0x374151)
+                                                    },
+                                                )
+                                                .on_click(cx.listener(|this, _, window, cx| {
+                                                    this.open_drawer_at(Placement::Left, window, cx)
+                                                })),
+                                        ),
+                                    ),
+                            ),
                     )
                     .child(
                         v_flex()
