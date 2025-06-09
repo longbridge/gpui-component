@@ -386,20 +386,19 @@ impl TodoList {
         //     list.set_selected_index(Some(3), cx);
         // });
 
-        let _subscriptions =
-            vec![
-                // cx.subscribe(&company_list, |_, _, ev: &ListEvent, _| match ev {
-                //     ListEvent::Select(ix) => {
-                //         println!("List Selected: {:?}", ix);
-                //     }
-                //     ListEvent::Confirm(ix) => {
-                //         println!("List Confirmed: {:?}", ix);
-                //     }
-                //     ListEvent::Cancel => {
-                //         println!("List Cancelled");
-                //     }
-                // }),
-            ];
+        let _subscriptions = vec![
+            // cx.subscribe(&company_list, |_, _, ev: &ListEvent, _| match ev {
+            //     ListEvent::Select(ix) => {
+            //         println!("List Selected: {:?}", ix);
+            //     }
+            //     ListEvent::Confirm(ix) => {
+            //         println!("List Confirmed: {:?}", ix);
+            //     }
+            //     ListEvent::Cancel => {
+            //         println!("List Cancelled");
+            //     }
+            // }),
+        ];
 
         // Spawn a background to random refresh the list
         // cx.spawn(async move |this, cx| {
@@ -467,7 +466,6 @@ impl TodoList {
     }
 
     fn edit_todo(&mut self, _: &Edit, window: &mut Window, cx: &mut Context<Self>) {
-        
         if let Some(todo) = self.selected_company.clone() {
             cx.activate(true);
             let window_size = size(px(600.0), px(750.0));
@@ -824,7 +822,7 @@ impl Render for TodoList {
                             .ghost()
                             .on_click(cx.listener(|this, ev, widnow, cx| {
                                 cx.activate(true);
-                                let window_size = size(px(600.0), px(800.0));
+                                let window_size = size(px(600.0), px(750.0));
                                 let window_bounds = Bounds::centered(None, window_size, cx);
                                 let options = WindowOptions {
                                     app_id: Some("x-todo-app".to_string()),
@@ -832,7 +830,7 @@ impl Render for TodoList {
                                     titlebar: Some(TitleBar::title_bar_options()),
                                     window_min_size: Some(gpui::Size {
                                         width: px(600.),
-                                        height: px(800.),
+                                        height: px(750.),
                                     }),
 
                                     kind: WindowKind::PopUp,

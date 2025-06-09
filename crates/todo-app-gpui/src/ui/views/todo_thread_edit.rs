@@ -120,6 +120,41 @@ impl ModelCapability {
     }
 }
 
+// 工具能力
+#[derive(Debug, Clone)]
+pub enum ToolCapability {
+    FileOperation,
+    CodeReview,
+    WebSearch,
+    Calculation,
+    DataAnalysis,
+    ImageProcessing,
+}
+
+impl ToolCapability {
+    fn icon(&self) -> IconName {
+        match self {
+            ToolCapability::FileOperation => IconName::LetterText,
+            ToolCapability::CodeReview => IconName::ChevronDown,
+            ToolCapability::WebSearch => IconName::Search,
+            ToolCapability::Calculation => IconName::Timer,
+            ToolCapability::DataAnalysis => IconName::TimerReset,
+            ToolCapability::ImageProcessing => IconName::Image,
+        }
+    }
+
+    fn label(&self) -> &'static str {
+        match self {
+            ToolCapability::FileOperation => "文件",
+            ToolCapability::CodeReview => "代码",
+            ToolCapability::WebSearch => "搜索",
+            ToolCapability::Calculation => "计算",
+            ToolCapability::DataAnalysis => "分析",
+            ToolCapability::ImageProcessing => "图像",
+        }
+    }
+}
+
 // 简化的模型数据结构
 #[derive(Debug, Clone)]
 pub struct ModelInfo {
@@ -406,6 +441,121 @@ impl ModelManager {
     }
 }
 
+// MCP工具信息
+#[derive(Debug, Clone)]
+pub struct McpToolInfo {
+    pub name: String,
+    pub provider: String,
+    pub is_selected: bool,
+    pub capabilities: Vec<ToolCapability>,
+    pub description: String,
+}
+
+// MCP工具提供商信息
+#[derive(Debug, Clone)]
+pub struct McpProviderInfo {
+    pub name: String,
+    pub tools: Vec<McpToolInfo>,
+}
+
+// MCP工具管理器
+pub struct McpToolManager {
+    pub providers: Vec<McpProviderInfo>,
+}
+
+impl McpToolManager {
+    pub fn new() -> Self {
+        let providers = vec![
+            McpProviderInfo {
+                name: "开发工具".to_string(),
+                tools: vec![
+                    McpToolInfo {
+                        name: "代码审查助手".to_string(),
+                        provider: "开发工具".to_string(),
+                        is_selected: false,
+                        capabilities: vec![ToolCapability::CodeReview, ToolCapability::FileOperation],
+                        description: "自动审查代码质量和安全性".to_string(),
+                    },
+                    McpToolInfo {
+                        name: "Git操作工具".to_string(),
+                        provider: "开发工具".to_string(),
+                        is_selected: false,
+                        capabilities: vec![ToolCapability::FileOperation, ToolCapability::CodeReview],
+                        description: "管理Git仓库和版本控制".to_string(),
+                    },
+                ],
+            },
+            McpProviderInfo {
+                name: "数据处理".to_string(),
+                tools: vec![
+                    McpToolInfo {
+                        name: "Excel处理器".to_string(),
+                        provider: "数据处理".to_string(),
+                        is_selected: false,
+                        capabilities: vec![ToolCapability::FileOperation, ToolCapability::DataAnalysis],
+                        description: "处理和分析Excel文件".to_string(),
+                    },
+                    McpToolInfo {
+                        name: "数据可视化".to_string(),
+                        provider: "数据处理".to_string(),
+                        is_selected: false,
+                        capabilities: vec![ToolCapability::DataAnalysis, ToolCapability::ImageProcessing],
+                        description: "生成图表和数据可视化".to_string(),
+                    },
+                ],
+            },
+            McpProviderInfo {
+                name: "办公工具".to_string(),
+                tools: vec![
+                    McpToolInfo {
+                        name: "文档生成器".to_string(),
+                        provider: "办公工具".to_string(),
+                        is_selected: false,
+                        capabilities: vec![ToolCapability::FileOperation],
+                        description: "自动生成各类文档".to_string(),
+                    },
+                    McpToolInfo {
+                        name: "邮件助手".to_string(),
+                        provider: "办公工具".to_string(),
+                        is_selected: false,
+                        capabilities: vec![ToolCapability::WebSearch],
+                        description: "智能邮件管理和回复".to_string(),
+                    },
+                ],
+            },
+        ];
+
+        Self { providers }
+    }
+
+    pub fn toggle_tool_selection(&mut self, tool_name: &str) {
+        for provider in &mut self.providers {
+            for tool in &mut provider.tools {
+                if tool.name == tool_name {
+                    tool.is_selected = !tool.is_selected;
+                    return;
+                }
+            }
+        }
+    }
+
+    pub fn get_selected_tools(&self) -> Vec<String> {
+        let mut selected = Vec::new();
+        for provider in &self.providers {
+            for tool in &provider.tools {
+                if tool.is_selected {
+                    selected.push(tool.name.clone());
+                }
+            }
+        }
+        selected
+    }
+
+    pub fn get_selected_count(&self) -> usize {
+        self.get_selected_tools().len()
+    }
+}
+
 pub struct TodoThreadEdit {
     focus_handle: FocusHandle,
 
@@ -417,9 +567,9 @@ pub struct TodoThreadEdit {
     status_dropdown: Entity<DropdownState<Vec<SharedString>>>,
     priority_dropdown: Entity<DropdownState<Vec<SharedString>>>,
 
-    // AI助手配置 - 简化为模型管理器
+    // AI助手配置
     model_manager: ModelManager,
-    mcp_tools_dropdown: Entity<DropdownState<Vec<SharedString>>>,
+    mcp_tool_manager: McpToolManager, // 改为工具管理器
 
     // 时间设置
     due_date_picker: Entity<DatePickerState>,
@@ -433,6 +583,7 @@ pub struct TodoThreadEdit {
 
     // 手风琴展开状态
     expanded_providers: Vec<usize>,
+    expanded_tool_providers: Vec<usize>, // 添加工具提供商展开状态
 
     _subscriptions: Vec<Subscription>,
 }
@@ -445,7 +596,7 @@ impl TodoThreadEdit {
         let description_input = cx.new(|cx| {
             InputState::new(window, cx)
                 .placeholder("详细描述任务内容和要求...")
-                .auto_grow(5, 10)
+                .auto_grow(10, 10)
         });
 
         // 状态和优先级下拉框
@@ -455,16 +606,9 @@ impl TodoThreadEdit {
         let priority_dropdown =
             cx.new(|cx| DropdownState::new(TodoPriority::all(), Some(1), window, cx));
 
-        // 简化的模型管理器
+        // 模型管理器和工具管理器
         let model_manager = ModelManager::new();
-
-        let mcp_tools = vec![
-            "文件操作".into(),
-            "代码审查".into(),
-            "网络搜索".into(),
-            "计算器".into(),
-        ];
-        let mcp_tools_dropdown = cx.new(|cx| DropdownState::new(mcp_tools, None, window, cx));
+        let mcp_tool_manager = McpToolManager::new();
 
         // 时间选择器
         let due_date_picker = cx.new(|cx| DatePickerState::new(window, cx));
@@ -496,14 +640,15 @@ impl TodoThreadEdit {
             status_dropdown,
             priority_dropdown,
             model_manager,
-            mcp_tools_dropdown,
+            mcp_tool_manager, // 使用工具管理器
             due_date_picker,
             reminder_date_picker,
             recurring_enabled: false,
             recurring_dropdown,
             auto_execute: false,
             enable_notifications: true,
-            expanded_providers: Vec::new(), // 初始化为空，表示默认都折叠
+            expanded_providers: Vec::new(),
+            expanded_tool_providers: Vec::new(), // 初始化工具提供商展开状态
             _subscriptions,
         }
     }
@@ -522,6 +667,7 @@ impl TodoThreadEdit {
 
     fn save(&mut self, _: &Save, _window: &mut Window, cx: &mut Context<Self>) {
         let selected_models = self.model_manager.get_selected_models();
+        let selected_tools = self.mcp_tool_manager.get_selected_tools(); // 改为获取选中的工具
 
         let todo_data = TodoData {
             title: self.title_input.read(cx).value().to_string(),
@@ -539,12 +685,7 @@ impl TodoThreadEdit {
                 .map(|v| v.to_string())
                 .unwrap_or_default(),
             selected_models,
-            mcp_tools: self
-                .mcp_tools_dropdown
-                .read(cx)
-                .selected_value()
-                .map(|v| v.to_string())
-                .unwrap_or_default(),
+            selected_tools, // 改为工具列表
             recurring_enabled: self.recurring_enabled,
             auto_execute: self.auto_execute,
             enable_notifications: self.enable_notifications,
@@ -637,8 +778,33 @@ impl TodoThreadEdit {
         }
     }
 
+    // 获取工具选择显示文本
+    fn get_tool_display_text(&self, _cx: &App) -> String {
+        let selected_tools = self.mcp_tool_manager.get_selected_tools();
+        let selected_count = selected_tools.len();
+
+        if selected_count == 0 {
+            "选择工具集".to_string()
+        } else if selected_count <= 2 {
+            selected_tools.join(", ")
+        } else {
+            let first_two = selected_tools
+                .iter()
+                .take(2)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("{} 等{}个工具", first_two, selected_count)
+        }
+    }
+
     fn toggle_accordion(&mut self, open_indices: &[usize], cx: &mut Context<Self>) {
         self.expanded_providers = open_indices.to_vec();
+        cx.notify();
+    }
+
+    fn toggle_tool_accordion(&mut self, open_indices: &[usize], cx: &mut Context<Self>) {
+        self.expanded_tool_providers = open_indices.to_vec();
         cx.notify();
     }
 
@@ -660,7 +826,7 @@ impl TodoThreadEdit {
             let mut accordion = Accordion::new("model-providers")
                 .on_toggle_click({
                     let todo_edit_entity_for_toggle = todo_edit_entity.clone();
-                    move | open_indices, _window,cx| {
+                    move |open_indices, _window, cx| {
                         todo_edit_entity_for_toggle.update(cx, |todo_edit, todo_cx| {
                             todo_edit.toggle_accordion(open_indices, todo_cx);
                         });
@@ -846,6 +1012,220 @@ impl TodoThreadEdit {
                 )
         });
     }
+
+    fn open_tool_drawer_at(
+        &mut self,
+        placement: Placement,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        // 使用 Entity 来共享状态
+        let todo_edit_entity = cx.entity().clone();
+        
+        window.open_drawer_at(placement, cx, move |drawer, _window, drawer_cx| {
+            // 从 entity 中读取当前的工具数据
+            let providers = todo_edit_entity.read(drawer_cx).mcp_tool_manager.providers.clone();
+            let expanded_providers = todo_edit_entity.read(drawer_cx).expanded_tool_providers.clone();
+
+            // 创建手风琴组件并添加切换监听器
+            let mut accordion = Accordion::new("tool-providers")
+                .on_toggle_click({
+                    let todo_edit_entity_for_toggle = todo_edit_entity.clone();
+                    move |open_indices, _window, cx| {
+                        todo_edit_entity_for_toggle.update(cx, |todo_edit, todo_cx| {
+                            todo_edit.toggle_tool_accordion(open_indices, todo_cx);
+                        });
+                    }
+                });
+
+            for (provider_index, provider) in providers.iter().enumerate() {
+                let provider_name = provider.name.clone();
+                let provider_tools = provider.tools.clone();
+                
+                // 检查该供应商是否有被选中的工具
+                let has_selected_tools = provider_tools.iter().any(|tool| tool.is_selected);
+                
+                // 检查当前供应商是否应该展开
+                let is_expanded = has_selected_tools || expanded_providers.contains(&provider_index);
+
+                accordion = accordion.item(|item| {
+                    item.open(is_expanded)
+                        .icon(IconName::Wrench)
+                        .title(
+                            h_flex()
+                                .w_full()
+                                .items_center()
+                                .justify_between()
+                                .child(
+                                    h_flex()
+                                        .items_center()
+                                        .gap_2()
+                                        .child(
+                                            div()
+                                                .font_medium()
+                                                .text_color(gpui::rgb(0x374151))
+                                                .child(provider_name.clone()),
+                                        )
+                                        .when(has_selected_tools, |this| {
+                                            this.child(
+                                                Icon::new(IconName::Check)
+                                                    .xsmall()
+                                                    .text_color(gpui::rgb(0x10B981)),
+                                            )
+                                        }),
+                                )
+                                .child(
+                                    div()
+                                        .px_2()
+                                        .py_1()
+                                        .bg(if has_selected_tools {
+                                            gpui::rgb(0xDCFCE7) // 有选中工具时使用绿色背景
+                                        } else {
+                                            gpui::rgb(0xFFF7ED) // 无选中工具时使用橙色背景
+                                        })
+                                        .text_color(if has_selected_tools {
+                                            gpui::rgb(0x166534) // 绿色文字
+                                        } else {
+                                            gpui::rgb(0xEA580C) // 橙色文字
+                                        })
+                                        .rounded_md()
+                                        .text_xs()
+                                        .child(format!("{} 个工具", provider_tools.len())),
+                                ),
+                        )
+                        .content(
+                            v_flex()
+                                .gap_2()
+                                .p_2()
+                                .children(provider_tools.iter().enumerate().map(
+                                    |(tool_index, tool)| {
+                                        let tool_name_for_event = tool.name.clone();
+                                        let checkbox_id = SharedString::new(format!(
+                                            "tool-{}-{}",
+                                            provider_index, tool_index
+                                        ));
+                                        let todo_edit_entity_for_event = todo_edit_entity.clone();
+
+                                        div()
+                                            .p_1()
+                                            .bg(gpui::rgb(0xFAFAFA))
+                                            .rounded_md()
+                                            .hover(|style| style.bg(gpui::rgb(0xF3F4F6)))
+                                            .child(
+                                                v_flex()
+                                                    .gap_1()
+                                                    .child(
+                                                        h_flex()
+                                                            .items_center()
+                                                            .justify_between()
+                                                            .child(
+                                                                h_flex()
+                                                                    .items_center()
+                                                                    .gap_3()
+                                                                    .child(
+                                                                        Checkbox::new(checkbox_id)
+                                                                            .checked(tool.is_selected)
+                                                                            .label(tool.name.clone())
+                                                                            .on_click(
+                                                                                move |_checked, _window, cx| {
+                                                                                    let tool_name_to_toggle =
+                                                                                        tool_name_for_event.clone();
+                                                                                    
+                                                                                    // 更新原始数据
+                                                                                    todo_edit_entity_for_event.update(cx, |todo_edit, todo_cx| {
+                                                                                        todo_edit.mcp_tool_manager.toggle_tool_selection(&tool_name_to_toggle);
+                                                                                        todo_cx.notify(); // 通知主界面更新
+                                                                                    });
+
+                                                                                    println!(
+                                                                                        "切换工具选择: {}",
+                                                                                        tool_name_to_toggle
+                                                                                    );
+                                                                                },
+                                                                            ),
+                                                                    )
+                                                                    .child(
+                                                                        h_flex().gap_1().items_center().children(
+                                                                            tool.capabilities.iter().enumerate().map(
+                                                                                |(cap_index, cap)| {
+                                                                                    let capability_unique_id = provider_index * 10000
+                                                                                        + tool_index * 1000
+                                                                                        + cap_index;
+
+                                                                                    div()
+                                                                                        .id(("tool_capability", capability_unique_id))
+                                                                                        .p_1()
+                                                                                        .rounded_md()
+                                                                                        .bg(gpui::rgb(0xF3F4F6))
+                                                                                        .child(
+                                                                                            Icon::new(cap.icon())
+                                                                                                .xsmall()
+                                                                                                .text_color(gpui::rgb(0x6B7280)),
+                                                                                        )
+                                                                                },
+                                                                            ),
+                                                                        ),
+                                                                    ),
+                                                            ),
+                                                    )
+                                                    .child(
+                                                        div()
+                                                            .pl_6()
+                                                            .text_xs()
+                                                            .text_color(gpui::rgb(0x6B7280))
+                                                            .child(tool.description.clone()),
+                                                    ),
+                                            )
+                                    },
+                                ))
+                                .when(provider_tools.is_empty(), |this| {
+                                    this.child(
+                                        div()
+                                            .p_4()
+                                            .text_center()
+                                            .text_sm()
+                                            .text_color(gpui::rgb(0x9CA3AF))
+                                            .child("该类别暂无可用工具"),
+                                    )
+                                }),
+                        )
+                });
+            }
+
+            let todo_edit_entity_for_clear = todo_edit_entity.clone();
+
+            drawer
+                .overlay(true)
+                .size(px(380.))
+                .title("选择工具集")
+                .child(accordion)
+                .footer(
+                    h_flex()
+                        .justify_center()
+                        .items_center()
+                        .p_2()
+                        .bg(gpui::rgb(0xFAFAFA))
+                        .child(
+                            Button::new("clear-all-tools")
+                                .label("清空选择")
+                                .on_click(move |_, window, cx| {
+                                    // 清空所有工具选择
+                                    todo_edit_entity_for_clear.update(cx, |todo_edit, todo_cx| {
+                                        for provider in &mut todo_edit.mcp_tool_manager.providers {
+                                            for tool in &mut provider.tools {
+                                                tool.is_selected = false;
+                                            }
+                                        }
+                                        todo_cx.notify(); // 通知主界面更新
+                                    });
+                                    println!("清空所有工具选择");
+                                    // 关闭抽屉
+                                    window.close_drawer(cx);
+                                }),
+                        ),
+                )
+        });
+    }
 }
 
 #[derive(Debug)]
@@ -854,8 +1234,8 @@ struct TodoData {
     description: String,
     status: String,
     priority: String,
-    selected_models: Vec<String>, // 多选模型列表
-    mcp_tools: String,
+    selected_models: Vec<String>,
+    selected_tools: Vec<String>, // 改为工具列表
     recurring_enabled: bool,
     auto_execute: bool,
     enable_notifications: bool,
@@ -882,7 +1262,7 @@ impl FocusableCycle for TodoThreadEdit {
             self.description_input.focus_handle(cx),
             self.status_dropdown.focus_handle(cx),
             self.priority_dropdown.focus_handle(cx),
-            self.mcp_tools_dropdown.focus_handle(cx),
+            // 移除 mcp_tools_dropdown.focus_handle(cx),
             self.due_date_picker.focus_handle(cx),
             self.reminder_date_picker.focus_handle(cx),
             self.recurring_dropdown.focus_handle(cx),
@@ -1033,12 +1413,7 @@ impl Render for TodoThreadEdit {
                             .bg(gpui::rgb(0xF9FAFB))
                             .rounded_lg()
                             .child(Self::section_title("助手配置"))
-                            .child(Self::form_row(
-                                "MCP工具",
-                                Dropdown::new(&self.mcp_tools_dropdown)
-                                    .placeholder("选择工具集")
-                                    .small(),
-                            ))
+                            
                             .child(
                                 h_flex()
                                     .gap_4()
@@ -1056,17 +1431,16 @@ impl Render for TodoThreadEdit {
                                                 .label({
                                                     let display_text =
                                                         self.get_model_display_text(cx);
-                                                    if display_text == "选择AI模型" {
+                                                    if display_text == "选择模型" {
                                                         display_text
                                                     } else {
                                                         display_text
                                                     }
                                                 }).ghost().xsmall()
-                                                // .w_full()
                                                 .justify_center()
                                                 .text_color(
                                                     if self.get_model_display_text(cx)
-                                                        == "选择AI模型"
+                                                        == "选择模型"
                                                     {
                                                         gpui::rgb(0x9CA3AF)
                                                     } else {
@@ -1078,7 +1452,45 @@ impl Render for TodoThreadEdit {
                                                 })),
                                         ),
                                     ),
-                            ),
+                            ).child(
+                                h_flex()
+                                    .gap_4()
+                                    .items_center()
+                                    .child(
+                                        div()
+                                            .text_sm()
+                                            .text_color(gpui::rgb(0x6B7280))
+                                            .min_w_24()
+                                            .child("MCP工具"),
+                                    )
+                                    .child(
+                                        div().justify_start().child(
+                                            Button::new("show-tool-drawer-left")
+                                                .label({
+                                                    let display_text = self.get_tool_display_text(cx);
+                                                    if display_text == "选择工具集" {
+                                                        display_text
+                                                    } else {
+                                                        display_text
+                                                    }
+                                                })
+                                                .ghost()
+                                                .xsmall()
+                                                .justify_center()
+                                                .text_color(
+                                                    if self.get_tool_display_text(cx) == "选择工具集" {
+                                                        gpui::rgb(0x9CA3AF)
+                                                    } else {
+                                                        gpui::rgb(0x374151)
+                                                    },
+                                                )
+                                                .on_click(cx.listener(|this, _, window, cx| {
+                                                    this.open_tool_drawer_at(Placement::Left, window, cx)
+                                                })),
+                                        ),
+                                    ),
+                            )
+                            
                     )
                     .child(
                         v_flex()
@@ -1127,7 +1539,7 @@ impl Render for TodoThreadEdit {
                                         )
                                     }),
                             ),
-                    ),
+                    )
             )
             .child(
                 h_flex().items_center().justify_center().pt_2().child(
