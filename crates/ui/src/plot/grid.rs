@@ -1,12 +1,12 @@
 use gpui::{px, Bounds, Hsla, PathBuilder, Pixels, Point, Window};
 
-use super::{dash_line, origin_point};
+use super::origin_point;
 
 pub struct Grid {
     x: Vec<Pixels>,
     y: Vec<Pixels>,
     stroke: Hsla,
-    dash_array: Option<[Pixels; 2]>,
+    dash_array: Option<Vec<Pixels>>,
 }
 
 impl Grid {
@@ -39,8 +39,8 @@ impl Grid {
     }
 
     /// Set the dash array of the Grid.
-    pub fn dash_array(mut self, dash_array: [Pixels; 2]) -> Self {
-        self.dash_array = Some(dash_array);
+    pub fn dash_array(mut self, dash_array: &[Pixels]) -> Self {
+        self.dash_array = Some(dash_array.to_vec());
         self
     }
 
@@ -78,20 +78,17 @@ impl Grid {
     pub fn paint(&self, bounds: &Bounds<Pixels>, window: &mut Window) {
         let points = self.points(bounds);
 
-        if let Some(dash_array) = self.dash_array {
-            for (start, end) in points {
-                if let Some(line) = dash_line(start, end, dash_array) {
-                    window.paint_path(line, self.stroke);
-                }
+        for (start, end) in points {
+            let mut builder = PathBuilder::stroke(px(1.));
+
+            if let Some(dash_array) = &self.dash_array {
+                builder = builder.dash_array(&dash_array);
             }
-        } else {
-            for (start, end) in points {
-                let mut builder = PathBuilder::stroke(px(1.));
-                builder.move_to(start);
-                builder.line_to(end);
-                if let Ok(line) = builder.build() {
-                    window.paint_path(line, self.stroke);
-                }
+
+            builder.move_to(start);
+            builder.line_to(end);
+            if let Ok(line) = builder.build() {
+                window.paint_path(line, self.stroke);
             }
         }
     }

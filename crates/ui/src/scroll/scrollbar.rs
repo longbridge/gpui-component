@@ -676,7 +676,7 @@ impl Element for Scrollbar {
                     let margin_end = state.margin_end;
                     let is_vertical = axis.is_vertical();
 
-                    window.set_cursor_style(CursorStyle::default(), Some(&state.bar_hitbox));
+                    window.set_cursor_style(CursorStyle::default(), &state.bar_hitbox);
 
                     window.paint_layer(hitbox_bounds, |cx| {
                         cx.paint_quad(fill(state.bounds, state.bg));

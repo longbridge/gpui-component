@@ -128,7 +128,7 @@ where
         Grid::new()
             .y((0..=3).map(|i| height * i as f64 / 4.0).collect())
             .stroke(cx.theme().border)
-            .dash_array([px(4.), px(2.)])
+            .dash_array(&[px(4.), px(2.)])
             .paint(&bounds, window);
 
         // Draw line
