@@ -49,6 +49,7 @@ pub struct LanguageConfig {
 
 impl LanguageConfig {
     pub fn new(
+        name: impl Into<SharedString>,
         language: tree_sitter::Language,
         injection_languages: Vec<SharedString>,
         highlights: &str,
@@ -56,7 +57,7 @@ impl LanguageConfig {
         locals: &str,
     ) -> Self {
         Self {
-            name: language.name().unwrap_or_default().into(),
+            name: name.into(),
             language,
             injection_languages,
             highlights: SharedString::from(highlights.to_string()),
@@ -357,6 +358,7 @@ impl Language {
         let language = tree_sitter::Language::new(language);
 
         LanguageConfig::new(
+            self.name(),
             language,
             self.injection_languages(),
             query,

@@ -13,6 +13,7 @@ fn init(cx: &mut App) {
     LanguageRegistry::global_mut(cx).register(
         "navi",
         &LanguageConfig::new(
+            "navi",
             tree_sitter_navi::LANGUAGE.into(),
             vec![],
             tree_sitter_navi::HIGHLIGHTS_QUERY,
