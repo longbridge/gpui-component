@@ -1448,8 +1448,13 @@ impl InputState {
             }
 
             self.diagnostic_popover = Some(DiagnosticPopover::new(marker, cx.entity(), cx));
-
             cx.notify();
+        } else {
+            if let Some(diagnostic_popover) = self.diagnostic_popover.as_mut() {
+                diagnostic_popover.update(cx, |this, cx| {
+                    this.check_to_hide(event.position, cx);
+                })
+            }
         }
     }
 
@@ -1461,6 +1466,7 @@ impl InputState {
     ) {
         let delta = event.delta.pixel_delta(self.last_line_height);
         self.update_scroll_offset(Some(self.scroll_handle.offset() + delta), cx);
+        self.diagnostic_popover = None;
     }
 
     fn update_scroll_offset(&mut self, offset: Option<Point<Pixels>>, cx: &mut Context<Self>) {

@@ -8,10 +8,10 @@ use gpui::{
 use crate::{
     highlighter::LanguageRegistry,
     input::{InputState, Marker},
+    text::TextView,
     ActiveTheme as _,
 };
 
-#[derive(Clone)]
 pub struct DiagnosticPopover {
     state: Entity<InputState>,
     pub(super) marker: Rc<Marker>,
@@ -48,6 +48,29 @@ impl DiagnosticPopover {
         self.open = true;
         cx.notify();
     }
+
+    pub(super) fn hide(&mut self, cx: &mut Context<Self>) {
+        self.open = false;
+        cx.notify();
+    }
+
+    pub(super) fn check_to_hide(&mut self, mouse_position: Point<Pixels>, cx: &mut Context<Self>) {
+        if !self.open {
+            return;
+        }
+
+        let padding = px(5.);
+        let bounds = Bounds {
+            origin: self.bounds.origin.map(|v| v - padding),
+            size: self.bounds.size.map(|v| v + padding * 2.),
+        };
+
+        if !bounds.contains(&mouse_position) {
+            println!("---------- bounds: {:?}", bounds);
+            println!("---------- mouse_position: {:?}", mouse_position);
+            self.hide(cx);
+        }
+    }
 }
 
 impl Render for DiagnosticPopover {
@@ -69,14 +92,16 @@ impl Render for DiagnosticPopover {
             self.marker.severity.fg(theme),
         );
 
-        let y = pos.y - self.bounds.size.height - px(4.);
+        let scroll_origin = self.state.read(cx).scroll_handle.offset();
+        let y = pos.y - self.bounds.size.height + scroll_origin.y;
+        let x = pos.x + scroll_origin.x;
 
         deferred(
             div()
                 .id("code-editor-diagnostic-popover")
                 .absolute()
+                .left(x)
                 .top(y)
-                .left(pos.x)
                 .px_1()
                 .py_0p5()
                 .text_xs()
@@ -88,12 +113,14 @@ impl Render for DiagnosticPopover {
                 .border_color(border)
                 .rounded(cx.theme().radius)
                 .shadow_sm()
-                .child(message)
+                .child(TextView::markdown("message", message))
                 .child(
                     canvas(
                         move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds),
                         |_, _, _, _| {},
                     )
+                    .top_0()
+                    .left_0()
                     .absolute()
                     .size_full(),
                 )
