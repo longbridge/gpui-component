@@ -66,8 +66,6 @@ impl DiagnosticPopover {
         };
 
         if !bounds.contains(&mouse_position) {
-            println!("---------- bounds: {:?}", bounds);
-            println!("---------- mouse_position: {:?}", mouse_position);
             self.hide(cx);
         }
     }
