@@ -1394,7 +1394,7 @@ impl Render for TodoThreadEdit {
                                     .child(
                                         div()
                                             .id("file-drop-zone")
-                                            .h_24()
+                                            .min_h_24() // 改为最小高度，而不是固定高度
                                             .w_full()
                                             .border_2()
                                             .border_color(gpui::rgb(0xD1D5DB))
@@ -1402,8 +1402,7 @@ impl Render for TodoThreadEdit {
                                             .rounded_lg()
                                             .bg(gpui::rgb(0xFAFAFA))
                                             .flex()
-                                            .items_center()
-                                            .justify_center()
+                                            .flex_col() // 改为垂直布局
                                             .cursor_pointer()
                                             .hover(|style| {
                                                 style
@@ -1416,27 +1415,113 @@ impl Render for TodoThreadEdit {
                                                     .bg(gpui::rgb(0xE0F2FE))
                                             })
                                             .child(
-                                                v_flex()
+                                                // 拖拽提示区域
+                                                div()
+                                                    .flex()
                                                     .items_center()
-                                                    .gap_2()
+                                                    .justify_center()
+                                                    .p_4()
                                                     .child(
-                                                        Icon::new(IconName::Upload)
-                                                            .size_6()
-                                                            .text_color(gpui::rgb(0x6B7280)),
-                                                    )
-                                                    .child(
-                                                        div()
-                                                            .text_xs()
-                                                            .text_color(gpui::rgb(0x9CA3AF))
-                                                            .child("拖拽文件到此处上传或点击选择文件"),
-                                                    )
-                                                    .child(
-                                                        div()
-                                                            .text_xs()
-                                                            .text_color(gpui::rgb(0xB91C1C))
-                                                            .child("支持 PDF、DOC、TXT、图片等格式"),
+                                                        v_flex()
+                                                            .items_center()
+                                                            .gap_2()
+                                                            .child(
+                                                                Icon::new(IconName::Upload)
+                                                                    .size_6()
+                                                                    .text_color(gpui::rgb(0x6B7280)),
+                                                            )
+                                                            .child(
+                                                                div()
+                                                                    .text_xs()
+                                                                    .text_color(gpui::rgb(0x9CA3AF))
+                                                                    .child("拖拽文件到此处上传或点击选择文件"),
+                                                            )
+                                                            .child(
+                                                                div()
+                                                                    .text_xs()
+                                                                    .text_color(gpui::rgb(0xB91C1C))
+                                                                    .child("支持 PDF、DOC、TXT、图片等格式"),
+                                                            ),
                                                     ),
                                             )
+                                            // 文件列表区域（集成到拖拽区域内）
+                                            .when(!self.uploaded_files.is_empty(), |this| {
+                                                this.child(
+                                                    div()
+                                                        .border_t_1()
+                                                        .border_color(gpui::rgb(0xE5E7EB))
+                                                        .p_3()
+                                                        .bg(gpui::rgb(0xF8F9FA))
+                                                        .child(
+                                                            v_flex()
+                                                                .gap_2()
+                                                                .child(
+                                                                    div()
+                                                                        .text_sm()
+                                                                        .font_medium()
+                                                                        .text_color(gpui::rgb(0x374151))
+                                                                        .child(format!("已上传文件 ({})", self.uploaded_files.len())),
+                                                                )
+                                                                .child(
+                                                                    h_flex()
+                                                                        .gap_2()
+                                                                        .flex_wrap()
+                                                                        .children(
+                                                                            self.uploaded_files.iter().enumerate().map(|(index, file)| {
+                                                                                let file_path_for_remove = file.path.clone();
+                                                                                
+                                                                                div()
+                                                                                    .id(("uploaded-file", index))
+                                                                                    .flex()
+                                                                                    .items_center()
+                                                                                    .gap_2()
+                                                                                    .px_3()
+                                                                                    .py_2()
+                                                                                    .bg(gpui::rgb(0xFFFFFF))
+                                                                                    .border_1()
+                                                                                    .border_color(gpui::rgb(0xE5E7EB))
+                                                                                    .rounded_md()
+                                                                                    .hover(|style| style.bg(gpui::rgb(0xF3F4F6)))
+                                                                                    .child(
+                                                                                        Icon::new(IconName::LetterText)
+                                                                                            .xsmall()
+                                                                                            .text_color(gpui::rgb(0x6B7280)),
+                                                                                    )
+                                                                                    .child(
+                                                                                        v_flex()
+                                                                                            .gap_1()
+                                                                                            .child(
+                                                                                                div()
+                                                                                                    .text_xs()
+                                                                                                    .font_medium()
+                                                                                                    .text_color(gpui::rgb(0x374151))
+                                                                                                    .child(file.name.clone()),
+                                                                                            )
+                                                                                            .when(file.size.is_some(), |this| {
+                                                                                                this.child(
+                                                                                                    div()
+                                                                                                        .text_xs()
+                                                                                                        .text_color(gpui::rgb(0x9CA3AF))
+                                                                                                        .child(Self::format_file_size(file.size.unwrap())),
+                                                                                                )
+                                                                                            }),
+                                                                                    )
+                                                                                    .child(
+                                                                                        Button::new(SharedString::new(format!("remove-file-{}", index)))
+                                                                                            .ghost()
+                                                                                            .xsmall()
+                                                                                            .icon(IconName::X)
+                                                                                            .text_color(gpui::rgb(0x9CA3AF))
+                                                                                            .on_click(cx.listener(move |this, _, window, cx| {
+                                                                                                this.remove_file(&file_path_for_remove, window, cx);
+                                                                                            })),
+                                                                                    )
+                                                                            })
+                                                                        ),
+                                                                ),
+                                                        )
+                                                )
+                                            })
                                             .drag_over(|style, _path: &ExternalPaths, _window, _cx| {
                                                 style
                                                     .border_color(gpui::rgb(0x3B82F6))
@@ -1478,11 +1563,11 @@ impl Render for TodoThreadEdit {
                                                                     .gap_2()
                                                                     .px_3()
                                                                     .py_2()
-                                                                    .bg(gpui::rgb(0xF3F4F6))
+                                                                    .bg(gpui::rgb(0xFFFFFF))
                                                                     .border_1()
                                                                     .border_color(gpui::rgb(0xE5E7EB))
                                                                     .rounded_md()
-                                                                    .hover(|style| style.bg(gpui::rgb(0xE5E7EB)))
+                                                                    .hover(|style| style.bg(gpui::rgb(0xF3F4F6)))
                                                                     .child(
                                                                         Icon::new(IconName::LetterText)
                                                                             .xsmall()
@@ -1513,7 +1598,6 @@ impl Render for TodoThreadEdit {
                                                                             .xsmall()
                                                                             .icon(IconName::X)
                                                                             .text_color(gpui::rgb(0x9CA3AF))
-                                                                            // .hover(|style|style.text_color(gpui::rgb(0xEF4444)))
                                                                             .on_click(cx.listener(move |this, _, window, cx| {
                                                                                 this.remove_file(&file_path_for_remove, window, cx);
                                                                             })),
