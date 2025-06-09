@@ -8,7 +8,16 @@ use std::{
 };
 
 use super::LanguageConfig;
-use crate::ThemeMode;
+use crate::{highlighter::languages, ThemeMode};
+
+pub(super) fn init(cx: &mut App) {
+    let mut register = LanguageRegistry::new();
+    for language in languages::Language::all() {
+        register.register(language.name(), &language.config());
+    }
+
+    cx.set_global(register);
+}
 
 pub(super) const HIGHLIGHT_NAMES: [&str; 40] = [
     "attribute",
@@ -359,10 +368,6 @@ impl HighlightTheme {
     }
 }
 
-pub fn init(cx: &mut App) {
-    cx.set_global(LanguageRegistry::new());
-}
-
 /// Registry for code highlighter languages.
 #[derive(Clone)]
 pub struct LanguageRegistry {
@@ -394,19 +399,28 @@ impl LanguageRegistry {
         self.languages.insert(lang.to_string(), config.clone());
     }
 
-    #[allow(unused)]
-    pub(crate) fn set_theme(&mut self, light_theme: &HighlightTheme, dark_theme: &HighlightTheme) {
-        self.light_theme = Arc::new(light_theme.clone());
-        self.dark_theme = Arc::new(dark_theme.clone());
+    /// Set highlighter theme.
+    pub fn set_theme(&mut self, light: &HighlightTheme, dark: &HighlightTheme) {
+        self.light_theme = Arc::new(light.clone());
+        self.dark_theme = Arc::new(dark.clone());
     }
 
-    #[allow(unused)]
     pub(crate) fn theme(&self, is_dark: bool) -> &Arc<HighlightTheme> {
         if is_dark {
             &self.dark_theme
         } else {
             &self.light_theme
         }
+    }
+
+    /// Returns a reference to the map of registered languages.
+    pub fn languages(&self) -> &HashMap<String, LanguageConfig> {
+        &self.languages
+    }
+
+    /// Returns the language configuration for the given language name.
+    pub fn language(&self, name: &str) -> Option<&LanguageConfig> {
+        self.languages.get(name)
     }
 }
 

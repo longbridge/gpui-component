@@ -8,7 +8,10 @@ use gpui::{
 };
 use smallvec::SmallVec;
 
-use crate::{highlighter::LanguageRegistry, ActiveTheme as _, Root};
+use crate::{
+    highlighter::{LanguageRegistry, SyntaxHighlighter},
+    ActiveTheme as _, Root,
+};
 
 use super::{mode::InputMode, InputState, LastLayout};
 
@@ -363,12 +366,22 @@ impl TextElement {
         let theme = LanguageRegistry::global(cx)
             .theme(cx.theme().is_dark())
             .clone();
-        self.input.update(cx, |state, _| match &state.mode {
+        self.input.update(cx, |state, cx| match &state.mode {
             InputMode::CodeEditor {
+                language,
                 highlighter,
                 markers,
                 ..
             } => {
+                // Init highlighter if not initialized
+                let mut highlighter = highlighter.borrow_mut();
+                if highlighter.is_none() {
+                    highlighter.replace(SyntaxHighlighter::new(language, cx));
+                };
+                let Some(highlighter) = highlighter.as_ref() else {
+                    return None;
+                };
+
                 let mut offset = 0;
                 let mut skipped_offset = 0;
                 let mut styles = vec![];
@@ -386,8 +399,7 @@ impl TextElement {
                     }
 
                     let range = offset..offset + line_len;
-                    let line_styles = highlighter.borrow().styles(&range, &theme);
-
+                    let line_styles = highlighter.styles(&range, &theme);
                     styles = gpui::combine_highlights(styles, line_styles).collect();
 
                     offset = range.end;

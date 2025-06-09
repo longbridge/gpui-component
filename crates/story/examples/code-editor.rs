@@ -3,38 +3,87 @@ use gpui_component::{
     checkbox::Checkbox,
     dropdown::{Dropdown, DropdownEvent, DropdownState},
     h_flex,
-    highlighter::Language,
+    highlighter::{Language, LanguageConfig, LanguageRegistry},
     input::{InputEvent, InputState, Marker, TabSize, TextInput},
     v_flex,
 };
 use story::Assets;
 
+fn init(cx: &mut App) {
+    LanguageRegistry::global_mut(cx).register(
+        "navi",
+        &LanguageConfig::new(
+            tree_sitter_navi::LANGUAGE.into(),
+            vec![],
+            tree_sitter_navi::HIGHLIGHTS_QUERY,
+            "",
+            "",
+        ),
+    );
+}
+
 pub struct Example {
     input_state: Entity<InputState>,
     language_state: Entity<DropdownState<Vec<SharedString>>>,
-    language: Language,
+    language: Lang,
     line_number: bool,
     need_update: bool,
     _subscribes: Vec<Subscription>,
 }
 
-const LANGUAGES: [(Language, &'static str); 8] = [
-    (Language::Rust, include_str!("./fixtures/test.rs")),
-    (Language::JavaScript, include_str!("./fixtures/test.js")),
-    (Language::Go, include_str!("./fixtures/test.go")),
-    (Language::Python, include_str!("./fixtures/test.py")),
-    (Language::Ruby, include_str!("./fixtures/test.rb")),
-    (Language::Zig, include_str!("./fixtures/test.zig")),
-    (Language::C, include_str!("./fixtures/test.c")),
-    (Language::Sql, include_str!("./fixtures/test.sql")),
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Lang {
+    BuiltIn(Language),
+    External(&'static str),
+}
+
+impl Lang {
+    fn name(&self) -> &str {
+        match self {
+            Lang::BuiltIn(lang) => lang.name(),
+            Lang::External(lang) => lang,
+        }
+    }
+}
+
+const LANGUAGES: [(Lang, &'static str); 8] = [
+    (
+        Lang::BuiltIn(Language::Rust),
+        include_str!("./fixtures/test.rs"),
+    ),
+    (
+        Lang::BuiltIn(Language::JavaScript),
+        include_str!("./fixtures/test.js"),
+    ),
+    (
+        Lang::BuiltIn(Language::Go),
+        include_str!("./fixtures/test.go"),
+    ),
+    (
+        Lang::BuiltIn(Language::Python),
+        include_str!("./fixtures/test.py"),
+    ),
+    (
+        Lang::BuiltIn(Language::Ruby),
+        include_str!("./fixtures/test.rb"),
+    ),
+    (
+        Lang::BuiltIn(Language::Zig),
+        include_str!("./fixtures/test.zig"),
+    ),
+    (
+        Lang::BuiltIn(Language::Sql),
+        include_str!("./fixtures/test.sql"),
+    ),
+    (Lang::External("navi"), include_str!("./fixtures/test.nv")),
 ];
 
 impl Example {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let default_language = LANGUAGES[0];
+        let default_language = LANGUAGES[0].clone();
         let input_state = cx.new(|cx| {
             InputState::new(window, cx)
-                .code_editor(default_language.0.name())
+                .code_editor(default_language.0.name().to_string())
                 .line_number(true)
                 .tab_size(TabSize {
                     tab_size: 4,
@@ -61,9 +110,11 @@ impl Example {
                 |this, state, _: &DropdownEvent<Vec<SharedString>>, cx| {
                     if let Some(val) = state.read(cx).selected_value() {
                         if let Some(language) = Language::from_str(&val) {
-                            this.language = language;
-                            this.need_update = true;
+                            this.language = Lang::BuiltIn(language);
+                        } else {
+                            this.language = Lang::External("navi");
                         }
+                        this.need_update = true;
                         cx.notify();
                     }
                 },
@@ -108,8 +159,8 @@ impl Example {
             return;
         }
 
-        let language = self.language;
-        let code = LANGUAGES.iter().find(|s| s.0 == language).unwrap().1;
+        let language = self.language.name().to_string();
+        let code = LANGUAGES.iter().find(|s| s.0.name() == language).unwrap().1;
         self.input_state.update(cx, |state, cx| {
             state.set_value(code, window, cx);
             state.set_highlighter(language, cx);
@@ -166,6 +217,7 @@ fn main() {
 
     app.run(move |cx| {
         story::init(cx);
+        init(cx);
         cx.activate(true);
 
         story::create_new_window("Code Editor", Example::view, cx);

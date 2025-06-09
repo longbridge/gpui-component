@@ -1,0 +1,18 @@
+use std.net.http.client.{HttpClient, Request};
+use std.net.http.OK;
+
+fn main() throws {
+    let client = HttpClient.new(
+        max_redirect_count: 5,
+        user_agent: "navi-client",
+    );
+    let req = try Request.get("https://httpbin.org/get");
+    let res = try client.request(req);
+
+    if (res.status() != OK) {
+        try println("Failed to fetch repo", res.text());
+        return;
+    }
+
+    try println(res.text());
+}

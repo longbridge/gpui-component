@@ -30,7 +30,6 @@ use super::{
     number_input,
     text_wrapper::TextWrapper,
 };
-use crate::highlighter::SyntaxHighlighter;
 use crate::input::marker::Marker;
 use crate::{history::History, scroll::ScrollbarState, Root};
 
@@ -379,7 +378,8 @@ impl InputState {
         self.mode = InputMode::CodeEditor {
             rows: 2,
             tab: TabSize::default(),
-            highlighter: Rc::new(RefCell::new(SyntaxHighlighter::new(&language))),
+            language,
+            highlighter: Rc::new(RefCell::new(None)),
             line_number: true,
             height: Some(relative(1.)),
             markers: vec![],
@@ -442,11 +442,20 @@ impl InputState {
         self
     }
 
-    /// Set highlighter, only for [`InputMode::CodeEditor`] mode.
-    pub fn set_highlighter(&mut self, language: impl Into<SharedString>, cx: &mut Context<Self>) {
+    /// Set highlighter language for for [`InputMode::CodeEditor`] mode.
+    pub fn set_highlighter(
+        &mut self,
+        new_language: impl Into<SharedString>,
+        cx: &mut Context<Self>,
+    ) {
         match &mut self.mode {
-            InputMode::CodeEditor { highlighter, .. } => {
-                highlighter.borrow_mut().set_language(language);
+            InputMode::CodeEditor {
+                language,
+                highlighter,
+                ..
+            } => {
+                *language = new_language.into();
+                *highlighter.borrow_mut() = None;
             }
             _ => {}
         }
@@ -1998,11 +2007,8 @@ impl EntityInputHandler for InputState {
 
         self.push_history(&range, &new_text, window, cx);
         self.text = mask_text.clone();
-        if let Some(highlighter) = self.mode.highlighter() {
-            highlighter
-                .borrow_mut()
-                .update(&range, self.text.clone(), &new_text, cx);
-        }
+        self.mode
+            .update_highlighter(&range, self.text.clone(), &new_text, cx);
         self.mode.clear_markers();
         self.text_wrapper.update(self.text.clone(), false, cx);
         self.selected_range = new_pos..new_pos;
@@ -2042,11 +2048,8 @@ impl EntityInputHandler for InputState {
 
         self.push_history(&range, new_text, window, cx);
         self.text = pending_text;
-        if let Some(highlighter) = self.mode.highlighter() {
-            highlighter
-                .borrow_mut()
-                .update(&range, self.text.clone(), &new_text, cx);
-        }
+        self.mode
+            .update_highlighter(&range, self.text.clone(), &new_text, cx);
         self.mode.clear_markers();
         self.text_wrapper.update(self.text.clone(), false, cx);
         if new_text.is_empty() {
@@ -2151,11 +2154,8 @@ impl Focusable for InputState {
 impl Render for InputState {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.text_wrapper.update(self.text.clone(), false, cx);
-        if let Some(highlighter) = self.mode.highlighter() {
-            highlighter
-                .borrow_mut()
-                .update(&(0..0), self.text.clone(), "", cx);
-        }
+        self.mode
+            .update_highlighter(&(0..0), self.text.clone(), "", cx);
 
         div()
             .id("text-element")

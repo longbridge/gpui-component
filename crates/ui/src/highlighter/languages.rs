@@ -38,7 +38,9 @@ pub enum Language {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LanguageConfig {
+    pub name: SharedString,
     pub language: tree_sitter::Language,
+    pub injection_languages: Vec<SharedString>,
     pub highlights: SharedString,
     pub injections: SharedString,
     pub locals: SharedString,
@@ -47,12 +49,15 @@ pub struct LanguageConfig {
 impl LanguageConfig {
     pub fn new(
         language: tree_sitter::Language,
+        injection_languages: Vec<SharedString>,
         highlights: &str,
         injections: &str,
         locals: &str,
     ) -> Self {
         Self {
+            name: language.name().unwrap_or_default().into(),
             language,
+            injection_languages,
             highlights: SharedString::from(highlights.to_string()),
             injections: SharedString::from(injections.to_string()),
             locals: SharedString::from(locals.to_string()),
@@ -144,14 +149,17 @@ impl Language {
     }
 
     #[allow(unused)]
-    pub(super) fn injection_languages(&self) -> Vec<Self> {
+    pub(super) fn injection_languages(&self) -> Vec<SharedString> {
         match self {
-            Self::Markdown => vec![Self::MarkdownInline, Self::Html, Self::Toml, Self::Yaml],
+            Self::Markdown => vec!["markdown-inline", "html", "toml", "yaml"],
             Self::MarkdownInline => vec![],
-            Self::Html => vec![Self::JavaScript, Self::Css],
-            Self::Rust => vec![Self::Rust],
+            Self::Html => vec!["javascript", "css"],
+            Self::Rust => vec!["rust"],
             _ => vec![],
         }
+        .into_iter()
+        .map(|s| s.into())
+        .collect()
     }
 
     pub(super) fn query(&self) -> Query {
@@ -329,7 +337,13 @@ impl Language {
 
         let language = tree_sitter::Language::new(language);
 
-        LanguageConfig::new(language, query, injection, locals)
+        LanguageConfig::new(
+            language,
+            self.injection_languages(),
+            query,
+            injection,
+            locals,
+        )
     }
 }
 

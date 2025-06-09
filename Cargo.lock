@@ -6772,6 +6772,8 @@ dependencies = [
  "serde",
  "serde_json",
  "tracing-subscriber",
+ "tree-sitter",
+ "tree-sitter-navi",
  "unindent",
 ]
 
@@ -7703,6 +7705,17 @@ version = "0.5.0"
 source = "git+https://github.com/tree-sitter-grammars/tree-sitter-markdown?tag=v0.5.0#afaa4138517363362f54c89330c9d79391e81168"
 dependencies = [
  "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
+name = "tree-sitter-navi"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ff190c235d2c0106d8d4c567e990f7776b80a2643b7d201a672cae308675424d"
+dependencies = [
+ "cc",
+ "tree-sitter",
  "tree-sitter-language",
 ]
 

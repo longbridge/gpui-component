@@ -9,16 +9,17 @@ use tree_sitter::{
 };
 use tree_sitter_highlight::{HighlightConfiguration, Highlighter};
 
+use crate::highlighter::LanguageRegistry;
+
 use super::{HighlightTheme, Language};
 
 /// A syntax highlighter that supports incremental parsing, multiline text,
 /// and caching of highlight results.
 #[allow(unused)]
 pub struct SyntaxHighlighter {
-    language_name: &'static str,
-    language: Option<Language>,
+    language: SharedString,
     query: Option<Query>,
-    injection_queries: HashMap<&'static str, Query>,
+    injection_queries: HashMap<SharedString, Query>,
     parser: Parser,
     old_tree: Option<Tree>,
     text: SharedString,
@@ -47,19 +48,22 @@ pub struct SyntaxHighlighter {
 
 impl SyntaxHighlighter {
     /// Create a new SyntaxHighlighter for HTML.
-    pub fn new(lang: &str) -> Self {
-        Self::build_combined_injections_query(&lang).unwrap()
+    pub fn new(lang: &str, cx: &App) -> Self {
+        Self::build_combined_injections_query(&lang, cx).expect(&format!(
+            "failed to build language {}, please make sure have registered the language in LanguageRegistry",
+            lang
+        ))
     }
 
     /// Build the combined injections query for the given language.
     ///
     /// https://github.com/tree-sitter/tree-sitter/blob/v0.25.5/highlight/src/lib.rs#L336
-    fn build_combined_injections_query(lang: &str) -> Option<Self> {
-        let language = Language::from_str(&lang);
-        let Some(language) = language else {
+    fn build_combined_injections_query(lang: &str, cx: &App) -> Option<Self> {
+        let language_registy = LanguageRegistry::global(cx);
+        let config = language_registy.language(&lang);
+        let Some(config) = config else {
             return None;
         };
-        let config = language.config();
 
         let mut parser = Parser::new();
         _ = parser.set_language(&config.language);
@@ -146,19 +150,19 @@ impl SyntaxHighlighter {
         }
 
         let mut injection_queries = HashMap::new();
-        for inj_language in language.injection_languages() {
-            let inj_config = inj_language.config();
-
-            match Query::new(&inj_config.language, &inj_config.highlights) {
-                Ok(q) => {
-                    injection_queries.insert(inj_language.name(), q);
-                }
-                Err(e) => {
-                    tracing::error!(
-                        "failed to build injection query for {:?}: {:?}",
-                        inj_language,
-                        e
-                    );
+        for inj_language in config.injection_languages.iter() {
+            if let Some(inj_config) = language_registy.language(&inj_language) {
+                match Query::new(&inj_config.language, &inj_config.highlights) {
+                    Ok(q) => {
+                        injection_queries.insert(inj_config.name.clone(), q);
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            "failed to build injection query for {:?}: {:?}",
+                            inj_config.name,
+                            e
+                        );
+                    }
                 }
             }
         }
@@ -166,8 +170,7 @@ impl SyntaxHighlighter {
         // let highlight_indices = vec![None; query.capture_names().len()];
 
         Some(Self {
-            language_name: language.name(),
-            language: Some(language),
+            language: config.name.clone(),
             query: Some(query),
             injection_queries,
             parser,
@@ -188,21 +191,28 @@ impl SyntaxHighlighter {
         })
     }
 
-    pub fn set_language(&mut self, lang: impl Into<SharedString>) {
-        let lang = lang.into();
-        let language = Language::from_str(&lang);
+    pub fn set_language(&mut self, language: impl Into<SharedString>, cx: &App) {
+        let language = language.into();
+
         if self.language == language {
             return;
         }
 
         // FIXME: use build_combined_injections_query to build the query.
-
-        if let Some(language) = language {
+        self.query = None;
+        if let Some(language) = Language::from_str(&language) {
+            self.query = Some(language.query());
             _ = self.parser.set_language(&language.config().language);
+        } else {
+            if let Some(config) = LanguageRegistry::global(cx).language(&language) {
+                _ = self.parser.set_language(&config.language);
+                if let Ok(query) = tree_sitter::Query::new(&config.language, &config.highlights) {
+                    self.query = Some(query);
+                }
+            }
         }
 
         self.language = language;
-        self.query = language.map(|l| l.query());
         self.old_tree = None;
         self.text = SharedString::new("");
         self.highlighter = Highlighter::new();
@@ -464,21 +474,26 @@ impl SyntaxHighlighter {
     /// - `include_children`: Whether to include the children of the content node.
     fn injection_for_match<'a>(
         &self,
-        parent_name: Option<&'a str>,
+        parent_name: Option<SharedString>,
         query: &'a Query,
         query_match: &QueryMatch<'a, 'a>,
         source: &'a [u8],
-    ) -> (Option<&'a str>, Option<Node<'a>>, bool) {
+    ) -> (Option<SharedString>, Option<Node<'a>>, bool) {
         let content_capture_index = self.injection_content_capture_index;
         let language_capture_index = self.injection_language_capture_index;
 
-        let mut language_name = None;
+        let mut language_name: Option<SharedString> = None;
         let mut content_node = None;
 
         for capture in query_match.captures {
             let index = Some(capture.index);
             if index == language_capture_index {
-                language_name = capture.node.utf8_text(source).ok();
+                language_name = capture
+                    .node
+                    .utf8_text(source)
+                    .ok()
+                    .map(ToString::to_string)
+                    .map(SharedString::from);
             } else if index == content_capture_index {
                 content_node = Some(capture.node);
             }
@@ -496,7 +511,8 @@ impl SyntaxHighlighter {
                             .value
                             .as_ref()
                             .map(std::convert::AsRef::as_ref)
-                            .to_owned();
+                            .map(ToString::to_string)
+                            .map(SharedString::from);
                     }
                 }
 
@@ -505,7 +521,7 @@ impl SyntaxHighlighter {
                 // layer.
                 "injection.self" => {
                     if language_name.is_none() {
-                        language_name = Some(self.language_name);
+                        language_name = Some(self.language.clone());
                     }
                 }
 
@@ -514,7 +530,7 @@ impl SyntaxHighlighter {
                 // parent layer
                 "injection.parent" => {
                     if language_name.is_none() {
-                        language_name = parent_name;
+                        language_name = parent_name.clone().map(SharedString::from);
                     }
                 }
 

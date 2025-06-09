@@ -222,7 +222,7 @@ impl CodeBlock {
             .clone();
         let mut styles = vec![];
         if let Some(lang) = &lang {
-            let mut highlighter = SyntaxHighlighter::new(&lang);
+            let mut highlighter = SyntaxHighlighter::new(&lang, cx);
             highlighter.update(&(0..0), code.clone(), "", cx);
             styles = highlighter.styles(&(0..code.len()), &theme);
         };

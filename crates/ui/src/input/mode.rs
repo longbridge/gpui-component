@@ -1,7 +1,7 @@
-use std::cell::RefCell;
 use std::rc::Rc;
+use std::{cell::RefCell, ops::Range};
 
-use gpui::{DefiniteLength, SharedString};
+use gpui::{App, DefiniteLength, SharedString};
 
 use crate::{highlighter::SyntaxHighlighter, input::marker::Marker};
 
@@ -49,7 +49,8 @@ pub enum InputMode {
         height: Option<DefiniteLength>,
         /// Show line number
         line_number: bool,
-        highlighter: Rc<RefCell<SyntaxHighlighter>>,
+        language: SharedString,
+        highlighter: Rc<RefCell<Option<SyntaxHighlighter>>>,
         markers: Vec<Marker>,
     },
     AutoGrow {
@@ -154,11 +155,30 @@ impl InputMode {
         }
     }
 
-    #[allow(unused)]
-    pub(super) fn highlighter(&self) -> Option<&Rc<RefCell<SyntaxHighlighter>>> {
+    pub(super) fn update_highlighter(
+        &mut self,
+        selected_range: &Range<usize>,
+        full_text: SharedString,
+        new_text: &str,
+        cx: &mut App,
+    ) {
         match &self {
-            InputMode::CodeEditor { highlighter, .. } => Some(highlighter),
-            _ => None,
+            InputMode::CodeEditor {
+                language,
+                highlighter,
+                ..
+            } => {
+                let mut highlighter = highlighter.borrow_mut();
+                if highlighter.is_none() {
+                    let new_highlighter = SyntaxHighlighter::new(language, cx);
+                    highlighter.replace(new_highlighter);
+                }
+
+                if let Some(highlighter) = highlighter.as_mut() {
+                    highlighter.update(selected_range, full_text, new_text, cx);
+                }
+            }
+            _ => {}
         }
     }
 
