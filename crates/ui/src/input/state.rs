@@ -2096,8 +2096,7 @@ impl EntityInputHandler for InputState {
 
         let mask_text = self.mask_pattern.mask(&pending_text);
         let new_text_len = (new_text.len() + mask_text.len()).saturating_sub(pending_text.len());
-        let old_offset = self.cursor_offset();
-        let new_offset = (old_offset + new_text_len).min(mask_text.len());
+        let new_offset = (range.start + new_text_len).min(mask_text.len());
 
         self.push_history(&range, &new_text, window, cx);
         self.text = mask_text.clone();
