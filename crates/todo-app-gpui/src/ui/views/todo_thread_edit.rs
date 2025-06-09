@@ -431,6 +431,9 @@ pub struct TodoThreadEdit {
     auto_execute: bool,
     enable_notifications: bool,
 
+    // 手风琴展开状态
+    expanded_providers: Vec<usize>,
+
     _subscriptions: Vec<Subscription>,
 }
 
@@ -500,6 +503,7 @@ impl TodoThreadEdit {
             recurring_dropdown,
             auto_execute: false,
             enable_notifications: true,
+            expanded_providers: Vec::new(), // 初始化为空，表示默认都折叠
             _subscriptions,
         }
     }
@@ -633,6 +637,11 @@ impl TodoThreadEdit {
         }
     }
 
+    fn toggle_accordion(&mut self, open_indices: &[usize], cx: &mut Context<Self>) {
+        self.expanded_providers = open_indices.to_vec();
+        cx.notify();
+    }
+
     fn open_drawer_at(
         &mut self,
         placement: Placement,
@@ -645,16 +654,31 @@ impl TodoThreadEdit {
         window.open_drawer_at(placement, cx, move |drawer, _window, drawer_cx| {
             // 从 entity 中读取当前的模型数据
             let providers = todo_edit_entity.read(drawer_cx).model_manager.providers.clone();
+            let expanded_providers = todo_edit_entity.read(drawer_cx).expanded_providers.clone();
 
-            // 创建手风琴组件
-            let mut accordion = Accordion::new("model-providers").multiple(true);
+            // 创建手风琴组件并添加切换监听器
+            let mut accordion = Accordion::new("model-providers")
+                .on_toggle_click({
+                    let todo_edit_entity_for_toggle = todo_edit_entity.clone();
+                    move | open_indices, _window,cx| {
+                        todo_edit_entity_for_toggle.update(cx, |todo_edit, todo_cx| {
+                            todo_edit.toggle_accordion(open_indices, todo_cx);
+                        });
+                    }
+                });
 
             for (provider_index, provider) in providers.iter().enumerate() {
                 let provider_name = provider.name.clone();
                 let provider_models = provider.models.clone();
+                
+                // 检查该供应商是否有被选中的模型
+                let has_selected_models = provider_models.iter().any(|model| model.is_selected);
+                
+                // 检查当前供应商是否应该展开
+                let is_expanded = has_selected_models || expanded_providers.contains(&provider_index);
 
                 accordion = accordion.item(|item| {
-                    item.open(true) // 默认展开所有服务商
+                    item.open(is_expanded) // 根据选中状态和展开状态决定是否展开
                         .icon(IconName::Bot)
                         .title(
                             h_flex()
@@ -662,17 +686,37 @@ impl TodoThreadEdit {
                                 .items_center()
                                 .justify_between()
                                 .child(
-                                    div()
-                                        .font_medium()
-                                        .text_color(gpui::rgb(0x374151))
-                                        .child(provider_name.clone()),
+                                    h_flex()
+                                        .items_center()
+                                        .gap_2()
+                                        .child(
+                                            div()
+                                                .font_medium()
+                                                .text_color(gpui::rgb(0x374151))
+                                                .child(provider_name.clone()),
+                                        )
+                                        .when(has_selected_models, |this| {
+                                            this.child(
+                                                Icon::new(IconName::Check)
+                                                    .xsmall()
+                                                    .text_color(gpui::rgb(0x10B981)),
+                                            )
+                                        }),
                                 )
                                 .child(
                                     div()
                                         .px_2()
                                         .py_1()
-                                        .bg(gpui::rgb(0xEFF6FF))
-                                        .text_color(gpui::rgb(0x1D4ED8))
+                                        .bg(if has_selected_models {
+                                            gpui::rgb(0xDCFCE7) // 有选中模型时使用绿色背景
+                                        } else {
+                                            gpui::rgb(0xEFF6FF) // 无选中模型时使用蓝色背景
+                                        })
+                                        .text_color(if has_selected_models {
+                                            gpui::rgb(0x166534) // 绿色文字
+                                        } else {
+                                            gpui::rgb(0x1D4ED8) // 蓝色文字
+                                        })
                                         .rounded_md()
                                         .text_xs()
                                         .child(format!("{} 个模型", provider_models.len())),
@@ -692,11 +736,11 @@ impl TodoThreadEdit {
                                         let todo_edit_entity_for_event = todo_edit_entity.clone();
 
                                         div()
-                                            .p_2()
+                                            .p_1()
                                             .bg(gpui::rgb(0xFAFAFA))
                                             .rounded_md()
-                                            .border_1()
-                                            .border_color(gpui::rgb(0xE5E7EB))
+                                            // .border_1()
+                                            // .border_color(gpui::rgb(0xE5E7EB))
                                             .hover(|style| style.bg(gpui::rgb(0xF3F4F6)))
                                             .child(
                                                 h_flex()
@@ -772,21 +816,19 @@ impl TodoThreadEdit {
 
             drawer
                 .overlay(true)
-                .size(px(380.)) // 稍微增加宽度以适应手风琴
+                .size(px(380.))
                 .title("选择模型")
-                .child(accordion) // 直接放置手风琴，不需要额外的滚动容器
+                .child(accordion)
                 .footer(
                     h_flex()
-                        .justify_center() // 只保留右对齐的按钮
+                        .justify_center()
                         .items_center()
                         .p_2()
-                        // .border_t_1() // 添加顶部边框分隔
-                        // .border_color(gpui::rgb(0xE5E7EB))
-                        .bg(gpui::rgb(0xFAFAFA)) // 底部背景色
+                        .bg(gpui::rgb(0xFAFAFA))
                         .child(
                             Button::new("clear-all-models")
                                 .label("清空选择")
-                                .on_click(move |_, _window, cx| {
+                                .on_click(move |_, window, cx| {
                                     // 清空所有模型选择
                                     todo_edit_entity_for_clear.update(cx, |todo_edit, todo_cx| {
                                         for provider in &mut todo_edit.model_manager.providers {
@@ -797,6 +839,8 @@ impl TodoThreadEdit {
                                         todo_cx.notify(); // 通知主界面更新
                                     });
                                     println!("清空所有模型选择");
+                                    // 关闭抽屉
+                                    window.close_drawer(cx);
                                 }),
                         ),
                 )
@@ -1007,7 +1051,7 @@ impl Render for TodoThreadEdit {
                                             .child("模型选择"),
                                     )
                                     .child(
-                                        div().flex_1().max_w_80().child(
+                                        div().justify_start().child(
                                             Button::new("show-drawer-left")
                                                 .label({
                                                     let display_text =
@@ -1017,9 +1061,9 @@ impl Render for TodoThreadEdit {
                                                     } else {
                                                         display_text
                                                     }
-                                                })
-                                                .w_full()
-                                                .justify_start()
+                                                }).ghost().xsmall()
+                                                // .w_full()
+                                                .justify_center()
                                                 .text_color(
                                                     if self.get_model_display_text(cx)
                                                         == "选择AI模型"
