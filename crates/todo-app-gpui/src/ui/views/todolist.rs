@@ -468,16 +468,16 @@ impl TodoList {
     fn edit_todo(&mut self, _: &Edit, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(todo) = self.selected_company.clone() {
             cx.activate(true);
-            let window_size = size(px(600.0), px(750.0));
+            let window_size = size(px(600.0), px(600.0));
             let window_bounds = Bounds::centered(None, window_size, cx);
             let options = WindowOptions {
                 app_id: Some("x-todo-app".to_string()),
                 window_bounds: Some(WindowBounds::Windowed(window_bounds)),
                 titlebar: Some(TitleBar::title_bar_options()),
-                // window_min_size: Some(gpui::Size {
-                //     width: px(600.),
-                //     height: px(600.),
-                // }),
+                window_min_size: Some(gpui::Size {
+                    width: px(600.),
+                    height: px(600.),
+                }),
                 kind: WindowKind::PopUp,
                 #[cfg(target_os = "linux")]
                 window_background: gpui::WindowBackgroundAppearance::Transparent,
@@ -822,7 +822,7 @@ impl Render for TodoList {
                             .ghost()
                             .on_click(cx.listener(|this, ev, widnow, cx| {
                                 cx.activate(true);
-                                let window_size = size(px(600.0), px(750.0));
+                                let window_size = size(px(600.0), px(600.0));
                                 let window_bounds = Bounds::centered(None, window_size, cx);
                                 let options = WindowOptions {
                                     app_id: Some("x-todo-app".to_string()),
@@ -830,7 +830,7 @@ impl Render for TodoList {
                                     titlebar: Some(TitleBar::title_bar_options()),
                                     window_min_size: Some(gpui::Size {
                                         width: px(600.),
-                                        height: px(750.),
+                                        height: px(600.),
                                     }),
 
                                     kind: WindowKind::PopUp,
