@@ -596,7 +596,7 @@ impl TodoThreadEdit {
         let description_input = cx.new(|cx| {
             InputState::new(window, cx)
                 .placeholder("详细描述任务内容和要求...")
-                .auto_grow(10, 10)
+                .auto_grow(10, 15)
         });
 
         // 状态和优先级下拉框
@@ -1326,21 +1326,7 @@ impl Render for TodoThreadEdit {
                             .child(
                                 v_flex()
                                     .gap_1()
-                                    .child(
-                                        h_flex()
-                                            .justify_between()
-                                            .items_center()
-                                            .child(Self::section_title("任务描述"))
-                                            .child(
-                                                Checkbox::new("push-feishu-button")
-                                                    .label("推送到飞书")
-                                                    .checked(true)
-                                                    .on_click(cx.listener(|view, _, _, cx| {
-                                                        // view.disabled = !view.disabled;
-                                                        cx.notify();
-                                                    })),
-                                            ),
-                                    )
+                                   
                                     .child(TextInput::new(&self.description_input).cleanable()),
                             ),
                     )
@@ -1406,13 +1392,25 @@ impl Render for TodoThreadEdit {
                     )
                     .child(
                         v_flex()
-                            .gap_3()
+                            .gap_2()
                             .pt_1()
                             .px_2()
                             .pb_2()
                             .bg(gpui::rgb(0xF9FAFB))
                             .rounded_lg()
-                            .child(Self::section_title("助手配置"))
+                            .child(h_flex()
+                                            .justify_between()
+                                            .items_center()
+                                            .child(Self::section_title("助手配置"))
+                                            .child(
+                                                Checkbox::new("push-feishu-button")
+                                                    .label("推送到飞书")
+                                                    .checked(true)
+                                                    .on_click(cx.listener(|view, _, _, cx| {
+                                                        // view.disabled = !view.disabled;
+                                                        cx.notify();
+                                                    })),
+                                            ),)
                             .child(
                                 h_flex()
                                     .gap_4()
@@ -1578,7 +1576,7 @@ impl Render for TodoThreadEdit {
             )
             .child(
                 h_flex().items_center().justify_center().pt_2().child(
-                    h_flex().gap_3().child(
+                    h_flex().gap_1().child(
                         Button::new("save-btn")
                             .with_variant(ButtonVariant::Primary)
                             .label("保存任务")
