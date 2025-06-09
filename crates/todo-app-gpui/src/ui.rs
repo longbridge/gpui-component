@@ -241,7 +241,7 @@ impl AppExt for App {
                         use windows::Win32::UI::WindowsAndMessaging::{
                             WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_SIZEBOX, WS_SYSMENU,
                         };
-                      // window.set_display_affinity(0x00000011);
+                        // window.set_display_affinity(0x00000011);
                         // let mut style = window.style();
                         // style &= !(WS_SIZEBOX.0 as i32
                         //     | WS_MINIMIZEBOX.0 as i32

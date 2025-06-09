@@ -3,7 +3,20 @@ use gpui::prelude::*;
 use gpui::*;
 
 use gpui_component::{
-    accordion::Accordion, badge::Badge, button::{Button, ButtonVariant, ButtonVariants as _}, checkbox::Checkbox, date_picker::{DatePicker, DatePickerEvent, DatePickerState, DateRangePreset}, dock::DragDrop, dropdown::{Dropdown, DropdownDelegate, DropdownEvent, DropdownItem, DropdownState}, input::{InputEvent, InputState, TextInput}, scroll::*, sidebar::{SidebarGroup, SidebarMenu, SidebarMenuItem}, switch::Switch, *
+    accordion::Accordion,
+    badge::Badge,
+    button::{Button, ButtonVariant, ButtonVariants as _},
+    checkbox::Checkbox,
+    date_picker::{DatePicker, DatePickerEvent, DatePickerState, DateRangePreset},
+    dock::DragDrop,
+    dropdown::{Dropdown, DropdownDelegate, DropdownEvent, DropdownItem, DropdownState},
+    input::{InputEvent, InputState, TextInput},
+    label::Label,
+    scroll::*,
+    sidebar::{SidebarGroup, SidebarMenu, SidebarMenuItem},
+    switch::Switch,
+    tooltip::Tooltip,
+    *,
 };
 
 use crate::ui::components::ViewKit;
@@ -471,14 +484,20 @@ impl McpToolManager {
                         name: "代码审查助手".to_string(),
                         provider: "开发工具".to_string(),
                         is_selected: false,
-                        capabilities: vec![ToolCapability::CodeReview, ToolCapability::FileOperation],
+                        capabilities: vec![
+                            ToolCapability::CodeReview,
+                            ToolCapability::FileOperation,
+                        ],
                         description: "自动审查代码质量和安全性".to_string(),
                     },
                     McpToolInfo {
                         name: "Git操作工具".to_string(),
                         provider: "开发工具".to_string(),
                         is_selected: false,
-                        capabilities: vec![ToolCapability::FileOperation, ToolCapability::CodeReview],
+                        capabilities: vec![
+                            ToolCapability::FileOperation,
+                            ToolCapability::CodeReview,
+                        ],
                         description: "管理Git仓库和版本控制".to_string(),
                     },
                 ],
@@ -490,14 +509,20 @@ impl McpToolManager {
                         name: "Excel处理器".to_string(),
                         provider: "数据处理".to_string(),
                         is_selected: false,
-                        capabilities: vec![ToolCapability::FileOperation, ToolCapability::DataAnalysis],
+                        capabilities: vec![
+                            ToolCapability::FileOperation,
+                            ToolCapability::DataAnalysis,
+                        ],
                         description: "处理和分析Excel文件".to_string(),
                     },
                     McpToolInfo {
                         name: "数据可视化".to_string(),
                         provider: "数据处理".to_string(),
                         is_selected: false,
-                        capabilities: vec![ToolCapability::DataAnalysis, ToolCapability::ImageProcessing],
+                        capabilities: vec![
+                            ToolCapability::DataAnalysis,
+                            ToolCapability::ImageProcessing,
+                        ],
                         description: "生成图表和数据可视化".to_string(),
                     },
                 ],
@@ -591,7 +616,6 @@ pub struct TodoThreadEdit {
 
 impl TodoThreadEdit {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-       
         // 基本信息输入框
         let title_input = cx.new(|cx| InputState::new(window, cx).placeholder("输入任务标题..."));
 
@@ -819,7 +843,7 @@ impl TodoThreadEdit {
     ) {
         // 使用 Entity 来共享状态
         let todo_edit_entity = cx.entity().clone();
-        
+
         window.open_drawer_at(placement, cx, move |drawer, _window, drawer_cx| {
             // 从 entity 中读取当前的模型数据
             let providers = todo_edit_entity.read(drawer_cx).model_manager.providers.clone();
@@ -1024,7 +1048,7 @@ impl TodoThreadEdit {
     ) {
         // 使用 Entity 来共享状态
         let todo_edit_entity = cx.entity().clone();
-        
+
         window.open_drawer_at(placement, cx, move |drawer, _window, drawer_cx| {
             // 从 entity 中读取当前的工具数据
             let providers = todo_edit_entity.read(drawer_cx).mcp_tool_manager.providers.clone();
@@ -1147,28 +1171,7 @@ impl TodoThreadEdit {
                                                                                 },
                                                                             ),
                                                                     )
-                                                                    // .child(
-                                                                    //     h_flex().gap_1().items_center().children(
-                                                                    //         tool.capabilities.iter().enumerate().map(
-                                                                    //             |(cap_index, cap)| {
-                                                                    //                 let capability_unique_id = provider_index * 10000
-                                                                    //                     + tool_index * 1000
-                                                                    //                     + cap_index;
-
-                                                                    //                 div()
-                                                                    //                     .id(("tool_capability", capability_unique_id))
-                                                                    //                     .p_1()
-                                                                    //                     .rounded_md()
-                                                                    //                     .bg(gpui::rgb(0xF3F4F6))
-                                                                    //                     .child(
-                                                                    //                         Icon::new(cap.icon())
-                                                                    //                             .xsmall()
-                                                                    //                             .text_color(gpui::rgb(0x6B7280)),
-                                                                    //                     )
-                                                                    //             },
-                                                                    //         ),
-                                                                    //     ),
-                                                                    // ),
+                                                                   
                                                             ),
                                                     )
                                                     .child(
@@ -1237,22 +1240,27 @@ impl TodoThreadEdit {
     }
 
     // 添加处理文件拖拽的方法
-    fn handle_file_drop(&mut self, external_paths: &ExternalPaths, _window: &mut Window, cx: &mut Context<Self>) {
+    fn handle_file_drop(
+        &mut self,
+        external_paths: &ExternalPaths,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         for path in external_paths.paths() {
             if let Some(file_name) = path.file_name().and_then(|name| name.to_str()) {
                 let path_str = path.to_string_lossy().to_string();
-                
+
                 // 检查文件是否已经存在
                 if !self.uploaded_files.iter().any(|f| f.path == path_str) {
                     // 获取文件大小（可选）
                     let file_size = std::fs::metadata(&path).ok().map(|metadata| metadata.len());
-                    
+
                     let uploaded_file = UploadedFile {
                         name: file_name.to_string(),
                         path: path_str,
                         size: file_size,
                     };
-                    
+
                     self.uploaded_files.push(uploaded_file);
                 }
             }
@@ -1265,12 +1273,12 @@ impl TodoThreadEdit {
         const UNITS: &[&str] = &["B", "KB", "MB", "GB"];
         let mut size_f = size as f64;
         let mut unit_index = 0;
-        
+
         while size_f >= 1024.0 && unit_index < UNITS.len() - 1 {
             size_f /= 1024.0;
             unit_index += 1;
         }
-        
+
         if unit_index == 0 {
             format!("{} {}", size as u64, UNITS[unit_index])
         } else {
@@ -1469,42 +1477,47 @@ impl Render for TodoThreadEdit {
                                                                         .children(
                                                                             self.uploaded_files.iter().enumerate().map(|(index, file)| {
                                                                                 let file_path_for_remove = file.path.clone();
+                                                                                let file_name = file.name.clone();
+                                                                                
+                                                                                // 截断文件名，最大显示15个字符
+                                                                                let display_name = if file.name.len() > 15 {
+                                                                                    format!("{}...", &file.name[..12])
+                                                                                } else {
+                                                                                    file.name.clone()
+                                                                                };
                                                                                 
                                                                                 div()
                                                                                     .id(("uploaded-file", index))
                                                                                     .flex()
                                                                                     .items_center()
-                                                                                    .gap_2()
-                                                                                    .px_3()
-                                                                                    .py_2()
-                                                                                    .bg(gpui::rgb(0xFFFFFF))
+                                                                                    .gap_1()
+                                                                                    .px_2()
+                                                                                    .py_1()
+                                                                                    .max_w_32() // 限制最大宽度
+                                                                                    .bg(gpui::rgb(0xF3F4F6))
                                                                                     .border_1()
                                                                                     .border_color(gpui::rgb(0xE5E7EB))
                                                                                     .rounded_md()
-                                                                                    .hover(|style| style.bg(gpui::rgb(0xF3F4F6)))
+                                                                                    .hover(|style| style.bg(gpui::rgb(0xE5E7EB)))
+                            .tooltip({
+                                let file_name = file_name.clone();
+                                move |window, cx| {
+                                     let file_name = file_name.clone();
+                                    Tooltip::element( move|_, _| {
+                                        Label::new(file_name.clone())
+                                    })
+                                    .build(window, cx)
+                                }
+                            })
                                                                                     .child(
-                                                                                        Icon::new(IconName::LetterText)
-                                                                                            .xsmall()
-                                                                                            .text_color(gpui::rgb(0x6B7280)),
-                                                                                    )
-                                                                                    .child(
-                                                                                        v_flex()
-                                                                                            .gap_1()
-                                                                                            .child(
-                                                                                                div()
-                                                                                                    .text_xs()
-                                                                                                    .font_medium()
-                                                                                                    .text_color(gpui::rgb(0x374151))
-                                                                                                    .child(file.name.clone()),
-                                                                                            )
-                                                                                            .when(file.size.is_some(), |this| {
-                                                                                                this.child(
-                                                                                                    div()
-                                                                                                        .text_xs()
-                                                                                                        .text_color(gpui::rgb(0x9CA3AF))
-                                                                                                        .child(Self::format_file_size(file.size.unwrap())),
-                                                                                                )
-                                                                                            }),
+                                                                                        
+                                                                                        div()
+                                                                                            .text_xs()
+                                                                                            .font_medium()
+                                                                                            .text_color(gpui::rgb(0x374151))
+                                                                                            .flex_1()
+                                                                                            .overflow_hidden()
+                                                                                            .child(display_name),
                                                                                     )
                                                                                     .child(
                                                                                         Button::new(SharedString::new(format!("remove-file-{}", index)))
@@ -1512,6 +1525,10 @@ impl Render for TodoThreadEdit {
                                                                                             .xsmall()
                                                                                             .icon(IconName::X)
                                                                                             .text_color(gpui::rgb(0x9CA3AF))
+                                                                                           
+                                                                                            .p_0()
+                                                                                            .min_w_4()
+                                                                                            .h_4()
                                                                                             .on_click(cx.listener(move |this, _, window, cx| {
                                                                                                 this.remove_file(&file_path_for_remove, window, cx);
                                                                                             })),

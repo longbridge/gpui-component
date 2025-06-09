@@ -4,7 +4,7 @@ use chrono::{Days, Utc};
 use gpui::prelude::*;
 use gpui::*;
 
-use gpui_component::{*,
+use gpui_component::{
     accordion::Accordion,
     button::{Button, ButtonVariant, ButtonVariants as _},
     checkbox::Checkbox,
@@ -13,6 +13,7 @@ use gpui_component::{*,
     h_flex,
     input::{InputEvent, InputState, TextInput},
     scroll::{Scrollable, Scrollbar, ScrollbarState},
+    *,
 };
 
 use crate::ui::components::ViewKit;
@@ -123,7 +124,7 @@ impl ModelManager {
                         name: "sqb-chat-4.0".to_string(),
                         provider: "收钱吧".to_string(),
                         is_selected: false,
-                        capabilities: vec! [
+                        capabilities: vec![
                             ModelCapability::Text,
                             ModelCapability::Vision,
                             ModelCapability::Tools,
@@ -138,7 +139,7 @@ impl ModelManager {
                         name: "claude-3.5-sonnet".to_string(),
                         provider: "Anthropic".to_string(),
                         is_selected: false,
-                        capabilities: vec! [
+                        capabilities: vec![
                             ModelCapability::Text,
                             ModelCapability::Vision,
                             ModelCapability::Tools,
@@ -159,7 +160,7 @@ impl ModelManager {
                         name: "gpt-4".to_string(),
                         provider: "OpenAI".to_string(),
                         is_selected: false,
-                        capabilities: vec! [
+                        capabilities: vec![
                             ModelCapability::Text,
                             ModelCapability::Vision,
                             ModelCapability::Tools,
@@ -169,7 +170,7 @@ impl ModelManager {
                         name: "gpt-4-turbo".to_string(),
                         provider: "OpenAI".to_string(),
                         is_selected: false,
-                        capabilities: vec! [
+                        capabilities: vec![
                             ModelCapability::Text,
                             ModelCapability::Vision,
                             ModelCapability::Tools,
@@ -230,7 +231,7 @@ pub enum ToolCapability {
 impl ToolCapability {
     fn icon(&self) -> IconName {
         match self {
-           ToolCapability::FileOperation => IconName::LetterText,
+            ToolCapability::FileOperation => IconName::LetterText,
             ToolCapability::CodeReview => IconName::ChevronDown,
             ToolCapability::WebSearch => IconName::Search,
             ToolCapability::Calculation => IconName::Timer,
@@ -283,14 +284,20 @@ impl McpToolManager {
                         name: "代码审查助手".to_string(),
                         provider: "开发工具".to_string(),
                         is_selected: false,
-                        capabilities: vec![ToolCapability::CodeReview, ToolCapability::FileOperation],
+                        capabilities: vec![
+                            ToolCapability::CodeReview,
+                            ToolCapability::FileOperation,
+                        ],
                         description: "自动审查代码质量和安全性".to_string(),
                     },
                     McpToolInfo {
                         name: "Git操作工具".to_string(),
                         provider: "开发工具".to_string(),
                         is_selected: false,
-                        capabilities: vec![ToolCapability::FileOperation, ToolCapability::CodeReview],
+                        capabilities: vec![
+                            ToolCapability::FileOperation,
+                            ToolCapability::CodeReview,
+                        ],
                         description: "管理Git仓库和版本控制".to_string(),
                     },
                 ],
@@ -302,14 +309,20 @@ impl McpToolManager {
                         name: "Excel处理器".to_string(),
                         provider: "数据处理".to_string(),
                         is_selected: false,
-                        capabilities: vec![ToolCapability::FileOperation, ToolCapability::DataAnalysis],
+                        capabilities: vec![
+                            ToolCapability::FileOperation,
+                            ToolCapability::DataAnalysis,
+                        ],
                         description: "处理和分析Excel文件".to_string(),
                     },
                     McpToolInfo {
                         name: "数据可视化".to_string(),
                         provider: "数据处理".to_string(),
                         is_selected: false,
-                        capabilities: vec![ToolCapability::DataAnalysis, ToolCapability::ImageProcessing],
+                        capabilities: vec![
+                            ToolCapability::DataAnalysis,
+                            ToolCapability::ImageProcessing,
+                        ],
                         description: "生成图表和数据可视化".to_string(),
                     },
                 ],
@@ -403,9 +416,7 @@ impl TodoThreadChat {
         let model_manager = ModelManager::new();
         let mcp_tool_manager = McpToolManager::new();
 
-        let _subscriptions = vec![
-            cx.subscribe_in(&chat_input, window, Self::on_chat_input_event),
-        ];
+        let _subscriptions = vec![cx.subscribe_in(&chat_input, window, Self::on_chat_input_event)];
 
         // 初始化欢迎消息
         let chat_messages = vec![ChatMessage {
@@ -479,7 +490,7 @@ impl TodoThreadChat {
         cx: &mut Context<Self>,
     ) {
         let todo_edit_entity = cx.entity().clone();
-        
+
         window.open_drawer_at(placement, cx, move |drawer, _window, drawer_cx| {
             let providers = todo_edit_entity.read(drawer_cx).model_manager.providers.clone();
             let expanded_providers = todo_edit_entity.read(drawer_cx).expanded_providers.clone();
@@ -665,7 +676,7 @@ impl TodoThreadChat {
         cx: &mut Context<Self>,
     ) {
         let todo_edit_entity = cx.entity().clone();
-        
+
         window.open_drawer_at(placement, cx, move |drawer, _window, drawer_cx| {
             let providers = todo_edit_entity.read(drawer_cx).mcp_tool_manager.providers.clone();
             let expanded_providers = todo_edit_entity.read(drawer_cx).expanded_tool_providers.clone();
@@ -782,28 +793,7 @@ impl TodoThreadChat {
                                                                                 },
                                                                             ),
                                                                     )
-                                                                    // .child(
-                                                                    //     h_flex().gap_1().items_center().children(
-                                                                    //         tool.capabilities.iter().enumerate().map(
-                                                                    //             |(cap_index, cap)| {
-                                                                    //                 let capability_unique_id = provider_index * 10000
-                                                                    //                     + tool_index * 1000
-                                                                    //                     + cap_index;
-
-                                                                    //                 div()
-                                                                    //                     .id(("chat_tool_capability", capability_unique_id))
-                                                                    //                     .p_1()
-                                                                    //                     .rounded_md()
-                                                                    //                     .bg(gpui::rgb(0xF3F4F6))
-                                                                    //                     .child(
-                                                                    //                         Icon::new(cap.icon())
-                                                                    //                             .xsmall()
-                                                                    //                             .text_color(gpui::rgb(0x6B7280)),
-                                                                    //                     )
-                                                                    //             },
-                                                                    //         ),
-                                                                    //     ),
-                                                                    // ),
+                                                                   
                                                             ),
                                                     )
                                                     .child(
@@ -1033,9 +1023,7 @@ impl ViewKit for TodoThreadChat {
 
 impl FocusableCycle for TodoThreadChat {
     fn cycle_focus_handles(&self, _: &mut Window, cx: &mut App) -> Vec<FocusHandle> {
-        vec![
-            self.chat_input.focus_handle(cx),
-        ]
+        vec![self.chat_input.focus_handle(cx)]
     }
 }
 
@@ -1094,14 +1082,12 @@ impl Render for TodoThreadChat {
                                     .left_0()
                                     .right_0()
                                     .bottom_0()
-                                    .child(
-                                        Scrollbar::vertical(
-                                            cx.entity().entity_id(),
-                                            self.scroll_state.clone(),
-                                            self.scroll_handle.clone(),
-                                            self.scroll_size,
-                                        ),
-                                    ),
+                                    .child(Scrollbar::vertical(
+                                        cx.entity().entity_id(),
+                                        self.scroll_state.clone(),
+                                        self.scroll_handle.clone(),
+                                        self.scroll_size,
+                                    )),
                             ),
                     ),
                 ),
@@ -1118,62 +1104,52 @@ impl Render for TodoThreadChat {
                     .border_color(gpui::rgb(0xE5E7EB))
                     .bg(gpui::rgb(0xF9FAFB))
                     .child(
-                        h_flex().justify_start()
-                            .items_center()
-                            .gap_2()
-                            .child(
+                        h_flex().justify_start().items_center().gap_2().child(
                             Button::new("show-chat-model-drawer")
-                                        .label({
-                                            let display_text = self.get_model_display_text(cx);
-                                            if display_text == "选择模型" {
-                                                display_text
-                                            } else {
-                                                display_text
-                                            }
-                                        })
-                                        .ghost()
-                                        .xsmall()
-                                        .justify_center()
-                                        .text_color(
-                                            if self.get_model_display_text(cx) == "选择AI模型" {
-                                                gpui::rgb(0x9CA3AF)
-                                            } else {
-                                                gpui::rgb(0x374151)
-                                            },
-                                        )
-                                        .on_click(cx.listener(|this, _, window, cx| {
-                                            this.open_model_drawer_at(Placement::Left, window, cx)
-                                        })),
-                            ),
+                                .label({
+                                    let display_text = self.get_model_display_text(cx);
+                                    if display_text == "选择模型" {
+                                        display_text
+                                    } else {
+                                        display_text
+                                    }
+                                })
+                                .ghost()
+                                .xsmall()
+                                .justify_center()
+                                .text_color(if self.get_model_display_text(cx) == "选择AI模型" {
+                                    gpui::rgb(0x9CA3AF)
+                                } else {
+                                    gpui::rgb(0x374151)
+                                })
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    this.open_model_drawer_at(Placement::Left, window, cx)
+                                })),
+                        ),
                     )
                     .child(
-                        h_flex().justify_start()
-                            .items_center()
-                            .gap_2()
-                            .child(
+                        h_flex().justify_start().items_center().gap_2().child(
                             Button::new("show-chat-tool-drawer")
-                                        .label({
-                                            let display_text = self.get_tool_display_text(cx);
-                                            if display_text == "选择工具集" {
-                                                display_text
-                                            } else {
-                                                display_text
-                                            }
-                                        })
-                                        .ghost()
-                                        .xsmall()
-                                        .justify_center()
-                                        .text_color(
-                                            if self.get_tool_display_text(cx) == "选择工具集" {
-                                                gpui::rgb(0x9CA3AF)
-                                            } else {
-                                                gpui::rgb(0x374151)
-                                            },
-                                        )
-                                        .on_click(cx.listener(|this, _, window, cx| {
-                                            this.open_tool_drawer_at(Placement::Left, window, cx)
-                                        })),
-                            ),
+                                .label({
+                                    let display_text = self.get_tool_display_text(cx);
+                                    if display_text == "选择工具集" {
+                                        display_text
+                                    } else {
+                                        display_text
+                                    }
+                                })
+                                .ghost()
+                                .xsmall()
+                                .justify_center()
+                                .text_color(if self.get_tool_display_text(cx) == "选择工具集" {
+                                    gpui::rgb(0x9CA3AF)
+                                } else {
+                                    gpui::rgb(0x374151)
+                                })
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    this.open_tool_drawer_at(Placement::Left, window, cx)
+                                })),
+                        ),
                     ),
             )
             .child(
