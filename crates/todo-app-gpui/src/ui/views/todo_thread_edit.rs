@@ -1144,28 +1144,28 @@ impl TodoThreadEdit {
                                                                                 },
                                                                             ),
                                                                     )
-                                                                    .child(
-                                                                        h_flex().gap_1().items_center().children(
-                                                                            tool.capabilities.iter().enumerate().map(
-                                                                                |(cap_index, cap)| {
-                                                                                    let capability_unique_id = provider_index * 10000
-                                                                                        + tool_index * 1000
-                                                                                        + cap_index;
+                                                                    // .child(
+                                                                    //     h_flex().gap_1().items_center().children(
+                                                                    //         tool.capabilities.iter().enumerate().map(
+                                                                    //             |(cap_index, cap)| {
+                                                                    //                 let capability_unique_id = provider_index * 10000
+                                                                    //                     + tool_index * 1000
+                                                                    //                     + cap_index;
 
-                                                                                    div()
-                                                                                        .id(("tool_capability", capability_unique_id))
-                                                                                        .p_1()
-                                                                                        .rounded_md()
-                                                                                        .bg(gpui::rgb(0xF3F4F6))
-                                                                                        .child(
-                                                                                            Icon::new(cap.icon())
-                                                                                                .xsmall()
-                                                                                                .text_color(gpui::rgb(0x6B7280)),
-                                                                                        )
-                                                                                },
-                                                                            ),
-                                                                        ),
-                                                                    ),
+                                                                    //                 div()
+                                                                    //                     .id(("tool_capability", capability_unique_id))
+                                                                    //                     .p_1()
+                                                                    //                     .rounded_md()
+                                                                    //                     .bg(gpui::rgb(0xF3F4F6))
+                                                                    //                     .child(
+                                                                    //                         Icon::new(cap.icon())
+                                                                    //                             .xsmall()
+                                                                    //                             .text_color(gpui::rgb(0x6B7280)),
+                                                                    //                     )
+                                                                    //             },
+                                                                    //         ),
+                                                                    //     ),
+                                                                    // ),
                                                             ),
                                                     )
                                                     .child(

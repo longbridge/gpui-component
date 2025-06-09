@@ -440,7 +440,7 @@ impl TodoList {
     fn open_todo(&mut self, _: &Open, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(todo) = self.selected_company.clone() {
             cx.activate(true);
-            let window_size = size(px(600.0), px(800.0));
+            let window_size = size(px(600.0), px(750.0));
             let window_bounds = Bounds::centered(None, window_size, cx);
             let options = WindowOptions {
                 app_id: Some("x-todo-app".to_string()),
@@ -448,7 +448,7 @@ impl TodoList {
                 titlebar: Some(TitleBar::title_bar_options()),
                 window_min_size: Some(gpui::Size {
                     width: px(600.),
-                    height: px(800.),
+                    height: px(750.),
                 }),
                 kind: WindowKind::Normal,
                 #[cfg(target_os = "linux")]

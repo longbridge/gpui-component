@@ -4,14 +4,15 @@ use chrono::{Days, Utc};
 use gpui::prelude::*;
 use gpui::*;
 
-use gpui_component::{
+use gpui_component::{*,
+    accordion::Accordion,
     button::{Button, ButtonVariant, ButtonVariants as _},
+    checkbox::Checkbox,
+    drawer::*,
     dropdown::{Dropdown, DropdownDelegate, DropdownEvent, DropdownItem, DropdownState},
     h_flex,
     input::{InputEvent, InputState, TextInput},
     scroll::{Scrollable, Scrollbar, ScrollbarState},
-    v_flex, v_virtual_list, ActiveTheme, Disableable, FocusableCycle, Icon, IconName, Sizable,
-    StyledExt,
 };
 
 use crate::ui::components::ViewKit;
@@ -56,157 +57,312 @@ impl MessageRole {
     }
 }
 
-// 层级化的模型选项结构
+// 模型能力
 #[derive(Debug, Clone)]
-pub enum ModelOption {
-    Provider { name: String, expanded: bool },
-    Model { name: String, provider: String },
+pub enum ModelCapability {
+    Text,
+    Vision,
+    Audio,
+    Tools,
 }
 
-impl DropdownItem for ModelOption {
-    type Value = String;
-
-    fn title(&self) -> SharedString {
+impl ModelCapability {
+    fn icon(&self) -> IconName {
         match self {
-            ModelOption::Provider { name, .. } => name.clone().into(),
-            ModelOption::Model { name, .. } => name.clone().into(),
+            ModelCapability::Text => IconName::LetterText,
+            ModelCapability::Vision => IconName::Eye,
+            ModelCapability::Audio => IconName::Mic,
+            ModelCapability::Tools => IconName::Wrench,
         }
     }
 
-    fn display_title(&self) -> Option<AnyElement> {
+    fn label(&self) -> &'static str {
         match self {
-            ModelOption::Provider { name, .. } => Some(
-                h_flex()
-                    .items_center()
-                    .py_1()
-                    .child(
-                        div()
-                            .font_semibold()
-                            .text_color(gpui::rgb(0x374151))
-                            .child(name.clone()),
-                    )
-                    .into_any_element(),
-            ),
-            ModelOption::Model { name, provider } => Some(
-                h_flex()
-                    .items_center()
-                    .gap_3()
-                    .pl_6()
-                    .py_1()
-                    .child(
-                        div()
-                            .w_4()
-                            .h_4()
-                            .border_1()
-                            .border_color(gpui::rgb(0xD1D5DB))
-                            .bg(gpui::rgb(0xFFFFFF))
-                            .rounded_sm()
-                            .flex()
-                            .items_center()
-                            .justify_center(),
-                    )
-                    .child(
-                        div()
-                            .text_sm()
-                            .font_medium()
-                            .text_color(gpui::rgb(0x6B7280))
-                            .child(name.clone()),
-                    )
-                    .into_any_element(),
-            ),
-        }
-    }
-
-    fn value(&self) -> &Self::Value {
-        match self {
-            ModelOption::Provider { name, .. } => name,
-            ModelOption::Model { name, .. } => name,
+            ModelCapability::Text => "文本",
+            ModelCapability::Vision => "视觉",
+            ModelCapability::Audio => "音频",
+            ModelCapability::Tools => "工具",
         }
     }
 }
 
-// 层级化的Dropdown委托
-pub struct HierarchicalModelDelegate {
-    providers: Vec<(String, Vec<String>)>,
-    flattened_options: Vec<ModelOption>,
-    selected_model: Option<String>,
+// 模型信息
+#[derive(Debug, Clone)]
+pub struct ModelInfo {
+    pub name: String,
+    pub provider: String,
+    pub is_selected: bool,
+    pub capabilities: Vec<ModelCapability>,
 }
 
-impl HierarchicalModelDelegate {
+// 提供商信息
+#[derive(Debug, Clone)]
+pub struct ProviderInfo {
+    pub name: String,
+    pub models: Vec<ModelInfo>,
+}
+
+// 模型管理器
+pub struct ModelManager {
+    pub providers: Vec<ProviderInfo>,
+}
+
+impl ModelManager {
     pub fn new() -> Self {
         let providers = vec![
-            (
-                "收钱吧".to_string(),
-                vec!["sqb-chat-3.5".to_string(), "sqb-chat-4.0".to_string()],
-            ),
-            (
-                "Anthropic".to_string(),
-                vec![
-                    "claude-3.5-sonnet".to_string(),
-                    "claude-3-haiku".to_string(),
-                    "claude-3-opus".to_string(),
+            ProviderInfo {
+                name: "收钱吧".to_string(),
+                models: vec![
+                    ModelInfo {
+                        name: "sqb-chat-3.5".to_string(),
+                        provider: "收钱吧".to_string(),
+                        is_selected: false,
+                        capabilities: vec![ModelCapability::Text, ModelCapability::Tools],
+                    },
+                    ModelInfo {
+                        name: "sqb-chat-4.0".to_string(),
+                        provider: "收钱吧".to_string(),
+                        is_selected: false,
+                        capabilities: vec! [
+                            ModelCapability::Text,
+                            ModelCapability::Vision,
+                            ModelCapability::Tools,
+                        ],
+                    },
                 ],
-            ),
-            (
-                "OpenAI".to_string(),
-                vec![
-                    "gpt-4".to_string(),
-                    "gpt-4-turbo".to_string(),
-                    "gpt-3.5-turbo".to_string(),
+            },
+            ProviderInfo {
+                name: "Anthropic".to_string(),
+                models: vec![
+                    ModelInfo {
+                        name: "claude-3.5-sonnet".to_string(),
+                        provider: "Anthropic".to_string(),
+                        is_selected: false,
+                        capabilities: vec! [
+                            ModelCapability::Text,
+                            ModelCapability::Vision,
+                            ModelCapability::Tools,
+                        ],
+                    },
+                    ModelInfo {
+                        name: "claude-3-haiku".to_string(),
+                        provider: "Anthropic".to_string(),
+                        is_selected: false,
+                        capabilities: vec![ModelCapability::Text, ModelCapability::Tools],
+                    },
                 ],
-            ),
+            },
+            ProviderInfo {
+                name: "OpenAI".to_string(),
+                models: vec![
+                    ModelInfo {
+                        name: "gpt-4".to_string(),
+                        provider: "OpenAI".to_string(),
+                        is_selected: false,
+                        capabilities: vec! [
+                            ModelCapability::Text,
+                            ModelCapability::Vision,
+                            ModelCapability::Tools,
+                        ],
+                    },
+                    ModelInfo {
+                        name: "gpt-4-turbo".to_string(),
+                        provider: "OpenAI".to_string(),
+                        is_selected: false,
+                        capabilities: vec! [
+                            ModelCapability::Text,
+                            ModelCapability::Vision,
+                            ModelCapability::Tools,
+                        ],
+                    },
+                    ModelInfo {
+                        name: "gpt-3.5-turbo".to_string(),
+                        provider: "OpenAI".to_string(),
+                        is_selected: false,
+                        capabilities: vec![ModelCapability::Text, ModelCapability::Tools],
+                    },
+                ],
+            },
         ];
 
-        let mut flattened_options = Vec::new();
-        for (provider_name, models) in &providers {
-            flattened_options.push(ModelOption::Provider {
-                name: provider_name.clone(),
-                expanded: true,
-            });
+        Self { providers }
+    }
 
-            for model_name in models {
-                flattened_options.push(ModelOption::Model {
-                    name: model_name.clone(),
-                    provider: provider_name.clone(),
-                });
+    pub fn toggle_model_selection(&mut self, model_name: &str) {
+        for provider in &mut self.providers {
+            for model in &mut provider.models {
+                if model.name == model_name {
+                    model.is_selected = !model.is_selected;
+                    return;
+                }
             }
         }
+    }
 
-        Self {
-            providers,
-            flattened_options,
-            selected_model: None,
+    pub fn get_selected_models(&self) -> Vec<String> {
+        let mut selected = Vec::new();
+        for provider in &self.providers {
+            for model in &provider.models {
+                if model.is_selected {
+                    selected.push(model.name.clone());
+                }
+            }
         }
+        selected
     }
 
-    pub fn set_selected_model(&mut self, model: Option<String>) {
-        self.selected_model = model;
-    }
-
-    pub fn get_selected_model(&self) -> Option<&String> {
-        self.selected_model.as_ref()
+    pub fn get_selected_count(&self) -> usize {
+        self.get_selected_models().len()
     }
 }
 
-impl DropdownDelegate for HierarchicalModelDelegate {
-    type Item = ModelOption;
+// 工具能力
+#[derive(Debug, Clone)]
+pub enum ToolCapability {
+    FileOperation,
+    CodeReview,
+    WebSearch,
+    Calculation,
+    DataAnalysis,
+    ImageProcessing,
+}
 
-    fn len(&self) -> usize {
-        self.flattened_options.len()
+impl ToolCapability {
+    fn icon(&self) -> IconName {
+        match self {
+           ToolCapability::FileOperation => IconName::LetterText,
+            ToolCapability::CodeReview => IconName::ChevronDown,
+            ToolCapability::WebSearch => IconName::Search,
+            ToolCapability::Calculation => IconName::Timer,
+            ToolCapability::DataAnalysis => IconName::TimerReset,
+            ToolCapability::ImageProcessing => IconName::Image,
+        }
     }
 
-    fn get(&self, ix: usize) -> Option<&Self::Item> {
-        self.flattened_options.get(ix)
+    fn label(&self) -> &'static str {
+        match self {
+            ToolCapability::FileOperation => "文件",
+            ToolCapability::CodeReview => "代码",
+            ToolCapability::WebSearch => "搜索",
+            ToolCapability::Calculation => "计算",
+            ToolCapability::DataAnalysis => "分析",
+            ToolCapability::ImageProcessing => "图像",
+        }
+    }
+}
+
+// MCP工具信息
+#[derive(Debug, Clone)]
+pub struct McpToolInfo {
+    pub name: String,
+    pub provider: String,
+    pub is_selected: bool,
+    pub capabilities: Vec<ToolCapability>,
+    pub description: String,
+}
+
+// MCP工具提供商信息
+#[derive(Debug, Clone)]
+pub struct McpProviderInfo {
+    pub name: String,
+    pub tools: Vec<McpToolInfo>,
+}
+
+// MCP工具管理器
+pub struct McpToolManager {
+    pub providers: Vec<McpProviderInfo>,
+}
+
+impl McpToolManager {
+    pub fn new() -> Self {
+        let providers = vec![
+            McpProviderInfo {
+                name: "开发工具".to_string(),
+                tools: vec![
+                    McpToolInfo {
+                        name: "代码审查助手".to_string(),
+                        provider: "开发工具".to_string(),
+                        is_selected: false,
+                        capabilities: vec![ToolCapability::CodeReview, ToolCapability::FileOperation],
+                        description: "自动审查代码质量和安全性".to_string(),
+                    },
+                    McpToolInfo {
+                        name: "Git操作工具".to_string(),
+                        provider: "开发工具".to_string(),
+                        is_selected: false,
+                        capabilities: vec![ToolCapability::FileOperation, ToolCapability::CodeReview],
+                        description: "管理Git仓库和版本控制".to_string(),
+                    },
+                ],
+            },
+            McpProviderInfo {
+                name: "数据处理".to_string(),
+                tools: vec![
+                    McpToolInfo {
+                        name: "Excel处理器".to_string(),
+                        provider: "数据处理".to_string(),
+                        is_selected: false,
+                        capabilities: vec![ToolCapability::FileOperation, ToolCapability::DataAnalysis],
+                        description: "处理和分析Excel文件".to_string(),
+                    },
+                    McpToolInfo {
+                        name: "数据可视化".to_string(),
+                        provider: "数据处理".to_string(),
+                        is_selected: false,
+                        capabilities: vec![ToolCapability::DataAnalysis, ToolCapability::ImageProcessing],
+                        description: "生成图表和数据可视化".to_string(),
+                    },
+                ],
+            },
+            McpProviderInfo {
+                name: "网络工具".to_string(),
+                tools: vec![
+                    McpToolInfo {
+                        name: "网页爬虫".to_string(),
+                        provider: "网络工具".to_string(),
+                        is_selected: false,
+                        capabilities: vec![ToolCapability::WebSearch, ToolCapability::DataAnalysis],
+                        description: "自动抓取和分析网页数据".to_string(),
+                    },
+                    McpToolInfo {
+                        name: "SEO分析器".to_string(),
+                        provider: "网络工具".to_string(),
+                        is_selected: false,
+                        capabilities: vec![ToolCapability::WebSearch, ToolCapability::DataAnalysis],
+                        description: "网站SEO优化分析".to_string(),
+                    },
+                ],
+            },
+        ];
+
+        Self { providers }
     }
 
-    fn position<V>(&self, value: &V) -> Option<usize>
-    where
-        Self::Item: DropdownItem<Value = V>,
-        V: PartialEq,
-    {
-        self.flattened_options
-            .iter()
-            .position(|item| item.value() == value)
+    pub fn toggle_tool_selection(&mut self, tool_name: &str) {
+        for provider in &mut self.providers {
+            for tool in &mut provider.tools {
+                if tool.name == tool_name {
+                    tool.is_selected = !tool.is_selected;
+                    return;
+                }
+            }
+        }
+    }
+
+    pub fn get_selected_tools(&self) -> Vec<String> {
+        let mut selected = Vec::new();
+        for provider in &self.providers {
+            for tool in &provider.tools {
+                if tool.is_selected {
+                    selected.push(tool.name.clone());
+                }
+            }
+        }
+        selected
+    }
+
+    pub fn get_selected_count(&self) -> usize {
+        self.get_selected_tools().len()
     }
 }
 
@@ -221,9 +377,13 @@ pub struct TodoThreadChat {
     scroll_size: gpui::Size<Pixels>,
     scroll_state: Rc<Cell<ScrollbarState>>,
 
-    // AI助手配置
-    model_dropdown: Entity<DropdownState<HierarchicalModelDelegate>>,
-    mcp_tools_dropdown: Entity<DropdownState<Vec<SharedString>>>,
+    // AI助手配置 - 改为管理器
+    model_manager: ModelManager,
+    mcp_tool_manager: McpToolManager,
+
+    // 手风琴展开状态
+    expanded_providers: Vec<usize>,
+    expanded_tool_providers: Vec<usize>,
 
     _subscriptions: Vec<Subscription>,
 }
@@ -239,29 +399,12 @@ impl TodoThreadChat {
                 .auto_grow(1, 6)
         });
 
-        // AI助手配置
-        let model_delegate = HierarchicalModelDelegate::new();
-        let model_dropdown = cx.new(|cx| DropdownState::new(model_delegate, None, window, cx));
-
-        let mcp_tools = vec![
-            "文件操作".into(),
-            "代码审查".into(),
-            "网络搜索".into(),
-            "计算器".into(),
-        ];
-        let mcp_tools_dropdown = cx.new(|cx| DropdownState::new(mcp_tools, None, window, cx));
+        // AI助手配置 - 使用管理器
+        let model_manager = ModelManager::new();
+        let mcp_tool_manager = McpToolManager::new();
 
         let _subscriptions = vec![
             cx.subscribe_in(&chat_input, window, Self::on_chat_input_event),
-            // 监听模型选择变化
-            cx.subscribe(&model_dropdown, |this, _, event, cx| match event {
-                DropdownEvent::Confirm(selected_value) => {
-                    if let Some(model_name) = selected_value {
-                        println!("选择了模型: {}", model_name);
-                    }
-                    cx.notify();
-                }
-            }),
         ];
 
         // 初始化欢迎消息
@@ -281,12 +424,433 @@ impl TodoThreadChat {
             chat_input,
             is_loading: false,
             scroll_handle: ScrollHandle::new(),
-            model_dropdown,
-            mcp_tools_dropdown,
+            model_manager,
+            mcp_tool_manager,
+            expanded_providers: Vec::new(),
+            expanded_tool_providers: Vec::new(),
             _subscriptions,
             scroll_state: Rc::new(Cell::new(ScrollbarState::default())),
             scroll_size: gpui::Size::default(),
         }
+    }
+
+    // 获取模型选择显示文本
+    fn get_model_display_text(&self, _cx: &App) -> String {
+        let selected_models = self.model_manager.get_selected_models();
+        let selected_count = selected_models.len();
+
+        if selected_count == 0 {
+            "选择模型".to_string()
+        } else if selected_count == 1 {
+            selected_models[0].clone()
+        } else {
+            format!("{} 等{}个模型", selected_models[0], selected_count)
+        }
+    }
+
+    // 获取工具选择显示文本
+    fn get_tool_display_text(&self, _cx: &App) -> String {
+        let selected_tools = self.mcp_tool_manager.get_selected_tools();
+        let selected_count = selected_tools.len();
+
+        if selected_count == 0 {
+            "选择MCP工具".to_string()
+        } else if selected_count == 1 {
+            selected_tools[0].clone()
+        } else {
+            format!("{} 等{}个工具", selected_tools[0], selected_count)
+        }
+    }
+
+    fn toggle_accordion(&mut self, open_indices: &[usize], cx: &mut Context<Self>) {
+        self.expanded_providers = open_indices.to_vec();
+        cx.notify();
+    }
+
+    fn toggle_tool_accordion(&mut self, open_indices: &[usize], cx: &mut Context<Self>) {
+        self.expanded_tool_providers = open_indices.to_vec();
+        cx.notify();
+    }
+
+    fn open_model_drawer_at(
+        &mut self,
+        placement: Placement,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let todo_edit_entity = cx.entity().clone();
+        
+        window.open_drawer_at(placement, cx, move |drawer, _window, drawer_cx| {
+            let providers = todo_edit_entity.read(drawer_cx).model_manager.providers.clone();
+            let expanded_providers = todo_edit_entity.read(drawer_cx).expanded_providers.clone();
+
+            let mut accordion = Accordion::new("chat-model-providers")
+                .on_toggle_click({
+                    let todo_edit_entity_for_toggle = todo_edit_entity.clone();
+                    move |open_indices, _window, cx| {
+                        todo_edit_entity_for_toggle.update(cx, |todo_edit, todo_cx| {
+                            todo_edit.toggle_accordion(open_indices, todo_cx);
+                        });
+                    }
+                });
+
+            for (provider_index, provider) in providers.iter().enumerate() {
+                let provider_name = provider.name.clone();
+                let provider_models = provider.models.clone();
+                
+                let has_selected_models = provider_models.iter().any(|model| model.is_selected);
+                let is_expanded = has_selected_models || expanded_providers.contains(&provider_index);
+
+                accordion = accordion.item(|item| {
+                    item.open(is_expanded)
+                        .icon(IconName::Bot)
+                        .title(
+                            h_flex()
+                                .w_full()
+                                .items_center()
+                                .justify_between()
+                                .child(
+                                    h_flex()
+                                        .items_center()
+                                        .gap_2()
+                                        .child(
+                                            div()
+                                                .font_medium()
+                                                .text_color(gpui::rgb(0x374151))
+                                                .child(provider_name.clone()),
+                                        )
+                                        .when(has_selected_models, |this| {
+                                            this.child(
+                                                Icon::new(IconName::Check)
+                                                    .xsmall()
+                                                    .text_color(gpui::rgb(0x10B981)),
+                                            )
+                                        }),
+                                )
+                                .child(
+                                    div()
+                                        .px_2()
+                                        .py_1()
+                                        .bg(if has_selected_models {
+                                            gpui::rgb(0xDCFCE7)
+                                        } else {
+                                            gpui::rgb(0xEFF6FF)
+                                        })
+                                        .text_color(if has_selected_models {
+                                            gpui::rgb(0x166534)
+                                        } else {
+                                            gpui::rgb(0x1D4ED8)
+                                        })
+                                        .rounded_md()
+                                        .text_xs()
+                                        .child(format!("{} 个模型", provider_models.len())),
+                                ),
+                        )
+                        .content(
+                            v_flex()
+                                .gap_2()
+                                .p_2()
+                                .children(provider_models.iter().enumerate().map(
+                                    |(model_index, model)| {
+                                        let model_name_for_event = model.name.clone();
+                                        let checkbox_id = SharedString::new(format!(
+                                            "chat-model-{}-{}",
+                                            provider_index, model_index
+                                        ));
+                                        let todo_edit_entity_for_event = todo_edit_entity.clone();
+
+                                        div()
+                                            .p_2()
+                                            .bg(gpui::rgb(0xFAFAFA))
+                                            .rounded_md()
+                                            .border_1()
+                                            .border_color(gpui::rgb(0xE5E7EB))
+                                            .hover(|style| style.bg(gpui::rgb(0xF3F4F6)))
+                                            .child(
+                                                h_flex()
+                                                    .items_center()
+                                                    .justify_between()
+                                                    .child(
+                                                        h_flex()
+                                                            .items_center()
+                                                            .gap_3()
+                                                            .child(
+                                                                Checkbox::new(checkbox_id)
+                                                                    .checked(model.is_selected)
+                                                                    .label(model.name.clone())
+                                                                    .on_click(
+                                                                        move |_checked, _window, cx| {
+                                                                            let model_name_to_toggle =
+                                                                                model_name_for_event.clone();
+                                                                            
+                                                                            todo_edit_entity_for_event.update(cx, |todo_edit, todo_cx| {
+                                                                                todo_edit.model_manager.toggle_model_selection(&model_name_to_toggle);
+                                                                                todo_cx.notify();
+                                                                            });
+
+                                                                            println!(
+                                                                                "切换模型选择: {}",
+                                                                                model_name_to_toggle
+                                                                            );
+                                                                        },
+                                                                    ),
+                                                            )
+                                                            .child(
+                                                                h_flex().gap_1().items_center().children(
+                                                                    model.capabilities.iter().enumerate().map(
+                                                                        |(cap_index, cap)| {
+                                                                            let capability_unique_id = provider_index * 10000
+                                                                                + model_index * 1000
+                                                                                + cap_index;
+
+                                                                            div()
+                                                                                .id(("chat_capability", capability_unique_id))
+                                                                                .p_1()
+                                                                                .rounded_md()
+                                                                                .bg(gpui::rgb(0xF3F4F6))
+                                                                                .child(
+                                                                                    Icon::new(cap.icon())
+                                                                                        .xsmall()
+                                                                                        .text_color(gpui::rgb(0x6B7280)),
+                                                                                )
+                                                                        },
+                                                                    ),
+                                                                ),
+                                                            ),
+                                                    ),
+                                            )
+                                    },
+                                ))
+                        )
+                });
+            }
+
+            let todo_edit_entity_for_clear = todo_edit_entity.clone();
+
+            drawer
+                .overlay(true)
+                .size(px(380.))
+                .title("选择模型")
+                .child(accordion)
+                .footer(
+                    h_flex()
+                        .justify_center()
+                        .items_center()
+                        .p_2()
+                        .bg(gpui::rgb(0xFAFAFA))
+                        .child(
+                            Button::new("clear-all-chat-models")
+                                .label("清空选择")
+                                .on_click(move |_, window, cx| {
+                                    todo_edit_entity_for_clear.update(cx, |todo_edit, todo_cx| {
+                                        for provider in &mut todo_edit.model_manager.providers {
+                                            for model in &mut provider.models {
+                                                model.is_selected = false;
+                                            }
+                                        }
+                                        todo_cx.notify();
+                                    });
+                                    println!("清空所有模型选择");
+                                    window.close_drawer(cx);
+                                }),
+                        ),
+                )
+        });
+    }
+
+    fn open_tool_drawer_at(
+        &mut self,
+        placement: Placement,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let todo_edit_entity = cx.entity().clone();
+        
+        window.open_drawer_at(placement, cx, move |drawer, _window, drawer_cx| {
+            let providers = todo_edit_entity.read(drawer_cx).mcp_tool_manager.providers.clone();
+            let expanded_providers = todo_edit_entity.read(drawer_cx).expanded_tool_providers.clone();
+
+            let mut accordion = Accordion::new("chat-tool-providers")
+                .on_toggle_click({
+                    let todo_edit_entity_for_toggle = todo_edit_entity.clone();
+                    move |open_indices, _window, cx| {
+                        todo_edit_entity_for_toggle.update(cx, |todo_edit, todo_cx| {
+                            todo_edit.toggle_tool_accordion(open_indices, todo_cx);
+                        });
+                    }
+                });
+
+            for (provider_index, provider) in providers.iter().enumerate() {
+                let provider_name = provider.name.clone();
+                let provider_tools = provider.tools.clone();
+                
+                let has_selected_tools = provider_tools.iter().any(|tool| tool.is_selected);
+                let is_expanded = has_selected_tools || expanded_providers.contains(&provider_index);
+
+                accordion = accordion.item(|item| {
+                    item.open(is_expanded)
+                        .icon(IconName::Wrench)
+                        .title(
+                            h_flex()
+                                .w_full()
+                                .items_center()
+                                .justify_between()
+                                .child(
+                                    h_flex()
+                                        .items_center()
+                                        .gap_2()
+                                        .child(
+                                            div()
+                                                .font_medium()
+                                                .text_color(gpui::rgb(0x374151))
+                                                .child(provider_name.clone()),
+                                        )
+                                        .when(has_selected_tools, |this| {
+                                            this.child(
+                                                Icon::new(IconName::Check)
+                                                    .xsmall()
+                                                    .text_color(gpui::rgb(0x10B981)),
+                                            )
+                                        }),
+                                )
+                                .child(
+                                    div()
+                                        .px_2()
+                                        .py_1()
+                                        .bg(if has_selected_tools {
+                                            gpui::rgb(0xDCFCE7)
+                                        } else {
+                                            gpui::rgb(0xFFF7ED)
+                                        })
+                                        .text_color(if has_selected_tools {
+                                            gpui::rgb(0x166534)
+                                        } else {
+                                            gpui::rgb(0xEA580C)
+                                        })
+                                        .rounded_md()
+                                        .text_xs()
+                                        .child(format!("{} 个工具", provider_tools.len())),
+                                ),
+                        )
+                        .content(
+                            v_flex()
+                                .gap_2()
+                                .p_2()
+                                .children(provider_tools.iter().enumerate().map(
+                                    |(tool_index, tool)| {
+                                        let tool_name_for_event = tool.name.clone();
+                                        let checkbox_id = SharedString::new(format!(
+                                            "chat-tool-{}-{}",
+                                            provider_index, tool_index
+                                        ));
+                                        let todo_edit_entity_for_event = todo_edit_entity.clone();
+
+                                        div()
+                                            .p_1()
+                                            .bg(gpui::rgb(0xFAFAFA))
+                                            .rounded_md()
+                                            .hover(|style| style.bg(gpui::rgb(0xF3F4F6)))
+                                            .child(
+                                                v_flex()
+                                                    .gap_1()
+                                                    .child(
+                                                        h_flex()
+                                                            .items_center()
+                                                            .justify_between()
+                                                            .child(
+                                                                h_flex()
+                                                                    .items_center()
+                                                                    .gap_3()
+                                                                    .child(
+                                                                        Checkbox::new(checkbox_id)
+                                                                            .checked(tool.is_selected)
+                                                                            .label(tool.name.clone())
+                                                                            .on_click(
+                                                                                move |_checked, _window, cx| {
+                                                                                    let tool_name_to_toggle =
+                                                                                        tool_name_for_event.clone();
+                                                                                    
+                                                                                    todo_edit_entity_for_event.update(cx, |todo_edit, todo_cx| {
+                                                                                        todo_edit.mcp_tool_manager.toggle_tool_selection(&tool_name_to_toggle);
+                                                                                        todo_cx.notify();
+                                                                                    });
+
+                                                                                    println!(
+                                                                                        "切换工具选择: {}",
+                                                                                        tool_name_to_toggle
+                                                                                    );
+                                                                                },
+                                                                            ),
+                                                                    )
+                                                                    // .child(
+                                                                    //     h_flex().gap_1().items_center().children(
+                                                                    //         tool.capabilities.iter().enumerate().map(
+                                                                    //             |(cap_index, cap)| {
+                                                                    //                 let capability_unique_id = provider_index * 10000
+                                                                    //                     + tool_index * 1000
+                                                                    //                     + cap_index;
+
+                                                                    //                 div()
+                                                                    //                     .id(("chat_tool_capability", capability_unique_id))
+                                                                    //                     .p_1()
+                                                                    //                     .rounded_md()
+                                                                    //                     .bg(gpui::rgb(0xF3F4F6))
+                                                                    //                     .child(
+                                                                    //                         Icon::new(cap.icon())
+                                                                    //                             .xsmall()
+                                                                    //                             .text_color(gpui::rgb(0x6B7280)),
+                                                                    //                     )
+                                                                    //             },
+                                                                    //         ),
+                                                                    //     ),
+                                                                    // ),
+                                                            ),
+                                                    )
+                                                    .child(
+                                                        div()
+                                                            .pl_6()
+                                                            .text_xs()
+                                                            .text_color(gpui::rgb(0x6B7280))
+                                                            .child(tool.description.clone()),
+                                                    ),
+                                            )
+                                    },
+                                ))
+                        )
+                });
+            }
+
+            let todo_edit_entity_for_clear = todo_edit_entity.clone();
+
+            drawer
+                .overlay(true)
+                .size(px(380.))
+                .title("选择对话工具")
+                .child(accordion)
+                .footer(
+                    h_flex()
+                        .justify_center()
+                        .items_center()
+                        .p_2()
+                        .bg(gpui::rgb(0xFAFAFA))
+                        .child(
+                            Button::new("clear-all-chat-tools")
+                                .label("清空选择")
+                                .on_click(move |_, window, cx| {
+                                    todo_edit_entity_for_clear.update(cx, |todo_edit, todo_cx| {
+                                        for provider in &mut todo_edit.mcp_tool_manager.providers {
+                                            for tool in &mut provider.tools {
+                                                tool.is_selected = false;
+                                            }
+                                        }
+                                        todo_cx.notify();
+                                    });
+                                    println!("清空所有工具选择");
+                                    window.close_drawer(cx);
+                                }),
+                        ),
+                )
+        });
     }
 
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
@@ -304,7 +868,6 @@ impl TodoThreadChat {
         }
         let message_content = message_content.to_string().trim().to_string();
 
-        // 添加用户消息
         let user_message = ChatMessage {
             id: format!("user_{}", chrono::Utc::now().timestamp()),
             role: MessageRole::User,
@@ -316,14 +879,10 @@ impl TodoThreadChat {
 
         self.chat_messages.push(user_message);
 
-        // 清空输入框
         self.chat_input
             .update(cx, |input, cx| input.set_value("", window, cx));
 
-        // 设置加载状态
         self.is_loading = true;
-
-        // 模拟AI响应
         self.simulate_ai_response(message_content, cx);
         self.scroll_handle.scroll_to_bottom();
         cx.notify();
@@ -331,18 +890,10 @@ impl TodoThreadChat {
 
     fn simulate_ai_response(&mut self, user_message: String, cx: &mut Context<Self>) {
         // 获取当前选择的模型和工具
-        let selected_model = self
-            .model_dropdown
-            .read(cx)
-            .selected_value()
-            .map(|v| v.to_string());
+        let selected_models = self.model_manager.get_selected_models();
+        let selected_tools = self.mcp_tool_manager.get_selected_tools();
 
-        let selected_tools = self
-            .mcp_tools_dropdown
-            .read(cx)
-            .selected_value()
-            .map(|v| vec![v.to_string()])
-            .unwrap_or_default();
+        let selected_model = selected_models.first().cloned();
 
         // 模拟AI响应内容
         let response_content = match user_message.to_lowercase().as_str() {
@@ -365,7 +916,6 @@ impl TodoThreadChat {
             ),
         };
 
-        // 添加AI响应消息
         let ai_message = ChatMessage {
             id: format!("ai_{}", chrono::Utc::now().timestamp()),
             role: MessageRole::Assistant,
@@ -390,8 +940,6 @@ impl TodoThreadChat {
     ) {
         match event {
             InputEvent::PressEnter { secondary, .. } if *secondary => {
-                // Ctrl+Enter 发送消息
-                // self.send_message(&SendMessage, window, cx);
                 window.dispatch_action(Box::new(SendMessage), cx);
             }
             InputEvent::PressEnter { .. } => {
@@ -487,8 +1035,6 @@ impl FocusableCycle for TodoThreadChat {
     fn cycle_focus_handles(&self, _: &mut Window, cx: &mut App) -> Vec<FocusHandle> {
         vec![
             self.chat_input.focus_handle(cx),
-            self.model_dropdown.focus_handle(cx),
-            self.mcp_tools_dropdown.focus_handle(cx),
         ]
     }
 }
@@ -554,60 +1100,79 @@ impl Render for TodoThreadChat {
                                             self.scroll_state.clone(),
                                             self.scroll_handle.clone(),
                                             self.scroll_size,
-                                        )
-                                       ,
+                                        ),
                                     ),
                             ),
                     ),
                 ),
             )
             .child(
-                // 中间区域：模型和工具选择
+                // 中间区域：模型和工具选择 - 改为按钮
                 h_flex()
                     .items_center()
-                    .justify_center()
-                    .gap_4()
+                    .justify_around()
+                    .gap_2()
                     .p_2()
                     .border_t_1()
                     .border_b_1()
                     .border_color(gpui::rgb(0xE5E7EB))
                     .bg(gpui::rgb(0xF9FAFB))
                     .child(
-                        h_flex()
+                        h_flex().justify_start()
                             .items_center()
                             .gap_2()
                             .child(
-                                div()
-                                    .text_sm()
-                                    .font_medium()
-                                    .text_color(gpui::rgb(0x6B7280))
-                                    .child("模型:"),
-                            )
-                            .child(
-                                div().w_48().child(
-                                    Dropdown::new(&self.model_dropdown)
-                                        .placeholder("选择模型")
-                                        .small(),
-                                ),
+                            Button::new("show-chat-model-drawer")
+                                        .label({
+                                            let display_text = self.get_model_display_text(cx);
+                                            if display_text == "选择模型" {
+                                                display_text
+                                            } else {
+                                                display_text
+                                            }
+                                        })
+                                        .ghost()
+                                        .xsmall()
+                                        .justify_center()
+                                        .text_color(
+                                            if self.get_model_display_text(cx) == "选择AI模型" {
+                                                gpui::rgb(0x9CA3AF)
+                                            } else {
+                                                gpui::rgb(0x374151)
+                                            },
+                                        )
+                                        .on_click(cx.listener(|this, _, window, cx| {
+                                            this.open_model_drawer_at(Placement::Left, window, cx)
+                                        })),
                             ),
                     )
                     .child(
-                        h_flex()
+                        h_flex().justify_start()
                             .items_center()
                             .gap_2()
                             .child(
-                                div()
-                                    .text_sm()
-                                    .font_medium()
-                                    .text_color(gpui::rgb(0x6B7280))
-                                    .child("工具:"),
-                            )
-                            .child(
-                                div().w_48().child(
-                                    Dropdown::new(&self.mcp_tools_dropdown)
-                                        .placeholder("选择工具")
-                                        .small(),
-                                ),
+                            Button::new("show-chat-tool-drawer")
+                                        .label({
+                                            let display_text = self.get_tool_display_text(cx);
+                                            if display_text == "选择工具集" {
+                                                display_text
+                                            } else {
+                                                display_text
+                                            }
+                                        })
+                                        .ghost()
+                                        .xsmall()
+                                        .justify_center()
+                                        .text_color(
+                                            if self.get_tool_display_text(cx) == "选择工具集" {
+                                                gpui::rgb(0x9CA3AF)
+                                            } else {
+                                                gpui::rgb(0x374151)
+                                            },
+                                        )
+                                        .on_click(cx.listener(|this, _, window, cx| {
+                                            this.open_tool_drawer_at(Placement::Left, window, cx)
+                                        })),
                             ),
                     ),
             )
@@ -621,7 +1186,6 @@ impl Render for TodoThreadChat {
                         div().w_full().child(TextInput::new(&self.chat_input)),
                     )
                     .child(
-                        // 发送按钮区域
                         h_flex().justify_end().child(
                             Button::new("send-message")
                                 .with_variant(ButtonVariant::Primary)
@@ -630,7 +1194,6 @@ impl Render for TodoThreadChat {
                                 .disabled(self.is_loading)
                                 .on_click(cx.listener(|this, _, window, cx| {
                                     window.dispatch_action(Box::new(SendMessage), cx);
-                                    // this.send_message(&SendMessage, window, cx)
                                 })),
                         ),
                     ),
