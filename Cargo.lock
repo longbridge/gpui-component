@@ -815,9 +815,9 @@ dependencies = [
 
 [[package]]
 name = "bytemuck"
-version = "1.23.0"
+version = "1.23.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9134a6ef01ce4b366b50689c94f82c14bc72bc5d0386829828a2e2752ef7958c"
+checksum = "5c76a5792e44e4abe34d3abf15636779261d45a7450612059293d1d2cfc63422"
 dependencies = [
  "bytemuck_derive",
 ]
@@ -1109,6 +1109,16 @@ dependencies = [
  "serde",
  "termcolor",
  "unicode-width 0.2.0",
+]
+
+[[package]]
+name = "collections"
+version = "0.1.0"
+source = "git+https://github.com/zed-industries/zed.git?branch=main#b15aef4310e86aa31c2ceab74184ec7e5627a2c5"
+dependencies = [
+ "indexmap 2.9.0",
+ "rustc-hash 2.1.1",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -1611,6 +1621,17 @@ dependencies = [
 [[package]]
 name = "derive_refineable"
 version = "0.1.0"
+source = "git+https://github.com/zed-industries/zed.git?branch=main#b15aef4310e86aa31c2ceab74184ec7e5627a2c5"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.101",
+ "workspace-hack",
+]
+
+[[package]]
+name = "derive_refineable"
+version = "0.1.0"
 source = "git+https://github.com/huacnlee/zed.git?branch=webview#a3de08a1fca76a321e935462dfa7ec72a36037b8"
 dependencies = [
  "proc-macro2",
@@ -1963,6 +1984,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "examples"
+version = "0.1.0"
+dependencies = [
+ "gpui 0.1.0 (git+https://github.com/zed-industries/zed.git?branch=main)",
+]
+
+[[package]]
 name = "exr"
 version = "1.73.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2046,9 +2074,9 @@ dependencies = [
 
 [[package]]
 name = "flate2"
-version = "1.1.1"
+version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7ced92e76e966ca2fd84c8f7aa01a4aea65b0eb6648d72f7c8f3e2764a67fece"
+checksum = "4a3d7db9596fecd151c5f638c0ee5d5bd487b6e0ea232e5dc96d5250f6f94b1d"
 dependencies = [
  "crc32fast",
  "miniz_oxide",
@@ -2685,6 +2713,99 @@ dependencies = [
 [[package]]
 name = "gpui"
 version = "0.1.0"
+source = "git+https://github.com/zed-industries/zed.git?branch=main#b15aef4310e86aa31c2ceab74184ec7e5627a2c5"
+dependencies = [
+ "anyhow",
+ "as-raw-xcb-connection",
+ "ashpd",
+ "async-task",
+ "bindgen 0.71.1",
+ "blade-graphics",
+ "blade-macros",
+ "blade-util",
+ "block",
+ "bytemuck",
+ "calloop",
+ "calloop-wayland-source",
+ "cbindgen",
+ "cocoa 0.26.1",
+ "collections 0.1.0 (git+https://github.com/zed-industries/zed.git?branch=main)",
+ "core-foundation 0.10.1",
+ "core-foundation-sys",
+ "core-graphics 0.24.0",
+ "core-text",
+ "core-video",
+ "cosmic-text",
+ "ctor",
+ "derive_more",
+ "embed-resource",
+ "etagere",
+ "filedescriptor",
+ "flume",
+ "font-kit",
+ "foreign-types",
+ "futures",
+ "gpui_macros 0.1.0 (git+https://github.com/zed-industries/zed.git?branch=main)",
+ "http_client 0.1.0 (git+https://github.com/zed-industries/zed.git?branch=main)",
+ "image",
+ "inventory",
+ "itertools 0.14.0",
+ "libc",
+ "log",
+ "lyon",
+ "media 0.1.0 (git+https://github.com/zed-industries/zed.git?branch=main)",
+ "metal",
+ "naga",
+ "num_cpus",
+ "objc",
+ "oo7",
+ "open",
+ "parking",
+ "parking_lot",
+ "pathfinder_geometry",
+ "postage",
+ "profiling",
+ "rand 0.8.5",
+ "raw-window-handle",
+ "refineable 0.1.0 (git+https://github.com/zed-industries/zed.git?branch=main)",
+ "resvg",
+ "scap",
+ "schemars",
+ "seahash",
+ "semantic_version 0.1.0 (git+https://github.com/zed-industries/zed.git?branch=main)",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "slotmap",
+ "smallvec",
+ "smol 2.0.2",
+ "strum 0.27.1",
+ "sum_tree 0.1.0 (git+https://github.com/zed-industries/zed.git?branch=main)",
+ "taffy",
+ "thiserror 2.0.12",
+ "usvg",
+ "util 0.1.0 (git+https://github.com/zed-industries/zed.git?branch=main)",
+ "uuid",
+ "waker-fn",
+ "wayland-backend",
+ "wayland-client",
+ "wayland-cursor",
+ "wayland-protocols",
+ "wayland-protocols-plasma",
+ "windows 0.61.1",
+ "windows-core 0.61.2",
+ "windows-numerics",
+ "windows-registry 0.5.2",
+ "workspace-hack",
+ "x11-clipboard",
+ "x11rb",
+ "xim",
+ "xkbcommon",
+]
+
+[[package]]
+name = "gpui"
+version = "0.1.0"
 source = "git+https://github.com/huacnlee/zed.git?branch=webview#a3de08a1fca76a321e935462dfa7ec72a36037b8"
 dependencies = [
  "anyhow",
@@ -2701,7 +2822,7 @@ dependencies = [
  "calloop-wayland-source",
  "cbindgen",
  "cocoa 0.26.1",
- "collections",
+ "collections 0.1.0 (git+https://github.com/huacnlee/zed.git?branch=webview)",
  "core-foundation 0.10.1",
  "core-foundation-sys",
  "core-graphics 0.24.0",
@@ -2717,15 +2838,15 @@ dependencies = [
  "font-kit",
  "foreign-types",
  "futures",
- "gpui_macros",
- "http_client",
+ "gpui_macros 0.1.0 (git+https://github.com/huacnlee/zed.git?branch=webview)",
+ "http_client 0.1.0 (git+https://github.com/huacnlee/zed.git?branch=webview)",
  "image",
  "inventory",
  "itertools 0.14.0",
  "libc",
  "log",
  "lyon",
- "media",
+ "media 0.1.0 (git+https://github.com/huacnlee/zed.git?branch=webview)",
  "metal",
  "naga",
  "num_cpus",
@@ -2739,12 +2860,12 @@ dependencies = [
  "profiling",
  "rand 0.8.5",
  "raw-window-handle",
- "refineable",
+ "refineable 0.1.0 (git+https://github.com/huacnlee/zed.git?branch=webview)",
  "resvg",
  "scap",
  "schemars",
  "seahash",
- "semantic_version",
+ "semantic_version 0.1.0 (git+https://github.com/huacnlee/zed.git?branch=webview)",
  "serde",
  "serde_derive",
  "serde_json",
@@ -2752,11 +2873,11 @@ dependencies = [
  "smallvec",
  "smol 2.0.2",
  "strum 0.27.1",
- "sum_tree",
+ "sum_tree 0.1.0 (git+https://github.com/huacnlee/zed.git?branch=webview)",
  "taffy",
  "thiserror 2.0.12",
  "usvg",
- "util",
+ "util 0.1.0 (git+https://github.com/huacnlee/zed.git?branch=webview)",
  "uuid",
  "waker-fn",
  "wayland-backend",
@@ -2783,7 +2904,7 @@ dependencies = [
  "chrono",
  "enum-iterator",
  "futures-util",
- "gpui",
+ "gpui 0.1.0 (git+https://github.com/huacnlee/zed.git?branch=webview)",
  "html5ever 0.27.0",
  "image",
  "indoc",
@@ -2834,6 +2955,18 @@ dependencies = [
  "usvg",
  "uuid",
  "wry",
+]
+
+[[package]]
+name = "gpui_macros"
+version = "0.1.0"
+source = "git+https://github.com/zed-industries/zed.git?branch=main#b15aef4310e86aa31c2ceab74184ec7e5627a2c5"
+dependencies = [
+ "heck 0.5.0",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.101",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2963,9 +3096,9 @@ checksum = "e5274423e17b7c9fc20b6e7e208532f9b19825d82dfd615708b70edd83df41f1"
 
 [[package]]
 name = "hashbrown"
-version = "0.15.3"
+version = "0.15.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "84b26c544d002229e640969970a2e74021aadf6e2f96372b9c58eff97de08eb3"
+checksum = "5971ac85611da7067dbfcabef3c70ebb5606018acd9e2a3903a0da507521e0d5"
 dependencies = [
  "foldhash",
 ]
@@ -3104,6 +3237,23 @@ dependencies = [
  "http",
  "http-body",
  "pin-project-lite",
+]
+
+[[package]]
+name = "http_client"
+version = "0.1.0"
+source = "git+https://github.com/zed-industries/zed.git?branch=main#b15aef4310e86aa31c2ceab74184ec7e5627a2c5"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "derive_more",
+ "futures",
+ "http",
+ "log",
+ "serde",
+ "serde_json",
+ "url",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3412,7 +3562,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cea70ddb795996207ad57735b50c5982d8844f38ba9ee5f1aedcfb708a2aa11e"
 dependencies = [
  "equivalent",
- "hashbrown 0.15.3",
+ "hashbrown 0.15.4",
  "serde",
 ]
 
@@ -3991,6 +4141,22 @@ dependencies = [
 [[package]]
 name = "media"
 version = "0.1.0"
+source = "git+https://github.com/zed-industries/zed.git?branch=main#b15aef4310e86aa31c2ceab74184ec7e5627a2c5"
+dependencies = [
+ "anyhow",
+ "bindgen 0.71.1",
+ "core-foundation 0.10.1",
+ "core-video",
+ "ctor",
+ "foreign-types",
+ "metal",
+ "objc",
+ "workspace-hack",
+]
+
+[[package]]
+name = "media"
+version = "0.1.0"
 source = "git+https://github.com/huacnlee/zed.git?branch=webview#a3de08a1fca76a321e935462dfa7ec72a36037b8"
 dependencies = [
  "anyhow",
@@ -4135,7 +4301,7 @@ dependencies = [
  "cfg_aliases",
  "codespan-reporting 0.12.0",
  "half",
- "hashbrown 0.15.3",
+ "hashbrown 0.15.4",
  "hexf-parse",
  "indexmap 2.9.0",
  "log",
@@ -5283,7 +5449,7 @@ version = "3.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "edce586971a4dfaa28950c6f18ed55e0406c1ab88bbce2c6f6293a7aaba73d35"
 dependencies = [
- "toml_edit 0.22.26",
+ "toml_edit 0.22.27",
 ]
 
 [[package]]
@@ -5710,9 +5876,18 @@ dependencies = [
 [[package]]
 name = "refineable"
 version = "0.1.0"
+source = "git+https://github.com/zed-industries/zed.git?branch=main#b15aef4310e86aa31c2ceab74184ec7e5627a2c5"
+dependencies = [
+ "derive_refineable 0.1.0 (git+https://github.com/zed-industries/zed.git?branch=main)",
+ "workspace-hack",
+]
+
+[[package]]
+name = "refineable"
+version = "0.1.0"
 source = "git+https://github.com/huacnlee/zed.git?branch=webview#a3de08a1fca76a321e935462dfa7ec72a36037b8"
 dependencies = [
- "derive_refineable",
+ "derive_refineable 0.1.0 (git+https://github.com/huacnlee/zed.git?branch=webview)",
  "workspace-hack",
 ]
 
@@ -5810,7 +5985,7 @@ dependencies = [
  "anyhow",
  "bytes",
  "futures",
- "http_client",
+ "http_client 0.1.0 (git+https://github.com/huacnlee/zed.git?branch=webview)",
  "http_client_tls",
  "log",
  "regex",
@@ -6339,6 +6514,16 @@ checksum = "0f7d95a54511e0c7be3f51e8867aa8cf35148d7b9445d44de2f943e2b206e749"
 [[package]]
 name = "semantic_version"
 version = "0.1.0"
+source = "git+https://github.com/zed-industries/zed.git?branch=main#b15aef4310e86aa31c2ceab74184ec7e5627a2c5"
+dependencies = [
+ "anyhow",
+ "serde",
+ "workspace-hack",
+]
+
+[[package]]
+name = "semantic_version"
+version = "0.1.0"
 source = "git+https://github.com/huacnlee/zed.git?branch=webview#a3de08a1fca76a321e935462dfa7ec72a36037b8"
 dependencies = [
  "anyhow",
@@ -6431,9 +6616,9 @@ dependencies = [
 
 [[package]]
 name = "serde_spanned"
-version = "0.6.8"
+version = "0.6.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "87607cb1398ed59d48732e575a4c28a7a8ebf2454b964fe3f224f2afc07909e1"
+checksum = "bf41e0cfaf7226dca15e8197172c295a782857fcb97fad1808a166870dee75a3"
 dependencies = [
  "serde",
 ]
@@ -6586,9 +6771,9 @@ dependencies = [
 
 [[package]]
 name = "smallvec"
-version = "1.15.0"
+version = "1.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8917285742e9f3e1683f0a9c4e6b57960b7314d0b08d30d1ecd426713ee2eee9"
+checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
 
 [[package]]
 name = "smol"
@@ -6713,7 +6898,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "fake 2.10.0",
- "gpui",
+ "gpui 0.1.0 (git+https://github.com/huacnlee/zed.git?branch=webview)",
  "gpui-component",
  "gtk",
  "rand 0.8.5",
@@ -6815,6 +7000,17 @@ name = "subtle"
 version = "2.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
+
+[[package]]
+name = "sum_tree"
+version = "0.1.0"
+source = "git+https://github.com/zed-industries/zed.git?branch=main#b15aef4310e86aa31c2ceab74184ec7e5627a2c5"
+dependencies = [
+ "arrayvec",
+ "log",
+ "rayon",
+ "workspace-hack",
+]
 
 [[package]]
 name = "sum_tree"
@@ -7273,7 +7469,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "fake 4.3.0",
- "gpui",
+ "gpui 0.1.0 (git+https://github.com/huacnlee/zed.git?branch=webview)",
  "gpui-component",
  "gtk",
  "rand 0.8.5",
@@ -7340,21 +7536,21 @@ dependencies = [
 
 [[package]]
 name = "toml"
-version = "0.8.22"
+version = "0.8.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "05ae329d1f08c4d17a59bed7ff5b5a769d062e64a62d34a3261b219e62cd5aae"
+checksum = "dc1beb996b9d83529a9e75c17a1686767d148d70663143c7854d8b4a09ced362"
 dependencies = [
  "serde",
  "serde_spanned",
  "toml_datetime",
- "toml_edit 0.22.26",
+ "toml_edit 0.22.27",
 ]
 
 [[package]]
 name = "toml_datetime"
-version = "0.6.9"
+version = "0.6.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3da5db5a963e24bc68be8b17b6fa82814bb22ee8660f192bb182771d498f09a3"
+checksum = "22cddaf88f4fbc13c51aebbf5f8eceb5c7c5a9da2ac40a13519eb5b0a0e8f11c"
 dependencies = [
  "serde",
 ]
@@ -7383,9 +7579,9 @@ dependencies = [
 
 [[package]]
 name = "toml_edit"
-version = "0.22.26"
+version = "0.22.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "310068873db2c5b3e7659d2cc35d21855dbafa50d1ce336397c666e3cb08137e"
+checksum = "41fe8c660ae4257887cf66394862d21dbca4a6ddd26f04a3560410406a2f819a"
 dependencies = [
  "indexmap 2.9.0",
  "serde",
@@ -7397,9 +7593,9 @@ dependencies = [
 
 [[package]]
 name = "toml_write"
-version = "0.1.1"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bfb942dfe1d8e29a7ee7fcbde5bd2b9a25fb89aa70caea2eba3bee836ff41076"
+checksum = "5d99f8c9a7727884afe522e9bd5edbfc91a3312b36a77b5fb8926e4c31a41801"
 
 [[package]]
 name = "tower"
@@ -7983,12 +8179,43 @@ checksum = "b6c140620e7ffbb22c2dee59cafe6084a59b5ffc27a8859a5f0d494b5d52b6be"
 [[package]]
 name = "util"
 version = "0.1.0"
+source = "git+https://github.com/zed-industries/zed.git?branch=main#b15aef4310e86aa31c2ceab74184ec7e5627a2c5"
+dependencies = [
+ "anyhow",
+ "async-fs 2.1.2",
+ "async_zip",
+ "collections 0.1.0 (git+https://github.com/zed-industries/zed.git?branch=main)",
+ "dirs 4.0.0",
+ "dunce",
+ "futures",
+ "futures-lite 1.13.0",
+ "globset",
+ "itertools 0.14.0",
+ "libc",
+ "log",
+ "regex",
+ "rust-embed",
+ "serde",
+ "serde_json",
+ "serde_json_lenient",
+ "smol 2.0.2",
+ "take-until",
+ "tempfile",
+ "tendril",
+ "unicase",
+ "walkdir",
+ "workspace-hack",
+]
+
+[[package]]
+name = "util"
+version = "0.1.0"
 source = "git+https://github.com/huacnlee/zed.git?branch=webview#a3de08a1fca76a321e935462dfa7ec72a36037b8"
 dependencies = [
  "anyhow",
  "async-fs 2.1.2",
  "async_zip",
- "collections",
+ "collections 0.1.0 (git+https://github.com/huacnlee/zed.git?branch=webview)",
  "dirs 4.0.0",
  "dunce",
  "futures",

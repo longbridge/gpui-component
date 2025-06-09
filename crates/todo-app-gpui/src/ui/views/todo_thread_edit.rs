@@ -3,13 +3,15 @@ use gpui::prelude::*;
 use gpui::*;
 
 use gpui_component::{
+    badge::Badge,
     button::{Button, ButtonVariant, ButtonVariants as _},
+    checkbox::Checkbox,
     date_picker::{DatePicker, DatePickerEvent, DatePickerState, DateRangePreset},
     dropdown::{Dropdown, DropdownDelegate, DropdownEvent, DropdownItem, DropdownState},
-    h_flex,
     input::{InputEvent, InputState, TextInput},
+    sidebar::{SidebarGroup, SidebarMenu, SidebarMenuItem},
     switch::Switch,
-    v_flex, FocusableCycle, Icon, IconName, Sizable, StyledExt,
+    *,
 };
 
 use crate::ui::components::ViewKit;
@@ -139,15 +141,13 @@ impl DropdownItem for MultiSelectModel {
                         }),
                 )
                 .child(
-                    v_flex()
-                        .flex_1()
-                        .child(
-                            div()
-                                .text_sm()
-                                .font_medium()
-                                .text_color(gpui::rgb(0x374151))
-                                .child(self.name.clone()),
-                        )
+                    v_flex().flex_1().child(
+                        div()
+                            .text_sm()
+                            .font_medium()
+                            .text_color(gpui::rgb(0x374151))
+                            .child(self.name.clone()),
+                    ),
                 )
                 .into_any_element(),
         )
@@ -350,9 +350,7 @@ impl DropdownDelegate for MultiSelectModelDelegate {
         Self::Item: DropdownItem<Value = V>,
         V: PartialEq,
     {
-        self.items
-            .iter()
-            .position(|item| item.value() == value)
+        self.items.iter().position(|item| item.value() == value)
     }
 }
 
@@ -439,7 +437,8 @@ impl TodoThreadEdit {
             cx.subscribe(&model_dropdown, |this, _, event, cx| match event {
                 DropdownEvent::Confirm(Some(item_name)) => {
                     // 检查点击的是模型还是服务商标题
-                    let is_model = this.model_dropdown
+                    let is_model = this
+                        .model_dropdown
                         .read(cx)
                         .list_entity()
                         .read(cx)
@@ -451,14 +450,15 @@ impl TodoThreadEdit {
                             ModelListItem::Model(model) => model.name == *item_name,
                             _ => false,
                         });
-                    
+
                     if is_model {
                         // 只有点击模型时才切换选择状态
-                        this.model_dropdown.update(cx, |dropdown_state, dropdown_cx| {
-                            dropdown_state.update_delegate(dropdown_cx, |delegate| {
-                                delegate.toggle_selection(item_name);
+                        this.model_dropdown
+                            .update(cx, |dropdown_state, dropdown_cx| {
+                                dropdown_state.update_delegate(dropdown_cx, |delegate| {
+                                    delegate.toggle_selection(item_name);
+                                });
                             });
-                        });
                         println!("切换模型选择: {}", item_name);
                     } else {
                         println!("点击了服务商标题: {}", item_name);
@@ -503,7 +503,8 @@ impl TodoThreadEdit {
 
     fn save(&mut self, _: &Save, _window: &mut Window, cx: &mut Context<Self>) {
         // 获取选中的模型列表
-        let selected_models = self.model_dropdown
+        let selected_models = self
+            .model_dropdown
             .read(cx)
             .list_entity()
             .read(cx)
@@ -608,16 +609,17 @@ impl TodoThreadEdit {
     // 获取模型选择显示文本 - 显示选中的模型名称
     fn get_model_display_text(&self, cx: &App) -> String {
         // 直接访问底层委托数据
-        let selected_models = self.model_dropdown
+        let selected_models = self
+            .model_dropdown
             .read(cx)
             .list_entity()
             .read(cx)
             .delegate()
             .delegate()
             .get_selected_models();
-        
+
         let selected_count = selected_models.len();
-        
+
         if selected_count == 0 {
             "选择AI模型".to_string()
         } else if selected_count <= 2 {
@@ -625,9 +627,138 @@ impl TodoThreadEdit {
             selected_models.join(", ")
         } else {
             // 如果选中的模型超过2个，显示前2个模型名称 + "等X个模型"
-            let first_two = selected_models.iter().take(2).cloned().collect::<Vec<_>>().join(", ");
+            let first_two = selected_models
+                .iter()
+                .take(2)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", ");
             format!("{} 等{}个模型", first_two, selected_count)
         }
+    }
+
+    fn open_drawer_at(
+        &mut self,
+        placement: Placement,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let model_dropdown = self.model_dropdown.clone();
+
+        window.open_drawer_at(placement, cx, move |drawer, _window, drawer_cx| {
+            // 获取模型列表数据
+            let model_list_items = model_dropdown
+                .read(drawer_cx)
+                .list_entity()
+                .read(drawer_cx)
+                .delegate()
+                .delegate()
+                .items
+                .clone();
+
+            let mut children_elements = Vec::new();
+
+            for item in model_list_items {
+                match item {
+                    ModelListItem::Provider(provider) => {
+                        // 服务商标题
+                        children_elements.push(
+                            div()
+                                .py_2()
+                                .px_3()
+                                .bg(gpui::rgb(0xF3F4F6))
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .text_color(gpui::rgb(0x374151))
+                                .child(provider.name.clone())
+                                .into_any_element(),
+                        );
+                    }
+                    ModelListItem::Model(model_data) => {
+                        let model_name_for_event = model_data.name.clone();
+                        let checkbox_id = format!("drawer-model-checkbox-{}", model_data.name);
+                        let model_dropdown_clone = model_dropdown.clone();
+
+                        // 模型选项（带缩进和复选框）
+                        children_elements.push(
+                            div()
+                                .pl_6() // 缩进表示层级关系
+                                .py_1()
+                                .px_3()
+                                .child(
+                                    Checkbox::new(SharedString::new(checkbox_id)) // 使用 .as_str() 转换为 &str
+                                        .checked(model_data.is_selected)
+                                        .label(model_data.name.clone())
+                                        .on_click(move |_checked, window, cx| {
+                                            let model_name_to_toggle = model_name_for_event.clone();
+                                            let model_dropdown_for_update =
+                                                model_dropdown_clone.clone();
+
+                                            // 更新底层模型选择状态
+                                            model_dropdown_for_update.update(
+                                                cx,
+                                                |dropdown_state, dropdown_cx| {
+                                                    dropdown_state.update_delegate(
+                                                        dropdown_cx,
+                                                        |delegate| {
+                                                            delegate.toggle_selection(
+                                                                &model_name_to_toggle,
+                                                            );
+                                                        },
+                                                    );
+                                                },
+                                            );
+
+                                            // 关闭并重新打开抽屉以刷新状态
+                                            window.close_drawer(cx);
+                                        }),
+                                )
+                                .into_any_element(),
+                        );
+                    }
+                }
+            }
+
+            drawer
+                .overlay(true)
+                .size(px(320.))
+                .title("选择AI模型")
+                .child(
+                    v_flex()
+                        .id("model-drawer-content")
+                        .size_full()
+                        .overflow_y_scroll()
+                        .py_2()
+                        .gap_px()
+                        .children(children_elements),
+                )
+                .footer(
+                    h_flex()
+                        .justify_between()
+                        .items_center()
+                        .p_3()
+                        .child(
+                            // 显示已选择的模型数量
+                            div().text_sm().text_color(gpui::rgb(0x6B7280)).child({
+                                let selected_count = model_dropdown
+                                    .read(drawer_cx)
+                                    .list_entity()
+                                    .read(drawer_cx)
+                                    .delegate()
+                                    .delegate()
+                                    .get_selected_count();
+                                format!("已选择 {} 个模型", selected_count)
+                            }),
+                        )
+                        .child(
+                            Button::new("close-model-drawer")
+                                .label("确定")
+                                .with_variant(ButtonVariant::Primary)
+                                .on_click(|_, window, cx| {
+                                    window.close_drawer(cx);
+                                }),
+                        ),
+                )
+        });
     }
 }
 
@@ -730,7 +861,21 @@ impl Render for TodoThreadEdit {
                             .child(
                                 v_flex()
                                     .gap_1()
-                                    .child(Self::section_title("任务描述"))
+                                    .child(
+                                        h_flex()
+                                            .justify_between()
+                                            .items_center()
+                                            .child(Self::section_title("任务描述"))
+                                            .child(
+                                                Checkbox::new("push-feishu-button")
+                                                    .label("推送到飞书")
+                                                    .checked(true)
+                                                    .on_click(cx.listener(|view, _, _, cx| {
+                                                        // view.disabled = !view.disabled;
+                                                        cx.notify();
+                                                    })),
+                                            ),
+                                    )
                                     .child(TextInput::new(&self.description_input).cleanable()),
                             ),
                     )
@@ -802,30 +947,32 @@ impl Render for TodoThreadEdit {
                             .pb_2()
                             .bg(gpui::rgb(0xF9FAFB))
                             .rounded_lg()
-                            .child(Self::section_title("AI助手配置"))
-                            .child(Self::form_row(
-                                "模型选择",
-                                {
-                                    let display_text = self.get_model_display_text(cx);
-                                    Dropdown::new(&self.model_dropdown)
-                                        .placeholder(display_text)  // 使用动态计算的文本
-                                        .small()
-                                        .empty(
-                                            h_flex()
-                                                .h_8()
-                                                .justify_center()
-                                                .items_center()
-                                                .text_color(gpui::rgb(0x9CA3AF))
-                                                .text_xs()
-                                                .child("暂无可用模型"),
-                                        )
-                                },
-                            ))
+                            .child(Self::section_title("助手配置"))
+                            .child(Self::form_row("模型选择", {
+                                let display_text = self.get_model_display_text(cx);
+                                Dropdown::new(&self.model_dropdown)
+                                    .placeholder(display_text) // 使用动态计算的文本
+                                    .small()
+                                    .empty(
+                                        h_flex()
+                                            .h_8()
+                                            .justify_center()
+                                            .items_center()
+                                            .text_color(gpui::rgb(0x9CA3AF))
+                                            .text_xs()
+                                            .child("暂无可用模型"),
+                                    )
+                            }))
                             .child(Self::form_row(
                                 "MCP工具",
                                 Dropdown::new(&self.mcp_tools_dropdown)
                                     .placeholder("选择工具集")
                                     .small(),
+                            ))
+                            .child(Button::new("show-drawer-left").label("选择模型").on_click(
+                                cx.listener(|this, _, window, cx| {
+                                    this.open_drawer_at(Placement::Left, window, cx)
+                                }),
                             )),
                     )
                     .child(

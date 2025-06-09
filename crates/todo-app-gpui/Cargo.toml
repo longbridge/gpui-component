@@ -7,7 +7,8 @@ edition = "2021"
 anyhow.workspace = true
 chrono = "0.4"
 fake = { version = "4.3.0", features = ["dummy"] }
-gpui.workspace = true
+# gpui.workspace = true
+gpui = { git = "https://github.com/huacnlee/zed.git", branch = "webview" }
 gpui-component = { workspace = true, features = ["webview"] }
 # story = { workspace = true }
 rand = "0.8"

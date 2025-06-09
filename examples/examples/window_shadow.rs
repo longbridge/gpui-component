@@ -1,8 +1,8 @@
 use gpui::{
-    black, canvas, div, green, point, prelude::*, px, rgb, size, transparent_black, white, App,
-    Application, Bounds, Context, CursorStyle, Decorations, HitboxBehavior, Hsla, MouseButton,
+    App, Application, Bounds, Context, CursorStyle, Decorations, HitboxBehavior, Hsla, MouseButton,
     Pixels, Point, ResizeEdge, Size, Window, WindowBackgroundAppearance, WindowBounds,
-    WindowDecorations, WindowOptions,
+    WindowDecorations, WindowOptions, black, canvas, div, green, point, prelude::*, px, rgb, size,
+    transparent_black, white,
 };
 
 struct WindowShadow {}
@@ -21,6 +21,7 @@ impl Render for WindowShadow {
         let border_size = px(1.0);
         let grey = rgb(0x808080);
         window.set_client_inset(shadow_size);
+
         div()
             .id("window-backdrop")
             .bg(transparent_black())
@@ -60,7 +61,7 @@ impl Render for WindowShadow {
                                             CursorStyle::ResizeUpRightDownLeft
                                         }
                                     },
-                                    Some(&hitbox),
+                                    &hitbox,
                                 );
                             },
                         )

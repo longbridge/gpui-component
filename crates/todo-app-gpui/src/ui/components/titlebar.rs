@@ -64,7 +64,7 @@ impl Render for AppTitleBar {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let notifications_count = window.notifications(cx).len();
         TitleBar::new()
-            // .show_maximize(false)
+            .show_maximize(false)
             // left side
             .child(
                 div().flex().items_center().child(
@@ -328,7 +328,7 @@ impl Render for NormalTitleBar {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         TitleBar::new()
             //.show_minimize(false)
-            //.show_maximize(false)
+            .show_maximize(false)
             // left side
             .child(self.title.clone())
             .child(
@@ -516,11 +516,11 @@ impl RenderOnce for ControlIcon {
                 .on_click(move |_, window, cx| match icon {
                     Self::Minimize => {
                         println!("Minimize window");
-                         window.minimize_window()
+                        window.minimize_window()
                     }
                     Self::Restore => {
                         println!("Restore window");
-                         window.zoom_window()
+                        window.zoom_window()
                     }
                     Self::Maximize => {
                         println!("Maximize window");
@@ -594,15 +594,17 @@ impl RenderOnce for WindowControls {
             .items_center()
             .flex_shrink_0()
             .h_full()
-            .when(self.show_minimize || self.show_maximize, |div| {
-                div.child(
+            .when(self.show_minimize || self.show_maximize, |this| {
+                this.child(
                     h_flex()
                         .justify_center()
                         .content_stretch()
                         .h_full()
-                        .when(self.show_minimize, |div| div.child(ControlIcon::minimize()))
-                        .when(self.show_maximize, |div| {
-                            div.child(if window.is_maximized() {
+                        .when(self.show_minimize, |this| {
+                            this.child(ControlIcon::minimize())
+                        })
+                        .when(self.show_maximize, |this| {
+                            this.child(if window.is_maximized() {
                                 ControlIcon::restore()
                             } else {
                                 ControlIcon::maximize()
@@ -610,8 +612,8 @@ impl RenderOnce for WindowControls {
                         }),
                 )
             })
-            .when(self.show_close, |div| {
-                div.child(ControlIcon::close(self.on_close_window))
+            .when(self.show_close, |this| {
+                this.child(ControlIcon::close(self.on_close_window))
             })
     }
 }

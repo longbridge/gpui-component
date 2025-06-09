@@ -1,7 +1,7 @@
 use gpui::{
-    actions, div, prelude::*, px, rgb, size, App, Application, Bounds, Context, KeyBinding,
-    PromptButton, PromptLevel, SharedString, Timer, Window, WindowBounds, WindowKind,
-    WindowOptions,
+    App, Application, Bounds, Context, InteractiveElement, KeyBinding, PromptButton, PromptLevel,
+    SharedString, Timer, Window, WindowBounds, WindowKind, WindowOptions, actions, div, prelude::*,
+    px, rgb, size,
 };
 
 struct SubWindow {
@@ -112,6 +112,7 @@ impl Render for WindowDemo {
                     WindowOptions {
                         titlebar: None,
                         window_bounds: Some(window_bounds),
+                        kind: WindowKind::PopUp,
                         ..Default::default()
                     },
                     |_, cx| {
