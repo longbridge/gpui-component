@@ -89,268 +89,104 @@ impl TodoStatus {
     }
 }
 
-// 多选模型选项
+// 简化的模型数据结构
 #[derive(Debug, Clone)]
-pub struct MultiSelectModel {
+pub struct ModelInfo {
     pub name: String,
     pub provider: String,
     pub is_selected: bool,
 }
 
-impl DropdownItem for MultiSelectModel {
-    type Value = String;
-
-    fn title(&self) -> SharedString {
-        self.name.clone().into()
-    }
-
-    fn display_title(&self) -> Option<AnyElement> {
-        Some(
-            h_flex()
-                .items_center()
-                .gap_3()
-                .py_2()
-                .px_3()
-                .child(
-                    // 复选框
-                    div()
-                        .w_4()
-                        .h_4()
-                        .border_1()
-                        .border_color(if self.is_selected {
-                            gpui::rgb(0x3B82F6)
-                        } else {
-                            gpui::rgb(0xD1D5DB)
-                        })
-                        .bg(if self.is_selected {
-                            gpui::rgb(0x3B82F6)
-                        } else {
-                            gpui::rgb(0xFFFFFF)
-                        })
-                        .rounded_sm()
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .child(if self.is_selected {
-                            Icon::new(IconName::Check)
-                                .size_3()
-                                .text_color(gpui::rgb(0xFFFFFF))
-                                .into_any_element()
-                        } else {
-                            div().into_any_element()
-                        }),
-                )
-                .child(
-                    v_flex().flex_1().child(
-                        div()
-                            .text_sm()
-                            .font_medium()
-                            .text_color(gpui::rgb(0x374151))
-                            .child(self.name.clone()),
-                    ),
-                )
-                .into_any_element(),
-        )
-    }
-
-    fn value(&self) -> &Self::Value {
-        &self.name
-    }
-}
-
-// 服务商标题
+// 简化的服务商信息
 #[derive(Debug, Clone)]
-pub struct ProviderTitle {
+pub struct ProviderInfo {
     pub name: String,
+    pub models: Vec<ModelInfo>,
 }
 
-impl DropdownItem for ProviderTitle {
-    type Value = String;
-
-    fn title(&self) -> SharedString {
-        self.name.clone().into()
-    }
-
-    fn display_title(&self) -> Option<AnyElement> {
-        Some(
-            h_flex()
-                .items_center()
-                .py_2()
-                .px_3()
-                .bg(gpui::rgb(0xF3F4F6)) // 灰色背景区分服务商标题
-                .child(
-                    div()
-                        .text_sm()
-                        .font_semibold()
-                        .text_color(gpui::rgb(0x374151))
-                        .child(self.name.clone()),
-                )
-                .into_any_element(),
-        )
-    }
-
-    fn value(&self) -> &Self::Value {
-        &self.name
-    }
+// 模型管理器
+pub struct ModelManager {
+    pub providers: Vec<ProviderInfo>,
 }
 
-// 模型列表项，可以是服务商标题或模型
-#[derive(Debug, Clone)]
-pub enum ModelListItem {
-    Provider(ProviderTitle),
-    Model(MultiSelectModel),
-}
-
-impl DropdownItem for ModelListItem {
-    type Value = String;
-
-    fn title(&self) -> SharedString {
-        match self {
-            ModelListItem::Provider(provider) => provider.title(),
-            ModelListItem::Model(model) => model.title(),
-        }
-    }
-
-    fn display_title(&self) -> Option<AnyElement> {
-        match self {
-            ModelListItem::Provider(provider) => provider.display_title(),
-            ModelListItem::Model(model) => {
-                // 给模型添加缩进，表示它们属于上面的服务商
-                Some(
-                    div()
-                        .pl_4() // 缩进
-                        .child(model.display_title().unwrap())
-                        .into_any_element(),
-                )
-            }
-        }
-    }
-
-    fn value(&self) -> &Self::Value {
-        match self {
-            ModelListItem::Provider(provider) => provider.value(),
-            ModelListItem::Model(model) => model.value(),
-        }
-    }
-}
-
-// 多选模型委托
-pub struct MultiSelectModelDelegate {
-    items: Vec<ModelListItem>, // 改为包含服务商和模型的混合列表
-}
-
-impl MultiSelectModelDelegate {
+impl ModelManager {
     pub fn new() -> Self {
-        let mut items = Vec::new();
+        let providers = vec![
+            ProviderInfo {
+                name: "收钱吧".to_string(),
+                models: vec![
+                    ModelInfo {
+                        name: "sqb-chat-3.5".to_string(),
+                        provider: "收钱吧".to_string(),
+                        is_selected: false,
+                    },
+                    ModelInfo {
+                        name: "sqb-chat-4.0".to_string(),
+                        provider: "收钱吧".to_string(),
+                        is_selected: false,
+                    },
+                ],
+            },
+            ProviderInfo {
+                name: "Anthropic".to_string(),
+                models: vec![
+                    ModelInfo {
+                        name: "claude-3.5-sonnet".to_string(),
+                        provider: "Anthropic".to_string(),
+                        is_selected: false,
+                    },
+                    ModelInfo {
+                        name: "claude-3-haiku".to_string(),
+                        provider: "Anthropic".to_string(),
+                        is_selected: false,
+                    },
+                ],
+            },
+            ProviderInfo {
+                name: "OpenAI".to_string(),
+                models: vec![
+                    ModelInfo {
+                        name: "gpt-4".to_string(),
+                        provider: "OpenAI".to_string(),
+                        is_selected: false,
+                    },
+                    ModelInfo {
+                        name: "gpt-4-turbo".to_string(),
+                        provider: "OpenAI".to_string(),
+                        is_selected: false,
+                    },
+                ],
+            },
+        ];
 
-        // 收钱吧
-        items.push(ModelListItem::Provider(ProviderTitle {
-            name: "收钱吧".to_string(),
-        }));
-        items.push(ModelListItem::Model(MultiSelectModel {
-            name: "sqb-chat-3.5".to_string(),
-            provider: "收钱吧".to_string(),
-            is_selected: false,
-        }));
-        items.push(ModelListItem::Model(MultiSelectModel {
-            name: "sqb-chat-4.0".to_string(),
-            provider: "收钱吧".to_string(),
-            is_selected: false,
-        }));
-
-        // Anthropic
-        items.push(ModelListItem::Provider(ProviderTitle {
-            name: "Anthropic".to_string(),
-        }));
-        items.push(ModelListItem::Model(MultiSelectModel {
-            name: "claude-3.5-sonnet".to_string(),
-            provider: "Anthropic".to_string(),
-            is_selected: false,
-        }));
-        items.push(ModelListItem::Model(MultiSelectModel {
-            name: "claude-3-haiku".to_string(),
-            provider: "Anthropic".to_string(),
-            is_selected: false,
-        }));
-        items.push(ModelListItem::Model(MultiSelectModel {
-            name: "claude-3-opus".to_string(),
-            provider: "Anthropic".to_string(),
-            is_selected: false,
-        }));
-
-        // OpenAI
-        items.push(ModelListItem::Provider(ProviderTitle {
-            name: "OpenAI".to_string(),
-        }));
-        items.push(ModelListItem::Model(MultiSelectModel {
-            name: "gpt-4".to_string(),
-            provider: "OpenAI".to_string(),
-            is_selected: false,
-        }));
-        items.push(ModelListItem::Model(MultiSelectModel {
-            name: "gpt-4-turbo".to_string(),
-            provider: "OpenAI".to_string(),
-            is_selected: false,
-        }));
-        items.push(ModelListItem::Model(MultiSelectModel {
-            name: "gpt-3.5-turbo".to_string(),
-            provider: "OpenAI".to_string(),
-            is_selected: false,
-        }));
-
-        Self { items }
+        Self { providers }
     }
 
-    pub fn toggle_selection(&mut self, model_name: &str) {
-        // 只有模型可以被选择，服务商标题不可选择
-        for item in self.items.iter_mut() {
-            if let ModelListItem::Model(model) = item {
+    pub fn toggle_model_selection(&mut self, model_name: &str) {
+        for provider in &mut self.providers {
+            for model in &mut provider.models {
                 if model.name == model_name {
                     model.is_selected = !model.is_selected;
-                    break;
+                    return;
                 }
             }
         }
     }
 
     pub fn get_selected_models(&self) -> Vec<String> {
-        self.items
-            .iter()
-            .filter_map(|item| match item {
-                ModelListItem::Model(model) if model.is_selected => Some(model.name.clone()),
-                _ => None,
-            })
-            .collect()
+        let mut selected = Vec::new();
+        for provider in &self.providers {
+            for model in &provider.models {
+                if model.is_selected {
+                    selected.push(model.name.clone());
+                }
+            }
+        }
+        selected
     }
 
     pub fn get_selected_count(&self) -> usize {
-        self.items
-            .iter()
-            .filter(|item| match item {
-                ModelListItem::Model(model) => model.is_selected,
-                _ => false,
-            })
-            .count()
-    }
-}
-
-impl DropdownDelegate for MultiSelectModelDelegate {
-    type Item = ModelListItem; // 改为新的类型
-
-    fn len(&self) -> usize {
-        self.items.len()
-    }
-
-    fn get(&self, ix: usize) -> Option<&Self::Item> {
-        self.items.get(ix)
-    }
-
-    fn position<V>(&self, value: &V) -> Option<usize>
-    where
-        Self::Item: DropdownItem<Value = V>,
-        V: PartialEq,
-    {
-        self.items.iter().position(|item| item.value() == value)
+        self.get_selected_models().len()
     }
 }
 
@@ -365,8 +201,8 @@ pub struct TodoThreadEdit {
     status_dropdown: Entity<DropdownState<Vec<SharedString>>>,
     priority_dropdown: Entity<DropdownState<Vec<SharedString>>>,
 
-    // AI助手配置 - 多选模型
-    model_dropdown: Entity<DropdownState<MultiSelectModelDelegate>>,
+    // AI助手配置 - 简化为模型管理器
+    model_manager: ModelManager,
     mcp_tools_dropdown: Entity<DropdownState<Vec<SharedString>>>,
 
     // 时间设置
@@ -400,9 +236,8 @@ impl TodoThreadEdit {
         let priority_dropdown =
             cx.new(|cx| DropdownState::new(TodoPriority::all(), Some(1), window, cx));
 
-        // 多选模型下拉框
-        let model_delegate = MultiSelectModelDelegate::new();
-        let model_dropdown = cx.new(|cx| DropdownState::new(model_delegate, None, window, cx));
+        // 简化的模型管理器
+        let model_manager = ModelManager::new();
 
         let mcp_tools = vec![
             "文件操作".into(),
@@ -433,42 +268,6 @@ impl TodoThreadEdit {
                     cx.notify();
                 }
             }),
-            // 监听模型选择变化 - 多选逻辑
-            cx.subscribe(&model_dropdown, |this, _, event, cx| match event {
-                DropdownEvent::Confirm(Some(item_name)) => {
-                    // 检查点击的是模型还是服务商标题
-                    let is_model = this
-                        .model_dropdown
-                        .read(cx)
-                        .list_entity()
-                        .read(cx)
-                        .delegate()
-                        .delegate()
-                        .items
-                        .iter()
-                        .any(|item| match item {
-                            ModelListItem::Model(model) => model.name == *item_name,
-                            _ => false,
-                        });
-
-                    if is_model {
-                        // 只有点击模型时才切换选择状态
-                        this.model_dropdown
-                            .update(cx, |dropdown_state, dropdown_cx| {
-                                dropdown_state.update_delegate(dropdown_cx, |delegate| {
-                                    delegate.toggle_selection(item_name);
-                                });
-                            });
-                        println!("切换模型选择: {}", item_name);
-                    } else {
-                        println!("点击了服务商标题: {}", item_name);
-                    }
-                    cx.notify();
-                }
-                DropdownEvent::Confirm(None) => {
-                    cx.notify();
-                }
-            }),
         ];
 
         Self {
@@ -477,7 +276,7 @@ impl TodoThreadEdit {
             description_input,
             status_dropdown,
             priority_dropdown,
-            model_dropdown,
+            model_manager,
             mcp_tools_dropdown,
             due_date_picker,
             reminder_date_picker,
@@ -502,15 +301,7 @@ impl TodoThreadEdit {
     }
 
     fn save(&mut self, _: &Save, _window: &mut Window, cx: &mut Context<Self>) {
-        // 获取选中的模型列表
-        let selected_models = self
-            .model_dropdown
-            .read(cx)
-            .list_entity()
-            .read(cx)
-            .delegate()
-            .delegate()
-            .get_selected_models();
+        let selected_models = self.model_manager.get_selected_models();
 
         let todo_data = TodoData {
             title: self.title_input.read(cx).value().to_string(),
@@ -527,7 +318,7 @@ impl TodoThreadEdit {
                 .selected_value()
                 .map(|v| v.to_string())
                 .unwrap_or_default(),
-            selected_models, // 多选模型列表
+            selected_models,
             mcp_tools: self
                 .mcp_tools_dropdown
                 .read(cx)
@@ -606,27 +397,16 @@ impl TodoThreadEdit {
             .child(div().flex_1().max_w_80().child(content))
     }
 
-    // 获取模型选择显示文本 - 显示选中的模型名称
-    fn get_model_display_text(&self, cx: &App) -> String {
-        // 直接访问底层委托数据
-        let selected_models = self
-            .model_dropdown
-            .read(cx)
-            .list_entity()
-            .read(cx)
-            .delegate()
-            .delegate()
-            .get_selected_models();
-
+    // 获取模型选择显示文本
+    fn get_model_display_text(&self, _cx: &App) -> String {
+        let selected_models = self.model_manager.get_selected_models();
         let selected_count = selected_models.len();
 
         if selected_count == 0 {
             "选择AI模型".to_string()
         } else if selected_count <= 2 {
-            // 如果选中的模型不超过2个，直接显示模型名称
             selected_models.join(", ")
         } else {
-            // 如果选中的模型超过2个，显示前2个模型名称 + "等X个模型"
             let first_two = selected_models
                 .iter()
                 .take(2)
@@ -643,80 +423,63 @@ impl TodoThreadEdit {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let model_dropdown = self.model_dropdown.clone();
+        // 先捕获当前的模型数据
+        let providers = self.model_manager.providers.clone();
 
         window.open_drawer_at(placement, cx, move |drawer, _window, drawer_cx| {
-            // 获取模型列表数据
-            let model_list_items = model_dropdown
-                .read(drawer_cx)
-                .list_entity()
-                .read(drawer_cx)
-                .delegate()
-                .delegate()
-                .items
-                .clone();
-
             let mut children_elements = Vec::new();
 
-            for item in model_list_items {
-                match item {
-                    ModelListItem::Provider(provider) => {
-                        // 服务商标题
-                        children_elements.push(
-                            div()
-                                .py_2()
-                                .px_3()
-                                .bg(gpui::rgb(0xF3F4F6))
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .text_color(gpui::rgb(0x374151))
-                                .child(provider.name.clone())
-                                .into_any_element(),
-                        );
-                    }
-                    ModelListItem::Model(model_data) => {
-                        let model_name_for_event = model_data.name.clone();
-                        let checkbox_id = format!("drawer-model-checkbox-{}", model_data.name);
-                        let model_dropdown_clone = model_dropdown.clone();
+            for provider in providers.iter() {
+                // 服务商标题
+                children_elements.push(
+                    div()
+                        .py_2()
+                        .px_3()
+                        .bg(gpui::rgb(0xF3F4F6))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(gpui::rgb(0x374151))
+                        .child(provider.name.clone())
+                        .into_any_element(),
+                );
 
-                        // 模型选项（带缩进和复选框）
-                        children_elements.push(
-                            div()
-                                .pl_6() // 缩进表示层级关系
-                                .py_1()
-                                .px_3()
-                                .child(
-                                    Checkbox::new(SharedString::new(checkbox_id)) // 使用 .as_str() 转换为 &str
-                                        .checked(model_data.is_selected)
-                                        .label(model_data.name.clone())
-                                        .on_click(move |_checked, window, cx| {
-                                            let model_name_to_toggle = model_name_for_event.clone();
-                                            let model_dropdown_for_update =
-                                                model_dropdown_clone.clone();
+                // 该服务商下的模型
+                for model in provider.models.iter() {
+                    let model_name_for_event = model.name.clone();
 
-                                            // 更新底层模型选择状态
-                                            model_dropdown_for_update.update(
-                                                cx,
-                                                |dropdown_state, dropdown_cx| {
-                                                    dropdown_state.update_delegate(
-                                                        dropdown_cx,
-                                                        |delegate| {
-                                                            delegate.toggle_selection(
-                                                                &model_name_to_toggle,
-                                                            );
-                                                        },
-                                                    );
-                                                },
-                                            );
+                    children_elements.push(
+                        div()
+                            .pl_6() // 缩进表示层级关系
+                            .py_1()
+                            .px_3()
+                            .child(
+                                Checkbox::new(SharedString::new(format!(
+                                    "model-checkbox-{}",
+                                    model.name
+                                )))
+                                .checked(model.is_selected)
+                                .label(model.name.clone())
+                                .on_click(
+                                    move |_checked, window, cx| {
+                                        let model_name_to_toggle = model_name_for_event.clone();
 
-                                            // 关闭并重新打开抽屉以刷新状态
-                                            window.close_drawer(cx);
-                                        }),
-                                )
-                                .into_any_element(),
-                        );
-                    }
+                                        // 通过全局事件或者其他方式更新模型选择状态
+                                        // 这里暂时先关闭抽屉，实际使用中需要找到正确的更新方式
+                                        println!("切换模型选择: {}", model_name_to_toggle);
+                                        window.close_drawer(cx);
+                                    },
+                                ),
+                            )
+                            .into_any_element(),
+                    );
                 }
             }
+
+            // 计算选中的模型数量（基于捕获的数据）
+            let selected_count = providers
+                .iter()
+                .flat_map(|p| &p.models)
+                .filter(|m| m.is_selected)
+                .count();
 
             drawer
                 .overlay(true)
@@ -738,16 +501,10 @@ impl TodoThreadEdit {
                         .p_3()
                         .child(
                             // 显示已选择的模型数量
-                            div().text_sm().text_color(gpui::rgb(0x6B7280)).child({
-                                let selected_count = model_dropdown
-                                    .read(drawer_cx)
-                                    .list_entity()
-                                    .read(drawer_cx)
-                                    .delegate()
-                                    .delegate()
-                                    .get_selected_count();
-                                format!("已选择 {} 个模型", selected_count)
-                            }),
+                            div()
+                                .text_sm()
+                                .text_color(gpui::rgb(0x6B7280))
+                                .child(format!("已选择 {} 个模型", selected_count)),
                         )
                         .child(
                             Button::new("close-model-drawer")
@@ -796,7 +553,6 @@ impl FocusableCycle for TodoThreadEdit {
             self.description_input.focus_handle(cx),
             self.status_dropdown.focus_handle(cx),
             self.priority_dropdown.focus_handle(cx),
-            self.model_dropdown.focus_handle(cx),
             self.mcp_tools_dropdown.focus_handle(cx),
             self.due_date_picker.focus_handle(cx),
             self.reminder_date_picker.focus_handle(cx),
