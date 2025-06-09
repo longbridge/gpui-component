@@ -656,20 +656,34 @@ impl TodoThreadEdit {
             drawer
                 .overlay(true)
                 .size(px(380.)) // 稍微增加宽度以适应手风琴
-                .title("选择AI模型")
+                .title("选择模型")
                 .child(
                     v_flex()
                         .id("model-drawer-content")
                         .size_full()
-                        .overflow_y_scroll()
-                        .py_2()
-                        .child(accordion),
+                        .child(
+                            div()
+                                .id("id-drawer-view")
+                                .size_full()
+                                .overflow_y_scroll() // 直接在内容区域启用滚动
+                                .py_2()
+                                .px_1() // 给滚动条留出空间
+                                .child(
+                                    v_flex()
+                                        .gap_1()
+                                        .child(accordion)
+                                        .min_h_full() // 确保最小高度
+                                )
+                        )
                 )
                 .footer(
                     h_flex()
                         .justify_end() // 只保留右对齐的按钮
                         .items_center()
                         .p_3()
+                        .border_t_1() // 添加顶部边框分隔
+                        .border_color(gpui::rgb(0xE5E7EB))
+                        .bg(gpui::rgb(0xFAFAFA)) // 底部背景色
                         .child(
                             h_flex()
                                 .gap_2()
