@@ -560,11 +560,11 @@ impl TodoThreadChat {
                                         let todo_edit_entity_for_event = todo_edit_entity.clone();
 
                                         div()
-                                            .p_2()
+                                            .p_1()
                                             .bg(gpui::rgb(0xFAFAFA))
                                             .rounded_md()
-                                            .border_1()
-                                            .border_color(gpui::rgb(0xE5E7EB))
+                                            // .border_1()
+                                            // .border_color(gpui::rgb(0xE5E7EB))
                                             .hover(|style| style.bg(gpui::rgb(0xF3F4F6)))
                                             .child(
                                                 h_flex()
@@ -825,7 +825,7 @@ impl TodoThreadChat {
             drawer
                 .overlay(true)
                 .size(px(380.))
-                .title("选择对话工具")
+                .title("选择工具集")
                 .child(accordion)
                 .footer(
                     h_flex()

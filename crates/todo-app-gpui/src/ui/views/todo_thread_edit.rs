@@ -596,7 +596,7 @@ impl TodoThreadEdit {
         let description_input = cx.new(|cx| {
             InputState::new(window, cx)
                 .placeholder("详细描述任务内容和要求...")
-                .auto_grow(10, 15)
+                .auto_grow(10, 10)
         });
 
         // 状态和优先级下拉框
@@ -1413,7 +1413,7 @@ impl Render for TodoThreadEdit {
                                             ),)
                             .child(
                                 h_flex()
-                                    .gap_4()
+                                    .gap_2()
                                     .items_center()
                                     .child(
                                         div()
@@ -1458,7 +1458,7 @@ impl Render for TodoThreadEdit {
                             )),
                             ).child(
                                 h_flex()
-                                    .gap_4()
+                                    .gap_2()
                                     .items_center()
                                     .child(
                                         div()
@@ -1494,7 +1494,7 @@ impl Render for TodoThreadEdit {
                                         ),
                                     ).child(
                                 h_flex()
-                                    .gap_4()
+                                    .gap_2()
                                     .items_center()
                                     .child(
                                         div()
@@ -1525,54 +1525,7 @@ impl Render for TodoThreadEdit {
                             )
                             
                     )
-                    // .child(
-                    //     v_flex()
-                    //         .gap_3()
-                    //         .pt_1()
-                    //         .px_2()
-                    //         .pb_2()
-                    //         .bg(gpui::rgb(0xF9FAFB))
-                    //         .rounded_lg()
-                    //         .child(Self::section_title("时间安排"))
-                    //         .child(Self::form_row(
-                    //             "截止日期",
-                    //             DatePicker::new(&self.due_date_picker)
-                    //                 .placeholder("选择截止日期")
-                    //                 .cleanable()
-                    //                 .presets(due_date_presets.clone())
-                    //                 .small(),
-                    //         ))
-                    //         .child(
-                    //             h_flex()
-                    //                 .gap_4()
-                    //                 .items_center()
-                    //                 .child(
-                    //                     div()
-                    //                         .text_sm()
-                    //                         .text_color(gpui::rgb(0x6B7280))
-                    //                         .min_w_24()
-                    //                         .child("周期重复"),
-                    //                 )
-                    //                 .child(
-                    //                     Switch::new("recurring")
-                    //                         .checked(self.recurring_enabled)
-                    //                         .on_click(cx.listener(
-                    //                             move |this, checked, window, cx| {
-                    //                                 this.toggle_recurring(*checked, window, cx);
-                    //                             },
-                    //                         )),
-                    //                 )
-                    //                 .when(self.recurring_enabled, |this| {
-                    //                     this.child(
-                    //                         div().ml_4().child(
-                    //                             Dropdown::new(&self.recurring_dropdown)
-                    //                                 .placeholder("选择周期")
-                    //                                 .small(),
-                    //                         ),
-                    //                     )
-                    //                 }),
-                    //         ),
-                    // )
+                    
             )
             .child(
                 h_flex().items_center().justify_center().pt_2().child(
