@@ -6772,7 +6772,6 @@ dependencies = [
  "serde",
  "serde_json",
  "tracing-subscriber",
- "tree-sitter",
  "tree-sitter-navi",
  "unindent",
 ]

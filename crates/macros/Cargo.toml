@@ -1,5 +1,5 @@
 [package]
-edition = "2024"
+edition = "2021"
 name = "gpui-component-macros"
 version = "0.1.0"
 
