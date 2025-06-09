@@ -145,7 +145,7 @@ impl Example {
                 vec![
                     Marker::new("warning", (2, 1), (2, 31), "Import but not used."),
                     Marker::new("error", (16, 10), (16, 46), "Syntax error."),
-                    Marker::new("info", (25, 10), (25, 20), "This is a info message."),
+                    Marker::new("info", (25, 10), (25, 20), "This is a info message, this is a very long message, with **Markdown** support."),
                     Marker::new("hint", (36, 9), (40, 10), "This is a hint message."),
                 ],
                 window,

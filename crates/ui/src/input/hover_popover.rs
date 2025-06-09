@@ -72,7 +72,7 @@ impl DiagnosticPopover {
 }
 
 impl Render for DiagnosticPopover {
-    fn render(&mut self, _: &mut Window, cx: &mut gpui::Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) -> impl IntoElement {
         if !self.open {
             return Empty.into_any_element();
         }
@@ -91,8 +91,10 @@ impl Render for DiagnosticPopover {
         );
 
         let scroll_origin = self.state.read(cx).scroll_handle.offset();
+
         let y = pos.y - self.bounds.size.height + scroll_origin.y;
         let x = pos.x + scroll_origin.x;
+        let max_width = px(500.).min(window.bounds().size.width - x);
 
         deferred(
             div()
@@ -104,8 +106,7 @@ impl Render for DiagnosticPopover {
                 .py_0p5()
                 .text_xs()
                 .bg(bg)
-                .max_w_80()
-                .min_w_20()
+                .w(max_width)
                 .text_color(fg)
                 .border_1()
                 .border_color(border)
