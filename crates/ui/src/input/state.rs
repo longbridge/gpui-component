@@ -53,6 +53,8 @@ actions!(
         DeleteToNextWordEnd,
         Indent,
         Outdent,
+        IndentInline,
+        OutdentInline,
         Up,
         Down,
         Left,
@@ -120,8 +122,16 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("down", Down, Some(CONTEXT)),
         KeyBinding::new("left", Left, Some(CONTEXT)),
         KeyBinding::new("right", Right, Some(CONTEXT)),
-        KeyBinding::new("tab", Indent, Some(CONTEXT)),
-        KeyBinding::new("shift-tab", Outdent, Some(CONTEXT)),
+        KeyBinding::new("tab", IndentInline, Some(CONTEXT)),
+        KeyBinding::new("shift-tab", OutdentInline, Some(CONTEXT)),
+        #[cfg(target_os = "macos")]
+        KeyBinding::new("cmd-]", Indent, Some(CONTEXT)),
+        #[cfg(not(target_os = "macos"))]
+        KeyBinding::new("ctrl-]", Indent, Some(CONTEXT)),
+        #[cfg(target_os = "macos")]
+        KeyBinding::new("cmd-[", Outdent, Some(CONTEXT)),
+        #[cfg(not(target_os = "macos"))]
+        KeyBinding::new("ctrl-[", Outdent, Some(CONTEXT)),
         KeyBinding::new("shift-left", SelectLeft, Some(CONTEXT)),
         KeyBinding::new("shift-right", SelectRight, Some(CONTEXT)),
         KeyBinding::new("shift-up", SelectUp, Some(CONTEXT)),
@@ -1260,7 +1270,38 @@ impl InputState {
         });
     }
 
-    pub(super) fn indent(&mut self, _: &Indent, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn indent_inline(
+        &mut self,
+        _: &IndentInline,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.indent(false, window, cx);
+    }
+
+    pub(super) fn indent_block(&mut self, _: &Indent, window: &mut Window, cx: &mut Context<Self>) {
+        self.indent(true, window, cx);
+    }
+
+    pub(super) fn outdent_inline(
+        &mut self,
+        _: &OutdentInline,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.outdent(false, window, cx);
+    }
+
+    pub(super) fn outdent_block(
+        &mut self,
+        _: &Outdent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.outdent(true, window, cx);
+    }
+
+    pub(super) fn indent(&mut self, block: bool, window: &mut Window, cx: &mut Context<Self>) {
         let Some(tab_size) = self.mode.tab_size() else {
             return;
         };
@@ -1268,8 +1309,9 @@ impl InputState {
         let tab_indent = tab_size.to_string();
         let selected_range = self.selected_range.clone();
         let mut added_len = 0;
+        let is_selected = !self.selected_range.is_empty();
 
-        if !self.selected_range.is_empty() {
+        if is_selected || block {
             let start_offset = self.start_of_line_of_selection(window, cx);
             let mut offset = start_offset;
 
@@ -1294,7 +1336,12 @@ impl InputState {
                 offset += line.len() + tab_indent.len() + 1;
             }
 
-            self.selected_range = start_offset..selected_range.end + added_len;
+            if is_selected {
+                self.selected_range = start_offset..selected_range.end + added_len;
+            } else {
+                self.selected_range =
+                    selected_range.start + added_len..selected_range.end + added_len;
+            }
         } else {
             // Selected none
             let offset = self.selected_range.start;
@@ -1310,7 +1357,7 @@ impl InputState {
         }
     }
 
-    pub(super) fn outdent(&mut self, _: &Outdent, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn outdent(&mut self, block: bool, window: &mut Window, cx: &mut Context<Self>) {
         let Some(tab_size) = self.mode.tab_size() else {
             return;
         };
@@ -1318,8 +1365,9 @@ impl InputState {
         let tab_indent = tab_size.to_string();
         let selected_range = self.selected_range.clone();
         let mut removed_len = 0;
+        let is_selected = !self.selected_range.is_empty();
 
-        if !self.selected_range.is_empty() {
+        if is_selected || block {
             let start_offset = self.start_of_line_of_selection(window, cx);
             let mut offset = start_offset;
 
@@ -1349,7 +1397,12 @@ impl InputState {
                 }
             }
 
-            self.selected_range = start_offset..selected_range.end.saturating_sub(removed_len);
+            if is_selected {
+                self.selected_range = start_offset..selected_range.end.saturating_sub(removed_len);
+            } else {
+                self.selected_range = selected_range.start.saturating_sub(removed_len)
+                    ..selected_range.end.saturating_sub(removed_len);
+            }
         } else {
             // Selected none
             let start_offset = self.selected_range.start;
@@ -2043,7 +2096,8 @@ impl EntityInputHandler for InputState {
 
         let mask_text = self.mask_pattern.mask(&pending_text);
         let new_text_len = (new_text.len() + mask_text.len()).saturating_sub(pending_text.len());
-        let new_pos = (range.start + new_text_len).min(mask_text.len());
+        let old_offset = self.cursor_offset();
+        let new_offset = (old_offset + new_text_len).min(mask_text.len());
 
         self.push_history(&range, &new_text, window, cx);
         self.text = mask_text.clone();
@@ -2051,7 +2105,7 @@ impl EntityInputHandler for InputState {
             .update_highlighter(&range, self.text.clone(), &new_text, cx);
         self.mode.clear_markers();
         self.text_wrapper.update(self.text.clone(), false, cx);
-        self.selected_range = new_pos..new_pos;
+        self.selected_range = new_offset..new_offset;
         self.marked_range.take();
         self.update_preferred_x_offset(cx);
         self.update_scroll_offset(None, cx);
