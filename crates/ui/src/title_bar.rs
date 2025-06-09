@@ -3,8 +3,9 @@ use std::rc::Rc;
 use crate::{h_flex, ActiveTheme, Icon, IconName, InteractiveElementExt as _, Sizable as _};
 use gpui::{
     div, prelude::FluentBuilder as _, px, relative, AnyElement, App, ClickEvent, Div, Element,
-    Hsla, InteractiveElement as _, IntoElement, MouseButton, ParentElement, Pixels, RenderOnce,
+    Hsla, InteractiveElement, IntoElement, MouseButton, ParentElement, Pixels, RenderOnce,
     Stateful, StatefulInteractiveElement as _, Style, Styled, TitlebarOptions, Window,
+    WindowControlArea,
 };
 
 pub const TITLE_BAR_HEIGHT: Pixels = px(34.);
@@ -26,7 +27,7 @@ pub struct TitleBar {
 impl TitleBar {
     pub fn new() -> Self {
         Self {
-            base: div().id("title-bar").pl(TITLE_BAR_LEFT_PADDING),
+            base: div().id("title-bar"),
             children: Vec::new(),
             on_close_window: None,
         }
@@ -103,6 +104,14 @@ impl ControlIcon {
         }
     }
 
+    fn window_control_area(&self) -> WindowControlArea {
+        match self {
+            Self::Minimize => WindowControlArea::Min,
+            Self::Restore | Self::Maximize => WindowControlArea::Max,
+            Self::Close { .. } => WindowControlArea::Close,
+        }
+    }
+
     fn is_close(&self) -> bool {
         matches!(self, Self::Close { .. })
     }
@@ -140,12 +149,13 @@ impl ControlIcon {
 
 impl RenderOnce for ControlIcon {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let is_linux = cfg!(target_os = "linux");
+        let is_windows = cfg!(target_os = "windows");
         let fg = self.fg(cx);
         let hover_fg = self.hover_fg(cx);
         let hover_bg = self.hover_bg(cx);
         let icon = self.clone();
-        let is_linux = cfg!(target_os = "linux");
-        let on_close_window = match &icon {
+        let on_close_window = match &self {
             ControlIcon::Close { on_close_window } => on_close_window.clone(),
             _ => None,
         };
@@ -159,20 +169,25 @@ impl RenderOnce for ControlIcon {
             .content_center()
             .items_center()
             .text_color(fg)
+            .when(is_windows, |this| {
+                this.window_control_area(self.window_control_area())
+            })
             .when(is_linux, |this| {
                 this.on_mouse_down(MouseButton::Left, move |_, window, cx| {
                     window.prevent_default();
                     cx.stop_propagation();
                 })
-                .on_click(move |_, window, cx| match icon {
-                    Self::Minimize => window.minimize_window(),
-                    Self::Restore => window.zoom_window(),
-                    Self::Maximize => window.zoom_window(),
-                    Self::Close { .. } => {
-                        if let Some(f) = on_close_window.clone() {
-                            f(&ClickEvent::default(), window, cx);
-                        } else {
-                            window.remove_window();
+                .on_click(move |_, window, cx| {
+                    cx.stop_propagation();
+                    match icon {
+                        Self::Minimize => window.minimize_window(),
+                        Self::Restore | Self::Maximize => window.zoom_window(),
+                        Self::Close { .. } => {
+                            if let Some(f) = on_close_window.clone() {
+                                f(&ClickEvent::default(), window, cx);
+                            } else {
+                                window.remove_window();
+                            }
                         }
                     }
                 })
@@ -243,10 +258,15 @@ impl RenderOnce for TitleBar {
                 .border_b_1()
                 .border_color(cx.theme().title_bar_border)
                 .bg(cx.theme().title_bar)
-                .when(window.is_fullscreen(), |this| this.pl(px(12.)))
-                .on_double_click(|_, window, _| window.zoom_window())
+                .when(is_linux, |this| {
+                    this.on_double_click(|_, window, _| window.zoom_window())
+                })
                 .child(
                     h_flex()
+                        .id("bar")
+                        .pl(TITLE_BAR_LEFT_PADDING)
+                        .when(window.is_fullscreen(), |this| this.pl(px(12.)))
+                        .window_control_area(WindowControlArea::Drag)
                         .h_full()
                         .justify_between()
                         .flex_shrink_0()
