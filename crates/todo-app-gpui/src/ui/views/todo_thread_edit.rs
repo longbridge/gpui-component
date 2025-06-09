@@ -91,12 +91,42 @@ impl TodoStatus {
     }
 }
 
+// 模型能力
+#[derive(Debug, Clone)]
+pub enum ModelCapability {
+    Text,
+    Vision,
+    Audio,
+    Tools,
+}
+
+impl ModelCapability {
+    fn icon(&self) -> IconName {
+        match self {
+            ModelCapability::Text => IconName::LetterText,
+            ModelCapability::Vision => IconName::Eye,
+            ModelCapability::Audio => IconName::Mic,
+            ModelCapability::Tools => IconName::Wrench,
+        }
+    }
+
+    fn label(&self) -> &'static str {
+        match self {
+            ModelCapability::Text => "文本",
+            ModelCapability::Vision => "视觉",
+            ModelCapability::Audio => "音频",
+            ModelCapability::Tools => "工具",
+        }
+    }
+}
+
 // 简化的模型数据结构
 #[derive(Debug, Clone)]
 pub struct ModelInfo {
     pub name: String,
     pub provider: String,
     pub is_selected: bool,
+    pub capabilities: Vec<ModelCapability>, // 添加能力字段
 }
 
 // 简化的服务商信息
@@ -121,11 +151,17 @@ impl ModelManager {
                         name: "sqb-chat-3.5".to_string(),
                         provider: "收钱吧".to_string(),
                         is_selected: false,
+                        capabilities: vec![ModelCapability::Text, ModelCapability::Tools],
                     },
                     ModelInfo {
                         name: "sqb-chat-4.0".to_string(),
                         provider: "收钱吧".to_string(),
                         is_selected: false,
+                        capabilities: vec![
+                            ModelCapability::Text,
+                            ModelCapability::Vision,
+                            ModelCapability::Tools,
+                        ],
                     },
                 ],
             },
@@ -136,16 +172,27 @@ impl ModelManager {
                         name: "claude-3.5-sonnet".to_string(),
                         provider: "Anthropic".to_string(),
                         is_selected: false,
+                        capabilities: vec![
+                            ModelCapability::Text,
+                            ModelCapability::Vision,
+                            ModelCapability::Tools,
+                        ],
                     },
                     ModelInfo {
                         name: "claude-3-haiku".to_string(),
                         provider: "Anthropic".to_string(),
                         is_selected: false,
+                        capabilities: vec![ModelCapability::Text, ModelCapability::Tools],
                     },
                     ModelInfo {
                         name: "claude-3-opus".to_string(),
                         provider: "Anthropic".to_string(),
                         is_selected: false,
+                        capabilities: vec![
+                            ModelCapability::Text,
+                            ModelCapability::Vision,
+                            ModelCapability::Tools,
+                        ],
                     },
                 ],
             },
@@ -156,21 +203,38 @@ impl ModelManager {
                         name: "gpt-4".to_string(),
                         provider: "OpenAI".to_string(),
                         is_selected: false,
+                        capabilities: vec![
+                            ModelCapability::Text,
+                            ModelCapability::Vision,
+                            ModelCapability::Tools,
+                        ],
                     },
                     ModelInfo {
                         name: "gpt-4-turbo".to_string(),
                         provider: "OpenAI".to_string(),
                         is_selected: false,
+                        capabilities: vec![
+                            ModelCapability::Text,
+                            ModelCapability::Vision,
+                            ModelCapability::Tools,
+                        ],
                     },
                     ModelInfo {
                         name: "gpt-3.5-turbo".to_string(),
                         provider: "OpenAI".to_string(),
                         is_selected: false,
+                        capabilities: vec![ModelCapability::Text, ModelCapability::Tools],
                     },
                     ModelInfo {
                         name: "gpt-4o".to_string(),
                         provider: "OpenAI".to_string(),
                         is_selected: false,
+                        capabilities: vec![
+                            ModelCapability::Text,
+                            ModelCapability::Vision,
+                            ModelCapability::Audio,
+                            ModelCapability::Tools,
+                        ],
                     },
                 ],
             },
@@ -181,16 +245,23 @@ impl ModelManager {
                         name: "文心一言-4.0".to_string(),
                         provider: "百度智能云".to_string(),
                         is_selected: false,
+                        capabilities: vec![
+                            ModelCapability::Text,
+                            ModelCapability::Vision,
+                            ModelCapability::Tools,
+                        ],
                     },
                     ModelInfo {
                         name: "文心一言-3.5".to_string(),
                         provider: "百度智能云".to_string(),
                         is_selected: false,
+                        capabilities: vec![ModelCapability::Text, ModelCapability::Tools],
                     },
                     ModelInfo {
                         name: "ERNIE-Bot-turbo".to_string(),
                         provider: "百度智能云".to_string(),
                         is_selected: false,
+                        capabilities: vec![ModelCapability::Text, ModelCapability::Tools],
                     },
                 ],
             },
@@ -201,16 +272,23 @@ impl ModelManager {
                         name: "通义千问-Max".to_string(),
                         provider: "阿里云".to_string(),
                         is_selected: false,
+                        capabilities: vec![
+                            ModelCapability::Text,
+                            ModelCapability::Vision,
+                            ModelCapability::Tools,
+                        ],
                     },
                     ModelInfo {
                         name: "通义千问-Plus".to_string(),
                         provider: "阿里云".to_string(),
                         is_selected: false,
+                        capabilities: vec![ModelCapability::Text, ModelCapability::Tools],
                     },
                     ModelInfo {
                         name: "通义千问-Turbo".to_string(),
                         provider: "阿里云".to_string(),
                         is_selected: false,
+                        capabilities: vec![ModelCapability::Text, ModelCapability::Tools],
                     },
                 ],
             },
@@ -221,16 +299,23 @@ impl ModelManager {
                         name: "混元-Pro".to_string(),
                         provider: "腾讯云".to_string(),
                         is_selected: false,
+                        capabilities: vec![
+                            ModelCapability::Text,
+                            ModelCapability::Vision,
+                            ModelCapability::Tools,
+                        ],
                     },
                     ModelInfo {
                         name: "混元-Standard".to_string(),
                         provider: "腾讯云".to_string(),
                         is_selected: false,
+                        capabilities: vec![ModelCapability::Text, ModelCapability::Tools],
                     },
                     ModelInfo {
                         name: "混元-Lite".to_string(),
                         provider: "腾讯云".to_string(),
                         is_selected: false,
+                        capabilities: vec![ModelCapability::Text],
                     },
                 ],
             },
@@ -241,16 +326,23 @@ impl ModelManager {
                         name: "豆包-Pro-32K".to_string(),
                         provider: "字节跳动".to_string(),
                         is_selected: false,
+                        capabilities: vec![
+                            ModelCapability::Text,
+                            ModelCapability::Vision,
+                            ModelCapability::Tools,
+                        ],
                     },
                     ModelInfo {
                         name: "豆包-Pro-4K".to_string(),
                         provider: "字节跳动".to_string(),
                         is_selected: false,
+                        capabilities: vec![ModelCapability::Text, ModelCapability::Tools],
                     },
                     ModelInfo {
                         name: "豆包-Lite-4K".to_string(),
                         provider: "字节跳动".to_string(),
                         is_selected: false,
+                        capabilities: vec![ModelCapability::Text],
                     },
                 ],
             },
@@ -261,16 +353,23 @@ impl ModelManager {
                         name: "GLM-4".to_string(),
                         provider: "智谱AI".to_string(),
                         is_selected: false,
+                        capabilities: vec![
+                            ModelCapability::Text,
+                            ModelCapability::Vision,
+                            ModelCapability::Tools,
+                        ],
                     },
                     ModelInfo {
                         name: "GLM-4-Air".to_string(),
                         provider: "智谱AI".to_string(),
                         is_selected: false,
+                        capabilities: vec![ModelCapability::Text, ModelCapability::Tools],
                     },
                     ModelInfo {
                         name: "GLM-3-Turbo".to_string(),
                         provider: "智谱AI".to_string(),
                         is_selected: false,
+                        capabilities: vec![ModelCapability::Text, ModelCapability::Tools],
                     },
                 ],
             },
@@ -604,36 +703,53 @@ impl TodoThreadEdit {
                                                     .items_center()
                                                     .justify_between()
                                                     .child(
-                                                        Checkbox::new(checkbox_id)
-                                                            .checked(model.is_selected)
-                                                            .label(model.name.clone())
-                                                            .on_click(
-                                                                move |_checked, _window, cx| {
-                                                                    let model_name_to_toggle =
-                                                                        model_name_for_event.clone();
-                                                                    
-                                                                    // 更新原始数据
-                                                                    todo_edit_entity_for_event.update(cx, |todo_edit, todo_cx| {
-                                                                        todo_edit.model_manager.toggle_model_selection(&model_name_to_toggle);
-                                                                        todo_cx.notify(); // 通知主界面更新
-                                                                    });
+                                                        h_flex()
+                                                            .items_center()
+                                                            .gap_3()
+                                                            .child(
+                                                                Checkbox::new(checkbox_id)
+                                                                    .checked(model.is_selected)
+                                                                    .label(model.name.clone())
+                                                                    .on_click(
+                                                                        move |_checked, _window, cx| {
+                                                                            let model_name_to_toggle =
+                                                                                model_name_for_event.clone();
+                                                                            
+                                                                            // 更新原始数据
+                                                                            todo_edit_entity_for_event.update(cx, |todo_edit, todo_cx| {
+                                                                                todo_edit.model_manager.toggle_model_selection(&model_name_to_toggle);
+                                                                                todo_cx.notify(); // 通知主界面更新
+                                                                            });
 
-                                                                    println!(
-                                                                        "切换模型选择: {}",
-                                                                        model_name_to_toggle
-                                                                    );
-                                                                },
+                                                                            println!(
+                                                                                "切换模型选择: {}",
+                                                                                model_name_to_toggle
+                                                                            );
+                                                                        },
+                                                                    ),
+                                                            )
+                                                            .child(
+                                                                h_flex().gap_1().items_center().children(
+                                                                    model.capabilities.iter().enumerate().map(
+                                                                        |(cap_index, cap)| {
+                                                                            let capability_unique_id = provider_index * 10000
+                                                                                + model_index * 1000
+                                                                                + cap_index;
+
+                                                                            div()
+                                                                                .id(("capability", capability_unique_id))
+                                                                                .p_1()
+                                                                                .rounded_md()
+                                                                                .bg(gpui::rgb(0xF3F4F6))
+                                                                                .child(
+                                                                                    Icon::new(cap.icon())
+                                                                                        .xsmall()
+                                                                                        .text_color(gpui::rgb(0x6B7280)),
+                                                                                )
+                                                                        },
+                                                                    ),
+                                                                ),
                                                             ),
-                                                    )
-                                                    .child(
-                                                        div()
-                                                            .px_2()
-                                                            .py_1()
-                                                            .bg(gpui::rgb(0xF3F4F6))
-                                                            .text_color(gpui::rgb(0x6B7280))
-                                                            .rounded_md()
-                                                            .text_xs()
-                                                            .child(model.provider.clone()),
                                                     ),
                                             )
                                     },
@@ -661,11 +777,11 @@ impl TodoThreadEdit {
                 .child(accordion) // 直接放置手风琴，不需要额外的滚动容器
                 .footer(
                     h_flex()
-                        .justify_end() // 只保留右对齐的按钮
+                        .justify_center() // 只保留右对齐的按钮
                         .items_center()
-                        .p_3()
-                        .border_t_1() // 添加顶部边框分隔
-                        .border_color(gpui::rgb(0xE5E7EB))
+                        .p_2()
+                        // .border_t_1() // 添加顶部边框分隔
+                        // .border_color(gpui::rgb(0xE5E7EB))
                         .bg(gpui::rgb(0xFAFAFA)) // 底部背景色
                         .child(
                             Button::new("clear-all-models")
