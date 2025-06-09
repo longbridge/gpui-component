@@ -407,7 +407,7 @@ impl TextElement {
 
                 let mut marker_styles = vec![];
                 for marker in markers.iter() {
-                    if let Some(range) = marker.byte_range(&state) {
+                    if let Some(range) = &marker.range {
                         if range.start < skipped_offset {
                             continue;
                         }

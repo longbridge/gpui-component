@@ -30,6 +30,7 @@ use super::{
     number_input,
     text_wrapper::TextWrapper,
 };
+use crate::input::hover_popover::DiagnosticPopover;
 use crate::input::marker::Marker;
 use crate::{history::History, scroll::ScrollbarState, Root};
 
@@ -258,6 +259,9 @@ pub struct InputState {
     pub(crate) mask_pattern: MaskPattern,
     pub(super) placeholder: SharedString,
 
+    /// Popover
+    diagnostic_popover: Option<Entity<DiagnosticPopover>>,
+
     /// To remember the horizontal column (x-coordinate) of the cursor position.
     preferred_x_offset: Option<Pixels>,
     _subscriptions: Vec<Subscription>,
@@ -329,6 +333,7 @@ impl InputState {
             line_number_width: px(0.),
             placeholder: SharedString::default(),
             mask_pattern: MaskPattern::default(),
+            diagnostic_popover: None,
             _subscriptions,
         }
     }
@@ -382,7 +387,7 @@ impl InputState {
             highlighter: Rc::new(RefCell::new(None)),
             line_number: true,
             height: Some(relative(1.)),
-            markers: vec![],
+            markers: Rc::new(vec![]),
         };
         self
     }
@@ -465,16 +470,12 @@ impl InputState {
     /// Set markers, only for [`InputMode::CodeEditor`] mode.
     ///
     /// For example to set the diagnostic markers in the code editor.
-    pub fn set_markers(
-        &mut self,
-        new_markers: Vec<Marker>,
-        _: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if let InputMode::CodeEditor { markers, .. } = &mut self.mode {
-            *markers = new_markers;
-            cx.notify();
+    pub fn set_markers(&mut self, markers: Vec<Marker>, _: &mut Window, _: &mut Context<Self>) {
+        let mut markers = markers;
+        for marker in &mut markers {
+            marker.prepare(self);
         }
+        self.mode.set_markers(markers);
     }
 
     /// Set placeholder
@@ -490,13 +491,12 @@ impl InputState {
 
     /// Called after moving the cursor. Updates preferred_x_offset if we know where the cursor now is.
     fn update_preferred_x_offset(&mut self, _cx: &mut Context<Self>) {
-        if let (Some(lines), Some(bounds)) = (&self.last_layout, &self.last_bounds) {
+        if let (Some(_), Some(bounds)) = (&self.last_layout, &self.last_bounds) {
             let offset = self.cursor_offset();
-            let line_height = self.last_line_height;
 
             // Find which line and sub-line the cursor is on and its position
             let (_line_index, _sub_line_index, cursor_pos) =
-                self.line_and_position_for_offset(offset, lines, line_height);
+                self.line_and_position_for_offset(offset);
 
             if let Some(pos) = cursor_pos {
                 // Adjust by scroll offset
@@ -507,19 +507,29 @@ impl InputState {
     }
 
     /// Find which line and sub-line the given offset belongs to, along with the position within that sub-line.
-    fn line_and_position_for_offset(
+    ///
+    /// Returns:
+    ///
+    /// - The index of the line (zero-based) containing the offset.
+    /// - The index of the sub-line (zero-based) within the line containing the offset.
+    /// - The position of the offset.
+    pub(super) fn line_and_position_for_offset(
         &self,
         offset: usize,
-        lines: &[WrappedLine],
-        line_height: Pixels,
     ) -> (usize, usize, Option<Point<Pixels>>) {
+        let Some(lines) = &self.last_layout else {
+            return (0, 0, None);
+        };
+        let line_height = self.last_line_height;
+        let line_number_width = self.line_number_width;
+
         let mut prev_lines_offset = 0;
         let mut y_offset = px(0.);
         for (line_index, line) in lines.iter().enumerate() {
             let local_offset = offset.saturating_sub(prev_lines_offset);
             if let Some(pos) = line.position_for_index(local_offset, line_height) {
                 let sub_line_index = (pos.y.0 / line_height.0) as usize;
-                let adjusted_pos = point(pos.x, pos.y + y_offset);
+                let adjusted_pos = point(pos.x + line_number_width, pos.y + y_offset);
                 return (line_index, sub_line_index, Some(adjusted_pos));
             }
 
@@ -543,7 +553,7 @@ impl InputState {
         let offset = self.cursor_offset();
         let line_height = self.last_line_height;
         let (current_line_index, current_sub_line, current_pos) =
-            self.line_and_position_for_offset(offset, lines, line_height);
+            self.line_and_position_for_offset(offset);
 
         let Some(current_pos) = current_pos else {
             return;
@@ -1419,6 +1429,30 @@ impl InputState {
         self.selected_word_range = None;
     }
 
+    pub(super) fn on_mouse_move(
+        &mut self,
+        event: &MouseMoveEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let offset = self.index_for_mouse_position(event.position, window, cx);
+        if let Some(marker) = self.mode.marker_for_offset(offset) {
+            if let Some(diagnostic_popover) = self.diagnostic_popover.as_ref() {
+                if diagnostic_popover.read(cx).marker.range == marker.range {
+                    diagnostic_popover.update(cx, |this, cx| {
+                        this.show(cx);
+                    });
+
+                    return;
+                }
+            }
+
+            self.diagnostic_popover = Some(DiagnosticPopover::new(marker, cx.entity(), cx));
+
+            cx.notify();
+        }
+    }
+
     pub(super) fn on_scroll_wheel(
         &mut self,
         event: &ScrollWheelEvent,
@@ -1751,7 +1785,7 @@ impl InputState {
         cx.notify()
     }
 
-    fn offset_from_utf16(&self, offset: usize) -> usize {
+    pub(super) fn offset_from_utf16(&self, offset: usize) -> usize {
         let mut utf8_offset = 0;
         let mut utf16_count = 0;
 
@@ -1766,7 +1800,7 @@ impl InputState {
         utf8_offset
     }
 
-    fn offset_to_utf16(&self, offset: usize) -> usize {
+    pub(super) fn offset_to_utf16(&self, offset: usize) -> usize {
         let mut utf16_offset = 0;
         let mut utf8_count = 0;
 
@@ -1781,11 +1815,11 @@ impl InputState {
         utf16_offset
     }
 
-    fn range_to_utf16(&self, range: &Range<usize>) -> Range<usize> {
+    pub(super) fn range_to_utf16(&self, range: &Range<usize>) -> Range<usize> {
         self.offset_to_utf16(range.start)..self.offset_to_utf16(range.end)
     }
 
-    fn range_from_utf16(&self, range_utf16: &Range<usize>) -> Range<usize> {
+    pub(super) fn range_from_utf16(&self, range_utf16: &Range<usize>) -> Range<usize> {
         self.offset_from_utf16(range_utf16.start)..self.offset_from_utf16(range_utf16.end)
     }
 
@@ -2164,5 +2198,6 @@ impl Render for InputState {
             .flex_grow()
             .overflow_x_hidden()
             .child(TextElement::new(cx.entity().clone()).placeholder(self.placeholder.clone()))
+            .children(self.diagnostic_popover.clone())
     }
 }

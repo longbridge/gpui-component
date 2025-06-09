@@ -1,5 +1,5 @@
 use crate::{highlighter::HighlightTheme, input::InputState};
-use gpui::{px, HighlightStyle, SharedString, UnderlineStyle};
+use gpui::{px, HighlightStyle, Hsla, SharedString, UnderlineStyle};
 use itertools::Itertools;
 use std::ops::Range;
 
@@ -9,6 +9,7 @@ pub struct Marker {
     pub severity: MarkerSeverity,
     pub start: LineColumn,
     pub end: LineColumn,
+    pub(super) range: Option<Range<usize>>,
     /// The message associated with the marker, typically a description of the issue.
     pub message: SharedString,
 }
@@ -26,22 +27,34 @@ impl Marker {
             start: start.into(),
             end: end.into(),
             message: message.into(),
+            range: None,
         }
     }
 
-    /// Returns the range (zero-based) of bytes in the source code that this marker covers.
-    pub(super) fn byte_range(&self, state: &InputState) -> Option<Range<usize>> {
-        let start_line = state
+    /// Prepare the marker to convert line, column to byte offsets.
+    pub(super) fn prepare(&mut self, state: &InputState) {
+        let Some(start_line) = state
             .text_wrapper
             .lines
-            .get(self.start.line.saturating_sub(1))?;
-        let start_line_str = state.text.get(start_line.range.clone())?;
+            .get(self.start.line.saturating_sub(1))
+        else {
+            return;
+        };
 
-        let end_line = state
+        let Some(start_line_str) = state.text.get(start_line.range.clone()) else {
+            return;
+        };
+
+        let Some(end_line) = state
             .text_wrapper
             .lines
-            .get(self.end.line.saturating_sub(1))?;
-        let end_line_str = state.text.get(end_line.range.clone())?;
+            .get(self.end.line.saturating_sub(1))
+        else {
+            return;
+        };
+        let Some(end_line_str) = state.text.get(end_line.range.clone()) else {
+            return;
+        };
 
         let start_byte = start_line.range.start
             + start_line_str
@@ -58,7 +71,7 @@ impl Marker {
                 .values()
                 .sum::<usize>();
 
-        Some(start_byte..end_byte)
+        self.range = Some(start_byte..end_byte);
     }
 }
 
@@ -104,7 +117,33 @@ impl From<&str> for MarkerSeverity {
 }
 
 impl MarkerSeverity {
-    /// Returns the [`HighlightStyle`] for the marker severity with the given theme style.
+    pub(super) fn bg(&self, theme: &HighlightTheme) -> Hsla {
+        match self {
+            Self::Error => theme.style.status.error_background(),
+            Self::Warning => theme.style.status.warning_background(),
+            Self::Info => theme.style.status.info_background(),
+            Self::Hint => theme.style.status.hint_background(),
+        }
+    }
+
+    pub(super) fn fg(&self, theme: &HighlightTheme) -> Hsla {
+        match self {
+            Self::Error => theme.style.status.error(),
+            Self::Warning => theme.style.status.warning(),
+            Self::Info => theme.style.status.info(),
+            Self::Hint => theme.style.status.hint(),
+        }
+    }
+
+    pub(super) fn border(&self, theme: &HighlightTheme) -> Hsla {
+        match self {
+            Self::Error => theme.style.status.error_border(),
+            Self::Warning => theme.style.status.warning_border(),
+            Self::Info => theme.style.status.info_border(),
+            Self::Hint => theme.style.status.hint_border(),
+        }
+    }
+
     pub(super) fn highlight_style(&self, theme: &HighlightTheme) -> HighlightStyle {
         let color = match self {
             Self::Error => Some(theme.style.status.error()),

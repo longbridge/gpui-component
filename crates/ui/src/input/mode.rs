@@ -51,7 +51,7 @@ pub enum InputMode {
         line_number: bool,
         language: SharedString,
         highlighter: Rc<RefCell<Option<SyntaxHighlighter>>>,
-        markers: Vec<Marker>,
+        markers: Rc<Vec<Marker>>,
     },
     AutoGrow {
         rows: usize,
@@ -182,19 +182,41 @@ impl InputMode {
         }
     }
 
+    pub(super) fn clear_markers(&mut self) {
+        match self {
+            InputMode::CodeEditor { markers, .. } => *markers = Rc::new(vec![]),
+            _ => {}
+        }
+    }
+
     #[allow(unused)]
-    pub(super) fn markers(&self) -> Option<&Vec<Marker>> {
-        match &self {
+    pub(super) fn markers(&self) -> Option<&Rc<Vec<Marker>>> {
+        match self {
             InputMode::CodeEditor { markers, .. } => Some(markers),
             _ => None,
         }
     }
 
-    pub(super) fn clear_markers(&mut self) {
+    pub(super) fn set_markers(&mut self, new_markers: Vec<Marker>) {
         match self {
-            InputMode::CodeEditor { markers, .. } => markers.clear(),
+            InputMode::CodeEditor { markers, .. } => *markers = Rc::new(new_markers),
             _ => {}
         }
+    }
+
+    pub(super) fn marker_for_offset(&self, offset: usize) -> Option<&Marker> {
+        let Some(markers) = self.markers() else {
+            return None;
+        };
+
+        for marker in markers.iter() {
+            if let Some(range) = marker.range.as_ref() {
+                if range.contains(&offset) {
+                    return Some(marker);
+                }
+            }
+        }
+        None
     }
 }
 
