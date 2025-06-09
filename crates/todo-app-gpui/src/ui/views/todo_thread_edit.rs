@@ -3,6 +3,7 @@ use gpui::prelude::*;
 use gpui::*;
 
 use gpui_component::{
+    accordion::Accordion,
     badge::Badge,
     button::{Button, ButtonVariant, ButtonVariants as _},
     checkbox::Checkbox,
@@ -140,6 +141,11 @@ impl ModelManager {
                         provider: "Anthropic".to_string(),
                         is_selected: false,
                     },
+                    ModelInfo {
+                        name: "claude-3-opus".to_string(),
+                        provider: "Anthropic".to_string(),
+                        is_selected: false,
+                    },
                 ],
             },
             ProviderInfo {
@@ -153,6 +159,116 @@ impl ModelManager {
                     ModelInfo {
                         name: "gpt-4-turbo".to_string(),
                         provider: "OpenAI".to_string(),
+                        is_selected: false,
+                    },
+                    ModelInfo {
+                        name: "gpt-3.5-turbo".to_string(),
+                        provider: "OpenAI".to_string(),
+                        is_selected: false,
+                    },
+                    ModelInfo {
+                        name: "gpt-4o".to_string(),
+                        provider: "OpenAI".to_string(),
+                        is_selected: false,
+                    },
+                ],
+            },
+            ProviderInfo {
+                name: "百度智能云".to_string(),
+                models: vec![
+                    ModelInfo {
+                        name: "文心一言-4.0".to_string(),
+                        provider: "百度智能云".to_string(),
+                        is_selected: false,
+                    },
+                    ModelInfo {
+                        name: "文心一言-3.5".to_string(),
+                        provider: "百度智能云".to_string(),
+                        is_selected: false,
+                    },
+                    ModelInfo {
+                        name: "ERNIE-Bot-turbo".to_string(),
+                        provider: "百度智能云".to_string(),
+                        is_selected: false,
+                    },
+                ],
+            },
+            ProviderInfo {
+                name: "阿里云".to_string(),
+                models: vec![
+                    ModelInfo {
+                        name: "通义千问-Max".to_string(),
+                        provider: "阿里云".to_string(),
+                        is_selected: false,
+                    },
+                    ModelInfo {
+                        name: "通义千问-Plus".to_string(),
+                        provider: "阿里云".to_string(),
+                        is_selected: false,
+                    },
+                    ModelInfo {
+                        name: "通义千问-Turbo".to_string(),
+                        provider: "阿里云".to_string(),
+                        is_selected: false,
+                    },
+                ],
+            },
+            ProviderInfo {
+                name: "腾讯云".to_string(),
+                models: vec![
+                    ModelInfo {
+                        name: "混元-Pro".to_string(),
+                        provider: "腾讯云".to_string(),
+                        is_selected: false,
+                    },
+                    ModelInfo {
+                        name: "混元-Standard".to_string(),
+                        provider: "腾讯云".to_string(),
+                        is_selected: false,
+                    },
+                    ModelInfo {
+                        name: "混元-Lite".to_string(),
+                        provider: "腾讯云".to_string(),
+                        is_selected: false,
+                    },
+                ],
+            },
+            ProviderInfo {
+                name: "字节跳动".to_string(),
+                models: vec![
+                    ModelInfo {
+                        name: "豆包-Pro-32K".to_string(),
+                        provider: "字节跳动".to_string(),
+                        is_selected: false,
+                    },
+                    ModelInfo {
+                        name: "豆包-Pro-4K".to_string(),
+                        provider: "字节跳动".to_string(),
+                        is_selected: false,
+                    },
+                    ModelInfo {
+                        name: "豆包-Lite-4K".to_string(),
+                        provider: "字节跳动".to_string(),
+                        is_selected: false,
+                    },
+                ],
+            },
+            ProviderInfo {
+                name: "智谱AI".to_string(),
+                models: vec![
+                    ModelInfo {
+                        name: "GLM-4".to_string(),
+                        provider: "智谱AI".to_string(),
+                        is_selected: false,
+                    },
+                    ModelInfo {
+                        name: "GLM-4-Air".to_string(),
+                        provider: "智谱AI".to_string(),
+                        is_selected: false,
+                    },
+                    ModelInfo {
+                        name: "GLM-3-Turbo".to_string(),
+                        provider: "智谱AI".to_string(),
                         is_selected: false,
                     },
                 ],
@@ -423,67 +539,123 @@ impl TodoThreadEdit {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        // 先捕获当前的模型数据
-        let providers = self.model_manager.providers.clone();
-
+        // 使用 Entity 来共享状态
+        let todo_edit_entity = cx.entity().clone();
+        
         window.open_drawer_at(placement, cx, move |drawer, _window, drawer_cx| {
-            let mut children_elements = Vec::new();
+            // 从 entity 中读取当前的模型数据
+            let providers = todo_edit_entity.read(drawer_cx).model_manager.providers.clone();
 
-            for provider in providers.iter() {
-                // 服务商标题
-                children_elements.push(
-                    div()
-                        .py_2()
-                        .px_3()
-                        .bg(gpui::rgb(0xF3F4F6))
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(gpui::rgb(0x374151))
-                        .child(provider.name.clone())
-                        .into_any_element(),
-                );
+            // 创建手风琴组件
+            let mut accordion = Accordion::new("model-providers").multiple(true);
 
-                // 该服务商下的模型
-                for model in provider.models.iter() {
-                    let model_name_for_event = model.name.clone();
+            for (provider_index, provider) in providers.iter().enumerate() {
+                let provider_name = provider.name.clone();
+                let provider_models = provider.models.clone();
 
-                    children_elements.push(
-                        div()
-                            .pl_6() // 缩进表示层级关系
-                            .py_1()
-                            .px_3()
-                            .child(
-                                Checkbox::new(SharedString::new(format!(
-                                    "model-checkbox-{}",
-                                    model.name
-                                )))
-                                .checked(model.is_selected)
-                                .label(model.name.clone())
-                                .on_click(
-                                    move |_checked, window, cx| {
-                                        let model_name_to_toggle = model_name_for_event.clone();
-
-                                        // 通过全局事件或者其他方式更新模型选择状态
-                                        // 这里暂时先关闭抽屉，实际使用中需要找到正确的更新方式
-                                        println!("切换模型选择: {}", model_name_to_toggle);
-                                        window.close_drawer(cx);
-                                    },
+                accordion = accordion.item(|item| {
+                    item.open(true) // 默认展开所有服务商
+                        .icon(IconName::Bot)
+                        .title(
+                            h_flex()
+                                .w_full()
+                                .items_center()
+                                .justify_between()
+                                .child(
+                                    div()
+                                        .font_medium()
+                                        .text_color(gpui::rgb(0x374151))
+                                        .child(provider_name.clone()),
+                                )
+                                .child(
+                                    div()
+                                        .px_2()
+                                        .py_1()
+                                        .bg(gpui::rgb(0xEFF6FF))
+                                        .text_color(gpui::rgb(0x1D4ED8))
+                                        .rounded_md()
+                                        .text_xs()
+                                        .child(format!("{} 个模型", provider_models.len())),
                                 ),
-                            )
-                            .into_any_element(),
-                    );
-                }
+                        )
+                        .content(
+                            v_flex()
+                                .gap_2()
+                                .p_2()
+                                .children(provider_models.iter().enumerate().map(
+                                    |(model_index, model)| {
+                                        let model_name_for_event = model.name.clone();
+                                        let checkbox_id = SharedString::new(format!(
+                                            "model-{}-{}",
+                                            provider_index, model_index
+                                        ));
+                                        let todo_edit_entity_for_event = todo_edit_entity.clone();
+
+                                        div()
+                                            .p_2()
+                                            .bg(gpui::rgb(0xFAFAFA))
+                                            .rounded_md()
+                                            .border_1()
+                                            .border_color(gpui::rgb(0xE5E7EB))
+                                            .hover(|style| style.bg(gpui::rgb(0xF3F4F6)))
+                                            .child(
+                                                h_flex()
+                                                    .items_center()
+                                                    .justify_between()
+                                                    .child(
+                                                        Checkbox::new(checkbox_id)
+                                                            .checked(model.is_selected)
+                                                            .label(model.name.clone())
+                                                            .on_click(
+                                                                move |_checked, _window, cx| {
+                                                                    let model_name_to_toggle =
+                                                                        model_name_for_event.clone();
+                                                                    
+                                                                    // 更新原始数据
+                                                                    todo_edit_entity_for_event.update(cx, |todo_edit, todo_cx| {
+                                                                        todo_edit.model_manager.toggle_model_selection(&model_name_to_toggle);
+                                                                        todo_cx.notify(); // 通知主界面更新
+                                                                    });
+
+                                                                    println!(
+                                                                        "切换模型选择: {}",
+                                                                        model_name_to_toggle
+                                                                    );
+                                                                },
+                                                            ),
+                                                    )
+                                                    .child(
+                                                        div()
+                                                            .px_2()
+                                                            .py_1()
+                                                            .bg(gpui::rgb(0xF3F4F6))
+                                                            .text_color(gpui::rgb(0x6B7280))
+                                                            .rounded_md()
+                                                            .text_xs()
+                                                            .child(model.provider.clone()),
+                                                    ),
+                                            )
+                                    },
+                                ))
+                                .when(provider_models.is_empty(), |this| {
+                                    this.child(
+                                        div()
+                                            .p_4()
+                                            .text_center()
+                                            .text_sm()
+                                            .text_color(gpui::rgb(0x9CA3AF))
+                                            .child("该服务商暂无可用模型"),
+                                    )
+                                }),
+                        )
+                });
             }
 
-            // 计算选中的模型数量（基于捕获的数据）
-            let selected_count = providers
-                .iter()
-                .flat_map(|p| &p.models)
-                .filter(|m| m.is_selected)
-                .count();
+            let todo_edit_entity_for_clear = todo_edit_entity.clone();
 
             drawer
                 .overlay(true)
-                .size(px(320.))
+                .size(px(380.)) // 稍微增加宽度以适应手风琴
                 .title("选择AI模型")
                 .child(
                     v_flex()
@@ -491,28 +663,38 @@ impl TodoThreadEdit {
                         .size_full()
                         .overflow_y_scroll()
                         .py_2()
-                        .gap_px()
-                        .children(children_elements),
+                        .child(accordion),
                 )
                 .footer(
                     h_flex()
-                        .justify_between()
+                        .justify_end() // 只保留右对齐的按钮
                         .items_center()
                         .p_3()
                         .child(
-                            // 显示已选择的模型数量
-                            div()
-                                .text_sm()
-                                .text_color(gpui::rgb(0x6B7280))
-                                .child(format!("已选择 {} 个模型", selected_count)),
-                        )
-                        .child(
-                            Button::new("close-model-drawer")
-                                .label("确定")
-                                .with_variant(ButtonVariant::Primary)
-                                .on_click(|_, window, cx| {
-                                    window.close_drawer(cx);
-                                }),
+                            h_flex()
+                                .gap_2()
+                                .child(Button::new("clear-all-models").label("清空选择").on_click(
+                                    move |_, _window, cx| {
+                                        // 清空所有模型选择
+                                        todo_edit_entity_for_clear.update(cx, |todo_edit, todo_cx| {
+                                            for provider in &mut todo_edit.model_manager.providers {
+                                                for model in &mut provider.models {
+                                                    model.is_selected = false;
+                                                }
+                                            }
+                                            todo_cx.notify(); // 通知主界面更新
+                                        });
+                                        println!("清空所有模型选择");
+                                    },
+                                ))
+                                .child(
+                                    Button::new("close-model-drawer")
+                                        .label("确定")
+                                        .with_variant(ButtonVariant::Primary)
+                                        .on_click(|_, window, cx| {
+                                            window.close_drawer(cx);
+                                        }),
+                                ),
                         ),
                 )
         });
