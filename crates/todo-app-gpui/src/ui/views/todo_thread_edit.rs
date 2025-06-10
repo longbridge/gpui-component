@@ -1456,13 +1456,7 @@ impl Render for TodoThreadEdit {
                                                         .child(
                                                             v_flex()
                                                                 .gap_2()
-                                                                // .child(
-                                                                //     div()
-                                                                //         .text_sm()
-                                                                //         .font_medium()
-                                                                //         .text_color(gpui::rgb(0x374151))
-                                                                //         .child(format!("已上传文件 ({})", self.uploaded_files.len())),
-                                                                // )
+                                                                
                                                                 .child(
                                                                     h_flex()
                                                                         .gap_2()
@@ -1571,15 +1565,15 @@ impl Render for TodoThreadEdit {
                                             ),)
                             .child(
                                 h_flex()
-                                    .gap_2()
+                                    .gap_2().justify_start()
                                     .items_center()
-                                    .child(
-                                        div()
-                                            .text_sm()
-                                            .text_color(gpui::rgb(0x6B7280))
-                                            .min_w_24()
-                                            .child("模型选择"),
-                                    )
+                                    // .child(
+                                    //     div()
+                                    //         .text_sm()
+                                    //         .text_color(gpui::rgb(0x6B7280))
+                                    //         .min_w_24()
+                                    //         .child("模型选择"),
+                                    // )
                                     .child(
                                         div().justify_start().child(
                                             Button::new("show-drawer-left")
@@ -1606,25 +1600,24 @@ impl Render for TodoThreadEdit {
                                                     this.open_drawer_at(Placement::Left, window, cx)
                                                 })),
                                         ),
-                                    ).child(Self::form_row(
-                                "截止日期",
-                                DatePicker::new(&self.due_date_picker)
-                                    .placeholder("选择截止日期")
+                                    ).child(
+                               h_flex().max_w_32().child( DatePicker::new(&self.due_date_picker)
+                                    .placeholder("截止日期")
                                     .cleanable()
                                     .presets(due_date_presets.clone())
-                                    .small(),
-                            )),
+                                    .small())
+                            ),
                             ).child(
                                 h_flex()
                                     .gap_2()
                                     .items_center()
-                                    .child(
-                                        div()
-                                            .text_sm()
-                                            .text_color(gpui::rgb(0x6B7280))
-                                            .min_w_24()
-                                            .child("工具集"),
-                                    )
+                                    // .child(
+                                    //     div()
+                                    //         .text_sm()
+                                    //         .text_color(gpui::rgb(0x6B7280))
+                                    //         .min_w_24()
+                                    //         .child("工具集"),
+                                    // )
                                     .child(
                                         div().justify_start().child(
                                             Button::new("show-tool-drawer-left")
