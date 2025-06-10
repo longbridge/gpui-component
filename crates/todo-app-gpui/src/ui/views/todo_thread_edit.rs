@@ -1,24 +1,18 @@
-use chrono::{Days, Utc};
+use chrono::{ Utc};
 use gpui::prelude::*;
 use gpui::*;
-
 use gpui_component::{
     accordion::Accordion,
-    badge::Badge,
     button::{Button, ButtonVariant, ButtonVariants as _},
     checkbox::Checkbox,
     date_picker::{DatePicker, DatePickerEvent, DatePickerState, DateRangePreset},
-    dock::DragDrop,
-    dropdown::{Dropdown, DropdownDelegate, DropdownEvent, DropdownItem, DropdownState},
+    dropdown::{Dropdown,  DropdownState},
     input::{InputEvent, InputState, TextInput},
     label::Label,
-    scroll::*,
-    sidebar::{SidebarGroup, SidebarMenu, SidebarMenuItem},
     switch::Switch,
     tooltip::Tooltip,
     *,
 };
-
 use crate::ui::components::ViewKit;
 
 actions!(todo_thread, [Tab, TabPrev, Save, Cancel, Delete]);

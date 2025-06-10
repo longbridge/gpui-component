@@ -1,20 +1,16 @@
 use gpui::prelude::*;
 use gpui::*;
 use std::time::Duration;
-
 use gpui_component::{
     button::{Button, ButtonGroup, ButtonVariants},
-    h_flex,
     indicator::Indicator,
     label::Label,
-    list::{List, ListDelegate, ListEvent, ListItem},
+    list::{List, ListDelegate, ListItem},
     popup_menu::PopupMenu,
     tab::TabBar,
-    v_flex, ActiveTheme, IconName, Sizable, *,
+    *,
 };
-
 use crate::ui::{views::todo_thread::TodoThreadChat, AppExt};
-
 use super::todo_thread_edit::TodoThreadEdit;
 
 actions!(

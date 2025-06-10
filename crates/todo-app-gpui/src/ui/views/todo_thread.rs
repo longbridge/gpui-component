@@ -1,8 +1,6 @@
 use std::{cell::Cell, rc::Rc};
-
 use gpui::prelude::*;
 use gpui::*;
-
 use gpui_component::{
     accordion::Accordion,
     button::{Button, ButtonVariant, ButtonVariants as _},
@@ -12,7 +10,6 @@ use gpui_component::{
     scroll::{ Scrollbar, ScrollbarState},
     *,
 };
-
 use crate::ui::components::ViewKit;
 
 actions!(todo_thread, [Tab, TabPrev, SendMessage]);

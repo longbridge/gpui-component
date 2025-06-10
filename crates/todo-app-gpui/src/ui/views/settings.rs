@@ -9,16 +9,10 @@ use crate::{
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::{
-    amber_500, badge::Badge, blue_500, label::Label, orange_300, orange_500,
-    popup_menu::PopupMenuExt, purple_500, sidebar::SidebarFooter, violet_500, yellow_500,
-    Selectable, Sizable,
-};
-use gpui_component::{
-    h_flex,
-    input::{InputEvent, InputState, TextInput},
+    input::{InputEvent, InputState},
     resizable::{h_resizable, resizable_panel, ResizableState},
-    sidebar::{Sidebar, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuItem},
-    v_flex, ActiveTheme, Icon, IconName, Side,
+    sidebar::{Sidebar, SidebarFooter, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuItem},white,
+    *,
 };
 use serde::Deserialize;
 
