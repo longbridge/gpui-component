@@ -459,7 +459,7 @@ impl TodoThreadChat {
         let selected_count = selected_tools.len();
 
         if selected_count == 0 {
-            "选择MCP工具".to_string()
+            "选择工具集".to_string()
         } else if selected_count == 1 {
             selected_tools[0].clone()
         } else {
