@@ -1,5 +1,4 @@
 use gpui::SharedString;
-use tree_sitter::Query;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, enum_iterator::Sequence)]
 pub enum Language {
@@ -174,11 +173,6 @@ impl Language {
         .into_iter()
         .map(|s| s.into())
         .collect()
-    }
-
-    pub(super) fn query(&self) -> Query {
-        let config = self.config();
-        Query::new(&config.language, &config.highlights).unwrap()
     }
 
     /// Return the language info for the language.

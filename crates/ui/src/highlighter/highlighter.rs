@@ -1,17 +1,13 @@
+use super::HighlightTheme;
+use crate::highlighter::LanguageRegistry;
 use gpui::{App, HighlightStyle, SharedString};
 use std::{
     collections::{BTreeMap, HashMap},
     ops::Range,
-    sync::Arc,
 };
 use tree_sitter::{
     InputEdit, Node, Parser, Point, Query, QueryCursor, QueryMatch, StreamingIterator, Tree,
 };
-use tree_sitter_highlight::{HighlightConfiguration, Highlighter};
-
-use crate::highlighter::LanguageRegistry;
-
-use super::{HighlightTheme, Language};
 
 /// A syntax highlighter that supports incremental parsing, multiline text,
 /// and caching of highlight results.
@@ -23,8 +19,6 @@ pub struct SyntaxHighlighter {
     parser: Parser,
     old_tree: Option<Tree>,
     text: SharedString,
-    highlighter: Highlighter,
-    config: Option<Arc<HighlightConfiguration>>,
 
     locals_pattern_index: usize,
     highlights_pattern_index: usize,
@@ -176,8 +170,6 @@ impl SyntaxHighlighter {
             parser,
             old_tree: None,
             text: SharedString::new(""),
-            highlighter: Highlighter::new(),
-            config: None,
             cache: BTreeMap::new(),
             locals_pattern_index,
             highlights_pattern_index,
@@ -200,23 +192,16 @@ impl SyntaxHighlighter {
 
         // FIXME: use build_combined_injections_query to build the query.
         self.query = None;
-        if let Some(language) = Language::from_str(&language) {
-            self.query = Some(language.query());
-            _ = self.parser.set_language(&language.config().language);
-        } else {
-            if let Some(config) = LanguageRegistry::global(cx).language(&language) {
-                _ = self.parser.set_language(&config.language);
-                if let Ok(query) = tree_sitter::Query::new(&config.language, &config.highlights) {
-                    self.query = Some(query);
-                }
+        if let Some(config) = LanguageRegistry::global(cx).language(&language) {
+            _ = self.parser.set_language(&config.language);
+            if let Ok(query) = Query::new(&config.language, &config.highlights) {
+                self.query = Some(query);
             }
         }
 
         self.language = language;
         self.old_tree = None;
         self.text = SharedString::new("");
-        self.highlighter = Highlighter::new();
-        self.config = None;
         self.cache.clear();
     }
 
