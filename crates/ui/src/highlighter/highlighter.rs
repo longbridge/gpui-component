@@ -523,9 +523,11 @@ impl SyntaxHighlighter {
         range: &Range<usize>,
         theme: &HighlightTheme,
     ) -> Vec<(Range<usize>, HighlightStyle)> {
+        // println!("-------------- style for range: {:?}", range);
         let mut styles = vec![];
         let start_offset = range.start;
         let mut last_range = start_offset..start_offset;
+        // FIXME: Here can not match, if the range.start not a key in the cache.
         let mut cursor = self.cache.lower_bound(Bound::Included(&range.start));
 
         // NOTE: the ranges in the cache may have duplicates, so we need to merge them.
@@ -537,7 +539,7 @@ impl SyntaxHighlighter {
         }) {
             cursor.move_next();
 
-            // println!("---------- node_range : {:?}", node_range);
+            let node_range = node_range.start.max(range.start)..node_range.end.min(range.end);
 
             // Ensure every range is connected.
             if last_range.end < node_range.start {
@@ -561,12 +563,13 @@ impl SyntaxHighlighter {
 
         let mut result = vec![];
         for (range, style) in styles.into_iter() {
-            result = gpui::combine_highlights(result, vec![(range, style)]).collect();
+            result = gpui::combine_highlights(result, vec![(range.clone(), style)]).collect();
         }
         // NOTE: DO NOT remove this comment, it is used for debugging.
         // for style in &result {
         //     println!("style: {:?} - {:?}", style.0, style.1.color);
         // }
+        // println!("--------------------------------");
 
         result
     }
