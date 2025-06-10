@@ -430,58 +430,14 @@ impl TodoList {
     fn open_todo(&mut self, _: &Open, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(todo) = self.selected_company.clone() {
             TodoThreadChat::open(todo, cx);
-            // cx.activate(true);
-            // let window_size = size(px(600.0), px(800.0));
-            // let window_bounds = Bounds::centered(None, window_size, cx);
-            // let options = WindowOptions {
-            //     app_id: Some("x-todo-app".to_string()),
-            //     window_bounds: Some(WindowBounds::Windowed(window_bounds)),
-            //     titlebar: Some(TitleBar::title_bar_options()),
-            //     window_min_size: Some(gpui::Size {
-            //         width: px(600.),
-            //         height: px(800.),
-            //     }),
-            //     kind: WindowKind::Normal,
-            //     #[cfg(target_os = "linux")]
-            //     window_background: gpui::WindowBackgroundAppearance::Transparent,
-            //     #[cfg(target_os = "linux")]
-            //     window_decorations: Some(gpui::WindowDecorations::Client),
-            //     ..Default::default()
-            // };
-            // cx.create_normal_window(
-            //     format!("todo-{}", todo.title),
-            //     options,
-            //     move |window, cx| TodoThreadChat::view(window, cx),
-            // );
+           
         }
     }
 
     fn edit_todo(&mut self, _: &Edit, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(todo) = self.selected_company.clone() {
             TodoThreadEdit::edit(todo, cx);
-            // cx.activate(true);
-            // let window_size = size(px(600.0), px(650.0));
-            // let window_bounds = Bounds::centered(None, window_size, cx);
-            // let options = WindowOptions {
-            //     app_id: Some("x-todo-app".to_string()),
-            //     window_bounds: Some(WindowBounds::Windowed(window_bounds)),
-            //     titlebar: Some(TitleBar::title_bar_options()),
-            //     window_min_size: Some(gpui::Size {
-            //         width: px(600.),
-            //         height: px(650.),
-            //     }),
-            //     kind: WindowKind::PopUp,
-            //     #[cfg(target_os = "linux")]
-            //     window_background: gpui::WindowBackgroundAppearance::Transparent,
-            //     #[cfg(target_os = "linux")]
-            //     window_decorations: Some(gpui::WindowDecorations::Client),
-            //     ..Default::default()
-            // };
-            // cx.create_normal_window(
-            //     format!("todo-{}", todo.title),
-            //     options,
-            //     move |window, cx| TodoThreadEdit::view(window, cx),
-            // );
+            
         }
     }
 
@@ -814,29 +770,7 @@ impl Render for TodoList {
                             .ghost()
                             .on_click(cx.listener(|_this, _ev, _widnow, cx| {
                                 TodoThreadEdit::add(cx);
-                                // cx.activate(true);
-                                // let window_size = size(px(600.0), px(570.0));
-                                // let window_bounds = Bounds::centered(None, window_size, cx);
-                                // let options = WindowOptions {
-                                //     app_id: Some("x-todo-app".to_string()),
-                                //     window_bounds: Some(WindowBounds::Windowed(window_bounds)),
-                                //     titlebar: Some(TitleBar::title_bar_options()),
-                                //     window_min_size: Some(gpui::Size {
-                                //         width: px(600.),
-                                //         height: px(570.),
-                                //     }),
-
-                                //     kind: WindowKind::PopUp,
-                                //     #[cfg(target_os = "linux")]
-                                //     window_background:
-                                //         gpui::WindowBackgroundAppearance::Transparent,
-                                //     #[cfg(target_os = "linux")]
-                                //     window_decorations: Some(gpui::WindowDecorations::Client),
-                                //     ..Default::default()
-                                // };
-                                // cx.create_normal_window("Add Todo", options, move |window, cx| {
-                                //     TodoThreadEdit::view(window, cx)
-                                // });
+                                
                             })),
                     ),
             )
