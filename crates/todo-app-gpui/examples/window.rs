@@ -112,7 +112,6 @@ impl Render for WindowDemo {
                     WindowOptions {
                         titlebar: None,
                         window_bounds: Some(window_bounds),
-                         kind: WindowKind::PopUp,
                         ..Default::default()
                     },
                     |_, cx| {
