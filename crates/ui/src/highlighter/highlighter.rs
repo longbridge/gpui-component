@@ -261,7 +261,6 @@ impl SyntaxHighlighter {
         let mut root_node = tree.root_node();
 
         // Incremental parsing to only update changed ranges.
-        let mut last_end = 0;
         if let Some(changed_ranges) = changed_ranges {
             let mut total_range = 0..0;
             for change_range in changed_ranges {
@@ -325,24 +324,17 @@ impl SyntaxHighlighter {
 
         let mut matches = query_cursor.matches(&query, root_node, source);
 
-        // TODO: Merge duplicate ranges.
-
         while let Some(m) = matches.next() {
             // Ref:
             // https://github.com/tree-sitter/tree-sitter/blob/460118b4c82318b083b4d527c9c750426730f9c0/highlight/src/lib.rs#L556
             let (language_name, content_node, _) = self.injection_for_match(None, query, m, source);
             if let Some(language_name) = language_name {
                 if let Some(content_node) = content_node {
-                    if content_node.start_byte() < last_end {
-                        continue;
-                    }
-
                     let styles = self.handle_injection(&language_name, content_node, source);
                     for (node_range, highlight_name) in styles {
                         self.cache
                             .insert(node_range.start, (node_range, highlight_name.to_string()));
                     }
-                    last_end = content_node.end_byte();
                 }
 
                 continue;
@@ -350,23 +342,35 @@ impl SyntaxHighlighter {
 
             for cap in m.captures {
                 let node = cap.node;
-                if node.start_byte() < last_end {
+
+                let Some(highlight_name) = query.capture_names().get(cap.index as usize) else {
                     continue;
-                }
+                };
 
-                let highlight_name = query.capture_names()[cap.index as usize];
                 let node_range: Range<usize> = node.start_byte()..node.end_byte();
+                let highlight_name = highlight_name.to_owned();
 
-                self.cache.insert(
-                    node_range.start,
-                    (node_range.clone(), highlight_name.to_string()),
-                );
-                last_end = node_range.end;
+                // Merge near range and same highlight name
+                let last_item = self.cache.last_key_value().map(|kv| kv.1);
+                let last_range = last_item.map(|(range, _)| range).unwrap_or(&(0..0));
+                let last_highlight_name = last_item.map(|(_, name)| name.as_str());
+
+                if last_range.end <= node_range.start && last_highlight_name == Some(highlight_name)
+                {
+                    self.cache.insert(
+                        last_range.start,
+                        (last_range.start..node_range.end, highlight_name.to_string()),
+                    );
+                } else {
+                    self.cache
+                        .insert(node_range.start, (node_range, highlight_name.to_string()));
+                }
             }
         }
 
+        // DO NOT REMOVE THIS PRINT, it's useful for debugging
         // for item in self.cache.iter() {
-        //     println!("---------- item: {:?}", item);
+        //     println!("item: {:?}", item);
         // }
     }
 
@@ -419,9 +423,10 @@ impl SyntaxHighlighter {
                     break;
                 }
 
-                let highlight_name = query.capture_names()[cap.index as usize];
-                last_end = node_range.end;
-                cache.push((node_range, highlight_name.to_string()));
+                if let Some(highlight_name) = query.capture_names().get(cap.index as usize) {
+                    last_end = node_range.end;
+                    cache.push((node_range, highlight_name.to_string()));
+                }
             }
         }
 

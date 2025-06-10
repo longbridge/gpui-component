@@ -218,7 +218,7 @@ impl Language {
             ),
             Self::Go => (
                 tree_sitter_go::LANGUAGE,
-                tree_sitter_go::HIGHLIGHTS_QUERY,
+                include_str!("languages/go/highlights.scm"),
                 "",
                 "",
             ),

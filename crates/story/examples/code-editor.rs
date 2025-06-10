@@ -81,7 +81,7 @@ const LANGUAGES: [(Lang, &'static str); 8] = [
 
 impl Example {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let default_language = LANGUAGES[0].clone();
+        let default_language = LANGUAGES[1].clone();
         let input_state = cx.new(|cx| {
             InputState::new(window, cx)
                 .code_editor(default_language.0.name().to_string())
