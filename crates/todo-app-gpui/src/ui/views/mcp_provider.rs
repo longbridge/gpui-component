@@ -1041,8 +1041,7 @@ impl McpProvider {
                             .text_sm()
                             .text_color(gpui::rgb(0x6B7280))
                             .child("此服务支持日志记录功能，可以输出调试和运行状态信息。"),
-                    ),
-            )
+                    ))
     }
 }
 
@@ -1650,5 +1649,380 @@ impl McpProvider {
             4 => div().child(Self::render_logging_content_static()),
             _ => div().child("未知能力"),
         })
+    }
+
+    // 渲染配置信息的静态方法
+    fn render_config_content_static(provider: &McpProviderInfo) -> impl IntoElement {
+        v_flex()
+            .gap_3()
+            .child(
+                div()
+                    .p_3()
+                    .bg(gpui::rgb(0xFAFAFA))
+                    .rounded_md()
+                    .border_1()
+                    .border_color(gpui::rgb(0xE5E7EB))
+                    .child(
+                        v_flex()
+                            .gap_3()
+                            .child(
+                                h_flex()
+                                    .items_center()
+                                    .gap_2()
+                                    .child(
+                                        Icon::new(IconName::Settings)
+                                            .small()
+                                            .text_color(gpui::rgb(0x6B7280)),
+                                    )
+                                    .child(
+                                        div()
+                                            .font_medium()
+                                            .text_color(gpui::rgb(0x111827))
+                                            .child("基本配置"),
+                                    ),
+                            )
+                            .child(
+                                v_flex()
+                                    .gap_2()
+                                    .child(
+                                        h_flex()
+                                            .gap_4()
+                                            .child(
+                                                div()
+                                                    .text_sm()
+                                                    .text_color(gpui::rgb(0x6B7280))
+                                                    .min_w_20()
+                                                    .child("服务名称:"),
+                                            )
+                                            .child(
+                                                div()
+                                                    .text_sm()
+                                                    .text_color(gpui::rgb(0x111827))
+                                                    .child(provider.name.clone()),
+                                            ),
+                                    )
+                                    .child(
+                                        h_flex()
+                                            .gap_4()
+                                            .child(
+                                                div()
+                                                    .text_sm()
+                                                    .text_color(gpui::rgb(0x6B7280))
+                                                    .min_w_20()
+                                                    .child("启动命令:"),
+                                            )
+                                            .child(
+                                                div()
+                                                    .text_sm()
+                                                    .text_color(gpui::rgb(0x111827))
+                                                    .child(format!("{} {}", provider.command, provider.args.join(" ")),
+                                            ),
+                                    )
+                                    .child(
+                                        h_flex()
+                                            .gap_4()
+                                            .child(
+                                                div()
+                                                    .text_sm()
+                                                    .text_color(gpui::rgb(0x6B7280))
+                                                    .min_w_20()
+                                                    .child("传输方式:"),
+                                            )
+                                            .child(
+                                                div()
+                                                    .px_2()
+                                                    .py_1()
+                                                    .bg(gpui::rgb(0xE0F2FE))
+                                                    .text_color(gpui::rgb(0x0369A1))
+                                                    .rounded_md()
+                                                    .text_xs()
+                                                    .child(provider.transport.as_str()),
+                                            ),
+                                    )
+                                    .when(!provider.description.is_empty(), |this| {
+                                        this.child(
+                                            h_flex()
+                                                .gap_4()
+                                                .child(
+                                                    div()
+                                                        .text_sm()
+                                                        .text_color(gpui::rgb(0x6B7280))
+                                                        .min_w_20()
+                                                        .child("描述:"),
+                                                )
+                                                .child(
+                                                    div()
+                                                        .text_sm()
+                                                        .text_color(gpui::rgb(0x111827))
+                                                        .child(provider.description.clone()),
+                                                ),
+                                        )
+                                    })
+                                    .when(!provider.env_vars.is_empty(), |this| {
+                                        this.child(
+                                            v_flex()
+                                                .gap_1()
+                                                .child(
+                                                    div()
+                                                        .text_sm()
+                                                        .text_color(gpui::rgb(0x6B7280))
+                                                        .child("环境变量:"),
+                                                )
+                                                .children(provider.env_vars.iter().map(|(key, value)| {
+                                                    div()
+                                                        .pl_4()
+                                                        .text_xs()
+                                                        .text_color(gpui::rgb(0x9CA3AF))
+                                                        .child(format!("{}={}", key, value))
+                                                })),
+                                        )
+                                    }),
+                            ),
+                    ),
+            ))
+    }
+
+    // 渲染工具的静态方法
+    fn render_tools_content_static(tools: &[McpTool]) -> impl IntoElement {
+        v_flex()
+            .gap_3()
+            .children(tools.iter().map(|tool| {
+                v_flex()
+                    .gap_2()
+                    .p_3()
+                    .bg(gpui::rgb(0xFAFAFA))
+                    .rounded_md()
+                    .border_1()
+                    .border_color(gpui::rgb(0xE5E7EB))
+                    .child(
+                        h_flex()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                Icon::new(IconName::Wrench)
+                                    .small()
+                                    .text_color(gpui::rgb(0xDC2626)),
+                            )
+                            .child(
+                                div()
+                                    .font_medium()
+                                    .text_color(gpui::rgb(0x111827))
+                                    .child(tool.name.clone()),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .text_sm()
+                            .text_color(gpui::rgb(0x6B7280))
+                            .child(tool.description.clone()),
+                    )
+                    .when(!tool.parameters.is_empty(), |this| {
+                        this.child(
+                            v_flex()
+                                .gap_1()
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .font_medium()
+                                        .text_color(gpui::rgb(0x374151))
+                                        .child("参数:"),
+                                )
+                                .children(tool.parameters.iter().map(|param| {
+                                    h_flex()
+                                        .items_center()
+                                        .gap_2()
+                                        .pl_2()
+                                        .child(
+                                            div()
+                                                .text_xs()
+                                                .text_color(if param.required {
+                                                    gpui::rgb(0xDC2626)
+                                                } else {
+                                                    gpui::rgb(0x059669)
+                                                })
+                                                .child(format!(
+                                                    "{}{}",
+                                                    param.name,
+                                                    if param.required { "*" } else { "" }
+                                                )),
+                                        )
+                                        .child(
+                                            div()
+                                                .px_1()
+                                                .bg(gpui::rgb(0xF3F4F6))
+                                                .rounded_sm()
+                                                .text_xs()
+                                                .text_color(gpui::rgb(0x6B7280))
+                                                .child(param.param_type.clone()),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_xs()
+                                                .text_color(gpui::rgb(0x9CA3AF))
+                                                .child(param.description.clone()),
+                                        )
+                                })),
+                        )
+                    })
+            }))
+            .when(tools.is_empty(), |this| {
+                this.child(
+                    div()
+                        .text_sm()
+                        .text_color(gpui::rgb(0x9CA3AF))
+                        .child("暂无可用工具"),
+                )
+            })
+    }
+
+    // 渲染提示的静态方法
+    fn render_prompts_content_static(prompts: &[McpPrompt]) -> impl IntoElement {
+        v_flex()
+            .gap_3()
+            .children(prompts.iter().map(|prompt| {
+                v_flex()
+                    .gap_2()
+                    .p_3()
+                    .bg(gpui::rgb(0xFAFAFA))
+                    .rounded_md()
+                    .border_1()
+                    .border_color(gpui::rgb(0xE5E7EB))
+                    .child(
+                        h_flex()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                Icon::new(IconName::SquareTerminal)
+                                    .small()
+                                    .text_color(gpui::rgb(0x7C3AED)),
+                            )
+                            .child(
+                                div()
+                                    .font_medium()
+                                    .text_color(gpui::rgb(0x111827))
+                                    .child(prompt.name.clone()),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .text_sm()
+                            .text_color(gpui::rgb(0x6B7280))
+                            .child(prompt.description.clone()),
+                    )
+                    .when(!prompt.arguments.is_empty(), |this| {
+                        this.child(
+                            v_flex()
+                                .gap_1()
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .font_medium()
+                                        .text_color(gpui::rgb(0x374151))
+                                        .child("参数:"),
+                                )
+                                .children(prompt.arguments.iter().map(|arg| {
+                                    h_flex()
+                                        .items_center()
+                                        .gap_2()
+                                        .pl_2()
+                                        .child(
+                                            div()
+                                                .text_xs()
+                                                .text_color(if arg.required {
+                                                    gpui::rgb(0xDC2626)
+                                                } else {
+                                                    gpui::rgb(0x059669)
+                                                })
+                                                .child(format!(
+                                                    "{}{}",
+                                                    arg.name,
+                                                    if arg.required { "*" } else { "" }
+                                                )),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_xs()
+                                                .text_color(gpui::rgb(0x9CA3AF))
+                                                .child(arg.description.clone()),
+                                        )
+                                })),
+                        )
+                    })
+            }))
+            .when(prompts.is_empty(), |this| {
+                this.child(
+                    div()
+                        .text_sm()
+                        .text_color(gpui::rgb(0x9CA3AF))
+                        .child("暂无可用提示"),
+                )
+            })
+    }
+
+    // 渲染日志的静态方法
+    fn render_logging_content_static() -> impl IntoElement {
+        div()
+            .p_3()
+            .bg(gpui::rgb(0xFAFAFA))
+            .rounded_md()
+            .border_1()
+            .border_color(gpui::rgb(0xE5E7EB))
+            .child(
+                v_flex()
+                    .gap_2()
+                    .child(
+                        h_flex()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                Icon::new(IconName::LetterText)
+                                    .small()
+                                    .text_color(gpui::rgb(0xF59E0B)),
+                            )
+                            .child(
+                                div()
+                                    .font_medium()
+                                    .text_color(gpui::rgb(0x111827))
+                                    .child("日志记录"),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .text_sm()
+                            .text_color(gpui::rgb(0x6B7280))
+                            .child("此服务支持日志记录功能，可以输出调试和运行状态信息。"),
+                    )
+                    .child(
+                        v_flex()
+                            .gap_1()
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .font_medium()
+                                    .text_color(gpui::rgb(0x374151))
+                                    .child("日志级别:"),
+                            )
+                            .child(
+                                h_flex()
+                                    .gap_2()
+                                    .pl_2()
+                                    .children([
+                                        ("DEBUG", gpui::rgb(0x6B7280)),
+                                        ("INFO", gpui::rgb(0x3B82F6)),
+                                        ("WARN", gpui::rgb(0xF59E0B)),
+                                        ("ERROR", gpui::rgb(0xEF4444)),
+                                    ].iter().map(|(level, color)| {
+                                        div()
+                                            .px_2()
+                                            .py_1()
+                                            .bg(gpui::rgb(0xF3F4F6))
+                                            .text_color(*color)
+                                            .rounded_sm()
+                                            .text_xs()
+                                            .child(*level)
+                                    })),
+                            ),
+                    ),
+            )
     }
 }
