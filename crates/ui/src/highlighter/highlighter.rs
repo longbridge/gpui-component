@@ -370,9 +370,9 @@ impl SyntaxHighlighter {
         }
 
         // DO NOT REMOVE THIS PRINT, it's useful for debugging
-        for item in self.cache.iter() {
-            println!("item: {:?}", item);
-        }
+        // for item in self.cache.iter() {
+        //     println!("item: {:?}", item);
+        // }
     }
 
     /// TODO: Use incremental parsing to handle the injection.
@@ -536,13 +536,16 @@ impl SyntaxHighlighter {
         } {
             cursor.move_next();
 
-            // TODO: If break, the `comment.doc` will not work.
-            // Ref: https://github.com/longbridge/gpui-component/pull/904/commits/d8f886939d3b472f228c1ce72154a951e98f32c5
-            if node_range.end > range.end {
-                break;
+            let node_range = node_range.start.max(range.start)..node_range.end.min(range.end);
+            if node_range.end < node_range.start {
+                continue;
             }
 
-            let node_range = node_range.start.max(range.start)..node_range.end.min(range.end);
+            // TODO: If break, the `comment.doc` will not work.
+            // Ref: https://github.com/longbridge/gpui-component/pull/904/commits/d8f886939d3b472f228c1ce72154a951e98f32c5
+            if node_range.end >= range.end {
+                break;
+            }
 
             // let range_in_line = node_range.start..node_range.end;
 
@@ -566,6 +569,11 @@ impl SyntaxHighlighter {
         if last_range.end < range.end {
             styles.push((last_range.end..range.end, HighlightStyle::default()));
         }
+
+        // NOTE: DO NOT remove this comment, it is used for debugging.
+        // for style in &styles {
+        //     println!("style: {:?}", style.0);
+        // }
 
         styles
     }
