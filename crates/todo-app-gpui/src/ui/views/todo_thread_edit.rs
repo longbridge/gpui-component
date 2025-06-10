@@ -42,7 +42,7 @@ pub enum TodoPriority {
 }
 
 impl TodoPriority {
-    fn as_str(&self) -> &'static str {
+   const fn as_str(&self) -> &'static str {
         match self {
             TodoPriority::Low => "低",
             TodoPriority::Medium => "中",
@@ -83,7 +83,7 @@ pub enum TodoStatus {
 }
 
 impl TodoStatus {
-    fn as_str(&self) -> &'static str {
+   const fn as_str(&self) -> &'static str {
         match self {
             TodoStatus::Todo => "待办",
             TodoStatus::InProgress => "进行中",
@@ -112,7 +112,7 @@ pub enum ModelCapability {
 }
 
 impl ModelCapability {
-    fn icon(&self) -> IconName {
+   const fn icon(&self) -> IconName {
         match self {
             ModelCapability::Text => IconName::LetterText,
             ModelCapability::Vision => IconName::Eye,
@@ -121,7 +121,7 @@ impl ModelCapability {
         }
     }
 
-    fn label(&self) -> &'static str {
+   const fn label(&self) -> &'static str {
         match self {
             ModelCapability::Text => "文本",
             ModelCapability::Vision => "视觉",
@@ -143,7 +143,7 @@ pub enum ToolCapability {
 }
 
 impl ToolCapability {
-    fn icon(&self) -> IconName {
+   const fn icon(&self) -> IconName {
         match self {
             ToolCapability::FileOperation => IconName::LetterText,
             ToolCapability::CodeReview => IconName::ChevronDown,
@@ -154,7 +154,7 @@ impl ToolCapability {
         }
     }
 
-    fn label(&self) -> &'static str {
+   const fn label(&self) -> &'static str {
         match self {
             ToolCapability::FileOperation => "文件",
             ToolCapability::CodeReview => "代码",
@@ -791,7 +791,7 @@ impl TodoThreadEdit {
         let selected_count = selected_models.len();
 
         if selected_count == 0 {
-            "选择AI模型".to_string()
+            "选择模型".to_string()
         } else if selected_count <= 2 {
             selected_models.join(", ")
         } else {
@@ -1321,7 +1321,6 @@ impl FocusableCycle for TodoThreadEdit {
             self.description_input.focus_handle(cx),
             self.status_dropdown.focus_handle(cx),
             self.priority_dropdown.focus_handle(cx),
-            // 移除 mcp_tools_dropdown.focus_handle(cx),
             self.due_date_picker.focus_handle(cx),
             self.reminder_date_picker.focus_handle(cx),
             self.recurring_dropdown.focus_handle(cx),
@@ -1463,13 +1462,13 @@ impl Render for TodoThreadEdit {
                                                         .child(
                                                             v_flex()
                                                                 .gap_2()
-                                                                .child(
-                                                                    div()
-                                                                        .text_sm()
-                                                                        .font_medium()
-                                                                        .text_color(gpui::rgb(0x374151))
-                                                                        .child(format!("已上传文件 ({})", self.uploaded_files.len())),
-                                                                )
+                                                                // .child(
+                                                                //     div()
+                                                                //         .text_sm()
+                                                                //         .font_medium()
+                                                                //         .text_color(gpui::rgb(0x374151))
+                                                                //         .child(format!("已上传文件 ({})", self.uploaded_files.len())),
+                                                                // )
                                                                 .child(
                                                                     h_flex()
                                                                         .gap_2()
@@ -1499,16 +1498,16 @@ impl Render for TodoThreadEdit {
                                                                                     .border_color(gpui::rgb(0xE5E7EB))
                                                                                     .rounded_md()
                                                                                     .hover(|style| style.bg(gpui::rgb(0xE5E7EB)))
-                            .tooltip({
-                                let file_name = file_name.clone();
-                                move |window, cx| {
-                                     let file_name = file_name.clone();
-                                    Tooltip::element( move|_, _| {
-                                        Label::new(file_name.clone())
-                                    })
-                                    .build(window, cx)
-                                }
-                            })
+                                                                                    .tooltip({
+                                                                                        let file_name = file_name.clone();
+                                                                                        move |window, cx| {
+                                                                                            let file_name = file_name.clone();
+                                                                                            Tooltip::element( move|_, _| {
+                                                                                                Label::new(file_name.clone())
+                                                                                            })
+                                                                                            .build(window, cx)
+                                                                                        }
+                                                                                    })
                                                                                     .child(
                                                                                         
                                                                                         div()
@@ -1553,77 +1552,6 @@ impl Render for TodoThreadEdit {
                                                 cx.notify();
                                             })),
                                     )
-                                    // 添加文件列表显示
-                                    .when(!self.uploaded_files.is_empty(), |this| {
-                                        this.child(
-                                            v_flex()
-                                                .gap_2()
-                                                .child(
-                                                    div()
-                                                        .text_sm()
-                                                        .font_medium()
-                                                        .text_color(gpui::rgb(0x374151))
-                                                        .child(format!("已上传文件 ({})", self.uploaded_files.len())),
-                                                )
-                                                .child(
-                                                    h_flex()
-                                                        .gap_2()
-                                                        .flex_wrap()
-                                                        .children(
-                                                            self.uploaded_files.iter().enumerate().map(|(index, file)| {
-                                                                let file_path_for_remove = file.path.clone();
-                                                                
-                                                                div()
-                                                                    .id(("uploaded-file", index))
-                                                                    .flex()
-                                                                    .items_center()
-                                                                    .gap_2()
-                                                                    .px_3()
-                                                                    .py_2()
-                                                                    .bg(gpui::rgb(0xFFFFFF))
-                                                                    .border_1()
-                                                                    .border_color(gpui::rgb(0xE5E7EB))
-                                                                    .rounded_md()
-                                                                    .hover(|style| style.bg(gpui::rgb(0xF3F4F6)))
-                                                                    .child(
-                                                                        Icon::new(IconName::LetterText)
-                                                                            .xsmall()
-                                                                            .text_color(gpui::rgb(0x6B7280)),
-                                                                    )
-                                                                    .child(
-                                                                        v_flex()
-                                                                            .gap_1()
-                                                                            .child(
-                                                                                div()
-                                                                                    .text_xs()
-                                                                                    .font_medium()
-                                                                                    .text_color(gpui::rgb(0x374151))
-                                                                                    .child(file.name.clone()),
-                                                                            )
-                                                                            .when(file.size.is_some(), |this| {
-                                                                                this.child(
-                                                                                    div()
-                                                                                        .text_xs()
-                                                                                        .text_color(gpui::rgb(0x9CA3AF))
-                                                                                        .child(Self::format_file_size(file.size.unwrap())),
-                                                                                )
-                                                                            }),
-                                                                    )
-                                                                    .child(
-                                                                        Button::new(SharedString::new(format!("remove-file-{}", index)))
-                                                                            .ghost()
-                                                                            .xsmall()
-                                                                            .icon(IconName::X)
-                                                                            .text_color(gpui::rgb(0x9CA3AF))
-                                                                            .on_click(cx.listener(move |this, _, window, cx| {
-                                                                                this.remove_file(&file_path_for_remove, window, cx);
-                                                                            })),
-                                                                    )
-                                                            })
-                                                        ),
-                                                ),
-                                        )
-                                    }),
                             ),
                     )
                     .child(

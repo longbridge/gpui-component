@@ -1,6 +1,5 @@
 use std::{cell::Cell, rc::Rc};
 
-use chrono::{Days, Utc};
 use gpui::prelude::*;
 use gpui::*;
 
@@ -8,11 +7,9 @@ use gpui_component::{
     accordion::Accordion,
     button::{Button, ButtonVariant, ButtonVariants as _},
     checkbox::Checkbox,
-    drawer::*,
-    dropdown::{Dropdown, DropdownDelegate, DropdownEvent, DropdownItem, DropdownState},
     h_flex,
     input::{InputEvent, InputState, TextInput},
-    scroll::{Scrollable, Scrollbar, ScrollbarState},
+    scroll::{ Scrollbar, ScrollbarState},
     *,
 };
 
