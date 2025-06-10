@@ -13,7 +13,7 @@ use gpui_component::{
     tooltip::Tooltip,
     *,
 };
-use crate::ui::components::ViewKit;
+use crate::ui::{AppExt,components::ViewKit, views::todolist::Todo};
 
 actions!(todo_thread, [Tab, TabPrev, Save, Cancel, Delete]);
 
@@ -609,7 +609,63 @@ pub struct TodoThreadEdit {
 }
 
 impl TodoThreadEdit {
-    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+
+    pub fn edit(todo:Todo,
+        cx: &mut App,
+    )  {
+      cx.activate(true);
+            let window_size = size(px(600.0), px(650.0));
+            let window_bounds = Bounds::centered(None, window_size, cx);
+            let options = WindowOptions {
+                app_id: Some("x-todo-app".to_string()),
+                window_bounds: Some(WindowBounds::Windowed(window_bounds)),
+                titlebar: Some(TitleBar::title_bar_options()),
+                window_min_size: Some(gpui::Size {
+                    width: px(600.),
+                    height: px(650.),
+                }),
+                kind: WindowKind::PopUp,
+                #[cfg(target_os = "linux")]
+                window_background: gpui::WindowBackgroundAppearance::Transparent,
+                #[cfg(target_os = "linux")]
+                window_decorations: Some(gpui::WindowDecorations::Client),
+                ..Default::default()
+            };
+            cx.create_normal_window(
+                format!("xTodo-{}", todo.title),
+                options,
+                move |window, cx| Self::view(window, cx),
+            );
+    }
+
+    pub fn add(
+        cx: &mut App,
+    )  {
+      cx.activate(true);
+            let window_size = size(px(600.0), px(650.0));
+            let window_bounds = Bounds::centered(None, window_size, cx);
+            let options = WindowOptions {
+                app_id: Some("x-todo-app".to_string()),
+                window_bounds: Some(WindowBounds::Windowed(window_bounds)),
+                titlebar: Some(TitleBar::title_bar_options()),
+                window_min_size: Some(gpui::Size {
+                    width: px(600.),
+                    height: px(650.),
+                }),
+                kind: WindowKind::PopUp,
+                #[cfg(target_os = "linux")]
+                window_background: gpui::WindowBackgroundAppearance::Transparent,
+                #[cfg(target_os = "linux")]
+                window_decorations: Some(gpui::WindowDecorations::Client),
+                ..Default::default()
+            };
+            cx.create_normal_window(
+                "xTodo-Add",
+                options,
+                move |window, cx| Self::view(window, cx),
+            );
+    }
+     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         // 基本信息输入框
         let title_input = cx.new(|cx| InputState::new(window, cx).placeholder("输入任务标题..."));
 

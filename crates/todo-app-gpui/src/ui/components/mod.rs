@@ -1,6 +1,7 @@
 pub(crate) mod container;
 pub(crate) mod section;
 pub(crate) mod titlebar;
+pub(crate) mod appbar;
 
 use gpui::*;
 use gpui_component::{dock::PanelControl, IconName};

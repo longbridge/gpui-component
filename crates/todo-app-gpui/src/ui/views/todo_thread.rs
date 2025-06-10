@@ -10,7 +10,8 @@ use gpui_component::{
     scroll::{ Scrollbar, ScrollbarState},
     *,
 };
-use crate::ui::components::ViewKit;
+use crate::ui::{components::ViewKit, views::todolist::Todo};
+use crate::ui::AppExt;
 
 actions!(todo_thread, [Tab, TabPrev, SendMessage]);
 
@@ -396,7 +397,34 @@ pub struct TodoThreadChat {
 }
 
 impl TodoThreadChat {
-    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn open(todo:Todo,
+        cx: &mut App) {
+            cx.activate(true);
+            let window_size = size(px(600.0), px(800.0));
+            let window_bounds = Bounds::centered(None, window_size, cx);
+            let options = WindowOptions {
+                app_id: Some("x-todo-app".to_string()),
+                window_bounds: Some(WindowBounds::Windowed(window_bounds)),
+                titlebar: Some(TitleBar::title_bar_options()),
+                window_min_size: Some(gpui::Size {
+                    width: px(600.),
+                    height: px(800.),
+                }),
+                kind: WindowKind::Normal,
+                #[cfg(target_os = "linux")]
+                window_background: gpui::WindowBackgroundAppearance::Transparent,
+                #[cfg(target_os = "linux")]
+                window_decorations: Some(gpui::WindowDecorations::Client),
+                ..Default::default()
+            };
+            cx.create_normal_window(
+                format!("xTodo-{}", todo.title),
+                options,
+                move |window, cx| Self::view(window, cx),
+            );
+        }
+
+     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         // 聊天输入框 - 多行支持
         let chat_input = cx.new(|cx| {
             InputState::new(window, cx)

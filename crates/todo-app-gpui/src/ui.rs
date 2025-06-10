@@ -3,7 +3,7 @@ pub(crate) mod components;
 pub(crate) mod main_window;
 pub(crate) mod views;
 
-use crate::ui::components::{titlebar::AppTitleBar, titlebar::NormalTitleBar};
+use crate::ui::components::{appbar::AppTitleBar, appbar::NormalTitleBar};
 use gpui::{prelude::FluentBuilder, Window, *};
 use gpui_component::{scroll::ScrollbarShow, v_flex, Root};
 use raw_window_handle::HasWindowHandle;

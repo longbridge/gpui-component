@@ -1,6 +1,7 @@
+use super::todo_thread_edit::TodoThreadEdit;
+use crate::ui::{views::todo_thread::TodoThreadChat, AppExt};
 use gpui::prelude::*;
 use gpui::*;
-use std::time::Duration;
 use gpui_component::{
     button::{Button, ButtonGroup, ButtonVariants},
     indicator::Indicator,
@@ -10,8 +11,7 @@ use gpui_component::{
     tab::TabBar,
     *,
 };
-use crate::ui::{views::todo_thread::TodoThreadChat, AppExt};
-use super::todo_thread_edit::TodoThreadEdit;
+use std::time::Duration;
 
 actions!(
     list_story,
@@ -28,13 +28,13 @@ actions!(
 );
 
 #[derive(Clone, Default)]
-struct Todo {
-    title: SharedString,
-    description: SharedString,
+pub struct Todo {
+    pub title: SharedString,
+    pub description: SharedString,
 }
 
 #[derive(IntoElement)]
-struct TodoItem {
+pub struct TodoItem {
     base: ListItem,
     ix: usize,
     item: Todo,
@@ -144,13 +144,7 @@ impl RenderOnce for TodoItem {
                                                 .icon(IconName::Star)
                                                 .small()
                                                 .on_click(|event, win, app| {}),
-                                        ), // .child(
-                                           //     Button::new("button-trash")
-                                           //         .ghost()
-                                           //         .icon(IconName::Trash)
-                                           //         .small()
-                                           //         .on_click(|event, win, app| {}),
-                                           // ),
+                                        ),
                                 )
                             })
                             .child(
@@ -435,57 +429,59 @@ impl TodoList {
 
     fn open_todo(&mut self, _: &Open, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(todo) = self.selected_company.clone() {
-            cx.activate(true);
-            let window_size = size(px(600.0), px(800.0));
-            let window_bounds = Bounds::centered(None, window_size, cx);
-            let options = WindowOptions {
-                app_id: Some("x-todo-app".to_string()),
-                window_bounds: Some(WindowBounds::Windowed(window_bounds)),
-                titlebar: Some(TitleBar::title_bar_options()),
-                window_min_size: Some(gpui::Size {
-                    width: px(600.),
-                    height: px(800.),
-                }),
-                kind: WindowKind::Normal,
-                #[cfg(target_os = "linux")]
-                window_background: gpui::WindowBackgroundAppearance::Transparent,
-                #[cfg(target_os = "linux")]
-                window_decorations: Some(gpui::WindowDecorations::Client),
-                ..Default::default()
-            };
-            cx.create_normal_window(
-                format!("todo-{}", todo.title),
-                options,
-                move |window, cx| TodoThreadChat::view(window, cx),
-            );
+            TodoThreadChat::open(todo, cx);
+            // cx.activate(true);
+            // let window_size = size(px(600.0), px(800.0));
+            // let window_bounds = Bounds::centered(None, window_size, cx);
+            // let options = WindowOptions {
+            //     app_id: Some("x-todo-app".to_string()),
+            //     window_bounds: Some(WindowBounds::Windowed(window_bounds)),
+            //     titlebar: Some(TitleBar::title_bar_options()),
+            //     window_min_size: Some(gpui::Size {
+            //         width: px(600.),
+            //         height: px(800.),
+            //     }),
+            //     kind: WindowKind::Normal,
+            //     #[cfg(target_os = "linux")]
+            //     window_background: gpui::WindowBackgroundAppearance::Transparent,
+            //     #[cfg(target_os = "linux")]
+            //     window_decorations: Some(gpui::WindowDecorations::Client),
+            //     ..Default::default()
+            // };
+            // cx.create_normal_window(
+            //     format!("todo-{}", todo.title),
+            //     options,
+            //     move |window, cx| TodoThreadChat::view(window, cx),
+            // );
         }
     }
 
     fn edit_todo(&mut self, _: &Edit, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(todo) = self.selected_company.clone() {
-            cx.activate(true);
-            let window_size = size(px(600.0), px(650.0));
-            let window_bounds = Bounds::centered(None, window_size, cx);
-            let options = WindowOptions {
-                app_id: Some("x-todo-app".to_string()),
-                window_bounds: Some(WindowBounds::Windowed(window_bounds)),
-                titlebar: Some(TitleBar::title_bar_options()),
-                window_min_size: Some(gpui::Size {
-                    width: px(600.),
-                    height: px(650.),
-                }),
-                kind: WindowKind::PopUp,
-                #[cfg(target_os = "linux")]
-                window_background: gpui::WindowBackgroundAppearance::Transparent,
-                #[cfg(target_os = "linux")]
-                window_decorations: Some(gpui::WindowDecorations::Client),
-                ..Default::default()
-            };
-            cx.create_normal_window(
-                format!("todo-{}", todo.title),
-                options,
-                move |window, cx| TodoThreadEdit::view(window, cx),
-            );
+            TodoThreadEdit::edit(todo, cx);
+            // cx.activate(true);
+            // let window_size = size(px(600.0), px(650.0));
+            // let window_bounds = Bounds::centered(None, window_size, cx);
+            // let options = WindowOptions {
+            //     app_id: Some("x-todo-app".to_string()),
+            //     window_bounds: Some(WindowBounds::Windowed(window_bounds)),
+            //     titlebar: Some(TitleBar::title_bar_options()),
+            //     window_min_size: Some(gpui::Size {
+            //         width: px(600.),
+            //         height: px(650.),
+            //     }),
+            //     kind: WindowKind::PopUp,
+            //     #[cfg(target_os = "linux")]
+            //     window_background: gpui::WindowBackgroundAppearance::Transparent,
+            //     #[cfg(target_os = "linux")]
+            //     window_decorations: Some(gpui::WindowDecorations::Client),
+            //     ..Default::default()
+            // };
+            // cx.create_normal_window(
+            //     format!("todo-{}", todo.title),
+            //     options,
+            //     move |window, cx| TodoThreadEdit::view(window, cx),
+            // );
         }
     }
 
@@ -816,30 +812,31 @@ impl Render for TodoList {
                             .size(px(24.))
                             .compact()
                             .ghost()
-                            .on_click(cx.listener(|this, ev, widnow, cx| {
-                                cx.activate(true);
-                                let window_size = size(px(600.0), px(570.0));
-                                let window_bounds = Bounds::centered(None, window_size, cx);
-                                let options = WindowOptions {
-                                    app_id: Some("x-todo-app".to_string()),
-                                    window_bounds: Some(WindowBounds::Windowed(window_bounds)),
-                                    titlebar: Some(TitleBar::title_bar_options()),
-                                    window_min_size: Some(gpui::Size {
-                                        width: px(600.),
-                                        height: px(570.),
-                                    }),
+                            .on_click(cx.listener(|_this, _ev, _widnow, cx| {
+                                TodoThreadEdit::add(cx);
+                                // cx.activate(true);
+                                // let window_size = size(px(600.0), px(570.0));
+                                // let window_bounds = Bounds::centered(None, window_size, cx);
+                                // let options = WindowOptions {
+                                //     app_id: Some("x-todo-app".to_string()),
+                                //     window_bounds: Some(WindowBounds::Windowed(window_bounds)),
+                                //     titlebar: Some(TitleBar::title_bar_options()),
+                                //     window_min_size: Some(gpui::Size {
+                                //         width: px(600.),
+                                //         height: px(570.),
+                                //     }),
 
-                                    kind: WindowKind::PopUp,
-                                    #[cfg(target_os = "linux")]
-                                    window_background:
-                                        gpui::WindowBackgroundAppearance::Transparent,
-                                    #[cfg(target_os = "linux")]
-                                    window_decorations: Some(gpui::WindowDecorations::Client),
-                                    ..Default::default()
-                                };
-                                cx.create_normal_window("Add Todo", options, move |window, cx| {
-                                    TodoThreadEdit::view(window, cx)
-                                });
+                                //     kind: WindowKind::PopUp,
+                                //     #[cfg(target_os = "linux")]
+                                //     window_background:
+                                //         gpui::WindowBackgroundAppearance::Transparent,
+                                //     #[cfg(target_os = "linux")]
+                                //     window_decorations: Some(gpui::WindowDecorations::Client),
+                                //     ..Default::default()
+                                // };
+                                // cx.create_normal_window("Add Todo", options, move |window, cx| {
+                                //     TodoThreadEdit::view(window, cx)
+                                // });
                             })),
                     ),
             )
