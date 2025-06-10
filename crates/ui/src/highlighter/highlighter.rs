@@ -526,8 +526,8 @@ impl SyntaxHighlighter {
         let mut styles = vec![];
         let start_offset = range.start;
         let mut last_range = start_offset..start_offset;
-
         let mut cursor = self.cache.lower_bound(Bound::Included(&range.start));
+
         // NOTE: the ranges in the cache may have duplicates, so we need to merge them.
         while let Some((node_range, name)) = if cursor.key() == Some(&range.start) {
             cursor.value()
@@ -536,7 +536,7 @@ impl SyntaxHighlighter {
         } {
             cursor.move_next();
 
-            let node_range = node_range.start.max(range.start)..node_range.end.min(range.end);
+            let node_range = node_range.start.min(range.start)..node_range.end.min(range.end);
             if node_range.end < node_range.start {
                 continue;
             }
@@ -571,9 +571,10 @@ impl SyntaxHighlighter {
         }
 
         // NOTE: DO NOT remove this comment, it is used for debugging.
-        // for style in &styles {
-        //     println!("style: {:?}", style.0);
-        // }
+        for style in &styles {
+            println!("style: {:?} - {:?}", style.0, style.1.color);
+        }
+        println!("---------------------------------------------------------");
 
         styles
     }
