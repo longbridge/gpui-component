@@ -183,28 +183,6 @@ impl SyntaxHighlighter {
         })
     }
 
-    pub fn set_language(&mut self, language: impl Into<SharedString>, cx: &App) {
-        let language = language.into();
-
-        if self.language == language {
-            return;
-        }
-
-        // FIXME: use build_combined_injections_query to build the query.
-        self.query = None;
-        if let Some(config) = LanguageRegistry::global(cx).language(&language) {
-            _ = self.parser.set_language(&config.language);
-            if let Ok(query) = Query::new(&config.language, &config.highlights) {
-                self.query = Some(query);
-            }
-        }
-
-        self.language = language;
-        self.old_tree = None;
-        self.text = SharedString::new("");
-        self.cache.clear();
-    }
-
     pub fn is_empty(&self) -> bool {
         self.text.is_empty()
     }
