@@ -529,25 +529,15 @@ impl SyntaxHighlighter {
         let mut cursor = self.cache.lower_bound(Bound::Included(&range.start));
 
         // NOTE: the ranges in the cache may have duplicates, so we need to merge them.
-        while let Some((node_range, name)) = if cursor.key() == Some(&range.start) {
-            cursor.value()
-        } else {
-            cursor.peek_prev().map(|item| item.1)
-        } {
+        while let Some((node_range, name)) = cursor.value().filter(|(node_range, _)| {
+            node_range.contains(&range.start)
+                || node_range.contains(&range.end)
+                || range.contains(&node_range.start)
+                || range.contains(&node_range.end)
+        }) {
             cursor.move_next();
 
-            let node_range = node_range.start.min(range.start)..node_range.end.min(range.end);
-            if node_range.end < node_range.start {
-                continue;
-            }
-
-            // TODO: If break, the `comment.doc` will not work.
-            // Ref: https://github.com/longbridge/gpui-component/pull/904/commits/d8f886939d3b472f228c1ce72154a951e98f32c5
-            if node_range.end >= range.end {
-                break;
-            }
-
-            // let range_in_line = node_range.start..node_range.end;
+            // println!("---------- node_range : {:?}", node_range);
 
             // Ensure every range is connected.
             if last_range.end < node_range.start {
@@ -555,7 +545,6 @@ impl SyntaxHighlighter {
             }
 
             let style = theme.style(&name).unwrap_or_default();
-
             styles.push((node_range.clone(), style));
             last_range = node_range.clone();
         }
@@ -570,12 +559,15 @@ impl SyntaxHighlighter {
             styles.push((last_range.end..range.end, HighlightStyle::default()));
         }
 
-        // NOTE: DO NOT remove this comment, it is used for debugging.
-        for style in &styles {
-            println!("style: {:?} - {:?}", style.0, style.1.color);
+        let mut result = vec![];
+        for (range, style) in styles.into_iter() {
+            result = gpui::combine_highlights(result, vec![(range, style)]).collect();
         }
-        println!("---------------------------------------------------------");
+        // NOTE: DO NOT remove this comment, it is used for debugging.
+        // for style in &result {
+        //     println!("style: {:?} - {:?}", style.0, style.1.color);
+        // }
 
-        styles
+        result
     }
 }
