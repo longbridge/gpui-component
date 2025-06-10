@@ -80,6 +80,21 @@ pub struct McpResource {
     name: String,
     description: String,
     mime_type: Option<String>,
+    subscribable: bool,    // 是否支持订阅
+    subscribed: bool,      // 当前是否已订阅
+}
+
+impl Default for McpResource {
+    fn default() -> Self {
+        Self {
+            uri: String::new(),
+            name: String::new(),
+            description: String::new(),
+            mime_type: None,
+            subscribable: true,
+            subscribed: false,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -144,12 +159,16 @@ impl Default for McpProviderInfo {
                     name: "文档文件夹".to_string(),
                     description: "用户文档目录访问".to_string(),
                     mime_type: Some("inode/directory".to_string()),
+                    subscribable: true,
+                    subscribed: false,
                 },
                 McpResource {
                     uri: "file:///home/user/config.json".to_string(),
                     name: "配置文件".to_string(),
                     description: "应用配置文件".to_string(),
                     mime_type: Some("application/json".to_string()),
+                    subscribable: true,
+                    subscribed: false,
                 },
             ],
             tools: vec![
@@ -327,6 +346,8 @@ impl McpProvider {
             name: "主数据库".to_string(),
             description: "主要的业务数据库连接".to_string(),
             mime_type: Some("application/sql".to_string()),
+            subscribable: true,
+            subscribed: false,
         }];
 
         Self {
@@ -1378,7 +1399,7 @@ impl Render for McpProvider {
                                                     active_capability_tabs
                                                         .get(&index)
                                                         .copied()
-                                                        .unwrap_or(0),
+                                                        .unwrap_or(0),cx,
                                                 ),
                                             ),
                                         ),
@@ -1398,10 +1419,11 @@ impl McpProvider {
     fn render_capability_content_static(
         provider: &McpProviderInfo,
         tab_index: usize,
+        cx:&mut Context<Self>
     ) -> impl IntoElement {
         div().child(match tab_index {
             0 => div().child(Self::render_config_content_static(provider)),
-            1 => div().child(Self::render_resources_content_static(&provider.resources)),
+            1 => div().child(Self::render_resources_content_static(&provider.resources,cx)),
             2 => div().child(Self::render_tools_content_static(&provider.tools)),
             3 => div().child(Self::render_prompts_content_static(&provider.prompts)),
             4 => div().child(Self::render_logging_content_static()),
@@ -1545,7 +1567,7 @@ impl McpProvider {
         )
     }
 
-    fn render_resources_content_static(resources: &[McpResource]) -> impl IntoElement {
+    fn render_resources_content_static(resources: &[McpResource],cx:&mut Context<Self>) -> impl IntoElement {
         v_flex()
             .gap_2()
             .children(resources.iter().map(|resource| {
@@ -1557,7 +1579,7 @@ impl McpProvider {
                     .border_1()
                     .border_color(gpui::rgb(0xE5E7EB))
                     .child(
-                        h_flex()
+                        h_flex().w_full().justify_between().items_center().child(h_flex()
                             .items_center()
                             .gap_2()
                             .child(
@@ -1582,7 +1604,19 @@ impl McpProvider {
                                         .text_xs()
                                         .child(resource.mime_type.as_ref().unwrap().clone()),
                                 )
-                            }),
+                            })).when(resource.subscribable, |this| {
+                                this.child(Switch::new(SharedString::new(resource.name.clone()))
+                                    .checked(resource.subscribed)
+                                    .on_click(cx.listener(move |this, checked, window, cx| {
+                                        this.toggle_resource_subscription(resource.name.clone(), *checked, window, cx);
+                                    }))
+                                    .tooltip(if resource.subscribed {
+                                        "取消订阅"
+                                    } else {
+                                        "订阅资源"
+                                    }))
+                            })
+                        ,
                     )
                     .child(
                         div()
