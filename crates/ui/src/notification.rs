@@ -16,7 +16,9 @@ use smol::Timer;
 use crate::{
     animation::cubic_bezier,
     button::{Button, ButtonVariants as _},
-    h_flex, v_flex, ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt,
+    h_flex,
+    text::Text,
+    v_flex, ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt,
 };
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -66,7 +68,7 @@ pub struct Notification {
     id: NotificationId,
     type_: Option<NotificationType>,
     title: Option<SharedString>,
-    message: SharedString,
+    message: Text,
     icon: Option<Icon>,
     autohide: bool,
     action_builder: Option<Rc<dyn Fn(&mut Window, &mut Context<Self>) -> Button>>,
@@ -110,7 +112,7 @@ impl Notification {
     /// Create a new notification with the given content.
     ///
     /// default width is 320px.
-    pub fn new(message: impl Into<SharedString>) -> Self {
+    pub fn new(message: impl Into<Text>) -> Self {
         let id: SharedString = uuid::Uuid::new_v4().to_string().into();
         let id = (TypeId::of::<DefaultIdType>(), id.into());
 
@@ -127,19 +129,19 @@ impl Notification {
         }
     }
 
-    pub fn info(message: impl Into<SharedString>) -> Self {
+    pub fn info(message: impl Into<Text>) -> Self {
         Self::new(message).with_type(NotificationType::Info)
     }
 
-    pub fn success(message: impl Into<SharedString>) -> Self {
+    pub fn success(message: impl Into<Text>) -> Self {
         Self::new(message).with_type(NotificationType::Success)
     }
 
-    pub fn warning(message: impl Into<SharedString>) -> Self {
+    pub fn warning(message: impl Into<Text>) -> Self {
         Self::new(message).with_type(NotificationType::Warning)
     }
 
-    pub fn error(message: impl Into<SharedString>) -> Self {
+    pub fn error(message: impl Into<Text>) -> Self {
         Self::new(message).with_type(NotificationType::Error)
     }
 

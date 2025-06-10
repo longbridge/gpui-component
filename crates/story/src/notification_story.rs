@@ -6,10 +6,22 @@ use gpui::{
 use gpui_component::{
     button::{Button, ButtonVariants as _},
     notification::{Notification, NotificationType},
+    text::TextView,
     ContextModal as _,
 };
 
 use crate::section;
+
+const NOTIFICATION_MARKDOWN: &str = r#"
+# 标题
+
+这是一个 Markdown Notification。
+
+- 列表项 1
+- 列表项 2
+
+**加粗文本**
+"#;
 
 pub struct NotificationStory {
     focus_handle: FocusHandle,
@@ -59,6 +71,21 @@ impl Render for NotificationStory {
                         .label("Show Notification")
                         .on_click(cx.listener(|_, _, window, cx| {
                             window.push_notification("This is a notification.", cx)
+                        })),
+                ),
+            )
+            .child(
+                section("TextView Notification").child(
+                    Button::new("show-text-view")
+                        .label("Markdown Notification")
+                        .on_click(cx.listener(|_, _, window, cx| {
+                            window.push_notification(
+                                Notification::new(TextView::markdown(
+                                    "notification",
+                                    NOTIFICATION_MARKDOWN,
+                                )),
+                                cx,
+                            )
                         })),
                 ),
             )
