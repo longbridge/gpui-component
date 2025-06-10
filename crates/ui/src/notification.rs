@@ -6,10 +6,10 @@ use std::{
 };
 
 use gpui::{
-    div, prelude::FluentBuilder, px, Animation, AnimationExt, App, AppContext, ClickEvent, Context,
-    DismissEvent, ElementId, Entity, EventEmitter, InteractiveElement as _, IntoElement,
-    ParentElement as _, Render, SharedString, StatefulInteractiveElement, Styled, Subscription,
-    Window,
+    div, prelude::FluentBuilder, px, Animation, AnimationExt, AnyElement, App, AppContext,
+    ClickEvent, Context, DismissEvent, ElementId, Entity, EventEmitter, InteractiveElement as _,
+    IntoElement, ParentElement as _, Render, SharedString, StatefulInteractiveElement, Styled,
+    Subscription, Window,
 };
 use smol::Timer;
 
@@ -66,41 +66,42 @@ pub struct Notification {
     id: NotificationId,
     type_: Option<NotificationType>,
     title: Option<SharedString>,
-    message: SharedString,
+    message: Option<SharedString>,
     icon: Option<Icon>,
     autohide: bool,
     action_builder: Option<Rc<dyn Fn(&mut Window, &mut Context<Self>) -> Button>>,
+    content_builder: Option<Rc<dyn Fn(&mut Window, &mut Context<Self>) -> AnyElement>>,
     on_click: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>>,
     closing: bool,
 }
 
 impl From<String> for Notification {
     fn from(s: String) -> Self {
-        Self::new(s)
+        Self::new().message(s)
     }
 }
 
 impl From<SharedString> for Notification {
     fn from(s: SharedString) -> Self {
-        Self::new(s)
+        Self::new().message(s)
     }
 }
 
 impl From<&'static str> for Notification {
     fn from(s: &'static str) -> Self {
-        Self::new(s)
+        Self::new().message(s)
     }
 }
 
 impl From<(NotificationType, &'static str)> for Notification {
     fn from((type_, content): (NotificationType, &'static str)) -> Self {
-        Self::new(content).with_type(type_)
+        Self::new().message(content).with_type(type_)
     }
 }
 
 impl From<(NotificationType, SharedString)> for Notification {
     fn from((type_, content): (NotificationType, SharedString)) -> Self {
-        Self::new(content).with_type(type_)
+        Self::new().message(content).with_type(type_)
     }
 }
 
@@ -110,37 +111,51 @@ impl Notification {
     /// Create a new notification with the given content.
     ///
     /// default width is 320px.
-    pub fn new(message: impl Into<SharedString>) -> Self {
+    pub fn new() -> Self {
         let id: SharedString = uuid::Uuid::new_v4().to_string().into();
         let id = (TypeId::of::<DefaultIdType>(), id.into());
 
         Self {
             id: id.into(),
             title: None,
-            message: message.into(),
+            message: None,
             type_: None,
             icon: None,
             autohide: true,
             action_builder: None,
+            content_builder: None,
             on_click: None,
             closing: false,
         }
     }
 
+    pub fn message(mut self, message: impl Into<SharedString>) -> Self {
+        self.message = Some(message.into());
+        self
+    }
+
     pub fn info(message: impl Into<SharedString>) -> Self {
-        Self::new(message).with_type(NotificationType::Info)
+        Self::new()
+            .message(message)
+            .with_type(NotificationType::Info)
     }
 
     pub fn success(message: impl Into<SharedString>) -> Self {
-        Self::new(message).with_type(NotificationType::Success)
+        Self::new()
+            .message(message)
+            .with_type(NotificationType::Success)
     }
 
     pub fn warning(message: impl Into<SharedString>) -> Self {
-        Self::new(message).with_type(NotificationType::Warning)
+        Self::new()
+            .message(message)
+            .with_type(NotificationType::Warning)
     }
 
     pub fn error(message: impl Into<SharedString>) -> Self {
-        Self::new(message).with_type(NotificationType::Error)
+        Self::new()
+            .message(message)
+            .with_type(NotificationType::Error)
     }
 
     /// Set the type for unique identification of the notification.
@@ -225,6 +240,15 @@ impl Notification {
         })
         .detach()
     }
+
+    /// Set the content of the notification.
+    pub fn content(
+        mut self,
+        content: impl Fn(&mut Window, &mut Context<Self>) -> AnyElement + 'static,
+    ) -> Self {
+        self.content_builder = Some(Rc::new(content));
+        self
+    }
 }
 impl EventEmitter<DismissEvent> for Notification {}
 impl FluentBuilder for Notification {}
@@ -257,12 +281,17 @@ impl Render for Notification {
             .child(
                 v_flex()
                     .flex_1()
+                    .overflow_hidden()
                     .when(has_icon, |this| this.pl_6())
                     .when_some(self.title.clone(), |this, title| {
                         this.child(div().text_sm().font_semibold().child(title))
                     })
-                    .overflow_hidden()
-                    .child(div().text_sm().child(self.message.clone())),
+                    .when_some(self.message.clone(), |this, message| {
+                        this.child(div().text_sm().child(message))
+                    })
+                    .when_some(self.content_builder.clone(), |this, child_builder| {
+                        this.child(child_builder(window, cx))
+                    }),
             )
             .when_some(self.action_builder.clone(), |this, action_builder| {
                 this.child(action_builder(window, cx).small().outline().mr_1())

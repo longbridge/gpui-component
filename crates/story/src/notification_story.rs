@@ -6,10 +6,18 @@ use gpui::{
 use gpui_component::{
     button::{Button, ButtonVariants as _},
     notification::{Notification, NotificationType},
+    text::TextView,
     ContextModal as _,
 };
 
 use crate::section;
+
+const NOTIFICATION_MARKDOWN: &str = r#"
+This is a custom notification.
+- List item 1
+- List item 2
+- [Click here](https://github.com/longbridge/gpui-component)
+"#;
 
 pub struct NotificationStory {
     focus_handle: FocusHandle,
@@ -130,9 +138,10 @@ impl Render for NotificationStory {
                             struct TestNotification;
 
                             window.push_notification(
-                                Notification::new("There was a problem with your request.")
+                                Notification::new()
                                     .id::<TestNotification>()
                                     .title("Uh oh! Something went wrong.")
+                                    .message("There was a problem with your request.")
                                     .autohide(false)
                                     .action(|_, cx| {
                                         Button::new("try-again").label("Try again").on_click(
@@ -146,6 +155,24 @@ impl Render for NotificationStory {
                                         println!("Notification clicked");
                                         cx.notify();
                                     })),
+                                cx,
+                            )
+                        })),
+                ),
+            )
+            .child(
+                section("Custom Notification").child(
+                    Button::new("show-notify-custom")
+                        .label("Show Custom Notification")
+                        .on_click(cx.listener(|_, _, window, cx| {
+                            window.push_notification(
+                                Notification::new().content(|_, _| {
+                                    TextView::markdown(
+                                        "notification-markdown",
+                                        NOTIFICATION_MARKDOWN,
+                                    )
+                                    .into_any_element()
+                                }),
                                 cx,
                             )
                         })),
