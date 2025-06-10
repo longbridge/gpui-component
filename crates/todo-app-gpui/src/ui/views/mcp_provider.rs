@@ -1413,164 +1413,131 @@ impl Render for McpProvider {
 }
 
 impl McpProvider {
-    // ...existing methods...
-
-    // 添加静态方法来渲染能力内容
-    fn render_capability_content_static(
-        provider: &McpProviderInfo,
-        tab_index: usize,
-        cx:&mut Context<Self>
-    ) -> impl IntoElement {
-        div().child(match tab_index {
-            0 => div().child(Self::render_config_content_static(provider)),
-            1 => div().child(Self::render_resources_content_static(&provider.resources,cx)),
-            2 => div().child(Self::render_tools_content_static(&provider.tools)),
-            3 => div().child(Self::render_prompts_content_static(&provider.prompts)),
-            4 => div().child(Self::render_logging_content_static()),
-            _ => div().child("未知能力"),
-        })
+    // 切换资源订阅状态的方法
+    fn toggle_resource_subscription(
+        &mut self,
+        resource_name: String,
+        subscribed: bool,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        // 遍历所有提供商，找到匹配的资源并更新订阅状态
+        for provider in &mut self.providers {
+            for resource in &mut provider.resources {
+                if resource.name == resource_name && resource.subscribable {
+                    resource.subscribed = subscribed;
+                    
+                    // 打印日志，方便调试
+                    println!(
+                        "资源 '{}' 订阅状态已{}",
+                        resource_name,
+                        if subscribed { "开启" } else { "关闭" }
+                    );
+                    
+                    cx.notify();
+                    return;
+                }
+            }
+        }
+        
+        // 如果没找到匹配的资源，打印警告
+        eprintln!("警告: 未找到名为 '{}' 的可订阅资源", resource_name);
     }
 
-    fn render_config_content_static(provider: &McpProviderInfo) -> impl IntoElement {
-        v_flex().gap_4().child(
-            v_flex()
-                .gap_2()
-                .child(
-                    h_flex()
-                        .gap_4()
-                        // .child(
-                        //     v_flex()
-                        //         .gap_1()
-                        //         .flex_1()
-                        //         .child(
-                        //             div()
-                        //                 .text_sm()
-                        //                 .font_medium()
-                        //                 .text_color(gpui::rgb(0x374151))
-                        //                 .child("服务名称"),
-                        //         )
-                        //         .child(div().text_sm().text_color(gpui::rgb(0x6B7280)).child(
-                        //             if provider.name.is_empty() {
-                        //                 "未设置".to_string()
-                        //             } else {
-                        //                 provider.name.clone()
-                        //             },
-                        //         )),
-                        // )
-                        .child(
-                            h_flex()
-                                .gap_1()
-                                .flex_1()
-                                .child(
-                                    div()
-                                        .text_sm()
-                                        .font_medium()
-                                        .text_color(gpui::rgb(0x374151))
-                                        .child("传输方式"),
-                                )
-                                .child(
-                                    div()
-                                        .px_2()
-                                        // .py_1()
-                                        .bg(gpui::rgb(0xDEF7EC))
-                                        .text_color(gpui::rgb(0x047857))
-                                        .rounded_md()
-                                        .text_sm()
-                                        .child(provider.transport.as_str()),
-                                ),
-                        ),
-                )
-                .child(
-                    v_flex()
-                        .gap_1()
-                        .child(
-                            div()
-                                .text_sm()
-                                .font_medium()
-                                .text_color(gpui::rgb(0x374151))
-                                .child("启动命令"),
-                        )
-                        .child(
-                            div()
-                                .p_2()
-                                .bg(gpui::rgb(0xF9FAFB))
-                                .rounded_md()
-                                .border_1()
-                                .border_color(gpui::rgb(0xE5E7EB))
-                                .child(
-                                    div()
-                                        .text_sm()
-                                        .text_color(gpui::rgb(0x374151))
-                                        .font_light()
-                                        .child(if provider.command.is_empty() {
-                                            "未设置启动命令".to_string()
-                                        } else if provider.args.is_empty() {
-                                            provider.command.clone()
-                                        } else {
-                                            format!(
-                                                "{} {}",
-                                                provider.command,
-                                                provider.args.join(" ")
-                                            )
-                                        }),
-                                ),
-                        ),
-                )
-                .when(!provider.description.is_empty(), |this| {
-                    this.child(
-                        v_flex()
-                            .gap_1()
-                            .child(
-                                div()
-                                    .text_sm()
-                                    .font_medium()
-                                    .text_color(gpui::rgb(0x374151))
-                                    .child("服务描述"),
-                            )
-                            .child(
-                                div()
-                                    .text_sm()
-                                    .text_color(gpui::rgb(0x6B7280))
-                                    .child(provider.description.clone()),
-                            ),
-                    )
-                })
-                .when(!provider.env_vars.is_empty(), |this| {
-                    this.child(
-                        v_flex()
-                            .gap_1()
-                            .child(
-                                div()
-                                    .text_sm()
-                                    .font_medium()
-                                    .text_color(gpui::rgb(0x374151))
-                                    .child("环境变量"),
-                            )
-                            .child(
-                                v_flex()
-                                    .gap_1()
-                                    .p_2()
-                                    .bg(gpui::rgb(0xF9FAFB))
-                                    .rounded_md()
-                                    .border_1()
-                                    .border_color(gpui::rgb(0xE5E7EB))
-                                    .children(provider.env_vars.iter().map(|(key, value)| {
-                                        div()
-                                            .text_sm()
-                                            .text_color(gpui::rgb(0x374151))
-                                            .font_light()
-                                            .child(format!("{}={}", key, value))
-                                    })),
-                            ),
-                    )
-                }),
-        )
+    // 如果你需要更精确的控制，可以使用这个带提供商索引的版本
+    fn toggle_resource_subscription_by_index(
+        &mut self,
+        provider_index: usize,
+        resource_index: usize,
+        subscribed: bool,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(provider) = self.providers.get_mut(provider_index) {
+            if let Some(resource) = provider.resources.get_mut(resource_index) {
+                if resource.subscribable {
+                    let old_status = resource.subscribed;
+                    resource.subscribed = subscribed;
+                    
+                    println!(
+                        "提供商 '{}' 的资源 '{}' 订阅状态从 {} 变更为 {}",
+                        provider.name,
+                        resource.name,
+                        if old_status { "已订阅" } else { "未订阅" },
+                        if subscribed { "已订阅" } else { "未订阅" }
+                    );
+                    
+                    cx.notify();
+                } else {
+                    eprintln!(
+                        "警告: 资源 '{}' 不支持订阅功能",
+                        resource.name
+                    );
+                }
+            } else {
+                eprintln!(
+                    "警告: 提供商索引 {} 中不存在资源索引 {}",
+                    provider_index, resource_index
+                );
+            }
+        } else {
+            eprintln!("警告: 不存在提供商索引 {}", provider_index);
+        }
     }
 
-    fn render_resources_content_static(resources: &[McpResource],cx:&mut Context<Self>) -> impl IntoElement {
+    // 获取所有已订阅的资源列表
+    fn get_subscribed_resources(&self) -> Vec<(String, String)> {
+        let mut subscribed = Vec::new();
+        
+        for provider in &self.providers {
+            for resource in &provider.resources {
+                if resource.subscribed {
+                    subscribed.push((provider.name.clone(), resource.name.clone()));
+                }
+            }
+        }
+        
+        subscribed
+    }
+
+    // 批量设置资源订阅状态
+    fn set_all_resources_subscription(
+        &mut self,
+        provider_name: &str,
+        subscribed: bool,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(provider) = self.providers.iter_mut().find(|p| p.name == provider_name) {
+            let mut updated_count = 0;
+            
+            for resource in &mut provider.resources {
+                if resource.subscribable && resource.subscribed != subscribed {
+                    resource.subscribed = subscribed;
+                    updated_count += 1;
+                }
+            }
+            
+            if updated_count > 0 {
+                println!(
+                    "提供商 '{}' 的 {} 个资源订阅状态已{}",
+                    provider_name,
+                    updated_count,
+                    if subscribed { "开启" } else { "关闭" }
+                );
+                
+                cx.notify();
+            }
+        } else {
+            eprintln!("警告: 未找到名为 '{}' 的提供商", provider_name);
+        }
+    }
+
+    // 修改静态方法，移除cx参数，因为静态方法中无法使用listener
+    fn render_resources_content_static(resources: &[McpResource]) -> impl IntoElement {
         v_flex()
             .gap_2()
-            .children(resources.iter().map(|resource| {
+            .children(resources.iter().enumerate().map(|(resource_index, resource)| {
                 v_flex()
                     .gap_2()
                     .p_3()
@@ -1579,44 +1546,72 @@ impl McpProvider {
                     .border_1()
                     .border_color(gpui::rgb(0xE5E7EB))
                     .child(
-                        h_flex().w_full().justify_between().items_center().child(h_flex()
+                        h_flex()
+                            .w_full()
+                            .justify_between()
                             .items_center()
-                            .gap_2()
                             .child(
-                                Icon::new(IconName::Database)
-                                    .small()
-                                    .text_color(gpui::rgb(0x059669)),
+                                h_flex()
+                                    .items_center()
+                                    .gap_2()
+                                    .child(
+                                        Icon::new(IconName::Database)
+                                            .small()
+                                            .text_color(gpui::rgb(0x059669)),
+                                    )
+                                    .child(
+                                        div()
+                                            .font_medium()
+                                            .text_color(gpui::rgb(0x111827))
+                                            .child(resource.name.clone()),
+                                    )
+                                    .when(resource.subscribable, |this| {
+                                        this.child(
+                                            div()
+                                                .px_2()
+                                                .py_1()
+                                                .bg(if resource.subscribed {
+                                                    gpui::rgb(0xDCFCE7)
+                                                } else {
+                                                    gpui::rgb(0xF3F4F6)
+                                                })
+                                                .text_color(if resource.subscribed {
+                                                    gpui::rgb(0x166534)
+                                                } else {
+                                                    gpui::rgb(0x6B7280)
+                                                })
+                                                .rounded_md()
+                                                .text_xs()
+                                                .child(if resource.subscribed {
+                                                    "已订阅"
+                                                } else {
+                                                    "可订阅"
+                                                }),
+                                        )
+                                    })
+                                    .when(resource.mime_type.is_some(), |this| {
+                                        this.child(
+                                            div()
+                                                .px_2()
+                                                .py_1()
+                                                .bg(gpui::rgb(0xE0F2FE))
+                                                .text_color(gpui::rgb(0x0369A1))
+                                                .rounded_md()
+                                                .text_xs()
+                                                .child(resource.mime_type.as_ref().unwrap().clone()),
+                                        )
+                                    }),
                             )
-                            .child(
-                                div()
-                                    .font_medium()
-                                    .text_color(gpui::rgb(0x111827))
-                                    .child(resource.name.clone()),
-                            )
-                            .when(resource.mime_type.is_some(), |this| {
+                            // 注意：在静态方法中无法使用cx.listener，所以这里暂时显示静态状态
+                            // 如果需要交互功能，应该使用非静态的render方法
+                            .when(resource.subscribable, |this| {
                                 this.child(
                                     div()
-                                        .px_2()
-                                        .py_1()
-                                        .bg(gpui::rgb(0xE0F2FE))
-                                        .text_color(gpui::rgb(0x0369A1))
-                                        .rounded_md()
                                         .text_xs()
-                                        .child(resource.mime_type.as_ref().unwrap().clone()),
+                                        .text_color(gpui::rgb(0x9CA3AF))
+                                        .child("(只读模式)"),
                                 )
-                            })).when(resource.subscribable, |this| {
-                                this.child(Switch::new(SharedString::new(resource.name.clone()))
-                                    .checked(resource.subscribed)
-                                    .on_click(cx.listener(move |this, checked, window, cx| {
-                                        this.toggle_resource_subscription(resource.name.clone(), *checked, window, cx);
-                                    }))
-                                    .tooltip(if resource.subscribed {
-                                        "取消订阅"
-                                    } else {
-                                        "订阅资源"
-                                    }))
-                            })
-                        ,
+                            }),
                     )
                     .child(
                         div()
@@ -1641,213 +1636,19 @@ impl McpProvider {
             })
     }
 
-    fn render_tools_content_static(tools: &[McpTool]) -> impl IntoElement {
-        v_flex()
-            .gap_3()
-            .children(tools.iter().map(|tool| {
-                v_flex()
-                    .gap_2()
-                    .p_3()
-                    .bg(gpui::rgb(0xFAFAFA))
-                    .rounded_md()
-                    .border_1()
-                    .border_color(gpui::rgb(0xE5E7EB))
-                    .child(
-                        h_flex()
-                            .items_center()
-                            .gap_2()
-                            .child(
-                                Icon::new(IconName::Wrench)
-                                    .small()
-                                    .text_color(gpui::rgb(0xDC2626)),
-                            )
-                            .child(
-                                div()
-                                    .font_medium()
-                                    .text_color(gpui::rgb(0x111827))
-                                    .child(tool.name.clone()),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .text_sm()
-                            .text_color(gpui::rgb(0x6B7280))
-                            .child(tool.description.clone()),
-                    )
-                    .when(!tool.parameters.is_empty(), |this| {
-                        this.child(
-                            v_flex()
-                                .gap_1()
-                                .child(
-                                    div()
-                                        .text_xs()
-                                        .font_medium()
-                                        .text_color(gpui::rgb(0x374151))
-                                        .child("参数:"),
-                                )
-                                .children(tool.parameters.iter().map(|param| {
-                                    h_flex()
-                                        .items_center()
-                                        .gap_2()
-                                        .pl_2()
-                                        .child(
-                                            div()
-                                                .text_xs()
-                                                .text_color(if param.required {
-                                                    gpui::rgb(0xDC2626)
-                                                } else {
-                                                    gpui::rgb(0x059669)
-                                                })
-                                                .child(format!(
-                                                    "{}{}",
-                                                    param.name,
-                                                    if param.required { "*" } else { "" }
-                                                )),
-                                        )
-                                        .child(
-                                            div()
-                                                .px_1()
-                                                .bg(gpui::rgb(0xF3F4F6))
-                                                .rounded_sm()
-                                                .text_xs()
-                                                .text_color(gpui::rgb(0x6B7280))
-                                                .child(param.param_type.clone()),
-                                        )
-                                        .child(
-                                            div()
-                                                .text_xs()
-                                                .text_color(gpui::rgb(0x9CA3AF))
-                                                .child(param.description.clone()),
-                                        )
-                                })),
-                        )
-                    })
-            }))
-            .when(tools.is_empty(), |this| {
-                this.child(
-                    div()
-                        .text_sm()
-                        .text_color(gpui::rgb(0x9CA3AF))
-                        .child("暂无可用工具"),
-                )
-            })
-    }
-
-    fn render_prompts_content_static(prompts: &[McpPrompt]) -> impl IntoElement {
-        v_flex()
-            .gap_3()
-            .children(prompts.iter().map(|prompt| {
-                v_flex()
-                    .gap_2()
-                    .p_3()
-                    .bg(gpui::rgb(0xFAFAFA))
-                    .rounded_md()
-                    .border_1()
-                    .border_color(gpui::rgb(0xE5E7EB))
-                    .child(
-                        h_flex()
-                            .items_center()
-                            .gap_2()
-                            .child(
-                                Icon::new(IconName::SquareTerminal)
-                                    .small()
-                                    .text_color(gpui::rgb(0x7C3AED)),
-                            )
-                            .child(
-                                div()
-                                    .font_medium()
-                                    .text_color(gpui::rgb(0x111827))
-                                    .child(prompt.name.clone()),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .text_sm()
-                            .text_color(gpui::rgb(0x6B7280))
-                            .child(prompt.description.clone()),
-                    )
-                    .when(!prompt.arguments.is_empty(), |this| {
-                        this.child(
-                            v_flex()
-                                .gap_1()
-                                .child(
-                                    div()
-                                        .text_xs()
-                                        .font_medium()
-                                        .text_color(gpui::rgb(0x374151))
-                                        .child("参数:"),
-                                )
-                                .children(prompt.arguments.iter().map(|arg| {
-                                    h_flex()
-                                        .items_center()
-                                        .gap_2()
-                                        .pl_2()
-                                        .child(
-                                            div()
-                                                .text_xs()
-                                                .text_color(if arg.required {
-                                                    gpui::rgb(0xDC2626)
-                                                } else {
-                                                    gpui::rgb(0x059669)
-                                                })
-                                                .child(format!(
-                                                    "{}{}",
-                                                    arg.name,
-                                                    if arg.required { "*" } else { "" }
-                                                )),
-                                        )
-                                        .child(
-                                            div()
-                                                .text_xs()
-                                                .text_color(gpui::rgb(0x9CA3AF))
-                                                .child(arg.description.clone()),
-                                        )
-                                })),
-                        )
-                    })
-            }))
-            .when(prompts.is_empty(), |this| {
-                this.child(
-                    div()
-                        .text_sm()
-                        .text_color(gpui::rgb(0x9CA3AF))
-                        .child("暂无可用提示"),
-                )
-            })
-    }
-
-    fn render_logging_content_static() -> impl IntoElement {
-        div()
-            .p_3()
-            .bg(gpui::rgb(0xFAFAFA))
-            .rounded_md()
-            .border_1()
-            .border_color(gpui::rgb(0xE5E7EB))
-            .child(
-                v_flex()
-                    .gap_2()
-                    .child(
-                        h_flex()
-                            .items_center()
-                            .gap_2()
-                            .child(
-                                Icon::new(IconName::LetterText)
-                                    .small()
-                                    .text_color(gpui::rgb(0xF59E0B)),
-                            )
-                            .child(
-                                div()
-                                    .font_medium()
-                                    .text_color(gpui::rgb(0x111827))
-                                    .child("日志记录"),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .text_sm()
-                            .text_color(gpui::rgb(0x6B7280))
-                            .child("此服务支持日志记录功能，可以输出调试和运行状态信息。"),
-                    ),
-            )
+    // 修改调用位置，移除cx参数
+    fn render_capability_content_static(
+        provider: &McpProviderInfo,
+        tab_index: usize,
+        _cx: &mut Context<Self>,  // 这个参数现在用不到，可以加下划线
+    ) -> impl IntoElement {
+        div().child(match tab_index {
+            0 => div().child(Self::render_config_content_static(provider)),
+            1 => div().child(Self::render_resources_content_static(&provider.resources)), // 移除cx参数
+            2 => div().child(Self::render_tools_content_static(&provider.tools)),
+            3 => div().child(Self::render_prompts_content_static(&provider.prompts)),
+            4 => div().child(Self::render_logging_content_static()),
+            _ => div().child("未知能力"),
+        })
     }
 }
