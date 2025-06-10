@@ -1,9 +1,10 @@
 use super::HighlightTheme;
 use crate::highlighter::LanguageRegistry;
 use gpui::{App, HighlightStyle, SharedString};
+use indexset::BTreeMap;
 use std::{
-    collections::{BTreeMap, HashMap},
-    ops::Range,
+    collections::HashMap,
+    ops::{Bound, Range},
 };
 use tree_sitter::{
     InputEdit, Node, Parser, Point, Query, QueryCursor, QueryMatch, StreamingIterator, Tree,
@@ -369,9 +370,9 @@ impl SyntaxHighlighter {
         }
 
         // DO NOT REMOVE THIS PRINT, it's useful for debugging
-        // for item in self.cache.iter() {
-        //     println!("item: {:?}", item);
-        // }
+        for item in self.cache.iter() {
+            println!("item: {:?}", item);
+        }
     }
 
     /// TODO: Use incremental parsing to handle the injection.
@@ -526,13 +527,22 @@ impl SyntaxHighlighter {
         let start_offset = range.start;
         let mut last_range = start_offset..start_offset;
 
+        let mut cursor = self.cache.lower_bound(Bound::Included(&range.start));
         // NOTE: the ranges in the cache may have duplicates, so we need to merge them.
-        for (_, (node_range, name)) in self.cache.range(range.start..) {
+        while let Some((node_range, name)) = if cursor.key() == Some(&range.start) {
+            cursor.value()
+        } else {
+            cursor.peek_prev().map(|item| item.1)
+        } {
+            cursor.move_next();
+
             // TODO: If break, the `comment.doc` will not work.
             // Ref: https://github.com/longbridge/gpui-component/pull/904/commits/d8f886939d3b472f228c1ce72154a951e98f32c5
             if node_range.end > range.end {
                 break;
             }
+
+            let node_range = node_range.start.max(range.start)..node_range.end.min(range.end);
 
             // let range_in_line = node_range.start..node_range.end;
 

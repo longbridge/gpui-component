@@ -57,6 +57,7 @@ minify-html = "0.15.0"
 chrono = "0.4.38"
 
 # Code Editor
+indexset = "0.12.2"
 tree-sitter = "0.25.4"
 tree-sitter-bash = "0.23.3"
 tree-sitter-c = "0.24.1"
