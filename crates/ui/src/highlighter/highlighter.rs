@@ -1,7 +1,7 @@
 use super::HighlightTheme;
 use crate::highlighter::LanguageRegistry;
 use gpui::{App, HighlightStyle, SharedString};
-use indexset::{BTreeMap, CursorMap};
+use indexset::BTreeMap;
 use std::{
     collections::HashMap,
     ops::{Bound, Range},
@@ -247,7 +247,7 @@ impl SyntaxHighlighter {
         &mut self,
         changed_ranges: Option<impl ExactSizeIterator<Item = tree_sitter::Range>>,
         changed_len: isize,
-        _: &mut App,
+        cx: &mut App,
     ) {
         let Some(tree) = &self.old_tree else {
             return;
@@ -331,7 +331,7 @@ impl SyntaxHighlighter {
             let (language_name, content_node, _) = self.injection_for_match(None, query, m, source);
             if let Some(language_name) = language_name {
                 if let Some(content_node) = content_node {
-                    let styles = self.handle_injection(&language_name, content_node, source);
+                    let styles = self.handle_injection(&language_name, content_node, source, cx);
                     for (node_range, highlight_name) in styles {
                         self.cache
                             .insert(node_range.start, (node_range, highlight_name.to_string()));
@@ -381,6 +381,7 @@ impl SyntaxHighlighter {
         injection_language: &str,
         node: Node,
         source: &[u8],
+        cx: &App,
     ) -> Vec<(Range<usize>, String)> {
         let start_offset = node.start_byte();
         let end_offset = node.end_byte();
@@ -394,12 +395,11 @@ impl SyntaxHighlighter {
         if content.is_empty() {
             return cache;
         };
-        let Some(lang) = super::Language::from_str(injection_language) else {
+        let Some(config) = LanguageRegistry::global(cx).language(injection_language) else {
             return cache;
         };
-        let lang_config = lang.config();
         let mut parser = Parser::new();
-        if parser.set_language(&lang_config.language).is_err() {
+        if parser.set_language(&config.language).is_err() {
             return cache;
         }
         let Some(tree) = parser.parse(content, None) else {
@@ -526,51 +526,26 @@ impl SyntaxHighlighter {
         let mut styles = vec![];
         let start_offset = range.start;
         let mut last_range = start_offset..start_offset;
-        // FIXME:
-        // Here can not match, if the range.start not a key in the cache.
-        // For example the JsDoc, the cache item may cross multiple lines.
-        let mut cursor = self.cache.lower_bound(Bound::Included(&range.start));
 
-        fn find_item<'a>(
-            cursor: &'a mut CursorMap<usize, (Range<usize>, String)>,
-            range: &Range<usize>,
-        ) -> Option<(&'a Range<usize>, &'a String)> {
-            if cursor.key() == Some(&range.start) {
-                return cursor
-                    .value()
-                    .map(|(node_range, name)| {
-                        if node_range.contains(&range.start)
-                            || node_range.contains(&range.end)
-                            || range.contains(&node_range.start)
-                            || range.contains(&node_range.end)
-                        {
-                            cursor.move_next();
-                            return Some((node_range, name));
-                        } else {
-                            return None;
-                        }
-                    })
-                    .flatten();
-            } else {
-                cursor
-                    .peek_prev()
-                    .map(|(_, (node_range, name))| {
-                        // println!("prev node_range: {:?}", node_range);
-                        if node_range.contains(&range.start)
-                            || node_range.contains(&range.end)
-                            || range.contains(&node_range.start)
-                            || range.contains(&node_range.end)
-                        {
-                            cursor.move_next();
-                            return Some((node_range, name));
-                        }
-                        None
-                    })
-                    .flatten()
-            }
+        let mut cursor = self.cache.lower_bound(Bound::Included(&range.start));
+        // Move to the previous item if the current item is not the start of the range.
+        // This is for case like JsDoc, where token may contains multiple lines.
+        if cursor.key() != Some(&range.start) {
+            cursor.move_prev();
         }
 
-        while let Some((node_range, name)) = find_item(&mut cursor, &range) {
+        while let Some((node_range, name)) = cursor.value() {
+            if !(node_range.contains(&range.start)
+                || node_range.contains(&range.end)
+                || range.contains(&node_range.start)
+                || range.contains(&node_range.end))
+            {
+                // Break loop if the node_range is out of the range
+                if node_range.end > range.end {
+                    break;
+                }
+            }
+
             let node_range = node_range.start.max(range.start)..node_range.end.min(range.end);
 
             // Ensure every range is connected.
@@ -581,6 +556,7 @@ impl SyntaxHighlighter {
             let style = theme.style(&name).unwrap_or_default();
             styles.push((node_range.clone(), style));
             last_range = node_range.clone();
+            cursor.move_next();
         }
 
         // If the matched styles is empty, return a default range.
@@ -596,10 +572,10 @@ impl SyntaxHighlighter {
         let result = unique_styles(styles);
 
         // NOTE: DO NOT remove this comment, it is used for debugging.
-        for style in &result {
-            println!("style: {:?} - {:?}", style.0, style.1.color);
-        }
-        println!("--------------------------------");
+        // for style in &result {
+        //     println!("style: {:?} - {:?}", style.0, style.1.color);
+        // }
+        // println!("--------------------------------");
 
         result
     }
