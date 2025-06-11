@@ -15,7 +15,7 @@ pub use axis::{Axis, AxisText, AXIS_GAP};
 pub use grid::Grid;
 pub use label::Label;
 
-pub trait Plot: 'static + IntoElement {
+pub trait Plot: IntoElement {
     fn paint(&mut self, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut App);
 }
 

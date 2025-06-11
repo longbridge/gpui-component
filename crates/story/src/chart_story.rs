@@ -1,6 +1,7 @@
 use gpui::{
-    div, linear_color_stop, linear_gradient, prelude::FluentBuilder, px, rgb, App, AppContext,
-    Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement, Render, Styled, Window,
+    div, linear_color_stop, linear_gradient, prelude::FluentBuilder, px, App, AppContext, Context,
+    Entity, FocusHandle, Focusable, Hsla, IntoElement, ParentElement, Render, SharedString, Styled,
+    Window,
 };
 use gpui_component::{
     chart::{AreaChart, BarChart, LineChart, PieChart},
@@ -8,16 +9,41 @@ use gpui_component::{
     dock::PanelControl,
     h_flex, v_flex, ActiveTheme, StyledExt,
 };
+use serde::Deserialize;
 
-use crate::fixtures::{CHART_DATA, CHART_DATA_2};
+#[derive(Clone, Deserialize)]
+struct MonthlyDevice {
+    pub month: SharedString,
+    pub desktop: f64,
+    pub color: Hsla,
+}
+
+#[derive(Clone, Deserialize)]
+struct DailyDevice {
+    pub date: SharedString,
+    pub desktop: f64,
+    pub mobile: f64,
+}
 
 pub struct ChartStory {
     focus_handle: FocusHandle,
+    daily_devices: Vec<DailyDevice>,
+    monthly_devices: Vec<MonthlyDevice>,
 }
 
 impl ChartStory {
     fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
+        let daily_devices =
+            serde_json::from_str::<Vec<DailyDevice>>(include_str!("fixtures/daily-devices.json"))
+                .unwrap();
+        let monthly_devices = serde_json::from_str::<Vec<MonthlyDevice>>(include_str!(
+            "fixtures/monthly-devices.json"
+        ))
+        .unwrap();
+
         Self {
+            daily_devices,
+            monthly_devices,
             focus_handle: cx.focus_handle(),
         }
     }
@@ -103,8 +129,8 @@ impl Render for ChartStory {
             .child(
                 div().h(px(400.)).child(chart_container(
                     "Area Chart - Stacked",
-                    AreaChart::new(CHART_DATA_2)
-                        .x(|d| d.date)
+                    AreaChart::new(self.daily_devices.clone())
+                        .x(|d| d.date.clone())
                         .y(|d| d.desktop)
                         .stroke(cx.theme().chart_1)
                         .fill(linear_gradient(
@@ -130,31 +156,31 @@ impl Render for ChartStory {
                     .h(px(450.))
                     .child(chart_container(
                         "Pie Chart",
-                        PieChart::new(CHART_DATA)
+                        PieChart::new(self.monthly_devices.clone())
                             .value(|d| d.desktop)
                             .outer_radius(100.)
-                            .color(|d| rgb(d.color)),
+                            .color(|d| d.color),
                         true,
                         cx,
                     ))
                     .child(chart_container(
                         "Pie Chart - Donut",
-                        PieChart::new(CHART_DATA)
+                        PieChart::new(self.monthly_devices.clone())
                             .value(|d| d.desktop)
                             .outer_radius(100.)
                             .inner_radius(60.)
-                            .color(|d| rgb(d.color)),
+                            .color(|d| d.color),
                         true,
                         cx,
                     ))
                     .child(chart_container(
                         "Pie Chart - Pad Angle",
-                        PieChart::new(CHART_DATA)
+                        PieChart::new(self.monthly_devices.clone())
                             .value(|d| d.desktop)
                             .outer_radius(100.)
                             .inner_radius(60.)
                             .pad_angle(4. / 100.)
-                            .color(|d| rgb(d.color)),
+                            .color(|d| d.color),
                         true,
                         cx,
                     )),
@@ -166,23 +192,25 @@ impl Render for ChartStory {
                     .h(px(400.))
                     .child(chart_container(
                         "Bar Chart",
-                        BarChart::new(CHART_DATA).x(|d| d.month).y(|d| d.desktop),
+                        BarChart::new(self.monthly_devices.clone())
+                            .x(|d| d.month.clone())
+                            .y(|d| d.desktop),
                         false,
                         cx,
                     ))
                     .child(chart_container(
                         "Bar Chart - Mixed",
-                        BarChart::new(CHART_DATA)
-                            .x(|d| d.month)
+                        BarChart::new(self.monthly_devices.clone())
+                            .x(|d| d.month.clone())
                             .y(|d| d.desktop)
-                            .fill(|d| rgb(d.color)),
+                            .fill(|d| d.color),
                         false,
                         cx,
                     ))
                     .child(chart_container(
                         "Bar Chart - Label",
-                        BarChart::new(CHART_DATA)
-                            .x(|d| d.month)
+                        BarChart::new(self.monthly_devices.clone())
+                            .x(|d| d.month.clone())
                             .y(|d| d.desktop)
                             .label(|d| d.desktop.to_string()),
                         false,
@@ -196,14 +224,16 @@ impl Render for ChartStory {
                     .h(px(400.))
                     .child(chart_container(
                         "Line Chart",
-                        LineChart::new(CHART_DATA).x(|d| d.month).y(|d| d.desktop),
+                        LineChart::new(self.monthly_devices.clone())
+                            .x(|d| d.month.clone())
+                            .y(|d| d.desktop),
                         false,
                         cx,
                     ))
                     .child(chart_container(
                         "Line Chart - Linear",
-                        LineChart::new(CHART_DATA)
-                            .x(|d| d.month)
+                        LineChart::new(self.monthly_devices.clone())
+                            .x(|d| d.month.clone())
                             .y(|d| d.desktop)
                             .linear(),
                         false,
@@ -211,8 +241,8 @@ impl Render for ChartStory {
                     ))
                     .child(chart_container(
                         "Line Chart - Dots",
-                        LineChart::new(CHART_DATA)
-                            .x(|d| d.month)
+                        LineChart::new(self.monthly_devices.clone())
+                            .x(|d| d.month.clone())
                             .y(|d| d.desktop)
                             .dot(),
                         false,
@@ -226,14 +256,16 @@ impl Render for ChartStory {
                     .h(px(400.))
                     .child(chart_container(
                         "Area Chart",
-                        AreaChart::new(CHART_DATA).x(|d| d.month).y(|d| d.desktop),
+                        AreaChart::new(self.monthly_devices.clone())
+                            .x(|d| d.month.clone())
+                            .y(|d| d.desktop),
                         false,
                         cx,
                     ))
                     .child(chart_container(
                         "Area Chart - Linear",
-                        AreaChart::new(CHART_DATA)
-                            .x(|d| d.month)
+                        AreaChart::new(self.monthly_devices.clone())
+                            .x(|d| d.month.clone())
                             .y(|d| d.desktop)
                             .linear(),
                         false,
@@ -241,8 +273,8 @@ impl Render for ChartStory {
                     ))
                     .child(chart_container(
                         "Area Chart - Linear Gradient",
-                        AreaChart::new(CHART_DATA)
-                            .x(|d| d.month)
+                        AreaChart::new(self.monthly_devices.clone())
+                            .x(|d| d.month.clone())
                             .y(|d| d.desktop)
                             .fill(linear_gradient(
                                 0.,

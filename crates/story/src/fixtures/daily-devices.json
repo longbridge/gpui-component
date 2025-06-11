@@ -1,0 +1,457 @@
+[
+  {
+    "date": "Apr 1",
+    "desktop": 222.0,
+    "mobile": 111.0
+  },
+  {
+    "date": "Apr 2",
+    "desktop": 97.0,
+    "mobile": 48.0
+  },
+  {
+    "date": "Apr 3",
+    "desktop": 167.0,
+    "mobile": 84.0
+  },
+  {
+    "date": "Apr 4",
+    "desktop": 242.0,
+    "mobile": 121.0
+  },
+  {
+    "date": "Apr 5",
+    "desktop": 373.0,
+    "mobile": 187.0
+  },
+  {
+    "date": "Apr 6",
+    "desktop": 301.0,
+    "mobile": 151.0
+  },
+  {
+    "date": "Apr 7",
+    "desktop": 245.0,
+    "mobile": 123.0
+  },
+  {
+    "date": "Apr 8",
+    "desktop": 409.0,
+    "mobile": 205.0
+  },
+  {
+    "date": "Apr 9",
+    "desktop": 59.0,
+    "mobile": 30.0
+  },
+  {
+    "date": "Apr 10",
+    "desktop": 261.0,
+    "mobile": 131.0
+  },
+  {
+    "date": "Apr 11",
+    "desktop": 327.0,
+    "mobile": 164.0
+  },
+  {
+    "date": "Apr 12",
+    "desktop": 292.0,
+    "mobile": 146.0
+  },
+  {
+    "date": "Apr 13",
+    "desktop": 342.0,
+    "mobile": 171.0
+  },
+  {
+    "date": "Apr 14",
+    "desktop": 137.0,
+    "mobile": 69.0
+  },
+  {
+    "date": "Apr 15",
+    "desktop": 120.0,
+    "mobile": 60.0
+  },
+  {
+    "date": "Apr 16",
+    "desktop": 138.0,
+    "mobile": 69.0
+  },
+  {
+    "date": "Apr 17",
+    "desktop": 446.0,
+    "mobile": 223.0
+  },
+  {
+    "date": "Apr 18",
+    "desktop": 364.0,
+    "mobile": 182.0
+  },
+  {
+    "date": "Apr 19",
+    "desktop": 243.0,
+    "mobile": 122.0
+  },
+  {
+    "date": "Apr 20",
+    "desktop": 89.0,
+    "mobile": 44.0
+  },
+  {
+    "date": "Apr 21",
+    "desktop": 137.0,
+    "mobile": 69.0
+  },
+  {
+    "date": "Apr 22",
+    "desktop": 224.0,
+    "mobile": 112.0
+  },
+  {
+    "date": "Apr 23",
+    "desktop": 138.0,
+    "mobile": 69.0
+  },
+  {
+    "date": "Apr 24",
+    "desktop": 387.0,
+    "mobile": 194.0
+  },
+  {
+    "date": "Apr 25",
+    "desktop": 215.0,
+    "mobile": 108.0
+  },
+  {
+    "date": "Apr 26",
+    "desktop": 75.0,
+    "mobile": 38.0
+  },
+  {
+    "date": "Apr 27",
+    "desktop": 383.0,
+    "mobile": 192.0
+  },
+  {
+    "date": "Apr 28",
+    "desktop": 122.0,
+    "mobile": 61.0
+  },
+  {
+    "date": "Apr 29",
+    "desktop": 315.0,
+    "mobile": 158.0
+  },
+  {
+    "date": "Apr 30",
+    "desktop": 454.0,
+    "mobile": 227.0
+  },
+  {
+    "date": "May 1",
+    "desktop": 165.0,
+    "mobile": 82.0
+  },
+  {
+    "date": "May 2",
+    "desktop": 293.0,
+    "mobile": 146.0
+  },
+  {
+    "date": "May 3",
+    "desktop": 247.0,
+    "mobile": 124.0
+  },
+  {
+    "date": "May 4",
+    "desktop": 385.0,
+    "mobile": 192.0
+  },
+  {
+    "date": "May 5",
+    "desktop": 481.0,
+    "mobile": 241.0
+  },
+  {
+    "date": "May 6",
+    "desktop": 498.0,
+    "mobile": 249.0
+  },
+  {
+    "date": "May 7",
+    "desktop": 388.0,
+    "mobile": 194.0
+  },
+  {
+    "date": "May 8",
+    "desktop": 149.0,
+    "mobile": 74.0
+  },
+  {
+    "date": "May 9",
+    "desktop": 227.0,
+    "mobile": 114.0
+  },
+  {
+    "date": "May 10",
+    "desktop": 293.0,
+    "mobile": 146.0
+  },
+  {
+    "date": "May 11",
+    "desktop": 335.0,
+    "mobile": 168.0
+  },
+  {
+    "date": "May 12",
+    "desktop": 197.0,
+    "mobile": 98.0
+  },
+  {
+    "date": "May 13",
+    "desktop": 197.0,
+    "mobile": 98.0
+  },
+  {
+    "date": "May 14",
+    "desktop": 448.0,
+    "mobile": 224.0
+  },
+  {
+    "date": "May 15",
+    "desktop": 473.0,
+    "mobile": 236.0
+  },
+  {
+    "date": "May 16",
+    "desktop": 338.0,
+    "mobile": 169.0
+  },
+  {
+    "date": "May 17",
+    "desktop": 499.0,
+    "mobile": 250.0
+  },
+  {
+    "date": "May 18",
+    "desktop": 315.0,
+    "mobile": 158.0
+  },
+  {
+    "date": "May 19",
+    "desktop": 235.0,
+    "mobile": 118.0
+  },
+  {
+    "date": "May 20",
+    "desktop": 177.0,
+    "mobile": 88.0
+  },
+  {
+    "date": "May 21",
+    "desktop": 82.0,
+    "mobile": 41.0
+  },
+  {
+    "date": "May 22",
+    "desktop": 81.0,
+    "mobile": 41.0
+  },
+  {
+    "date": "May 23",
+    "desktop": 252.0,
+    "mobile": 126.0
+  },
+  {
+    "date": "May 24",
+    "desktop": 294.0,
+    "mobile": 147.0
+  },
+  {
+    "date": "May 25",
+    "desktop": 201.0,
+    "mobile": 100.0
+  },
+  {
+    "date": "May 26",
+    "desktop": 213.0,
+    "mobile": 106.0
+  },
+  {
+    "date": "May 27",
+    "desktop": 420.0,
+    "mobile": 210.0
+  },
+  {
+    "date": "May 28",
+    "desktop": 233.0,
+    "mobile": 116.0
+  },
+  {
+    "date": "May 29",
+    "desktop": 78.0,
+    "mobile": 39.0
+  },
+  {
+    "date": "May 30",
+    "desktop": 340.0,
+    "mobile": 170.0
+  },
+  {
+    "date": "May 31",
+    "desktop": 178.0,
+    "mobile": 89.0
+  },
+  {
+    "date": "Jun 1",
+    "desktop": 178.0,
+    "mobile": 89.0
+  },
+  {
+    "date": "Jun 2",
+    "desktop": 470.0,
+    "mobile": 235.0
+  },
+  {
+    "date": "Jun 3",
+    "desktop": 103.0,
+    "mobile": 52.0
+  },
+  {
+    "date": "Jun 4",
+    "desktop": 439.0,
+    "mobile": 220.0
+  },
+  {
+    "date": "Jun 5",
+    "desktop": 88.0,
+    "mobile": 44.0
+  },
+  {
+    "date": "Jun 6",
+    "desktop": 294.0,
+    "mobile": 147.0
+  },
+  {
+    "date": "Jun 7",
+    "desktop": 323.0,
+    "mobile": 162.0
+  },
+  {
+    "date": "Jun 8",
+    "desktop": 385.0,
+    "mobile": 192.0
+  },
+  {
+    "date": "Jun 9",
+    "desktop": 438.0,
+    "mobile": 219.0
+  },
+  {
+    "date": "Jun 10",
+    "desktop": 155.0,
+    "mobile": 78.0
+  },
+  {
+    "date": "Jun 11",
+    "desktop": 92.0,
+    "mobile": 46.0
+  },
+  {
+    "date": "Jun 12",
+    "desktop": 492.0,
+    "mobile": 246.0
+  },
+  {
+    "date": "Jun 13",
+    "desktop": 81.0,
+    "mobile": 41.0
+  },
+  {
+    "date": "Jun 14",
+    "desktop": 426.0,
+    "mobile": 213.0
+  },
+  {
+    "date": "Jun 15",
+    "desktop": 307.0,
+    "mobile": 154.0
+  },
+  {
+    "date": "Jun 16",
+    "desktop": 371.0,
+    "mobile": 186.0
+  },
+  {
+    "date": "Jun 17",
+    "desktop": 475.0,
+    "mobile": 238.0
+  },
+  {
+    "date": "Jun 18",
+    "desktop": 107.0,
+    "mobile": 54.0
+  },
+  {
+    "date": "Jun 19",
+    "desktop": 341.0,
+    "mobile": 171.0
+  },
+  {
+    "date": "Jun 20",
+    "desktop": 408.0,
+    "mobile": 204.0
+  },
+  {
+    "date": "Jun 21",
+    "desktop": 169.0,
+    "mobile": 84.0
+  },
+  {
+    "date": "Jun 22",
+    "desktop": 317.0,
+    "mobile": 158.0
+  },
+  {
+    "date": "Jun 23",
+    "desktop": 480.0,
+    "mobile": 240.0
+  },
+  {
+    "date": "Jun 24",
+    "desktop": 132.0,
+    "mobile": 66.0
+  },
+  {
+    "date": "Jun 25",
+    "desktop": 141.0,
+    "mobile": 70.0
+  },
+  {
+    "date": "Jun 26",
+    "desktop": 434.0,
+    "mobile": 217.0
+  },
+  {
+    "date": "Jun 27",
+    "desktop": 448.0,
+    "mobile": 224.0
+  },
+  {
+    "date": "Jun 28",
+    "desktop": 149.0,
+    "mobile": 74.0
+  },
+  {
+    "date": "Jun 29",
+    "desktop": 103.0,
+    "mobile": 52.0
+  },
+  {
+    "date": "Jun 30",
+    "desktop": 446.0,
+    "mobile": 223.0
+  }
+]

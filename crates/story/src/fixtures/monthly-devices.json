@@ -1,0 +1,32 @@
+[
+  {
+    "month": "January",
+    "desktop": 186.0,
+    "color": "#93c5fd"
+  },
+  {
+    "month": "February",
+    "desktop": 305.0,
+    "color": "#60a5fa"
+  },
+  {
+    "month": "March",
+    "desktop": 237.0,
+    "color": "#3b82f6"
+  },
+  {
+    "month": "April",
+    "desktop": 73.0,
+    "color": "#2563eb"
+  },
+  {
+    "month": "May",
+    "desktop": 209.0,
+    "color": "#1d4ed8"
+  },
+  {
+    "month": "June",
+    "desktop": 214.0,
+    "color": "#1e40af"
+  }
+]

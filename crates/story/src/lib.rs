@@ -11,7 +11,6 @@ mod color_picker_story;
 mod date_picker_story;
 mod drawer_story;
 mod dropdown_story;
-mod fixtures;
 mod form_story;
 mod icon_story;
 mod image_story;
