@@ -250,8 +250,8 @@ impl Language {
             ),
             Self::Zig => (
                 tree_sitter_zig::LANGUAGE,
-                tree_sitter_zig::HIGHLIGHTS_QUERY,
-                tree_sitter_zig::INJECTIONS_QUERY,
+                include_str!("languages/zig/highlights.scm"),
+                include_str!("languages/zig/injections.scm"),
                 "",
             ),
             Self::Java => (
