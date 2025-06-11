@@ -7,6 +7,9 @@
 ;-----------
 
 (property_identifier) @property
+(shorthand_property_identifier) @property
+(shorthand_property_identifier_pattern) @property
+(private_property_identifier) @property
 
 ; Function and method definitions
 ;--------------------------------
@@ -48,15 +51,15 @@
 ; Special identifiers
 ;--------------------
 
-((identifier) @constructor
- (#match? @constructor "^[A-Z]"))
+((identifier) @type
+ (#match? @type "^[A-Z]"))
 
 ([
-    (identifier)
-    (shorthand_property_identifier)
-    (shorthand_property_identifier_pattern)
+  (identifier)
+  (shorthand_property_identifier)
+  (shorthand_property_identifier_pattern)
  ] @constant
- (#match? @constant "^[A-Z_][A-Z\\d_]+$"))
+ (#match? @constant "^_*[A-Z_][A-Z\\d_]*$"))
 
 ((identifier) @variable.builtin
  (#match? @variable.builtin "^(arguments|module|console|window|document)$")

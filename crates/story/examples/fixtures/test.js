@@ -1,3 +1,9 @@
+const fs = require('fs');
+
+const getName = function() {
+    return 'John Doe';
+}
+
 /**
  * A class representing a HelloWorld greeter with various utility methods
  * @class HelloWorld
