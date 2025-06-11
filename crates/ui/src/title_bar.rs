@@ -20,6 +20,7 @@ const TITLE_BAR_LEFT_PADDING: Pixels = px(12.);
 #[derive(IntoElement)]
 pub struct TitleBar {
     base: Stateful<Div>,
+    inner_left_padding: Pixels,
     children: Vec<AnyElement>,
     on_close_window: Option<Rc<Box<dyn Fn(&ClickEvent, &mut Window, &mut App)>>>,
 }
@@ -28,6 +29,7 @@ impl TitleBar {
     pub fn new() -> Self {
         Self {
             base: div().id("title-bar"),
+            inner_left_padding: TITLE_BAR_LEFT_PADDING,
             children: Vec::new(),
             on_close_window: None,
         }
@@ -40,6 +42,14 @@ impl TitleBar {
             appears_transparent: true,
             traffic_light_position: Some(gpui::point(px(9.0), px(9.0))),
         }
+    }
+
+    /// Add custom inner title left padding.
+    ///
+    /// Default is [`TITLE_BAR_LEFT_PADDING`] (The traffic light width).
+    pub fn inner_left_padding(mut self, padding: Pixels) -> Self {
+        self.inner_left_padding = padding;
+        self
     }
 
     /// Add custom for close window event, default is None, then click X button will call `window.remove_window()`.
@@ -246,15 +256,13 @@ impl RenderOnce for TitleBar {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let is_linux = cfg!(target_os = "linux");
 
-        const HEIGHT: Pixels = px(34.);
-
         div().flex_shrink_0().child(
             self.base
                 .flex()
                 .flex_row()
                 .items_center()
                 .justify_between()
-                .h(HEIGHT)
+                .h(TITLE_BAR_HEIGHT)
                 .border_b_1()
                 .border_color(cx.theme().title_bar_border)
                 .bg(cx.theme().title_bar)
@@ -264,8 +272,8 @@ impl RenderOnce for TitleBar {
                 .child(
                     h_flex()
                         .id("bar")
-                        .pl(TITLE_BAR_LEFT_PADDING)
-                        .when(window.is_fullscreen(), |this| this.pl(px(12.)))
+                        .pl(self.inner_left_padding)
+                        .when(window.is_fullscreen(), |this| this.pl_3())
                         .window_control_area(WindowControlArea::Drag)
                         .h_full()
                         .justify_between()
