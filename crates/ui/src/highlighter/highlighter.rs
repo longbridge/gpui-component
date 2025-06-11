@@ -639,10 +639,10 @@ pub(crate) fn unique_styles(
                 let overlap_end = last_range.end.min(range.end);
 
                 if overlap_start > last_range.start {
-                    result.push((last_range.start..overlap_start, last_style.clone()));
+                    result.push((last_range.start..overlap_start, *last_style));
                 }
 
-                result.push((overlap_start..overlap_end, style.clone()));
+                result.push((overlap_start..overlap_end, style));
 
                 last_range.end = overlap_start;
                 if overlap_end < range.end {
@@ -652,7 +652,7 @@ pub(crate) fn unique_styles(
                 }
             } else {
                 // Push the completed range and start a new one
-                result.push((last_range.clone(), last_style.clone()));
+                result.push((last_range.clone(), *last_style));
                 current_range = Some((range, style));
             }
         } else {
