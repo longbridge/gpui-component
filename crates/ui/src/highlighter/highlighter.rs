@@ -1,5 +1,5 @@
 use super::HighlightTheme;
-use crate::highlighter::LanguageRegistry;
+use crate::{highlighter::LanguageRegistry, Colorize};
 use gpui::{App, HighlightStyle, SharedString};
 use indexset::BTreeMap;
 use std::{
@@ -561,10 +561,38 @@ impl SyntaxHighlighter {
             styles.push((last_range.end..range.end, HighlightStyle::default()));
         }
 
-        let mut result = vec![];
+        // To merge intersection ranges
+        let mut result: Vec<(Range<usize>, HighlightStyle)> = vec![];
         for (range, style) in styles.into_iter() {
-            result = gpui::combine_highlights(result, vec![(range.clone(), style)]).collect();
+            println!(
+                "-------- range: {:?}, color: {:?}",
+                range,
+                style.color.map(|c| c.to_hex())
+            );
+            if let Some((last_range, last_style)) = result.last_mut() {
+                // Override last range
+                if range.start <= last_range.start {
+                    last_range.start = range.start;
+                    last_range.end = range.end;
+                    if last_style.color.is_none() {
+                        last_style.color = style.color;
+                    }
+                    continue;
+                }
+
+                if range.start < last_range.end {
+                    last_range.end = range.start;
+                }
+            }
+
+            // Skip empty range
+            if range.is_empty() {
+                continue;
+            }
+
+            result.push((range.clone(), style));
         }
+
         // NOTE: DO NOT remove this comment, it is used for debugging.
         // for style in &result {
         //     println!("style: {:?} - {:?}", style.0, style.1.color);
