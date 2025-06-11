@@ -1,3 +1,4 @@
+use std::ops::Range;
 use std::time::Duration;
 use std::{cell::Cell, rc::Rc};
 
@@ -560,7 +561,6 @@ where
     D: ListDelegate,
 {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let view = cx.entity().clone();
         let vertical_scroll_handle = self.vertical_scroll_handle.clone();
         let items_count = self.delegate.items_count(cx);
         let loading = self.delegate.loading(cx);
@@ -631,22 +631,28 @@ where
                                     })
                                     .when(items_count > 0, |this| {
                                         this.child(
-                                            uniform_list(view, "uniform-list", items_count, {
-                                                move |list, visible_range, window, cx| {
-                                                    list.load_more_if_need(
-                                                        items_count,
-                                                        visible_range.end,
-                                                        window,
-                                                        cx,
-                                                    );
+                                            uniform_list(
+                                                "uniform-list",
+                                                items_count,
+                                                cx.processor(
+                                                    move |list, visible_range: Range<usize>, window, cx| {
+                                                        list.load_more_if_need(
+                                                            items_count,
+                                                            visible_range.end,
+                                                            window,
+                                                            cx,
+                                                        );
 
-                                                    visible_range
-                                                        .map(|ix| {
-                                                            list.render_list_item(ix, window, cx)
-                                                        })
-                                                        .collect::<Vec<_>>()
-                                                }
-                                            })
+                                                        visible_range
+                                                            .map(|ix| {
+                                                                list.render_list_item(
+                                                                    ix, window, cx,
+                                                                )
+                                                            })
+                                                            .collect::<Vec<_>>()
+                                                    },
+                                                ),
+                                            )
                                             .flex_grow()
                                             .with_sizing_behavior(sizing_behavior)
                                             .track_scroll(vertical_scroll_handle)

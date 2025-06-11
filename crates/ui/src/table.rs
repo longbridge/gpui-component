@@ -1539,11 +1539,10 @@ where
                     this.child(
                         h_flex().id("table-body").flex_grow().size_full().child(
                             uniform_list(
-                                view,
                                 "table-uniform-list",
                                 rows_count + extra_rows_needed,
-                                {
-                                    move |table, visible_range, window, cx| {
+                                cx.processor(
+                                    move |table, visible_range: Range<usize>, window, cx| {
                                         // We must calculate the col sizes here, because the col sizes
                                         // need render_th first, then that method will set the bounds of each col.
                                         let col_sizes: Rc<Vec<gpui::Size<Pixels>>> = Rc::new(
@@ -1597,8 +1596,8 @@ where
                                         });
 
                                         items
-                                    }
-                                },
+                                    },
+                                ),
                             )
                             .flex_grow()
                             .size_full()
