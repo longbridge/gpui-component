@@ -1,7 +1,7 @@
 use super::HighlightTheme;
 use crate::highlighter::LanguageRegistry;
 use gpui::{App, HighlightStyle, SharedString};
-use indexset::BTreeMap;
+use indexset::{BTreeMap, CursorMap};
 use std::{
     collections::HashMap,
     ops::{Bound, Range},
@@ -523,7 +523,6 @@ impl SyntaxHighlighter {
         range: &Range<usize>,
         theme: &HighlightTheme,
     ) -> Vec<(Range<usize>, HighlightStyle)> {
-        // println!("-------------- style for range: {:?}", range);
         let mut styles = vec![];
         let start_offset = range.start;
         let mut last_range = start_offset..start_offset;
@@ -532,14 +531,46 @@ impl SyntaxHighlighter {
         // For example the JsDoc, the cache item may cross multiple lines.
         let mut cursor = self.cache.lower_bound(Bound::Included(&range.start));
 
-        while let Some((node_range, name)) = cursor.value().filter(|(node_range, _)| {
-            node_range.contains(&range.start)
-                || node_range.contains(&range.end)
-                || range.contains(&node_range.start)
-                || range.contains(&node_range.end)
-        }) {
-            cursor.move_next();
+        fn find_item<'a>(
+            cursor: &'a mut CursorMap<usize, (Range<usize>, String)>,
+            range: &Range<usize>,
+        ) -> Option<(&'a Range<usize>, &'a String)> {
+            if cursor.key() == Some(&range.start) {
+                return cursor
+                    .value()
+                    .map(|(node_range, name)| {
+                        if node_range.contains(&range.start)
+                            || node_range.contains(&range.end)
+                            || range.contains(&node_range.start)
+                            || range.contains(&node_range.end)
+                        {
+                            cursor.move_next();
+                            return Some((node_range, name));
+                        } else {
+                            return None;
+                        }
+                    })
+                    .flatten();
+            } else {
+                cursor
+                    .peek_prev()
+                    .map(|(_, (node_range, name))| {
+                        // println!("prev node_range: {:?}", node_range);
+                        if node_range.contains(&range.start)
+                            || node_range.contains(&range.end)
+                            || range.contains(&node_range.start)
+                            || range.contains(&node_range.end)
+                        {
+                            cursor.move_next();
+                            return Some((node_range, name));
+                        }
+                        None
+                    })
+                    .flatten()
+            }
+        }
 
+        while let Some((node_range, name)) = find_item(&mut cursor, &range) {
             let node_range = node_range.start.max(range.start)..node_range.end.min(range.end);
 
             // Ensure every range is connected.
