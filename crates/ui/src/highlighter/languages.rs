@@ -158,13 +158,15 @@ impl Language {
             Self::MarkdownInline => vec![],
             Self::Html => vec!["javascript", "css"],
             Self::Rust => vec!["rust"],
-            Self::JavaScript => vec![
+            Self::JavaScript | Self::TypeScript => vec![
                 "jsdoc",
                 "json",
                 "css",
                 "html",
                 "sql",
                 "typescript",
+                "javascript",
+                "tsx",
                 "yaml",
                 "graphql",
             ],
@@ -313,8 +315,8 @@ impl Language {
             Self::CMake => (tree_sitter_cmake::LANGUAGE, "", "", ""),
             Self::TypeScript => (
                 tree_sitter_typescript::LANGUAGE_TYPESCRIPT,
-                tree_sitter_typescript::HIGHLIGHTS_QUERY,
-                "",
+                include_str!("languages/typescript/highlights.scm"),
+                include_str!("languages/javascript/injections.scm"),
                 tree_sitter_typescript::LOCALS_QUERY,
             ),
             Self::Tsx => (

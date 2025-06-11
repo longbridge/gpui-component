@@ -529,7 +529,6 @@ impl SyntaxHighlighter {
         let mut styles = vec![];
         let start_offset = range.start;
         let mut last_range = start_offset..start_offset;
-        let mut last_style = HighlightStyle::default();
 
         // NOTE: Iterate over the cache and print the range and style for each item.
         // for (_, (range, style)) in self.cache.iter() {
@@ -561,8 +560,10 @@ impl SyntaxHighlighter {
             }
 
             last_range = node_range.clone();
-            last_style = theme.style(name.as_ref()).unwrap_or_default();
-            styles.push((node_range.clone(), last_style));
+            styles.push((
+                node_range.clone(),
+                theme.style(name.as_ref()).unwrap_or_default(),
+            ));
 
             cursor.move_next();
         }
@@ -574,7 +575,7 @@ impl SyntaxHighlighter {
 
         // Ensure the last range is connected to the end of the line.
         if last_range.end < range.end {
-            styles.push((last_range.end..range.end, last_style));
+            styles.push((last_range.end..range.end, HighlightStyle::default()));
         }
 
         let styles = unique_styles(styles);
