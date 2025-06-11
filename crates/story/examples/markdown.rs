@@ -65,7 +65,12 @@ impl Render for Example {
                         .size_full()
                         .font_family("Monaco")
                         .text_size(px(12.))
-                        .child(TextInput::new(&self.input_state).h_full().appearance(false)),
+                        .child(
+                            TextInput::new(&self.input_state)
+                                .h_full()
+                                .appearance(false)
+                                .focus_bordered(false),
+                        ),
                 ),
             )
             .child(
