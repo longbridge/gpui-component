@@ -38,7 +38,7 @@ pub struct SyntaxHighlighter {
     ///
     /// - The `key` is the `start` of the range.
     /// -The `value` is a tuple of the range (in the entire text) and the highlight name.
-    cache: BTreeMap<usize, (Range<usize>, String)>,
+    cache: BTreeMap<usize, (Range<usize>, SharedString)>,
 }
 
 impl SyntaxHighlighter {
@@ -55,10 +55,7 @@ impl SyntaxHighlighter {
     /// https://github.com/tree-sitter/tree-sitter/blob/v0.25.5/highlight/src/lib.rs#L336
     fn build_combined_injections_query(lang: &str, cx: &App) -> Option<Self> {
         let registry = LanguageRegistry::global(cx);
-        let config = registry.language(&lang);
-        let Some(config) = config else {
-            return None;
-        };
+        let config = registry.language(&lang)?;
 
         let mut parser = Parser::new();
         _ = parser.set_language(&config.language);
@@ -73,9 +70,12 @@ impl SyntaxHighlighter {
 
         // Construct a single query by concatenating the three query strings, but record the
         // range of pattern indices that belong to each individual string.
-        let Some(query) = Query::new(&config.language, &query_source).ok() else {
-            return None;
-        };
+        let query = match Query::new(&config.language, &query_source) {
+            Ok(query) => Some(query),
+            Err(err) => {
+                panic!("failed create Query for language {}, err: {}", lang, err);
+            }
+        }?;
 
         let mut locals_pattern_index = 0;
         let mut highlights_pattern_index = 0;
@@ -301,7 +301,7 @@ impl SyntaxHighlighter {
             });
 
             // Apply changed_len to reorder the cache to move the range offset
-            let mut old_cache: BTreeMap<usize, (Range<usize>, String)> = BTreeMap::new();
+            let mut old_cache: BTreeMap<usize, (Range<usize>, SharedString)> = BTreeMap::new();
             std::mem::swap(&mut self.cache, &mut old_cache);
 
             // NOTE: 10K lines, about 35ms
@@ -333,8 +333,10 @@ impl SyntaxHighlighter {
                 if let Some(content_node) = content_node {
                     let styles = self.handle_injection(&language_name, content_node, source, cx);
                     for (node_range, highlight_name) in styles {
-                        self.cache
-                            .insert(node_range.start, (node_range, highlight_name.to_string()));
+                        self.cache.insert(
+                            node_range.start,
+                            (node_range, highlight_name.to_string().into()),
+                        );
                     }
                 }
 
@@ -349,22 +351,23 @@ impl SyntaxHighlighter {
                 };
 
                 let node_range: Range<usize> = node.start_byte()..node.end_byte();
-                let highlight_name = highlight_name.to_owned();
+                let highlight_name = SharedString::from(highlight_name.to_string());
 
                 // Merge near range and same highlight name
                 let last_item = self.cache.last_key_value().map(|kv| kv.1);
                 let last_range = last_item.map(|(range, _)| range).unwrap_or(&(0..0));
-                let last_highlight_name = last_item.map(|(_, name)| name.as_str());
+                let last_highlight_name = last_item.map(|(_, name)| name.clone());
 
-                if last_range.end <= node_range.start && last_highlight_name == Some(highlight_name)
+                if last_range.end <= node_range.start
+                    && last_highlight_name.as_ref() == Some(&highlight_name)
                 {
                     self.cache.insert(
                         last_range.start,
-                        (last_range.start..node_range.end, highlight_name.to_string()),
+                        (last_range.start..node_range.end, highlight_name.clone()),
                     );
                 } else {
                     self.cache
-                        .insert(node_range.start, (node_range, highlight_name.to_string()));
+                        .insert(node_range.start, (node_range, highlight_name.clone()));
                 }
             }
         }
@@ -518,7 +521,7 @@ impl SyntaxHighlighter {
     /// The argument `range` is the range of the line in the text.
     ///
     /// Returns `range` is the range in the line.
-    pub fn styles(
+    pub(crate) fn styles(
         &self,
         range: &Range<usize>,
         theme: &HighlightTheme,
@@ -526,6 +529,12 @@ impl SyntaxHighlighter {
         let mut styles = vec![];
         let start_offset = range.start;
         let mut last_range = start_offset..start_offset;
+        let mut last_style = HighlightStyle::default();
+
+        // NOTE: Iterate over the cache and print the range and style for each item.
+        // for (_, (range, style)) in self.cache.iter() {
+        //     println!("-- range: {:?}, style: {:?}", range, style);
+        // }
 
         let mut cursor = self.cache.lower_bound(Bound::Included(&range.start));
         // Move to the previous item if the current item is not the start of the range.
@@ -535,27 +544,26 @@ impl SyntaxHighlighter {
         }
 
         while let Some((node_range, name)) = cursor.value() {
-            if !(node_range.contains(&range.start)
-                || node_range.contains(&range.end)
-                || range.contains(&node_range.start)
-                || range.contains(&node_range.end))
-            {
-                // Break loop if the node_range is out of the range
-                if node_range.end > range.end {
-                    break;
-                }
+            // Break loop if the node_range is out of the range
+            if node_range.start > range.end {
+                break;
             }
 
-            let node_range = node_range.start.max(range.start)..node_range.end.min(range.end);
+            let mut node_range = node_range.start.max(range.start)..node_range.end.min(range.end);
+            // Avoid start larger than end
+            if node_range.start > node_range.end {
+                node_range.end = node_range.start;
+            }
 
             // Ensure every range is connected.
             if last_range.end < node_range.start {
                 styles.push((last_range.end..node_range.start, HighlightStyle::default()));
             }
 
-            let style = theme.style(&name).unwrap_or_default();
-            styles.push((node_range.clone(), style));
             last_range = node_range.clone();
+            last_style = theme.style(name.as_ref()).unwrap_or_default();
+            styles.push((node_range.clone(), last_style));
+
             cursor.move_next();
         }
 
@@ -566,18 +574,18 @@ impl SyntaxHighlighter {
 
         // Ensure the last range is connected to the end of the line.
         if last_range.end < range.end {
-            styles.push((last_range.end..range.end, HighlightStyle::default()));
+            styles.push((last_range.end..range.end, last_style));
         }
 
-        let result = unique_styles(styles);
+        let styles = unique_styles(styles);
 
         // NOTE: DO NOT remove this comment, it is used for debugging.
         // for style in &result {
-        //     println!("style: {:?} - {:?}", style.0, style.1.color);
+        //     println!("---- style: {:?} - {:?}", style.0, style.1.color);
         // }
         // println!("--------------------------------");
 
-        result
+        styles
     }
 }
 
