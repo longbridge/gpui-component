@@ -1,5 +1,5 @@
 use super::HighlightTheme;
-use crate::{highlighter::LanguageRegistry, Colorize};
+use crate::highlighter::LanguageRegistry;
 use gpui::{App, HighlightStyle, SharedString};
 use indexset::BTreeMap;
 use std::{
@@ -561,37 +561,7 @@ impl SyntaxHighlighter {
             styles.push((last_range.end..range.end, HighlightStyle::default()));
         }
 
-        // To merge intersection ranges
-        let mut result: Vec<(Range<usize>, HighlightStyle)> = vec![];
-        for (range, style) in styles.into_iter() {
-            println!(
-                "-------- range: {:?}, color: {:?}",
-                range,
-                style.color.map(|c| c.to_hex())
-            );
-            if let Some((last_range, last_style)) = result.last_mut() {
-                // Override last range
-                if range.start <= last_range.start {
-                    last_range.start = range.start;
-                    last_range.end = range.end;
-                    if last_style.color.is_none() {
-                        last_style.color = style.color;
-                    }
-                    continue;
-                }
-
-                if range.start < last_range.end {
-                    last_range.end = range.start;
-                }
-            }
-
-            // Skip empty range
-            if range.is_empty() {
-                continue;
-            }
-
-            result.push((range.clone(), style));
-        }
+        let result = unique_styles(styles);
 
         // NOTE: DO NOT remove this comment, it is used for debugging.
         // for style in &result {
@@ -600,5 +570,170 @@ impl SyntaxHighlighter {
         // println!("--------------------------------");
 
         result
+    }
+}
+
+/// To merge intersection ranges
+///
+/// ```
+/// vec![
+///     (0..10, clean),
+///     (0..10, clean),
+///     (5..11, red),
+///     (10..15, green),
+///     (15..30, clean),
+///     (29..35, blue),
+///     (35..40, green),
+/// ];
+/// ```
+///
+/// to
+///
+/// ```
+/// vec![
+///   (0..5, clean),
+///   (5..10, red),
+///   (10..11, green),
+///   (11..15, green),
+///   (15..29, clean),
+///   (29..30, blue),
+///   (30..35, blue),
+///   (35..40, green),
+/// ];
+/// ```
+pub(crate) fn unique_styles(
+    styles: Vec<(Range<usize>, HighlightStyle)>,
+) -> Vec<(Range<usize>, HighlightStyle)> {
+    let mut result: Vec<(Range<usize>, HighlightStyle)> = vec![];
+    let mut current_range: Option<(Range<usize>, HighlightStyle)> = None;
+
+    for (range, style) in styles.into_iter() {
+        if range.is_empty() {
+            continue;
+        }
+
+        if let Some((last_range, last_style)) = current_range.as_mut() {
+            if last_style.color == style.color && range.start <= last_range.end {
+                // Merge overlapping or adjacent ranges with the same style
+                last_range.end = last_range.end.max(range.end);
+            } else if range.start < last_range.end {
+                // Split overlapping ranges with different styles
+                let overlap_start = range.start;
+                let overlap_end = last_range.end.min(range.end);
+
+                if overlap_start > last_range.start {
+                    result.push((last_range.start..overlap_start, last_style.clone()));
+                }
+
+                result.push((overlap_start..overlap_end, style.clone()));
+
+                last_range.end = overlap_start;
+                if overlap_end < range.end {
+                    current_range = Some((overlap_end..range.end, style));
+                } else {
+                    current_range = None;
+                }
+            } else {
+                // Push the completed range and start a new one
+                result.push((last_range.clone(), last_style.clone()));
+                current_range = Some((range, style));
+            }
+        } else {
+            current_range = Some((range, style));
+        }
+    }
+
+    if let Some((last_range, last_style)) = current_range {
+        result.push((last_range, last_style));
+    }
+
+    result
+}
+
+#[cfg(test)]
+mod tests {
+    use gpui::Hsla;
+
+    use super::*;
+    use crate::Colorize as _;
+
+    fn color_style(color: Hsla) -> HighlightStyle {
+        let mut style = HighlightStyle::default();
+        style.color = Some(color);
+        style
+    }
+
+    #[track_caller]
+    fn assert_unique_styles(
+        left: Vec<(Range<usize>, HighlightStyle)>,
+        right: Vec<(Range<usize>, HighlightStyle)>,
+    ) {
+        fn color_name(c: Option<Hsla>) -> String {
+            match c {
+                Some(c) => {
+                    if c == gpui::red() {
+                        "red".to_string()
+                    } else if c == gpui::green() {
+                        "green".to_string()
+                    } else if c == gpui::blue() {
+                        "blue".to_string()
+                    } else {
+                        c.to_hex()
+                    }
+                }
+                None => "clean".to_string(),
+            }
+        }
+
+        let left = unique_styles(left);
+        if left.len() != right.len() {
+            println!("\n---------------------------------------------");
+            for (range, style) in left.iter() {
+                println!("({:?}, {})", range, color_name(style.color));
+            }
+            println!("---------------------------------------------");
+            panic!("left {} styles, right {} styles", left.len(), right.len());
+        }
+        for (left, right) in left.into_iter().zip(right) {
+            if left.1.color != right.1.color || left.0 != right.0 {
+                panic!(
+                    "\n left: ({:?}, {})\nright: ({:?}, {})\n",
+                    left.0,
+                    color_name(left.1.color),
+                    right.0,
+                    color_name(right.1.color)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_unique_styles() {
+        let red = color_style(gpui::red());
+        let green = color_style(gpui::green());
+        let blue = color_style(gpui::blue());
+        let clean = HighlightStyle::default();
+
+        assert_unique_styles(
+            vec![
+                (0..10, clean),
+                (0..10, clean),
+                (5..11, red),
+                (10..15, green),
+                (15..30, clean),
+                (29..35, blue),
+                (35..40, green),
+            ],
+            vec![
+                (0..5, clean),
+                (5..10, red),
+                (10..11, green),
+                (11..15, green),
+                (15..29, clean),
+                (29..30, blue),
+                (30..35, blue),
+                (35..40, green),
+            ],
+        );
     }
 }
