@@ -623,7 +623,7 @@ dependencies = [
  "bitflags 2.9.1",
  "cexpr",
  "clang-sys",
- "itertools 0.12.1",
+ "itertools 0.10.5",
  "lazy_static",
  "lazycell",
  "log",
@@ -646,7 +646,7 @@ dependencies = [
  "bitflags 2.9.1",
  "cexpr",
  "clang-sys",
- "itertools 0.13.0",
+ "itertools 0.10.5",
  "log",
  "prettyplease",
  "proc-macro2",
@@ -1226,7 +1226,7 @@ dependencies = [
 [[package]]
 name = "collections"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#ee2a3299815ea29770491b34592a448d95761cdb"
+source = "git+https://github.com/zed-industries/zed.git#0852912fd6868c0fcffdeef1cd592def4c50fbc5"
 dependencies = [
  "indexmap 2.9.0",
  "rustc-hash 2.1.0",
@@ -1253,6 +1253,16 @@ checksum = "ba5a308b75df32fe02788e748662718f03fde005016435c444eea572398219fd"
 dependencies = [
  "bytes",
  "memchr",
+]
+
+[[package]]
+name = "command-fds"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2ec1052629a80c28594777d1252efc8a6b005d13f9edfd8c3fc0f44d5b32489a"
+dependencies = [
+ "nix 0.30.1",
+ "thiserror 2.0.12",
 ]
 
 [[package]]
@@ -1636,7 +1646,7 @@ version = "3.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "697b5419f348fd5ae2478e8018cb016c00a5881c7f46c717de98ffd135a5651c"
 dependencies = [
- "nix",
+ "nix 0.29.0",
  "windows-sys 0.59.0",
 ]
 
@@ -1739,7 +1749,7 @@ dependencies = [
 [[package]]
 name = "derive_refineable"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#ee2a3299815ea29770491b34592a448d95761cdb"
+source = "git+https://github.com/zed-industries/zed.git#0852912fd6868c0fcffdeef1cd592def4c50fbc5"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2786,7 +2796,7 @@ dependencies = [
 [[package]]
 name = "gpui"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#ee2a3299815ea29770491b34592a448d95761cdb"
+source = "git+https://github.com/zed-industries/zed.git#0852912fd6868c0fcffdeef1cd592def4c50fbc5"
 dependencies = [
  "anyhow",
  "as-raw-xcb-connection",
@@ -2955,7 +2965,7 @@ dependencies = [
 [[package]]
 name = "gpui_macros"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#ee2a3299815ea29770491b34592a448d95761cdb"
+source = "git+https://github.com/zed-industries/zed.git#0852912fd6868c0fcffdeef1cd592def4c50fbc5"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -3225,7 +3235,7 @@ dependencies = [
 [[package]]
 name = "http_client"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#ee2a3299815ea29770491b34592a448d95761cdb"
+source = "git+https://github.com/zed-industries/zed.git#0852912fd6868c0fcffdeef1cd592def4c50fbc5"
 dependencies = [
  "anyhow",
  "bytes",
@@ -3242,7 +3252,7 @@ dependencies = [
 [[package]]
 name = "http_client_tls"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#ee2a3299815ea29770491b34592a448d95761cdb"
+source = "git+https://github.com/zed-industries/zed.git#0852912fd6868c0fcffdeef1cd592def4c50fbc5"
 dependencies = [
  "rustls",
  "rustls-platform-verifier",
@@ -4021,7 +4031,7 @@ dependencies = [
 [[package]]
 name = "media"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#ee2a3299815ea29770491b34592a448d95761cdb"
+source = "git+https://github.com/zed-industries/zed.git#0852912fd6868c0fcffdeef1cd592def4c50fbc5"
 dependencies = [
  "anyhow",
  "bindgen 0.71.1",
@@ -4231,6 +4241,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "nix"
+version = "0.30.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "74523f3a35e05aba87a1d978330aef40f67b0304ac79c1c00b294c9830543db6"
+dependencies = [
+ "bitflags 2.9.1",
+ "cfg-if",
+ "cfg_aliases",
+ "libc",
+]
+
+[[package]]
 name = "nodrop"
 version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4414,7 +4436,7 @@ version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "af1844ef2428cc3e1cb900be36181049ef3d3193c63e43026cfe202983b27a56"
 dependencies = [
- "proc-macro-crate 3.2.0",
+ "proc-macro-crate 1.3.1",
  "proc-macro2",
  "quote",
  "syn 2.0.101",
@@ -5738,7 +5760,7 @@ dependencies = [
 [[package]]
 name = "refineable"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#ee2a3299815ea29770491b34592a448d95761cdb"
+source = "git+https://github.com/zed-industries/zed.git#0852912fd6868c0fcffdeef1cd592def4c50fbc5"
 dependencies = [
  "derive_refineable",
  "workspace-hack",
@@ -5848,7 +5870,7 @@ dependencies = [
 [[package]]
 name = "reqwest_client"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#ee2a3299815ea29770491b34592a448d95761cdb"
+source = "git+https://github.com/zed-industries/zed.git#0852912fd6868c0fcffdeef1cd592def4c50fbc5"
 dependencies = [
  "anyhow",
  "bytes",
@@ -6397,7 +6419,7 @@ checksum = "d369a96f978623eb3dc28807c4852d6cc617fed53da5d3c400feff1ef34a714a"
 [[package]]
 name = "semantic_version"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#ee2a3299815ea29770491b34592a448d95761cdb"
+source = "git+https://github.com/zed-industries/zed.git#0852912fd6868c0fcffdeef1cd592def4c50fbc5"
 dependencies = [
  "anyhow",
  "serde",
@@ -6895,7 +6917,7 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 [[package]]
 name = "sum_tree"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#ee2a3299815ea29770491b34592a448d95761cdb"
+source = "git+https://github.com/zed-industries/zed.git#0852912fd6868c0fcffdeef1cd592def4c50fbc5"
 dependencies = [
  "arrayvec",
  "log",
@@ -8071,12 +8093,13 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 [[package]]
 name = "util"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#ee2a3299815ea29770491b34592a448d95761cdb"
+source = "git+https://github.com/zed-industries/zed.git#0852912fd6868c0fcffdeef1cd592def4c50fbc5"
 dependencies = [
  "anyhow",
  "async-fs 2.1.2",
  "async_zip",
  "collections",
+ "command-fds",
  "dirs 4.0.0",
  "dunce",
  "futures",
@@ -9426,7 +9449,7 @@ dependencies = [
  "futures-core",
  "futures-lite 2.6.0",
  "hex",
- "nix",
+ "nix 0.29.0",
  "ordered-stream",
  "serde",
  "serde_repr",
