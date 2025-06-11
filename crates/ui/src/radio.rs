@@ -146,6 +146,7 @@ impl RenderOnce for Radio {
 /// A Radio group element.
 #[derive(IntoElement)]
 pub struct RadioGroup {
+    id: ElementId,
     style: StyleRefinement,
     radios: Vec<Radio>,
     layout: Axis,
@@ -155,8 +156,9 @@ pub struct RadioGroup {
 }
 
 impl RadioGroup {
-    fn new() -> Self {
+    fn new(id: impl Into<ElementId>) -> Self {
         Self {
+            id: id.into(),
             style: StyleRefinement::default().flex_1(),
             on_change: None,
             layout: Axis::Vertical,
@@ -167,13 +169,13 @@ impl RadioGroup {
     }
 
     /// Create a new Radio group with default Vertical layout.
-    pub fn vertical() -> Self {
-        Self::new()
+    pub fn vertical(id: impl Into<ElementId>) -> Self {
+        Self::new(id)
     }
 
     /// Create a new Radio group with Horizontal layout.
-    pub fn horizontal() -> Self {
-        Self::new().layout(Axis::Horizontal)
+    pub fn horizontal(id: impl Into<ElementId>) -> Self {
+        Self::new(id).layout(Axis::Horizontal)
     }
 
     /// Set the layout of the Radio group. Default is `Axis::Vertical`.
@@ -249,14 +251,15 @@ impl RenderOnce for RadioGroup {
             h_flex().w_full().flex_wrap()
         };
 
-        let mut container = div();
+        let mut container = div().id(self.id);
         *container.style() = self.style;
 
         container.child(
             base.gap_3()
-                .children(self.radios.into_iter().enumerate().map(|(ix, radio)| {
+                .children(self.radios.into_iter().enumerate().map(|(ix, mut radio)| {
                     let checked = selected_ix == Some(ix);
 
+                    radio.id = ix.into();
                     radio.disabled(disabled).checked(checked).when_some(
                         on_change.clone(),
                         |this, on_change| {
