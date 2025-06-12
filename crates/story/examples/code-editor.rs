@@ -118,11 +118,12 @@ impl Example {
                 &language_state,
                 |this, state, _: &DropdownEvent<Vec<SharedString>>, cx| {
                     if let Some(val) = state.read(cx).selected_value() {
-                        if let Some(language) = Language::from_str(&val) {
-                            this.language = Lang::BuiltIn(language);
-                        } else {
+                        if val == "navi" {
                             this.language = Lang::External("navi");
+                        } else {
+                            this.language = Lang::BuiltIn(Language::from_str(&val));
                         }
+
                         this.need_update = true;
                         cx.notify();
                     }
