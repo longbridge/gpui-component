@@ -308,12 +308,14 @@ impl SyntaxHighlighter {
             for (start, (old_range, highlight_name)) in old_cache.into_iter() {
                 if old_range.end >= byte_range.start {
                     let new_range = Range {
-                        start: (old_range.start as isize + changed_len) as usize,
-                        end: (old_range.end as isize + changed_len) as usize,
+                        start: (old_range.start as isize + changed_len).max(0) as usize,
+                        end: (old_range.end as isize + changed_len).max(0) as usize,
                     };
 
-                    self.cache
-                        .insert(new_range.start, (new_range, highlight_name));
+                    if new_range.len() > 0 {
+                        self.cache
+                            .insert(new_range.start, (new_range, highlight_name));
+                    }
                 } else {
                     self.cache.insert(start, (old_range, highlight_name));
                 }
@@ -357,7 +359,6 @@ impl SyntaxHighlighter {
                 let last_item = self.cache.last_key_value().map(|kv| kv.1);
                 let last_range = last_item.map(|(range, _)| range).unwrap_or(&(0..0));
                 let last_highlight_name = last_item.map(|(_, name)| name.clone());
-
                 if last_range.end <= node_range.start
                     && last_highlight_name.as_ref() == Some(&highlight_name)
                 {
@@ -531,9 +532,9 @@ impl SyntaxHighlighter {
         let mut last_range = start_offset..start_offset;
 
         // NOTE: Iterate over the cache and print the range and style for each item.
-        for (_, (range, style)) in self.cache.iter() {
-            println!("-- range: {:?}, style: {:?}", range, style);
-        }
+        // for (_, (range, style)) in self.cache.iter() {
+        //     println!("-- range: {:?}, style: {:?}", range, style);
+        // }
 
         let mut cursor = self.cache.lower_bound(Bound::Included(&range.start));
         // Move to the previous item if the current item is not the start of the range.
@@ -581,10 +582,10 @@ impl SyntaxHighlighter {
         let styles = unique_styles(styles);
 
         // NOTE: DO NOT remove this comment, it is used for debugging.
-        for style in &styles {
-            println!("---- style: {:?} - {:?}", style.0, style.1.color);
-        }
-        println!("--------------------------------");
+        // for style in &styles {
+        //     println!("---- style: {:?} - {:?}", style.0, style.1.color);
+        // }
+        // println!("--------------------------------");
 
         styles
     }
