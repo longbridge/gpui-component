@@ -1243,26 +1243,12 @@ impl InputState {
 
     pub(super) fn enter(&mut self, action: &Enter, window: &mut Window, cx: &mut Context<Self>) {
         if self.is_multi_line() {
-            let is_eof = self.selected_range.end == self.text.len();
-
             // Get current line indent
             let indent = self.indent_of_next_line(window, cx);
-            self.replace_text_in_range(None, "\n", window, cx);
 
-            // Move cursor to the start of the next line
-            let mut new_offset = self.cursor_offset() - 1;
-            if is_eof {
-                new_offset += 1;
-            }
-            self.move_to(self.next_boundary(new_offset), window, cx);
-
-            // Add indent
-            self.replace_text_in_range(
-                Some(self.range_to_utf16(&(self.cursor_offset()..self.cursor_offset()))),
-                &indent,
-                window,
-                cx,
-            );
+            // Add newline and indent
+            let new_line_text = format!("\n{}", indent);
+            self.replace_text_in_range(None, &new_line_text, window, cx);
         }
 
         cx.emit(InputEvent::PressEnter {
