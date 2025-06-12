@@ -9,7 +9,7 @@ use markdown::{
     ParseOptions,
 };
 
-use crate::{v_flex, Measure};
+use crate::v_flex;
 
 use super::{
     element::{
@@ -78,7 +78,7 @@ impl MarkdownState {
 
         self.raw = new_text;
         // NOTE: About 100ms
-        // let measure = Measure::new("parse_markdown");
+        // let measure = crate::Measure::new("parse_markdown");
         self.root = Some(parse_markdown(&self.raw, &style, cx));
         // measure.end();
         self._last_parsed = Some(Instant::now());
