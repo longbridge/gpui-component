@@ -16,9 +16,9 @@ pub fn init(cx: &mut App) {
 }
 
 pub struct PopoverContent {
+    style: StyleRefinement,
     focus_handle: FocusHandle,
     content: Rc<dyn Fn(&mut Window, &mut Context<Self>) -> AnyElement>,
-    max_width: Option<Pixels>,
 }
 
 impl PopoverContent {
@@ -29,15 +29,10 @@ impl PopoverContent {
         let focus_handle = cx.focus_handle();
 
         Self {
+            style: StyleRefinement::default().p_2(),
             focus_handle,
             content: Rc::new(content),
-            max_width: None,
         }
-    }
-
-    pub fn max_w(mut self, max_width: Pixels) -> Self {
-        self.max_width = Some(max_width);
-        self
     }
 }
 impl EventEmitter<DismissEvent> for PopoverContent {}
@@ -48,17 +43,22 @@ impl Focusable for PopoverContent {
     }
 }
 
+impl Styled for PopoverContent {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
 impl Render for PopoverContent {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
+            .with_style(&self.style)
             .track_focus(&self.focus_handle)
             .key_context(CONTEXT)
             .on_action(cx.listener(|_, _: &Cancel, _, cx| {
                 cx.propagate();
                 cx.emit(DismissEvent);
             }))
-            .p_2()
-            .when_some(self.max_width, |this, v| this.max_w(v))
             .child(self.content.clone()(window, cx))
     }
 }

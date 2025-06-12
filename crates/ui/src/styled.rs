@@ -6,7 +6,7 @@ use crate::{
 };
 use gpui::{
     div, px, App, Axis, DefiniteLength, Div, Edges, Element, ElementId, EntityId, FocusHandle,
-    Pixels, Styled, Window,
+    Pixels, StyleRefinement, Styled, Window,
 };
 use serde::{Deserialize, Serialize};
 
@@ -34,6 +34,12 @@ macro_rules! font_weight {
 
 /// Extends [`gpui::Styled`] with specific styling methods.
 pub trait StyledExt: Styled + Sized {
+    /// Sets the style of this element.
+    fn with_style(mut self, style: &StyleRefinement) -> Self {
+        *self.style() = style.clone();
+        self
+    }
+
     /// Apply self into a horizontal flex layout.
     #[inline]
     fn h_flex(self) -> Self {
