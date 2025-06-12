@@ -421,7 +421,6 @@ impl TabPanel {
         let view = cx.entity().clone();
         let zoomable_toolbar_visible = state.zoomable.map_or(false, |v| v.toolbar_visible());
 
-        // TODO: Do not show MenuButton if there is no menu items
         h_flex()
             .gap_1()
             .occlude()
@@ -466,14 +465,16 @@ impl TabPanel {
                         move |this, window, cx| {
                             view.read(cx)
                                 .popup_menu(this, window, cx)
-                                .when(zoomable, |this| {
-                                    let name = if zoomed {
+                                .separator()
+                                .menu_with_disabled(
+                                    if zoomed {
                                         t!("Dock.Zoom Out")
                                     } else {
                                         t!("Dock.Zoom In")
-                                    };
-                                    this.separator().menu(name, Box::new(ToggleZoom))
-                                })
+                                    },
+                                    Box::new(ToggleZoom),
+                                    !zoomable,
+                                )
                                 .when(closable, |this| {
                                     this.separator()
                                         .menu(t!("Dock.Close"), Box::new(ClosePanel))

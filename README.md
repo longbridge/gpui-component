@@ -19,7 +19,7 @@ UI components for building fantastic desktop applications using [GPUI](https://g
 
 Here is the first application: [Longbridge Pro](https://longbridge.com/desktop), built using GPUI Component.
 
-<img width="1763" alt="Image" src="https://wp-cdn.4ce.cn/v2/hZRGaJm.png" />
+<img width="1763" alt="Image" src="https://assets.lbctrl.com/uploads/32c11b27-b90d-4fce-a6b8-7d72e99fb231/longbridge-pro.png" />
 
 We built multi-theme support in the application. This feature is not included in GPUI Component itself, but is based on the `Theme` feature, so it's easy to implement.
 
