@@ -359,12 +359,21 @@ impl SyntaxHighlighter {
                 let last_item = self.cache.last_key_value().map(|kv| kv.1);
                 let last_range = last_item.map(|(range, _)| range).unwrap_or(&(0..0));
                 let last_highlight_name = last_item.map(|(_, name)| name.clone());
+
                 if last_range.end <= node_range.start
                     && last_highlight_name.as_ref() == Some(&highlight_name)
                 {
                     self.cache.insert(
                         last_range.start,
                         (last_range.start..node_range.end, highlight_name.clone()),
+                    );
+                } else if last_range == &node_range {
+                    // case:
+                    // last_range: 213..220, last_highlight_name: Some("property")
+                    // last_range: 213..220, last_highlight_name: Some("string")
+                    self.cache.insert(
+                        node_range.start,
+                        (node_range, last_highlight_name.unwrap_or(highlight_name)),
                     );
                 } else {
                     self.cache

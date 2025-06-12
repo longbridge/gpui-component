@@ -1,10 +1,11 @@
 (comment) @comment
 
 (string) @string
-(pair key: (string) @property)
 (escape_sequence) @string.escape
 
 (number) @number
+
+(pair key: (string) @property)
 
 [
   (true)

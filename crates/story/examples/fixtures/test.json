@@ -5,6 +5,7 @@
     "license": "Apache-2.0",
     "keywords": ["UI", "desktop", "application"],
     "stars": 3000,
+    "public": true,
     "repository": "https://github.com/longbridge/gpui-component"
   }
 ]
