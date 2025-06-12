@@ -184,7 +184,7 @@ impl Language {
         let (language, query, injection, locals) = match self {
             Self::Json => (
                 tree_sitter_json::LANGUAGE,
-                tree_sitter_json::HIGHLIGHTS_QUERY,
+                include_str!("languages/json/highlights.scm"),
                 "",
                 "",
             ),

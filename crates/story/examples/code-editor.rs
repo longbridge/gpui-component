@@ -47,7 +47,7 @@ impl Lang {
     }
 }
 
-const LANGUAGES: [(Lang, &'static str); 9] = [
+const LANGUAGES: [(Lang, &'static str); 10] = [
     (
         Lang::BuiltIn(Language::Rust),
         include_str!("./fixtures/test.rs"),
@@ -80,12 +80,16 @@ const LANGUAGES: [(Lang, &'static str); 9] = [
         Lang::BuiltIn(Language::Sql),
         include_str!("./fixtures/test.sql"),
     ),
+    (
+        Lang::BuiltIn(Language::Json),
+        include_str!("./fixtures/test.json"),
+    ),
     (Lang::External("navi"), include_str!("./fixtures/test.nv")),
 ];
 
 impl Example {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let default_language = LANGUAGES[0].clone();
+        let default_language = LANGUAGES[8].clone();
         let input_state = cx.new(|cx| {
             InputState::new(window, cx)
                 .code_editor(default_language.0.name().to_string())

@@ -531,9 +531,9 @@ impl SyntaxHighlighter {
         let mut last_range = start_offset..start_offset;
 
         // NOTE: Iterate over the cache and print the range and style for each item.
-        // for (_, (range, style)) in self.cache.iter() {
-        //     println!("-- range: {:?}, style: {:?}", range, style);
-        // }
+        for (_, (range, style)) in self.cache.iter() {
+            println!("-- range: {:?}, style: {:?}", range, style);
+        }
 
         let mut cursor = self.cache.lower_bound(Bound::Included(&range.start));
         // Move to the previous item if the current item is not the start of the range.
@@ -581,10 +581,10 @@ impl SyntaxHighlighter {
         let styles = unique_styles(styles);
 
         // NOTE: DO NOT remove this comment, it is used for debugging.
-        // for style in &result {
-        //     println!("---- style: {:?} - {:?}", style.0, style.1.color);
-        // }
-        // println!("--------------------------------");
+        for style in &styles {
+            println!("---- style: {:?} - {:?}", style.0, style.1.color);
+        }
+        println!("--------------------------------");
 
         styles
     }
