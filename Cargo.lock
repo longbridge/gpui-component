@@ -1117,7 +1117,7 @@ dependencies = [
 [[package]]
 name = "collections"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git?branch=main#eb5f59577d637f2ce2dc6da1920b724fa44cf536"
+source = "git+https://github.com/zed-industries/zed.git?branch=main#106b98fbcbc606e385df9a218db773b5e84a21f9"
 dependencies = [
  "indexmap 2.9.0",
  "rustc-hash 2.1.1",
@@ -1127,7 +1127,7 @@ dependencies = [
 [[package]]
 name = "collections"
 version = "0.1.0"
-source = "git+https://github.com/huacnlee/zed.git?branch=webview#9ed268f55219404aa9a5258712dbc450aec904c8"
+source = "git+https://github.com/huacnlee/zed.git?branch=webview#8defb01a0422de222bfc4c5b9e776651c17317c0"
 dependencies = [
  "indexmap 2.9.0",
  "rustc-hash 2.1.1",
@@ -1634,7 +1634,7 @@ dependencies = [
 [[package]]
 name = "derive_refineable"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git?branch=main#eb5f59577d637f2ce2dc6da1920b724fa44cf536"
+source = "git+https://github.com/zed-industries/zed.git?branch=main#106b98fbcbc606e385df9a218db773b5e84a21f9"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1645,7 +1645,7 @@ dependencies = [
 [[package]]
 name = "derive_refineable"
 version = "0.1.0"
-source = "git+https://github.com/huacnlee/zed.git?branch=webview#9ed268f55219404aa9a5258712dbc450aec904c8"
+source = "git+https://github.com/huacnlee/zed.git?branch=webview#8defb01a0422de222bfc4c5b9e776651c17317c0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2547,7 +2547,7 @@ dependencies = [
  "cfg-if",
  "js-sys",
  "libc",
- "wasi 0.11.0+wasi-snapshot-preview1",
+ "wasi 0.11.1+wasi-snapshot-preview1",
  "wasm-bindgen",
 ]
 
@@ -2746,7 +2746,7 @@ dependencies = [
 [[package]]
 name = "gpui"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git?branch=main#eb5f59577d637f2ce2dc6da1920b724fa44cf536"
+source = "git+https://github.com/zed-industries/zed.git?branch=main#106b98fbcbc606e385df9a218db773b5e84a21f9"
 dependencies = [
  "anyhow",
  "as-raw-xcb-connection",
@@ -2825,7 +2825,7 @@ dependencies = [
  "wayland-cursor",
  "wayland-protocols",
  "wayland-protocols-plasma",
- "windows 0.61.1",
+ "windows 0.61.2",
  "windows-core 0.61.2",
  "windows-numerics",
  "windows-registry 0.5.2",
@@ -2839,7 +2839,7 @@ dependencies = [
 [[package]]
 name = "gpui"
 version = "0.1.0"
-source = "git+https://github.com/huacnlee/zed.git?branch=webview#9ed268f55219404aa9a5258712dbc450aec904c8"
+source = "git+https://github.com/huacnlee/zed.git?branch=webview#8defb01a0422de222bfc4c5b9e776651c17317c0"
 dependencies = [
  "anyhow",
  "as-raw-xcb-connection",
@@ -2918,7 +2918,7 @@ dependencies = [
  "wayland-cursor",
  "wayland-protocols",
  "wayland-protocols-plasma",
- "windows 0.61.1",
+ "windows 0.61.2",
  "windows-core 0.61.2",
  "windows-numerics",
  "windows-registry 0.5.2",
@@ -2993,7 +2993,7 @@ dependencies = [
 [[package]]
 name = "gpui_macros"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git?branch=main#eb5f59577d637f2ce2dc6da1920b724fa44cf536"
+source = "git+https://github.com/zed-industries/zed.git?branch=main#106b98fbcbc606e385df9a218db773b5e84a21f9"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -3005,7 +3005,7 @@ dependencies = [
 [[package]]
 name = "gpui_macros"
 version = "0.1.0"
-source = "git+https://github.com/huacnlee/zed.git?branch=webview#9ed268f55219404aa9a5258712dbc450aec904c8"
+source = "git+https://github.com/huacnlee/zed.git?branch=webview#8defb01a0422de222bfc4c5b9e776651c17317c0"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -3156,9 +3156,9 @@ checksum = "d231dfb89cfffdbc30e7fc41579ed6066ad03abda9e567ccafae602b97ec5024"
 
 [[package]]
 name = "hermit-abi"
-version = "0.5.1"
+version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f154ce46856750ed433c8649605bf7ed2de3bc35fd9d2a9f30cddd873c80cb08"
+checksum = "fc0fef456e4baa96da950455cd02c081ca953b141298e41db3fc7e36b1da849c"
 
 [[package]]
 name = "hex"
@@ -3275,7 +3275,7 @@ dependencies = [
 [[package]]
 name = "http_client"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git?branch=main#eb5f59577d637f2ce2dc6da1920b724fa44cf536"
+source = "git+https://github.com/zed-industries/zed.git?branch=main#106b98fbcbc606e385df9a218db773b5e84a21f9"
 dependencies = [
  "anyhow",
  "bytes",
@@ -3292,7 +3292,7 @@ dependencies = [
 [[package]]
 name = "http_client"
 version = "0.1.0"
-source = "git+https://github.com/huacnlee/zed.git?branch=webview#9ed268f55219404aa9a5258712dbc450aec904c8"
+source = "git+https://github.com/huacnlee/zed.git?branch=webview#8defb01a0422de222bfc4c5b9e776651c17317c0"
 dependencies = [
  "anyhow",
  "bytes",
@@ -3309,7 +3309,7 @@ dependencies = [
 [[package]]
 name = "http_client_tls"
 version = "0.1.0"
-source = "git+https://github.com/huacnlee/zed.git?branch=webview#9ed268f55219404aa9a5258712dbc450aec904c8"
+source = "git+https://github.com/huacnlee/zed.git?branch=webview#8defb01a0422de222bfc4c5b9e776651c17317c0"
 dependencies = [
  "rustls",
  "rustls-platform-verifier",
@@ -3912,7 +3912,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "07033963ba89ebaf1584d767badaa2e8fcec21aedea6b8c0346d487d49c28667"
 dependencies = [
  "cfg-if",
- "windows-targets 0.53.0",
+ "windows-targets 0.53.1",
 ]
 
 [[package]]
@@ -4174,7 +4174,7 @@ dependencies = [
 [[package]]
 name = "media"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git?branch=main#eb5f59577d637f2ce2dc6da1920b724fa44cf536"
+source = "git+https://github.com/zed-industries/zed.git?branch=main#106b98fbcbc606e385df9a218db773b5e84a21f9"
 dependencies = [
  "anyhow",
  "bindgen 0.71.1",
@@ -4190,7 +4190,7 @@ dependencies = [
 [[package]]
 name = "media"
 version = "0.1.0"
-source = "git+https://github.com/huacnlee/zed.git?branch=webview#9ed268f55219404aa9a5258712dbc450aec904c8"
+source = "git+https://github.com/huacnlee/zed.git?branch=webview#8defb01a0422de222bfc4c5b9e776651c17317c0"
 dependencies = [
  "anyhow",
  "bindgen 0.71.1",
@@ -4205,9 +4205,9 @@ dependencies = [
 
 [[package]]
 name = "memchr"
-version = "2.7.4"
+version = "2.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "78ca9ab1a0babb1e7d5695e3530886289c18cf2f87ec19a575a0abdce112e3a3"
+checksum = "32a282da65faaf38286cf3be983213fcf1d2e2a58700e808f83f4ea9a4804bc0"
 
 [[package]]
 name = "memmap2"
@@ -4318,7 +4318,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "78bed444cc8a2160f01cbcf811ef18cac863ad68ae8ca62092e8db51d51c761c"
 dependencies = [
  "libc",
- "wasi 0.11.0+wasi-snapshot-preview1",
+ "wasi 0.11.1+wasi-snapshot-preview1",
  "windows-sys 0.59.0",
 ]
 
@@ -4554,7 +4554,7 @@ version = "1.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "91df4bbde75afed763b708b7eee1e8e7651e02d97f6d5dd763e89367e957b23b"
 dependencies = [
- "hermit-abi 0.5.1",
+ "hermit-abi 0.5.2",
  "libc",
 ]
 
@@ -5387,7 +5387,7 @@ checksum = "b53a684391ad002dd6a596ceb6c74fd004fdce75f4be2e3f615068abbea5fd50"
 dependencies = [
  "cfg-if",
  "concurrent-queue",
- "hermit-abi 0.5.1",
+ "hermit-abi 0.5.2",
  "pin-project-lite",
  "rustix 1.0.7",
  "tracing",
@@ -5909,7 +5909,7 @@ dependencies = [
 [[package]]
 name = "refineable"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git?branch=main#eb5f59577d637f2ce2dc6da1920b724fa44cf536"
+source = "git+https://github.com/zed-industries/zed.git?branch=main#106b98fbcbc606e385df9a218db773b5e84a21f9"
 dependencies = [
  "derive_refineable 0.1.0 (git+https://github.com/zed-industries/zed.git?branch=main)",
  "workspace-hack",
@@ -5918,7 +5918,7 @@ dependencies = [
 [[package]]
 name = "refineable"
 version = "0.1.0"
-source = "git+https://github.com/huacnlee/zed.git?branch=webview#9ed268f55219404aa9a5258712dbc450aec904c8"
+source = "git+https://github.com/huacnlee/zed.git?branch=webview#8defb01a0422de222bfc4c5b9e776651c17317c0"
 dependencies = [
  "derive_refineable 0.1.0 (git+https://github.com/huacnlee/zed.git?branch=webview)",
  "workspace-hack",
@@ -6013,7 +6013,7 @@ dependencies = [
 [[package]]
 name = "reqwest_client"
 version = "0.1.0"
-source = "git+https://github.com/huacnlee/zed.git?branch=webview#9ed268f55219404aa9a5258712dbc450aec904c8"
+source = "git+https://github.com/huacnlee/zed.git?branch=webview#8defb01a0422de222bfc4c5b9e776651c17317c0"
 dependencies = [
  "anyhow",
  "bytes",
@@ -6414,7 +6414,7 @@ dependencies = [
  "screencapturekit-sys",
  "sysinfo",
  "tao-core-video-sys",
- "windows 0.61.1",
+ "windows 0.61.2",
  "windows-capture",
  "x11",
  "xcb",
@@ -6547,7 +6547,7 @@ checksum = "0f7d95a54511e0c7be3f51e8867aa8cf35148d7b9445d44de2f943e2b206e749"
 [[package]]
 name = "semantic_version"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git?branch=main#eb5f59577d637f2ce2dc6da1920b724fa44cf536"
+source = "git+https://github.com/zed-industries/zed.git?branch=main#106b98fbcbc606e385df9a218db773b5e84a21f9"
 dependencies = [
  "anyhow",
  "serde",
@@ -6557,7 +6557,7 @@ dependencies = [
 [[package]]
 name = "semantic_version"
 version = "0.1.0"
-source = "git+https://github.com/huacnlee/zed.git?branch=webview#9ed268f55219404aa9a5258712dbc450aec904c8"
+source = "git+https://github.com/huacnlee/zed.git?branch=webview#8defb01a0422de222bfc4c5b9e776651c17317c0"
 dependencies = [
  "anyhow",
  "serde",
@@ -7037,7 +7037,7 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 [[package]]
 name = "sum_tree"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git?branch=main#eb5f59577d637f2ce2dc6da1920b724fa44cf536"
+source = "git+https://github.com/zed-industries/zed.git?branch=main#106b98fbcbc606e385df9a218db773b5e84a21f9"
 dependencies = [
  "arrayvec",
  "log",
@@ -7048,7 +7048,7 @@ dependencies = [
 [[package]]
 name = "sum_tree"
 version = "0.1.0"
-source = "git+https://github.com/huacnlee/zed.git?branch=webview#9ed268f55219404aa9a5258712dbc450aec904c8"
+source = "git+https://github.com/huacnlee/zed.git?branch=webview#8defb01a0422de222bfc4c5b9e776651c17317c0"
 dependencies = [
  "arrayvec",
  "log",
@@ -7514,7 +7514,7 @@ dependencies = [
  "serde_json",
  "unindent",
  "uuid",
- "windows 0.61.1",
+ "windows 0.61.2",
 ]
 
 [[package]]
@@ -7621,7 +7621,7 @@ dependencies = [
  "serde_spanned",
  "toml_datetime",
  "toml_write",
- "winnow 0.7.10",
+ "winnow 0.7.11",
 ]
 
 [[package]]
@@ -8212,7 +8212,7 @@ checksum = "b6c140620e7ffbb22c2dee59cafe6084a59b5ffc27a8859a5f0d494b5d52b6be"
 [[package]]
 name = "util"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git?branch=main#eb5f59577d637f2ce2dc6da1920b724fa44cf536"
+source = "git+https://github.com/zed-industries/zed.git?branch=main#106b98fbcbc606e385df9a218db773b5e84a21f9"
 dependencies = [
  "anyhow",
  "async-fs 2.1.2",
@@ -8244,12 +8244,13 @@ dependencies = [
 [[package]]
 name = "util"
 version = "0.1.0"
-source = "git+https://github.com/huacnlee/zed.git?branch=webview#9ed268f55219404aa9a5258712dbc450aec904c8"
+source = "git+https://github.com/huacnlee/zed.git?branch=webview#8defb01a0422de222bfc4c5b9e776651c17317c0"
 dependencies = [
  "anyhow",
  "async-fs 2.1.2",
  "async_zip",
  "collections 0.1.0 (git+https://github.com/huacnlee/zed.git?branch=webview)",
+ "command-fds",
  "dirs 4.0.0",
  "dunce",
  "futures",
@@ -8403,9 +8404,9 @@ checksum = "cccddf32554fecc6acb585f82a32a72e28b48f8c4c1883ddfeeeaa96f7d8e519"
 
 [[package]]
 name = "wasi"
-version = "0.11.0+wasi-snapshot-preview1"
+version = "0.11.1+wasi-snapshot-preview1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c8d87e72b64a3b4db28d11ce29237c246188f4f51057d65a7eab63b7987e423"
+checksum = "ccf3ec651a847eb01de73ccad15eb7d99f80485de043efb2f370cd654f4ea44b"
 
 [[package]]
 name = "wasi"
@@ -8774,9 +8775,9 @@ dependencies = [
 
 [[package]]
 name = "windows"
-version = "0.61.1"
+version = "0.61.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c5ee8f3d025738cb02bad7868bbb5f8a6327501e870bf51f1b455b0a2454a419"
+checksum = "e2b85ac982d24496e0b49912479da8a89c0ba7b1d8bf6de49df12af42e94b325"
 dependencies = [
  "windows-collections",
  "windows-core 0.61.2",
@@ -8794,7 +8795,7 @@ dependencies = [
  "parking_lot",
  "rayon",
  "thiserror 2.0.12",
- "windows 0.61.1",
+ "windows 0.61.2",
  "windows-future",
 ]
 
@@ -8924,9 +8925,9 @@ dependencies = [
 
 [[package]]
 name = "windows-link"
-version = "0.1.1"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76840935b766e1b0a05c0066835fb9ec80071d4c09a16f6bd5f7e655e3c14c38"
+checksum = "d3bfe459f85da17560875b8bf1423d6f113b7a87a5d942e7da0ac71be7c61f8b"
 
 [[package]]
 name = "windows-numerics"
@@ -8946,7 +8947,7 @@ checksum = "4286ad90ddb45071efd1a66dfa43eb02dd0dfbae1545ad6cc3c51cf34d7e8ba3"
 dependencies = [
  "windows-result 0.3.4",
  "windows-strings 0.3.1",
- "windows-targets 0.53.0",
+ "windows-targets 0.53.1",
 ]
 
 [[package]]
@@ -9099,9 +9100,9 @@ dependencies = [
 
 [[package]]
 name = "windows-targets"
-version = "0.53.0"
+version = "0.53.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1e4c7e8ceaaf9cb7d7507c974735728ab453b67ef8f18febdd7c11fe59dca8b"
+checksum = "30357ec391cde730f8fbfcdc29adc47518b06504528df977ab5af02ef23fdee9"
 dependencies = [
  "windows_aarch64_gnullvm 0.53.0",
  "windows_aarch64_msvc 0.53.0",
@@ -9322,9 +9323,9 @@ dependencies = [
 
 [[package]]
 name = "winnow"
-version = "0.7.10"
+version = "0.7.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c06928c8748d81b05c9be96aad92e1b6ff01833332f281e8cfca3be4b35fc9ec"
+checksum = "74c7b26e3480b707944fc872477815d29a8e429d2f93a1ce000f5fa84a15cbcd"
 dependencies = [
  "memchr",
 ]
@@ -9621,7 +9622,7 @@ dependencies = [
  "tracing",
  "uds_windows",
  "windows-sys 0.59.0",
- "winnow 0.7.10",
+ "winnow 0.7.11",
  "zbus_macros",
  "zbus_names",
  "zvariant",
@@ -9650,7 +9651,7 @@ checksum = "7be68e64bf6ce8db94f63e72f0c7eb9a60d733f7e0499e628dfab0f84d6bcb97"
 dependencies = [
  "serde",
  "static_assertions",
- "winnow 0.7.10",
+ "winnow 0.7.11",
  "zvariant",
 ]
 
@@ -9788,7 +9789,7 @@ dependencies = [
  "enumflags2",
  "serde",
  "url",
- "winnow 0.7.10",
+ "winnow 0.7.11",
  "zvariant_derive",
  "zvariant_utils",
 ]
@@ -9817,5 +9818,5 @@ dependencies = [
  "serde",
  "static_assertions",
  "syn 2.0.102",
- "winnow 0.7.10",
+ "winnow 0.7.11",
 ]

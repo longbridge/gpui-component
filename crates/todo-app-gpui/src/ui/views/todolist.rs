@@ -279,7 +279,7 @@ impl ListDelegate for TodoListDelegate {
         row_ix: usize,
         menu: PopupMenu,
         _window: &Window,
-        _cx: &App,
+        cx: &App,
     ) -> PopupMenu {
         println!("Context menu for row: {}", row_ix);
         menu.external_link_icon(true)
@@ -430,14 +430,12 @@ impl TodoList {
     fn open_todo(&mut self, _: &Open, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(todo) = self.selected_company.clone() {
             TodoThreadChat::open(todo, cx);
-           
         }
     }
 
     fn edit_todo(&mut self, _: &Edit, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(todo) = self.selected_company.clone() {
             TodoThreadEdit::edit(todo, cx);
-            
         }
     }
 
@@ -770,7 +768,6 @@ impl Render for TodoList {
                             .ghost()
                             .on_click(cx.listener(|_this, _ev, _widnow, cx| {
                                 TodoThreadEdit::add(cx);
-                                
                             })),
                     ),
             )

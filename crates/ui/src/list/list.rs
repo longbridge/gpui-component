@@ -1,6 +1,3 @@
-use std::time::Duration;
-use std::{cell::Cell, rc::Rc};
-
 use crate::actions::{Cancel, Confirm, SelectNext, SelectPrev};
 use crate::context_menu::ContextMenuExt;
 use crate::input::InputState;
@@ -19,6 +16,9 @@ use gpui::{
 use gpui::{px, App, Context, EventEmitter, MouseDownEvent, ScrollStrategy, Subscription};
 use rust_i18n::t;
 use smol::Timer;
+use std::ops::Range;
+use std::time::Duration;
+use std::{cell::Cell, rc::Rc};
 
 use super::loading::Loading;
 
@@ -530,6 +530,7 @@ where
                 })
                 .on_double_click(cx.listener(|this, ev, window, cx| {
                     this.on_double_click(ev, window, cx);
+                    cx.stop_propagation();
                 }))
                 .on_mouse_down(
                     MouseButton::Left,
@@ -634,13 +635,17 @@ where
                     .context_menu({
                         let view = view.clone();
                         move |this, window: &mut Window, cx: &mut Context<PopupMenu>| {
-                            if let Some(row_ix) = view.read(cx).right_clicked_index {
+                            println!("Context menu for list {:?}",view.read(cx).right_clicked_index);
+                           let menu= if let Some(row_ix) = view.read(cx).right_clicked_index {
+                                 println!("Context menu for list {}",row_ix);
                                 view.read(cx)
                                     .delegate
                                     .context_menu(row_ix, this, window, cx)
                             } else {
                                 this
-                            }
+                            };
+                            cx.notify();
+                            menu
                         }
                     })
                     .map(|this| {
@@ -658,26 +663,29 @@ where
                                     })
                                     .when(items_count > 0, |this| {
                                         this.child(
-                                            uniform_list(view, "uniform-list", items_count, {
-                                                move |list, visible_range, window, cx| {
-                                                    list.load_more_if_need(
-                                                        items_count,
-                                                        visible_range.end,
-                                                        window,
-                                                        cx,
-                                                    );
+                                            uniform_list("uniform-list", items_count, cx.processor(
+                                                    move |list, visible_range: Range<usize>, window, cx| {
+                                                        list.load_more_if_need(
+                                                            items_count,
+                                                            visible_range.end,
+                                                            window,
+                                                            cx,
+                                                        );
 
-                                                    visible_range
-                                                        .map(|ix| {
-                                                            list.render_list_item(ix, window, cx)
-                                                        })
-                                                        .collect::<Vec<_>>()
-                                                }
-                                            })
+                                                        visible_range
+                                                            .map(|ix| {
+                                                                list.render_list_item(
+                                                                    ix, window, cx,
+                                                                )
+                                                            })
+                                                            .collect::<Vec<_>>()
+                                                    },
+                                                ),
+                                            )
                                             .flex_grow()
                                             .with_sizing_behavior(sizing_behavior)
                                             .track_scroll(vertical_scroll_handle)
-                                            .into_any_element(),
+                                            .into_any_element()
                                         )
                                     })
                                     .children(self.render_scrollbar(window, cx)),
