@@ -6,7 +6,7 @@ use gpui_component::{
     button::{Button, ButtonGroup, ButtonVariants},
     indicator::Indicator,
     label::Label,
-    list::{List, ListDelegate, ListItem},
+    list::{List, ListDelegate, ListEvent, ListItem},
     popup_menu::PopupMenu,
     tab::TabBar,
     *,
@@ -235,10 +235,10 @@ impl ListDelegate for TodoListDelegate {
         Task::ready(())
     }
 
-    fn confirm(&mut self, secondary: bool, window: &mut Window, cx: &mut Context<List<Self>>) {
-        println!("Confirmed with secondary: {}", secondary);
-        window.dispatch_action(Box::new(SelectedCompany), cx);
-    }
+    // fn confirm(&mut self, secondary: bool, window: &mut Window, cx: &mut Context<List<Self>>) {
+    //     // println!("Confirmed with secondary: {}", secondary);
+    //     // window.dispatch_action(Box::new(SelectedCompany), cx);
+    // }
 
     fn on_double_click(
         &mut self,
@@ -253,9 +253,10 @@ impl ListDelegate for TodoListDelegate {
     fn set_selected_index(
         &mut self,
         ix: Option<usize>,
-        _: &mut Window,
+        window: &mut Window,
         cx: &mut Context<List<Self>>,
     ) {
+        println!("Selected index: {:?}", ix);
         self.selected_index = ix;
         cx.notify();
     }
@@ -279,11 +280,12 @@ impl ListDelegate for TodoListDelegate {
         row_ix: usize,
         menu: PopupMenu,
         _window: &Window,
-        cx: &App,
+        _cx: &App,
     ) -> PopupMenu {
         println!("Context menu for row: {}", row_ix);
+        // self.selected_index = Some(row_ix);
         menu.external_link_icon(true)
-            // .link("About", "https://github.com/longbridge/gpui-component")
+            //  .link("About", "https://github.com/longbridge/gpui-component")
             .menu("打开", Box::new(Open))
             .menu("编辑", Box::new(Edit))
             .separator()
@@ -364,7 +366,7 @@ impl TodoList {
         let delegate = TodoListDelegate {
             matched_companies: companies.clone(),
             companies,
-            selected_index: Some(0),
+            selected_index: None,
             confirmed_index: None,
             query: "".to_string(),
             loading: false,
@@ -376,19 +378,21 @@ impl TodoList {
         //     list.set_selected_index(Some(3), cx);
         // });
 
-        let _subscriptions = vec![
-            // cx.subscribe(&company_list, |_, _, ev: &ListEvent, _| match ev {
-            //     ListEvent::Select(ix) => {
-            //         println!("List Selected: {:?}", ix);
-            //     }
-            //     ListEvent::Confirm(ix) => {
-            //         println!("List Confirmed: {:?}", ix);
-            //     }
-            //     ListEvent::Cancel => {
-            //         println!("List Cancelled");
-            //     }
-            // }),
-        ];
+        let _subscriptions =
+            vec![
+                cx.subscribe(&company_list, |this, entiry, ev: &ListEvent, cx| match ev {
+                    ListEvent::Select(ix) => {
+                        println!("List Selected: {:?}", ix);
+                    }
+                    ListEvent::Confirm(ix) => {
+                        this.selected_company(cx);
+                        println!("List Confirmed: {:?}", ix);
+                    }
+                    ListEvent::Cancel => {
+                        println!("List Cancelled");
+                    }
+                }),
+            ];
 
         // Spawn a background to random refresh the list
         // cx.spawn(async move |this, cx| {
@@ -418,7 +422,14 @@ impl TodoList {
         }
     }
 
-    fn selected_company(&mut self, _: &SelectedCompany, _: &mut Window, cx: &mut Context<Self>) {
+    // fn selected_company(&mut self, _: &SelectedCompany, _: &mut Window, cx: &mut Context<Self>) {
+    //     println!("Selected company action triggered");
+    //     let picker = self.company_list.read(cx);
+    //     self.selected_company = picker.delegate().selected_company();
+    // }
+
+    fn selected_company(&mut self, cx: &mut Context<Self>) {
+        println!("Selected company action triggered");
         let picker = self.company_list.read(cx);
         self.selected_company = picker.delegate().selected_company();
     }
@@ -428,7 +439,10 @@ impl TodoList {
     }
 
     fn open_todo(&mut self, _: &Open, window: &mut Window, cx: &mut Context<Self>) {
+        // self.company_list.update(cx, update)
+        println!("Open action triggered");
         if let Some(todo) = self.selected_company.clone() {
+            println!("Opening todo: {}", todo.title);
             TodoThreadChat::open(todo, cx);
         }
     }
@@ -708,7 +722,7 @@ impl Render for TodoList {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .track_focus(&self.focus_handle)
-            .on_action(cx.listener(Self::selected_company))
+            //  .on_action(cx.listener(Self::selected_company))
             .on_action(cx.listener(Self::clone))
             .on_action(cx.listener(Self::open_todo))
             .on_action(cx.listener(Self::edit_todo))

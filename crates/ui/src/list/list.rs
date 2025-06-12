@@ -16,7 +16,7 @@ use gpui::{
 use gpui::{px, App, Context, EventEmitter, MouseDownEvent, ScrollStrategy, Subscription};
 use rust_i18n::t;
 use smol::Timer;
-use std::ops::Range;
+use std::ops::{DerefMut, Range};
 use std::time::Duration;
 use std::{cell::Cell, rc::Rc};
 
@@ -637,7 +637,6 @@ where
                         move |this, window: &mut Window, cx: &mut Context<PopupMenu>| {
                             println!("Context menu for list {:?}",view.read(cx).right_clicked_index);
                            let menu= if let Some(row_ix) = view.read(cx).right_clicked_index {
-                                 println!("Context menu for list {}",row_ix);
                                 view.read(cx)
                                     .delegate
                                     .context_menu(row_ix, this, window, cx)
