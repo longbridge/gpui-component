@@ -52,7 +52,7 @@ impl Styled for PopoverContent {
 impl Render for PopoverContent {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
-            .with_style(&self.style)
+            .refine_style(&self.style)
             .track_focus(&self.focus_handle)
             .key_context(CONTEXT)
             .on_action(cx.listener(|_, _: &Cancel, _, cx| {
