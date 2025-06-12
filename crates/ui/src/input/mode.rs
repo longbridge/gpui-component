@@ -61,6 +61,10 @@ pub enum InputMode {
 }
 
 impl InputMode {
+    pub(super) fn is_code_editor(&self) -> bool {
+        matches!(self, InputMode::CodeEditor { .. })
+    }
+
     pub(super) fn set_rows(&mut self, new_rows: usize) {
         match self {
             InputMode::MultiLine { rows, .. } => {

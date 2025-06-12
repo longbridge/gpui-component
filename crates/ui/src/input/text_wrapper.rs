@@ -95,15 +95,6 @@ impl TextWrapper {
             prev_line_ix += line.len() + 1;
         }
 
-        // Add last empty line.
-        if text.chars().last().unwrap_or('\n') == '\n' {
-            wrapped_lines.push(text.len()..text.len());
-            lines.push(LineWrap {
-                wrap_lines: 0,
-                range: text.len()..text.len(),
-            });
-        }
-
         self.text = text;
         self.wrapped_lines = wrapped_lines;
         self.lines = lines;
