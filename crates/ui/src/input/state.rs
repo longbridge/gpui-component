@@ -477,6 +477,16 @@ impl InputState {
         cx.notify();
     }
 
+    fn reset_highlighter(&mut self, cx: &mut Context<Self>) {
+        match &mut self.mode {
+            InputMode::CodeEditor { highlighter, .. } => {
+                *highlighter.borrow_mut() = None;
+            }
+            _ => {}
+        }
+        cx.notify();
+    }
+
     /// Set markers, only for [`InputMode::CodeEditor`] mode.
     ///
     /// For example to set the diagnostic markers in the code editor.
@@ -715,6 +725,7 @@ impl InputState {
         let text: SharedString = text.into();
         let range = 0..self.text.chars().map(|c| c.len_utf16()).sum();
         self.replace_text_in_range(Some(range), &text, window, cx);
+        self.reset_highlighter(cx);
     }
 
     /// Set with disabled mode.
