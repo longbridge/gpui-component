@@ -1,5 +1,6 @@
 use super::HighlightTheme;
 use crate::highlighter::LanguageRegistry;
+use anyhow::{anyhow, Context, Result};
 use gpui::{App, HighlightStyle, SharedString};
 use indexset::BTreeMap;
 use std::{
@@ -44,21 +45,34 @@ pub struct SyntaxHighlighter {
 impl SyntaxHighlighter {
     /// Create a new SyntaxHighlighter for HTML.
     pub fn new(lang: &str, cx: &App) -> Self {
-        Self::build_combined_injections_query(&lang, cx).unwrap_or_else(|| panic!(
-            "failed to build language {}, please make sure have registered the language in LanguageRegistry",
-            lang
-        ))
+        match Self::build_combined_injections_query(&lang, cx) {
+            Ok(result) => result,
+            Err(err) => {
+                tracing::warn!(
+                    "SyntaxHighlighter init failed, fallback to use `text`, {}",
+                    err
+                );
+                Self::build_combined_injections_query("text", cx).unwrap()
+            }
+        }
     }
 
     /// Build the combined injections query for the given language.
     ///
     /// https://github.com/tree-sitter/tree-sitter/blob/v0.25.5/highlight/src/lib.rs#L336
-    fn build_combined_injections_query(lang: &str, cx: &App) -> Option<Self> {
+    fn build_combined_injections_query(lang: &str, cx: &App) -> Result<Self> {
         let registry = LanguageRegistry::global(cx);
-        let config = registry.language(&lang)?;
+        let Some(config) = registry.language(&lang) else {
+            return Err(anyhow!(
+                "language {:?} is not registered in `LanguageRegistry`",
+                lang
+            ));
+        };
 
         let mut parser = Parser::new();
-        _ = parser.set_language(&config.language);
+        parser
+            .set_language(&config.language)
+            .context("parse set_language")?;
 
         // Concatenate the query strings, keeping track of the start offset of each section.
         let mut query_source = String::new();
@@ -70,12 +84,7 @@ impl SyntaxHighlighter {
 
         // Construct a single query by concatenating the three query strings, but record the
         // range of pattern indices that belong to each individual string.
-        let query = match Query::new(&config.language, &query_source) {
-            Ok(query) => Some(query),
-            Err(err) => {
-                panic!("failed create Query for language {}, err: {}", lang, err);
-            }
-        }?;
+        let query = Query::new(&config.language, &query_source).context("new query")?;
 
         let mut locals_pattern_index = 0;
         let mut highlights_pattern_index = 0;
@@ -164,7 +173,7 @@ impl SyntaxHighlighter {
 
         // let highlight_indices = vec![None; query.capture_names().len()];
 
-        Some(Self {
+        Ok(Self {
             language: config.name.clone(),
             query: Some(query),
             injection_queries,

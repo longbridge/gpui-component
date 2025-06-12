@@ -2,6 +2,7 @@ use gpui::SharedString;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, enum_iterator::Sequence)]
 pub enum Language {
+    Plain,
     Bash,
     C,
     CMake,
@@ -78,6 +79,7 @@ impl Language {
 
     pub fn name(&self) -> &'static str {
         match self {
+            Self::Plain => "text",
             Self::Bash => "bash",
             Self::C => "c",
             Self::CMake => "cmake",
@@ -113,41 +115,41 @@ impl Language {
         }
     }
 
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn from_str(s: &str) -> Self {
         match s {
-            "bash" | "sh" => Some(Self::Bash),
-            "c" => Some(Self::C),
-            "cmake" => Some(Self::CMake),
-            "cpp" | "c++" => Some(Self::Cpp),
-            "csharp" | "cs" => Some(Self::CSharp),
-            "css" | "scss" => Some(Self::Css),
-            "diff" => Some(Self::Diff),
-            "ejs" => Some(Self::Ejs),
-            "elixir" | "ex" => Some(Self::Elixir),
-            "erb" => Some(Self::Erb),
-            "go" => Some(Self::Go),
-            "graphql" => Some(Self::GraphQL),
-            "html" => Some(Self::Html),
-            "java" => Some(Self::Java),
-            "javascript" | "js" => Some(Self::JavaScript),
-            "jsdoc" => Some(Self::JsDoc),
-            "json" | "jsonc" => Some(Self::Json),
-            "make" | "makefile" => Some(Self::Make),
-            "markdown" | "md" | "mdx" => Some(Self::Markdown),
-            "markdown_inline" | "markdown-inline" => Some(Self::MarkdownInline),
-            "proto" | "protobuf" => Some(Self::Proto),
-            "python" | "py" => Some(Self::Python),
-            "ruby" | "rb" => Some(Self::Ruby),
-            "rust" | "rs" => Some(Self::Rust),
-            "scala" => Some(Self::Scala),
-            "sql" => Some(Self::Sql),
-            "swift" => Some(Self::Swift),
-            "toml" => Some(Self::Toml),
-            "tsx" => Some(Self::Tsx),
-            "typescript" | "ts" => Some(Self::TypeScript),
-            "yaml" | "yml" => Some(Self::Yaml),
-            "zig" => Some(Self::Zig),
-            _ => None,
+            "bash" | "sh" => Self::Bash,
+            "c" => Self::C,
+            "cmake" => Self::CMake,
+            "cpp" | "c++" => Self::Cpp,
+            "csharp" | "cs" => Self::CSharp,
+            "css" | "scss" => Self::Css,
+            "diff" => Self::Diff,
+            "ejs" => Self::Ejs,
+            "elixir" | "ex" => Self::Elixir,
+            "erb" => Self::Erb,
+            "go" => Self::Go,
+            "graphql" => Self::GraphQL,
+            "html" => Self::Html,
+            "java" => Self::Java,
+            "javascript" | "js" => Self::JavaScript,
+            "jsdoc" => Self::JsDoc,
+            "json" | "jsonc" => Self::Json,
+            "make" | "makefile" => Self::Make,
+            "markdown" | "md" | "mdx" => Self::Markdown,
+            "markdown_inline" | "markdown-inline" => Self::MarkdownInline,
+            "proto" | "protobuf" => Self::Proto,
+            "python" | "py" => Self::Python,
+            "ruby" | "rb" => Self::Ruby,
+            "rust" | "rs" => Self::Rust,
+            "scala" => Self::Scala,
+            "sql" => Self::Sql,
+            "swift" => Self::Swift,
+            "toml" => Self::Toml,
+            "tsx" => Self::Tsx,
+            "typescript" | "ts" => Self::TypeScript,
+            "yaml" | "yml" => Self::Yaml,
+            "zig" => Self::Zig,
+            _ => Self::Plain,
         }
     }
 
@@ -182,6 +184,7 @@ impl Language {
     /// (language, query, injection, locals)
     pub(super) fn config(&self) -> LanguageConfig {
         let (language, query, injection, locals) = match self {
+            Self::Plain => (tree_sitter_json::LANGUAGE, "", "", ""),
             Self::Json => (
                 tree_sitter_json::LANGUAGE,
                 include_str!("languages/json/highlights.scm"),
