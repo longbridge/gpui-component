@@ -1244,7 +1244,11 @@ impl InputState {
     pub(super) fn enter(&mut self, action: &Enter, window: &mut Window, cx: &mut Context<Self>) {
         if self.is_multi_line() {
             // Get current line indent
-            let indent = self.indent_of_next_line(window, cx);
+            let indent = if self.mode.is_code_editor() {
+                self.indent_of_next_line(window, cx)
+            } else {
+                "".to_string()
+            };
 
             // Add newline and indent
             let new_line_text = format!("\n{}", indent);
