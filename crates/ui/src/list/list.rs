@@ -4,12 +4,12 @@ use std::{cell::Cell, rc::Rc};
 
 use crate::actions::{Cancel, Confirm, SelectNext, SelectPrev};
 use crate::input::InputState;
+use crate::{h_flex, Icon, Sizable as _};
 use crate::{
     input::{InputEvent, TextInput},
     scroll::{Scrollbar, ScrollbarState},
     v_flex, ActiveTheme, IconName, Size,
 };
-use crate::{Icon, Sizable as _};
 use gpui::{
     div, prelude::FluentBuilder, uniform_list, AnyElement, AppContext, Entity, FocusHandle,
     Focusable, InteractiveElement, IntoElement, KeyBinding, Length, ListSizingBehavior,
@@ -73,7 +73,12 @@ pub trait ListDelegate: Sized + 'static {
 
     /// Return a Element to show when list is empty.
     fn render_empty(&self, window: &mut Window, cx: &mut Context<List<Self>>) -> impl IntoElement {
-        div()
+        h_flex()
+            .size_full()
+            .justify_center()
+            .text_color(cx.theme().muted_foreground.opacity(0.6))
+            .child(Icon::new(IconName::Inbox).size_12())
+            .into_any_element()
     }
 
     /// Returns Some(AnyElement) to render the initial state of the list.
