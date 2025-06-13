@@ -377,22 +377,21 @@ impl TodoList {
         // company_list.update(cx, |list, cx| {
         //     list.set_selected_index(Some(3), cx);
         // });
-
-        let _subscriptions =
-            vec![
-                cx.subscribe(&company_list, |this, entiry, ev: &ListEvent, cx| match ev {
-                    ListEvent::Select(ix) => {
-                        println!("List Selected: {:?}", ix);
-                    }
-                    ListEvent::Confirm(ix) => {
-                        this.selected_company(cx);
-                        println!("List Confirmed: {:?}", ix);
-                    }
-                    ListEvent::Cancel => {
-                        println!("List Cancelled");
-                    }
-                }),
-            ];
+        let _subscriptions = vec![cx.subscribe(
+            &company_list,
+            |this, _company_list, ev: &ListEvent, cx| match ev {
+                ListEvent::Select(ix) => {
+                    println!("List Selected: {:?}", ix);
+                }
+                ListEvent::Confirm(ix) => {
+                    this.selected_company(cx);
+                    println!("List Confirmed: {:?}", ix);
+                }
+                ListEvent::Cancel => {
+                    println!("List Cancelled");
+                }
+            },
+        )];
 
         // Spawn a background to random refresh the list
         // cx.spawn(async move |this, cx| {
