@@ -202,12 +202,12 @@ impl MaskPattern {
                     return false;
                 }
 
-                // only one symbol is valid
+                // only one sign is valid
                 if int_part.chars().filter(is_sign).collect::<Vec<_>>().len() > 1 {
                     return false;
                 }
 
-                // symbol is not valid if not at the beginning
+                // sign is only valid at the beginning of the string
                 if int_part.chars().position(|ch| is_sign(&ch)) > Some(0) {
                     return false;
                 }
@@ -300,8 +300,8 @@ impl MaskPattern {
                     // Reverse the integer part for easier grouping
                     let mut chars: Vec<char> = int_part.chars().rev().collect();
 
-                    // Removing the symbol from formatting to avoid cases such as: -,123
-                    let maybe_symbol = if let Some(pos) = chars.iter().position(is_sign) {
+                    // Removing the sign from formatting to avoid cases such as: -,123
+                    let maybe_signed = if let Some(pos) = chars.iter().position(is_sign) {
                         Some(chars.remove(pos))
                     } else {
                         None
@@ -326,8 +326,8 @@ impl MaskPattern {
                         int_with_sep
                     };
 
-                    let final_str = if let Some(symbol) = maybe_symbol {
-                        format!("{}{}", symbol, final_str)
+                    let final_str = if let Some(sign) = maybe_signed {
+                        format!("{}{}", sign, final_str)
                     } else {
                         final_str
                     };
@@ -608,19 +608,19 @@ mod tests {
         assert_eq!(mask.is_valid("+1234567."), true);
         assert_eq!(mask.is_valid("+1234567.89"), true);
 
-        // Only one symbol is valid
+        // Only one sign is valid
         assert_eq!(mask.is_valid("+-"), false);
         assert_eq!(mask.is_valid("-+"), false);
         assert_eq!(mask.is_valid("+-1234567"), false);
 
-        // No symbol is valid in the middle of the number
+        // No sign is valid in the middle of the number
         assert_eq!(mask.is_valid("1,-234,567"), false);
         assert_eq!(mask.is_valid("12-34567.89"), false);
 
-        // Symbols in fractions are invalid
+        // Signs in fractions are invalid
         assert_eq!(mask.is_valid("+1234567.-"), false);
 
-        // The separator does not show up before the symbol i.e. -,123
+        // The separator does not show up before the sign i.e. -,123
         assert_eq!(mask.mask("-123"), "-123");
 
         assert_eq!(mask.mask("-1234567"), "-1,234,567");
