@@ -44,19 +44,14 @@ impl Settings {
 }
 
 impl Settings {
-    pub fn open(init_view: Option<&str>, window: &mut Window, cx: &mut App) {
+    pub fn open(init_view: Option<&str>, cx: &mut App) {
         cx.activate(true);
-
         let window_size = size(px(1024.0), px(920.0));
         let window_bounds = Bounds::centered(None, window_size, cx);
         let options = WindowOptions {
             app_id: Some("x-todo-app".to_string()),
             window_bounds: Some(WindowBounds::Windowed(window_bounds)),
             titlebar: Some(TitleBar::title_bar_options()),
-            // window_min_size: Some(gpui::Size {
-            //     width: px(800.),
-            //     height: px(800.),
-            // }),
             kind: WindowKind::PopUp,
             #[cfg(target_os = "linux")]
             window_background: gpui::WindowBackgroundAppearance::Transparent,
@@ -64,11 +59,17 @@ impl Settings {
             window_decorations: Some(gpui::WindowDecorations::Client),
             ..Default::default()
         };
+        let init_view = if let Some(init_view) = init_view {
+            init_view.to_string()
+        } else {
+            "个人资料".to_string()
+        };
         cx.create_normal_window("设置", options, move |window, cx| {
-            Settings::view(Some("服务提供商"), window, cx)
+            cx.new(|cx| Self::new(&init_view, window, cx))
         });
     }
-    fn new(init_view: Option<&str>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+
+    fn new(init_view: &str, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let search_input = cx.new(|cx| InputState::new(window, cx).placeholder("Search..."));
         let _subscriptions = vec![cx.subscribe(&search_input, |this, _, e, cx| match e {
             InputEvent::Change(_) => {
@@ -110,10 +111,7 @@ impl Settings {
             side: Side::Left,
         };
 
-        if let Some(init_view) = init_view {
-            this.set_active_story(init_view, cx);
-        }
-
+        this.set_active_story(init_view, cx);
         this
     }
 
@@ -137,10 +135,6 @@ impl Settings {
                 return;
             }
         }
-    }
-
-    fn view(init_view: Option<&str>, window: &mut Window, cx: &mut App) -> Entity<Self> {
-        cx.new(|cx| Self::new(init_view, window, cx))
     }
 }
 
