@@ -203,25 +203,19 @@ impl MaskPattern {
                 }
 
                 // only one symbol is valid
-                if int_part
-                    .chars()
-                    .filter(is_digit_sign)
-                    .collect::<Vec<_>>()
-                    .len()
-                    > 1
-                {
+                if int_part.chars().filter(is_sign).collect::<Vec<_>>().len() > 1 {
                     return false;
                 }
 
                 // symbol is not valid if not at the beginning
-                if int_part.chars().position(|ch| is_digit_sign(&ch)) > Some(0) {
+                if int_part.chars().position(|ch| is_sign(&ch)) > Some(0) {
                     return false;
                 }
 
                 // check if the integer part is valid
                 if !int_part
                     .chars()
-                    .all(|ch| ch.is_ascii_digit() || is_digit_sign(&ch) || Some(ch) == *separator)
+                    .all(|ch| ch.is_ascii_digit() || is_sign(&ch) || Some(ch) == *separator)
                 {
                     return false;
                 }
@@ -307,14 +301,14 @@ impl MaskPattern {
                     let mut chars: Vec<char> = int_part.chars().rev().collect();
 
                     // Removing the symbol from formatting to avoid cases such as: -,123
-                    let maybe_symbol = if let Some(pos) = chars.iter().position(is_digit_sign) {
+                    let maybe_symbol = if let Some(pos) = chars.iter().position(is_sign) {
                         Some(chars.remove(pos))
                     } else {
                         None
                     };
 
                     let mut result = String::new();
-                    for (i, ch) in chars.iter().filter(|ch| !is_digit_sign(ch)).enumerate() {
+                    for (i, ch) in chars.iter().filter(|ch| !is_sign(ch)).enumerate() {
                         if i > 0 && i % 3 == 0 {
                             result.push(sep);
                         }
@@ -410,7 +404,7 @@ impl MaskPattern {
     }
 }
 
-fn is_digit_sign(ch: &char) -> bool {
+fn is_sign(ch: &char) -> bool {
     matches!(ch, '+' | '-')
 }
 
