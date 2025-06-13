@@ -1,0 +1,9 @@
+[package]
+name = "pkg-example"
+version = "0.3.2"
+edition = "2024"
+
+[package.metadata.bundle.example.example1]
+name = "test-example"
+identifier = "io.github.longbridge.wef.tests.example"
+category = "Utility"

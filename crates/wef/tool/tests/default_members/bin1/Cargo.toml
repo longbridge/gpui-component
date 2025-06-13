@@ -1,0 +1,9 @@
+[package]
+name = "bin1"
+version = "0.5.0"
+edition = "2024"
+
+[package.metadata.bundle.bin.bin1]
+name = "test-bin1"
+identifier = "io.github.longbridge.wef.tests.bin1"
+category = "Utility"

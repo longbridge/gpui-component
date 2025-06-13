@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Text Input</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 20px;
+      }
+      h1 {
+        color: #333;
+      }
+      label {
+        display: block;
+        margin-top: 10px;
+        font-weight: bold;
+      }
+      input[type="text"],
+      textarea {
+        width: 100%;
+        padding: 10px;
+        margin-top: 5px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        font-size: 16px;
+      }
+      textarea {
+        resize: vertical;
+      }
+      button {
+        margin-top: 10px;
+        background-color: #007bff;
+        color: white;
+        border: none;
+        padding: 10px 15px;
+        cursor: pointer;
+      }
+      button:hover {
+        background-color: #0056b3;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Text Input</h1>
+    <form id="textInputForm">
+      <label for="singleLineInput">Single Line Text:</label>
+      <input
+        type="text"
+        id="singleLineInput"
+        placeholder="Enter single line text here"
+      />
+
+      <label for="multiLineInput">Multi-line Text:</label>
+      <textarea
+        id="multiLineInput"
+        rows="5"
+        placeholder="Enter multi-line text here"
+      ></textarea>
+
+      <button type="button" onclick="submitText()">Submit</button>
+    </form>
+    <p id="output"></p>
+
+    <script>
+      function submitText() {
+        const singleLineInput =
+          document.getElementById("singleLineInput").value;
+        const multiLineInput = document.getElementById("multiLineInput").value;
+        const output = document.getElementById("output");
+
+        output.innerHTML = `
+                <strong>Single Line Text:</strong> ${singleLineInput}<br>
+                <strong>Multi-line Text:</strong><br>${multiLineInput.replace(
+                  /\n/g,
+                  "<br>"
+                )}
+            `;
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,9 @@
+[package]
+name = "package-bin"
+version = "0.3.0"
+edition = "2024"
+
+[package.metadata.bundle]
+name = "test-package-bin"
+identifier = "io.github.longbridge.wef.tests.package-bin"
+category = "Utility"
