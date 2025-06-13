@@ -202,7 +202,7 @@ impl MaskPattern {
                     return false;
                 }
 
-                // Only one symbol is valid
+                // only one symbol is valid
                 if int_part
                     .chars()
                     .filter(|ch| is_digit_sign(*ch))
@@ -210,6 +210,11 @@ impl MaskPattern {
                     .len()
                     > 1
                 {
+                    return false;
+                }
+
+                // symbol is not valid if not at the beginning
+                if int_part.chars().position(|ch| is_digit_sign(ch)) > Some(0) {
                     return false;
                 }
 
@@ -601,6 +606,10 @@ mod tests {
         assert_eq!(mask.is_valid("+-"), false);
         assert_eq!(mask.is_valid("-+"), false);
         assert_eq!(mask.is_valid("+-1234567"), false);
+
+        // No symbol is valid in the middle of the number
+        assert_eq!(mask.is_valid("1,-234,567"), false);
+        assert_eq!(mask.is_valid("12-34567.89"), false);
 
         // Symbols in fractions are invalid
         assert_eq!(mask.is_valid("+1234567.-"), false);
