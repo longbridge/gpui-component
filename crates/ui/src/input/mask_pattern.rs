@@ -202,10 +202,21 @@ impl MaskPattern {
                     return false;
                 }
 
+                // Only one symbol is valid
+                if int_part
+                    .chars()
+                    .filter(|ch| is_digit_sign(*ch))
+                    .collect::<Vec<_>>()
+                    .len()
+                    > 1
+                {
+                    return false;
+                }
+
                 // check if the integer part is valid
                 if !int_part
                     .chars()
-                    .all(|ch| ch.is_ascii_digit() || Some(ch) == *separator)
+                    .all(|ch| ch.is_ascii_digit() || is_digit_sign(ch) || Some(ch) == *separator)
                 {
                     return false;
                 }
@@ -376,6 +387,13 @@ impl MaskPattern {
             }
             Self::None => mask_text.to_owned(),
         }
+    }
+}
+
+fn is_digit_sign(ch: char) -> bool {
+    match ch {
+        '+' | '-' => true,
+        _ => false,
     }
 }
 
@@ -558,5 +576,39 @@ mod tests {
         };
 
         assert_eq!(mask.mask("1234567.1234567"), "1,234,567");
+    }
+
+    #[test]
+    fn test_signed_number_numbers() {
+        let mask = MaskPattern::Number {
+            separator: Some(','),
+            fraction: Some(2),
+        };
+
+        assert_eq!(mask.is_valid("-"), true);
+        assert_eq!(mask.is_valid("-1234567"), true);
+        assert_eq!(mask.is_valid("-1,234,567"), true);
+        assert_eq!(mask.is_valid("-1234567."), true);
+        assert_eq!(mask.is_valid("-1234567.89"), true);
+
+        assert_eq!(mask.is_valid("+"), true);
+        assert_eq!(mask.is_valid("+1234567"), true);
+        assert_eq!(mask.is_valid("+1,234,567"), true);
+        assert_eq!(mask.is_valid("+1234567."), true);
+        assert_eq!(mask.is_valid("+1234567.89"), true);
+
+        // Only one symbol is valid
+        assert_eq!(mask.is_valid("+-"), false);
+        assert_eq!(mask.is_valid("-+"), false);
+        assert_eq!(mask.is_valid("+-1234567"), false);
+
+        // Symbols in fractions are invalid
+        assert_eq!(mask.is_valid("+1234567.-"), false);
+
+        assert_eq!(mask.mask("-1234567"), "-1,234,567");
+        assert_eq!(mask.mask("+1234567"), "+1,234,567");
+        assert_eq!(mask.unmask("-1,234,567"), "-1234567");
+        assert_eq!(mask.mask("-1234567."), "-1,234,567.");
+        assert_eq!(mask.mask("-1234567.89"), "-1,234,567.89");
     }
 }
