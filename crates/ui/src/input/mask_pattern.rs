@@ -308,7 +308,7 @@ impl MaskPattern {
                     };
 
                     let mut result = String::new();
-                    for (i, ch) in chars.iter().filter(|ch| !is_sign(ch)).enumerate() {
+                    for (i, ch) in chars.iter().enumerate() {
                         if i > 0 && i % 3 == 0 {
                             result.push(sep);
                         }
