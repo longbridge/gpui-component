@@ -205,7 +205,7 @@ impl MaskPattern {
                 // only one symbol is valid
                 if int_part
                     .chars()
-                    .filter(|ch| is_digit_sign(*ch))
+                    .filter(is_digit_sign)
                     .collect::<Vec<_>>()
                     .len()
                     > 1
@@ -214,14 +214,14 @@ impl MaskPattern {
                 }
 
                 // symbol is not valid if not at the beginning
-                if int_part.chars().position(|ch| is_digit_sign(ch)) > Some(0) {
+                if int_part.chars().position(|ch| is_digit_sign(&ch)) > Some(0) {
                     return false;
                 }
 
                 // check if the integer part is valid
                 if !int_part
                     .chars()
-                    .all(|ch| ch.is_ascii_digit() || is_digit_sign(ch) || Some(ch) == *separator)
+                    .all(|ch| ch.is_ascii_digit() || is_digit_sign(&ch) || Some(ch) == *separator)
                 {
                     return false;
                 }
@@ -304,9 +304,17 @@ impl MaskPattern {
                     });
 
                     // Reverse the integer part for easier grouping
-                    let chars: Vec<char> = int_part.chars().rev().collect();
+                    let mut chars: Vec<char> = int_part.chars().rev().collect();
+
+                    // Removing the symbol from formatting to avoid cases such as: -,123
+                    let maybe_symbol = if let Some(pos) = chars.iter().position(is_digit_sign) {
+                        Some(chars.remove(pos))
+                    } else {
+                        None
+                    };
+
                     let mut result = String::new();
-                    for (i, ch) in chars.iter().enumerate() {
+                    for (i, ch) in chars.iter().filter(|ch| !is_digit_sign(ch)).enumerate() {
                         if i > 0 && i % 3 == 0 {
                             result.push(sep);
                         }
@@ -323,6 +331,13 @@ impl MaskPattern {
                     } else {
                         int_with_sep
                     };
+
+                    let final_str = if let Some(symbol) = maybe_symbol {
+                        format!("{}{}", symbol, final_str)
+                    } else {
+                        final_str
+                    };
+
                     return final_str.into();
                 }
 
@@ -395,11 +410,8 @@ impl MaskPattern {
     }
 }
 
-fn is_digit_sign(ch: char) -> bool {
-    match ch {
-        '+' | '-' => true,
-        _ => false,
-    }
+fn is_digit_sign(ch: &char) -> bool {
+    matches!(ch, '+' | '-')
 }
 
 #[cfg(test)]
@@ -613,6 +625,9 @@ mod tests {
 
         // Symbols in fractions are invalid
         assert_eq!(mask.is_valid("+1234567.-"), false);
+
+        // The separator does not show up before the symbol i.e. -,123
+        assert_eq!(mask.mask("-123"), "-123");
 
         assert_eq!(mask.mask("-1234567"), "-1,234,567");
         assert_eq!(mask.mask("+1234567"), "+1,234,567");
