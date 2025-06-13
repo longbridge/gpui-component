@@ -83,30 +83,8 @@ impl Render for AppTitleBar {
                             .icon(IconName::Settings)
                             .small()
                             .ghost()
-                            .on_click(|_, _, cx| {
-                                cx.activate(true);
-
-                                let window_size = size(px(1024.0), px(920.0));
-                                let window_bounds = Bounds::centered(None, window_size, cx);
-                                let options = WindowOptions {
-                                    app_id: Some("x-todo-app".to_string()),
-                                    window_bounds: Some(WindowBounds::Windowed(window_bounds)),
-                                    titlebar: None,
-                                    // window_min_size: Some(gpui::Size {
-                                    //     width: px(800.),
-                                    //     height: px(800.),
-                                    // }),
-                                    kind: WindowKind::PopUp,
-                                    #[cfg(target_os = "linux")]
-                                    window_background:
-                                        gpui::WindowBackgroundAppearance::Transparent,
-                                    #[cfg(target_os = "linux")]
-                                    window_decorations: Some(gpui::WindowDecorations::Client),
-                                    ..Default::default()
-                                };
-                                cx.create_normal_window("设置", options, move |window, cx| {
-                                    Settings::view(Some("服务提供商"), window, cx)
-                                });
+                            .on_click(|_, window, cx| {
+                                Settings::open(Some("服务提供商"), window, cx)
                             }),
                     )
                     .child(

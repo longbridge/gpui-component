@@ -2,6 +2,7 @@ use super::{
     introduction::Introduction, mcp_provider::McpProvider, profile::Profile, provider::LlmProvider,
     user_guide::UserGuide,
 };
+use crate::ui::AppExt;
 use crate::{
     app::{Quit, ToggleSearch},
     ui::components::container::Container,
@@ -11,8 +12,8 @@ use gpui::*;
 use gpui_component::{
     input::{InputEvent, InputState},
     resizable::{h_resizable, resizable_panel, ResizableState},
-    sidebar::{Sidebar, SidebarFooter, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuItem},white,
-    *,
+    sidebar::{Sidebar, SidebarFooter, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuItem},
+    white, *,
 };
 use serde::Deserialize;
 
@@ -43,7 +44,31 @@ impl Settings {
 }
 
 impl Settings {
-    pub fn new(init_view: Option<&str>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn open(init_view: Option<&str>, window: &mut Window, cx: &mut App) {
+        cx.activate(true);
+
+        let window_size = size(px(1024.0), px(920.0));
+        let window_bounds = Bounds::centered(None, window_size, cx);
+        let options = WindowOptions {
+            app_id: Some("x-todo-app".to_string()),
+            window_bounds: Some(WindowBounds::Windowed(window_bounds)),
+            titlebar: Some(TitleBar::title_bar_options()),
+            // window_min_size: Some(gpui::Size {
+            //     width: px(800.),
+            //     height: px(800.),
+            // }),
+            kind: WindowKind::PopUp,
+            #[cfg(target_os = "linux")]
+            window_background: gpui::WindowBackgroundAppearance::Transparent,
+            #[cfg(target_os = "linux")]
+            window_decorations: Some(gpui::WindowDecorations::Client),
+            ..Default::default()
+        };
+        cx.create_normal_window("设置", options, move |window, cx| {
+            Settings::view(Some("服务提供商"), window, cx)
+        });
+    }
+    fn new(init_view: Option<&str>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let search_input = cx.new(|cx| InputState::new(window, cx).placeholder("Search..."));
         let _subscriptions = vec![cx.subscribe(&search_input, |this, _, e, cx| match e {
             InputEvent::Change(_) => {
@@ -114,7 +139,7 @@ impl Settings {
         }
     }
 
-    pub fn view(init_view: Option<&str>, window: &mut Window, cx: &mut App) -> Entity<Self> {
+    fn view(init_view: Option<&str>, window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| Self::new(init_view, window, cx))
     }
 }
