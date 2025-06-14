@@ -983,6 +983,10 @@ impl LlmProviderConfigManager {
         self.configs.get(index)
     }
 
+    pub fn get_config_mut(&mut self, index: usize) -> Option<&mut LlmProviderInfo> {
+        self.configs.get_mut(index)
+    }
+
     pub fn get_config_by_name(&self, name: &str) -> Option<&LlmProviderInfo> {
         self.configs.iter().find(|c| c.name == name)
     }
