@@ -134,7 +134,6 @@ impl ModelCapability {
     }
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelLimits {
     pub context_length: Option<u32>,
@@ -158,13 +157,12 @@ impl Default for ModelLimits {
 
 #[derive(Debug, Clone)]
 pub struct ModelInfo {
-     pub id: String,
+    pub id: String,
     display_name: String,
     capabilities: Vec<ModelCapability>,
     enabled: bool,
     pub limits: ModelLimits,
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RetryConfig {
@@ -194,7 +192,7 @@ pub struct LlmProviderInfo {
     api_type: ApiType,
     enabled: bool,
     models: Vec<ModelInfo>,
-     retry_config: RetryConfig,
+    retry_config: RetryConfig,
 }
 
 impl Default for LlmProviderInfo {
@@ -217,14 +215,14 @@ impl Default for LlmProviderInfo {
                         ModelCapability::Tools,
                     ],
                     enabled: true,
-                    limits:ModelLimits::default(),
+                    limits: ModelLimits::default(),
                 },
                 ModelInfo {
-                     id: uuid::Uuid::new_v4().to_string(),
+                    id: uuid::Uuid::new_v4().to_string(),
                     display_name: "gpt-4o-mini".to_string(),
                     capabilities: vec![ModelCapability::Text, ModelCapability::Tools],
                     enabled: true,
-                    limits:ModelLimits::default(),
+                    limits: ModelLimits::default(),
                 },
             ],
         }
@@ -295,7 +293,7 @@ impl LlmProvider {
         anthropic_provider.api_type = ApiType::Anthropic;
         anthropic_provider.models = vec![
             ModelInfo {
-                 id: uuid::Uuid::new_v4().to_string(),
+                id: uuid::Uuid::new_v4().to_string(),
                 display_name: "claude-3.5-sonnet".to_string(),
                 capabilities: vec![
                     ModelCapability::Text,
@@ -303,14 +301,14 @@ impl LlmProvider {
                     ModelCapability::Tools,
                 ],
                 enabled: true,
-                limits:ModelLimits::default(),
+                limits: ModelLimits::default(),
             },
             ModelInfo {
-                 id: uuid::Uuid::new_v4().to_string(),
+                id: uuid::Uuid::new_v4().to_string(),
                 display_name: "claude-3-haiku".to_string(),
                 capabilities: vec![ModelCapability::Text, ModelCapability::Tools],
                 enabled: true,
-                limits:ModelLimits::default(),
+                limits: ModelLimits::default(),
             },
         ];
 
@@ -320,7 +318,7 @@ impl LlmProvider {
         gemini_provider.api_type = ApiType::Gemini;
         gemini_provider.models = vec![
             ModelInfo {
-                 id: uuid::Uuid::new_v4().to_string(),
+                id: uuid::Uuid::new_v4().to_string(),
                 display_name: "gemini-2.5-pro-exp-03-25".to_string(),
                 capabilities: vec![
                     ModelCapability::Text,
@@ -329,10 +327,10 @@ impl LlmProvider {
                     ModelCapability::Tools,
                 ],
                 enabled: true,
-                 limits:ModelLimits::default(),
+                limits: ModelLimits::default(),
             },
             ModelInfo {
-                 id: uuid::Uuid::new_v4().to_string(),
+                id: uuid::Uuid::new_v4().to_string(),
                 display_name: "gemini-2.5-pro-preview-03-25".to_string(),
                 capabilities: vec![
                     ModelCapability::Text,
@@ -341,7 +339,7 @@ impl LlmProvider {
                     ModelCapability::Tools,
                 ],
                 enabled: true,
-                 limits:ModelLimits::default(),
+                limits: ModelLimits::default(),
             },
         ];
 
@@ -616,75 +614,7 @@ impl LlmProvider {
         v_flex().gap_4().child(
             v_flex()
                 .gap_2()
-                // .child(
-                //     h_flex()
-                //         .gap_4()
-                //         // .child(
-                //         //     v_flex()
-                //         //         .gap_1()
-                //         //         .flex_1()
-                //         //         .child(
-                //         //             div()
-                //         //                 .text_sm()
-                //         //                 .font_medium()
-                //         //                 .text_color(gpui::rgb(0x374151))
-                //         //                 .child("API 类型"),
-                //         //         )
-                //         //         .child(
-                //         //             div()
-                //         //                 .px_2()
-                //         //                 .bg(gpui::rgb(0xDDD6FE))
-                //         //                 .text_color(gpui::rgb(0x7C3AED))
-                //         //                 .rounded_md()
-                //         //                 .text_sm()
-                //         //                 .child(provider.api_type.as_str()),
-                //         //         ),
-                //         // )
-                //         .child(
-                //             v_flex()
-                //                 .gap_1()
-                //                 .flex_1()
-                //                 .child(
-                //                     div()
-                //                         .text_sm()
-                //                         .font_medium()
-                //                         .text_color(gpui::rgb(0x374151))
-                //                         .child("服务状态"),
-                //                 )
-                //                 .child(
-                //                     h_flex()
-                //                         .items_center()
-                //                         .gap_2()
-                //                         .child(
-                //                             Icon::new(if provider.enabled {
-                //                                 IconName::CircleCheck
-                //                             } else {
-                //                                 IconName::CircleX
-                //                             })
-                //                             .small()
-                //                             .text_color(if provider.enabled {
-                //                                 gpui::rgb(0x059669)
-                //                             } else {
-                //                                 gpui::rgb(0xDC2626)
-                //                             }),
-                //                         )
-                //                         .child(
-                //                             div()
-                //                                 .text_sm()
-                //                                 .text_color(if provider.enabled {
-                //                                     gpui::rgb(0x059669)
-                //                                 } else {
-                //                                     gpui::rgb(0xDC2626)
-                //                                 })
-                //                                 .child(if provider.enabled {
-                //                                     "已启用"
-                //                                 } else {
-                //                                     "已禁用"
-                //                                 }),
-                //                         ),
-                //                 ),
-                //         ),
-                // )
+                
                 .child(
                     v_flex()
                         .gap_1()
