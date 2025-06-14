@@ -36,6 +36,7 @@ pub enum IconName {
     CircleUser,
     CircleX,
     Close,
+    Code,
     Copy,
     Dash,
     Database,
@@ -57,6 +58,7 @@ pub enum IconName {
     Inbox,
     Info,
     Inspector,
+    Layers,
     LayoutDashboard,
     LetterText,
     Loader,
@@ -115,6 +117,7 @@ pub enum IconName {
     WindowRestore,
     Wrench,
     X,
+    Shuffle,Sparkles,FolderTree,Terminal,Wifi,Radio,Zap,Video
 }
 
 impl IconName {
@@ -149,6 +152,7 @@ impl IconName {
             Self::CircleUser => "icons/circle-user.svg",
             Self::CircleX => "icons/circle-x.svg",
             Self::Close => "icons/close.svg",
+            Self::Code => "icons/code.svg",
             Self::Copy => "icons/copy.svg",
             Self::Dash => "icons/dash.svg",
             Self::Database => "icons/database.svg",
@@ -170,6 +174,7 @@ impl IconName {
             Self::Inbox => "icons/inbox.svg",
             Self::Info => "icons/info.svg",
             Self::Inspector => "icons/inspector.svg",
+            Self::Layers => "icons/layers.svg",
             Self::LayoutDashboard => "icons/layout-dashboard.svg",
             Self::LetterText => "icons/letter-text.svg",
             Self::Loader => "icons/loader.svg",
@@ -228,6 +233,14 @@ impl IconName {
             Self::WindowRestore => "icons/window-restore.svg",
             Self::Wrench => "icons/wrench.svg",
             Self::X => "icons/x.svg",
+            Self::Shuffle => "icons/shuffle.svg",
+            Self::Sparkles => "icons/sparkles.svg",
+            Self::FolderTree => "icons/folder-tree.svg",
+            Self::Terminal => "icons/terminal.svg",
+            Self::Wifi => "icons/wifi.svg",
+            Self::Radio => "icons/radio.svg",
+            Self::Zap => "icons/zap.svg",
+            Self::Video => "icons/video.svg",
         }
         .into()
     }

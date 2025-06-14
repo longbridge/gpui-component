@@ -11,15 +11,17 @@ fake = { version = "4.3.0", features = ["dummy"] }
 gpui = { git = "https://github.com/huacnlee/zed.git", branch = "webview" }
 gpui-component = { workspace = true, features = ["webview"] }
 # story = { workspace = true }
-rand = "0.8"
+rand = "0.9.1"
 raw-window-handle = { version = "0.6", features = ["std"] }
 regex = "1"
 reqwest_client = { git = "https://github.com/huacnlee/zed.git", branch = "webview" }
 rust-embed = "8.5.0"
 serde = "1"
-serde_json = "1"
+serde_json = "1.0.140"
 unindent = "0.2.3"
 uuid = "1.17.0"
+serde_yaml="0.9.33"
+tempfile="3.10.0"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.61.1", features = [

@@ -4,6 +4,7 @@
 )]
 mod app;
 mod ui;
+mod models;
 
 fn main() {
     app::run();

@@ -698,8 +698,9 @@ fn random_todo() -> Todo {
         "制定下阶段目标，明确重点任务和负责人，提升执行力。",
         "安排项目复盘，总结得失，提出改进建议，持续优化流程。",
     ];
+use rand::prelude::IndexedRandom;
 
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let name: String = Name().fake();
     let title_tpl = TITLES.choose(&mut rng).unwrap();
     let desc_tpl = DESCS.choose(&mut rng).unwrap();
