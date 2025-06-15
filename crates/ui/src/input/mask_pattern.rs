@@ -202,13 +202,18 @@ impl MaskPattern {
                     return false;
                 }
 
-                // only one sign is valid
-                if int_part.chars().filter(is_sign).collect::<Vec<_>>().len() > 1 {
-                    return false;
-                }
+                let sign_positions: Vec<usize> = int_part
+                    .chars()
+                    .enumerate()
+                    .filter_map(|(i, ch)| match is_sign(&ch) {
+                        true => Some(i),
+                        false => None,
+                    })
+                    .collect();
 
+                // only one sign is valid
                 // sign is only valid at the beginning of the string
-                if int_part.chars().position(|ch| is_sign(&ch)) > Some(0) {
+                if sign_positions.len() > 1 || sign_positions.first() > Some(&0) {
                     return false;
                 }
 
@@ -404,6 +409,7 @@ impl MaskPattern {
     }
 }
 
+#[inline]
 fn is_sign(ch: &char) -> bool {
     matches!(ch, '+' | '-')
 }
