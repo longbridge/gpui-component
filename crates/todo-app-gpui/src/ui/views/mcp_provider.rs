@@ -758,8 +758,9 @@ impl Render for McpProvider {
                                         )
                                         .child(
                                             div().mt_2().child(
-                                                Self::render_capability_content_static(
+                                                self.render_capability_content_interactive(
                                                     &provider_clone,
+                                                    index,
                                                     active_capability_tabs
                                                         .get(&index)
                                                         .copied()
@@ -895,15 +896,19 @@ impl McpProvider {
         }
     }
 
-    // 修改静态方法，移除cx参数，因为静态方法中无法使用listener
-    fn render_resources_content_static(
-        resources: &[McpResource],
+    // 将静态方法改为实例方法，支持资源订阅交互
+    fn render_resources_content_interactive(
+        &mut self,
+        provider_index: usize,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
+        let provider = &self.providers[provider_index];
+
         v_flex()
             .gap_2()
             .children(
-                resources
+                provider
+                    .resources
                     .iter()
                     .enumerate()
                     .map(|(resource_index, resource)| {
@@ -977,23 +982,29 @@ impl McpProvider {
                                                 )
                                             }),
                                     )
-                                    // 注意：在静态方法中无法使用cx.listener，所以这里暂时显示静态状态
-                                    // 如果需要交互功能，应该使用非静态的render方法
                                     .when(resource.subscribable, |this| {
                                         this.child(
-                                            Switch::new(("resource-subscription", resource_index))
-                                                .checked(resource.subscribed)
-                                                .on_click(cx.listener(
-                                                    move |this, checked, window, cx| {
-                                                        this.toggle_resource_subscription_by_index(
-                                                            0, // 假设只有一个提供商
-                                                            resource_index,
-                                                            *checked,
-                                                            window,
-                                                            cx,
-                                                        );
-                                                    },
+                                            Switch::new((
+                                                SharedString::new(format!(
+                                                    "resource-subscription-{}",
+                                                    provider_index
                                                 )),
+                                                resource_index,
+                                            ))
+                                            .checked(resource.subscribed)
+                                            .on_click({
+                                                let provider_index = provider_index;
+                                                let resource_index = resource_index;
+                                                cx.listener(move |view, checked, window, cx| {
+                                                    view.toggle_resource_subscription_by_index(
+                                                        provider_index,
+                                                        resource_index,
+                                                        *checked,
+                                                        window,
+                                                        cx,
+                                                    );
+                                                })
+                                            }),
                                         )
                                     }),
                             )
@@ -1011,7 +1022,7 @@ impl McpProvider {
                             )
                     }),
             )
-            .when(resources.is_empty(), |this| {
+            .when(provider.resources.is_empty(), |this| {
                 this.child(
                     div()
                         .text_sm()
@@ -1021,18 +1032,17 @@ impl McpProvider {
             })
     }
 
-    // 修改调用位置，移除cx参数
-    fn render_capability_content_static(
+    // 修改能力内容渲染方法，使用交互式资源组件
+    fn render_capability_content_interactive(
+        &mut self,
         provider: &McpProviderInfo,
+        provider_index: usize,
         tab_index: usize,
-        cx: &mut Context<Self>, // 这个参数现在用不到，可以加下划线
+        cx: &mut Context<Self>,
     ) -> impl IntoElement {
         div().child(match tab_index {
             0 => div().child(Self::render_config_content_static(provider)),
-            1 => div().child(Self::render_resources_content_static(
-                &provider.resources,
-                cx,
-            )), // 移除cx参数
+            1 => div().child(self.render_resources_content_interactive(provider_index, cx)),
             2 => div().child(Self::render_tools_content_static(&provider.tools)),
             3 => div().child(Self::render_prompts_content_static(&provider.prompts)),
             4 => div().child(Self::render_logging_content_static()),
