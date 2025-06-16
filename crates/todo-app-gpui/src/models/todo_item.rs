@@ -115,7 +115,7 @@ pub struct SelectedTool {
 
 /// Todo项目主结构
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TodoItem {
+pub struct Todo {
     pub id: String,
     pub title: String,
     pub description: String,
@@ -151,7 +151,7 @@ pub struct TodoItem {
     pub last_execution_result: Option<String>,
 }
 
-impl Default for TodoItem {
+impl Default for Todo {
     fn default() -> Self {
         let now = Utc::now();
         Self {
@@ -179,7 +179,7 @@ impl Default for TodoItem {
     }
 }
 
-impl TodoItem {
+impl Todo {
     /// 创建新的Todo项目
     pub fn new(title: String, description: String) -> Self {
         Self {
@@ -427,7 +427,7 @@ const TODO_CONFIG_FILE: &str = "config/todos.yml";
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TodoManager {
     #[serde(flatten, default)]
-    pub todos: HashMap<String, TodoItem>,
+    pub todos: HashMap<String, Todo>,
 }
 
 impl TodoManager {
@@ -467,20 +467,20 @@ impl TodoManager {
     }
 
     /// 获取所有Todo列表
-    pub fn list_todos(&self) -> Vec<TodoItem> {
-        let mut todos: Vec<TodoItem> = self.todos.values().cloned().collect();
+    pub fn list_todos(&self) -> Vec<Todo> {
+        let mut todos: Vec<Todo> = self.todos.values().cloned().collect();
         // 按更新时间倒序排列
         todos.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
         todos
     }
 
     /// 根据ID查询Todo
-    pub fn get_todo(&self, id: &str) -> Option<&TodoItem> {
+    pub fn get_todo(&self, id: &str) -> Option<&Todo> {
         self.todos.get(id)
     }
 
     /// 根据状态筛选Todo
-    pub fn get_todos_by_status(&self, status: TodoStatus) -> Vec<TodoItem> {
+    pub fn get_todos_by_status(&self, status: TodoStatus) -> Vec<Todo> {
         self.todos
             .values()
             .filter(|todo| todo.status == status)
@@ -489,7 +489,7 @@ impl TodoManager {
     }
 
     /// 根据优先级筛选Todo
-    pub fn get_todos_by_priority(&self, priority: TodoPriority) -> Vec<TodoItem> {
+    pub fn get_todos_by_priority(&self, priority: TodoPriority) -> Vec<Todo> {
         self.todos
             .values()
             .filter(|todo| todo.priority == priority)
@@ -498,7 +498,7 @@ impl TodoManager {
     }
 
     /// 获取过期的Todo
-    pub fn get_overdue_todos(&self) -> Vec<TodoItem> {
+    pub fn get_overdue_todos(&self) -> Vec<Todo> {
         self.todos
             .values()
             .filter(|todo| todo.is_overdue())
@@ -507,7 +507,7 @@ impl TodoManager {
     }
 
     /// 获取需要提醒的Todo
-    pub fn get_reminder_todos(&self) -> Vec<TodoItem> {
+    pub fn get_reminder_todos(&self) -> Vec<Todo> {
         self.todos
             .values()
             .filter(|todo| todo.needs_reminder())
@@ -516,14 +516,14 @@ impl TodoManager {
     }
 
     /// 添加新的Todo
-    pub fn add_todo(&mut self, todo: TodoItem) -> anyhow::Result<String> {
+    pub fn add_todo(&mut self, todo: Todo) -> anyhow::Result<String> {
         let id = todo.id.clone();
         self.todos.insert(id.clone(), todo);
         Ok(id)
     }
 
     /// 更新Todo
-    pub fn update_todo(&mut self, id: &str, mut todo: TodoItem) -> anyhow::Result<()> {
+    pub fn update_todo(&mut self, id: &str, mut todo: Todo) -> anyhow::Result<()> {
         if !self.todos.contains_key(id) {
             return Err(anyhow::anyhow!("Todo with id '{}' not found", id));
         }
@@ -534,14 +534,14 @@ impl TodoManager {
     }
 
     /// 删除Todo
-    pub fn delete_todo(&mut self, id: &str) -> anyhow::Result<TodoItem> {
+    pub fn delete_todo(&mut self, id: &str) -> anyhow::Result<Todo> {
         self.todos
             .remove(id)
             .ok_or_else(|| anyhow::anyhow!("Todo with id '{}' not found", id))
     }
 
     /// 批量删除Todo
-    pub fn batch_delete(&mut self, ids: &[String]) -> Vec<TodoItem> {
+    pub fn batch_delete(&mut self, ids: &[String]) -> Vec<Todo> {
         let mut deleted = Vec::new();
         for id in ids {
             if let Some(todo) = self.todos.remove(id) {
@@ -552,7 +552,7 @@ impl TodoManager {
     }
 
     /// 搜索Todo
-    pub fn search_todos(&self, query: &str) -> Vec<TodoItem> {
+    pub fn search_todos(&self, query: &str) -> Vec<Todo> {
         let query_lower = query.to_lowercase();
         self.todos
             .values()
@@ -627,7 +627,7 @@ mod tests {
 
     #[test]
     fn test_todo_creation() {
-        let todo = TodoItem::new("Test Todo".to_string(), "This is a test todo".to_string());
+        let todo = Todo::new("Test Todo".to_string(), "This is a test todo".to_string());
 
         assert_eq!(todo.title, "Test Todo");
         assert_eq!(todo.description, "This is a test todo");
@@ -637,7 +637,7 @@ mod tests {
 
     #[test]
     fn test_todo_completion() {
-        let mut todo = TodoItem::new("Test Todo".to_string(), "This is a test todo".to_string());
+        let mut todo = Todo::new("Test Todo".to_string(), "This is a test todo".to_string());
 
         todo.mark_completed();
         assert_eq!(todo.status, TodoStatus::Done);
@@ -650,7 +650,7 @@ mod tests {
 
     #[test]
     fn test_todo_toggle_completion() {
-        let mut todo = TodoItem::new("Test Todo".to_string(), "Test".to_string());
+        let mut todo = Todo::new("Test Todo".to_string(), "Test".to_string());
 
         // Initially not completed
         assert_eq!(todo.status, TodoStatus::Todo);
@@ -669,7 +669,7 @@ mod tests {
 
     #[test]
     fn test_todo_status_transitions() {
-        let mut todo = TodoItem::new("Test Todo".to_string(), "Test".to_string());
+        let mut todo = Todo::new("Test Todo".to_string(), "Test".to_string());
 
         // Set to in progress
         todo.set_status(TodoStatus::InProgress);
@@ -689,7 +689,7 @@ mod tests {
 
     #[test]
     fn test_todo_priority() {
-        let mut todo = TodoItem::new("Test Todo".to_string(), "Test".to_string());
+        let mut todo = Todo::new("Test Todo".to_string(), "Test".to_string());
 
         assert_eq!(todo.priority, TodoPriority::Medium);
 
@@ -702,7 +702,7 @@ mod tests {
 
     #[test]
     fn test_todo_files() {
-        let mut todo = TodoItem::new("Test Todo".to_string(), "Test".to_string());
+        let mut todo = Todo::new("Test Todo".to_string(), "Test".to_string());
 
         assert!(todo.files.is_empty());
 
@@ -724,7 +724,7 @@ mod tests {
 
     #[test]
     fn test_todo_execution_logs() {
-        let mut todo = TodoItem::new("Test Todo".to_string(), "Test".to_string());
+        let mut todo = Todo::new("Test Todo".to_string(), "Test".to_string());
 
         assert!(todo.execution_logs.is_empty());
 
@@ -741,7 +741,7 @@ mod tests {
 
     #[test]
     fn test_todo_overdue_check() {
-        let mut todo = TodoItem::new("Test Todo".to_string(), "Test".to_string());
+        let mut todo = Todo::new("Test Todo".to_string(), "Test".to_string());
 
         // No due date set
         assert!(!todo.is_overdue());
@@ -762,7 +762,7 @@ mod tests {
 
     #[test]
     fn test_todo_reminder_check() {
-        let mut todo = TodoItem::new("Test Todo".to_string(), "Test".to_string());
+        let mut todo = Todo::new("Test Todo".to_string(), "Test".to_string());
 
         // No reminder date set
         assert!(!todo.needs_reminder());
@@ -785,7 +785,7 @@ mod tests {
     fn test_todo_manager() {
         let mut manager = TodoManager::default();
 
-        let todo = TodoItem::new("Test Todo".to_string(), "This is a test todo".to_string());
+        let todo = Todo::new("Test Todo".to_string(), "This is a test todo".to_string());
 
         let id = manager.add_todo(todo.clone()).unwrap();
         assert_eq!(manager.count(), 1);
@@ -801,15 +801,15 @@ mod tests {
     fn test_todo_manager_filtering() {
         let mut manager = TodoManager::default();
 
-        let mut todo1 = TodoItem::new("Todo 1".to_string(), "Description 1".to_string());
+        let mut todo1 = Todo::new("Todo 1".to_string(), "Description 1".to_string());
         todo1.set_status(TodoStatus::Done);
         todo1.set_priority(TodoPriority::High);
 
-        let mut todo2 = TodoItem::new("Todo 2".to_string(), "Description 2".to_string());
+        let mut todo2 = Todo::new("Todo 2".to_string(), "Description 2".to_string());
         todo2.set_status(TodoStatus::InProgress);
         todo2.set_priority(TodoPriority::Low);
 
-        let mut todo3 = TodoItem::new("Todo 3".to_string(), "Description 3".to_string());
+        let mut todo3 = Todo::new("Todo 3".to_string(), "Description 3".to_string());
         todo3.set_priority(TodoPriority::High);
 
         manager.add_todo(todo1).unwrap();
@@ -842,12 +842,12 @@ mod tests {
     fn test_todo_manager_search() {
         let mut manager = TodoManager::default();
 
-        let todo1 = TodoItem::new("Buy groceries".to_string(), "Milk, bread, eggs".to_string());
-        let todo2 = TodoItem::new(
+        let todo1 = Todo::new("Buy groceries".to_string(), "Milk, bread, eggs".to_string());
+        let todo2 = Todo::new(
             "Walk the dog".to_string(),
             "30 minutes in the park".to_string(),
         );
-        let todo3 = TodoItem::new(
+        let todo3 = Todo::new(
             "Write code".to_string(),
             "Implement new features".to_string(),
         );
@@ -880,9 +880,9 @@ mod tests {
     fn test_todo_manager_batch_operations() {
         let mut manager = TodoManager::default();
 
-        let todo1 = TodoItem::new("Todo 1".to_string(), "Description 1".to_string());
-        let todo2 = TodoItem::new("Todo 2".to_string(), "Description 2".to_string());
-        let todo3 = TodoItem::new("Todo 3".to_string(), "Description 3".to_string());
+        let todo1 = Todo::new("Todo 1".to_string(), "Description 1".to_string());
+        let todo2 = Todo::new("Todo 2".to_string(), "Description 2".to_string());
+        let todo3 = Todo::new("Todo 3".to_string(), "Description 3".to_string());
 
         let id1 = manager.add_todo(todo1).unwrap();
         let id2 = manager.add_todo(todo2).unwrap();
@@ -908,16 +908,16 @@ mod tests {
     fn test_todo_manager_statistics() {
         let mut manager = TodoManager::default();
 
-        let mut todo1 = TodoItem::new("Todo 1".to_string(), "Description 1".to_string());
+        let mut todo1 = Todo::new("Todo 1".to_string(), "Description 1".to_string());
         todo1.set_status(TodoStatus::Done);
 
-        let mut todo2 = TodoItem::new("Todo 2".to_string(), "Description 2".to_string());
+        let mut todo2 = Todo::new("Todo 2".to_string(), "Description 2".to_string());
         todo2.set_status(TodoStatus::InProgress);
 
-        let mut todo3 = TodoItem::new("Todo 3".to_string(), "Description 3".to_string());
+        let mut todo3 = Todo::new("Todo 3".to_string(), "Description 3".to_string());
         todo3.set_status(TodoStatus::Cancelled);
 
-        let mut todo4 = TodoItem::new("Todo 4".to_string(), "Description 4".to_string());
+        let mut todo4 = Todo::new("Todo 4".to_string(), "Description 4".to_string());
         todo4.due_date = Some(Utc::now() - chrono::Duration::days(1)); // Overdue
 
         manager.add_todo(todo1).unwrap();
@@ -980,7 +980,7 @@ mod tests {
     fn test_todo_update() {
         let mut manager = TodoManager::default();
 
-        let todo = TodoItem::new(
+        let todo = Todo::new(
             "Original Title".to_string(),
             "Original Description".to_string(),
         );
@@ -998,7 +998,7 @@ mod tests {
         assert_eq!(retrieved.description, "Updated Description");
 
         // Test updating non-existent todo
-        let result = manager.update_todo("non-existent", TodoItem::default());
+        let result = manager.update_todo("non-existent", Todo::default());
         assert!(result.is_err());
     }
 }
