@@ -287,6 +287,7 @@ impl RenderOnce for Modal {
         let on_close = self.on_close.clone();
         let on_ok = self.on_ok.clone();
         let on_cancel = self.on_cancel.clone();
+        let has_footer = self.footer.is_some();
 
         let render_ok: RenderButtonFn = Box::new({
             let on_ok = on_ok.clone();
@@ -397,7 +398,7 @@ impl RenderOnce for Modal {
                             .rounded(border_radius)
                             .shadow_xl()
                             .min_h_24()
-                            .py_4()
+                            .pt_4()
                             .gap_4()
                             .refine_style(&self.style)
                             .key_context(CONTEXT)
@@ -469,18 +470,21 @@ impl RenderOnce for Modal {
                                     v_flex()
                                         .scrollable(window.current_view(), ScrollbarAxis::Vertical)
                                         .px_4()
+                                        .when(!has_footer, |this| this.pb_4())
                                         .child(self.content),
                                 ),
                             )
                             .when(self.footer.is_some(), |this| {
                                 let footer = self.footer.unwrap();
 
-                                this.child(h_flex().px_4().gap_2().justify_end().children(footer(
-                                    render_ok,
-                                    render_cancel,
-                                    window,
-                                    cx,
-                                )))
+                                this.child(
+                                    h_flex()
+                                        .px_4()
+                                        .pb_4()
+                                        .gap_2()
+                                        .justify_end()
+                                        .children(footer(render_ok, render_cancel, window, cx)),
+                                )
                             })
                             .with_animation(
                                 "slide-down",
