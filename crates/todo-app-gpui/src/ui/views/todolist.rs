@@ -446,6 +446,22 @@ impl TodoList {
 
     fn set_todo_filter(&mut self, filter: TodoFilter, _: &mut Window, cx: &mut Context<Self>) {
         self.todo_filter = filter;
+        self.todo_list.update(cx, |list, _cx| {
+            let todos = list.delegate_mut().todos.clone();
+            list.delegate_mut().matched_todos = match filter {
+                TodoFilter::All => todos,
+                TodoFilter::Planned => todos
+                    .into_iter()
+                    .filter(|todo| todo.status == TodoStatus::Todo)
+                    .collect(),
+                TodoFilter::Completed => todos
+                    .into_iter()
+                    .filter(|todo| todo.status == TodoStatus::Done)
+                    .collect(),
+            };
+            list.delegate_mut().selected_index = None;
+            list.delegate_mut().confirmed_index = None;
+        });
         cx.notify();
     }
 
