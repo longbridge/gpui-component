@@ -97,6 +97,20 @@ impl LlmProvider {
         }
     }
 
+    // 刷新提供商列表
+    fn refresh_providers(&mut self, cx: &mut Context<Self>) {
+        self.providers = self.llm_provider_manager.list_providers();
+        cx.notify();
+    }
+
+    // 保存配置到文件
+    fn save_config(&mut self) {
+        println!("正在保存配置...");
+        if let Err(e) = self.llm_provider_manager.save() {
+            eprintln!("保存配置失败: {}", e);
+        }
+    }
+
     fn tab(&mut self, _: &Tab1, window: &mut Window, cx: &mut Context<Self>) {
         self.cycle_focus(true, window, cx);
     }
@@ -106,8 +120,9 @@ impl LlmProvider {
     }
 
     fn add_provider(&mut self, _: &AddProvider, window: &mut Window, cx: &mut Context<Self>) {
+        let new_provider = LlmProviderInfo::default();
         let new_index = self.providers.len();
-        self.providers.push(LlmProviderInfo::default());
+        self.providers.push(new_provider);
         self.expanded_providers.push(new_index);
         self.start_editing(new_index, window, cx);
         cx.notify();
@@ -140,6 +155,7 @@ impl LlmProvider {
                 self.providers.get_mut(index),
                 self.provider_inputs.get(&index),
             ) {
+                // 更新提供商信息
                 provider.name = inputs.name_input.read(cx).value().to_string();
                 provider.api_url = inputs.api_url_input.read(cx).value().to_string();
                 provider.api_key = inputs.api_key_input.read(cx).value().to_string();
@@ -153,6 +169,52 @@ impl LlmProvider {
                         "Azure-OpenAI" => ApiType::AzureOpenAI,
                         _ => ApiType::OpenAI,
                     };
+                }
+
+                // 检查是否为新创建的提供商
+                let is_new_provider = provider.id.is_empty()
+                    || self
+                        .llm_provider_manager
+                        .get_provider(&provider.id)
+                        .is_none();
+
+                if is_new_provider {
+                    // 新建提供商 - 使用 add_provider
+                    provider.id = uuid::Uuid::new_v4().to_string();
+                    match self.llm_provider_manager.add_provider(provider.clone()) {
+                        Ok(id) => {
+                            provider.id = id;
+                            window.push_notification(
+                                format!("成功添加服务提供商 \"{}\"", provider.name),
+                                cx,
+                            );
+                            self.save_config();
+                            self.refresh_providers(cx);
+                        }
+                        Err(e) => {
+                            window.push_notification(format!("添加服务提供商失败: {}", e), cx);
+                            return;
+                        }
+                    }
+                } else {
+                    // 更新现有提供商 - 使用 update_provider
+                    match self
+                        .llm_provider_manager
+                        .update_provider(&provider.id, provider.clone())
+                    {
+                        Ok(_) => {
+                            window.push_notification(
+                                format!("成功更新服务提供商 \"{}\"", provider.name),
+                                cx,
+                            );
+                            self.save_config();
+                            self.refresh_providers(cx);
+                        }
+                        Err(e) => {
+                            window.push_notification(format!("更新服务提供商失败: {}", e), cx);
+                            return;
+                        }
+                    }
                 }
             }
         }
@@ -211,29 +273,46 @@ impl LlmProvider {
         cx: &mut Context<Self>,
     ) {
         if index < self.providers.len() {
-            let provider_name = self.providers[index].name.clone();
-            self.providers.remove(index);
-            self.provider_inputs.remove(&index);
+            let provider = &self.providers[index];
+            let provider_name = provider.name.clone();
+            let provider_id = provider.id.clone();
 
-            // 更新展开状态
-            self.expanded_providers.retain(|&i| i != index);
-            self.expanded_providers = self
-                .expanded_providers
-                .iter()
-                .map(|&i| if i > index { i - 1 } else { i })
-                .collect();
+            // 使用 LlmProviderManager 删除提供商
+            match self.llm_provider_manager.delete_provider(&provider_id) {
+                Ok(_) => {
+                    // 从本地列表中删除
+                    self.providers.remove(index);
+                    self.provider_inputs.remove(&index);
 
-            // 如果正在编辑被删除的提供商，清除编辑状态
-            if self.editing_provider == Some(index) {
-                self.editing_provider = None;
-            } else if let Some(editing) = self.editing_provider {
-                if editing > index {
-                    self.editing_provider = Some(editing - 1);
+                    // 更新展开状态
+                    self.expanded_providers.retain(|&i| i != index);
+                    self.expanded_providers = self
+                        .expanded_providers
+                        .iter()
+                        .map(|&i| if i > index { i - 1 } else { i })
+                        .collect();
+
+                    // 如果正在编辑被删除的提供商，清除编辑状态
+                    if self.editing_provider == Some(index) {
+                        self.editing_provider = None;
+                    } else if let Some(editing) = self.editing_provider {
+                        if editing > index {
+                            self.editing_provider = Some(editing - 1);
+                        }
+                    }
+
+                    // 保存配置并刷新
+                    self.save_config();
+                    window.push_notification(
+                        format!("已成功删除服务提供商 \"{}\"", provider_name),
+                        cx,
+                    );
+                    cx.notify();
+                }
+                Err(e) => {
+                    window.push_notification(format!("删除服务提供商失败: {}", e), cx);
                 }
             }
-
-            window.push_notification(format!("已成功删除服务提供商 \"{}\"", provider_name), cx);
-            cx.notify();
         }
     }
 
@@ -245,14 +324,29 @@ impl LlmProvider {
         cx: &mut Context<Self>,
     ) {
         if let Some(provider) = self.providers.get_mut(index) {
-            provider.enabled = enabled;
+            let provider_id = provider.id.clone();
 
-            // 如果禁用提供商，自动关闭其 accordion
-            if !enabled {
-                self.expanded_providers.retain(|&i| i != index);
+            // 使用 LlmProviderManager 切换启用状态
+            match self
+                .llm_provider_manager
+                .toggle_provider(&provider_id, enabled)
+            {
+                Ok(_) => {
+                    provider.enabled = enabled;
+
+                    // 如果禁用提供商，自动关闭其 accordion
+                    if !enabled {
+                        self.expanded_providers.retain(|&i| i != index);
+                    }
+
+                    // 保存配置
+                    self.save_config();
+                    cx.notify();
+                }
+                Err(e) => {
+                    eprintln!("切换服务提供商状态失败: {}", e);
+                }
             }
-
-            cx.notify();
         }
     }
 

@@ -273,6 +273,7 @@ impl LlmProviderManager {
 
         let id = provider.id.clone();
         self.providers.insert(id.clone(), provider);
+        self.save()?;
         Ok(id)
     }
 
@@ -293,14 +294,18 @@ impl LlmProviderManager {
         }
 
         self.providers.insert(id.to_string(), provider);
+        self.save()?;
         Ok(())
     }
 
     /// 删除提供商
     pub fn delete_provider(&mut self, id: &str) -> anyhow::Result<LlmProviderInfo> {
-        self.providers
+        let provider = self
+            .providers
             .remove(id)
-            .ok_or_else(|| anyhow::anyhow!("Provider with id '{}' not found", id))
+            .ok_or_else(|| anyhow::anyhow!("Provider with id '{}' not found", id))?;
+        self.save()?;
+        Ok(provider)
     }
 
     /// 启用/禁用提供商
@@ -311,6 +316,7 @@ impl LlmProviderManager {
             .ok_or_else(|| anyhow::anyhow!("Provider with id '{}' not found", id))?;
 
         provider.enabled = enabled;
+        self.save()?;
         Ok(())
     }
 
@@ -341,47 +347,21 @@ impl LlmProviderManager {
     }
 
     /// 批量删除提供商
-    pub fn batch_delete(&mut self, ids: &[String]) -> Vec<LlmProviderInfo> {
+    pub fn batch_delete(&mut self, ids: &[String]) -> anyhow::Result<Vec<LlmProviderInfo>> {
         let mut deleted = Vec::new();
         for id in ids {
             if let Some(provider) = self.providers.remove(id) {
                 deleted.push(provider);
             }
         }
-        deleted
+        self.save()?;
+        Ok(deleted)
     }
 
     /// 清空所有提供商
-    pub fn clear(&mut self) {
+    pub fn clear(&mut self) -> anyhow::Result<()> {
         self.providers.clear();
-    }
-
-    /// 创建新的空管理器
-    pub fn new() -> Self {
-        Self {
-            providers: std::collections::HashMap::new(),
-        }
-    }
-
-    /// 保存配置到指定文件
-    pub fn save_to_file(&self, path: &std::path::Path) -> anyhow::Result<()> {
-        let content = serde_yaml::to_string(self)?;
-        std::fs::write(path, content)?;
+        self.save()?;
         Ok(())
-    }
-
-    /// 从指定文件加载配置
-    pub fn load_from_file(path: &std::path::Path) -> anyhow::Result<Self> {
-        let content = std::fs::read_to_string(path)?;
-        let manager: LlmProviderManager = serde_yaml::from_str(&content)?;
-        Ok(manager)
-    }
-
-    /// 从指定文件加载配置，如果失败则返回默认配置
-    pub fn load_or_default(path: &std::path::Path) -> Self {
-        match Self::load_from_file(path) {
-            Ok(manager) => manager,
-            Err(_) => Self::default(),
-        }
     }
 }
