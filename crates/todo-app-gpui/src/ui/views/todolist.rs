@@ -509,7 +509,7 @@ impl Render for TodoList {
                             .on_click(cx.listener(|this, ix: &usize, window, cx| {
                                 this.set_active_tab(*ix, window, cx);
                             }))
-                            .children(vec!["All", "Planned", "Completed"]),
+                            .children(vec!["全部", "计划中", "已完成"]),
                     )
                     .child(
                         ButtonGroup::new("button-group")

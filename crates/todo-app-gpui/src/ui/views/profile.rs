@@ -8,10 +8,12 @@ use gpui_component::{
     dropdown::{Dropdown, DropdownState},
     h_flex,
     input::{InputEvent, InputState, TextInput},
+    label::Label,
     text::TextView,
+    tooltip::Tooltip,
     v_flex,
     wry::dpi::Size,
-    Disableable, FocusableCycle, Icon, IconName, Sizable, StyledExt,
+    Disableable, FocusableCycle, Icon, IconName, Sizable, StyledExt, *,
 };
 
 use crate::ui::components::ViewKit;
@@ -500,21 +502,24 @@ impl Render for Profile {
                                     .child(
                                         Checkbox::new("auto-analyze-bio")
                                             .checked(self.auto_analyze_bio)
-                                            .label("自动")
+                                            .label("开启个体特征分析")
                                             .with_size(gpui_component::Size::Small)
+                                            .tooltip(|win, cx| {
+                                                Tooltip::element(|_, cx| {
+                                                    h_flex().gap_x_1().child(
+                                                        div()
+                                                            .text_size(rems(0.6))
+                                                            .text_color(cx.theme().muted_foreground)
+                                                            .child(TextView::markdown(
+                                                                "character",
+                                                                include_str!("character.md"),
+                                                            )),
+                                                    )
+                                                })
+                                                .build(win, cx)
+                                            })
                                             .on_click(cx.listener(|this, checked, window, cx| {
                                                 this.toggle_auto_analyze(*checked, window, cx);
-                                            })),
-                                    )
-                                    .child(
-                                        Button::new("analyze-bio-btn")
-                                            .with_variant(ButtonVariant::Ghost)
-                                            .label("分析人物特征")
-                                            .icon(IconName::Brain)
-                                            .small()
-                                            .when(self.auto_analyze_bio, |btn| btn.disabled(true))
-                                            .on_click(cx.listener(|this, _, window, cx| {
-                                                this.analyze_bio(&AnalyzeBio, window, cx)
                                             })),
                                     ),
                             ),
