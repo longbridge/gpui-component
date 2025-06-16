@@ -3,17 +3,23 @@ use gpui::*;
 
 use gpui_component::{
     button::{Button, ButtonVariant, ButtonVariants as _},
+    checkbox::Checkbox,
     dock::PanelControl,
     dropdown::{Dropdown, DropdownState},
     h_flex,
     input::{InputEvent, InputState, TextInput},
     text::TextView,
-    v_flex, FocusableCycle, Icon, IconName, Sizable, StyledExt,
+    v_flex,
+    wry::dpi::Size,
+    Disableable, FocusableCycle, Icon, IconName, Sizable, StyledExt,
 };
 
 use crate::ui::components::ViewKit;
 
-actions!(profile, [Tab, TabPrev, Save, Reset, AuthorizeFeishu]);
+actions!(
+    profile,
+    [Tab, TabPrev, Save, Reset, AuthorizeFeishu, AnalyzeBio]
+);
 
 const CONTEXT: &str = "Profile";
 
@@ -32,6 +38,9 @@ pub struct Profile {
     // 偏好设置 - 修正类型
     theme_dropdown: Entity<DropdownState<Vec<SharedString>>>,
     language_dropdown: Entity<DropdownState<Vec<SharedString>>>,
+
+    // AI分析相关
+    auto_analyze_bio: bool,
 
     _subscriptions: Vec<Subscription>,
 }
@@ -106,6 +115,7 @@ impl Profile {
             cx.subscribe_in(&email_input, window, Self::on_input_event),
             cx.subscribe_in(&phone_input, window, Self::on_input_event),
             cx.subscribe_in(&username_input, window, Self::on_input_event),
+            cx.subscribe_in(&bio_input, window, Self::on_bio_input_event),
         ];
 
         Self {
@@ -117,6 +127,7 @@ impl Profile {
             username_input,
             theme_dropdown,
             language_dropdown,
+            auto_analyze_bio: false,
             _subscriptions,
         }
     }
@@ -202,6 +213,49 @@ impl Profile {
         // TODO: 实现飞书授权逻辑
         println!("开始飞书授权...");
         cx.notify();
+    }
+
+    fn analyze_bio(&mut self, _: &AnalyzeBio, _window: &mut Window, cx: &mut Context<Self>) {
+        let bio_text = self.bio_input.read(cx).value().to_string();
+
+        if bio_text.trim().is_empty() {
+            println!("请先填写个人简介");
+            return;
+        }
+
+        println!("开始AI分析个人简介: {}", bio_text);
+        println!("分析内容包括：人物特征、背景信息、职业倾向、兴趣爱好等");
+
+        cx.notify();
+    }
+
+    fn toggle_auto_analyze(&mut self, checked: bool, _window: &mut Window, cx: &mut Context<Self>) {
+        self.auto_analyze_bio = checked;
+
+        // 如果启用自动分析，立即分析当前内容
+        if checked {
+            self.analyze_bio(&AnalyzeBio, _window, cx);
+        }
+
+        cx.notify();
+    }
+
+    fn on_bio_input_event(
+        &mut self,
+        _entity: &Entity<InputState>,
+        event: &InputEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        match event {
+            InputEvent::Change(_text) => {
+                // 如果启用自动分析，在输入变化时触发分析
+                if self.auto_analyze_bio {
+                    self.analyze_bio(&AnalyzeBio, window, cx);
+                }
+            }
+            _ => {}
+        };
     }
 
     fn on_input_event(
@@ -328,6 +382,7 @@ impl Render for Profile {
             .on_action(cx.listener(Self::save))
             .on_action(cx.listener(Self::reset))
             .on_action(cx.listener(Self::authorize_feishu))
+            .on_action(cx.listener(Self::analyze_bio))
             .size_full()
             .gap_2()
             .child(
@@ -434,6 +489,34 @@ impl Render for Profile {
                                 div()
                                     .w_full()
                                     .child(TextInput::new(&self.bio_input).cleanable()),
+                            )
+                            .child(
+                                // AI分析控制区域
+                                h_flex()
+                                    .pt_2()
+                                    .gap_3()
+                                    .justify_start()
+                                    .items_center()
+                                    .child(
+                                        Checkbox::new("auto-analyze-bio")
+                                            .checked(self.auto_analyze_bio)
+                                            .label("自动")
+                                            .with_size(gpui_component::Size::Small)
+                                            .on_click(cx.listener(|this, checked, window, cx| {
+                                                this.toggle_auto_analyze(*checked, window, cx);
+                                            })),
+                                    )
+                                    .child(
+                                        Button::new("analyze-bio-btn")
+                                            .with_variant(ButtonVariant::Ghost)
+                                            .label("分析人物特征")
+                                            .icon(IconName::Brain)
+                                            .small()
+                                            .when(self.auto_analyze_bio, |btn| btn.disabled(true))
+                                            .on_click(cx.listener(|this, _, window, cx| {
+                                                this.analyze_bio(&AnalyzeBio, window, cx)
+                                            })),
+                                    ),
                             ),
                     ),
             )
