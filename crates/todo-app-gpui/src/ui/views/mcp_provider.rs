@@ -84,54 +84,7 @@ impl McpProvider {
         cx.new(|cx| Self::new(window, cx))
     }
 
-    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        // 初始化一些示例数据
-        let mut filesystem_provider = McpProviderInfo::default();
-        filesystem_provider.name = "文件系统".to_string();
-        filesystem_provider.command = "node".to_string();
-        filesystem_provider.args = vec!["filesystem-server.js".to_string()];
-        filesystem_provider.description = "提供文件系统访问功能".to_string();
-        filesystem_provider.capabilities = vec![McpCapability::Resources, McpCapability::Tools];
-
-        let mut database_provider = McpProviderInfo::default();
-        database_provider.name = "数据库连接".to_string();
-        database_provider.command = "python".to_string();
-        database_provider.args = vec!["-m", "mcp_database", "--host", "localhost"]
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
-        database_provider.description = "提供数据库查询和操作功能".to_string();
-        database_provider.capabilities = vec![
-            McpCapability::Resources,
-            McpCapability::Tools,
-            McpCapability::Logging,
-        ];
-        database_provider.tools = vec![McpTool {
-            name: "execute_query".to_string(),
-            description: "执行SQL查询语句".to_string(),
-            parameters: vec![
-                McpParameter {
-                    name: "query".to_string(),
-                    param_type: "string".to_string(),
-                    description: "SQL查询语句".to_string(),
-                    required: true,
-                },
-                McpParameter {
-                    name: "database".to_string(),
-                    param_type: "string".to_string(),
-                    description: "目标数据库名称".to_string(),
-                    required: false,
-                },
-            ],
-        }];
-        database_provider.resources = vec![McpResource {
-            uri: "db://localhost:5432/main".to_string(),
-            name: "主数据库".to_string(),
-            description: "主要的业务数据库连接".to_string(),
-            mime_type: Some("application/sql".to_string()),
-            subscribable: true,
-            subscribed: false,
-        }];
+    fn new(_window: &mut Window, cx: &mut Context<Self>) -> Self {
         let mcp_provider_manager = McpProviderManager::load();
         Self {
             focus_handle: cx.focus_handle(),
@@ -142,6 +95,23 @@ impl McpProvider {
             provider_inputs: std::collections::HashMap::new(),
             _subscriptions: vec![],
             mcp_provider_manager,
+        }
+    }
+
+    // 保存配置到文件
+    fn save_config(&mut self) {
+        println!("保存MCP配置到文件...");
+        // 先同步视图数据到管理器
+        self.mcp_provider_manager.providers.clear();
+        for provider in &self.providers {
+            self.mcp_provider_manager
+                .providers
+                .insert(provider.id.clone(), provider.clone());
+        }
+
+        // 然后保存到文件
+        if let Err(e) = self.mcp_provider_manager.save() {
+            eprintln!("保存MCP配置失败: {}", e);
         }
     }
 
@@ -164,6 +134,7 @@ impl McpProvider {
         self.expanded_providers.push(new_index);
         self.start_editing(new_index, window, cx);
         cx.notify();
+        self.save_config();
     }
 
     fn cancel_edit(&mut self, _: &CancelEdit, window: &mut Window, cx: &mut Context<Self>) {
@@ -226,8 +197,8 @@ impl McpProvider {
                 if let Some(selected) = inputs.transport_dropdown.read(cx).selected_value() {
                     provider.transport = match selected.as_ref() {
                         "Stdio" => McpTransport::Stdio,
-                        "HTTP" => McpTransport::Sse,
-                        "WebSocket" => McpTransport::Streamable,
+                        "Sse" => McpTransport::Sse,
+                        "Streamable" => McpTransport::Streamable,
                         _ => McpTransport::Stdio,
                     };
                 }
@@ -240,6 +211,7 @@ impl McpProvider {
         }
         self.editing_provider = None;
         cx.notify();
+        self.save_config();
     }
 
     fn delete_mcp_provider(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
@@ -279,6 +251,7 @@ impl McpProvider {
                     true
                 })
         });
+        self.save_config();
     }
 
     fn confirm_delete_mcp_provider(
@@ -311,6 +284,7 @@ impl McpProvider {
 
             window.push_notification(format!("已成功删除MCP服务 \"{}\"", provider_name), cx);
             cx.notify();
+            self.save_config();
         }
     }
 
@@ -329,6 +303,7 @@ impl McpProvider {
                 self.expanded_providers.retain(|&i| i != index);
             }
 
+            self.save_config();
             cx.notify();
         }
     }
@@ -422,106 +397,6 @@ impl McpProvider {
         };
     }
 
-    fn render_edit_form(&mut self, index: usize, cx: &mut Context<Self>) -> impl IntoElement {
-        if let Some(inputs) = self.provider_inputs.get(&index) {
-            v_flex()
-                .gap_3()
-                .p_4()
-                .bg(gpui::rgb(0xF0F9FF))
-                .rounded_lg()
-                .border_1()
-                .border_color(gpui::rgb(0x0EA5E9))
-                .child(
-                    h_flex()
-                        .gap_3()
-                        .child(
-                            v_flex()
-                                .gap_1()
-                                .flex_1()
-                                .child(
-                                    div()
-                                        .text_sm()
-                                        .text_color(gpui::rgb(0x6B7280))
-                                        .child("服务名称 *"),
-                                )
-                                .child(TextInput::new(&inputs.name_input).cleanable()),
-                        )
-                        .child(
-                            v_flex()
-                                .gap_1()
-                                .flex_1()
-                                .child(
-                                    div()
-                                        .text_sm()
-                                        .text_color(gpui::rgb(0x6B7280))
-                                        .child("传输方式"),
-                                )
-                                .child(
-                                    Dropdown::new(&inputs.transport_dropdown)
-                                        .placeholder("选择传输方式")
-                                        .small(),
-                                ),
-                        ),
-                )
-                .child(
-                    h_flex().gap_3().child(
-                        v_flex()
-                            .gap_1()
-                            .flex_1()
-                            .child(
-                                div()
-                                    .text_sm()
-                                    .text_color(gpui::rgb(0x6B7280))
-                                    .child("启动命令&参数"),
-                            )
-                            .child(TextInput::new(&inputs.args_input).cleanable()),
-                    ),
-                )
-                .child(
-                    v_flex()
-                        .gap_1()
-                        .child(
-                            div()
-                                .text_sm()
-                                .text_color(gpui::rgb(0x6B7280))
-                                .child("服务描述"),
-                        )
-                        .child(TextInput::new(&inputs.description_input).cleanable()),
-                )
-                .child(
-                    v_flex()
-                        .gap_1()
-                        .child(
-                            div()
-                                .text_sm()
-                                .text_color(gpui::rgb(0x6B7280))
-                                .child("环境变量"),
-                        )
-                        .child(TextInput::new(&inputs.env_input).cleanable()),
-                )
-                .child(
-                    h_flex()
-                        .justify_end()
-                        .gap_2()
-                        .child(Button::new(("cancel-edit", index)).label("取消").on_click(
-                            cx.listener(|this, _, window, cx| {
-                                this.cancel_edit(&CancelEdit, window, cx);
-                            }),
-                        ))
-                        .child(
-                            Button::new(("save-provider", index))
-                                .with_variant(ButtonVariant::Primary)
-                                .label("保存")
-                                .on_click(cx.listener(|this, _, window, cx| {
-                                    this.save_mcp_provider(&SaveMcpProvider, window, cx);
-                                })),
-                        ),
-                )
-        } else {
-            div().child("加载中...")
-        }
-    }
-
     fn set_active_capability_tab(
         &mut self,
         provider_index: usize,
@@ -532,301 +407,6 @@ impl McpProvider {
         self.active_capability_tabs
             .insert(provider_index, tab_index);
         cx.notify();
-    }
-
-    fn render_capability_content(
-        &self,
-        provider: &McpProviderInfo,
-        tab_index: usize,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
-        div().child(match tab_index {
-            0 => div().child(self.render_resources_content(&provider.resources, cx)),
-            1 => div().child(self.render_tools_content(&provider.tools, cx)),
-            2 => div().child(self.render_prompts_content(&provider.prompts, cx)),
-            3 => div().child(self.render_logging_content(cx)),
-            _ => div().child("未知能力"),
-        })
-    }
-
-    fn render_resources_content(
-        &self,
-        resources: &[McpResource],
-        _cx: &mut Context<Self>,
-    ) -> impl IntoElement {
-        v_flex()
-            .gap_2()
-            .children(resources.iter().map(|resource| {
-                v_flex()
-                    .gap_2()
-                    .p_3()
-                    .bg(gpui::rgb(0xFAFAFA))
-                    .rounded_md()
-                    .border_1()
-                    .border_color(gpui::rgb(0xE5E7EB))
-                    .child(
-                        h_flex()
-                            .items_center()
-                            .gap_2()
-                            .child(
-                                Icon::new(IconName::Database)
-                                    .small()
-                                    .text_color(gpui::rgb(0x059669)),
-                            )
-                            .child(
-                                div()
-                                    .font_medium()
-                                    .text_color(gpui::rgb(0x111827))
-                                    .child(resource.name.clone()),
-                            )
-                            .when(resource.mime_type.is_some(), |this| {
-                                this.child(
-                                    div()
-                                        .px_2()
-                                        .py_1()
-                                        .bg(gpui::rgb(0xE0F2FE))
-                                        .text_color(gpui::rgb(0x0369A1))
-                                        .rounded_md()
-                                        .text_xs()
-                                        .child(resource.mime_type.as_ref().unwrap().clone()),
-                                )
-                            }),
-                    )
-                    .child(
-                        div()
-                            .text_sm()
-                            .text_color(gpui::rgb(0x6B7280))
-                            .child(resource.description.clone()),
-                    )
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(gpui::rgb(0x9CA3AF))
-                            .child(resource.uri.clone()),
-                    )
-            }))
-            .when(resources.is_empty(), |this| {
-                this.child(
-                    div()
-                        .text_sm()
-                        .text_color(gpui::rgb(0x9CA3AF))
-                        .child("暂无可用资源"),
-                )
-            })
-    }
-
-    fn render_tools_content(&self, tools: &[McpTool], _cx: &mut Context<Self>) -> impl IntoElement {
-        v_flex()
-            .gap_3()
-            .children(tools.iter().map(|tool| {
-                v_flex()
-                    .gap_2()
-                    .p_3()
-                    .bg(gpui::rgb(0xFAFAFA))
-                    .rounded_md()
-                    .border_1()
-                    .border_color(gpui::rgb(0xE5E7EB))
-                    .child(
-                        h_flex()
-                            .items_center()
-                            .gap_2()
-                            .child(
-                                Icon::new(IconName::Wrench)
-                                    .small()
-                                    .text_color(gpui::rgb(0xDC2626)),
-                            )
-                            .child(
-                                div()
-                                    .font_medium()
-                                    .text_color(gpui::rgb(0x111827))
-                                    .child(tool.name.clone()),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .text_sm()
-                            .text_color(gpui::rgb(0x6B7280))
-                            .child(tool.description.clone()),
-                    )
-                    .when(!tool.parameters.is_empty(), |this| {
-                        this.child(
-                            v_flex()
-                                .gap_1()
-                                .child(
-                                    div()
-                                        .text_xs()
-                                        .font_medium()
-                                        .text_color(gpui::rgb(0x374151))
-                                        .child("参数:"),
-                                )
-                                .children(tool.parameters.iter().map(|param| {
-                                    h_flex()
-                                        .items_center()
-                                        .gap_2()
-                                        .pl_2()
-                                        .child(
-                                            div()
-                                                .text_xs()
-                                                .text_color(if param.required {
-                                                    gpui::rgb(0xDC2626)
-                                                } else {
-                                                    gpui::rgb(0x059669)
-                                                })
-                                                .child(format!(
-                                                    "{}{}",
-                                                    param.name,
-                                                    if param.required { "*" } else { "" }
-                                                )),
-                                        )
-                                        .child(
-                                            div()
-                                                .px_1()
-                                                .bg(gpui::rgb(0xF3F4F6))
-                                                .rounded_sm()
-                                                .text_xs()
-                                                .text_color(gpui::rgb(0x6B7280))
-                                                .child(param.param_type.clone()),
-                                        )
-                                        .child(
-                                            div()
-                                                .text_xs()
-                                                .text_color(gpui::rgb(0x9CA3AF))
-                                                .child(param.description.clone()),
-                                        )
-                                })),
-                        )
-                    })
-            }))
-            .when(tools.is_empty(), |this| {
-                this.child(
-                    div()
-                        .text_sm()
-                        .text_color(gpui::rgb(0x9CA3AF))
-                        .child("暂无可用工具"),
-                )
-            })
-    }
-
-    fn render_prompts_content(
-        &self,
-        prompts: &[McpPrompt],
-        _cx: &mut Context<Self>,
-    ) -> impl IntoElement {
-        v_flex()
-            .gap_3()
-            .children(prompts.iter().map(|prompt| {
-                v_flex()
-                    .gap_2()
-                    .p_3()
-                    .bg(gpui::rgb(0xFAFAFA))
-                    .rounded_md()
-                    .border_1()
-                    .border_color(gpui::rgb(0xE5E7EB))
-                    .child(
-                        h_flex()
-                            .items_center()
-                            .gap_2()
-                            .child(
-                                Icon::new(IconName::SquareTerminal)
-                                    .small()
-                                    .text_color(gpui::rgb(0x7C3AED)),
-                            )
-                            .child(
-                                div()
-                                    .font_medium()
-                                    .text_color(gpui::rgb(0x111827))
-                                    .child(prompt.name.clone()),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .text_sm()
-                            .text_color(gpui::rgb(0x6B7280))
-                            .child(prompt.description.clone()),
-                    )
-                    .when(!prompt.arguments.is_empty(), |this| {
-                        this.child(
-                            v_flex()
-                                .gap_1()
-                                .child(
-                                    div()
-                                        .text_xs()
-                                        .font_medium()
-                                        .text_color(gpui::rgb(0x374151))
-                                        .child("参数:"),
-                                )
-                                .children(prompt.arguments.iter().map(|arg| {
-                                    h_flex()
-                                        .items_center()
-                                        .gap_2()
-                                        .pl_2()
-                                        .child(
-                                            div()
-                                                .text_xs()
-                                                .text_color(if arg.required {
-                                                    gpui::rgb(0xDC2626)
-                                                } else {
-                                                    gpui::rgb(0x059669)
-                                                })
-                                                .child(format!(
-                                                    "{}{}",
-                                                    arg.name,
-                                                    if arg.required { "*" } else { "" }
-                                                )),
-                                        )
-                                        .child(
-                                            div()
-                                                .text_xs()
-                                                .text_color(gpui::rgb(0x9CA3AF))
-                                                .child(arg.description.clone()),
-                                        )
-                                })),
-                        )
-                    })
-            }))
-            .when(prompts.is_empty(), |this| {
-                this.child(
-                    div()
-                        .text_sm()
-                        .text_color(gpui::rgb(0x9CA3AF))
-                        .child("暂无可用提示"),
-                )
-            })
-    }
-
-    fn render_logging_content(&self, _cx: &mut Context<Self>) -> impl IntoElement {
-        div()
-            .p_3()
-            .bg(gpui::rgb(0xFAFAFA))
-            .rounded_md()
-            .border_1()
-            .border_color(gpui::rgb(0xE5E7EB))
-            .child(
-                v_flex()
-                    .gap_2()
-                    .child(
-                        h_flex()
-                            .items_center()
-                            .gap_2()
-                            .child(
-                                Icon::new(IconName::LetterText)
-                                    .small()
-                                    .text_color(gpui::rgb(0xF59E0B)),
-                            )
-                            .child(
-                                div()
-                                    .font_medium()
-                                    .text_color(gpui::rgb(0x111827))
-                                    .child("日志记录"),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .text_sm()
-                            .text_color(gpui::rgb(0x6B7280))
-                            .child("此服务支持日志记录功能，可以输出调试和运行状态信息。"),
-                    ),
-            )
     }
 }
 
@@ -1218,7 +798,7 @@ impl McpProvider {
                         resource_name,
                         if subscribed { "开启" } else { "关闭" }
                     );
-
+                    self.save_config();
                     cx.notify();
                     return;
                 }
@@ -1251,7 +831,7 @@ impl McpProvider {
                         if old_status { "已订阅" } else { "未订阅" },
                         if subscribed { "已订阅" } else { "未订阅" }
                     );
-
+                    self.save_config();
                     cx.notify();
                 } else {
                     eprintln!("警告: 资源 '{}' 不支持订阅功能", resource.name);
@@ -1316,7 +896,10 @@ impl McpProvider {
     }
 
     // 修改静态方法，移除cx参数，因为静态方法中无法使用listener
-    fn render_resources_content_static(resources: &[McpResource]) -> impl IntoElement {
+    fn render_resources_content_static(
+        resources: &[McpResource],
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         v_flex()
             .gap_2()
             .children(
@@ -1400,14 +983,17 @@ impl McpProvider {
                                         this.child(
                                             Switch::new(("resource-subscription", resource_index))
                                                 .checked(resource.subscribed)
-                                                .on_click(|checked, _window, _cx| {
-                                                    // this.toggle_resource_subscription(
-                                                    //     resource.name.clone(),
-                                                    //     *checked,
-                                                    //     _window,
-                                                    //     _cx,
-                                                    // );
-                                                }),
+                                                .on_click(cx.listener(
+                                                    move |this, checked, window, cx| {
+                                                        this.toggle_resource_subscription_by_index(
+                                                            0, // 假设只有一个提供商
+                                                            resource_index,
+                                                            *checked,
+                                                            window,
+                                                            cx,
+                                                        );
+                                                    },
+                                                )),
                                         )
                                     }),
                             )
@@ -1439,11 +1025,14 @@ impl McpProvider {
     fn render_capability_content_static(
         provider: &McpProviderInfo,
         tab_index: usize,
-        _cx: &mut Context<Self>, // 这个参数现在用不到，可以加下划线
+        cx: &mut Context<Self>, // 这个参数现在用不到，可以加下划线
     ) -> impl IntoElement {
         div().child(match tab_index {
             0 => div().child(Self::render_config_content_static(provider)),
-            1 => div().child(Self::render_resources_content_static(&provider.resources)), // 移除cx参数
+            1 => div().child(Self::render_resources_content_static(
+                &provider.resources,
+                cx,
+            )), // 移除cx参数
             2 => div().child(Self::render_tools_content_static(&provider.tools)),
             3 => div().child(Self::render_prompts_content_static(&provider.prompts)),
             4 => div().child(Self::render_logging_content_static()),

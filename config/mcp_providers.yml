@@ -1,255 +1,318 @@
-filesystem-server:
-  id: "fs-001"
-  name: "文件系统服务器"
-  command: "npx"
+web-001:
+  id: web-001
+  name: 网页搜索服务器
+  command: node
   args:
-    - "@modelcontextprotocol/server-filesystem"
-    - "/home/user/documents"
-  transport: "Stdio"
-  enabled: true
-  capabilities:
-    - "Resources"
-    - "Tools"
-  description: "提供文件系统访问功能的MCP服务器"
-  resources:
-    - uri: "file:///home/user/documents"
-      name: "文档文件夹"
-      description: "用户文档目录访问"
-      mime_type: "inode/directory"
-      subscribable: true
-      subscribed: false
-    - uri: "file:///home/user/config.json"
-      name: "配置文件"
-      description: "应用配置文件"
-      mime_type: "application/json"
-      subscribable: true
-      subscribed: false
-  tools:
-    - name: "read_file"
-      description: "读取指定文件的内容"
-      parameters:
-        - name: "path"
-          param_type: "string"
-          description: "要读取的文件路径"
-          required: true
-        - name: "encoding"
-          param_type: "string"
-          description: "文件编码格式"
-          required: false
-    - name: "write_file"
-      description: "写入内容到指定文件"
-      parameters:
-        - name: "path"
-          param_type: "string"
-          description: "目标文件路径"
-          required: true
-        - name: "content"
-          param_type: "string"
-          description: "要写入的内容"
-          required: true
-  prompts:
-    - name: "code_review"
-      description: "对代码进行审查和建议"
-      arguments:
-        - name: "code"
-          description: "要审查的代码内容"
-          required: true
-        - name: "language"
-          description: "编程语言类型"
-          required: false
-    - name: "explain_concept"
-      description: "解释技术概念"
-      arguments:
-        - name: "concept"
-          description: "要解释的概念"
-          required: true
-  env_vars:
-    PATH: "/usr/local/bin:/usr/bin:/bin"
-    NODE_ENV: "production"
-
-git-server:
-  id: "git-001"
-  name: "Git服务器"
-  command: "npx"
-  args:
-    - "@modelcontextprotocol/server-git"
-  transport: "Stdio"
-  enabled: true
-  capabilities:
-    - "Tools"
-    - "Resources"
-  description: "提供Git版本控制功能"
-  resources:
-    - uri: "git://current-repo"
-      name: "当前仓库"
-      description: "当前Git仓库状态"
-      mime_type: "application/x-git"
-      subscribable: true
-      subscribed: true
-  tools:
-    - name: "git_status"
-      description: "查看Git仓库状态"
-      parameters: []
-    - name: "git_commit"
-      description: "提交更改"
-      parameters:
-        - name: "message"
-          param_type: "string"
-          description: "提交消息"
-          required: true
-    - name: "git_log"
-      description: "查看提交历史"
-      parameters:
-        - name: "limit"
-          param_type: "number"
-          description: "显示条数"
-          required: false
-  prompts:
-    - name: "commit_message"
-      description: "生成规范的提交消息"
-      arguments:
-        - name: "changes"
-          description: "变更描述"
-          required: true
-  env_vars:
-    GIT_EDITOR: "nano"
-
-sqlite-server:
-  id: "sqlite-001"
-  name: "SQLite数据库服务器"
-  command: "npx"
-  args:
-    - "@modelcontextprotocol/server-sqlite"
-    - "/path/to/database.db"
-  transport: "Stdio"
+  - /path/to/web-search-server.js
+  transport: Sse
   enabled: false
   capabilities:
-    - "Tools"
-    - "Resources"
-  description: "SQLite数据库操作接口"
+  - Tools
+  - Resources
+  description: 提供网络搜索和网页内容获取功能
   resources:
-    - uri: "sqlite:///path/to/database.db"
-      name: "主数据库"
-      description: "应用主数据库文件"
-      mime_type: "application/x-sqlite3"
-      subscribable: false
-      subscribed: false
+  - uri: web://search-results
+    name: 搜索结果
+    description: 最近的搜索结果
+    mime_type: text/html
+    subscribable: true
+    subscribed: false
   tools:
-    - name: "execute_query"
-      description: "执行SQL查询"
-      parameters:
-        - name: "query"
-          param_type: "string"
-          description: "SQL查询语句"
-          required: true
-    - name: "get_schema"
-      description: "获取数据库结构"
-      parameters: []
+  - name: web_search
+    description: 搜索网络内容
+    parameters:
+    - name: query
+      param_type: string
+      description: 搜索关键词
+      required: true
+    - name: limit
+      param_type: number
+      description: 结果数量限制
+      required: false
+  - name: fetch_webpage
+    description: 获取网页内容
+    parameters:
+    - name: url
+      param_type: string
+      description: 网页URL
+      required: true
   prompts:
-    - name: "generate_sql"
-      description: "根据需求生成SQL语句"
-      arguments:
-        - name: "requirement"
-          description: "查询需求描述"
-          required: true
-        - name: "tables"
-          description: "相关表名"
-          required: false
+  - name: summarize_webpage
+    description: 总结网页内容
+    arguments:
+    - name: url
+      description: 要总结的网页URL
+      required: true
   env_vars:
-    SQLITE_TIMEOUT: "30000"
-
-python-server:
-  id: "python-001"
-  name: "Python执行服务器"
-  command: "python"
+    SEARCH_ENGINE: google
+    USER_AGENT: MCP-WebSearch/1.0
+python-001:
+  id: python-001
+  name: Python执行服务器
+  command: python
   args:
-    - "-m"
-    - "mcp.server.python"
-  transport: "Stdio"
+  - -m
+  - mcp.server.python
+  transport: Stdio
   enabled: true
   capabilities:
-    - "Tools"
-    - "Prompts"
-  description: "Python代码执行环境"
+  - Tools
+  - Prompts
+  description: Python代码执行环境
   resources: []
   tools:
-    - name: "execute_python"
-      description: "执行Python代码"
-      parameters:
-        - name: "code"
-          param_type: "string"
-          description: "要执行的Python代码"
-          required: true
-        - name: "timeout"
-          param_type: "number"
-          description: "执行超时时间(秒)"
-          required: false
-    - name: "install_package"
-      description: "安装Python包"
-      parameters:
-        - name: "package"
-          param_type: "string"
-          description: "包名"
-          required: true
+  - name: execute_python
+    description: 执行Python代码
+    parameters:
+    - name: code
+      param_type: string
+      description: 要执行的Python代码
+      required: true
+    - name: timeout
+      param_type: number
+      description: 执行超时时间(秒)
+      required: false
+  - name: install_package
+    description: 安装Python包
+    parameters:
+    - name: package
+      param_type: string
+      description: 包名
+      required: true
   prompts:
-    - name: "debug_code"
-      description: "调试Python代码"
-      arguments:
-        - name: "code"
-          description: "有问题的代码"
-          required: true
-        - name: "error"
-          description: "错误信息"
-          required: false
+  - name: debug_code
+    description: 调试Python代码
+    arguments:
+    - name: code
+      description: 有问题的代码
+      required: true
+    - name: error
+      description: 错误信息
+      required: false
   env_vars:
-    PYTHONPATH: "/opt/python/lib"
-    PYTHON_ENV: "development"
-
-web-search-server:
-  id: "web-001"
-  name: "网页搜索服务器"
-  command: "node"
+    PYTHON_ENV: development
+    PYTHONPATH: /opt/python/lib
+git-001:
+  id: git-001
+  name: Git服务器
+  command: npx
   args:
-    - "/path/to/web-search-server.js"
-  transport: "Sse"
+  - '@modelcontextprotocol/server-git'
+  transport: Stdio
   enabled: true
   capabilities:
-    - "Tools"
-    - "Resources"
-  description: "提供网络搜索和网页内容获取功能"
+  - Tools
+  - Resources
+  description: 提供Git版本控制功能
   resources:
-    - uri: "web://search-results"
-      name: "搜索结果"
-      description: "最近的搜索结果"
-      mime_type: "text/html"
-      subscribable: true
-      subscribed: false
+  - uri: git://current-repo
+    name: 当前仓库
+    description: 当前Git仓库状态
+    mime_type: application/x-git
+    subscribable: true
+    subscribed: true
   tools:
-    - name: "web_search"
-      description: "搜索网络内容"
-      parameters:
-        - name: "query"
-          param_type: "string"
-          description: "搜索关键词"
-          required: true
-        - name: "limit"
-          param_type: "number"
-          description: "结果数量限制"
-          required: false
-    - name: "fetch_webpage"
-      description: "获取网页内容"
-      parameters:
-        - name: "url"
-          param_type: "string"
-          description: "网页URL"
-          required: true
+  - name: git_status
+    description: 查看Git仓库状态
+    parameters: []
+  - name: git_commit
+    description: 提交更改
+    parameters:
+    - name: message
+      param_type: string
+      description: 提交消息
+      required: true
+  - name: git_log
+    description: 查看提交历史
+    parameters:
+    - name: limit
+      param_type: number
+      description: 显示条数
+      required: false
   prompts:
-    - name: "summarize_webpage"
-      description: "总结网页内容"
-      arguments:
-        - name: "url"
-          description: "要总结的网页URL"
-          required: true
+  - name: commit_message
+    description: 生成规范的提交消息
+    arguments:
+    - name: changes
+      description: 变更描述
+      required: true
   env_vars:
-    USER_AGENT: "MCP-WebSearch/1.0"
-    SEARCH_ENGINE: "google"
+    GIT_EDITOR: nano
+sqlite-001:
+  id: sqlite-001
+  name: SQLite数据库服务器
+  command: npx
+  args:
+  - '@modelcontextprotocol/server-sqlite'
+  - /path/to/database.db
+  transport: Stdio
+  enabled: false
+  capabilities:
+  - Tools
+  - Resources
+  description: SQLite数据库操作接口
+  resources:
+  - uri: sqlite:///path/to/database.db
+    name: 主数据库
+    description: 应用主数据库文件
+    mime_type: application/x-sqlite3
+    subscribable: false
+    subscribed: false
+  tools:
+  - name: execute_query
+    description: 执行SQL查询
+    parameters:
+    - name: query
+      param_type: string
+      description: SQL查询语句
+      required: true
+  - name: get_schema
+    description: 获取数据库结构
+    parameters: []
+  prompts:
+  - name: generate_sql
+    description: 根据需求生成SQL语句
+    arguments:
+    - name: requirement
+      description: 查询需求描述
+      required: true
+    - name: tables
+      description: 相关表名
+      required: false
+  env_vars:
+    SQLITE_TIMEOUT: '30000'
+4e0a3cb7-eec5-4314-81b2-856e51b102c7:
+  id: 4e0a3cb7-eec5-4314-81b2-856e51b102c7
+  name: trertwe
+  command: ''
+  args:
+  - rewr
+  transport: Stdio
+  enabled: false
+  capabilities:
+  - Resources
+  - Tools
+  description: rwerw
+  resources:
+  - uri: file:///home/user/documents
+    name: 文档文件夹
+    description: 用户文档目录访问
+    mime_type: inode/directory
+    subscribable: true
+    subscribed: false
+  - uri: file:///home/user/config.json
+    name: 配置文件
+    description: 应用配置文件
+    mime_type: application/json
+    subscribable: true
+    subscribed: false
+  tools:
+  - name: read_file
+    description: 读取指定文件的内容
+    parameters:
+    - name: path
+      param_type: string
+      description: 要读取的文件路径
+      required: true
+    - name: encoding
+      param_type: string
+      description: 文件编码格式
+      required: false
+  - name: write_file
+    description: 写入内容到指定文件
+    parameters:
+    - name: path
+      param_type: string
+      description: 目标文件路径
+      required: true
+    - name: content
+      param_type: string
+      description: 要写入的内容
+      required: true
+  prompts:
+  - name: code_review
+    description: 对代码进行审查和建议
+    arguments:
+    - name: code
+      description: 要审查的代码内容
+      required: true
+    - name: language
+      description: 编程语言类型
+      required: false
+  - name: explain_concept
+    description: 解释技术概念
+    arguments:
+    - name: concept
+      description: 要解释的概念
+      required: true
+  env_vars:
+    NODE_ENV: production
+    PATH: /usr/local/bin:/usr/bin:/bin
+fs-001:
+  id: fs-001
+  name: 文件系统服务器
+  command: npx
+  args:
+  - '@modelcontextprotocol/server-filesystem'
+  - /home/user/documents
+  transport: Stdio
+  enabled: false
+  capabilities:
+  - Resources
+  - Tools
+  description: 提供文件系统访问功能的MCP服务器
+  resources:
+  - uri: file:///home/user/documents
+    name: 文档文件夹
+    description: 用户文档目录访问
+    mime_type: inode/directory
+    subscribable: true
+    subscribed: false
+  - uri: file:///home/user/config.json
+    name: 配置文件
+    description: 应用配置文件
+    mime_type: application/json
+    subscribable: true
+    subscribed: false
+  tools:
+  - name: read_file
+    description: 读取指定文件的内容
+    parameters:
+    - name: path
+      param_type: string
+      description: 要读取的文件路径
+      required: true
+    - name: encoding
+      param_type: string
+      description: 文件编码格式
+      required: false
+  - name: write_file
+    description: 写入内容到指定文件
+    parameters:
+    - name: path
+      param_type: string
+      description: 目标文件路径
+      required: true
+    - name: content
+      param_type: string
+      description: 要写入的内容
+      required: true
+  prompts:
+  - name: code_review
+    description: 对代码进行审查和建议
+    arguments:
+    - name: code
+      description: 要审查的代码内容
+      required: true
+    - name: language
+      description: 编程语言类型
+      required: false
+  - name: explain_concept
+    description: 解释技术概念
+    arguments:
+    - name: concept
+      description: 要解释的概念
+      required: true
+  env_vars:
+    PATH: /usr/local/bin:/usr/bin:/bin
+    NODE_ENV: production
