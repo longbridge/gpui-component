@@ -502,7 +502,7 @@ impl Render for Profile {
                                     .child(
                                         Checkbox::new("auto-analyze-bio")
                                             .checked(self.auto_analyze_bio)
-                                            .label("开启个体特征分析")
+                                            .label("开启人格分析")
                                             .with_size(gpui_component::Size::Small)
                                             .tooltip(|win, cx| {
                                                 Tooltip::element(|_, cx| {
