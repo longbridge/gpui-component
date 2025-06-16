@@ -1,3 +1,7 @@
+use crate::models::mcp_config::{
+    McpCapability, McpParameter, McpPrompt, McpProviderInfo, McpProviderManager, McpResource,
+    McpTool, McpTransport,
+};
 use crate::ui::components::{section::section, ViewKit};
 use gpui::prelude::*;
 use gpui::*;
@@ -25,228 +29,6 @@ actions!(
 
 const CONTEXT: &str = "McpProvider";
 
-#[derive(Debug, Clone)]
-pub enum McpTransport {
-    Stdio,
-    Http,
-    WebSocket,
-}
-
-impl McpTransport {
-    fn as_str(&self) -> &'static str {
-        match self {
-            McpTransport::Stdio => "Stdio",
-            McpTransport::Http => "HTTP",
-            McpTransport::WebSocket => "WebSocket",
-        }
-    }
-
-    fn all() -> Vec<SharedString> {
-        vec!["Stdio".into(), "HTTP".into(), "WebSocket".into()]
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum McpCapability {
-    Resources,
-    Tools,
-    Prompts,
-    Logging,
-}
-
-impl McpCapability {
-    fn icon(&self) -> IconName {
-        match self {
-            McpCapability::Resources => IconName::Database,
-            McpCapability::Tools => IconName::Wrench,
-            McpCapability::Prompts => IconName::SquareTerminal,
-            McpCapability::Logging => IconName::LetterText,
-        }
-    }
-
-    fn label(&self) -> &'static str {
-        match self {
-            McpCapability::Resources => "资源",
-            McpCapability::Tools => "工具",
-            McpCapability::Prompts => "提示",
-            McpCapability::Logging => "日志",
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct McpResource {
-    uri: String,
-    name: String,
-    description: String,
-    mime_type: Option<String>,
-    subscribable: bool, // 是否支持订阅
-    subscribed: bool,   // 当前是否已订阅
-}
-
-impl Default for McpResource {
-    fn default() -> Self {
-        Self {
-            uri: String::new(),
-            name: String::new(),
-            description: String::new(),
-            mime_type: None,
-            subscribable: true,
-            subscribed: false,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct McpTool {
-    name: String,
-    description: String,
-    parameters: Vec<McpParameter>,
-}
-
-#[derive(Debug, Clone)]
-pub struct McpParameter {
-    name: String,
-    param_type: String,
-    description: String,
-    required: bool,
-}
-
-#[derive(Debug, Clone)]
-pub struct McpPrompt {
-    name: String,
-    description: String,
-    arguments: Vec<McpArgument>,
-}
-
-#[derive(Debug, Clone)]
-pub struct McpArgument {
-    name: String,
-    description: String,
-    required: bool,
-}
-
-#[derive(Debug, Clone)]
-pub struct McpProviderInfo {
-    id: String,
-    name: String,
-    command: String,
-    args: Vec<String>,
-    transport: McpTransport,
-    enabled: bool,
-    capabilities: Vec<McpCapability>,
-    description: String,
-    resources: Vec<McpResource>,
-    tools: Vec<McpTool>,
-    prompts: Vec<McpPrompt>,
-    env_vars: std::collections::HashMap<String, String>,
-}
-
-impl Default for McpProviderInfo {
-    fn default() -> Self {
-        Self {
-            id: uuid::Uuid::new_v4().to_string(),
-            name: String::new(),
-            command: String::new(),
-            args: Vec::new(),
-            transport: McpTransport::Stdio,
-            enabled: true,
-            capabilities: vec![McpCapability::Resources, McpCapability::Tools],
-            description: String::new(),
-            resources: vec![
-                McpResource {
-                    uri: "file:///home/user/documents".to_string(),
-                    name: "文档文件夹".to_string(),
-                    description: "用户文档目录访问".to_string(),
-                    mime_type: Some("inode/directory".to_string()),
-                    subscribable: true,
-                    subscribed: false,
-                },
-                McpResource {
-                    uri: "file:///home/user/config.json".to_string(),
-                    name: "配置文件".to_string(),
-                    description: "应用配置文件".to_string(),
-                    mime_type: Some("application/json".to_string()),
-                    subscribable: true,
-                    subscribed: false,
-                },
-            ],
-            tools: vec![
-                McpTool {
-                    name: "read_file".to_string(),
-                    description: "读取指定文件的内容".to_string(),
-                    parameters: vec![
-                        McpParameter {
-                            name: "path".to_string(),
-                            param_type: "string".to_string(),
-                            description: "要读取的文件路径".to_string(),
-                            required: true,
-                        },
-                        McpParameter {
-                            name: "encoding".to_string(),
-                            param_type: "string".to_string(),
-                            description: "文件编码格式".to_string(),
-                            required: false,
-                        },
-                    ],
-                },
-                McpTool {
-                    name: "write_file".to_string(),
-                    description: "写入内容到指定文件".to_string(),
-                    parameters: vec![
-                        McpParameter {
-                            name: "path".to_string(),
-                            param_type: "string".to_string(),
-                            description: "目标文件路径".to_string(),
-                            required: true,
-                        },
-                        McpParameter {
-                            name: "content".to_string(),
-                            param_type: "string".to_string(),
-                            description: "要写入的内容".to_string(),
-                            required: true,
-                        },
-                    ],
-                },
-            ],
-            prompts: vec![
-                McpPrompt {
-                    name: "code_review".to_string(),
-                    description: "对代码进行审查和建议".to_string(),
-                    arguments: vec![
-                        McpArgument {
-                            name: "code".to_string(),
-                            description: "要审查的代码内容".to_string(),
-                            required: true,
-                        },
-                        McpArgument {
-                            name: "language".to_string(),
-                            description: "编程语言类型".to_string(),
-                            required: false,
-                        },
-                    ],
-                },
-                McpPrompt {
-                    name: "explain_concept".to_string(),
-                    description: "解释技术概念".to_string(),
-                    arguments: vec![McpArgument {
-                        name: "concept".to_string(),
-                        description: "要解释的概念".to_string(),
-                        required: true,
-                    }],
-                },
-            ],
-            env_vars: std::collections::HashMap::from([
-                (
-                    "PATH".to_string(),
-                    "/usr/local/bin:/usr/bin:/bin".to_string(),
-                ),
-                ("NODE_ENV".to_string(), "production".to_string()),
-            ]),
-        }
-    }
-}
-
 // 用于存储每个Provider的编辑状态输入框
 #[derive(Clone)]
 struct ProviderInputs {
@@ -267,6 +49,7 @@ pub struct McpProvider {
     // 每个Provider的编辑状态输入框
     provider_inputs: std::collections::HashMap<usize, ProviderInputs>,
     _subscriptions: Vec<Subscription>,
+    mcp_provider_manager: McpProviderManager,
 }
 
 impl ViewKit for McpProvider {
@@ -349,15 +132,16 @@ impl McpProvider {
             subscribable: true,
             subscribed: false,
         }];
-
+        let mcp_provider_manager = McpProviderManager::load();
         Self {
             focus_handle: cx.focus_handle(),
-            providers: vec![filesystem_provider, database_provider],
+            providers: mcp_provider_manager.list_providers(),
             expanded_providers: vec![],
             active_capability_tabs: std::collections::HashMap::new(),
             editing_provider: None,
             provider_inputs: std::collections::HashMap::new(),
             _subscriptions: vec![],
+            mcp_provider_manager,
         }
     }
 
@@ -442,8 +226,8 @@ impl McpProvider {
                 if let Some(selected) = inputs.transport_dropdown.read(cx).selected_value() {
                     provider.transport = match selected.as_ref() {
                         "Stdio" => McpTransport::Stdio,
-                        "HTTP" => McpTransport::Http,
-                        "WebSocket" => McpTransport::WebSocket,
+                        "HTTP" => McpTransport::Sse,
+                        "WebSocket" => McpTransport::Streamable,
                         _ => McpTransport::Stdio,
                     };
                 }
@@ -594,8 +378,8 @@ impl McpProvider {
 
         let transport_index = match provider.transport {
             McpTransport::Stdio => 0,
-            McpTransport::Http => 1,
-            McpTransport::WebSocket => 2,
+            McpTransport::Sse => 1,
+            McpTransport::Streamable => 2,
         };
 
         let transport_dropdown =
@@ -1677,31 +1461,11 @@ impl McpProvider {
                 .border_1()
                 .border_color(gpui::rgb(0xE5E7EB))
                 .child(
-                    v_flex()
-                        .gap_3()
-                        .child(
-                            v_flex()
-                                .gap_2()
-                                .when(!provider.description.is_empty(), |this| {
-                                    this.child(
-                                        h_flex()
-                                            .gap_4()
-                                            .child(
-                                                div()
-                                                    .text_sm()
-                                                    .text_color(gpui::rgb(0x6B7280))
-                                                    .min_w_20()
-                                                    .child("描述:"),
-                                            )
-                                            .child(
-                                                div()
-                                                    .text_sm()
-                                                    .text_color(gpui::rgb(0x111827))
-                                                    .child(provider.description.clone()),
-                                            ),
-                                    )
-                                })
-                                .child(
+                    v_flex().gap_3().child(
+                        v_flex()
+                            .gap_2()
+                            .when(!provider.description.is_empty(), |this| {
+                                this.child(
                                     h_flex()
                                         .gap_4()
                                         .child(
@@ -1709,41 +1473,50 @@ impl McpProvider {
                                                 .text_sm()
                                                 .text_color(gpui::rgb(0x6B7280))
                                                 .min_w_20()
-                                                .child("启动命令:"),
+                                                .child("描述:"),
                                         )
                                         .child(
-                                            div().text_sm().text_color(gpui::rgb(0x111827)).child(
-                                                format!(
-                                                    "{} {}",
-                                                    provider.command,
-                                                    provider.args.join(" ")
-                                                ),
-                                            ),
+                                            div()
+                                                .text_sm()
+                                                .text_color(gpui::rgb(0x111827))
+                                                .child(provider.description.clone()),
                                         ),
                                 )
-                                
-                                .when(!provider.env_vars.is_empty(), |this| {
-                                    this.child(
-                                        v_flex()
-                                            .gap_1()
-                                            .child(
-                                                div()
-                                                    .text_sm()
-                                                    .text_color(gpui::rgb(0x6B7280))
-                                                    .child("环境变量:"),
-                                            )
-                                            .children(provider.env_vars.iter().map(
-                                                |(key, value)| {
-                                                    div()
-                                                        .pl_4()
-                                                        .text_xs()
-                                                        .text_color(gpui::rgb(0x9CA3AF))
-                                                        .child(format!("{}={}", key, value))
-                                                },
-                                            )),
+                            })
+                            .child(
+                                h_flex()
+                                    .gap_4()
+                                    .child(
+                                        div()
+                                            .text_sm()
+                                            .text_color(gpui::rgb(0x6B7280))
+                                            .min_w_20()
+                                            .child("启动命令:"),
                                     )
-                                }),
-                        ),
+                                    .child(div().text_sm().text_color(gpui::rgb(0x111827)).child(
+                                        format!("{} {}", provider.command, provider.args.join(" ")),
+                                    )),
+                            )
+                            .when(!provider.env_vars.is_empty(), |this| {
+                                this.child(
+                                    v_flex()
+                                        .gap_1()
+                                        .child(
+                                            div()
+                                                .text_sm()
+                                                .text_color(gpui::rgb(0x6B7280))
+                                                .child("环境变量:"),
+                                        )
+                                        .children(provider.env_vars.iter().map(|(key, value)| {
+                                            div()
+                                                .pl_4()
+                                                .text_xs()
+                                                .text_color(gpui::rgb(0x9CA3AF))
+                                                .child(format!("{}={}", key, value))
+                                        })),
+                                )
+                            }),
+                    ),
                 ),
         )
     }

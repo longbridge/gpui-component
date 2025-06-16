@@ -1,9 +1,11 @@
 use gpui::SharedString;
 use gpui_component::IconName;
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub enum ApiType {
+    #[default] // 默认值为 OpenAI
     OpenAI,
     OpenAIResponse,
     Gemini,
@@ -33,8 +35,9 @@ impl ApiType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub enum ModelCapability {
+    #[default] // 默认值为 Text
     Text,
     Vision,
     Audio,
@@ -130,12 +133,15 @@ impl Default for ModelLimits {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelInfo {
     pub id: String,
     pub display_name: String,
+    #[serde(default)]
     pub capabilities: Vec<ModelCapability>,
+    #[serde(default)]
     pub enabled: bool,
+    #[serde(default)]
     pub limits: ModelLimits,
 }
 
@@ -158,15 +164,21 @@ impl Default for RetryConfig {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LlmProviderInfo {
     pub id: String,
     pub name: String,
+    #[serde(default)]
     pub api_url: String,
+    #[serde(default)]
     pub api_key: String,
+    #[serde(default)]
     pub api_type: ApiType,
+    #[serde(default)]
     pub enabled: bool,
+    #[serde(default)]
     pub models: Vec<ModelInfo>,
+    #[serde(default)]
     pub retry_config: RetryConfig,
 }
 
@@ -200,6 +212,176 @@ impl Default for LlmProviderInfo {
                     limits: ModelLimits::default(),
                 },
             ],
+        }
+    }
+}
+
+const CONFIG_FILE: &str = "config/llm_providers.yml";
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct LlmProviderManager {
+    #[serde(flatten, default)]
+    pub providers: std::collections::HashMap<String, LlmProviderInfo>,
+}
+
+impl LlmProviderManager {
+    /// 从文件加载配置
+    pub fn load() -> Self {
+        let content =
+            std::fs::read_to_string(CONFIG_FILE).map_or("".to_string(), |content| content);
+        // println!("Loading LLM provider config from: {}", content);
+        // let manager: LlmProviderManager = serde_yaml::from_str(&content).unwrap();
+        let manager: LlmProviderManager =
+            serde_yaml::from_str(&content).map_or(LlmProviderManager::default(), |map| map);
+        manager
+    }
+
+    /// 保存配置到文件
+    pub fn save(&self) -> anyhow::Result<()> {
+        let content = serde_yaml::to_string(self)?;
+
+        if let Some(parent) = Path::new(CONFIG_FILE).parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+
+        std::fs::write(CONFIG_FILE, content)?;
+        Ok(())
+    }
+
+    /// 获取所有提供商列表
+    pub fn list_providers(&self) -> Vec<LlmProviderInfo> {
+        self.providers.values().cloned().collect()
+    }
+
+    /// 根据ID查询提供商
+    pub fn get_provider(&self, id: &str) -> Option<&LlmProviderInfo> {
+        self.providers.get(id)
+    }
+
+    /// 根据名称查询提供商
+    pub fn get_provider_by_name(&self, name: &str) -> Option<&LlmProviderInfo> {
+        self.providers.values().find(|p| p.name == name)
+    }
+
+    /// 添加新的提供商
+    pub fn add_provider(&mut self, provider: LlmProviderInfo) -> anyhow::Result<String> {
+        if self.get_provider_by_name(&provider.name).is_some() {
+            return Err(anyhow::anyhow!(
+                "Provider '{}' already exists",
+                provider.name
+            ));
+        }
+
+        let id = provider.id.clone();
+        self.providers.insert(id.clone(), provider);
+        Ok(id)
+    }
+
+    /// 更新提供商
+    pub fn update_provider(&mut self, id: &str, provider: LlmProviderInfo) -> anyhow::Result<()> {
+        if !self.providers.contains_key(id) {
+            return Err(anyhow::anyhow!("Provider with id '{}' not found", id));
+        }
+
+        // 检查名称冲突
+        if let Some(existing) = self.get_provider_by_name(&provider.name) {
+            if existing.id != id {
+                return Err(anyhow::anyhow!(
+                    "Provider name '{}' already exists",
+                    provider.name
+                ));
+            }
+        }
+
+        self.providers.insert(id.to_string(), provider);
+        Ok(())
+    }
+
+    /// 删除提供商
+    pub fn delete_provider(&mut self, id: &str) -> anyhow::Result<LlmProviderInfo> {
+        self.providers
+            .remove(id)
+            .ok_or_else(|| anyhow::anyhow!("Provider with id '{}' not found", id))
+    }
+
+    /// 启用/禁用提供商
+    pub fn toggle_provider(&mut self, id: &str, enabled: bool) -> anyhow::Result<()> {
+        let provider = self
+            .providers
+            .get_mut(id)
+            .ok_or_else(|| anyhow::anyhow!("Provider with id '{}' not found", id))?;
+
+        provider.enabled = enabled;
+        Ok(())
+    }
+
+    // /// 搜索提供商
+    // pub fn search_providers(&self, query: &str) -> Vec<&LlmProvider> {
+    //     let query_lower = query.to_lowercase();
+    //     self.providers
+    //         .values()
+    //         .filter(|provider| {
+    //             provider.name.to_lowercase().contains(&query_lower)
+    //                 || provider.model.to_lowercase().contains(&query_lower)
+    //                 || provider.base_url.to_lowercase().contains(&query_lower)
+    //         })
+    //         .collect()
+    // }
+
+    /// 获取提供商数量
+    pub fn count(&self) -> usize {
+        self.providers.len()
+    }
+
+    /// 获取启用的提供商
+    pub fn get_enabled_providers(&self) -> Vec<&LlmProviderInfo> {
+        self.providers
+            .values()
+            .filter(|provider| provider.enabled)
+            .collect()
+    }
+
+    /// 批量删除提供商
+    pub fn batch_delete(&mut self, ids: &[String]) -> Vec<LlmProviderInfo> {
+        let mut deleted = Vec::new();
+        for id in ids {
+            if let Some(provider) = self.providers.remove(id) {
+                deleted.push(provider);
+            }
+        }
+        deleted
+    }
+
+    /// 清空所有提供商
+    pub fn clear(&mut self) {
+        self.providers.clear();
+    }
+
+    /// 创建新的空管理器
+    pub fn new() -> Self {
+        Self {
+            providers: std::collections::HashMap::new(),
+        }
+    }
+
+    /// 保存配置到指定文件
+    pub fn save_to_file(&self, path: &std::path::Path) -> anyhow::Result<()> {
+        let content = serde_yaml::to_string(self)?;
+        std::fs::write(path, content)?;
+        Ok(())
+    }
+
+    /// 从指定文件加载配置
+    pub fn load_from_file(path: &std::path::Path) -> anyhow::Result<Self> {
+        let content = std::fs::read_to_string(path)?;
+        let manager: LlmProviderManager = serde_yaml::from_str(&content)?;
+        Ok(manager)
+    }
+
+    /// 从指定文件加载配置，如果失败则返回默认配置
+    pub fn load_or_default(path: &std::path::Path) -> Self {
+        match Self::load_from_file(path) {
+            Ok(manager) => manager,
+            Err(_) => Self::default(),
         }
     }
 }

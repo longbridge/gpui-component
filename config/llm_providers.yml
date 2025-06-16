@@ -1,0 +1,162 @@
+收钱吧:
+  id: "shouqianba-001"
+  name: "收钱吧"
+  api_url: "https://hcb.aliyunddos1117.com/v1"
+  api_type: "OpenAI"
+  api_key: ""
+  enabled: true
+  models:
+    - id: "gpt-4o-mini-001"
+      display_name: "gpt-4o-mini"
+      capabilities:
+        - "Text"
+        - "Vision"
+        - "Tools"
+      enabled: true
+      limits:
+        max_tokens: 4096
+        context_length: 128000
+        max_requests_per_minute: 60
+        max_tokens_per_minute: 100000
+    - id: "gpt-4o-001"
+      display_name: "gpt-4o"
+      capabilities:
+        - "Text"
+        - "Vision"
+        - "Tools"
+      enabled: true
+      limits:
+        max_tokens: 4096
+        context_length: 128000
+        max_requests_per_minute: 30
+        max_tokens_per_minute: 50000
+Anthropic:
+  id: "anthropic-001"
+  name: "Anthropic"
+  api_url: "https://api.anthropic.com"
+  api_type: "Anthropic"
+  api_key: ""
+  enabled: true
+  models:
+    - id: "claude-3-5-sonnet-001"
+      display_name: "claude-3.5-sonnet"
+      capabilities:
+        - "Text"
+        - "Vision"
+        - "Tools"
+      enabled: true
+      limits:
+        max_tokens: 8192
+        context_length: 200000
+        max_requests_per_minute: 50
+        max_tokens_per_minute: 80000
+    - id: "claude-3-haiku-001"
+      display_name: "claude-3-haiku"
+      capabilities:
+        - "Text"
+        - "Tools"
+      enabled: true
+      limits:
+        max_tokens: 4096
+        context_length: 200000
+        max_requests_per_minute: 100
+        max_tokens_per_minute: 120000
+
+Gemini:
+  id: "gemini-001"
+  name: "Gemini"
+  api_url: "https://generativelanguage.googleapis.com"
+  api_type: "Gemini"
+  api_key: ""
+  enabled: true
+  models:
+    - id: "gemini-2-5-pro-exp-001"
+      display_name: "gemini-2.5-pro-exp-03-25"
+      capabilities:
+        - "Text"
+        - "Vision"
+        - "Audio"
+        - "Tools"
+      enabled: true
+      limits:
+        max_tokens: 8192
+        context_length: 1048576
+        max_requests_per_minute: 60
+        max_tokens_per_minute: 100000
+    - id: "gemini-2-5-pro-preview-001"
+      display_name: "gemini-2.5-pro-preview-03-25"
+      capabilities:
+        - "Text"
+        - "Vision"
+        - "Audio"
+        - "Tools"
+      enabled: true
+      limits:
+        max_tokens: 8192
+        context_length: 1048576
+        max_requests_per_minute: 60
+        max_tokens_per_minute: 100000
+
+OpenAI:
+  id: "openai-001"
+  name: "OpenAI"
+  api_url: "https://api.openai.com/v1"
+  api_type: "OpenAI"
+  api_key: ""
+  enabled: true
+  models:
+    - id: "gpt-4o-mini-official-001"
+      display_name: "gpt-4o-mini"
+      capabilities:
+        - "Text"
+        - "Vision"
+        - "Tools"
+      enabled: true
+      limits:
+        max_tokens: 16384
+        context_length: 128000
+        max_requests_per_minute: 500
+        max_tokens_per_minute: 200000
+    - id: "gpt-4o-official-001"
+      display_name: "gpt-4o"
+      capabilities:
+        - "Text"
+        - "Vision"
+        - "Tools"
+      enabled: true
+      limits:
+        max_tokens: 4096
+        context_length: 128000
+        max_requests_per_minute: 100
+        max_tokens_per_minute: 100000
+
+DeepSeek:
+  id: "deepseek-001"
+  name: "DeepSeek"
+  api_url: "https://api.deepseek.com/v1"
+  api_type: "OpenAI"
+  api_key: ""
+  enabled: true
+  models:
+    - id: "deepseek-chat-001"
+      display_name: "deepseek-chat"
+      capabilities:
+        - "Text"
+        - "Tools"
+      enabled: true
+      limits:
+        max_tokens: 4096
+        context_length: 32768
+        max_requests_per_minute: 60
+        max_tokens_per_minute: 50000
+    - id: "deepseek-coder-001"
+      display_name: "deepseek-coder"
+      capabilities:
+        - "Text"
+        - "Tools"
+      enabled: true
+      limits:
+        max_tokens: 4096
+        context_length: 16384
+        max_requests_per_minute: 60
+        max_tokens_per_minute: 50000

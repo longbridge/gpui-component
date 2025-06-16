@@ -1,5 +1,5 @@
 use crate::models::provider_config::{
-    ApiType, LlmProviderInfo, ModelCapability, ModelInfo, ModelLimits,
+    ApiType, LlmProviderInfo, LlmProviderManager, ModelCapability, ModelInfo, ModelLimits,
 };
 use crate::ui::components::ViewKit;
 use gpui::prelude::*;
@@ -48,6 +48,7 @@ pub struct LlmProvider {
     // 每个Provider的编辑状态输入框
     provider_inputs: std::collections::HashMap<usize, ProviderInputs>,
     _subscriptions: Vec<Subscription>,
+    llm_provider_manager: LlmProviderManager,
 }
 
 impl ViewKit for LlmProvider {
@@ -83,75 +84,16 @@ impl LlmProvider {
     }
 
     fn new(_window: &mut Window, cx: &mut Context<Self>) -> Self {
-        // 初始化示例数据保持不变
-        let mut default_provider = LlmProviderInfo::default();
-        default_provider.name = "收钱吧".to_string();
-        default_provider.api_url = "https://hcb.aliyunddos1117.com/v1".to_string();
-
-        let mut anthropic_provider = LlmProviderInfo::default();
-        anthropic_provider.name = "Anthropic".to_string();
-        anthropic_provider.api_url = "https://api.anthropic.com".to_string();
-        anthropic_provider.api_type = ApiType::Anthropic;
-        anthropic_provider.models = vec![
-            ModelInfo {
-                id: uuid::Uuid::new_v4().to_string(),
-                display_name: "claude-3.5-sonnet".to_string(),
-                capabilities: vec![
-                    ModelCapability::Text,
-                    ModelCapability::Vision,
-                    ModelCapability::Tools,
-                ],
-                enabled: true,
-                limits: ModelLimits::default(),
-            },
-            ModelInfo {
-                id: uuid::Uuid::new_v4().to_string(),
-                display_name: "claude-3-haiku".to_string(),
-                capabilities: vec![ModelCapability::Text, ModelCapability::Tools],
-                enabled: true,
-                limits: ModelLimits::default(),
-            },
-        ];
-
-        let mut gemini_provider = LlmProviderInfo::default();
-        gemini_provider.name = "Gemini".to_string();
-        gemini_provider.api_url = "https://generativelanguage.googleapis.com".to_string();
-        gemini_provider.api_type = ApiType::Gemini;
-        gemini_provider.models = vec![
-            ModelInfo {
-                id: uuid::Uuid::new_v4().to_string(),
-                display_name: "gemini-2.5-pro-exp-03-25".to_string(),
-                capabilities: vec![
-                    ModelCapability::Text,
-                    ModelCapability::Vision,
-                    ModelCapability::Audio,
-                    ModelCapability::Tools,
-                ],
-                enabled: true,
-                limits: ModelLimits::default(),
-            },
-            ModelInfo {
-                id: uuid::Uuid::new_v4().to_string(),
-                display_name: "gemini-2.5-pro-preview-03-25".to_string(),
-                capabilities: vec![
-                    ModelCapability::Text,
-                    ModelCapability::Vision,
-                    ModelCapability::Audio,
-                    ModelCapability::Tools,
-                ],
-                enabled: true,
-                limits: ModelLimits::default(),
-            },
-        ];
-
+        let llm_provider_manager = LlmProviderManager::load();
         Self {
             focus_handle: cx.focus_handle(),
-            providers: vec![default_provider, anthropic_provider, gemini_provider],
+            providers: llm_provider_manager.list_providers(),
             expanded_providers: vec![],
             active_provider_tabs: std::collections::HashMap::new(),
             editing_provider: None,
             provider_inputs: std::collections::HashMap::new(),
             _subscriptions: vec![],
+            llm_provider_manager,
         }
     }
 
