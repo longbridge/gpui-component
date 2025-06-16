@@ -125,6 +125,7 @@ impl LlmProvider {
         self.providers.push(new_provider);
         self.expanded_providers.push(new_index);
         self.start_editing(new_index, window, cx);
+        self.save_config();
         cx.notify();
     }
 

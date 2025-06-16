@@ -1,86 +1,10 @@
-ce09c880-841e-453a-82ce-def09b592424:
-  id: ce09c880-841e-453a-82ce-def09b592424
-  name: dsfasd
-  api_url: fasdfsad
-  api_key: fdasfasd
-  api_type: OpenAI
-  enabled: false
-  models:
-  - id: bbfaf186-be3e-4914-b207-af0a81614ce4
-    display_name: gpt-4o
-    capabilities:
-    - Text
-    - Vision
-    - Tools
-    enabled: true
-    limits:
-      context_length: 4096
-      max_output_tokens: 2048
-      max_requests_per_minute: null
-      max_requests_per_day: null
-      max_tokens_per_minute: null
-  - id: 530fad9d-b28c-4c5f-8544-e911c3e5c627
-    display_name: gpt-4o-mini
-    capabilities:
-    - Text
-    - Tools
-    enabled: true
-    limits:
-      context_length: 4096
-      max_output_tokens: 2048
-      max_requests_per_minute: null
-      max_requests_per_day: null
-      max_tokens_per_minute: null
-  retry_config:
-    max_retries: 3
-    initial_delay: 1000
-    max_delay: 32000
-    backoff_multiplier: 2.0
-anthropic-001:
-  id: anthropic-001
-  name: Anthropic
-  api_url: https://api.anthropic.com
-  api_key: ''
-  api_type: Anthropic
-  enabled: false
-  models:
-  - id: claude-3-5-sonnet-001
-    display_name: claude-3.5-sonnet
-    capabilities:
-    - Text
-    - Vision
-    - Tools
-    enabled: true
-    limits:
-      context_length: 200000
-      max_output_tokens: null
-      max_requests_per_minute: 50
-      max_requests_per_day: null
-      max_tokens_per_minute: 80000
-  - id: claude-3-haiku-001
-    display_name: claude-3-haiku
-    capabilities:
-    - Text
-    - Tools
-    enabled: true
-    limits:
-      context_length: 200000
-      max_output_tokens: null
-      max_requests_per_minute: 100
-      max_requests_per_day: null
-      max_tokens_per_minute: 120000
-  retry_config:
-    max_retries: 3
-    initial_delay: 1000
-    max_delay: 32000
-    backoff_multiplier: 2.0
 deepseek-001:
   id: deepseek-001
   name: DeepSeek
   api_url: https://api.deepseek.com/v1
   api_key: ''
   api_type: OpenAI
-  enabled: false
+  enabled: true
   models:
   - id: deepseek-chat-001
     display_name: deepseek-chat
@@ -111,52 +35,13 @@ deepseek-001:
     initial_delay: 1000
     max_delay: 32000
     backoff_multiplier: 2.0
-shouqianba-001:
-  id: shouqianba-001
-  name: 收钱吧
-  api_url: https://hcb.aliyunddos1117.com/v1
-  api_key: ''
-  api_type: OpenAI
-  enabled: true
-  models:
-  - id: gpt-4o-mini-001
-    display_name: gpt-4o-mini
-    capabilities:
-    - Text
-    - Vision
-    - Tools
-    enabled: true
-    limits:
-      context_length: 128000
-      max_output_tokens: null
-      max_requests_per_minute: 60
-      max_requests_per_day: null
-      max_tokens_per_minute: 100000
-  - id: gpt-4o-001
-    display_name: gpt-4o
-    capabilities:
-    - Text
-    - Vision
-    - Tools
-    enabled: true
-    limits:
-      context_length: 128000
-      max_output_tokens: null
-      max_requests_per_minute: 30
-      max_requests_per_day: null
-      max_tokens_per_minute: 50000
-  retry_config:
-    max_retries: 3
-    initial_delay: 1000
-    max_delay: 32000
-    backoff_multiplier: 2.0
 openai-001:
   id: openai-001
   name: OpenAI
   api_url: https://api.openai.com/v1
   api_key: ''
   api_type: OpenAI
-  enabled: false
+  enabled: true
   models:
   - id: gpt-4o-mini-official-001
     display_name: gpt-4o-mini
@@ -189,13 +74,52 @@ openai-001:
     initial_delay: 1000
     max_delay: 32000
     backoff_multiplier: 2.0
+shouqianba-001:
+  id: shouqianba-001
+  name: 收钱吧
+  api_url: https://hcb.aliyunddos1117.com/v1
+  api_key: ''
+  api_type: OpenAI
+  enabled: true
+  models:
+  - id: gpt-4o-mini-001
+    display_name: gpt-4o-mini
+    capabilities:
+    - Text
+    - Vision
+    - Tools
+    enabled: false
+    limits:
+      context_length: 128000
+      max_output_tokens: null
+      max_requests_per_minute: 60
+      max_requests_per_day: null
+      max_tokens_per_minute: 100000
+  - id: gpt-4o-001
+    display_name: gpt-4o
+    capabilities:
+    - Text
+    - Vision
+    - Tools
+    enabled: true
+    limits:
+      context_length: 128000
+      max_output_tokens: null
+      max_requests_per_minute: 30
+      max_requests_per_day: null
+      max_tokens_per_minute: 50000
+  retry_config:
+    max_retries: 3
+    initial_delay: 1000
+    max_delay: 32000
+    backoff_multiplier: 2.0
 gemini-001:
   id: gemini-001
   name: Gemini
   api_url: https://generativelanguage.googleapis.com
   api_key: ''
   api_type: Gemini
-  enabled: false
+  enabled: true
   models:
   - id: gemini-2-5-pro-exp-001
     display_name: gemini-2.5-pro-exp-03-25
@@ -225,6 +149,44 @@ gemini-001:
       max_requests_per_minute: 60
       max_requests_per_day: null
       max_tokens_per_minute: 100000
+  retry_config:
+    max_retries: 3
+    initial_delay: 1000
+    max_delay: 32000
+    backoff_multiplier: 2.0
+anthropic-001:
+  id: anthropic-001
+  name: Anthropic
+  api_url: https://api.anthropic.com
+  api_key: ''
+  api_type: Anthropic
+  enabled: true
+  models:
+  - id: claude-3-5-sonnet-001
+    display_name: claude-3.5-sonnet
+    capabilities:
+    - Text
+    - Vision
+    - Tools
+    enabled: true
+    limits:
+      context_length: 200000
+      max_output_tokens: null
+      max_requests_per_minute: 50
+      max_requests_per_day: null
+      max_tokens_per_minute: 80000
+  - id: claude-3-haiku-001
+    display_name: claude-3-haiku
+    capabilities:
+    - Text
+    - Tools
+    enabled: true
+    limits:
+      context_length: 200000
+      max_output_tokens: null
+      max_requests_per_minute: 100
+      max_requests_per_day: null
+      max_tokens_per_minute: 120000
   retry_config:
     max_retries: 3
     initial_delay: 1000
