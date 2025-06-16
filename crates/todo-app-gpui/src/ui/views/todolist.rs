@@ -198,8 +198,8 @@ impl RenderOnce for TodoItem {
 }
 
 struct TodoListDelegate {
-    companies: Vec<Todo>,
-    matched_companies: Vec<Todo>,
+    todos: Vec<Todo>,
+    matched_todos: Vec<Todo>,
     selected_index: Option<usize>,
     confirmed_index: Option<usize>,
     query: String,
@@ -212,7 +212,7 @@ impl ListDelegate for TodoListDelegate {
     type Item = TodoItem;
 
     fn items_count(&self, _: &App) -> usize {
-        self.matched_companies.len()
+        self.matched_todos.len()
     }
 
     fn perform_search(
@@ -222,10 +222,10 @@ impl ListDelegate for TodoListDelegate {
         _: &mut Context<List<Self>>,
     ) -> Task<()> {
         self.query = query.to_string();
-        self.matched_companies = self
-            .companies
+        self.matched_todos = self
+            .todos
             .iter()
-            .filter(|company| company.title.to_lowercase().contains(&query.to_lowercase()))
+            .filter(|todo| todo.title.to_lowercase().contains(&query.to_lowercase()))
             .cloned()
             .collect();
         Task::ready(())
@@ -264,7 +264,7 @@ impl ListDelegate for TodoListDelegate {
         cx: &mut Context<List<Self>>,
     ) -> Option<Self::Item> {
         let selected = Some(ix) == self.selected_index || Some(ix) == self.confirmed_index;
-        if let Some(company) = self.matched_companies.get(ix) {
+        if let Some(company) = self.matched_todos.get(ix) {
             return Some(TodoItem::new(ix, company.clone(), ix, selected));
         }
 
@@ -322,16 +322,18 @@ impl ListDelegate for TodoListDelegate {
         //     });
         // })
         // .detach();
+        // self.companies
+        //     .extend((0..200).map(|_| self.manager.list_todos()));
     }
 }
 
 impl TodoListDelegate {
-    fn selected_company(&self) -> Option<Todo> {
+    fn selected_todo(&self) -> Option<Todo> {
         let Some(ix) = self.selected_index else {
             return None;
         };
 
-        self.companies.get(ix).cloned()
+        self.todos.get(ix).cloned()
     }
 }
 
@@ -344,8 +346,8 @@ enum TodoFilter {
 }
 pub struct TodoList {
     focus_handle: FocusHandle,
-    company_list: Entity<List<TodoListDelegate>>,
-    selected_company: Option<Todo>,
+    todo_list: Entity<List<TodoListDelegate>>,
+    selected_todo: Option<Todo>,
     _subscriptions: Vec<Subscription>,
     todo_filter: TodoFilter,
     active_tab_ix: usize,
@@ -359,11 +361,11 @@ impl TodoList {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let manager = TodoManager::create_fake_data();
 
-        let companies = manager.list_todos();
+        let todos = manager.list_todos();
 
         let delegate = TodoListDelegate {
-            matched_companies: companies.clone(),
-            companies,
+            matched_todos: todos.clone(),
+            todos,
             selected_index: None,
             confirmed_index: None,
             query: "".to_string(),
@@ -372,18 +374,15 @@ impl TodoList {
             manager,
         };
 
-        let company_list = cx.new(|cx| List::new(delegate, window, cx));
-        // company_list.update(cx, |list, cx| {
-        //     list.set_selected_index(Some(3), cx);
-        // });
+        let todo_list = cx.new(|cx| List::new(delegate, window, cx));
         let _subscriptions = vec![cx.subscribe(
-            &company_list,
-            |this, _company_list, ev: &ListEvent, cx| match ev {
+            &todo_list,
+            |this, _todo_list, ev: &ListEvent, cx| match ev {
                 ListEvent::Select(ix) => {
                     println!("List Selected: {:?}", ix);
                 }
                 ListEvent::Confirm(ix) => {
-                    this.selected_company(cx);
+                    this.selected_todo(cx);
                     println!("List Confirmed: {:?}", ix);
                 }
                 ListEvent::Cancel => {
@@ -412,18 +411,18 @@ impl TodoList {
 
         Self {
             focus_handle: cx.focus_handle(),
-            company_list,
-            selected_company: None,
+            todo_list,
+            selected_todo: None,
             _subscriptions,
             todo_filter: TodoFilter::default(),
             active_tab_ix: 0,
         }
     }
 
-    fn selected_company(&mut self, cx: &mut Context<Self>) {
-        println!("Selected company action triggered");
-        let picker = self.company_list.read(cx);
-        self.selected_company = picker.delegate().selected_company();
+    fn selected_todo(&mut self, cx: &mut Context<Self>) {
+        println!("Selected todo action triggered");
+        let picker = self.todo_list.read(cx);
+        self.selected_todo = picker.delegate().selected_todo();
     }
 
     fn clone(&mut self, _: &Clone, _: &mut Window, cx: &mut Context<Self>) {
@@ -433,14 +432,14 @@ impl TodoList {
     fn open_todo(&mut self, _: &Open, window: &mut Window, cx: &mut Context<Self>) {
         // self.company_list.update(cx, update)
         println!("Open action triggered");
-        if let Some(todo) = self.selected_company.clone() {
+        if let Some(todo) = self.selected_todo.clone() {
             println!("Opening todo: {}", todo.title);
             TodoThreadChat::open(todo, cx);
         }
     }
 
     fn edit_todo(&mut self, _: &Edit, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(todo) = self.selected_company.clone() {
+        if let Some(todo) = self.selected_todo.clone() {
             TodoThreadEdit::edit(todo, cx);
         }
     }
@@ -463,16 +462,16 @@ impl TodoList {
     fn set_scroll(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
         println!("Scroll to: {}", ix);
         match ix {
-            0 => self.company_list.update(cx, |list, cx| {
+            0 => self.todo_list.update(cx, |list, cx| {
                 list.scroll_to_item(0, window, cx);
             }),
 
-            1 => self.company_list.update(cx, |list, cx| {
+            1 => self.todo_list.update(cx, |list, cx| {
                 if let Some(selected) = list.selected_index() {
                     list.scroll_to_item(selected, window, cx);
                 }
             }),
-            2 => self.company_list.update(cx, |list, cx| {
+            2 => self.todo_list.update(cx, |list, cx| {
                 list.scroll_to_item(list.delegate().items_count(cx) - 1, window, cx);
             }),
             _ => {}
@@ -562,7 +561,7 @@ impl Render for TodoList {
                     .border_1()
                     .border_color(cx.theme().border)
                     .rounded(cx.theme().radius)
-                    .child(self.company_list.clone()),
+                    .child(self.todo_list.clone()),
             )
     }
 }
