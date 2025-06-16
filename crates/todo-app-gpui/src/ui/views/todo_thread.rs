@@ -10,7 +10,8 @@ use gpui_component::{
     scroll::{ Scrollbar, ScrollbarState},
     *,
 };
-use crate::ui::{components::ViewKit, views::todolist::Todo};
+use crate::ui::{components::ViewKit};
+use crate::models::todo_item::*;
 use crate::ui::AppExt;
 
 actions!(todo_thread, [Tab, TabPrev, SendMessage]);

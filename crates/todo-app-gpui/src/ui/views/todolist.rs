@@ -1,5 +1,6 @@
 use super::todo_thread_edit::TodoThreadEdit;
-use crate::ui::{views::todo_thread::TodoThreadChat, AppExt};
+use crate::models::todo_item::*;
+use crate::ui::views::todo_thread::TodoThreadChat;
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::{
@@ -26,12 +27,6 @@ actions!(
         Delete
     ]
 );
-
-#[derive(Clone, Default)]
-pub struct Todo {
-    pub title: SharedString,
-    pub description: SharedString,
-}
 
 #[derive(IntoElement)]
 pub struct TodoItem {
@@ -698,7 +693,7 @@ fn random_todo() -> Todo {
         "制定下阶段目标，明确重点任务和负责人，提升执行力。",
         "安排项目复盘，总结得失，提出改进建议，持续优化流程。",
     ];
-use rand::prelude::IndexedRandom;
+    use rand::prelude::IndexedRandom;
 
     let mut rng = rand::rng();
     let name: String = Name().fake();

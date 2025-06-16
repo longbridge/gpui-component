@@ -13,7 +13,8 @@ use gpui_component::{
     tooltip::Tooltip,
     *,
 };
-use crate::ui::{AppExt,components::ViewKit, views::todolist::Todo};
+use crate::ui::{AppExt,components::ViewKit};
+use crate::models::todo_item::*;
 
 actions!(todo_thread, [Tab, TabPrev, Save, Cancel, Delete]);
 
