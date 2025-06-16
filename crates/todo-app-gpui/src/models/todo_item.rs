@@ -13,6 +13,7 @@ pub enum TodoStatus {
     Todo,       // 待办
     InProgress, // 进行中
     Done,       // 已完成
+    Alert, // 警报
     Cancelled,  // 已取消
 }
 
@@ -21,19 +22,21 @@ impl TodoStatus {
         match self {
             TodoStatus::Todo => "待办",
             TodoStatus::InProgress => "进行中",
+            TodoStatus::Alert => "警报",
             TodoStatus::Done => "已完成",
             TodoStatus::Cancelled => "已取消",
         }
     }
 
     pub fn all() -> Vec<&'static str> {
-        vec!["待办", "进行中", "已完成", "已取消"]
+        vec!["待办", "进行中", "警报", "已完成", "已取消"]
     }
 
     pub fn from_str(s: &str) -> Self {
         match s {
             "待办" => TodoStatus::Todo,
             "进行中" => TodoStatus::InProgress,
+            "警报" => TodoStatus::Alert,
             "已完成" => TodoStatus::Done,
             "已取消" => TodoStatus::Cancelled,
             _ => TodoStatus::Todo,

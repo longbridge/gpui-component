@@ -34,10 +34,7 @@ pub struct TodoItem {
     ix: usize,
     item: Todo,
     selected: bool,
-    in_progress: bool,
     star: bool,
-    alert: bool,
-    completed: bool,
 }
 
 impl TodoItem {
@@ -47,10 +44,7 @@ impl TodoItem {
             ix,
             base: ListItem::new(id),
             selected,
-            in_progress: true,
             star: false,
-            alert: true,
-            completed: false,
         }
     }
 }
@@ -72,6 +66,22 @@ impl RenderOnce for TodoItem {
             cx.theme().list_even
         };
 
+        // 检查任务是否已完成
+        let is_completed = self.item.status == TodoStatus::Done;
+
+        // 为已完成任务设置不同的文本颜色和透明度
+        let title_color = if is_completed {
+            text_color.opacity(0.6)
+        } else {
+            text_color
+        };
+
+        let description_color = if is_completed {
+            text_color.opacity(0.3)
+        } else {
+            text_color.opacity(0.5)
+        };
+
         self.base
             .px_3()
             .py_1()
@@ -85,16 +95,30 @@ impl RenderOnce for TodoItem {
                     .text_color(text_color)
                     .child(
                         v_flex()
-                            .gap_2()
+                            .gap_1()
                             .max_w(px(500.))
                             .overflow_x_hidden()
-                            .text_sm()
-                            .child(Label::new(self.item.title.clone()).whitespace_nowrap())
+                            .text_xs()
                             .child(
-                                div().text_ellipsis().text_sm().overflow_x_hidden().child(
-                                    Label::new(self.item.description.clone())
-                                        .text_color(text_color.opacity(0.5)),
+                                // 标题 - 为已完成任务添加删除线
+                                div().child(
+                                    Label::new(self.item.title.clone())
+                                        .whitespace_nowrap()
+                                        .text_color(title_color)
+                                        .when(is_completed, |div| div.line_through().italic()),
                                 ),
+                            )
+                            .child(
+                                // 描述 - 为已完成任务添加删除线
+                                div()
+                                    .text_ellipsis()
+                                    .child(
+                                        Label::new(self.item.description.clone())
+                                            .text_color(description_color)
+                                            .when(is_completed, |label| {
+                                                label.line_through().italic()
+                                            }),
+                                    ),
                             ),
                     )
                     .child(
@@ -109,7 +133,7 @@ impl RenderOnce for TodoItem {
                                         .gap_1()
                                         .items_center()
                                         .justify_end()
-                                        .when(self.in_progress, |div| {
+                                        .when(self.item.status == TodoStatus::InProgress, |div| {
                                             div.child(
                                                 Indicator::new()
                                                     .with_size(px(16.))
@@ -117,7 +141,7 @@ impl RenderOnce for TodoItem {
                                                     .color(blue_500()),
                                             )
                                         })
-                                        .when(!self.in_progress, |div| {
+                                        .when(self.item.status != TodoStatus::InProgress, |div| {
                                             div.child(
                                                 Button::new("button-refresh")
                                                     .ghost()
@@ -143,14 +167,12 @@ impl RenderOnce for TodoItem {
                                 )
                             })
                             .child(
-                                h_flex()
-                                    // .child(IconName::Calendar)
-                                    .child(
-                                        Label::new("10/01 17:36")
-                                            .whitespace_nowrap()
-                                            .text_xs()
-                                            .text_color(text_color.opacity(0.5)),
-                                    ),
+                                h_flex().child(
+                                    Label::new("10/01 17:36")
+                                        .whitespace_nowrap()
+                                        .text_xs()
+                                        .text_color(text_color.opacity(0.5)),
+                                ),
                             ),
                     ),
             )
@@ -166,7 +188,7 @@ impl RenderOnce for TodoItem {
                             .items_center()
                             .justify_start()
                             .gap_2()
-                            .when(self.alert, |div| {
+                            .when(self.item.status == TodoStatus::Alert, |div| {
                                 div.child(
                                     Icon::new(IconName::TriangleAlert)
                                         .xsmall()
@@ -174,20 +196,28 @@ impl RenderOnce for TodoItem {
                                 )
                             })
                             .child(Icon::new(IconName::Paperclip).xsmall())
-                            .child(if self.completed {
+                            .child(if is_completed {
+                                // 已完成任务显示完成图标
+                                Icon::new(IconName::CircleCheck)
+                                    .xsmall()
+                                    .text_color(green_500())
+                            } else if self.item.status == TodoStatus::InProgress {
+                                // 进行中任务显示刷新图标
                                 Icon::new(IconName::RefreshCW).xsmall()
                             } else {
+                                // 待办任务显示计时器图标
                                 Icon::new(IconName::TimerReset)
                                     .xsmall()
                                     .text_color(green_500())
                             }),
                     )
                     .child(
-                        // 模型信息
+                        // 模型信息 - 为已完成任务降低透明度
                         h_flex()
                             .items_center()
                             .justify_end()
                             .gap_2()
+                            .when(is_completed, |div| div.opacity(0.5))
                             .child(Icon::new(IconName::Mic).xsmall())
                             .child(Icon::new(IconName::Image).xsmall())
                             .child(Icon::new(IconName::Brain).xsmall())
@@ -409,14 +439,16 @@ impl TodoList {
         // })
         // .detach();
 
-        Self {
+       let mut celf= Self {
             focus_handle: cx.focus_handle(),
             todo_list,
             selected_todo: None,
             _subscriptions,
             todo_filter: TodoFilter::default(),
             active_tab_ix: 0,
-        }
+        };
+        celf.set_active_tab(1,window,cx);
+        celf
     }
 
     fn selected_todo(&mut self, cx: &mut Context<Self>) {
