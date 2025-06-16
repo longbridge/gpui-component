@@ -5,6 +5,7 @@ use crate::ui::components::titlebar::TitleBar;
 use crate::ui::components::ViewKit;
 use crate::ui::views::introduction::Introduction;
 use crate::ui::views::llm_provider::LlmProvider;
+use crate::ui::views::mcp_provider::McpProvider;
 use crate::ui::views::profile::Profile;
 use crate::ui::views::settings::Settings;
 use crate::ui::{main_window::TodoMainWindow, AppExt};
@@ -115,6 +116,7 @@ pub fn run() {
         AppState::init(cx);
         Profile::init(cx);
         LlmProvider::init(cx);
+        McpProvider::init(cx);
         Settings::init(cx);
 
         cx.on_action(|_: &Quit, cx: &mut App| {

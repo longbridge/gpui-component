@@ -319,12 +319,6 @@ impl McpProvider {
                 .default_value(&provider.name)
         });
 
-        let command_input = cx.new(|cx| {
-            InputState::new(window, cx)
-                .placeholder("可执行文件路径")
-                .default_value(&provider.command)
-        });
-
         let args_input = cx.new(|cx| {
             InputState::new(window, cx)
                 .placeholder("启动命令&参数 (用空格分隔)")
@@ -363,7 +357,6 @@ impl McpProvider {
             index,
             ProviderInputs {
                 name_input,
-                //command_input,
                 args_input,
                 description_input,
                 env_input,
