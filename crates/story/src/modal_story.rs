@@ -12,7 +12,7 @@ use gpui_component::{
     h_flex,
     input::{InputState, TextInput},
     modal::ModalButtonProps,
-    v_flex, ContextModal as _,
+    v_flex, ActiveTheme as _, ContextModal as _,
 };
 
 use crate::section;
@@ -297,8 +297,10 @@ impl Render for ModalStory {
                                 .danger()
                                 .label("Delete Item")
                                 .on_click(cx.listener(|_, _, window, cx| {
-                                    window.open_modal(cx, |modal, _, _| {
+                                    window.open_modal(cx, |modal, _, cx| {
                                         modal
+                                            .rounded_none()
+                                            .p_6()
                                             .confirm()
                                             .child("Are you sure to delete this item?")
                                             .button_props(

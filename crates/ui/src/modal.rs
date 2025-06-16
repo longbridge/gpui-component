@@ -3,8 +3,8 @@ use std::{rc::Rc, time::Duration};
 use gpui::{
     anchored, div, hsla, point, prelude::FluentBuilder, px, relative, Animation, AnimationExt as _,
     AnyElement, App, Bounds, ClickEvent, Div, FocusHandle, Hsla, InteractiveElement, IntoElement,
-    KeyBinding, MouseButton, ParentElement, Pixels, Point, RenderOnce, SharedString, Styled,
-    Window,
+    KeyBinding, MouseButton, ParentElement, Pixels, Point, RenderOnce, SharedString,
+    StyleRefinement, Styled, Window,
 };
 use rust_i18n::t;
 
@@ -74,7 +74,7 @@ impl ModalButtonProps {
 
 #[derive(IntoElement)]
 pub struct Modal {
-    base: Div,
+    style: StyleRefinement,
     title: Option<AnyElement>,
     footer: Option<FooterFn>,
     content: Div,
@@ -111,21 +111,9 @@ pub(crate) fn overlay_color(overlay: bool, _: &Window, cx: &App) -> Hsla {
 
 impl Modal {
     pub fn new(_: &mut Window, cx: &mut App) -> Self {
-        let radius = (cx.theme().radius * 2.).min(px(20.));
-
-        let base = v_flex()
-            .bg(cx.theme().background)
-            .border_1()
-            .border_color(cx.theme().border)
-            .rounded(radius)
-            .shadow_xl()
-            .min_h_24()
-            .p_4()
-            .gap_4();
-
         Self {
-            base,
             focus_handle: cx.focus_handle(),
+            style: StyleRefinement::default(),
             title: None,
             footer: None,
             content: v_flex(),
@@ -287,7 +275,7 @@ impl ParentElement for Modal {
 
 impl Styled for Modal {
     fn style(&mut self) -> &mut gpui::StyleRefinement {
-        self.base.style()
+        &mut self.style
     }
 }
 
@@ -369,6 +357,7 @@ impl RenderOnce for Modal {
         let offset_top = px(layer_ix as f32 * 16.);
         let y = self.margin_top.unwrap_or(view_size.height / 10.) + offset_top;
         let x = bounds.center().x - self.width / 2.;
+        let border_radius = (cx.theme().radius * 2.).min(px(20.));
 
         anchored()
             .position(point(window_paddings.left, window_paddings.top))
@@ -397,7 +386,16 @@ impl RenderOnce for Modal {
                         })
                     })
                     .child(
-                        self.base
+                        v_flex()
+                            .bg(cx.theme().background)
+                            .border_1()
+                            .border_color(cx.theme().border)
+                            .rounded(border_radius)
+                            .shadow_xl()
+                            .min_h_24()
+                            .p_4()
+                            .gap_4()
+                            .refine_style(&self.style)
                             .id(SharedString::from(format!("modal-{layer_ix}")))
                             .key_context(CONTEXT)
                             .track_focus(&self.focus_handle)
