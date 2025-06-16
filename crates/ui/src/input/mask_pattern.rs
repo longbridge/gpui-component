@@ -218,10 +218,9 @@ impl MaskPattern {
                 }
 
                 // check if the integer part is valid
-                if !int_part
-                    .chars()
-                    .all(|ch| ch.is_ascii_digit() || is_sign(&ch) || Some(ch) == *separator)
-                {
+                if !int_part.chars().enumerate().all(|(i, ch)| {
+                    ch.is_ascii_digit() || is_sign(&ch) && i == 0 || Some(ch) == *separator
+                }) {
                     return false;
                 }
 
