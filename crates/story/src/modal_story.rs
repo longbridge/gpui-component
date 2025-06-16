@@ -12,6 +12,7 @@ use gpui_component::{
     h_flex,
     input::{InputState, TextInput},
     modal::ModalButtonProps,
+    text::TextView,
     v_flex, ContextModal as _,
 };
 
@@ -353,9 +354,11 @@ impl Render for ModalStory {
                                 .on_click(cx.listener(|_, _, window, cx| {
                                     window.open_modal(cx, |modal, _, _| {
                                         modal.h(px(450.)).title("Modal with scrollbar").child(
-                                        "This is a scrollable modal, there are many things to say.\n"
-                                            .repeat(200),
-                                    )
+                                            TextView::markdown(
+                                                "markdown1",
+                                                include_str!("../../../README.md"),
+                                            ),
+                                        )
                                     });
                                 })),
                         ),
