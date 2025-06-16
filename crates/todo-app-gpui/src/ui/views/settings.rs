@@ -1,6 +1,6 @@
 use super::{
-    introduction::Introduction, mcp_provider::McpProvider, profile::Profile, provider::LlmProvider,
-    user_guide::UserGuide,
+    introduction::Introduction, llm_provider::LlmProvider, mcp_provider::McpProvider,
+    profile::Profile, user_guide::UserGuide,
 };
 use crate::ui::AppExt;
 use crate::{

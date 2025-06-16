@@ -1,7 +1,7 @@
 pub(crate) mod introduction;
+pub(crate) mod llm_provider;
 pub(crate) mod mcp_provider;
 pub(crate) mod profile;
-pub(crate) mod provider;
 pub(crate) mod settings;
 pub(crate) mod todo_thread;
 pub(crate) mod todo_thread_edit;

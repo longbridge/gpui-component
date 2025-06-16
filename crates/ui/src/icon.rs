@@ -118,7 +118,14 @@ pub enum IconName {
     WindowRestore,
     Wrench,
     X,
-    Shuffle,Sparkles,FolderTree,Terminal,Wifi,Radio,Zap,Video
+    Shuffle,
+    Sparkles,
+    FolderTree,
+    Terminal,
+    Wifi,
+    Radio,
+    Zap,
+    Video,
 }
 
 impl IconName {
