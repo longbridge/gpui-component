@@ -359,9 +359,34 @@ impl LlmProvider {
         cx: &mut Context<Self>,
     ) {
         if let Some(provider) = self.providers.get_mut(provider_index) {
+            // 克隆provider在修改之前
+            let provider_id = provider.id.clone();
+            let mut provider_clone = provider.clone();
+
             if let Some(model) = provider.models.get_mut(model_index) {
+                // 更新本地模型状态
                 model.enabled = enabled;
-                cx.notify();
+
+                // 同时更新clone中的模型状态
+                if let Some(clone_model) = provider_clone.models.get_mut(model_index) {
+                    clone_model.enabled = enabled;
+                }
+
+                // 同步到 LlmProviderManager 并保存
+                match self
+                    .llm_provider_manager
+                    .update_provider(&provider_id, provider_clone)
+                {
+                    Ok(_) => {
+                        self.save_config();
+                        cx.notify();
+                    }
+                    Err(e) => {
+                        // 如果保存失败，回滚本地状态
+                        model.enabled = !enabled;
+                        eprintln!("切换模型状态失败: {}", e);
+                    }
+                }
             }
         }
     }

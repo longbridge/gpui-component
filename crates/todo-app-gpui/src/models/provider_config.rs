@@ -273,7 +273,7 @@ impl LlmProviderManager {
 
         let id = provider.id.clone();
         self.providers.insert(id.clone(), provider);
-        self.save()?;
+        //self.save()?;
         Ok(id)
     }
 
@@ -294,7 +294,7 @@ impl LlmProviderManager {
         }
 
         self.providers.insert(id.to_string(), provider);
-        self.save()?;
+        // self.save()?;
         Ok(())
     }
 
@@ -304,7 +304,7 @@ impl LlmProviderManager {
             .providers
             .remove(id)
             .ok_or_else(|| anyhow::anyhow!("Provider with id '{}' not found", id))?;
-        self.save()?;
+        // self.save()?;
         Ok(provider)
     }
 
@@ -316,7 +316,7 @@ impl LlmProviderManager {
             .ok_or_else(|| anyhow::anyhow!("Provider with id '{}' not found", id))?;
 
         provider.enabled = enabled;
-        self.save()?;
+        //self.save()?;
         Ok(())
     }
 
@@ -354,14 +354,14 @@ impl LlmProviderManager {
                 deleted.push(provider);
             }
         }
-        self.save()?;
+        // self.save()?;
         Ok(deleted)
     }
 
     /// 清空所有提供商
     pub fn clear(&mut self) -> anyhow::Result<()> {
         self.providers.clear();
-        self.save()?;
+        // self.save()?;
         Ok(())
     }
 }
