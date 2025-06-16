@@ -464,7 +464,7 @@ impl Render for McpProvider {
                 let expanded_providers = self.expanded_providers.clone();
                 let editing_provider = self.editing_provider;
                 let active_capability_tabs = self.active_capability_tabs.clone();
-
+                let providers = self.providers.clone();
                 // 预先收集编辑表单的输入框数据
                 let edit_inputs = if let Some(editing_index) = editing_provider {
                     self.provider_inputs.get(&editing_index).map(|inputs| {
@@ -481,7 +481,7 @@ impl Render for McpProvider {
                     None
                 };
 
-                for (index, provider) in self.providers.iter().enumerate() {
+                for (index, provider) in providers.iter().enumerate() {
                     let provider_name = provider.name.clone();
                     let provider_command = provider.command.clone();
                     let provider_args = provider.args.join(" ");
@@ -747,7 +747,7 @@ impl Render for McpProvider {
                                                 .child(Tab::new("资源"))
                                                 .child(Tab::new("工具"))
                                                 .child(Tab::new("提示"))
-                                                .child(Tab::new("日志"))
+                                                // .child(Tab::new("日志"))
                                                 .on_click(cx.listener(
                                                     move |this, tab_ix: &usize, window, cx| {
                                                         this.set_active_capability_tab(

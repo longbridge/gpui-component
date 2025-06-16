@@ -30,7 +30,6 @@ pub enum McpCapability {
     Resources,
     Tools,
     Prompts,
-    Logging,
 }
 
 impl McpCapability {
@@ -39,7 +38,6 @@ impl McpCapability {
             McpCapability::Resources => IconName::Database,
             McpCapability::Tools => IconName::Wrench,
             McpCapability::Prompts => IconName::SquareTerminal,
-            McpCapability::Logging => IconName::LetterText,
         }
     }
 
@@ -48,7 +46,6 @@ impl McpCapability {
             McpCapability::Resources => "资源",
             McpCapability::Tools => "工具",
             McpCapability::Prompts => "提示",
-            McpCapability::Logging => "日志",
         }
     }
 }
