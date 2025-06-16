@@ -1,4 +1,4 @@
-use std::{cell::Cell, ops::Range, rc::Rc, time::Duration};
+use std::{ops::Range, rc::Rc, time::Duration};
 
 use crate::{
     actions::{Cancel, SelectNext, SelectPrev},
@@ -147,9 +147,9 @@ pub struct Table<D: TableDelegate> {
     fixed_cols: FixedCols,
 
     pub vertical_scroll_handle: UniformListScrollHandle,
-    pub vertical_scrollbar_state: Rc<Cell<ScrollbarState>>,
+    pub vertical_scroll_state: ScrollbarState,
     pub horizontal_scroll_handle: ScrollHandle,
-    pub horizontal_scrollbar_state: Rc<Cell<ScrollbarState>>,
+    pub horizontal_scroll_state: ScrollbarState,
 
     scrollbar_visible: Edges<bool>,
     selected_row: Option<usize>,
@@ -391,8 +391,8 @@ where
             fixed_cols: FixedCols::default(),
             horizontal_scroll_handle: ScrollHandle::new(),
             vertical_scroll_handle: UniformListScrollHandle::new(),
-            vertical_scrollbar_state: Rc::new(Cell::new(ScrollbarState::new())),
-            horizontal_scrollbar_state: Rc::new(Cell::new(ScrollbarState::new())),
+            vertical_scroll_state: ScrollbarState::default(),
+            horizontal_scroll_state: ScrollbarState::default(),
             selection_state: SelectionState::Row,
             selected_row: None,
             right_clicked_row: None,
@@ -867,7 +867,7 @@ where
         _: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<impl IntoElement> {
-        let state = self.vertical_scrollbar_state.clone();
+        let state = self.vertical_scroll_state.clone();
 
         Some(
             div()
@@ -896,7 +896,7 @@ where
         _: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let state = self.horizontal_scrollbar_state.clone();
+        let state = self.horizontal_scroll_state.clone();
 
         div()
             .occlude()

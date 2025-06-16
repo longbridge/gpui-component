@@ -12,7 +12,6 @@ use gpui::{
     SharedString, StatefulInteractiveElement, Styled, WeakEntity, Window,
 };
 use gpui::{MouseDownEvent, Subscription};
-use std::cell::Cell;
 use std::ops::Deref;
 use std::rc::Rc;
 
@@ -109,7 +108,7 @@ pub struct PopupMenu {
     scrollable: bool,
     external_link_icon: bool,
     scroll_handle: ScrollHandle,
-    scroll_state: Rc<Cell<ScrollbarState>>,
+    scroll_state: ScrollbarState,
 
     previous_focus_handle: Option<FocusHandle>,
     _subscriptions: Vec<Subscription>,
@@ -144,7 +143,7 @@ impl PopupMenu {
                 bounds: Bounds::default(),
                 scrollable: false,
                 scroll_handle: ScrollHandle::default(),
-                scroll_state: Rc::new(Cell::new(ScrollbarState::default())),
+                scroll_state: ScrollbarState::default(),
                 external_link_icon: true,
                 _subscriptions,
             };

@@ -1,8 +1,6 @@
 use std::{
     any::Any,
-    cell::Cell,
     fmt::{Debug, Formatter},
-    rc::Rc,
     sync::Arc,
 };
 
@@ -139,7 +137,7 @@ pub struct Tiles {
     resizing_drag_data: Option<ResizeDrag>,
     bounds: Bounds<Pixels>,
     history: History<TileChange>,
-    scroll_state: Rc<Cell<ScrollbarState>>,
+    scroll_state: ScrollbarState,
     scroll_handle: ScrollHandle,
 }
 
@@ -193,7 +191,7 @@ impl Tiles {
             resizing_drag_data: None,
             bounds: Bounds::default(),
             history: History::new().group_interval(std::time::Duration::from_millis(100)),
-            scroll_state: Rc::new(Cell::new(ScrollbarState::default())),
+            scroll_state: ScrollbarState::default(),
             scroll_handle: ScrollHandle::default(),
         }
     }

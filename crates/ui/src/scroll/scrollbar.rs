@@ -1,5 +1,6 @@
 use std::{
     cell::Cell,
+    ops::Deref,
     rc::Rc,
     time::{Duration, Instant},
 };
@@ -79,8 +80,11 @@ impl ScrollHandleOffsetable for UniformListScrollHandle {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct ScrollbarState(Rc<Cell<ScrollbarStateInner>>);
+
 #[derive(Debug, Clone, Copy)]
-pub struct ScrollbarState {
+pub struct ScrollbarStateInner {
     hovered_axis: Option<ScrollbarAxis>,
     hovered_on_thumb: Option<ScrollbarAxis>,
     dragged_axis: Option<ScrollbarAxis>,
@@ -93,7 +97,7 @@ pub struct ScrollbarState {
 
 impl Default for ScrollbarState {
     fn default() -> Self {
-        Self {
+        Self(Rc::new(Cell::new(ScrollbarStateInner {
             hovered_axis: None,
             hovered_on_thumb: None,
             dragged_axis: None,
@@ -101,15 +105,19 @@ impl Default for ScrollbarState {
             last_scroll_offset: point(px(0.), px(0.)),
             last_scroll_time: None,
             last_update: Instant::now(),
-        }
+        })))
     }
 }
 
-impl ScrollbarState {
-    pub fn new() -> Self {
-        Self::default()
-    }
+impl Deref for ScrollbarState {
+    type Target = Rc<Cell<ScrollbarStateInner>>;
 
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl ScrollbarStateInner {
     fn with_drag_pos(&self, axis: ScrollbarAxis, pos: Point<Pixels>) -> Self {
         let mut state = *self;
         if axis.is_vertical() {
@@ -232,7 +240,7 @@ pub struct Scrollbar {
     axis: ScrollbarAxis,
     scroll_handle: Rc<Box<dyn ScrollHandleOffsetable>>,
     scroll_size: gpui::Size<Pixels>,
-    state: Rc<Cell<ScrollbarState>>,
+    state: ScrollbarState,
     /// Maximum frames per second for scrolling by drag. Default is 120 FPS.
     ///
     /// This is used to limit the update rate of the scrollbar when it is
@@ -243,7 +251,7 @@ pub struct Scrollbar {
 impl Scrollbar {
     fn new(
         view_id: EntityId,
-        state: Rc<Cell<ScrollbarState>>,
+        state: ScrollbarState,
         axis: ScrollbarAxis,
         scroll_handle: impl ScrollHandleOffsetable + 'static,
         scroll_size: gpui::Size<Pixels>,
@@ -261,7 +269,7 @@ impl Scrollbar {
     /// Create with vertical and horizontal scrollbar.
     pub fn both(
         view_id: EntityId,
-        state: Rc<Cell<ScrollbarState>>,
+        state: ScrollbarState,
         scroll_handle: impl ScrollHandleOffsetable + 'static,
         scroll_size: gpui::Size<Pixels>,
     ) -> Self {
@@ -277,7 +285,7 @@ impl Scrollbar {
     /// Create with horizontal scrollbar.
     pub fn horizontal(
         view_id: EntityId,
-        state: Rc<Cell<ScrollbarState>>,
+        state: ScrollbarState,
         scroll_handle: impl ScrollHandleOffsetable + 'static,
         scroll_size: gpui::Size<Pixels>,
     ) -> Self {
@@ -293,7 +301,7 @@ impl Scrollbar {
     /// Create with vertical scrollbar.
     pub fn vertical(
         view_id: EntityId,
-        state: Rc<Cell<ScrollbarState>>,
+        state: ScrollbarState,
         scroll_handle: impl ScrollHandleOffsetable + 'static,
         scroll_size: gpui::Size<Pixels>,
     ) -> Self {
@@ -309,7 +317,7 @@ impl Scrollbar {
     /// Create vertical scrollbar for uniform list.
     pub fn uniform_scroll(
         view_id: EntityId,
-        state: Rc<Cell<ScrollbarState>>,
+        state: ScrollbarState,
         scroll_handle: UniformListScrollHandle,
     ) -> Self {
         let scroll_size = scroll_handle

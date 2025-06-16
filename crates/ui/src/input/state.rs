@@ -4,7 +4,7 @@
 //! https://github.com/zed-industries/zed/blob/main/crates/gpui/examples/input.rs
 use serde::Deserialize;
 use smallvec::SmallVec;
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::ops::{Deref, Range};
 use std::rc::Rc;
 use unicode_segmentation::*;
@@ -260,7 +260,7 @@ pub struct InputState {
     pub(super) pattern: Option<regex::Regex>,
     pub(super) validate: Option<Box<dyn Fn(&str) -> bool + 'static>>,
     pub(crate) scroll_handle: ScrollHandle,
-    pub(super) scrollbar_state: Rc<Cell<ScrollbarState>>,
+    pub(super) scroll_state: ScrollbarState,
     /// The size of the scrollable content.
     pub(crate) scroll_size: gpui::Size<Pixels>,
     pub(crate) line_number_width: Pixels,
@@ -337,7 +337,7 @@ impl InputState {
             last_line_height: px(20.),
             last_cursor_offset: None,
             scroll_handle: ScrollHandle::new(),
-            scrollbar_state: Rc::new(Cell::new(ScrollbarState::default())),
+            scroll_state: ScrollbarState::default(),
             scroll_size: gpui::size(px(0.), px(0.)),
             preferred_x_offset: None,
             line_number_width: px(0.),

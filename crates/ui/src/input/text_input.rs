@@ -7,7 +7,7 @@ use gpui::{
 use crate::button::{Button, ButtonVariants as _};
 use crate::indicator::Indicator;
 use crate::input::clear_button;
-use crate::scroll::{Scrollbar, ScrollbarAxis};
+use crate::scroll::Scrollbar;
 use crate::ActiveTheme;
 use crate::{h_flex, StyledExt};
 use crate::{IconName, Size};
@@ -308,15 +308,12 @@ impl RenderOnce for TextInput {
                             .left_0()
                             .right(px(1.))
                             .bottom_0()
-                            .child(
-                                Scrollbar::vertical(
-                                    entity_id,
-                                    state.scrollbar_state.clone(),
-                                    state.scroll_handle.clone(),
-                                    scroll_size,
-                                )
-                                .axis(ScrollbarAxis::Vertical),
-                            ),
+                            .child(Scrollbar::vertical(
+                                entity_id,
+                                state.scroll_state.clone(),
+                                state.scroll_handle.clone(),
+                                scroll_size,
+                            )),
                     )
                 } else {
                     this

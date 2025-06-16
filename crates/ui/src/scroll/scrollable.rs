@@ -75,7 +75,7 @@ where
 
 pub struct ScrollViewState {
     scroll_size: Rc<Cell<Size<Pixels>>>,
-    state: Rc<Cell<ScrollbarState>>,
+    state: ScrollbarState,
     handle: ScrollHandle,
 }
 
@@ -84,7 +84,7 @@ impl Default for ScrollViewState {
         Self {
             handle: ScrollHandle::new(),
             scroll_size: Rc::new(Cell::new(Size::default())),
-            state: Rc::new(Cell::new(ScrollbarState::default())),
+            state: ScrollbarState::default(),
         }
     }
 }

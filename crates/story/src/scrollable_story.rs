@@ -1,4 +1,3 @@
-use std::cell::Cell;
 use std::rc::Rc;
 
 use gpui::{
@@ -18,7 +17,7 @@ pub struct ScrollableStory {
     focus_handle: gpui::FocusHandle,
     scroll_handle: ScrollHandle,
     scroll_size: gpui::Size<Pixels>,
-    scroll_state: Rc<Cell<ScrollbarState>>,
+    scroll_state: ScrollbarState,
     items: Vec<String>,
     item_sizes: Rc<Vec<Size<Pixels>>>,
     test_width: Pixels,
@@ -41,7 +40,7 @@ impl ScrollableStory {
         Self {
             focus_handle: cx.focus_handle(),
             scroll_handle: ScrollHandle::new(),
-            scroll_state: Rc::new(Cell::new(ScrollbarState::default())),
+            scroll_state: ScrollbarState::default(),
             scroll_size: gpui::Size::default(),
             items,
             item_sizes: Rc::new(item_sizes),
@@ -80,7 +79,7 @@ impl ScrollableStory {
             .map(|_| size(self.test_width, ITEM_HEIGHT))
             .collect::<Vec<_>>()
             .into();
-        self.scroll_state.set(ScrollbarState::default());
+        self.scroll_state = ScrollbarState::default();
         cx.notify();
     }
 

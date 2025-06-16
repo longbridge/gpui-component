@@ -1,6 +1,5 @@
 use std::ops::Range;
 use std::time::Duration;
-use std::{cell::Cell, rc::Rc};
 
 use crate::actions::{Cancel, Confirm, SelectNext, SelectPrev};
 use crate::input::InputState;
@@ -161,7 +160,7 @@ pub struct List<D: ListDelegate> {
     querying: bool,
     scrollbar_visible: bool,
     vertical_scroll_handle: UniformListScrollHandle,
-    scrollbar_state: Rc<Cell<ScrollbarState>>,
+    scroll_state: ScrollbarState,
     pub(crate) size: Size,
     selected_index: Option<usize>,
     right_clicked_index: Option<usize>,
@@ -193,7 +192,7 @@ where
             selected_index: None,
             right_clicked_index: None,
             vertical_scroll_handle: UniformListScrollHandle::new(),
-            scrollbar_state: Rc::new(Cell::new(ScrollbarState::new())),
+            scroll_state: ScrollbarState::default(),
             max_height: None,
             scrollbar_visible: true,
             selectable: true,
@@ -295,7 +294,7 @@ where
 
         Some(Scrollbar::uniform_scroll(
             cx.entity().entity_id(),
-            self.scrollbar_state.clone(),
+            self.scroll_state.clone(),
             self.vertical_scroll_handle.clone(),
         ))
     }
