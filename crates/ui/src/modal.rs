@@ -12,7 +12,9 @@ use crate::{
     actions::{Cancel, Confirm},
     animation::cubic_bezier,
     button::{Button, ButtonVariant, ButtonVariants as _},
-    h_flex, v_flex, ActiveTheme as _, ContextModal, IconName, Root, Sizable as _, StyledExt,
+    h_flex,
+    scroll::ScrollbarAxis,
+    v_flex, ActiveTheme as _, ContextModal, IconName, Root, Sizable as _, StyledExt,
 };
 
 const CONTEXT: &str = "Modal";
@@ -364,6 +366,7 @@ impl RenderOnce for Modal {
             .snap_to_window()
             .child(
                 div()
+                    .id("modal")
                     .w(view_size.width)
                     .h(view_size.height)
                     .when(self.overlay_visible, |this| {
@@ -387,16 +390,16 @@ impl RenderOnce for Modal {
                     })
                     .child(
                         v_flex()
+                            .id(layer_ix)
                             .bg(cx.theme().background)
                             .border_1()
                             .border_color(cx.theme().border)
                             .rounded(border_radius)
                             .shadow_xl()
                             .min_h_24()
-                            .p_4()
+                            .py_4()
                             .gap_4()
                             .refine_style(&self.style)
-                            .id(SharedString::from(format!("modal-{layer_ix}")))
                             .key_context(CONTEXT)
                             .track_focus(&self.focus_handle)
                             .when(self.keyboard, |this| {
@@ -438,34 +441,41 @@ impl RenderOnce for Modal {
                             .when_some(self.max_width, |this, w| this.max_w(w))
                             .when_some(self.title, |this, title| {
                                 this.child(
-                                    div().font_semibold().line_height(relative(1.)).child(title),
+                                    div()
+                                        .font_semibold()
+                                        .px_4()
+                                        .line_height(relative(1.))
+                                        .child(title),
                                 )
                             })
                             .when(self.show_close, |this| {
                                 this.child(
-                                    Button::new(SharedString::from(format!(
-                                        "modal-close-{layer_ix}"
-                                    )))
-                                    .absolute()
-                                    .top_2()
-                                    .right_2()
-                                    .small()
-                                    .ghost()
-                                    .icon(IconName::Close)
-                                    .on_click(
-                                        move |_, window, cx| {
+                                    Button::new("close")
+                                        .absolute()
+                                        .top_2()
+                                        .right_2()
+                                        .small()
+                                        .ghost()
+                                        .icon(IconName::Close)
+                                        .on_click(move |_, window, cx| {
                                             on_cancel(&ClickEvent::default(), window, cx);
                                             on_close(&ClickEvent::default(), window, cx);
                                             window.close_modal(cx);
-                                        },
-                                    ),
+                                        }),
                                 )
                             })
-                            .child(div().w_full().flex_1().child(self.content))
+                            .child(
+                                div().w_full().flex_1().overflow_hidden().child(
+                                    v_flex()
+                                        .scrollable(window.current_view(), ScrollbarAxis::Vertical)
+                                        .px_4()
+                                        .child(self.content),
+                                ),
+                            )
                             .when(self.footer.is_some(), |this| {
                                 let footer = self.footer.unwrap();
 
-                                this.child(h_flex().gap_2().justify_end().children(footer(
+                                this.child(h_flex().px_4().gap_2().justify_end().children(footer(
                                     render_ok,
                                     render_cancel,
                                     window,

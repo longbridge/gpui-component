@@ -12,7 +12,7 @@ use gpui_component::{
     h_flex,
     input::{InputState, TextInput},
     modal::ModalButtonProps,
-    v_flex, ActiveTheme as _, ContextModal as _,
+    v_flex, ContextModal as _,
 };
 
 use crate::section;
@@ -297,10 +297,10 @@ impl Render for ModalStory {
                                 .danger()
                                 .label("Delete Item")
                                 .on_click(cx.listener(|_, _, window, cx| {
-                                    window.open_modal(cx, |modal, _, cx| {
+                                    window.open_modal(cx, |modal, _, _| {
                                         modal
-                                            .rounded_none()
-                                            .p_6()
+                                            .rounded_lg()
+                                            .p_3()
                                             .confirm()
                                             .child("Are you sure to delete this item?")
                                             .button_props(
@@ -342,6 +342,20 @@ impl Render for ModalStory {
                                                 window
                                                     .push_notification("You have pressed Ok.", cx);
                                             })
+                                    });
+                                })),
+                        ),
+                    )
+                    .child(
+                        section("Scrollable Modal").child(
+                            Button::new("scrollable-modal")
+                                .label("Scrollable Modal")
+                                .on_click(cx.listener(|_, _, window, cx| {
+                                    window.open_modal(cx, |modal, _, _| {
+                                        modal.h(px(450.)).title("Modal with scrollbar").child(
+                                        "This is a scrollable modal, there are many things to say.\n"
+                                            .repeat(200),
+                                    )
                                     });
                                 })),
                         ),
