@@ -99,16 +99,12 @@ pub struct Modal {
     pub(crate) overlay_visible: bool,
 }
 
-pub(crate) fn overlay_color(overlay: bool, _: &Window, cx: &App) -> Hsla {
+pub(crate) fn overlay_color(overlay: bool, cx: &App) -> Hsla {
     if !overlay {
         return hsla(0., 0., 0., 0.);
     }
 
-    if cx.theme().mode.is_dark() {
-        hsla(0., 1., 1., 0.06)
-    } else {
-        hsla(0., 0., 0., 0.06)
-    }
+    cx.theme().overlay
 }
 
 impl Modal {
@@ -370,7 +366,7 @@ impl RenderOnce for Modal {
                     .w(view_size.width)
                     .h(view_size.height)
                     .when(self.overlay_visible, |this| {
-                        this.occlude().bg(overlay_color(self.overlay, window, cx))
+                        this.occlude().bg(overlay_color(self.overlay, cx))
                     })
                     .when(self.overlay_closable, |this| {
                         // Only the last modal owns the `mouse down - close modal` event.

@@ -136,7 +136,7 @@ impl RenderOnce for Drawer {
                     .occlude()
                     .w(size.width)
                     .h(size.height - titlebar_height)
-                    .bg(overlay_color(self.overlay, window, cx))
+                    .bg(overlay_color(self.overlay, cx))
                     .when(self.overlay, |this| {
                         this.on_mouse_down(MouseButton::Left, {
                             let on_close = self.on_close.clone();

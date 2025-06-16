@@ -185,6 +185,9 @@ impl Focusable for ModalStory {
 
 impl Render for ModalStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let modal_overlay = self.modal_overlay;
+        let overlay_closable = self.overlay_closable;
+
         div()
             .id("modal-story")
             .track_focus(&self.focus_handle)
@@ -271,10 +274,12 @@ impl Render for ModalStory {
                             Button::new("confirm-modal0")
                                 .primary()
                                 .label("Submit")
-                                .on_click(cx.listener(|_, _, window, cx| {
-                                    window.open_modal(cx, |modal, _, _| {
+                                .on_click(cx.listener(move |_, _, window, cx| {
+                                    window.open_modal(cx, move |modal, _, _| {
                                         modal
                                             .confirm()
+                                            .overlay(modal_overlay)
+                                            .overlay_closable(overlay_closable)
                                             .child("Are you sure to submit?")
                                             .on_ok(|_, window, cx| {
                                                 window
@@ -297,12 +302,14 @@ impl Render for ModalStory {
                             Button::new("confirm-modal1")
                                 .danger()
                                 .label("Delete Item")
-                                .on_click(cx.listener(|_, _, window, cx| {
-                                    window.open_modal(cx, |modal, _, _| {
+                                .on_click(cx.listener(move |_, _, window, cx| {
+                                    window.open_modal(cx, move |modal, _, _| {
                                         modal
                                             .rounded_lg()
                                             .p_3()
                                             .confirm()
+                                            .overlay(modal_overlay)
+                                            .overlay_closable(overlay_closable)
                                             .child("Are you sure to delete this item?")
                                             .button_props(
                                                 ModalButtonProps::default()
@@ -333,10 +340,12 @@ impl Render for ModalStory {
                         section("Alert Modal").child(
                             Button::new("alert-modal")
                                 .label("Alert")
-                                .on_click(cx.listener(|_, _, window, cx| {
-                                    window.open_modal(cx, |modal, _, _| {
+                                .on_click(cx.listener(move |_, _, window, cx| {
+                                    window.open_modal(cx, move |modal, _, _| {
                                         modal
                                             .confirm()
+                                            .overlay(modal_overlay)
+                                            .overlay_closable(overlay_closable)
                                             .child("You are successfully logged in.")
                                             .alert()
                                             .on_close(|_, window, cx| {
@@ -351,14 +360,17 @@ impl Render for ModalStory {
                         section("Scrollable Modal").child(
                             Button::new("scrollable-modal")
                                 .label("Scrollable Modal")
-                                .on_click(cx.listener(|_, _, window, cx| {
-                                    window.open_modal(cx, |modal, _, _| {
-                                        modal.h(px(450.)).title("Modal with scrollbar").child(
-                                            TextView::markdown(
+                                .on_click(cx.listener(move |_, _, window, cx| {
+                                    window.open_modal(cx, move |modal, _, _| {
+                                        modal
+                                            .h(px(450.))
+                                            .overlay(modal_overlay)
+                                            .overlay_closable(overlay_closable)
+                                            .title("Modal with scrollbar")
+                                            .child(TextView::markdown(
                                                 "markdown1",
                                                 include_str!("../../../README.md"),
-                                            ),
-                                        )
+                                            ))
                                     });
                                 })),
                         ),

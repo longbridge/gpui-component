@@ -243,6 +243,8 @@ pub struct ThemeColor {
     pub warning_hover: Hsla,
     /// Warning foreground color.
     pub warning_foreground: Hsla,
+    /// Overlay background color.
+    pub overlay: Hsla,
     /// Window border color.
     ///
     /// # Platform specific:
@@ -346,6 +348,7 @@ impl ThemeColor {
             warning_active: crate::yellow_600(),
             warning_hover: crate::yellow_500().opacity(0.9),
             warning_foreground: crate::gray_50(),
+            overlay: hsl(0., 0., 0.).opacity(0.06),
             window_border: hsl(240.0, 5.9, 78.0),
         }
     }
@@ -444,6 +447,7 @@ impl ThemeColor {
             warning_active: crate::yellow_800().darken(0.2),
             warning_foreground: crate::yellow_50(),
             warning_hover: crate::yellow_800().opacity(0.9),
+            overlay: hsl(0., 100., 100.).opacity(0.06),
             window_border: hsl(240.0, 3.7, 28.0),
         }
     }
