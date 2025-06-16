@@ -116,8 +116,8 @@ pub struct McpProviderInfo {
     pub name: String,
     #[serde(default)]
     pub command: String,
-    #[serde(default)]
-    pub args: Vec<String>,
+    // #[serde(default)]
+    // pub args: Vec<String>,
     #[serde(default)]
     pub transport: McpTransport,
     #[serde(default)]
@@ -142,7 +142,7 @@ impl Default for McpProviderInfo {
             id: uuid::Uuid::new_v4().to_string(),
             name: String::new(),
             command: String::new(),
-            args: Vec::new(),
+            // args: Vec::new(),
             transport: McpTransport::Stdio,
             enabled: true,
             capabilities: vec![McpCapability::Resources, McpCapability::Tools],

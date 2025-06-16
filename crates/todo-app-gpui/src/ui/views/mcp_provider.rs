@@ -33,7 +33,7 @@ const CONTEXT: &str = "McpProvider";
 #[derive(Clone)]
 struct ProviderInputs {
     name_input: Entity<InputState>,
-    command_input: Entity<InputState>,
+    //command_input: Entity<InputState>,
     args_input: Entity<InputState>,
     description_input: Entity<InputState>,
     env_input: Entity<InputState>,
@@ -161,7 +161,7 @@ impl McpProvider {
     fn save_mcp_provider(
         &mut self,
         _: &SaveMcpProvider,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         if let Some(index) = self.editing_provider {
@@ -170,12 +170,11 @@ impl McpProvider {
                 self.provider_inputs.get(&index),
             ) {
                 provider.name = inputs.name_input.read(cx).value().to_string();
-                provider.command = inputs.command_input.read(cx).value().to_string();
                 provider.description = inputs.description_input.read(cx).value().to_string();
 
                 // 解析启动参数
                 let args_text = inputs.args_input.read(cx).value().to_string();
-                provider.args = args_text
+                provider.command = args_text
                     .split_whitespace()
                     .map(|s| s.to_string())
                     .collect();
@@ -328,8 +327,8 @@ impl McpProvider {
 
         let args_input = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder("启动参数 (用空格分隔)")
-                .default_value(&provider.args.join(" "))
+                .placeholder("启动命令&参数 (用空格分隔)")
+                .default_value(&provider.command)
         });
 
         let description_input = cx.new(|cx| {
@@ -364,7 +363,7 @@ impl McpProvider {
             index,
             ProviderInputs {
                 name_input,
-                command_input,
+                //command_input,
                 args_input,
                 description_input,
                 env_input,
@@ -416,7 +415,7 @@ impl FocusableCycle for McpProvider {
             if let Some(inputs) = self.provider_inputs.get(&editing_index) {
                 return vec![
                     inputs.name_input.focus_handle(cx),
-                    inputs.command_input.focus_handle(cx),
+                    // inputs.command_input.focus_handle(cx),
                     inputs.args_input.focus_handle(cx),
                     inputs.description_input.focus_handle(cx),
                     inputs.env_input.focus_handle(cx),
@@ -470,7 +469,7 @@ impl Render for McpProvider {
                     self.provider_inputs.get(&editing_index).map(|inputs| {
                         (
                             inputs.name_input.clone(),
-                            inputs.command_input.clone(),
+                            // inputs.command_input.clone(),
                             inputs.args_input.clone(),
                             inputs.description_input.clone(),
                             inputs.env_input.clone(),
@@ -483,8 +482,6 @@ impl Render for McpProvider {
 
                 for (index, provider) in providers.iter().enumerate() {
                     let provider_name = provider.name.clone();
-                    let provider_command = provider.command.clone();
-                    let provider_args = provider.args.join(" ");
                     let provider_transport = provider.transport.as_str().to_string();
                     let provider_enabled = provider.enabled;
                     let provider_clone = provider.clone(); // 为Tab内容克隆整个provider
@@ -600,7 +597,6 @@ impl Render for McpProvider {
                                 // 编辑表单保持不变
                                 if let Some((
                                     name_input,
-                                    command_input,
                                     args_input,
                                     description_input,
                                     env_input,
@@ -779,37 +775,6 @@ impl Render for McpProvider {
 }
 
 impl McpProvider {
-    // 切换资源订阅状态的方法
-    fn toggle_resource_subscription(
-        &mut self,
-        resource_name: String,
-        subscribed: bool,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        // 遍历所有提供商，找到匹配的资源并更新订阅状态
-        for provider in &mut self.providers {
-            for resource in &mut provider.resources {
-                if resource.name == resource_name && resource.subscribable {
-                    resource.subscribed = subscribed;
-
-                    // 打印日志，方便调试
-                    println!(
-                        "资源 '{}' 订阅状态已{}",
-                        resource_name,
-                        if subscribed { "开启" } else { "关闭" }
-                    );
-                    self.save_config();
-                    cx.notify();
-                    return;
-                }
-            }
-        }
-
-        // 如果没找到匹配的资源，打印警告
-        eprintln!("警告: 未找到名为 '{}' 的可订阅资源", resource_name);
-    }
-
     // 如果你需要更精确的控制，可以使用这个带提供商索引的版本
     fn toggle_resource_subscription_by_index(
         &mut self,
@@ -845,54 +810,6 @@ impl McpProvider {
             }
         } else {
             eprintln!("警告: 不存在提供商索引 {}", provider_index);
-        }
-    }
-
-    // 获取所有已订阅的资源列表
-    fn get_subscribed_resources(&self) -> Vec<(String, String)> {
-        let mut subscribed = Vec::new();
-
-        for provider in &self.providers {
-            for resource in &provider.resources {
-                if resource.subscribed {
-                    subscribed.push((provider.name.clone(), resource.name.clone()));
-                }
-            }
-        }
-
-        subscribed
-    }
-
-    // 批量设置资源订阅状态
-    fn set_all_resources_subscription(
-        &mut self,
-        provider_name: &str,
-        subscribed: bool,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if let Some(provider) = self.providers.iter_mut().find(|p| p.name == provider_name) {
-            let mut updated_count = 0;
-
-            for resource in &mut provider.resources {
-                if resource.subscribable && resource.subscribed != subscribed {
-                    resource.subscribed = subscribed;
-                    updated_count += 1;
-                }
-            }
-
-            if updated_count > 0 {
-                println!(
-                    "提供商 '{}' 的 {} 个资源订阅状态已{}",
-                    provider_name,
-                    updated_count,
-                    if subscribed { "开启" } else { "关闭" }
-                );
-
-                cx.notify();
-            }
-        } else {
-            eprintln!("警告: 未找到名为 '{}' 的提供商", provider_name);
         }
     }
 
@@ -1092,9 +1009,12 @@ impl McpProvider {
                                             .min_w_20()
                                             .child("启动命令:"),
                                     )
-                                    .child(div().text_sm().text_color(gpui::rgb(0x111827)).child(
-                                        format!("{} {}", provider.command, provider.args.join(" ")),
-                                    )),
+                                    .child(
+                                        div()
+                                            .text_sm()
+                                            .text_color(gpui::rgb(0x111827))
+                                            .child(provider.command.clone()),
+                                    ),
                             )
                             .when(!provider.env_vars.is_empty(), |this| {
                                 this.child(
