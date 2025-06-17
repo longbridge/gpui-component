@@ -355,6 +355,15 @@ impl RenderOnce for Modal {
         let x = bounds.center().x - self.width / 2.;
         let border_radius = (cx.theme().radius * 2.).min(px(20.));
 
+        let mut padding_right = px(16.);
+        let mut padding_left = px(16.);
+        if let Some(pl) = self.style.padding.left {
+            padding_left = pl.to_pixels(self.width.into(), window.rem_size());
+        }
+        if let Some(pr) = self.style.padding.right {
+            padding_right = pr.to_pixels(self.width.into(), window.rem_size());
+        }
+
         anchored()
             .position(point(window_paddings.left, window_paddings.top))
             .snap_to_window()
@@ -391,9 +400,10 @@ impl RenderOnce for Modal {
                             .rounded(border_radius)
                             .shadow_xl()
                             .min_h_24()
-                            .p_4()
+                            .py_4()
                             .gap_4()
                             .refine_style(&self.style)
+                            .px_0()
                             .key_context(CONTEXT)
                             .track_focus(&self.focus_handle)
                             .when(self.keyboard, |this| {
@@ -426,6 +436,7 @@ impl RenderOnce for Modal {
                                     }
                                 })
                             })
+                            // Ther style is can't be override.
                             .absolute()
                             .occlude()
                             .relative()
@@ -435,7 +446,12 @@ impl RenderOnce for Modal {
                             .when_some(self.max_width, |this, w| this.max_w(w))
                             .when_some(self.title, |this, title| {
                                 this.child(
-                                    div().font_semibold().line_height(relative(1.)).child(title),
+                                    div()
+                                        .font_semibold()
+                                        .pl(padding_left)
+                                        .pr(padding_right)
+                                        .line_height(relative(1.))
+                                        .child(title),
                                 )
                             })
                             .when(self.show_close, |this| {
@@ -455,21 +471,28 @@ impl RenderOnce for Modal {
                                 )
                             })
                             .child(
-                                div()
-                                    .w_full()
-                                    .flex_1()
-                                    .overflow_hidden()
-                                    .child(self.content),
+                                div().w_full().flex_1().overflow_hidden().child(
+                                    v_flex()
+                                        .pl(padding_left)
+                                        .pr(padding_right)
+                                        .scrollable(
+                                            window.current_view(),
+                                            crate::scroll::ScrollbarAxis::Vertical,
+                                        )
+                                        .child(self.content),
+                                ),
                             )
                             .when(self.footer.is_some(), |this| {
                                 let footer = self.footer.unwrap();
 
-                                this.child(h_flex().gap_2().justify_end().children(footer(
-                                    render_ok,
-                                    render_cancel,
-                                    window,
-                                    cx,
-                                )))
+                                this.child(
+                                    h_flex()
+                                        .gap_2()
+                                        .pl(padding_left)
+                                        .pr(padding_right)
+                                        .justify_end()
+                                        .children(footer(render_ok, render_cancel, window, cx)),
+                                )
                             })
                             .with_animation(
                                 "slide-down",
