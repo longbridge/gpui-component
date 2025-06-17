@@ -575,7 +575,7 @@ impl InputState {
         let offset = self.cursor_offset();
         let preferred_x_offset = self.preferred_x_offset;
         let line_height = last_layout.line_height;
-        let (current_line_index, current_sub_line, current_pos) =
+        let (current_line, current_sub_line, current_pos) =
             self.line_and_position_for_offset(offset);
 
         let Some(current_pos) = current_pos else {
@@ -591,41 +591,33 @@ impl InputState {
         new_sub_line += if move_lines > 0 { 1 } else { -1 };
 
         // Handle moving above the first line
-        if move_lines < 0 && current_line_index == 0 && new_sub_line < 0 {
+        if move_lines < 0 && current_line == 0 && new_sub_line < 0 {
             // Move cursor to the beginning of the text
             self.move_to(0, window, cx);
+            self.preferred_x_offset = preferred_x_offset;
             return;
         }
 
-        let mut new_line_index = current_line_index;
+        let new_line = current_line
+            .saturating_add_signed(move_lines)
+            .max(0)
+            .min(last_layout.lines.len().saturating_sub(1));
 
         if new_sub_line < 0 {
-            new_line_index = new_line_index
-                .saturating_add_signed(move_lines)
-                .max(0)
-                .min(last_layout.lines.len().saturating_sub(1));
-            new_sub_line = last_layout.lines[new_line_index].wrap_boundaries.len() as i32;
+            new_sub_line = last_layout.lines[new_line].wrap_boundaries.len() as i32;
         } else {
-            let max_sub_line = last_layout.lines[new_line_index].wrap_boundaries.len() as i32;
+            let max_sub_line = last_layout.lines[current_line].wrap_boundaries.len() as i32;
             if new_sub_line > max_sub_line {
-                if new_line_index < last_layout.lines.len() - 1 {
-                    new_line_index = new_line_index
-                        .saturating_add_signed(move_lines)
-                        .max(0)
-                        .min(last_layout.lines.len().saturating_sub(1));
-                    new_sub_line = 0;
-                } else {
-                    new_sub_line = max_sub_line;
-                }
+                new_sub_line = max_sub_line;
             }
         }
 
         // If after adjustment, still at the same position, do not proceed
-        if new_line_index == current_line_index && new_sub_line == current_sub_line as i32 {
+        if new_line == current_line && new_sub_line == current_sub_line as i32 {
             return;
         }
 
-        let target_line = &last_layout.lines[new_line_index];
+        let target_line = &last_layout.lines[new_line];
         let line_x = current_x - bounds.origin.x;
         let target_sub_line = new_sub_line as usize;
 
@@ -638,11 +630,13 @@ impl InputState {
         };
 
         let mut prev_lines_offset = 0;
-        for (i, l) in last_layout.lines.iter().enumerate() {
-            if i == new_line_index {
-                break;
-            }
-            prev_lines_offset += l.len() + 1;
+        for (_, line) in last_layout
+            .lines
+            .iter()
+            .enumerate()
+            .take_while(|(i, _)| *i < new_line)
+        {
+            prev_lines_offset += line.len() + 1;
         }
 
         let new_offset = (prev_lines_offset + new_local_index).min(self.text.len());
