@@ -14,6 +14,7 @@ UI components for building fantastic desktop applications using [GPUI](https://g
 - **Content Rendering**: Native support for Markdown and simple HTML.
 - **Charting**: Built-in charts for visualization your data.
 - **Code Highlighting**: Code Editor and Syntax highlighting.
+- **Wef**: (Experimental) Offscreen rendering webview based on [CEF](https://github.com/chromiumembedded/cef).
 
 ## Showcase
 
