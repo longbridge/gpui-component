@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use gpui::{
     div, prelude::FluentBuilder, px, relative, rems, App, AppContext, Context, Corner,
-    DismissEvent, DragMoveEvent, Empty, Entity, EventEmitter, FocusHandle, Focusable,
+    DismissEvent, Div, DragMoveEvent, Empty, Entity, EventEmitter, FocusHandle, Focusable,
     InteractiveElement as _, IntoElement, ParentElement, Pixels, Render, ScrollHandle,
     SharedString, StatefulInteractiveElement, StyleRefinement, Styled, WeakEntity, Window,
 };
@@ -1108,6 +1108,14 @@ impl TabPanel {
             });
         }
     }
+
+    // Bind actions to the tab panel, only when the tab panel is not collapsed.
+    fn bind_actions(&self, cx: &mut Context<Self>) -> Div {
+        v_flex().when(!self.collapsed, |this| {
+            this.on_action(cx.listener(Self::on_action_toggle_zoom))
+                .on_action(cx.listener(Self::on_action_close_panel))
+        })
+    }
 }
 
 impl Focusable for TabPanel {
@@ -1139,11 +1147,9 @@ impl Render for TabPanel {
             state.closable = false;
         }
 
-        v_flex()
+        self.bind_actions(cx)
             .id("tab-panel")
             .track_focus(&focus_handle)
-            .on_action(cx.listener(Self::on_action_toggle_zoom))
-            .on_action(cx.listener(Self::on_action_close_panel))
             .size_full()
             .overflow_hidden()
             .bg(cx.theme().background)
