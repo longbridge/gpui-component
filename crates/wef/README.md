@@ -1,5 +1,9 @@
 # Wef is a Rust library for embedding WebView functionality using Chromium Embedded Framework (CEF3) with offscreen rendering support.
 
+> The `Wef` name is abbreviation of "Web Embedding Framework", it also inspires by Wry.
+
+![Wef Example](https://github.com/user-attachments/assets/f677ecb4-dbff-4e0d-86b9-203f6e1004a4)
+
 ## Contents
 
 - [Introduction](#introduction)
