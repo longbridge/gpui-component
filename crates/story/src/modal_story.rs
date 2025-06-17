@@ -367,6 +367,7 @@ impl Render for ModalStory {
                                             .overlay(modal_overlay)
                                             .overlay_closable(overlay_closable)
                                             .title("Modal with scrollbar")
+                                            .scrollable()
                                             .child(TextView::markdown(
                                                 "markdown1",
                                                 include_str!("../../../README.md"),

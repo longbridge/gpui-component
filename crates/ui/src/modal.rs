@@ -90,6 +90,7 @@ pub struct Modal {
     overlay: bool,
     overlay_closable: bool,
     keyboard: bool,
+    scrollable: bool,
 
     /// This will be change when open the modal, the focus handle is create when open the modal.
     pub(crate) focus_handle: FocusHandle,
@@ -126,6 +127,7 @@ impl Modal {
             button_props: ModalButtonProps::default(),
             show_close: true,
             overlay_closable: true,
+            scrollable: false,
         }
     }
 
@@ -260,6 +262,12 @@ impl Modal {
 
     pub(crate) fn has_overlay(&self) -> bool {
         self.overlay
+    }
+
+    /// Set to support scrollbar in the modal content area, defaults to `false`.
+    pub fn scrollable(mut self) -> Self {
+        self.scrollable = true;
+        self
     }
 }
 
@@ -470,18 +478,20 @@ impl RenderOnce for Modal {
                                         }),
                                 )
                             })
-                            .child(
-                                div().w_full().flex_1().overflow_hidden().child(
-                                    v_flex()
-                                        .pl(padding_left)
-                                        .pr(padding_right)
-                                        .scrollable(
-                                            window.current_view(),
-                                            crate::scroll::ScrollbarAxis::Vertical,
-                                        )
-                                        .child(self.content),
-                                ),
-                            )
+                            .child(div().w_full().flex_1().overflow_hidden().child(
+                                v_flex().pl(padding_left).pr(padding_right).map(|this| {
+                                    match self.scrollable {
+                                        true => this
+                                            .scrollable(
+                                                window.current_view(),
+                                                crate::scroll::ScrollbarAxis::Vertical,
+                                            )
+                                            .child(self.content)
+                                            .into_any_element(),
+                                        false => this.child(self.content).into_any_element(),
+                                    }
+                                }),
+                            ))
                             .when(self.footer.is_some(), |this| {
                                 let footer = self.footer.unwrap();
 
