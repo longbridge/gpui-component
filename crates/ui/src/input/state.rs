@@ -885,8 +885,8 @@ impl InputState {
             return;
         };
 
-        let visible_lines = last_layout.visible_range.len() as isize;
-        self.move_vertical(-visible_lines, window, cx);
+        let display_lines = (self.input_bounds.size.height / last_layout.line_height) as isize;
+        self.move_vertical(-display_lines, window, cx);
     }
 
     pub(super) fn page_down(
@@ -903,8 +903,8 @@ impl InputState {
             return;
         };
 
-        let visible_lines = last_layout.visible_range.len() as isize;
-        self.move_vertical(visible_lines, window, cx);
+        let display_lines = (self.input_bounds.size.height / last_layout.line_height) as isize;
+        self.move_vertical(display_lines, window, cx);
     }
 
     pub(super) fn select_left(
