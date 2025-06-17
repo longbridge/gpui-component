@@ -273,11 +273,34 @@ impl AppExt for App {
 pub trait WindowExt {
     fn hwnd(&self) -> Option<HWND>;
 
-    fn style(&self) -> i32;
+    fn style(&self) -> i32 {
+        use windows::Win32::UI::WindowsAndMessaging::{GetWindowLongW, GWL_STYLE};
+        self.hwnd()
+            .map_or(0, |hwnd| unsafe { GetWindowLongW(hwnd, GWL_STYLE) })
+    }
 
-    fn set_style(&self, style: i32);
+    fn set_style(&self, style: i32) {
+        use windows::Win32::UI::WindowsAndMessaging::{SetWindowLongW, GWL_STYLE};
+        self.hwnd().map(|hwnd| unsafe {
+            SetWindowLongW(hwnd, GWL_STYLE, style);
+        });
+    }
 
-    fn set_display_affinity(&self, dwaffinity: u32);
+    fn set_display_affinity(&self, dwaffinity: u32) {
+        use windows::Win32::UI::WindowsAndMessaging::{
+            SetWindowDisplayAffinity, WINDOW_DISPLAY_AFFINITY,
+        };
+        self.hwnd().map(|hwnd| unsafe {
+            SetWindowDisplayAffinity(hwnd, WINDOW_DISPLAY_AFFINITY(dwaffinity)).ok();
+        });
+    }
+
+    fn enable_window(&self, benable: bool) {
+        use windows::Win32::UI::Input::KeyboardAndMouse::EnableWindow;
+        if let Some(hwnd) = self.hwnd() {
+            unsafe { EnableWindow(hwnd, benable) };
+        }
+    }
 }
 #[cfg(target_os = "windows")]
 impl WindowExt for Window {
@@ -296,25 +319,5 @@ impl WindowExt for Window {
             }
         }
         None
-    }
-
-    fn style(&self) -> i32 {
-        use windows::Win32::UI::WindowsAndMessaging::{GetWindowLongW, GWL_STYLE};
-        self.hwnd()
-            .map_or(0, |hwnd| unsafe { GetWindowLongW(hwnd, GWL_STYLE) })
-    }
-    fn set_style(&self, style: i32) {
-        use windows::Win32::UI::WindowsAndMessaging::{SetWindowLongW, GWL_STYLE};
-        self.hwnd().map(|hwnd| unsafe {
-            SetWindowLongW(hwnd, GWL_STYLE, style);
-        });
-    }
-    fn set_display_affinity(&self, dwaffinity: u32) {
-        use windows::Win32::UI::WindowsAndMessaging::{
-            SetWindowDisplayAffinity, WINDOW_DISPLAY_AFFINITY,
-        };
-        self.hwnd().map(|hwnd| unsafe {
-            SetWindowDisplayAffinity(hwnd, WINDOW_DISPLAY_AFFINITY(dwaffinity)).ok();
-        });
     }
 }

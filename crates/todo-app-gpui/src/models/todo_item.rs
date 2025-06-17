@@ -424,12 +424,8 @@ impl TodoManager {
     }
 
     /// 根据ID查询Todo
-    pub fn get_todo_by_idx(&self, id: usize) -> Option<&Todo> {
-        self.todos.get(id)
-    }
-
-    pub fn get_todo_by_id(&self, id: &str) -> Option<&Todo> {
-        unimplemented!()
+    pub fn get_todo(&self, id: &str) -> Option<&Todo> {
+        self.todos.iter().find(|todo| todo.id == id)
     }
 
     /// 根据状态筛选Todo
@@ -467,33 +463,34 @@ impl TodoManager {
 
     /// 更新Todo
     pub fn update_todo(&mut self, id: &str, mut todo: Todo) -> anyhow::Result<()> {
-        // if !self.todos.contains_key(id) {
-        //     return Err(anyhow::anyhow!("Todo with id '{}' not found", id));
-        // }
-
-        // todo.updated_at = Utc::now();
-        // self.todos.insert(id.to_string(), todo);
+        if let Some(position) = self.todos.iter().position(|t| t.id == id) {
+            todo.updated_at = Utc::now();
+            self.todos[position] = todo;
+        } else {
+            return Err(anyhow::anyhow!("Todo with id '{}' not found", id));
+        }
         Ok(())
     }
 
     /// 删除Todo
-    pub fn delete_todo(&mut self, id: &str) -> anyhow::Result<Todo> {
-        // self.todos
-        //     .remove(id)
-        //     .ok_or_else(|| anyhow::anyhow!("Todo with id '{}' not found", id))
-        unimplemented!()
+    pub fn delete_todo(&mut self, id: &str) -> anyhow::Result<Option<Todo>> {
+        if let Some(position) = self.todos.iter().position(|t| t.id == id) {
+            let todo = self.todos.remove(position);
+            return Ok(Some(todo));
+        }
+        Ok(None)
     }
 
     /// 批量删除Todo
     pub fn batch_delete(&mut self, ids: &[String]) -> Vec<Todo> {
-        // let mut deleted = Vec::new();
-        // for id in ids {
-        //     if let Some(todo) = self.todos.remove(id) {
-        //         deleted.push(todo);
-        //     }
-        // }
-        // deleted
-        unimplemented!()
+        let mut deleted = Vec::new();
+        for id in ids {
+            if let Some(position) = self.todos.iter().position(|t| t.id == *id) {
+                let todo = self.todos.remove(position);
+                deleted.push(todo);
+            }
+        }
+        deleted
     }
 
     /// 搜索Todo
