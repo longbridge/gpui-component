@@ -214,6 +214,8 @@ impl RenderOnce for TextInput {
                     .on_action(window.listener_for(&self.state, InputState::down))
                     .on_action(window.listener_for(&self.state, InputState::select_up))
                     .on_action(window.listener_for(&self.state, InputState::select_down))
+                    .on_action(window.listener_for(&self.state, InputState::page_up))
+                    .on_action(window.listener_for(&self.state, InputState::page_down))
             })
             .on_action(window.listener_for(&self.state, InputState::select_all))
             .on_action(window.listener_for(&self.state, InputState::select_to_start_of_line))

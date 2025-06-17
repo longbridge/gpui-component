@@ -432,8 +432,6 @@ impl TextElement {
 }
 
 pub(super) struct PrepaintState {
-    /// The visible range (no wrap) of lines in the viewport.
-    visible_range: Range<usize>,
     /// The lines of entire lines.
     last_layout: LastLayout,
     /// The lines only contains the visible lines in the viewport, based on `visible_range`.
@@ -798,6 +796,7 @@ impl Element for TextElement {
             last_layout: LastLayout {
                 lines: Rc::new(lines),
                 line_height,
+                visible_range,
             },
             scroll_size,
             line_numbers,
@@ -806,7 +805,6 @@ impl Element for TextElement {
             cursor_scroll_offset,
             current_line_index,
             selection_path,
-            visible_range,
         }
     }
 
@@ -824,7 +822,7 @@ impl Element for TextElement {
         let focused = focus_handle.is_focused(window);
         let bounds = prepaint.bounds;
         let selected_range = self.input.read(cx).selected_range.clone();
-        let visible_range = &prepaint.visible_range;
+        let visible_range = &prepaint.last_layout.visible_range;
 
         window.handle_input(
             &focus_handle,

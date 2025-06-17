@@ -66,6 +66,8 @@ actions!(
         SelectAll,
         Home,
         End,
+        PageUp,
+        PageDown,
         SelectToStartOfLine,
         SelectToEndOfLine,
         SelectToStart,
@@ -122,6 +124,8 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("down", Down, Some(CONTEXT)),
         KeyBinding::new("left", Left, Some(CONTEXT)),
         KeyBinding::new("right", Right, Some(CONTEXT)),
+        KeyBinding::new("pageup", PageUp, Some(CONTEXT)),
+        KeyBinding::new("pagedown", PageDown, Some(CONTEXT)),
         KeyBinding::new("tab", IndentInline, Some(CONTEXT)),
         KeyBinding::new("shift-tab", OutdentInline, Some(CONTEXT)),
         #[cfg(target_os = "macos")]
@@ -217,6 +221,8 @@ pub(super) struct LastLayout {
     pub(super) lines: Rc<SmallVec<[WrappedLine; 1]>>,
     /// The line_height of text layout, this will change will InputElement painted.
     pub(super) line_height: Pixels,
+    /// The visible range (no wrap) of lines in the viewport.
+    pub(super) visible_range: Range<usize>,
 }
 
 impl Deref for LastLayout {
@@ -555,8 +561,9 @@ impl InputState {
     }
 
     /// Move the cursor vertically by one line (up or down) while preserving the column if possible.
-    /// direction: -1 for up, +1 for down
-    fn move_vertical(&mut self, direction: i32, window: &mut Window, cx: &mut Context<Self>) {
+    ///
+    /// move_lines: Number of lines to move vertically (positive for down, negative for up).
+    fn move_vertical(&mut self, move_lines: isize, window: &mut Window, cx: &mut Context<Self>) {
         if self.is_single_line() {
             return;
         }
@@ -579,21 +586,23 @@ impl InputState {
             .preferred_x_offset
             .unwrap_or_else(|| current_pos.x + bounds.origin.x);
 
-        let mut new_line_index = current_line_index;
         let mut new_sub_line = current_sub_line as i32;
 
-        new_sub_line += direction;
+        new_sub_line += if move_lines > 0 { 1 } else { -1 };
 
         // Handle moving above the first line
-        if direction == -1 && new_line_index == 0 && new_sub_line < 0 {
+        if move_lines == -1 && current_line_index == 0 && new_sub_line < 0 {
             // Move cursor to the beginning of the text
             self.move_to(0, window, cx);
             return;
         }
 
+        let new_line_index = (current_line_index.saturating_add_signed(move_lines) as usize)
+            .max(0)
+            .min(last_layout.lines.len().saturating_sub(1));
+
         if new_sub_line < 0 {
             if new_line_index > 0 {
-                new_line_index -= 1;
                 new_sub_line = last_layout.lines[new_line_index].wrap_boundaries.len() as i32;
             } else {
                 new_sub_line = 0;
@@ -602,7 +611,6 @@ impl InputState {
             let max_sub_line = last_layout.lines[new_line_index].wrap_boundaries.len() as i32;
             if new_sub_line > max_sub_line {
                 if new_line_index < last_layout.lines.len() - 1 {
-                    new_line_index += 1;
                     new_sub_line = 0;
                 } else {
                     new_sub_line = max_sub_line;
@@ -864,6 +872,32 @@ impl InputState {
 
         self.pause_blink_cursor(cx);
         self.move_vertical(1, window, cx);
+    }
+
+    pub(super) fn page_up(&mut self, _: &PageUp, window: &mut Window, cx: &mut Context<Self>) {
+        if self.is_single_line() {
+            return;
+        }
+
+        let Some(last_layout) = &self.last_layout else {
+            return;
+        };
+
+        let visible_lines = last_layout.visible_range.len() as isize;
+        self.move_vertical(-visible_lines, window, cx);
+    }
+
+    pub(super) fn page_down(&mut self, _: &PageDown, window: &mut Window, cx: &mut Context<Self>) {
+        if self.is_single_line() {
+            return;
+        }
+
+        let Some(last_layout) = &self.last_layout else {
+            return;
+        };
+
+        let visible_lines = last_layout.visible_range.len() as isize;
+        self.move_vertical(visible_lines, window, cx);
     }
 
     pub(super) fn select_left(
