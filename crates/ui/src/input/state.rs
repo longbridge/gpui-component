@@ -591,7 +591,7 @@ impl InputState {
         new_sub_line += if move_lines > 0 { 1 } else { -1 };
 
         // Handle moving above the first line
-        if move_lines == -1 && current_line_index == 0 && new_sub_line < 0 {
+        if move_lines < 0 && current_line_index == 0 && new_sub_line < 0 {
             // Move cursor to the beginning of the text
             self.move_to(0, window, cx);
             return;
