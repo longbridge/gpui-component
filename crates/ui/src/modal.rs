@@ -459,7 +459,7 @@ impl RenderOnce for Modal {
                             .child(
                                 div().w_full().flex_1().overflow_hidden().child(
                                     v_flex()
-                                        .scrollable(window.current_view(), ScrollbarAxis::Vertical)
+                                        // .scrollable(window.current_view(), ScrollbarAxis::Vertical)
                                         .child(self.content),
                                 ),
                             )
