@@ -242,7 +242,6 @@ impl RenderOnce for TodoItem {
 }
 
 struct TodoListDelegate {
-    todos: Vec<Todo>,
     matched_todos: Vec<Todo>,
     selected_index: Option<usize>,
     confirmed_index: Option<usize>,
@@ -267,7 +266,8 @@ impl ListDelegate for TodoListDelegate {
     ) -> Task<()> {
         self.query = query.to_string();
         self.matched_todos = self
-            .todos
+            .manager
+            .list_todos()
             .iter()
             .filter(|todo| todo.title.to_lowercase().contains(&query.to_lowercase()))
             .cloned()
@@ -376,8 +376,8 @@ impl TodoListDelegate {
         let Some(ix) = self.selected_index else {
             return None;
         };
-
-        self.todos.get(ix).cloned()
+        let todo = self.matched_todos.get(ix).cloned();
+        todo
     }
 }
 
@@ -405,11 +405,8 @@ impl TodoList {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let manager = TodoManager::create_fake_data();
 
-        let todos = manager.list_todos();
-
         let delegate = TodoListDelegate {
-            matched_todos: todos.clone(),
-            todos,
+            matched_todos: manager.list_todos(),
             selected_index: None,
             confirmed_index: None,
             query: "".to_string(),
@@ -426,8 +423,8 @@ impl TodoList {
                     println!("List Selected: {:?}", ix);
                 }
                 ListEvent::Confirm(ix) => {
-                    this.selected_todo(cx);
                     println!("List Confirmed: {:?}", ix);
+                    this.selected_todo(cx);
                 }
                 ListEvent::Cancel => {
                     println!("List Cancelled");
@@ -466,7 +463,6 @@ impl TodoList {
     }
 
     fn selected_todo(&mut self, cx: &mut Context<Self>) {
-        println!("Selected todo action triggered");
         let picker = self.todo_list.read(cx);
         self.selected_todo = picker.delegate().selected_todo();
     }
@@ -493,7 +489,7 @@ impl TodoList {
     fn set_todo_filter(&mut self, filter: TodoFilter, _: &mut Window, cx: &mut Context<Self>) {
         self.todo_filter = filter;
         self.todo_list.update(cx, |list, _cx| {
-            let todos = list.delegate_mut().todos.clone();
+            let todos = list.delegate_mut().manager.list_todos();
             list.delegate_mut().matched_todos = match filter {
                 TodoFilter::All => todos,
                 TodoFilter::Planned => todos

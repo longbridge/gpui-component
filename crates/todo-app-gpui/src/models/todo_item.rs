@@ -376,7 +376,7 @@ const TODO_CONFIG_FILE: &str = "config/todos.yml";
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TodoManager {
     #[serde(flatten, default)]
-    pub todos: HashMap<String, Todo>,
+    pub todos: Vec<Todo>,
 }
 
 impl TodoManager {
@@ -417,21 +417,25 @@ impl TodoManager {
 
     /// 获取所有Todo列表
     pub fn list_todos(&self) -> Vec<Todo> {
-        let mut todos: Vec<Todo> = self.todos.values().cloned().collect();
         // 按更新时间倒序排列
+        let mut todos = self.todos.clone();
         todos.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
         todos
     }
 
     /// 根据ID查询Todo
-    pub fn get_todo(&self, id: &str) -> Option<&Todo> {
+    pub fn get_todo_by_idx(&self, id: usize) -> Option<&Todo> {
         self.todos.get(id)
+    }
+
+    pub fn get_todo_by_id(&self, id: &str) -> Option<&Todo> {
+        unimplemented!()
     }
 
     /// 根据状态筛选Todo
     pub fn get_todos_by_status(&self, status: TodoStatus) -> Vec<Todo> {
         self.todos
-            .values()
+            .iter()
             .filter(|todo| todo.status == status)
             .cloned()
             .collect()
@@ -440,7 +444,7 @@ impl TodoManager {
     /// 获取过期的Todo
     pub fn get_overdue_todos(&self) -> Vec<Todo> {
         self.todos
-            .values()
+            .iter()
             .filter(|todo| todo.is_overdue())
             .cloned()
             .collect()
@@ -449,53 +453,54 @@ impl TodoManager {
     /// 获取需要提醒的Todo
     pub fn get_reminder_todos(&self) -> Vec<Todo> {
         self.todos
-            .values()
+            .iter()
             .filter(|todo| todo.needs_reminder())
             .cloned()
             .collect()
     }
 
     /// 添加新的Todo
-    pub fn add_todo(&mut self, todo: Todo) -> anyhow::Result<String> {
-        let id = todo.id.clone();
-        self.todos.insert(id.clone(), todo);
-        Ok(id)
+    pub fn add_todo(&mut self, todo: Todo) -> anyhow::Result<()> {
+        self.todos.push(todo);
+        Ok(())
     }
 
     /// 更新Todo
     pub fn update_todo(&mut self, id: &str, mut todo: Todo) -> anyhow::Result<()> {
-        if !self.todos.contains_key(id) {
-            return Err(anyhow::anyhow!("Todo with id '{}' not found", id));
-        }
+        // if !self.todos.contains_key(id) {
+        //     return Err(anyhow::anyhow!("Todo with id '{}' not found", id));
+        // }
 
-        todo.updated_at = Utc::now();
-        self.todos.insert(id.to_string(), todo);
+        // todo.updated_at = Utc::now();
+        // self.todos.insert(id.to_string(), todo);
         Ok(())
     }
 
     /// 删除Todo
     pub fn delete_todo(&mut self, id: &str) -> anyhow::Result<Todo> {
-        self.todos
-            .remove(id)
-            .ok_or_else(|| anyhow::anyhow!("Todo with id '{}' not found", id))
+        // self.todos
+        //     .remove(id)
+        //     .ok_or_else(|| anyhow::anyhow!("Todo with id '{}' not found", id))
+        unimplemented!()
     }
 
     /// 批量删除Todo
     pub fn batch_delete(&mut self, ids: &[String]) -> Vec<Todo> {
-        let mut deleted = Vec::new();
-        for id in ids {
-            if let Some(todo) = self.todos.remove(id) {
-                deleted.push(todo);
-            }
-        }
-        deleted
+        // let mut deleted = Vec::new();
+        // for id in ids {
+        //     if let Some(todo) = self.todos.remove(id) {
+        //         deleted.push(todo);
+        //     }
+        // }
+        // deleted
+        unimplemented!()
     }
 
     /// 搜索Todo
     pub fn search_todos(&self, query: &str) -> Vec<Todo> {
         let query_lower = query.to_lowercase();
         self.todos
-            .values()
+            .iter()
             .filter(|todo| {
                 todo.title.to_lowercase().contains(&query_lower)
                     || todo.description.to_lowercase().contains(&query_lower)
@@ -509,25 +514,25 @@ impl TodoManager {
         let total = self.todos.len();
         let completed = self
             .todos
-            .values()
+            .iter()
             .filter(|t| t.status == TodoStatus::Done)
             .count();
         let in_progress = self
             .todos
-            .values()
+            .iter()
             .filter(|t| t.status == TodoStatus::InProgress)
             .count();
         let todo = self
             .todos
-            .values()
+            .iter()
             .filter(|t| t.status == TodoStatus::Todo)
             .count();
         let cancelled = self
             .todos
-            .values()
+            .iter()
             .filter(|t| t.status == TodoStatus::Cancelled)
             .count();
-        let overdue = self.todos.values().filter(|t| t.is_overdue()).count();
+        let overdue = self.todos.iter().filter(|t| t.is_overdue()).count();
 
         TodoStatistics {
             total,
@@ -558,7 +563,7 @@ impl TodoManager {
 
         // 将所有伪造的Todo添加到管理器中
         for todo in fake_todos {
-            manager.todos.insert(todo.id.clone(), todo);
+            manager.todos.push(todo);
         }
 
         manager

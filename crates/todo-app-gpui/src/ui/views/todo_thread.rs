@@ -684,8 +684,8 @@ impl TodoThreadChat {
                                         }
                                         todo_cx.notify();
                                     });
-                                    println!("清空所有模型选择");
-                                    window.close_drawer(cx);
+                                    // println!("清空所有模型选择");
+                                    // window.close_drawer(cx);
                                 }),
                         ),
                 )
@@ -858,8 +858,8 @@ impl TodoThreadChat {
                                         }
                                         todo_cx.notify();
                                     });
-                                    println!("清空所有工具选择");
-                                    window.close_drawer(cx);
+                                    // println!("清空所有工具选择");
+                                    // window.close_drawer(cx);
                                 }),
                         ),
                 )

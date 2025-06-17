@@ -1,3 +1,108 @@
+fs-001:
+  id: fs-001
+  name: 文件系统服务器
+  command: npx @modelcontextprotocol/server-filesystem /home/user/documents
+  transport: Stdio
+  enabled: true
+  capabilities:
+  - Resources
+  - Tools
+  description: 提供文件系统访问功能的MCP服务器
+  resources:
+  - uri: file:///home/user/documents
+    name: 文档文件夹
+    description: 用户文档目录访问
+    mime_type: inode/directory
+    subscribable: true
+    subscribed: false
+  - uri: file:///home/user/config.json
+    name: 配置文件
+    description: 应用配置文件
+    mime_type: application/json
+    subscribable: true
+    subscribed: true
+  tools:
+  - name: read_file
+    description: 读取指定文件的内容
+    parameters:
+    - name: path
+      param_type: string
+      description: 要读取的文件路径
+      required: true
+    - name: encoding
+      param_type: string
+      description: 文件编码格式
+      required: false
+  - name: write_file
+    description: 写入内容到指定文件
+    parameters:
+    - name: path
+      param_type: string
+      description: 目标文件路径
+      required: true
+    - name: content
+      param_type: string
+      description: 要写入的内容
+      required: true
+  prompts:
+  - name: code_review
+    description: 对代码进行审查和建议
+    arguments:
+    - name: code
+      description: 要审查的代码内容
+      required: true
+    - name: language
+      description: 编程语言类型
+      required: false
+  - name: explain_concept
+    description: 解释技术概念
+    arguments:
+    - name: concept
+      description: 要解释的概念
+      required: true
+  env_vars:
+    PATH: /usr/local/bin:/usr/bin:/bin
+    NODE_ENV: production
+sqlite-001:
+  id: sqlite-001
+  name: SQLite数据库服务器
+  command: npx @modelcontextprotocol/server-sqlite /path/to/database.db
+  transport: Stdio
+  enabled: false
+  capabilities:
+  - Tools
+  - Resources
+  description: SQLite数据库操作接口
+  resources:
+  - uri: sqlite:///path/to/database.db
+    name: 主数据库
+    description: 应用主数据库文件
+    mime_type: application/x-sqlite3
+    subscribable: false
+    subscribed: false
+  tools:
+  - name: execute_query
+    description: 执行SQL查询
+    parameters:
+    - name: query
+      param_type: string
+      description: SQL查询语句
+      required: true
+  - name: get_schema
+    description: 获取数据库结构
+    parameters: []
+  prompts:
+  - name: generate_sql
+    description: 根据需求生成SQL语句
+    arguments:
+    - name: requirement
+      description: 查询需求描述
+      required: true
+    - name: tables
+      description: 相关表名
+      required: false
+  env_vars:
+    SQLITE_TIMEOUT: '30000'
 web-001:
   id: web-001
   name: 网页搜索服务器
@@ -44,6 +149,50 @@ web-001:
   env_vars:
     SEARCH_ENGINE: google
     USER_AGENT: MCP-WebSearch/1.0
+git-001:
+  id: git-001
+  name: Git服务器
+  command: npx @modelcontextprotocol/server-git abcd
+  transport: Stdio
+  enabled: false
+  capabilities:
+  - Tools
+  - Resources
+  description: 提供Git版本控制功能
+  resources:
+  - uri: git://current-repo
+    name: 当前仓库
+    description: 当前Git仓库状态
+    mime_type: application/x-git
+    subscribable: true
+    subscribed: true
+  tools:
+  - name: git_status
+    description: 查看Git仓库状态
+    parameters: []
+  - name: git_commit
+    description: 提交更改
+    parameters:
+    - name: message
+      param_type: string
+      description: 提交消息
+      required: true
+  - name: git_log
+    description: 查看提交历史
+    parameters:
+    - name: limit
+      param_type: number
+      description: 显示条数
+      required: false
+  prompts:
+  - name: commit_message
+    description: 生成规范的提交消息
+    arguments:
+    - name: changes
+      description: 变更描述
+      required: true
+  env_vars:
+    GIT_EDITOR: nano
 python-001:
   id: python-001
   name: Python执行服务器
@@ -85,219 +234,5 @@ python-001:
       description: 错误信息
       required: false
   env_vars:
-    PYTHON_ENV: development
     PYTHONPATH: /opt/python/lib
-sqlite-001:
-  id: sqlite-001
-  name: SQLite数据库服务器
-  command: npx @modelcontextprotocol/server-sqlite /path/to/database.db
-  transport: Stdio
-  enabled: true
-  capabilities:
-  - Tools
-  - Resources
-  description: SQLite数据库操作接口
-  resources:
-  - uri: sqlite:///path/to/database.db
-    name: 主数据库
-    description: 应用主数据库文件
-    mime_type: application/x-sqlite3
-    subscribable: false
-    subscribed: false
-  tools:
-  - name: execute_query
-    description: 执行SQL查询
-    parameters:
-    - name: query
-      param_type: string
-      description: SQL查询语句
-      required: true
-  - name: get_schema
-    description: 获取数据库结构
-    parameters: []
-  prompts:
-  - name: generate_sql
-    description: 根据需求生成SQL语句
-    arguments:
-    - name: requirement
-      description: 查询需求描述
-      required: true
-    - name: tables
-      description: 相关表名
-      required: false
-  env_vars:
-    SQLITE_TIMEOUT: '30000'
-d4198f66-f498-41b3-8c94-b523ccee99d6:
-  id: d4198f66-f498-41b3-8c94-b523ccee99d6
-  name: ''
-  command: ''
-  transport: Stdio
-  enabled: true
-  capabilities:
-  - Resources
-  - Tools
-  description: ''
-  resources:
-  - uri: file:///home/user/documents
-    name: 文档文件夹
-    description: 用户文档目录访问
-    mime_type: inode/directory
-    subscribable: true
-    subscribed: false
-  - uri: file:///home/user/config.json
-    name: 配置文件
-    description: 应用配置文件
-    mime_type: application/json
-    subscribable: true
-    subscribed: false
-  tools:
-  - name: read_file
-    description: 读取指定文件的内容
-    parameters:
-    - name: path
-      param_type: string
-      description: 要读取的文件路径
-      required: true
-    - name: encoding
-      param_type: string
-      description: 文件编码格式
-      required: false
-  - name: write_file
-    description: 写入内容到指定文件
-    parameters:
-    - name: path
-      param_type: string
-      description: 目标文件路径
-      required: true
-    - name: content
-      param_type: string
-      description: 要写入的内容
-      required: true
-  prompts:
-  - name: code_review
-    description: 对代码进行审查和建议
-    arguments:
-    - name: code
-      description: 要审查的代码内容
-      required: true
-    - name: language
-      description: 编程语言类型
-      required: false
-  - name: explain_concept
-    description: 解释技术概念
-    arguments:
-    - name: concept
-      description: 要解释的概念
-      required: true
-  env_vars:
-    NODE_ENV: production
-    PATH: /usr/local/bin:/usr/bin:/bin
-fs-001:
-  id: fs-001
-  name: 文件系统服务器
-  command: npx @modelcontextprotocol/server-filesystem /home/user/documents
-  transport: Stdio
-  enabled: true
-  capabilities:
-  - Resources
-  - Tools
-  description: 提供文件系统访问功能的MCP服务器
-  resources:
-  - uri: file:///home/user/documents
-    name: 文档文件夹
-    description: 用户文档目录访问
-    mime_type: inode/directory
-    subscribable: true
-    subscribed: true
-  - uri: file:///home/user/config.json
-    name: 配置文件
-    description: 应用配置文件
-    mime_type: application/json
-    subscribable: true
-    subscribed: true
-  tools:
-  - name: read_file
-    description: 读取指定文件的内容
-    parameters:
-    - name: path
-      param_type: string
-      description: 要读取的文件路径
-      required: true
-    - name: encoding
-      param_type: string
-      description: 文件编码格式
-      required: false
-  - name: write_file
-    description: 写入内容到指定文件
-    parameters:
-    - name: path
-      param_type: string
-      description: 目标文件路径
-      required: true
-    - name: content
-      param_type: string
-      description: 要写入的内容
-      required: true
-  prompts:
-  - name: code_review
-    description: 对代码进行审查和建议
-    arguments:
-    - name: code
-      description: 要审查的代码内容
-      required: true
-    - name: language
-      description: 编程语言类型
-      required: false
-  - name: explain_concept
-    description: 解释技术概念
-    arguments:
-    - name: concept
-      description: 要解释的概念
-      required: true
-  env_vars:
-    NODE_ENV: production
-    PATH: /usr/local/bin:/usr/bin:/bin
-git-001:
-  id: git-001
-  name: Git服务器
-  command: npx @modelcontextprotocol/server-git abcd
-  transport: Stdio
-  enabled: true
-  capabilities:
-  - Tools
-  - Resources
-  description: 提供Git版本控制功能
-  resources:
-  - uri: git://current-repo
-    name: 当前仓库
-    description: 当前Git仓库状态
-    mime_type: application/x-git
-    subscribable: true
-    subscribed: true
-  tools:
-  - name: git_status
-    description: 查看Git仓库状态
-    parameters: []
-  - name: git_commit
-    description: 提交更改
-    parameters:
-    - name: message
-      param_type: string
-      description: 提交消息
-      required: true
-  - name: git_log
-    description: 查看提交历史
-    parameters:
-    - name: limit
-      param_type: number
-      description: 显示条数
-      required: false
-  prompts:
-  - name: commit_message
-    description: 生成规范的提交消息
-    arguments:
-    - name: changes
-      description: 变更描述
-      required: true
-  env_vars:
-    GIT_EDITOR: nano
+    PYTHON_ENV: development

@@ -24,15 +24,7 @@ const CONTEXT: &str = "TodoThreadEdit";
 
 pub struct TodoThreadEdit {
     focus_handle: FocusHandle,
-
-    // 基本信息
-    title_input: Entity<InputState>,
     description_input: Entity<InputState>,
-
-    // // 状态和优先级
-    // status_dropdown: Entity<DropdownState<Vec<SharedString>>>,
-    // priority_dropdown: Entity<DropdownState<Vec<SharedString>>>,
-
     // AI助手配置
     model_manager: LlmProviderManager,
     mcp_tool_manager: McpProviderManager,
@@ -43,17 +35,9 @@ pub struct TodoThreadEdit {
     recurring_enabled: bool,
     recurring_dropdown: Entity<DropdownState<Vec<SharedString>>>,
 
-    // 其他设置
-    auto_execute: bool,
-    enable_notifications: bool,
-
     // 手风琴展开状态
     expanded_providers: Vec<usize>,
     expanded_tool_providers: Vec<usize>,
-
-    // // 添加上传文件列表
-    // uploaded_files: Vec<UploadedFile>,
-
     _subscriptions: Vec<Subscription>,
 
     todoitem:Todo,
@@ -92,15 +76,15 @@ fn tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
         cx.notify();
     }
 
-    fn toggle_auto_execute(&mut self, enabled: bool, _: &mut Window, cx: &mut Context<Self>) {
-        self.auto_execute = enabled;
-        cx.notify();
-    }
+    // fn toggle_auto_execute(&mut self, enabled: bool, _: &mut Window, cx: &mut Context<Self>) {
+    //     self.auto_execute = enabled;
+    //     cx.notify();
+    // }
 
-    fn toggle_notifications(&mut self, enabled: bool, _: &mut Window, cx: &mut Context<Self>) {
-        self.enable_notifications = enabled;
-        cx.notify();
-    }
+    // fn toggle_notifications(&mut self, enabled: bool, _: &mut Window, cx: &mut Context<Self>) {
+    //     self.enable_notifications = enabled;
+    //     cx.notify();
+    // }
 
     fn on_input_event(
         &mut self,
@@ -255,25 +239,24 @@ impl TodoThreadEdit {
                 ..Default::default()
             };
             cx.create_normal_window(
-                "xTodo-Add",
+                "xTodo-创建",
                 options,
                 move |window, cx|  cx.new(|cx| Self::new(Todo::default(),window, cx)),
             );
     }
     
     fn new(todo:Todo,window: &mut Window, cx: &mut Context<Self>) -> Self {
-        // 基本信息输入框
-        let title_input = cx.new(|cx| InputState::new(window, cx).placeholder("输入任务标题..."));
-
         let description_input = cx.new(|cx| {
-            InputState::new(window, cx)
+        let mut state= InputState::new(window, cx)
                 .placeholder("详细描述任务内容和要求...")
-                .auto_grow(10, 10)
+                .auto_grow(10, 10);
+            state.set_value(todo.description.clone(), window, cx);
+            state
         });
 
         // 模型管理器和工具管理器
         let model_manager = LlmProviderManager::load();
-        let mcp_tool_manager = McpProviderManager::load();
+        let mcp_manager = McpProviderManager::load();
 
         // 时间选择器
         let due_date_picker = cx.new(|cx| DatePickerState::new(window, cx));
@@ -284,7 +267,6 @@ impl TodoThreadEdit {
             cx.new(|cx| DropdownState::new(recurring_options, Some(1), window, cx));
 
         let _subscriptions = vec![
-            cx.subscribe_in(&title_input, window, Self::on_input_event),
             cx.subscribe_in(&description_input, window, Self::on_input_event),
             cx.subscribe(&due_date_picker, |_, _, ev, cx| match ev {
                 DatePickerEvent::Change(_) => {
@@ -300,16 +282,13 @@ impl TodoThreadEdit {
 
         Self {
             focus_handle: cx.focus_handle(),
-            title_input,
             description_input,
             model_manager,
-            mcp_tool_manager,
+            mcp_tool_manager: mcp_manager,
             due_date_picker,
             reminder_date_picker,
             recurring_enabled: false,
             recurring_dropdown,
-            auto_execute: false,
-            enable_notifications: true,
             expanded_providers: Vec::new(),
             expanded_tool_providers: Vec::new(),
             _subscriptions,
@@ -559,8 +538,8 @@ impl TodoThreadEdit {
                                         todo_cx.notify(); // 通知主界面更新
                                     });
                                     println!("清空所有模型选择");
-                                    // 关闭抽屉
-                                    window.close_drawer(cx);
+                                    // // 关闭抽屉
+                                    // window.close_drawer(cx);
                                 }),
                         ),
                 )
@@ -742,7 +721,7 @@ impl TodoThreadEdit {
                         .child(
                             Button::new("clear-all-tools")
                                 .label("清空选择")
-                                .on_click(move |_, window, cx| {
+                                .on_click(move |_, _window, cx| {
                                     // 清空所有工具选择
                                     todo_edit_entity_for_clear.update(cx, |todo_edit, todo_cx| {
                                         todo_edit.todoitem.selected_tools.clear();
@@ -829,7 +808,7 @@ impl ViewKit for TodoThreadEdit {
 impl FocusableCycle for TodoThreadEdit {
     fn cycle_focus_handles(&self, _: &mut Window, cx: &mut App) -> Vec<FocusHandle> {
         vec![
-            self.title_input.focus_handle(cx),
+            //self.title_input.focus_handle(cx),
             self.description_input.focus_handle(cx),
             self.due_date_picker.focus_handle(cx),
             self.reminder_date_picker.focus_handle(cx),
@@ -893,7 +872,6 @@ impl Render for TodoThreadEdit {
                             .rounded_lg()
                             .child(
                                 v_flex()
-                                    .gap_1()
                                     .child(TextInput::new(&self.description_input).cleanable()),
                             ),
                     )
@@ -972,7 +950,6 @@ impl Render for TodoThreadEdit {
                                                         .child(
                                                             v_flex()
                                                                 .gap_2()
-                                                                
                                                                 .child(
                                                                     h_flex()
                                                                         .gap_2()
@@ -1072,9 +1049,9 @@ impl Render for TodoThreadEdit {
                                             .child(
                                                 Checkbox::new("push-feishu-button")
                                                     .label("推送到飞书")
-                                                    .checked(true)
+                                                    .checked(self.todoitem.push_to_feishu)
                                                     .on_click(cx.listener(|view, _, _, cx| {
-                                                        // view.disabled = !view.disabled;
+                                                        view.todoitem.push_to_feishu = !view.todoitem.push_to_feishu;
                                                         cx.notify();
                                                     })),
                                             ),)
