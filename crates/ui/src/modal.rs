@@ -12,9 +12,7 @@ use crate::{
     actions::{Cancel, Confirm},
     animation::cubic_bezier,
     button::{Button, ButtonVariant, ButtonVariants as _},
-    h_flex,
-    scroll::ScrollbarAxis,
-    v_flex, ActiveTheme as _, ContextModal, IconName, Root, Sizable as _, StyledExt,
+    h_flex, v_flex, ActiveTheme as _, ContextModal, IconName, Root, Sizable as _, StyledExt,
 };
 
 const CONTEXT: &str = "Modal";
@@ -457,11 +455,11 @@ impl RenderOnce for Modal {
                                 )
                             })
                             .child(
-                                div().w_full().flex_1().overflow_hidden().child(
-                                    v_flex()
-                                        // .scrollable(window.current_view(), ScrollbarAxis::Vertical)
-                                        .child(self.content),
-                                ),
+                                div()
+                                    .w_full()
+                                    .flex_1()
+                                    .overflow_hidden()
+                                    .child(self.content),
                             )
                             .when(self.footer.is_some(), |this| {
                                 let footer = self.footer.unwrap();
