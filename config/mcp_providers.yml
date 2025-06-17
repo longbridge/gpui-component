@@ -3,7 +3,7 @@ web-001:
   name: 网页搜索服务器
   command: node /path/to/web-search-server.js
   transport: Sse
-  enabled: false
+  enabled: true
   capabilities:
   - Tools
   - Resources
@@ -44,12 +44,160 @@ web-001:
   env_vars:
     SEARCH_ENGINE: google
     USER_AGENT: MCP-WebSearch/1.0
+python-001:
+  id: python-001
+  name: Python执行服务器
+  command: python -m mcp.server.python
+  transport: Stdio
+  enabled: true
+  capabilities:
+  - Tools
+  - Prompts
+  description: Python代码执行环境
+  resources: []
+  tools:
+  - name: execute_python
+    description: 执行Python代码
+    parameters:
+    - name: code
+      param_type: string
+      description: 要执行的Python代码
+      required: true
+    - name: timeout
+      param_type: number
+      description: 执行超时时间(秒)
+      required: false
+  - name: install_package
+    description: 安装Python包
+    parameters:
+    - name: package
+      param_type: string
+      description: 包名
+      required: true
+  prompts:
+  - name: debug_code
+    description: 调试Python代码
+    arguments:
+    - name: code
+      description: 有问题的代码
+      required: true
+    - name: error
+      description: 错误信息
+      required: false
+  env_vars:
+    PYTHON_ENV: development
+    PYTHONPATH: /opt/python/lib
+sqlite-001:
+  id: sqlite-001
+  name: SQLite数据库服务器
+  command: npx @modelcontextprotocol/server-sqlite /path/to/database.db
+  transport: Stdio
+  enabled: true
+  capabilities:
+  - Tools
+  - Resources
+  description: SQLite数据库操作接口
+  resources:
+  - uri: sqlite:///path/to/database.db
+    name: 主数据库
+    description: 应用主数据库文件
+    mime_type: application/x-sqlite3
+    subscribable: false
+    subscribed: false
+  tools:
+  - name: execute_query
+    description: 执行SQL查询
+    parameters:
+    - name: query
+      param_type: string
+      description: SQL查询语句
+      required: true
+  - name: get_schema
+    description: 获取数据库结构
+    parameters: []
+  prompts:
+  - name: generate_sql
+    description: 根据需求生成SQL语句
+    arguments:
+    - name: requirement
+      description: 查询需求描述
+      required: true
+    - name: tables
+      description: 相关表名
+      required: false
+  env_vars:
+    SQLITE_TIMEOUT: '30000'
+d4198f66-f498-41b3-8c94-b523ccee99d6:
+  id: d4198f66-f498-41b3-8c94-b523ccee99d6
+  name: ''
+  command: ''
+  transport: Stdio
+  enabled: true
+  capabilities:
+  - Resources
+  - Tools
+  description: ''
+  resources:
+  - uri: file:///home/user/documents
+    name: 文档文件夹
+    description: 用户文档目录访问
+    mime_type: inode/directory
+    subscribable: true
+    subscribed: false
+  - uri: file:///home/user/config.json
+    name: 配置文件
+    description: 应用配置文件
+    mime_type: application/json
+    subscribable: true
+    subscribed: false
+  tools:
+  - name: read_file
+    description: 读取指定文件的内容
+    parameters:
+    - name: path
+      param_type: string
+      description: 要读取的文件路径
+      required: true
+    - name: encoding
+      param_type: string
+      description: 文件编码格式
+      required: false
+  - name: write_file
+    description: 写入内容到指定文件
+    parameters:
+    - name: path
+      param_type: string
+      description: 目标文件路径
+      required: true
+    - name: content
+      param_type: string
+      description: 要写入的内容
+      required: true
+  prompts:
+  - name: code_review
+    description: 对代码进行审查和建议
+    arguments:
+    - name: code
+      description: 要审查的代码内容
+      required: true
+    - name: language
+      description: 编程语言类型
+      required: false
+  - name: explain_concept
+    description: 解释技术概念
+    arguments:
+    - name: concept
+      description: 要解释的概念
+      required: true
+  env_vars:
+    NODE_ENV: production
+    PATH: /usr/local/bin:/usr/bin:/bin
 fs-001:
   id: fs-001
   name: 文件系统服务器
   command: npx @modelcontextprotocol/server-filesystem /home/user/documents
   transport: Stdio
-  enabled: false
+  enabled: true
   capabilities:
   - Resources
   - Tools
@@ -109,49 +257,6 @@ fs-001:
   env_vars:
     NODE_ENV: production
     PATH: /usr/local/bin:/usr/bin:/bin
-python-001:
-  id: python-001
-  name: Python执行服务器
-  command: python -m mcp.server.python
-  transport: Stdio
-  enabled: false
-  capabilities:
-  - Tools
-  - Prompts
-  description: Python代码执行环境
-  resources: []
-  tools:
-  - name: execute_python
-    description: 执行Python代码
-    parameters:
-    - name: code
-      param_type: string
-      description: 要执行的Python代码
-      required: true
-    - name: timeout
-      param_type: number
-      description: 执行超时时间(秒)
-      required: false
-  - name: install_package
-    description: 安装Python包
-    parameters:
-    - name: package
-      param_type: string
-      description: 包名
-      required: true
-  prompts:
-  - name: debug_code
-    description: 调试Python代码
-    arguments:
-    - name: code
-      description: 有问题的代码
-      required: true
-    - name: error
-      description: 错误信息
-      required: false
-  env_vars:
-    PYTHONPATH: /opt/python/lib
-    PYTHON_ENV: development
 git-001:
   id: git-001
   name: Git服务器
@@ -196,108 +301,3 @@ git-001:
       required: true
   env_vars:
     GIT_EDITOR: nano
-sqlite-001:
-  id: sqlite-001
-  name: SQLite数据库服务器
-  command: npx @modelcontextprotocol/server-sqlite /path/to/database.db
-  transport: Stdio
-  enabled: false
-  capabilities:
-  - Tools
-  - Resources
-  description: SQLite数据库操作接口
-  resources:
-  - uri: sqlite:///path/to/database.db
-    name: 主数据库
-    description: 应用主数据库文件
-    mime_type: application/x-sqlite3
-    subscribable: false
-    subscribed: false
-  tools:
-  - name: execute_query
-    description: 执行SQL查询
-    parameters:
-    - name: query
-      param_type: string
-      description: SQL查询语句
-      required: true
-  - name: get_schema
-    description: 获取数据库结构
-    parameters: []
-  prompts:
-  - name: generate_sql
-    description: 根据需求生成SQL语句
-    arguments:
-    - name: requirement
-      description: 查询需求描述
-      required: true
-    - name: tables
-      description: 相关表名
-      required: false
-  env_vars:
-    SQLITE_TIMEOUT: '30000'
-d4198f66-f498-41b3-8c94-b523ccee99d6:
-  id: d4198f66-f498-41b3-8c94-b523ccee99d6
-  name: ''
-  command: ''
-  transport: Stdio
-  enabled: false
-  capabilities:
-  - Resources
-  - Tools
-  description: ''
-  resources:
-  - uri: file:///home/user/documents
-    name: 文档文件夹
-    description: 用户文档目录访问
-    mime_type: inode/directory
-    subscribable: true
-    subscribed: false
-  - uri: file:///home/user/config.json
-    name: 配置文件
-    description: 应用配置文件
-    mime_type: application/json
-    subscribable: true
-    subscribed: false
-  tools:
-  - name: read_file
-    description: 读取指定文件的内容
-    parameters:
-    - name: path
-      param_type: string
-      description: 要读取的文件路径
-      required: true
-    - name: encoding
-      param_type: string
-      description: 文件编码格式
-      required: false
-  - name: write_file
-    description: 写入内容到指定文件
-    parameters:
-    - name: path
-      param_type: string
-      description: 目标文件路径
-      required: true
-    - name: content
-      param_type: string
-      description: 要写入的内容
-      required: true
-  prompts:
-  - name: code_review
-    description: 对代码进行审查和建议
-    arguments:
-    - name: code
-      description: 要审查的代码内容
-      required: true
-    - name: language
-      description: 编程语言类型
-      required: false
-  - name: explain_concept
-    description: 解释技术概念
-    arguments:
-    - name: concept
-      description: 要解释的概念
-      required: true
-  env_vars:
-    PATH: /usr/local/bin:/usr/bin:/bin
-    NODE_ENV: production

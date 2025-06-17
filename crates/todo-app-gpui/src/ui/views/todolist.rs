@@ -105,20 +105,34 @@ impl RenderOnce for TodoItem {
                                     Label::new(self.item.title.clone())
                                         .whitespace_nowrap()
                                         .text_color(title_color)
-                                        .when(is_completed, |div| div.line_through().italic()),
+                                        .when(is_completed, |mut this| {
+                                            let style = this
+                                                .text_style()
+                                                .get_or_insert_with(Default::default);
+                                            style.strikethrough = Some(StrikethroughStyle {
+                                                thickness: px(1.),
+                                                color: Some(Hsla::black()),
+                                            });
+                                            this.italic()
+                                        }),
                                 ),
                             )
                             .child(
                                 // 描述 - 为已完成任务添加删除线
-                                div()
-                                    .text_ellipsis()
-                                    .child(
-                                        Label::new(self.item.description.clone())
-                                            .text_color(description_color)
-                                            .when(is_completed, |label| {
-                                                label.line_through().italic()
-                                            }),
-                                    ),
+                                div().text_ellipsis().child(
+                                    Label::new(self.item.description.clone())
+                                        .text_color(description_color)
+                                        .when(is_completed, |mut this| {
+                                            let style = this
+                                                .text_style()
+                                                .get_or_insert_with(Default::default);
+                                            style.strikethrough = Some(StrikethroughStyle {
+                                                thickness: px(1.),
+                                                color: Some(Hsla::black()),
+                                            });
+                                            this.italic()
+                                        }),
+                                ),
                             ),
                     )
                     .child(
@@ -439,7 +453,7 @@ impl TodoList {
         // })
         // .detach();
 
-       let mut celf= Self {
+        let mut celf = Self {
             focus_handle: cx.focus_handle(),
             todo_list,
             selected_todo: None,
@@ -447,7 +461,7 @@ impl TodoList {
             todo_filter: TodoFilter::default(),
             active_tab_ix: 0,
         };
-        celf.set_active_tab(1,window,cx);
+        celf.set_active_tab(1, window, cx);
         celf
     }
 
