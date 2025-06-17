@@ -35,13 +35,14 @@ impl DiagnosticPopover {
         let Some(range) = self.marker.range.as_ref() else {
             return None;
         };
+        let line_number_width = self.state.read(cx).line_number_width;
 
         let (_, _, start_pos) = self
             .state
             .read(cx)
             .line_and_position_for_offset(range.start);
 
-        start_pos
+        start_pos.map(|pos| pos + Point::new(line_number_width, px(0.)))
     }
 
     pub(super) fn show(&mut self, cx: &mut Context<Self>) {
