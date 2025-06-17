@@ -761,25 +761,27 @@ impl TabPanel {
                         ))
                     }),
             )
-            .suffix(
-                h_flex()
-                    .items_center()
-                    .top_0()
-                    .right_0()
-                    .border_l_1()
-                    .border_b_1()
-                    .h_full()
-                    .border_color(cx.theme().border)
-                    .bg(cx.theme().tab_bar)
-                    .px_2()
-                    .gap_1()
-                    .children(
-                        self.active_panel(cx)
-                            .and_then(|panel| panel.title_suffix(window, cx)),
-                    )
-                    .child(self.render_toolbar(state, window, cx))
-                    .when_some(right_dock_button, |this, btn| this.child(btn)),
-            )
+            .when(!self.collapsed, |this| {
+                this.suffix(
+                    h_flex()
+                        .items_center()
+                        .top_0()
+                        .right_0()
+                        .border_l_1()
+                        .border_b_1()
+                        .h_full()
+                        .border_color(cx.theme().border)
+                        .bg(cx.theme().tab_bar)
+                        .px_2()
+                        .gap_1()
+                        .children(
+                            self.active_panel(cx)
+                                .and_then(|panel| panel.title_suffix(window, cx)),
+                        )
+                        .child(self.render_toolbar(state, window, cx))
+                        .when_some(right_dock_button, |this, btn| this.child(btn)),
+                )
+            })
             .into_any_element()
     }
 
