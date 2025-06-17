@@ -436,7 +436,7 @@ impl RenderOnce for Modal {
                                     }
                                 })
                             })
-                            // Ther style is can't be override.
+                            // There style is high priority, can't be overridden.
                             .absolute()
                             .occlude()
                             .relative()
