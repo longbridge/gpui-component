@@ -34,6 +34,10 @@ style = { level = "allow", priority = -1 }
 todo = "deny"
 type_complexity = "allow"
 
+[profile.release]
+lto = true
+panic = "abort"
+
 [profile.dev]
 codegen-units = 16
 debug = "limited"

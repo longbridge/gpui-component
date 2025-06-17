@@ -13,566 +13,14 @@ use gpui_component::{
     tooltip::Tooltip,
     *,
 };
-use crate::ui::{AppExt,components::ViewKit};
+use crate::{models::{mcp_config::{McpProviderInfo, McpProviderManager, McpTool}, provider_config::{LlmProviderManager, ModelInfo}}, ui::{components::ViewKit, views::todo_thread::ProviderInfo, AppExt}};
 use crate::models::todo_item::*;
 
 actions!(todo_thread, [Tab, TabPrev, Save, Cancel, Delete]);
 
 const CONTEXT: &str = "TodoThreadEdit";
 
-// 添加文件信息结构体
-#[derive(Debug, Clone)]
-pub struct UploadedFile {
-    pub name: String,
-    pub path: String,
-    pub size: Option<u64>,
-}
 
-#[derive(Debug, Clone)]
-pub enum TodoPriority {
-    Low,
-    Medium,
-    High,
-    Urgent,
-}
-
-impl TodoPriority {
-   const fn as_str(&self) -> &'static str {
-        match self {
-            TodoPriority::Low => "低",
-            TodoPriority::Medium => "中",
-            TodoPriority::High => "高",
-            TodoPriority::Urgent => "紧急",
-        }
-    }
-
-    fn all() -> Vec<SharedString> {
-        vec!["低".into(), "中".into(), "高".into(), "紧急".into()]
-    }
-
-    fn icon(&self) -> IconName {
-        match self {
-            TodoPriority::Low => IconName::ArrowDown,
-            TodoPriority::Medium => IconName::Minus,
-            TodoPriority::High => IconName::ArrowUp,
-            TodoPriority::Urgent => IconName::TriangleAlert,
-        }
-    }
-
-    fn color(&self) -> gpui::Rgba {
-        match self {
-            TodoPriority::Low => gpui::rgb(0x6B7280),
-            TodoPriority::Medium => gpui::rgb(0x3B82F6),
-            TodoPriority::High => gpui::rgb(0xF59E0B),
-            TodoPriority::Urgent => gpui::rgb(0xEF4444),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum TodoStatus {
-    Todo,
-    InProgress,
-    Done,
-    Cancelled,
-}
-
-impl TodoStatus {
-   const fn as_str(&self) -> &'static str {
-        match self {
-            TodoStatus::Todo => "待办",
-            TodoStatus::InProgress => "进行中",
-            TodoStatus::Done => "已完成",
-            TodoStatus::Cancelled => "已取消",
-        }
-    }
-
-    fn all() -> Vec<SharedString> {
-        vec![
-            "待办".into(),
-            "进行中".into(),
-            "已完成".into(),
-            "已取消".into(),
-        ]
-    }
-}
-
-// 模型能力
-#[derive(Debug, Clone)]
-pub enum ModelCapability {
-    Text,
-    Vision,
-    Audio,
-    Tools,
-}
-
-impl ModelCapability {
-   const fn icon(&self) -> IconName {
-        match self {
-            ModelCapability::Text => IconName::LetterText,
-            ModelCapability::Vision => IconName::Eye,
-            ModelCapability::Audio => IconName::Mic,
-            ModelCapability::Tools => IconName::Wrench,
-        }
-    }
-
-   const fn label(&self) -> &'static str {
-        match self {
-            ModelCapability::Text => "文本",
-            ModelCapability::Vision => "视觉",
-            ModelCapability::Audio => "音频",
-            ModelCapability::Tools => "工具",
-        }
-    }
-}
-
-// 工具能力
-#[derive(Debug, Clone)]
-pub enum ToolCapability {
-    FileOperation,
-    CodeReview,
-    WebSearch,
-    Calculation,
-    DataAnalysis,
-    ImageProcessing,
-}
-
-impl ToolCapability {
-   const fn icon(&self) -> IconName {
-        match self {
-            ToolCapability::FileOperation => IconName::LetterText,
-            ToolCapability::CodeReview => IconName::ChevronDown,
-            ToolCapability::WebSearch => IconName::Search,
-            ToolCapability::Calculation => IconName::Timer,
-            ToolCapability::DataAnalysis => IconName::TimerReset,
-            ToolCapability::ImageProcessing => IconName::Image,
-        }
-    }
-
-   const fn label(&self) -> &'static str {
-        match self {
-            ToolCapability::FileOperation => "文件",
-            ToolCapability::CodeReview => "代码",
-            ToolCapability::WebSearch => "搜索",
-            ToolCapability::Calculation => "计算",
-            ToolCapability::DataAnalysis => "分析",
-            ToolCapability::ImageProcessing => "图像",
-        }
-    }
-}
-
-// 简化的模型数据结构
-#[derive(Debug, Clone)]
-pub struct ModelInfo {
-    pub name: String,
-    pub provider: String,
-    pub is_selected: bool,
-    pub capabilities: Vec<ModelCapability>, // 添加能力字段
-}
-
-// 简化的服务商信息
-#[derive(Debug, Clone)]
-pub struct ProviderInfo {
-    pub name: String,
-    pub models: Vec<ModelInfo>,
-}
-
-// 模型管理器
-pub struct ModelManager {
-    pub providers: Vec<ProviderInfo>,
-}
-
-impl ModelManager {
-    pub fn new() -> Self {
-        let providers = vec![
-            ProviderInfo {
-                name: "收钱吧".to_string(),
-                models: vec![
-                    ModelInfo {
-                        name: "sqb-chat-3.5".to_string(),
-                        provider: "收钱吧".to_string(),
-                        is_selected: false,
-                        capabilities: vec![ModelCapability::Text, ModelCapability::Tools],
-                    },
-                    ModelInfo {
-                        name: "sqb-chat-4.0".to_string(),
-                        provider: "收钱吧".to_string(),
-                        is_selected: false,
-                        capabilities: vec![
-                            ModelCapability::Text,
-                            ModelCapability::Vision,
-                            ModelCapability::Tools,
-                        ],
-                    },
-                ],
-            },
-            ProviderInfo {
-                name: "Anthropic".to_string(),
-                models: vec![
-                    ModelInfo {
-                        name: "claude-3.5-sonnet".to_string(),
-                        provider: "Anthropic".to_string(),
-                        is_selected: false,
-                        capabilities: vec![
-                            ModelCapability::Text,
-                            ModelCapability::Vision,
-                            ModelCapability::Tools,
-                        ],
-                    },
-                    ModelInfo {
-                        name: "claude-3-haiku".to_string(),
-                        provider: "Anthropic".to_string(),
-                        is_selected: false,
-                        capabilities: vec![ModelCapability::Text, ModelCapability::Tools],
-                    },
-                    ModelInfo {
-                        name: "claude-3-opus".to_string(),
-                        provider: "Anthropic".to_string(),
-                        is_selected: false,
-                        capabilities: vec![
-                            ModelCapability::Text,
-                            ModelCapability::Vision,
-                            ModelCapability::Tools,
-                        ],
-                    },
-                ],
-            },
-            ProviderInfo {
-                name: "OpenAI".to_string(),
-                models: vec![
-                    ModelInfo {
-                        name: "gpt-4".to_string(),
-                        provider: "OpenAI".to_string(),
-                        is_selected: false,
-                        capabilities: vec![
-                            ModelCapability::Text,
-                            ModelCapability::Vision,
-                            ModelCapability::Tools,
-                        ],
-                    },
-                    ModelInfo {
-                        name: "gpt-4-turbo".to_string(),
-                        provider: "OpenAI".to_string(),
-                        is_selected: false,
-                        capabilities: vec![
-                            ModelCapability::Text,
-                            ModelCapability::Vision,
-                            ModelCapability::Tools,
-                        ],
-                    },
-                    ModelInfo {
-                        name: "gpt-3.5-turbo".to_string(),
-                        provider: "OpenAI".to_string(),
-                        is_selected: false,
-                        capabilities: vec![ModelCapability::Text, ModelCapability::Tools],
-                    },
-                    ModelInfo {
-                        name: "gpt-4o".to_string(),
-                        provider: "OpenAI".to_string(),
-                        is_selected: false,
-                        capabilities: vec![
-                            ModelCapability::Text,
-                            ModelCapability::Vision,
-                            ModelCapability::Audio,
-                            ModelCapability::Tools,
-                        ],
-                    },
-                ],
-            },
-            ProviderInfo {
-                name: "百度智能云".to_string(),
-                models: vec![
-                    ModelInfo {
-                        name: "文心一言-4.0".to_string(),
-                        provider: "百度智能云".to_string(),
-                        is_selected: false,
-                        capabilities: vec![
-                            ModelCapability::Text,
-                            ModelCapability::Vision,
-                            ModelCapability::Tools,
-                        ],
-                    },
-                    ModelInfo {
-                        name: "文心一言-3.5".to_string(),
-                        provider: "百度智能云".to_string(),
-                        is_selected: false,
-                        capabilities: vec![ModelCapability::Text, ModelCapability::Tools],
-                    },
-                    ModelInfo {
-                        name: "ERNIE-Bot-turbo".to_string(),
-                        provider: "百度智能云".to_string(),
-                        is_selected: false,
-                        capabilities: vec![ModelCapability::Text, ModelCapability::Tools],
-                    },
-                ],
-            },
-            ProviderInfo {
-                name: "阿里云".to_string(),
-                models: vec![
-                    ModelInfo {
-                        name: "通义千问-Max".to_string(),
-                        provider: "阿里云".to_string(),
-                        is_selected: false,
-                        capabilities: vec![
-                            ModelCapability::Text,
-                            ModelCapability::Vision,
-                            ModelCapability::Tools,
-                        ],
-                    },
-                    ModelInfo {
-                        name: "通义千问-Plus".to_string(),
-                        provider: "阿里云".to_string(),
-                        is_selected: false,
-                        capabilities: vec![ModelCapability::Text, ModelCapability::Tools],
-                    },
-                    ModelInfo {
-                        name: "通义千问-Turbo".to_string(),
-                        provider: "阿里云".to_string(),
-                        is_selected: false,
-                        capabilities: vec![ModelCapability::Text, ModelCapability::Tools],
-                    },
-                ],
-            },
-            ProviderInfo {
-                name: "腾讯云".to_string(),
-                models: vec![
-                    ModelInfo {
-                        name: "混元-Pro".to_string(),
-                        provider: "腾讯云".to_string(),
-                        is_selected: false,
-                        capabilities: vec![
-                            ModelCapability::Text,
-                            ModelCapability::Vision,
-                            ModelCapability::Tools,
-                        ],
-                    },
-                    ModelInfo {
-                        name: "混元-Standard".to_string(),
-                        provider: "腾讯云".to_string(),
-                        is_selected: false,
-                        capabilities: vec![ModelCapability::Text, ModelCapability::Tools],
-                    },
-                    ModelInfo {
-                        name: "混元-Lite".to_string(),
-                        provider: "腾讯云".to_string(),
-                        is_selected: false,
-                        capabilities: vec![ModelCapability::Text],
-                    },
-                ],
-            },
-            ProviderInfo {
-                name: "字节跳动".to_string(),
-                models: vec![
-                    ModelInfo {
-                        name: "豆包-Pro-32K".to_string(),
-                        provider: "字节跳动".to_string(),
-                        is_selected: false,
-                        capabilities: vec![
-                            ModelCapability::Text,
-                            ModelCapability::Vision,
-                            ModelCapability::Tools,
-                        ],
-                    },
-                    ModelInfo {
-                        name: "豆包-Pro-4K".to_string(),
-                        provider: "字节跳动".to_string(),
-                        is_selected: false,
-                        capabilities: vec![ModelCapability::Text, ModelCapability::Tools],
-                    },
-                    ModelInfo {
-                        name: "豆包-Lite-4K".to_string(),
-                        provider: "字节跳动".to_string(),
-                        is_selected: false,
-                        capabilities: vec![ModelCapability::Text],
-                    },
-                ],
-            },
-            ProviderInfo {
-                name: "智谱AI".to_string(),
-                models: vec![
-                    ModelInfo {
-                        name: "GLM-4".to_string(),
-                        provider: "智谱AI".to_string(),
-                        is_selected: false,
-                        capabilities: vec![
-                            ModelCapability::Text,
-                            ModelCapability::Vision,
-                            ModelCapability::Tools,
-                        ],
-                    },
-                    ModelInfo {
-                        name: "GLM-4-Air".to_string(),
-                        provider: "智谱AI".to_string(),
-                        is_selected: false,
-                        capabilities: vec![ModelCapability::Text, ModelCapability::Tools],
-                    },
-                    ModelInfo {
-                        name: "GLM-3-Turbo".to_string(),
-                        provider: "智谱AI".to_string(),
-                        is_selected: false,
-                        capabilities: vec![ModelCapability::Text, ModelCapability::Tools],
-                    },
-                ],
-            },
-        ];
-
-        Self { providers }
-    }
-
-    pub fn toggle_model_selection(&mut self, model_name: &str) {
-        for provider in &mut self.providers {
-            for model in &mut provider.models {
-                if model.name == model_name {
-                    model.is_selected = !model.is_selected;
-                    return;
-                }
-            }
-        }
-    }
-
-    pub fn get_selected_models(&self) -> Vec<String> {
-        let mut selected = Vec::new();
-        for provider in &self.providers {
-            for model in &provider.models {
-                if model.is_selected {
-                    selected.push(model.name.clone());
-                }
-            }
-        }
-        selected
-    }
-
-    pub fn get_selected_count(&self) -> usize {
-        self.get_selected_models().len()
-    }
-}
-
-// MCP工具信息
-#[derive(Debug, Clone)]
-pub struct McpToolInfo {
-    pub name: String,
-    pub provider: String,
-    pub is_selected: bool,
-    pub capabilities: Vec<ToolCapability>,
-    pub description: String,
-}
-
-// MCP工具提供商信息
-#[derive(Debug, Clone)]
-pub struct McpProviderInfo {
-    pub name: String,
-    pub tools: Vec<McpToolInfo>,
-}
-
-// MCP工具管理器
-pub struct McpToolManager {
-    pub providers: Vec<McpProviderInfo>,
-}
-
-impl McpToolManager {
-    pub fn new() -> Self {
-        let providers = vec![
-            McpProviderInfo {
-                name: "开发工具".to_string(),
-                tools: vec![
-                    McpToolInfo {
-                        name: "代码审查助手".to_string(),
-                        provider: "开发工具".to_string(),
-                        is_selected: false,
-                        capabilities: vec![
-                            ToolCapability::CodeReview,
-                            ToolCapability::FileOperation,
-                        ],
-                        description: "自动审查代码质量和安全性".to_string(),
-                    },
-                    McpToolInfo {
-                        name: "Git操作工具".to_string(),
-                        provider: "开发工具".to_string(),
-                        is_selected: false,
-                        capabilities: vec![
-                            ToolCapability::FileOperation,
-                            ToolCapability::CodeReview,
-                        ],
-                        description: "管理Git仓库和版本控制".to_string(),
-                    },
-                ],
-            },
-            McpProviderInfo {
-                name: "数据处理".to_string(),
-                tools: vec![
-                    McpToolInfo {
-                        name: "Excel处理器".to_string(),
-                        provider: "数据处理".to_string(),
-                        is_selected: false,
-                        capabilities: vec![
-                            ToolCapability::FileOperation,
-                            ToolCapability::DataAnalysis,
-                        ],
-                        description: "处理和分析Excel文件".to_string(),
-                    },
-                    McpToolInfo {
-                        name: "数据可视化".to_string(),
-                        provider: "数据处理".to_string(),
-                        is_selected: false,
-                        capabilities: vec![
-                            ToolCapability::DataAnalysis,
-                            ToolCapability::ImageProcessing,
-                        ],
-                        description: "生成图表和数据可视化".to_string(),
-                    },
-                ],
-            },
-            McpProviderInfo {
-                name: "办公工具".to_string(),
-                tools: vec![
-                    McpToolInfo {
-                        name: "文档生成器".to_string(),
-                        provider: "办公工具".to_string(),
-                        is_selected: false,
-                        capabilities: vec![ToolCapability::FileOperation],
-                        description: "自动生成各类文档".to_string(),
-                    },
-                    McpToolInfo {
-                        name: "邮件助手".to_string(),
-                        provider: "办公工具".to_string(),
-                        is_selected: false,
-                        capabilities: vec![ToolCapability::WebSearch],
-                        description: "智能邮件管理和回复".to_string(),
-                    },
-                ],
-            },
-        ];
-
-        Self { providers }
-    }
-
-    pub fn toggle_tool_selection(&mut self, tool_name: &str) {
-        for provider in &mut self.providers {
-            for tool in &mut provider.tools {
-                if tool.name == tool_name {
-                    tool.is_selected = !tool.is_selected;
-                    return;
-                }
-            }
-        }
-    }
-
-    pub fn get_selected_tools(&self) -> Vec<String> {
-        let mut selected = Vec::new();
-        for provider in &self.providers {
-            for tool in &provider.tools {
-                if tool.is_selected {
-                    selected.push(tool.name.clone());
-                }
-            }
-        }
-        selected
-    }
-
-    pub fn get_selected_count(&self) -> usize {
-        self.get_selected_tools().len()
-    }
-}
 
 pub struct TodoThreadEdit {
     focus_handle: FocusHandle,
@@ -581,13 +29,13 @@ pub struct TodoThreadEdit {
     title_input: Entity<InputState>,
     description_input: Entity<InputState>,
 
-    // 状态和优先级
-    status_dropdown: Entity<DropdownState<Vec<SharedString>>>,
-    priority_dropdown: Entity<DropdownState<Vec<SharedString>>>,
+    // // 状态和优先级
+    // status_dropdown: Entity<DropdownState<Vec<SharedString>>>,
+    // priority_dropdown: Entity<DropdownState<Vec<SharedString>>>,
 
     // AI助手配置
-    model_manager: ModelManager,
-    mcp_tool_manager: McpToolManager,
+    model_manager: LlmProviderManager,
+    mcp_tool_manager: McpProviderManager,
 
     // 时间设置
     due_date_picker: Entity<DatePickerState>,
@@ -603,139 +51,16 @@ pub struct TodoThreadEdit {
     expanded_providers: Vec<usize>,
     expanded_tool_providers: Vec<usize>,
 
-    // 添加上传文件列表
-    uploaded_files: Vec<UploadedFile>,
+    // // 添加上传文件列表
+    // uploaded_files: Vec<UploadedFile>,
 
     _subscriptions: Vec<Subscription>,
+
+    todoitem:Todo,
 }
-
+//实现业务操作
 impl TodoThreadEdit {
-
-    pub fn edit(todo:Todo,
-        cx: &mut App,
-    )  {
-      cx.activate(true);
-            let window_size = size(px(600.0), px(650.0));
-            let window_bounds = Bounds::centered(None, window_size, cx);
-            let options = WindowOptions {
-                app_id: Some("x-todo-app".to_string()),
-                window_bounds: Some(WindowBounds::Windowed(window_bounds)),
-                titlebar: Some(TitleBar::title_bar_options()),
-                window_min_size: Some(gpui::Size {
-                    width: px(600.),
-                    height: px(650.),
-                }),
-                kind: WindowKind::PopUp,
-                #[cfg(target_os = "linux")]
-                window_background: gpui::WindowBackgroundAppearance::Transparent,
-                #[cfg(target_os = "linux")]
-                window_decorations: Some(gpui::WindowDecorations::Client),
-                ..Default::default()
-            };
-            cx.create_normal_window(
-                format!("xTodo-{}", todo.title),
-                options,
-                move |window, cx| Self::view(window, cx),
-            );
-    }
-
-    pub fn add(
-        cx: &mut App,
-    )  {
-      cx.activate(true);
-            let window_size = size(px(600.0), px(650.0));
-            let window_bounds = Bounds::centered(None, window_size, cx);
-            let options = WindowOptions {
-                app_id: Some("x-todo-app".to_string()),
-                window_bounds: Some(WindowBounds::Windowed(window_bounds)),
-                titlebar: Some(TitleBar::title_bar_options()),
-                window_min_size: Some(gpui::Size {
-                    width: px(600.),
-                    height: px(650.),
-                }),
-                kind: WindowKind::PopUp,
-                #[cfg(target_os = "linux")]
-                window_background: gpui::WindowBackgroundAppearance::Transparent,
-                #[cfg(target_os = "linux")]
-                window_decorations: Some(gpui::WindowDecorations::Client),
-                ..Default::default()
-            };
-            cx.create_normal_window(
-                "xTodo-Add",
-                options,
-                move |window, cx| Self::view(window, cx),
-            );
-    }
-     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        // 基本信息输入框
-        let title_input = cx.new(|cx| InputState::new(window, cx).placeholder("输入任务标题..."));
-
-        let description_input = cx.new(|cx| {
-            InputState::new(window, cx)
-                .placeholder("详细描述任务内容和要求...")
-                .auto_grow(10, 10)
-        });
-
-        // 状态和优先级下拉框
-        let status_dropdown =
-            cx.new(|cx| DropdownState::new(TodoStatus::all(), Some(0), window, cx));
-
-        let priority_dropdown =
-            cx.new(|cx| DropdownState::new(TodoPriority::all(), Some(1), window, cx));
-
-        // 模型管理器和工具管理器
-        let model_manager = ModelManager::new();
-        let mcp_tool_manager = McpToolManager::new();
-
-        // 时间选择器
-        let due_date_picker = cx.new(|cx| DatePickerState::new(window, cx));
-        let reminder_date_picker = cx.new(|cx| DatePickerState::new(window, cx));
-
-        let recurring_options = vec!["每日".into(), "每周".into(), "每月".into(), "每年".into()];
-        let recurring_dropdown =
-            cx.new(|cx| DropdownState::new(recurring_options, Some(1), window, cx));
-
-        let _subscriptions = vec![
-            cx.subscribe_in(&title_input, window, Self::on_input_event),
-            cx.subscribe_in(&description_input, window, Self::on_input_event),
-            cx.subscribe(&due_date_picker, |_, _, ev, cx| match ev {
-                DatePickerEvent::Change(_) => {
-                    cx.notify();
-                }
-            }),
-            cx.subscribe(&reminder_date_picker, |_, _, ev, cx| match ev {
-                DatePickerEvent::Change(_) => {
-                    cx.notify();
-                }
-            }),
-        ];
-
-        Self {
-            focus_handle: cx.focus_handle(),
-            title_input,
-            description_input,
-            status_dropdown,
-            priority_dropdown,
-            model_manager,
-            mcp_tool_manager,
-            due_date_picker,
-            reminder_date_picker,
-            recurring_enabled: false,
-            recurring_dropdown,
-            auto_execute: false,
-            enable_notifications: true,
-            expanded_providers: Vec::new(),
-            expanded_tool_providers: Vec::new(),
-            uploaded_files: Vec::new(), // 初始化空文件列表
-            _subscriptions,
-        }
-    }
-
-    pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
-        cx.new(|cx| Self::new(window, cx))
-    }
-
-    fn tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
+fn tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
         self.cycle_focus(true, window, cx);
     }
 
@@ -744,32 +69,11 @@ impl TodoThreadEdit {
     }
 
     fn save(&mut self, _: &Save, _window: &mut Window, cx: &mut Context<Self>) {
-        let selected_models = self.model_manager.get_selected_models();
-        let selected_tools = self.mcp_tool_manager.get_selected_tools(); // 改为获取选中的工具
+        let selected_models = self.todoitem.selected_models.clone();
+        let selected_tools = self.todoitem.selected_tools.clone(); // 改为获取选中的工具
 
-        let todo_data = TodoData {
-            title: self.title_input.read(cx).value().to_string(),
-            description: self.description_input.read(cx).value().to_string(),
-            status: self
-                .status_dropdown
-                .read(cx)
-                .selected_value()
-                .map(|v| v.to_string())
-                .unwrap_or_default(),
-            priority: self
-                .priority_dropdown
-                .read(cx)
-                .selected_value()
-                .map(|v| v.to_string())
-                .unwrap_or_default(),
-            selected_models,
-            selected_tools, // 改为工具列表
-            recurring_enabled: self.recurring_enabled,
-            auto_execute: self.auto_execute,
-            enable_notifications: self.enable_notifications,
-        };
-
-        println!("保存Todo: {:?}", todo_data);
+        
+        println!("保存Todo: {:?}", self.todoitem);
         cx.notify();
     }
 
@@ -813,6 +117,205 @@ impl TodoThreadEdit {
         }
     }
 
+    
+    // 获取模型选择显示文本
+    fn get_model_display_text(&self, _cx: &App) -> String {
+        let selected_count = self.todoitem.selected_models.len();
+        if selected_count == 0 {
+            "选择模型".to_string()
+        } else if selected_count <= 2 {
+            self.todoitem.selected_models.iter().map(|item|item.model_name.as_str()).collect::<Vec<_>>().join(", ")
+        } else {
+            let first_two = self.todoitem.selected_models
+                .iter()
+                .take(2)
+                .map(|item|item.model_name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("{} 等{}个模型", first_two, selected_count)
+        }
+    }
+
+    // 获取工具选择显示文本
+    fn get_tool_display_text(&self, _cx: &App) -> String {
+        let selected_count = self.todoitem.selected_tools.len();
+
+        if selected_count == 0 {
+            "选择工具集".to_string()
+        } else if selected_count <= 2 {
+            self.todoitem.selected_tools.iter().map(|item|item.tool_name.as_str()).collect::<Vec<_>>().join(", ")
+        } else {
+            let first_two = self.todoitem.selected_tools
+                .iter()
+                .take(2)
+                .map(|item|item.tool_name.as_str()).collect::<Vec<_>>()
+                .join(", ");
+            format!("{} 等{}个工具", first_two, selected_count)
+        }
+    }
+
+    fn toggle_accordion(&mut self, open_indices: &[usize], cx: &mut Context<Self>) {
+        self.expanded_providers = open_indices.to_vec();
+        cx.notify();
+    }
+
+    fn toggle_tool_accordion(&mut self, open_indices: &[usize], cx: &mut Context<Self>) {
+        self.expanded_tool_providers = open_indices.to_vec();
+        cx.notify();
+    }
+
+    fn toggle_model_selection(
+        &mut self,
+        model: &ModelInfo,
+        provider: &ProviderInfo,
+        checked:bool,
+        cx: &mut Context<Self>,
+    ) {
+
+    }
+
+    fn toggle_tool_selection(&mut self, tool:&McpTool,provider:&McpProviderInfo, cx: &mut Context<Self>) {
+        // 检查工具是否已被选中
+        if let Some(index) = self.todoitem.selected_tools.iter().position(|t| t.tool_name == tool.name) {
+            // 如果已选中，则移除
+            self.todoitem.selected_tools.remove(index);
+        } else {
+            // 如果未选中，则添加
+            if let Some((id,provider)) = self.mcp_tool_manager.providers.iter_mut().find(|(id,p)| p.tools.iter().any(|t| t.name == tool.name)) {
+                if let Some(tool) = provider.tools.iter_mut().find(|t| t.name == tool.name) {
+                    self.todoitem.selected_tools.push(crate::models::todo_item::SelectedTool {
+                        provider_id: provider.id.clone(),
+                        provider_name: provider.name.clone(),
+                        description: tool.description.clone(),
+                        tool_name: tool.name.clone(),
+                    });
+                }
+            }
+        }
+          cx.notify(); // 通知主界面更新
+    }
+
+    fn uploaded_files(&self) -> Vec<TodoFile> {
+        // 返回当前上传的文件列表
+        vec![] // 这里可以根据实际情况返回已上传的文件
+    }
+}
+
+// 实现 TodoThreadEdit界面的相关方法
+impl TodoThreadEdit {
+
+    pub fn edit(todo:Todo,
+        cx: &mut App,
+    )  {
+      cx.activate(true);
+            let window_size = size(px(600.0), px(650.0));
+            let window_bounds = Bounds::centered(None, window_size, cx);
+            let options = WindowOptions {
+                app_id: Some("x-todo-app".to_string()),
+                window_bounds: Some(WindowBounds::Windowed(window_bounds)),
+                titlebar: Some(TitleBar::title_bar_options()),
+                window_min_size: Some(gpui::Size {
+                    width: px(600.),
+                    height: px(650.),
+                }),
+                kind: WindowKind::PopUp,
+                #[cfg(target_os = "linux")]
+                window_background: gpui::WindowBackgroundAppearance::Transparent,
+                #[cfg(target_os = "linux")]
+                window_decorations: Some(gpui::WindowDecorations::Client),
+                ..Default::default()
+            };
+            cx.create_normal_window(
+                format!("xTodo-{}", todo.title),
+                options,
+                move |window, cx| cx.new(|cx| Self::new(todo,window, cx)),
+            );
+    }
+
+    pub fn add(
+        cx: &mut App,
+    )  {
+    cx.activate(true);
+            let window_size = size(px(600.0), px(650.0));
+            let window_bounds = Bounds::centered(None, window_size, cx);
+            let options = WindowOptions {
+                app_id: Some("x-todo-app".to_string()),
+                window_bounds: Some(WindowBounds::Windowed(window_bounds)),
+                titlebar: Some(TitleBar::title_bar_options()),
+                window_min_size: Some(gpui::Size {
+                    width: px(600.),
+                    height: px(650.),
+                }),
+                kind: WindowKind::PopUp,
+                #[cfg(target_os = "linux")]
+                window_background: gpui::WindowBackgroundAppearance::Transparent,
+                #[cfg(target_os = "linux")]
+                window_decorations: Some(gpui::WindowDecorations::Client),
+                ..Default::default()
+            };
+            cx.create_normal_window(
+                "xTodo-Add",
+                options,
+                move |window, cx|  cx.new(|cx| Self::new(Todo::default(),window, cx)),
+            );
+    }
+    
+    fn new(todo:Todo,window: &mut Window, cx: &mut Context<Self>) -> Self {
+        // 基本信息输入框
+        let title_input = cx.new(|cx| InputState::new(window, cx).placeholder("输入任务标题..."));
+
+        let description_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("详细描述任务内容和要求...")
+                .auto_grow(10, 10)
+        });
+
+        // 模型管理器和工具管理器
+        let model_manager = LlmProviderManager::load();
+        let mcp_tool_manager = McpProviderManager::load();
+
+        // 时间选择器
+        let due_date_picker = cx.new(|cx| DatePickerState::new(window, cx));
+        let reminder_date_picker = cx.new(|cx| DatePickerState::new(window, cx));
+
+        let recurring_options = vec!["每日".into(), "每周".into(), "每月".into(), "每年".into()];
+        let recurring_dropdown =
+            cx.new(|cx| DropdownState::new(recurring_options, Some(1), window, cx));
+
+        let _subscriptions = vec![
+            cx.subscribe_in(&title_input, window, Self::on_input_event),
+            cx.subscribe_in(&description_input, window, Self::on_input_event),
+            cx.subscribe(&due_date_picker, |_, _, ev, cx| match ev {
+                DatePickerEvent::Change(_) => {
+                    cx.notify();
+                }
+            }),
+            cx.subscribe(&reminder_date_picker, |_, _, ev, cx| match ev {
+                DatePickerEvent::Change(_) => {
+                    cx.notify();
+                }
+            }),
+        ];
+
+        Self {
+            focus_handle: cx.focus_handle(),
+            title_input,
+            description_input,
+            model_manager,
+            mcp_tool_manager,
+            due_date_picker,
+            reminder_date_picker,
+            recurring_enabled: false,
+            recurring_dropdown,
+            auto_execute: false,
+            enable_notifications: true,
+            expanded_providers: Vec::new(),
+            expanded_tool_providers: Vec::new(),
+            _subscriptions,
+            todoitem:todo,
+        }
+    }
+
     fn section_title(title: &'static str) -> impl IntoElement {
         div()
             .text_lg()
@@ -836,87 +339,40 @@ impl TodoThreadEdit {
             .child(div().flex_1().max_w_80().child(content))
     }
 
-    // 获取模型选择显示文本
-    fn get_model_display_text(&self, _cx: &App) -> String {
-        let selected_models = self.model_manager.get_selected_models();
-        let selected_count = selected_models.len();
-
-        if selected_count == 0 {
-            "选择模型".to_string()
-        } else if selected_count <= 2 {
-            selected_models.join(", ")
-        } else {
-            let first_two = selected_models
-                .iter()
-                .take(2)
-                .cloned()
-                .collect::<Vec<_>>()
-                .join(", ");
-            format!("{} 等{}个模型", first_two, selected_count)
-        }
-    }
-
-    // 获取工具选择显示文本
-    fn get_tool_display_text(&self, _cx: &App) -> String {
-        let selected_tools = self.mcp_tool_manager.get_selected_tools();
-        let selected_count = selected_tools.len();
-
-        if selected_count == 0 {
-            "选择工具集".to_string()
-        } else if selected_count <= 2 {
-            selected_tools.join(", ")
-        } else {
-            let first_two = selected_tools
-                .iter()
-                .take(2)
-                .cloned()
-                .collect::<Vec<_>>()
-                .join(", ");
-            format!("{} 等{}个工具", first_two, selected_count)
-        }
-    }
-
-    fn toggle_accordion(&mut self, open_indices: &[usize], cx: &mut Context<Self>) {
-        self.expanded_providers = open_indices.to_vec();
-        cx.notify();
-    }
-
-    fn toggle_tool_accordion(&mut self, open_indices: &[usize], cx: &mut Context<Self>) {
-        self.expanded_tool_providers = open_indices.to_vec();
-        cx.notify();
-    }
 
     fn open_drawer_at(
-        &mut self,
+        // &mut self,
         placement: Placement,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         // 使用 Entity 来共享状态
         let todo_edit_entity = cx.entity().clone();
-
         window.open_drawer_at(placement, cx, move |drawer, _window, drawer_cx| {
             // 从 entity 中读取当前的模型数据
             let providers = todo_edit_entity.read(drawer_cx).model_manager.providers.clone();
             let expanded_providers = todo_edit_entity.read(drawer_cx).expanded_providers.clone();
+            let todoitem = todo_edit_entity.read(drawer_cx).todoitem.clone();
 
             // 创建手风琴组件并添加切换监听器
             let mut accordion = Accordion::new("model-providers")
                 .on_toggle_click({
                     let todo_edit_entity_for_toggle = todo_edit_entity.clone();
                     move |open_indices, _window, cx| {
-                        todo_edit_entity_for_toggle.update(cx, |todo_edit, todo_cx| {
-                            todo_edit.toggle_accordion(open_indices, todo_cx);
+                        todo_edit_entity_for_toggle.update(cx, |todo_edit, cx| {
+                            todo_edit.toggle_accordion(open_indices, cx);
                         });
                     }
                 });
 
-            for (provider_index, provider) in providers.iter().enumerate() {
+            for (provider_index, (_id,provider)) in providers.into_iter().enumerate() {
                 let provider_name = provider.name.clone();
                 let provider_models = provider.models.clone();
                 
                 // 检查该供应商是否有被选中的模型
-                let has_selected_models = provider_models.iter().any(|model| model.is_selected);
+                let has_selected_models = provider_models.iter().any(|model| {
+                    todoitem.selected_models.iter().any(|selected| selected.model_name == model.display_name)
+                });
                 
                 // 检查当前供应商是否应该展开
                 let is_expanded = has_selected_models || expanded_providers.contains(&provider_index);
@@ -972,11 +428,8 @@ impl TodoThreadEdit {
                                 .p_2()
                                 .children(provider_models.iter().enumerate().map(
                                     |(model_index, model)| {
-                                        let model_name_for_event = model.name.clone();
-                                        let checkbox_id = SharedString::new(format!(
-                                            "model-{}-{}",
-                                            provider_index, model_index
-                                        ));
+                                        let model_name_for_event = model.display_name.clone();
+                                        let checkbox_id = SharedString::new(format!("model-{}-{}",provider_index, model_index));
                                         let todo_edit_entity_for_event = todo_edit_entity.clone();
 
                                         div()
@@ -996,8 +449,12 @@ impl TodoThreadEdit {
                                                             .gap_3()
                                                             .child(
                                                                 Checkbox::new(checkbox_id)
-                                                                    .checked(model.is_selected)
-                                                                    .label(model.name.clone())
+                                                                    .checked(
+                                                                        todoitem.selected_models.iter().any(|selected| 
+                                                                            selected.model_name == model.display_name
+                                                                        )
+                                                                    )
+                                                                    .label(model.display_name.clone())
                                                                     .on_click(
                                                                         move |_checked, _window, cx| {
                                                                             let model_name_to_toggle =
@@ -1005,14 +462,34 @@ impl TodoThreadEdit {
                                                                             
                                                                             // 更新原始数据
                                                                             todo_edit_entity_for_event.update(cx, |todo_edit, todo_cx| {
-                                                                                todo_edit.model_manager.toggle_model_selection(&model_name_to_toggle);
+                                                                                // First, update the method call in the selection placeholder:
+                                                                                let model_to_toggle = todo_edit.model_manager.providers
+                                                                                    .iter()
+                                                                                    .flat_map(|(_, provider)| &provider.models)
+                                                                                    .find(|model| model.display_name == model_name_to_toggle)
+                                                                                    .cloned();
+
+                                                                                if let Some(model_info) = model_to_toggle {
+                                                                                    // Check if model is already selected
+                                                                                    if let Some(index) = todo_edit.todoitem.selected_models
+                                                                                        .iter()
+                                                                                        .position(|selected| selected.model_name == model_name_to_toggle) 
+                                                                                    {
+                                                                                        // Remove if already selected
+                                                                                        todo_edit.todoitem.selected_models.remove(index);
+                                                                                    } else {
+                                                                                        // Add if not selected
+                                                                                        todo_edit.todoitem.selected_models.push(crate::models::todo_item::SelectedModel {
+                                                                                            provider_id:provider.id.clone(),
+                                                                                            provider_name: provider.name.clone(),
+                                                                                            model_id: model_info.id.clone(),
+                                                                                            model_name: model_info.display_name.clone(),
+                                                                                        });
+                                                                                    }
+                                                                                }
+                                                                                println!("切换模型选择: {}",model_name_to_toggle);
                                                                                 todo_cx.notify(); // 通知主界面更新
                                                                             });
-
-                                                                            println!(
-                                                                                "切换模型选择: {}",
-                                                                                model_name_to_toggle
-                                                                            );
                                                                         },
                                                                     ),
                                                             )
@@ -1075,11 +552,7 @@ impl TodoThreadEdit {
                                 .on_click(move |_, window, cx| {
                                     // 清空所有模型选择
                                     todo_edit_entity_for_clear.update(cx, |todo_edit, todo_cx| {
-                                        for provider in &mut todo_edit.model_manager.providers {
-                                            for model in &mut provider.models {
-                                                model.is_selected = false;
-                                            }
-                                        }
+                                        todo_edit.todoitem.selected_models.clear();
                                         todo_cx.notify(); // 通知主界面更新
                                     });
                                     println!("清空所有模型选择");
@@ -1092,7 +565,7 @@ impl TodoThreadEdit {
     }
 
     fn open_tool_drawer_at(
-        &mut self,
+        // &mut self,
         placement: Placement,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -1104,7 +577,7 @@ impl TodoThreadEdit {
             // 从 entity 中读取当前的工具数据
             let providers = todo_edit_entity.read(drawer_cx).mcp_tool_manager.providers.clone();
             let expanded_providers = todo_edit_entity.read(drawer_cx).expanded_tool_providers.clone();
-
+            let todoitem = todo_edit_entity.read(drawer_cx).todoitem.clone();
             // 创建手风琴组件并添加切换监听器
             let mut accordion = Accordion::new("tool-providers")
                 .on_toggle_click({
@@ -1116,13 +589,13 @@ impl TodoThreadEdit {
                     }
                 });
 
-            for (provider_index, provider) in providers.iter().enumerate() {
+            for (provider_index, (provider_id,provider)) in providers.iter().enumerate() {
                 let provider_name = provider.name.clone();
                 let provider_tools = provider.tools.clone();
                 
                 // 检查该供应商是否有被选中的工具
-                let has_selected_tools = provider_tools.iter().any(|tool| tool.is_selected);
-                
+                let has_selected_tools = provider_tools.iter().any(|tool|  todoitem.selected_tools.iter().any(|selected| selected.tool_name == tool.name));
+                let provider_tool_len = provider_tools.len();
                 // 检查当前供应商是否应该展开
                 let is_expanded = has_selected_tools || expanded_providers.contains(&provider_index);
 
@@ -1168,7 +641,7 @@ impl TodoThreadEdit {
                                         })
                                         .rounded_md()
                                         .text_xs()
-                                        .child(format!("{} 个工具", provider_tools.len())),
+                                        .child(format!("{} 个工具", provider_tool_len)),
                                 ),
                         )
                         .content(
@@ -1202,7 +675,9 @@ impl TodoThreadEdit {
                                                                     .gap_3()
                                                                     .child(
                                                                         Checkbox::new(checkbox_id)
-                                                                            .checked(tool.is_selected)
+                                                                            .checked(todoitem.selected_tools.iter().any(|selected| 
+                                                                            selected.tool_name == tool.name
+                                                                        ))
                                                                             .label(tool.name.clone())
                                                                             .on_click(
                                                                                 move |_checked, _window, cx| {
@@ -1211,10 +686,8 @@ impl TodoThreadEdit {
                                                                                     
                                                                                     // 更新原始数据
                                                                                     todo_edit_entity_for_event.update(cx, |todo_edit, todo_cx| {
-                                                                                        todo_edit.mcp_tool_manager.toggle_tool_selection(&tool_name_to_toggle);
-                                                                                        todo_cx.notify(); // 通知主界面更新
+                                                                                        todo_edit.toggle_tool_selection(tool,provider,todo_cx);
                                                                                     });
-
                                                                                     println!(
                                                                                         "切换工具选择: {}",
                                                                                         tool_name_to_toggle
@@ -1222,7 +695,6 @@ impl TodoThreadEdit {
                                                                                 },
                                                                             ),
                                                                     )
-                                                                   
                                                             ),
                                                     )
                                                     .child(
@@ -1268,12 +740,8 @@ impl TodoThreadEdit {
                                 .on_click(move |_, window, cx| {
                                     // 清空所有工具选择
                                     todo_edit_entity_for_clear.update(cx, |todo_edit, todo_cx| {
-                                        for provider in &mut todo_edit.mcp_tool_manager.providers {
-                                            for tool in &mut provider.tools {
-                                                tool.is_selected = false;
-                                            }
-                                        }
-                                        todo_cx.notify(); // 通知主界面更新
+                                        todo_edit.mcp_tool_manager.providers.clear();
+                                        todo_cx.notify();
                                     });
                                     println!("清空所有工具选择");
                                     // 关闭抽屉
@@ -1286,7 +754,7 @@ impl TodoThreadEdit {
 
     // 添加移除文件的方法
     fn remove_file(&mut self, file_path: &str, _window: &mut Window, cx: &mut Context<Self>) {
-        self.uploaded_files.retain(|file| file.path != file_path);
+        self.todoitem.files.retain(|file| file.path != file_path);
         cx.notify();
     }
 
@@ -1300,19 +768,20 @@ impl TodoThreadEdit {
         for path in external_paths.paths() {
             if let Some(file_name) = path.file_name().and_then(|name| name.to_str()) {
                 let path_str = path.to_string_lossy().to_string();
-
                 // 检查文件是否已经存在
-                if !self.uploaded_files.iter().any(|f| f.path == path_str) {
+                if !self.todoitem.files.iter().any(|f| f.path == path_str) {
                     // 获取文件大小（可选）
                     let file_size = std::fs::metadata(&path).ok().map(|metadata| metadata.len());
 
-                    let uploaded_file = UploadedFile {
+                    let uploaded_file = TodoFile {  
                         name: file_name.to_string(),
                         path: path_str,
                         size: file_size,
+                        mime_type:None,
+                        uploaded_at: Utc::now().to_utc(),
                     };
 
-                    self.uploaded_files.push(uploaded_file);
+                    self.todoitem.files.push(uploaded_file);
                 }
             }
         }
@@ -1338,19 +807,6 @@ impl TodoThreadEdit {
     }
 }
 
-#[derive(Debug)]
-struct TodoData {
-    title: String,
-    description: String,
-    status: String,
-    priority: String,
-    selected_models: Vec<String>,
-    selected_tools: Vec<String>, // 改为工具列表
-    recurring_enabled: bool,
-    auto_execute: bool,
-    enable_notifications: bool,
-}
-
 impl ViewKit for TodoThreadEdit {
     fn title() -> &'static str {
         "任务编辑"
@@ -1361,7 +817,7 @@ impl ViewKit for TodoThreadEdit {
     }
 
     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
-        Self::view(window, cx)
+        cx.new(|cx| Self::new(Todo::default(),window, cx))
     }
 }
 
@@ -1370,8 +826,6 @@ impl FocusableCycle for TodoThreadEdit {
         vec![
             self.title_input.focus_handle(cx),
             self.description_input.focus_handle(cx),
-            self.status_dropdown.focus_handle(cx),
-            self.priority_dropdown.focus_handle(cx),
             self.due_date_picker.focus_handle(cx),
             self.reminder_date_picker.focus_handle(cx),
             self.recurring_dropdown.focus_handle(cx),
@@ -1503,7 +957,7 @@ impl Render for TodoThreadEdit {
                                                     ),
                                             )
                                             // 文件列表区域（集成到拖拽区域内）
-                                            .when(!self.uploaded_files.is_empty(), |this| {
+                                            .when(!self.todoitem.files.is_empty(), |this| {
                                                 this.child(
                                                     div()
                                                         .border_t_1()
@@ -1519,7 +973,7 @@ impl Render for TodoThreadEdit {
                                                                         .gap_2()
                                                                         .flex_wrap()
                                                                         .children(
-                                                                            self.uploaded_files.iter().enumerate().map(|(index, file)| {
+                                                                            self.todoitem.files.iter().enumerate().map(|(index, file)| {
                                                                                 let file_path_for_remove = file.path.clone();
                                                                                 let file_name = file.name.clone();
                                                                                 
@@ -1569,7 +1023,6 @@ impl Render for TodoThreadEdit {
                                                                                             .xsmall()
                                                                                             .icon(IconName::X)
                                                                                             .text_color(gpui::rgb(0x9CA3AF))
-                                                                                           
                                                                                             .p_0()
                                                                                             .min_w_4()
                                                                                             .h_4()
@@ -1654,15 +1107,17 @@ impl Render for TodoThreadEdit {
                                                     },
                                                 )
                                                 .on_click(cx.listener(|this, _, window, cx| {
-                                                    this.open_drawer_at(Placement::Left, window, cx)
+                                                    Self::open_drawer_at(Placement::Left, window, cx)
                                                 })),
                                         ),
                                     ).child(
-                               h_flex().max_w_32().child( DatePicker::new(&self.due_date_picker)
-                                    .placeholder("截止日期")
-                                    .cleanable()
-                                    .presets(due_date_presets.clone())
-                                    .small())
+                                        h_flex()
+                                        .max_w_32()
+                                        .child( DatePicker::new(&self.due_date_picker)
+                                        .placeholder("截止日期")
+                                        .cleanable()
+                                        .presets(due_date_presets.clone())
+                                        .small())
                             ),
                             ).child(
                                 h_flex()
@@ -1697,7 +1152,7 @@ impl Render for TodoThreadEdit {
                                                     },
                                                 )
                                                 .on_click(cx.listener(|this, _, window, cx| {
-                                                    this.open_tool_drawer_at(Placement::Left, window, cx)
+                                                    Self::open_tool_drawer_at(Placement::Left, window, cx)
                                                 })),
                                         ),
                                     ).child(

@@ -35,5 +35,10 @@ windows = { version = "0.61.1", features = [
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = { version = "0.18" }
 
+
+[profile.release]
+lto = true
+panic = "abort"
+
 [lints]
 workspace = true

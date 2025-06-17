@@ -13,7 +13,7 @@ pub enum TodoStatus {
     Todo,       // 待办
     InProgress, // 进行中
     Done,       // 已完成
-    Alert, // 警报
+    Alert,      // 警报
     Cancelled,  // 已取消
 }
 
@@ -80,7 +80,21 @@ pub struct Todo {
     pub title: String,
     pub description: String,
     pub status: TodoStatus,
-    // pub priority: TodoPriority,
+    // AI配置
+    pub selected_models: Vec<SelectedModel>,
+    pub selected_tools: Vec<SelectedTool>,
+    // 文件附件
+    pub files: Vec<TodoFile>,
+    // 配置选项
+    pub recurring_enabled: bool,
+    pub recurring_pattern: Option<String>, // "daily", "weekly", "monthly", "yearly"
+    pub auto_execute: bool,
+    pub enable_notifications: bool,
+    pub push_to_feishu: bool,
+    // 执行结果
+    pub execution_logs: Vec<String>,
+    pub last_execution_result: Option<String>,
+    // 时间戳
     #[serde(with = "chrono::serde::ts_seconds")]
     pub created_at: DateTime<Utc>,
     #[serde(with = "chrono::serde::ts_seconds")]
@@ -91,24 +105,6 @@ pub struct Todo {
     pub reminder_date: Option<DateTime<Utc>>,
     #[serde(with = "chrono::serde::ts_seconds_option")]
     pub completed_at: Option<DateTime<Utc>>,
-
-    // AI配置
-    pub selected_models: Vec<SelectedModel>,
-    pub selected_tools: Vec<SelectedTool>,
-
-    // 文件附件
-    pub files: Vec<TodoFile>,
-
-    // 配置选项
-    pub recurring_enabled: bool,
-    pub recurring_pattern: Option<String>, // "daily", "weekly", "monthly", "yearly"
-    pub auto_execute: bool,
-    pub enable_notifications: bool,
-    pub push_to_feishu: bool,
-
-    // 执行结果
-    pub execution_logs: Vec<String>,
-    pub last_execution_result: Option<String>,
 }
 
 impl Default for Todo {
@@ -119,7 +115,6 @@ impl Default for Todo {
             title: String::new(),
             description: String::new(),
             status: TodoStatus::Todo,
-            // priority: TodoPriority::Medium,
             created_at: now,
             updated_at: now,
             due_date: None,
