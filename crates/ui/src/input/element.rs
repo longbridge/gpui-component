@@ -178,7 +178,7 @@ impl TextElement {
                 let cursor_height = line_height;
                 cursor_bounds = Some(Bounds::new(
                     point(
-                        bounds.left() + cursor_pos.x + line_number_width,
+                        bounds.left() + cursor_pos.x + line_number_width + scroll_offset.x,
                         bounds.top() + cursor_pos.y + ((line_height - cursor_height) / 2.),
                     ),
                     size(CURSOR_WIDTH, cursor_height),
