@@ -1,9 +1,10 @@
 use std::time::Duration;
 
-use gpui::{Context, Timer};
+use gpui::{px, Context, Pixels, Timer};
 
 static INTERVAL: Duration = Duration::from_millis(500);
 static PAUSE_DELAY: Duration = Duration::from_millis(300);
+pub(super) const CURSOR_WIDTH: Pixels = px(1.5);
 
 /// To manage the Input cursor blinking.
 ///

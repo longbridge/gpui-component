@@ -10,6 +10,7 @@ use smallvec::SmallVec;
 
 use crate::{
     highlighter::{LanguageRegistry, SyntaxHighlighter},
+    input::blink_cursor::CURSOR_WIDTH,
     ActiveTheme as _, Root,
 };
 
@@ -174,14 +175,13 @@ impl TextElement {
 
             if input.show_cursor(window, cx) {
                 // cursor blink
-                let cursor_height =
-                    window.text_style().font_size.to_pixels(window.rem_size()) + px(2.);
+                let cursor_height = line_height;
                 cursor_bounds = Some(Bounds::new(
                     point(
                         bounds.left() + cursor_pos.x + line_number_width,
                         bounds.top() + cursor_pos.y + ((line_height - cursor_height) / 2.),
                     ),
-                    size(px(1.), cursor_height),
+                    size(CURSOR_WIDTH, cursor_height),
                 ));
             };
         }
