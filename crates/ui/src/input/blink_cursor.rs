@@ -44,6 +44,7 @@ impl BlinkCursor {
 
     fn blink(&mut self, epoch: usize, cx: &mut Context<Self>) {
         if self.paused || epoch != self.epoch {
+            self.visible = true;
             return;
         }
 
