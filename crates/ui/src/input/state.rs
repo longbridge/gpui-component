@@ -597,20 +597,22 @@ impl InputState {
             return;
         }
 
-        let new_line_index = (current_line_index.saturating_add_signed(move_lines) as usize)
-            .max(0)
-            .min(last_layout.lines.len().saturating_sub(1));
+        let mut new_line_index = current_line_index;
 
         if new_sub_line < 0 {
-            if new_line_index > 0 {
-                new_sub_line = last_layout.lines[new_line_index].wrap_boundaries.len() as i32;
-            } else {
-                new_sub_line = 0;
-            }
+            new_line_index = new_line_index
+                .saturating_add_signed(move_lines)
+                .max(0)
+                .min(last_layout.lines.len().saturating_sub(1));
+            new_sub_line = last_layout.lines[new_line_index].wrap_boundaries.len() as i32;
         } else {
             let max_sub_line = last_layout.lines[new_line_index].wrap_boundaries.len() as i32;
             if new_sub_line > max_sub_line {
                 if new_line_index < last_layout.lines.len() - 1 {
+                    new_line_index = new_line_index
+                        .saturating_add_signed(move_lines)
+                        .max(0)
+                        .min(last_layout.lines.len().saturating_sub(1));
                     new_sub_line = 0;
                 } else {
                     new_sub_line = max_sub_line;
