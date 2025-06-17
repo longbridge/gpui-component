@@ -1,7 +1,8 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     div, px, relative, AnyElement, App, DefiniteLength, Entity, InteractiveElement as _,
-    IntoElement, MouseButton, ParentElement as _, Rems, RenderOnce, Styled as _, Window,
+    IntoElement, MouseButton, ParentElement as _, Rems, RenderOnce, StyleRefinement, Styled,
+    Window,
 };
 
 use crate::button::{Button, ButtonVariants as _};
@@ -18,8 +19,8 @@ use super::InputState;
 #[derive(IntoElement)]
 pub struct TextInput {
     state: Entity<InputState>,
+    style: StyleRefinement,
     size: Size,
-    no_gap: bool,
     prefix: Option<AnyElement>,
     suffix: Option<AnyElement>,
     height: Option<DefiniteLength>,
@@ -44,7 +45,7 @@ impl TextInput {
         Self {
             state: state.clone(),
             size: Size::default(),
-            no_gap: false,
+            style: StyleRefinement::default(),
             prefix: None,
             suffix: None,
             height: None,
@@ -115,14 +116,6 @@ impl TextInput {
         self
     }
 
-    /// Set true to not use gap between input and prefix, suffix, and clear button.
-    ///
-    /// Default: false
-    pub(super) fn no_gap(mut self) -> Self {
-        self.no_gap = true;
-        self
-    }
-
     fn render_toggle_mask_button(state: Entity<InputState>) -> impl IntoElement {
         Button::new("toggle-mask")
             .icon(IconName::Eye)
@@ -147,6 +140,12 @@ impl TextInput {
     }
 }
 
+impl Styled for TextInput {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
 impl RenderOnce for TextInput {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         const LINE_HEIGHT: Rems = Rems(1.25);
@@ -161,24 +160,23 @@ impl RenderOnce for TextInput {
 
         let state = self.state.read(cx);
         let focused = state.focus_handle.is_focused(window);
-        let mut gap_x = match self.size {
+        let gap_x = match self.size {
             Size::Small => px(4.),
             Size::Large => px(8.),
             _ => px(4.),
         };
-        if self.no_gap {
-            gap_x = px(0.);
-        }
 
-        let prefix = self.prefix;
-        let suffix = self.suffix;
-        let show_clear_button =
-            self.cleanable && !state.loading && !state.text.is_empty() && state.is_single_line();
         let bg = if state.disabled {
             cx.theme().muted
         } else {
             cx.theme().background
         };
+
+        let prefix = self.prefix;
+        let suffix = self.suffix;
+        let show_clear_button =
+            self.cleanable && !state.loading && !state.text.is_empty() && state.is_single_line();
+        let has_suffix = suffix.is_some() || state.loading || self.mask_toggle || show_clear_button;
 
         div()
             .id(("input", self.state.entity_id()))
@@ -196,14 +194,16 @@ impl RenderOnce for TextInput {
                     .on_action(window.listener_for(&self.state, InputState::delete_next_word))
                     .on_action(window.listener_for(&self.state, InputState::enter))
                     .on_action(window.listener_for(&self.state, InputState::escape))
-                    .on_action(window.listener_for(&self.state, InputState::indent_inline))
-                    .on_action(window.listener_for(&self.state, InputState::outdent_inline))
-                    .on_action(window.listener_for(&self.state, InputState::indent_block))
-                    .on_action(window.listener_for(&self.state, InputState::outdent_block))
                     .on_action(window.listener_for(&self.state, InputState::paste))
                     .on_action(window.listener_for(&self.state, InputState::cut))
                     .on_action(window.listener_for(&self.state, InputState::undo))
                     .on_action(window.listener_for(&self.state, InputState::redo))
+                    .when(state.is_multi_line(), |this| {
+                        this.on_action(window.listener_for(&self.state, InputState::indent_inline))
+                            .on_action(window.listener_for(&self.state, InputState::outdent_inline))
+                            .on_action(window.listener_for(&self.state, InputState::indent_block))
+                            .on_action(window.listener_for(&self.state, InputState::outdent_block))
+                    })
             })
             .on_action(window.listener_for(&self.state, InputState::left))
             .on_action(window.listener_for(&self.state, InputState::right))
@@ -263,39 +263,38 @@ impl RenderOnce for TextInput {
                             })
                     })
             })
-            .when(prefix.is_none(), |this| this.input_pl(self.size))
-            .input_pr(self.size)
+            .input_px(self.size)
             .items_center()
             .gap(gap_x)
             .children(prefix)
             .child(self.state.clone())
-            .child(
-                h_flex()
-                    .id("suffix")
-                    .absolute()
-                    .gap(gap_x)
-                    .when(self.appearance, |this| this.bg(bg))
-                    .items_center()
-                    .when(suffix.is_none(), |this| this.pr_1())
-                    .right_0()
-                    .when(state.loading, |this| {
-                        this.child(Indicator::new().color(cx.theme().muted_foreground))
-                    })
-                    .when(self.mask_toggle, |this| {
-                        this.child(Self::render_toggle_mask_button(self.state.clone()))
-                    })
-                    .when(show_clear_button, |this| {
-                        this.child(clear_button(cx).on_click({
-                            let state = self.state.clone();
-                            move |_, window, cx| {
-                                state.update(cx, |state, cx| {
-                                    state.clean(window, cx);
-                                })
-                            }
-                        }))
-                    })
-                    .children(suffix),
-            )
+            .when(has_suffix, |this| {
+                this.pr(self.size.input_px() / 2.).child(
+                    h_flex()
+                        .id("suffix")
+                        .gap(gap_x)
+                        .when(self.appearance, |this| this.bg(bg))
+                        .items_center()
+                        .when(state.loading, |this| {
+                            this.child(Indicator::new().color(cx.theme().muted_foreground))
+                        })
+                        .when(self.mask_toggle, |this| {
+                            this.child(Self::render_toggle_mask_button(self.state.clone()))
+                        })
+                        .when(show_clear_button, |this| {
+                            this.child(clear_button(cx).on_click({
+                                let state = self.state.clone();
+                                move |_, window, cx| {
+                                    state.update(cx, |state, cx| {
+                                        state.clean(window, cx);
+                                    })
+                                }
+                            }))
+                        })
+                        .children(suffix),
+                )
+            })
+            .refine_style(&self.style)
             .when(state.is_multi_line(), |this| {
                 let entity_id = self.state.entity_id();
                 if state.last_layout.is_some() {

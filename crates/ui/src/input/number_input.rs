@@ -122,11 +122,6 @@ impl RenderOnce for NumberInput {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let focused = self.state.focus_handle(cx).is_focused(window);
 
-        let btn_size = match self.size {
-            Size::XSmall | Size::Small => Size::Size(px(16.)),
-            _ => Size::XSmall,
-        };
-
         h_flex()
             .id(self.id)
             .key_context(KEY_CONTENT)
@@ -134,11 +129,7 @@ impl RenderOnce for NumberInput {
             .on_action(window.listener_for(&self.state, InputState::on_action_decrement))
             .flex_1()
             .input_size(self.size)
-            .px(match self.size {
-                Size::XSmall => px(1.),
-                Size::Small => px(2.),
-                _ => px(3.),
-            })
+            .px(self.size.input_px() / 2.)
             .bg(cx.theme().background)
             .border_color(cx.theme().input)
             .border_1()
@@ -147,8 +138,9 @@ impl RenderOnce for NumberInput {
             .child(
                 Button::new("minus")
                     .ghost()
-                    .with_size(btn_size)
+                    .with_size(self.size.smaller())
                     .icon(IconName::Minus)
+                    .compact()
                     .on_click({
                         let state = self.state.clone();
                         move |_, window, cx| {
@@ -159,15 +151,17 @@ impl RenderOnce for NumberInput {
             .child(
                 TextInput::new(&self.state)
                     .appearance(false)
-                    .no_gap()
+                    .px(px(2.))
+                    .gap_0()
                     .when_some(self.prefix, |this, prefix| this.prefix(prefix))
                     .when_some(self.suffix, |this, suffix| this.suffix(suffix)),
             )
             .child(
                 Button::new("plus")
                     .ghost()
-                    .with_size(btn_size)
+                    .with_size(self.size.smaller())
                     .icon(IconName::Plus)
+                    .compact()
                     .on_click({
                         let state = self.state.clone();
                         move |_, window, cx| {

@@ -6,8 +6,7 @@ use gpui::{
 
 use crate::section;
 use gpui_component::{
-    button::{Button, ButtonVariant, ButtonVariants as _},
-    h_flex,
+    button::{Button, ButtonVariants as _},
     input::{InputEvent, InputState, MaskPattern, TextInput},
     v_flex, ContextModal, FocusableCycle, Icon, IconName, Sizable,
 };
@@ -157,14 +156,17 @@ impl FocusableCycle for InputStory {
         [
             self.input1.focus_handle(cx),
             self.input2.focus_handle(cx),
-            self.input_esc.focus_handle(cx),
             self.disabled_input.focus_handle(cx),
             self.mask_input.focus_handle(cx),
             self.prefix_input1.focus_handle(cx),
             self.both_input1.focus_handle(cx),
             self.suffix_input1.focus_handle(cx),
+            self.currency_input.focus_handle(cx),
+            self.phone_input.focus_handle(cx),
+            self.mask_input2.focus_handle(cx),
             self.large_input.focus_handle(cx),
             self.small_input.focus_handle(cx),
+            self.input_esc.focus_handle(cx),
         ]
         .to_vec()
     }
@@ -189,7 +191,7 @@ impl Render for InputStory {
                 section("Normal Input")
                     .max_w_md()
                     .child(TextInput::new(&self.input1).cleanable())
-                    .child(self.input2.clone()),
+                    .child(TextInput::new(&self.input2)),
             )
             .child(
                 section("Input State")
@@ -203,28 +205,18 @@ impl Render for InputStory {
                     .child(
                         TextInput::new(&self.prefix_input1)
                             .cleanable()
-                            .prefix(Icon::new(IconName::Search).small().ml_3()),
+                            .prefix(Icon::new(IconName::Search).small()),
                     )
                     .child(
                         TextInput::new(&self.both_input1)
                             .cleanable()
-                            .prefix(div().child(Icon::new(IconName::Search).small()).ml_3())
-                            .suffix(
-                                Button::new("info")
-                                    .ghost()
-                                    .icon(IconName::Info)
-                                    .xsmall()
-                                    .mr_3(),
-                            ),
+                            .prefix(div().child(Icon::new(IconName::Search).small()))
+                            .suffix(Button::new("info").ghost().icon(IconName::Info).xsmall()),
                     )
                     .child(
-                        TextInput::new(&self.suffix_input1).cleanable().suffix(
-                            Button::new("info")
-                                .ghost()
-                                .icon(IconName::Info)
-                                .xsmall()
-                                .mr_3(),
-                        ),
+                        TextInput::new(&self.suffix_input1)
+                            .cleanable()
+                            .suffix(Button::new("info").ghost().icon(IconName::Info).xsmall()),
                     ),
             )
             .child(
@@ -264,8 +256,8 @@ impl Render for InputStory {
             .child(
                 section("Input Size")
                     .max_w_md()
-                    .child(TextInput::new(&self.large_input).large())
-                    .child(TextInput::new(&self.small_input).small()),
+                    .child(TextInput::new(&self.large_input).large().cleanable())
+                    .child(TextInput::new(&self.small_input).small().cleanable()),
             )
             .child(
                 section("Cleanable and ESC to clean")
@@ -281,27 +273,6 @@ impl Render for InputStory {
                         "Value: {:?}",
                         window.focused_input(cx).map(|input| input.read(cx).value())
                     ))),
-            )
-            .child(
-                h_flex()
-                    .items_center()
-                    .w_full()
-                    .gap_3()
-                    .child(
-                        Button::new("btn-submit")
-                            .flex_1()
-                            .with_variant(ButtonVariant::Primary)
-                            .label("Submit")
-                            .on_click(cx.listener(|_, _, window, cx| {
-                                window.dispatch_action(Box::new(Tab), cx)
-                            })),
-                    )
-                    .child(
-                        Button::new("btn-cancel")
-                            .flex_1()
-                            .label("Cancel")
-                            .into_element(),
-                    ),
             )
     }
 }

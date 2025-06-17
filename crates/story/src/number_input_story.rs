@@ -217,13 +217,9 @@ impl Render for NumberInputStory {
             )
             .child(
                 section("Small Size with suffix").max_w_md().child(
-                    NumberInput::new(&self.number_input2).small().suffix(
-                        Button::new("info")
-                            .ghost()
-                            .icon(IconName::Info)
-                            .xsmall()
-                            .mr_3(),
-                    ),
+                    NumberInput::new(&self.number_input2)
+                        .small()
+                        .suffix(Button::new("info").ghost().icon(IconName::Info).xsmall()),
                 ),
             )
             .child(

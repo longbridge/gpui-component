@@ -864,13 +864,13 @@ impl Element for TextElement {
             invisible_top_padding += line.size(line_height).height;
         }
 
-        let mut offset_y = px(0.);
+        let mut mask_offset_y = px(0.);
         if self.input.read(cx).masked {
             // Move down offset for vertical centering the *****
             if cfg!(target_os = "macos") {
-                offset_y = px(3.);
+                mask_offset_y = px(3.);
             } else {
-                offset_y = px(2.5);
+                mask_offset_y = px(2.5);
             }
         }
 
@@ -879,6 +879,7 @@ impl Element for TextElement {
             .style
             .active_line;
 
+        let mut offset_y = px(0.);
         if let Some(line_numbers) = prepaint.line_numbers.as_ref() {
             offset_y += invisible_top_padding;
 
@@ -909,7 +910,7 @@ impl Element for TextElement {
         }
 
         // Paint text
-        let mut offset_y = invisible_top_padding;
+        let mut offset_y = mask_offset_y + invisible_top_padding;
         for line in prepaint
             .last_layout
             .iter()

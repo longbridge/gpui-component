@@ -285,6 +285,26 @@ impl Size {
             _ => other,
         }
     }
+
+    pub fn input_px(&self) -> Pixels {
+        match self {
+            Self::Large => px(20.),
+            Self::Medium => px(12.),
+            Self::Small => px(8.),
+            Self::XSmall => px(4.),
+            _ => px(8.),
+        }
+    }
+
+    pub fn input_py(&self) -> Pixels {
+        match self {
+            Size::Large => px(16.),
+            Size::Medium => px(8.),
+            Size::Small => px(4.),
+            Size::XSmall => px(0.),
+            _ => px(4.),
+        }
+    }
 }
 
 impl From<Pixels> for Size {
@@ -374,40 +394,22 @@ impl<T: Styled> StyleSized<T> for T {
 
     #[inline]
     fn input_pl(self, size: Size) -> Self {
-        match size {
-            Size::Large => self.pl_5(),
-            Size::Medium => self.pl_3(),
-            _ => self.pl_2(),
-        }
+        self.pl(size.input_px())
     }
 
     #[inline]
     fn input_pr(self, size: Size) -> Self {
-        match size {
-            Size::Large => self.pr_5(),
-            Size::Medium => self.pr_3(),
-            _ => self.pr_2(),
-        }
+        self.pr(size.input_px())
     }
 
     #[inline]
     fn input_px(self, size: Size) -> Self {
-        match size {
-            Size::Large => self.px_5(),
-            Size::Medium => self.px_3(),
-            _ => self.px_2(),
-        }
+        self.px(size.input_px())
     }
 
     #[inline]
     fn input_py(self, size: Size) -> Self {
-        match size {
-            Size::Large => self.py_5(),
-            Size::Medium => self.py_2(),
-            Size::Small => self.py_1(),
-            Size::XSmall => self.py_0(),
-            _ => self.py_1(),
-        }
+        self.py(size.input_py())
     }
 
     #[inline]
