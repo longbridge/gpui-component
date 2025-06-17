@@ -55,19 +55,19 @@ actions!(
         Outdent,
         IndentInline,
         OutdentInline,
-        Up,
-        Down,
-        Left,
-        Right,
+        MoveUp,
+        MoveDown,
+        MoveLeft,
+        MoveRight,
+        MoveHome,
+        MoveEnd,
+        MovePageUp,
+        MovePageDown,
         SelectUp,
         SelectDown,
         SelectLeft,
         SelectRight,
         SelectAll,
-        Home,
-        End,
-        PageUp,
-        PageDown,
         SelectToStartOfLine,
         SelectToEndOfLine,
         SelectToStart,
@@ -86,7 +86,6 @@ actions!(
         MoveToEnd,
         MoveToPreviousWord,
         MoveToNextWord,
-        TextChanged,
         Escape
     ]
 );
@@ -120,12 +119,12 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("enter", Enter { secondary: false }, Some(CONTEXT)),
         KeyBinding::new("secondary-enter", Enter { secondary: true }, Some(CONTEXT)),
         KeyBinding::new("escape", Escape, Some(CONTEXT)),
-        KeyBinding::new("up", Up, Some(CONTEXT)),
-        KeyBinding::new("down", Down, Some(CONTEXT)),
-        KeyBinding::new("left", Left, Some(CONTEXT)),
-        KeyBinding::new("right", Right, Some(CONTEXT)),
-        KeyBinding::new("pageup", PageUp, Some(CONTEXT)),
-        KeyBinding::new("pagedown", PageDown, Some(CONTEXT)),
+        KeyBinding::new("up", MoveUp, Some(CONTEXT)),
+        KeyBinding::new("down", MoveDown, Some(CONTEXT)),
+        KeyBinding::new("left", MoveLeft, Some(CONTEXT)),
+        KeyBinding::new("right", MoveRight, Some(CONTEXT)),
+        KeyBinding::new("pageup", MovePageUp, Some(CONTEXT)),
+        KeyBinding::new("pagedown", MovePageDown, Some(CONTEXT)),
         KeyBinding::new("tab", IndentInline, Some(CONTEXT)),
         KeyBinding::new("shift-tab", OutdentInline, Some(CONTEXT)),
         #[cfg(target_os = "macos")]
@@ -140,8 +139,8 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("shift-right", SelectRight, Some(CONTEXT)),
         KeyBinding::new("shift-up", SelectUp, Some(CONTEXT)),
         KeyBinding::new("shift-down", SelectDown, Some(CONTEXT)),
-        KeyBinding::new("home", Home, Some(CONTEXT)),
-        KeyBinding::new("end", End, Some(CONTEXT)),
+        KeyBinding::new("home", MoveHome, Some(CONTEXT)),
+        KeyBinding::new("end", MoveEnd, Some(CONTEXT)),
         KeyBinding::new("shift-home", SelectToStartOfLine, Some(CONTEXT)),
         KeyBinding::new("shift-end", SelectToEndOfLine, Some(CONTEXT)),
         #[cfg(target_os = "macos")]
@@ -179,13 +178,13 @@ pub fn init(cx: &mut App) {
         #[cfg(not(target_os = "macos"))]
         KeyBinding::new("ctrl-v", Paste, Some(CONTEXT)),
         #[cfg(target_os = "macos")]
-        KeyBinding::new("ctrl-a", Home, Some(CONTEXT)),
+        KeyBinding::new("ctrl-a", MoveHome, Some(CONTEXT)),
         #[cfg(target_os = "macos")]
-        KeyBinding::new("cmd-left", Home, Some(CONTEXT)),
+        KeyBinding::new("cmd-left", MoveHome, Some(CONTEXT)),
         #[cfg(target_os = "macos")]
-        KeyBinding::new("ctrl-e", End, Some(CONTEXT)),
+        KeyBinding::new("ctrl-e", MoveEnd, Some(CONTEXT)),
         #[cfg(target_os = "macos")]
-        KeyBinding::new("cmd-right", End, Some(CONTEXT)),
+        KeyBinding::new("cmd-right", MoveEnd, Some(CONTEXT)),
         #[cfg(target_os = "macos")]
         KeyBinding::new("cmd-z", Undo, Some(CONTEXT)),
         #[cfg(target_os = "macos")]
@@ -586,8 +585,8 @@ impl InputState {
             .preferred_x_offset
             .unwrap_or_else(|| current_pos.x + bounds.origin.x);
 
+        let mut new_line = current_line;
         let mut new_sub_line = current_sub_line as i32;
-
         new_sub_line += if move_lines > 0 { 1 } else { -1 };
 
         // Handle moving above the first line
@@ -598,17 +597,24 @@ impl InputState {
             return;
         }
 
-        let new_line = current_line
-            .saturating_add_signed(move_lines)
-            .max(0)
-            .min(last_layout.lines.len().saturating_sub(1));
-
         if new_sub_line < 0 {
+            new_line = new_line
+                .saturating_add_signed(move_lines)
+                .max(0)
+                .min(last_layout.lines.len().saturating_sub(1));
             new_sub_line = last_layout.lines[new_line].wrap_boundaries.len() as i32;
         } else {
             let max_sub_line = last_layout.lines[current_line].wrap_boundaries.len() as i32;
             if new_sub_line > max_sub_line {
-                new_sub_line = max_sub_line;
+                if new_line < last_layout.lines.len() - 1 {
+                    new_line = new_line
+                        .saturating_add_signed(move_lines)
+                        .max(0)
+                        .min(last_layout.lines.len().saturating_sub(1));
+                    new_sub_line = 0;
+                } else {
+                    new_sub_line = max_sub_line;
+                }
             }
         }
 
@@ -819,7 +825,7 @@ impl InputState {
         self.focus_handle.focus(window);
     }
 
-    pub(super) fn left(&mut self, _: &Left, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn left(&mut self, _: &MoveLeft, window: &mut Window, cx: &mut Context<Self>) {
         self.pause_blink_cursor(cx);
         if self.selected_range.is_empty() {
             self.move_to(self.previous_boundary(self.cursor_offset()), window, cx);
@@ -828,7 +834,7 @@ impl InputState {
         }
     }
 
-    pub(super) fn right(&mut self, _: &Right, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn right(&mut self, _: &MoveRight, window: &mut Window, cx: &mut Context<Self>) {
         self.pause_blink_cursor(cx);
         if self.selected_range.is_empty() {
             self.move_to(self.next_boundary(self.selected_range.end), window, cx);
@@ -837,7 +843,7 @@ impl InputState {
         }
     }
 
-    pub(super) fn up(&mut self, _: &Up, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn up(&mut self, _: &MoveUp, window: &mut Window, cx: &mut Context<Self>) {
         if self.is_single_line() {
             return;
         }
@@ -853,7 +859,7 @@ impl InputState {
         self.move_vertical(-1, window, cx);
     }
 
-    pub(super) fn down(&mut self, _: &Down, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn down(&mut self, _: &MoveDown, window: &mut Window, cx: &mut Context<Self>) {
         if self.is_single_line() {
             return;
         }
@@ -870,7 +876,7 @@ impl InputState {
         self.move_vertical(1, window, cx);
     }
 
-    pub(super) fn page_up(&mut self, _: &PageUp, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn page_up(&mut self, _: &MovePageUp, window: &mut Window, cx: &mut Context<Self>) {
         if self.is_single_line() {
             return;
         }
@@ -883,7 +889,12 @@ impl InputState {
         self.move_vertical(-visible_lines, window, cx);
     }
 
-    pub(super) fn page_down(&mut self, _: &PageDown, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn page_down(
+        &mut self,
+        _: &MovePageDown,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if self.is_single_line() {
             return;
         }
@@ -945,13 +956,13 @@ impl InputState {
         self.select_to(self.text.len(), window, cx)
     }
 
-    pub(super) fn home(&mut self, _: &Home, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn home(&mut self, _: &MoveHome, window: &mut Window, cx: &mut Context<Self>) {
         self.pause_blink_cursor(cx);
         let offset = self.start_of_line(window, cx);
         self.move_to(offset, window, cx);
     }
 
-    pub(super) fn end(&mut self, _: &End, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn end(&mut self, _: &MoveEnd, window: &mut Window, cx: &mut Context<Self>) {
         self.pause_blink_cursor(cx);
         let offset = self.end_of_line(window, cx);
         self.move_to(offset, window, cx);
