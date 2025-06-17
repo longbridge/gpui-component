@@ -433,7 +433,7 @@ impl Node {
                                             ))
                                         })
                                         .when_some(checked, |this, checked| {
-                                            // Checkmark
+                                            // Todo list checkbox
                                             this.child(
                                                 div()
                                                     .flex()
@@ -443,10 +443,11 @@ impl Node {
                                                     .items_center()
                                                     .justify_center()
                                                     .rounded(cx.theme().radius.half())
-                                                    .bg(cx.theme().primary)
+                                                    .border_1()
+                                                    .border_color(cx.theme().primary)
                                                     .text_color(cx.theme().primary_foreground)
                                                     .when(checked, |this| {
-                                                        this.child(
+                                                        this.bg(cx.theme().primary).child(
                                                             Icon::new(IconName::Check)
                                                                 .size_2()
                                                                 .text_xs(),
