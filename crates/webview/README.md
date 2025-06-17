@@ -12,5 +12,5 @@ cargo wef init
 ## Run example
 
 ```bash
-cargo run -p wef-example
+cargo wef run -p wef-example
 ```

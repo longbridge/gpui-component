@@ -8,11 +8,11 @@
 - [Application Layout](#application-layout)
   - [Windows](#windows)
   - [Linux](#linux)
-  - [MacOS](#macos)
+  - [macOS](#macos)
 - [Application Structure](#application-structure)
-    - [Entry-Point Function](#entry-point-function)
-        - [Single Executable](#single-executable)
-        - [Separate Sub-Process Executable](#separate-sub-process-executable)
+  - [Entry-Point Function](#entry-point-function)
+    - [Single Executable](#single-executable)
+    - [Separate Sub-Process Executable](#separate-sub-process-executable)
 - [Examples](#examples)
 - [JS Bridge](#js-bridge)
   - [Call Rust functions from JavaScript](#call-rust-functions-from-javascript)
@@ -20,7 +20,7 @@
 - [Cargo-wef](#cargo-wef)
   - [Installation Cargo-wef](#installation-cargo-wef)
   - [Build Wef application](#build-wef-application)
-    - [MacOS Bundle Settings](#macos-bundle-settings)
+    - [macOS Bundle Settings](#macos-bundle-settings)
   - [Run Wef application](#run-wef-application)
   - [Add CEF3 Framework to the application](#add-cef3-framework-to-the-application)
 
@@ -32,7 +32,7 @@
 
 ## Getting Started
 
-To use Wef, you need to download the CEF binary distribution. You can find the latest version of CEF on the [CEF Download page](https://cef-builds.spotifycdn.com/index.html). Make sure to download the appropriate version for your platform (Windows, macOS, or Linux).
+To use Wef, you need to download the CEF binary distribution. You can find the latest version of CEF on the [CEF Download page](https://cef-builds.spotifycdn.com/index.html). Make sure to download the appropriate version for your platform (Windows, macOS or Linux).
 
 After downloading the CEF binary distribution, extract it to a directory of your choice.
 
@@ -77,9 +77,9 @@ Application/
         en-US.pak, ... <= locale-specific resources and strings
 ```
 
-### MacOS
+### macOS
 
-The application (app bundle) layout on MacOS is mandated by the Chromium implementation and consequently is not very flexible.
+The application (app bundle) layout on macOS is mandated by the Chromium implementation and consequently is not very flexible.
 
 ```plain
 cefclient.app/
@@ -137,7 +137,7 @@ As described in the `Important Concepts` section a CEF3 application will run mul
 
 #### Single Executable
 
-When running as a single executable the entry-point function is required to differentiate between the different process types. The single executable structure is supported on Windows and Linux but not on MacOS.
+When running as a single executable the entry-point function is required to differentiate between the different process types. The single executable structure is supported on Windows and Linux but not on macOS.
 
 ```rust, no_run
 use wef::Settings;
@@ -212,9 +212,9 @@ let browser = Browser::builder()
 The Rust results are returned as promises in JavaScript. You can use the `Promise.then` method to handle the result, and the `Promise.catch` method to handle errors.
 
 ```javascript
-jsBridge.addInt(1, 2).then(result => {
-    console.log("Result of addInt:", result);
-    // Result of addInt: 3
+jsBridge.addInt(1, 2).then((result) => {
+  console.log("Result of addInt:", result);
+  // Result of addInt: 3
 });
 ```
 
@@ -248,8 +248,8 @@ let Some(frame) = browser.main_frame() {
 
 ```javascript
 jsBridge.addEventListener((message) => {
-    console.log("Message from Rust:", message);
-    // Message from Rust: ok
+  console.log("Message from Rust:", message);
+  // Message from Rust: ok
 });
 ```
 
@@ -272,7 +272,7 @@ cargo install cargo-wef
 The `init` command used to init and download CEF into your system, default download path is `~/.cef`, you can change it by passing the path to the command.
 
 ```bash
-cargo wef init [/path/to/cef]
+cargo wef init
 ```
 
 ### Build Wef application
@@ -283,11 +283,11 @@ Like cargo build, but it will also copy the CEF3 framework to the target directo
 cargo wef build
 ```
 
-On MacOS, this command will also create an application bundle with the CEF3 framework inside.
+On macOS, this command will also create an application bundle with the CEF3 framework inside.
 On Windows and Linux, it will copy the CEF3 framework to the target directory.
 
-```bash
-If on MacOS, this command also create application bundle with the CEF3 framework inside.
+````bash
+If on macOS, this command also create application bundle with the CEF3 framework inside.
 
 ### Run Wef application
 
@@ -295,9 +295,9 @@ Like cargo run, but it will also copy the CEF3 framework to the target directory
 
 ```bash
 cargo wef run
-```
+````
 
-#### MacOS Bundle Settings
+#### macOS Bundle Settings
 
 You can specify the application bundle settings in your `Cargo.toml` file under the `package.metadata.bundle` section, otherwise it will use the default settings.
 
@@ -324,7 +324,7 @@ identifier = "my.wef.app"
 ```
 
 | name                   | type     | optional | description                                                                                                              |
-|------------------------|----------|----------|--------------------------------------------------------------------------------------------------------------------------|
+| ---------------------- | -------- | -------- | ------------------------------------------------------------------------------------------------------------------------ |
 | name                   | String   | No       | Bundle name                                                                                                              |
 | identifier             | String   | No       | Bundle identifier                                                                                                        |
 | display_name           | String   | Yes      | Display name, If is `None` then use `name`                                                                               |
@@ -340,13 +340,13 @@ identifier = "my.wef.app"
 
 ### Add CEF3 Framework to the application
 
-MacOS
+For macOS
 
 ```bash
 cargo wef add-framework /path/to/your/app.bundle
 ```
 
-Windows/Linux
+For Windows or Linux
 
 ```bash
 cargo wef add-framework /path/to/app
