@@ -13,7 +13,7 @@ use gpui_component::{
     input::{InputState, TextInput},
     modal::ModalButtonProps,
     text::TextView,
-    v_flex, ContextModal as _,
+    v_flex, ActiveTheme, ContextModal as _,
 };
 
 use crate::section;
@@ -371,6 +371,28 @@ impl Render for ModalStory {
                                                 "markdown1",
                                                 include_str!("../../../README.md"),
                                             ))
+                                    });
+                                })),
+                        ),
+                    )
+                    .child(
+                        section("Custom Modal style").child(
+                            Button::new("custom-modal-style")
+                                .label("Custom Modal Style")
+                                .on_click(cx.listener(move |_, _, window, cx| {
+                                    window.open_modal(cx, move |modal, _, cx| {
+                                        modal
+                                            .rounded_lg()
+                                            .p_0()
+                                            .title(div().pt_4().px_4().child("Custom Modal Title"))
+                                            .child(
+                                                div()
+                                                    .bg(cx.theme().info)
+                                                    .text_color(cx.theme().info_foreground)
+                                                    .p_4()
+                                                    .rounded_b_lg()
+                                                    .child("This is a custom modal content."),
+                                            )
                                     });
                                 })),
                         ),
