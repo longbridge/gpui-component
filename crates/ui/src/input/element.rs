@@ -797,6 +797,7 @@ impl Element for TextElement {
             bounds,
             last_layout: LastLayout {
                 lines: Rc::new(lines),
+                line_height,
             },
             scroll_size,
             line_numbers,
@@ -933,7 +934,6 @@ impl Element for TextElement {
             input.last_layout = Some(prepaint.last_layout.clone());
             input.last_bounds = Some(bounds);
             input.last_cursor_offset = Some(input.cursor_offset());
-            input.last_line_height = line_height;
             input.set_input_bounds(input_bounds, cx);
             input.last_selected_range = Some(selected_range);
             input.scroll_size = prepaint.scroll_size;
