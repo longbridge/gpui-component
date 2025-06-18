@@ -595,8 +595,8 @@ where
                 this.child(
                     div()
                         .map(|this| match self.size {
-                            Size::Small => this.py_0().px_1p5(),
-                            _ => this.py_1().px_2(),
+                            Size::Small => this.px_1p5(),
+                            _ => this.px_2(),
                         })
                         .border_b_1()
                         .border_color(cx.theme().border)
