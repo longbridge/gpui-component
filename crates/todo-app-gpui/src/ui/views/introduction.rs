@@ -1,7 +1,6 @@
-use gpui::{App, AppContext, Context, Entity, Focusable, ParentElement, Render, Styled, Window};
 
-use gpui_component::{dock::PanelControl, text::TextView, v_flex};
-
+use gpui::*;
+use gpui_component::{dock::PanelControl, highlighter::HighlightTheme, resizable::resizable_panel, text::{TextView, TextViewStyle}, *};
 use crate::ui::components::ViewKit;
 
 pub struct Introduction {
@@ -48,7 +47,7 @@ impl Render for Introduction {
     fn render(
         &mut self,
         _: &mut gpui::Window,
-        _cx: &mut gpui::Context<Self>,
+        cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
         v_flex()
             .p_4()

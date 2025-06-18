@@ -1,6 +1,6 @@
-use gpui::{App, AppContext, Context, Entity, Focusable, ParentElement, Render, Styled, Window};
-
-use gpui_component::{dock::PanelControl, text::TextView, v_flex};
+use std::rc::Rc;
+use gpui::*;
+use gpui_component::{dock::PanelControl, highlighter::HighlightTheme, resizable::resizable_panel, text::{TextView, TextViewStyle}, *};
 
 use crate::ui::components::ViewKit;
 
@@ -48,8 +48,15 @@ impl Render for UserGuide {
     fn render(
         &mut self,
         _: &mut gpui::Window,
-        _cx: &mut gpui::Context<Self>,
+        cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
+        let theme = if cx.theme().mode.is_dark() {
+            HighlightTheme::default_dark()
+        } else {
+            HighlightTheme::default_light()
+        };
+        let is_dark = cx.theme().mode.is_dark();
+
         v_flex().p_4().gap_5().child(TextView::markdown(
             "user_guid",
             include_str!("user_guide.md"),

@@ -171,7 +171,7 @@ impl Render for TextareaStory {
             .child(
                 section("Textarea Auto Grow").child(
                     v_flex()
-                        .w_full()
+                        .w_full().debug_selector(|| "textarea-auto-grow".to_string())
                         .child(TextInput::new(&self.textarea_auto_grow)),
                 ),
             )

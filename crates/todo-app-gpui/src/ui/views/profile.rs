@@ -2,13 +2,7 @@ use gpui::prelude::*;
 use gpui::*;
 
 use gpui_component::{
-    button::{Button, ButtonVariant, ButtonVariants as _},
-    checkbox::Checkbox,
-    dock::PanelControl,
-    dropdown::{Dropdown, DropdownState},
-    input::{InputEvent, InputState, TextInput},
-    notification::NotificationType,
-    *,
+    button::{Button, ButtonVariant, ButtonVariants as _}, checkbox::Checkbox, dock::PanelControl, dropdown::{Dropdown, DropdownState}, input::{InputEvent, InputState, TextInput}, notification::NotificationType, text::TextView, tooltip::Tooltip, *
 };
 
 use crate::{app::AppState, models::profile_config::ProfileData, ui::components::ViewKit};
@@ -538,20 +532,20 @@ impl Render for Profile {
                                             .checked(self.auto_analyze_bio)
                                             .label("开启洞察")
                                             .with_size(gpui_component::Size::Small)
-                                            // .tooltip(|win, cx| {
-                                            //     Tooltip::element(|_, cx| {
-                                            //         h_flex().gap_x_1().child(
-                                            //             div()
-                                            //                 .text_size(rems(0.6))
-                                            //                 .text_color(cx.theme().muted_foreground)
-                                            //                 .child(TextView::markdown(
-                                            //                     "character",
-                                            //                     include_str!("character.md"),
-                                            //                 )),
-                                            //         )
-                                            //     })
-                                            //     .build(win, cx)
-                                            // })
+                                            .tooltip(|win, cx| {
+                                                Tooltip::element(|_, cx| {
+                                                    h_flex().gap_x_1().child(
+                                                        div()
+                                                            .text_size(rems(0.6))
+                                                            .text_color(cx.theme().muted_foreground)
+                                                            .child(TextView::markdown(
+                                                                "character",
+                                                                include_str!("character.md"),
+                                                            )),
+                                                    )
+                                                })
+                                                .build(win, cx)
+                                            })
                                             .on_click(cx.listener(|this, checked, window, cx| {
                                                 this.toggle_auto_analyze(*checked, window, cx);
                                             })),

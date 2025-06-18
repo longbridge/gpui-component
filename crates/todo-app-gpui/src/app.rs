@@ -129,7 +129,10 @@ pub fn run() {
         LlmProvider::init(cx);
         McpProvider::init(cx);
         Settings::init(cx);
-
+        let http_client = std::sync::Arc::new(
+            reqwest_client::ReqwestClient::user_agent("gpui-component/story").unwrap(),
+        );
+        cx.set_http_client(http_client);
         cx.on_action(|_: &Quit, cx: &mut App| {
             println!("Quit action received, quitting the application.");
             cx.quit();
