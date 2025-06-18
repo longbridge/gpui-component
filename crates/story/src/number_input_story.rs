@@ -155,7 +155,7 @@ impl NumberInputStory {
                             input.set_value(self.number_input1_value.to_string(), window, cx);
                         });
                     } else if this == &self.number_input2 {
-                        self.number_input2_value = self.number_input2_value - 1;
+                        self.number_input2_value = self.number_input2_value.saturating_sub(1);
                         this.update(cx, |input, cx| {
                             input.set_value(self.number_input2_value.to_string(), window, cx);
                         });
