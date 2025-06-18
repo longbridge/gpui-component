@@ -13,7 +13,7 @@ use gpui_component::{
     tooltip::Tooltip,
     *,
 };
-use crate::{models::provider_config::LlmProviderInfo, ui::{AppExt, WindowExt}};
+use crate::{app::AppState, models::provider_config::LlmProviderInfo, ui::{AppExt, WindowExt}};
 use crate::{models::{mcp_config::{McpProviderInfo, McpProviderManager, McpTool}, provider_config::{LlmProviderManager, ModelInfo}}, ui::{components::ViewKit}};
 use crate::models::todo_item::*;
 
@@ -27,8 +27,8 @@ pub struct TodoThreadEdit {
     focus_handle: FocusHandle,
     description_input: Entity<InputState>,
     // AI助手配置
-    model_manager: LlmProviderManager,
-    mcp_tool_manager: McpProviderManager,
+    // model_manager: LlmProviderManager,
+    // mcp_tool_manager: McpProviderManager,
 
     // 时间设置
     due_date_picker: Entity<DatePickerState>,
@@ -149,14 +149,26 @@ fn tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
         cx.notify();
     }
 
-    fn toggle_model_selection(
-        &mut self,
-        model: &ModelInfo,
-        provider: &LlmProviderInfo,
-        checked:bool,
-        cx: &mut Context<Self>,
-    ) {
-
+    
+    fn toggle_model_selection(&mut self, model:&ModelInfo,provider:&LlmProviderInfo, cx: &mut Context<Self>) {
+        // 检查工具是否已被选中
+        if let Some(index) = self.todoitem.selected_models.iter().position(|t| t.model_name == model.display_name) {
+            // 如果已选中，则移除
+            self.todoitem.selected_models.remove(index);
+        } else {
+            // 如果未选中，则添加
+            if let Some((id,provider)) = AppState::state(cx).llm_provider.providers.iter().find(|(id,p)| p.models.iter().any(|t| t.display_name == model.display_name)) {
+                if let Some(model) = provider.models.iter().find(|t| t.display_name == model.display_name) {
+                    self.todoitem.selected_models.push(crate::models::todo_item::SelectedModel {
+                        provider_id: provider.id.clone(),
+                        provider_name: provider.name.clone(),
+                        model_id: model.id.clone(),
+                        model_name: model.display_name.clone(),
+                    });
+                }
+            }
+        }
+          cx.notify(); // 通知主界面更新
     }
 
     fn toggle_tool_selection(&mut self, tool:&McpTool,provider:&McpProviderInfo, cx: &mut Context<Self>) {
@@ -166,8 +178,8 @@ fn tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
             self.todoitem.selected_tools.remove(index);
         } else {
             // 如果未选中，则添加
-            if let Some((id,provider)) = self.mcp_tool_manager.providers.iter_mut().find(|(id,p)| p.tools.iter().any(|t| t.name == tool.name)) {
-                if let Some(tool) = provider.tools.iter_mut().find(|t| t.name == tool.name) {
+            if let Some((id,provider)) = AppState::state(cx).mcp_provider.providers.iter().find(|(id,p)| p.tools.iter().any(|t| t.name == tool.name)) {
+                if let Some(tool) = provider.tools.iter().find(|t| t.name == tool.name) {
                     self.todoitem.selected_tools.push(crate::models::todo_item::SelectedTool {
                         provider_id: provider.id.clone(),
                         provider_name: provider.name.clone(),
@@ -260,8 +272,8 @@ impl TodoThreadEdit {
         });
 
         // 模型管理器和工具管理器
-        let model_manager = LlmProviderManager::load();
-        let mcp_manager = McpProviderManager::load();
+        // let model_manager = LlmProviderManager::load();
+        // let mcp_manager = McpProviderManager::load();
 
         // 时间选择器
         let due_date_picker = cx.new(|cx| DatePickerState::new(window, cx));
@@ -295,8 +307,8 @@ impl TodoThreadEdit {
         Self {
             focus_handle: cx.focus_handle(),
             description_input,
-            model_manager,
-            mcp_tool_manager: mcp_manager,
+            // model_manager,
+            // mcp_tool_manager: mcp_manager,
             due_date_picker,
             reminder_date_picker,
             recurring_enabled: false,
@@ -342,7 +354,7 @@ impl TodoThreadEdit {
         let todo_edit_entity = cx.entity().clone();
         window.open_drawer_at(placement, cx, move |drawer, _window, drawer_cx| {
             // 从 entity 中读取当前的模型数据
-            let providers = todo_edit_entity.read(drawer_cx).model_manager.providers.clone();
+            let providers = AppState::state(drawer_cx).llm_provider.providers.clone();
             let expanded_providers = todo_edit_entity.read(drawer_cx).expanded_providers.clone();
             let todoitem = todo_edit_entity.read(drawer_cx).todoitem.clone();
 
@@ -448,44 +460,19 @@ impl TodoThreadEdit {
                                                                     )
                                                                     .label(model.display_name.clone())
                                                                     .on_click({
-                                                                        let provider_id = provider.id.clone();
-                                                                        let provider_name = provider.name.clone();
+                                                                        let model_clone = model.clone();
+                                                                                let provider_clone = provider.clone();
                                                                         move |_checked, _window, cx| {
                                                                             let model_name_to_toggle =
                                                                                 model_name_for_event.clone();
                                                                             
                                                                             // 更新原始数据
-                                                                            todo_edit_entity_for_event.update(cx, |todo_edit, todo_cx| {
-                                                                                // First, update the method call in the selection placeholder:
-                                                                                let model_to_toggle = todo_edit.model_manager.providers
-                                                                                    .iter()
-                                                                                    .flat_map(|(_, provider)| &provider.models)
-                                                                                    .find(|model| model.display_name == model_name_to_toggle)
-                                                                                    .cloned();
-
-                                                                                if let Some(model_info) = model_to_toggle {
-                                                                                    // Check if model is already selected
-                                                                                    if let Some(index) = todo_edit.todoitem.selected_models
-                                                                                        .iter()
-                                                                                        .position(|selected| selected.model_name == model_name_to_toggle) 
-                                                                                    {
-                                                                                        // Remove if already selected
-                                                                                        todo_edit.todoitem.selected_models.remove(index);
-                                                                                    } else {
-                                                                                        // Add if not selected
-                                                                                        todo_edit.todoitem.selected_models.push(crate::models::todo_item::SelectedModel {
-                                                                                            provider_id: provider_id.clone(),
-                                                                                            provider_name: provider_name.clone(),
-                                                                                            model_id: model_info.id.clone(),
-                                                                                            model_name: model_info.display_name.clone(),
-                                                                                        });
-                                                                                    }
-                                                                                }
+                                                                                    todo_edit_entity_for_event.update(cx, |todo_edit, todo_cx| {
+                                                                                        todo_edit.toggle_model_selection(&model_clone, &provider_clone, todo_cx);
+                                                                                    });
                                                                                 println!("切换模型选择: {}",model_name_to_toggle);
-                                                                                todo_cx.notify(); // 通知主界面更新
-                                                                            });
-                                                                        }
-                                                                    }),
+                                                                                
+                                                                            }}),
                                                             )
                                                             .child(
                                                                 h_flex().gap_1().items_center().children(
@@ -569,7 +556,7 @@ impl TodoThreadEdit {
 
         window.open_drawer_at(placement, cx, move |drawer, _window, drawer_cx| {
             // 从 entity 中读取当前的工具数据
-            let providers = todo_edit_entity.read(drawer_cx).mcp_tool_manager.providers.clone();
+            let providers = AppState::state(drawer_cx).mcp_provider.providers.clone();
             let expanded_providers = todo_edit_entity.read(drawer_cx).expanded_tool_providers.clone();
             let todoitem = todo_edit_entity.read(drawer_cx).todoitem.clone();
             // 创建手风琴组件并添加切换监听器
