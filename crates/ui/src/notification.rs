@@ -391,6 +391,19 @@ impl NotificationList {
         cx.notify();
     }
 
+    pub(crate) fn close(
+        &mut self,
+        id: impl Into<NotificationId>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let id: NotificationId = id.into();
+        if let Some(n) = self.notifications.iter().find(|n| n.read(cx).id == id) {
+            n.update(cx, |note, cx| note.dismiss(window, cx))
+        }
+        cx.notify();
+    }
+
     pub fn clear(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         self.notifications.clear();
         cx.notify();
