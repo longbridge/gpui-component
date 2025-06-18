@@ -1,13 +1,9 @@
-use std::{cell::Cell, rc::Rc};
-
-use crate::StyledExt;
-
 use super::{Scrollbar, ScrollbarAxis, ScrollbarState};
 use gpui::{
-    canvas, div, relative, AnyElement, App, Bounds, Div, Element, ElementId, EntityId,
-    GlobalElementId, InspectorElementId, InteractiveElement, Interactivity, IntoElement, LayoutId,
-    ParentElement, Pixels, Position, ScrollHandle, SharedString, Size, Stateful,
-    StatefulInteractiveElement, Style, StyleRefinement, Styled, Window,
+    div, relative, AnyElement, App, Bounds, Div, Element, ElementId, EntityId, GlobalElementId,
+    InspectorElementId, InteractiveElement, Interactivity, IntoElement, LayoutId, ParentElement,
+    Pixels, Position, ScrollHandle, SharedString, Stateful, StatefulInteractiveElement, Style,
+    StyleRefinement, Styled, Window,
 };
 
 /// A scroll view is a container that allows the user to scroll through a large amount of content.
@@ -77,7 +73,6 @@ where
 }
 
 pub struct ScrollViewState {
-    size: Rc<Cell<Size<Pixels>>>,
     state: ScrollbarState,
     handle: ScrollHandle,
 }
@@ -86,7 +81,6 @@ impl Default for ScrollViewState {
     fn default() -> Self {
         Self {
             handle: ScrollHandle::new(),
-            size: Rc::new(Cell::new(Size::default())),
             state: ScrollbarState::default(),
         }
     }
@@ -186,12 +180,7 @@ where
                         .overflow_scroll()
                         .relative()
                         .size_full()
-                        .child(div().children(content).child({
-                            let scroll_size = element_state.size.clone();
-                            canvas(move |b, _, _| scroll_size.set(b.size), |_, _, _, _| {})
-                                .absolute()
-                                .size_full()
-                        })),
+                        .child(div().children(content)),
                 )
                 .child(
                     div()
@@ -205,7 +194,6 @@ where
                                 view_id,
                                 element_state.state.clone(),
                                 element_state.handle.clone(),
-                                element_state.size.get(),
                             )
                             .axis(axis),
                         ),

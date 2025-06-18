@@ -947,7 +947,6 @@ impl Render for PopupMenu {
                             cx.entity_id(),
                             self.scroll_state.clone(),
                             self.scroll_handle.clone(),
-                            self.bounds.size,
                         )),
                 )
             })

@@ -8,9 +8,10 @@ use std::{
 use crate::{ActiveTheme, AxisExt};
 use gpui::{
     fill, point, px, relative, size, App, Axis, BorderStyle, Bounds, ContentMask, Corner,
-    CursorStyle, Edges, Element, EntityId, Hitbox, Hsla, IntoElement, MouseDownEvent,
-    MouseMoveEvent, MouseUpEvent, PaintQuad, Pixels, Point, Position, ScrollHandle,
-    ScrollWheelEvent, Style, UniformListScrollHandle, Window,
+    CursorStyle, Edges, Element, EntityId, GlobalElementId, Hitbox, HitboxBehavior, Hsla,
+    InspectorElementId, IntoElement, LayoutId, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
+    PaintQuad, Pixels, Point, Position, ScrollHandle, ScrollWheelEvent, Size, Style,
+    UniformListScrollHandle, Window,
 };
 use serde::{Deserialize, Serialize};
 
@@ -54,6 +55,8 @@ pub trait ScrollHandleOffsetable {
     fn is_uniform_list(&self) -> bool {
         false
     }
+    /// The full size of the content, including padding.
+    fn content_size(&self) -> Size<Pixels>;
 }
 
 impl ScrollHandleOffsetable for ScrollHandle {
@@ -63,6 +66,10 @@ impl ScrollHandleOffsetable for ScrollHandle {
 
     fn set_offset(&self, offset: Point<Pixels>) {
         self.set_offset(offset);
+    }
+
+    fn content_size(&self) -> Size<Pixels> {
+        self.padded_content_size()
     }
 }
 
@@ -77,6 +84,10 @@ impl ScrollHandleOffsetable for UniformListScrollHandle {
 
     fn is_uniform_list(&self) -> bool {
         true
+    }
+
+    fn content_size(&self) -> Size<Pixels> {
+        self.0.borrow().base_handle.padded_content_size()
     }
 }
 
@@ -253,8 +264,8 @@ pub struct Scrollbar {
     view_id: EntityId,
     axis: ScrollbarAxis,
     scroll_handle: Rc<Box<dyn ScrollHandleOffsetable>>,
-    scroll_size: gpui::Size<Pixels>,
     state: ScrollbarState,
+    scroll_size: Option<Size<Pixels>>,
     /// Maximum frames per second for scrolling by drag. Default is 120 FPS.
     ///
     /// This is used to limit the update rate of the scrollbar when it is
@@ -268,15 +279,14 @@ impl Scrollbar {
         state: ScrollbarState,
         axis: impl Into<ScrollbarAxis>,
         scroll_handle: impl ScrollHandleOffsetable + 'static,
-        scroll_size: gpui::Size<Pixels>,
     ) -> Self {
         Self {
             view_id,
             state,
             axis: axis.into(),
-            scroll_size,
             scroll_handle: Rc::new(Box::new(scroll_handle)),
             max_fps: 120,
+            scroll_size: None,
         }
     }
 
@@ -285,15 +295,8 @@ impl Scrollbar {
         view_id: EntityId,
         state: ScrollbarState,
         scroll_handle: impl ScrollHandleOffsetable + 'static,
-        scroll_size: gpui::Size<Pixels>,
     ) -> Self {
-        Self::new(
-            view_id,
-            state,
-            ScrollbarAxis::Both,
-            scroll_handle,
-            scroll_size,
-        )
+        Self::new(view_id, state, ScrollbarAxis::Both, scroll_handle)
     }
 
     /// Create with horizontal scrollbar.
@@ -301,15 +304,8 @@ impl Scrollbar {
         view_id: EntityId,
         state: ScrollbarState,
         scroll_handle: impl ScrollHandleOffsetable + 'static,
-        scroll_size: gpui::Size<Pixels>,
     ) -> Self {
-        Self::new(
-            view_id,
-            state,
-            ScrollbarAxis::Horizontal,
-            scroll_handle,
-            scroll_size,
-        )
+        Self::new(view_id, state, ScrollbarAxis::Horizontal, scroll_handle)
     }
 
     /// Create with vertical scrollbar.
@@ -317,15 +313,8 @@ impl Scrollbar {
         view_id: EntityId,
         state: ScrollbarState,
         scroll_handle: impl ScrollHandleOffsetable + 'static,
-        scroll_size: gpui::Size<Pixels>,
     ) -> Self {
-        Self::new(
-            view_id,
-            state,
-            ScrollbarAxis::Vertical,
-            scroll_handle,
-            scroll_size,
-        )
+        Self::new(view_id, state, ScrollbarAxis::Vertical, scroll_handle)
     }
 
     /// Create vertical scrollbar for uniform list.
@@ -334,20 +323,15 @@ impl Scrollbar {
         state: ScrollbarState,
         scroll_handle: UniformListScrollHandle,
     ) -> Self {
-        let scroll_size = scroll_handle
-            .0
-            .borrow()
-            .last_item_size
-            .map(|size| size.contents)
-            .unwrap_or_default();
+        Self::new(view_id, state, ScrollbarAxis::Vertical, scroll_handle)
+    }
 
-        Self::new(
-            view_id,
-            state,
-            ScrollbarAxis::Vertical,
-            scroll_handle,
-            scroll_size,
-        )
+    /// Set a speical scroll size of the content area, default is None.
+    ///
+    /// Default will sync the `content_size` from `scroll_handle`.
+    pub fn scroll_size(mut self, scroll_size: Size<Pixels>) -> Self {
+        self.scroll_size = Some(scroll_size);
+        self
     }
 
     /// Set scrollbar axis.
@@ -448,7 +432,6 @@ pub struct AxisPrepaintState {
 
 impl Element for Scrollbar {
     type RequestLayoutState = ();
-
     type PrepaintState = PrepaintState;
 
     fn id(&self) -> Option<gpui::ElementId> {
@@ -461,11 +444,11 @@ impl Element for Scrollbar {
 
     fn request_layout(
         &mut self,
-        _: Option<&gpui::GlobalElementId>,
-        _: Option<&gpui::InspectorElementId>,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
         window: &mut Window,
         cx: &mut App,
-    ) -> (gpui::LayoutId, Self::RequestLayoutState) {
+    ) -> (LayoutId, Self::RequestLayoutState) {
         let mut style = Style::default();
         style.position = Position::Absolute;
         style.flex_grow = 1.0;
@@ -478,32 +461,34 @@ impl Element for Scrollbar {
 
     fn prepaint(
         &mut self,
-        _: Option<&gpui::GlobalElementId>,
-        _: Option<&gpui::InspectorElementId>,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
         bounds: Bounds<Pixels>,
         _: &mut Self::RequestLayoutState,
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
         let hitbox = window.with_content_mask(Some(ContentMask { bounds }), |window| {
-            window.insert_hitbox(bounds, gpui::HitboxBehavior::Normal)
+            window.insert_hitbox(bounds, HitboxBehavior::Normal)
         });
 
         let mut states = vec![];
-
         let mut has_both = self.axis.is_both();
+        let scroll_size = self
+            .scroll_size
+            .unwrap_or(self.scroll_handle.content_size());
 
         for axis in self.axis.all().into_iter() {
             let is_vertical = axis.is_vertical();
             let (scroll_area_size, container_size, scroll_position) = if is_vertical {
                 (
-                    self.scroll_size.height,
+                    scroll_size.height,
                     hitbox.size.height,
                     self.scroll_handle.offset().y,
                 )
             } else {
                 (
-                    self.scroll_size.width,
+                    scroll_size.width,
                     hitbox.size.width,
                     self.scroll_handle.offset().x,
                 )
@@ -660,8 +645,8 @@ impl Element for Scrollbar {
 
     fn paint(
         &mut self,
-        _: Option<&gpui::GlobalElementId>,
-        _: Option<&gpui::InspectorElementId>,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
         _: Bounds<Pixels>,
         _: &mut Self::RequestLayoutState,
         prepaint: &mut Self::PrepaintState,

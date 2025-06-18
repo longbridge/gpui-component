@@ -1139,12 +1139,14 @@ impl Render for Tiles {
                     .left_0()
                     .right_0()
                     .bottom_0()
-                    .child(Scrollbar::both(
-                        view_id,
-                        self.scroll_state.clone(),
-                        self.scroll_handle.clone(),
-                        scroll_size,
-                    )),
+                    .child(
+                        Scrollbar::both(
+                            view_id,
+                            self.scroll_state.clone(),
+                            self.scroll_handle.clone(),
+                        )
+                        .scroll_size(scroll_size),
+                    ),
             )
             .size_full()
     }

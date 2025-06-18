@@ -277,7 +277,6 @@ impl Render for ScrollableStory {
                                             view.entity_id(),
                                             self.scroll_state.clone(),
                                             self.scroll_handle.clone(),
-                                            self.scroll_size,
                                         )
                                         .axis(self.axis),
                                     )

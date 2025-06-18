@@ -140,8 +140,6 @@ pub struct Table<D: TableDelegate> {
     bounds: Bounds<Pixels>,
     /// The bounds of the fixed head cols.
     fixed_head_cols_bounds: Bounds<Pixels>,
-    /// The bounds of the table head content.
-    head_content_bounds: Bounds<Pixels>,
 
     col_groups: Vec<ColGroup>,
     fixed_cols: FixedCols,
@@ -400,7 +398,6 @@ where
             resizing_col: None,
             bounds: Bounds::default(),
             fixed_head_cols_bounds: Bounds::default(),
-            head_content_bounds: Bounds::default(),
             stripe: false,
             border: true,
             size: Size::default(),
@@ -806,22 +803,6 @@ where
         }
     }
 
-    /// Returns the size of the content area.
-    fn head_content_bounds(&self) -> gpui::Bounds<Pixels> {
-        let has_fixed_cols = self.fixed_head_cols_bounds.size.width > px(0.0);
-        Bounds {
-            origin: if has_fixed_cols {
-                self.fixed_head_cols_bounds.origin
-            } else {
-                self.head_content_bounds.origin
-            },
-            size: gpui::size(
-                self.fixed_head_cols_bounds.size.width + self.head_content_bounds.size.width,
-                self.head_content_bounds.size.height,
-            ),
-        }
-    }
-
     #[inline]
     fn render_cell(&self, col_ix: usize, _window: &mut Window, _cx: &mut Context<Self>) -> Div {
         let Some(col_group) = self.col_groups.get(col_ix) else {
@@ -901,7 +882,7 @@ where
         div()
             .occlude()
             .absolute()
-            .left_0()
+            .left(self.fixed_head_cols_bounds.size.width)
             .right_0()
             .bottom_0()
             .h(scroll::WIDTH)
@@ -912,7 +893,6 @@ where
                 cx.entity().entity_id(),
                 state,
                 self.horizontal_scroll_handle.clone(),
-                self.head_content_bounds().size,
             ))
     }
 
@@ -1136,6 +1116,11 @@ where
         let view = cx.entity().clone();
         let horizontal_scroll_handle = self.horizontal_scroll_handle.clone();
 
+        // Reset fixed head columns bounds, if no fixed columns are present
+        if left_cols_count == 0 {
+            self.fixed_head_cols_bounds = Bounds::default();
+        }
+
         h_flex()
             .w_full()
             .h(self.size.table_row_height())
@@ -1203,17 +1188,7 @@ where
                                         self.render_th(left_cols_count + col_ix, window, cx)
                                     }),
                             )
-                            .child(self.delegate.render_last_empty_col(window, cx))
-                            .child(
-                                canvas(
-                                    move |bounds, _, cx| {
-                                        view.update(cx, |r, _| r.head_content_bounds = bounds)
-                                    },
-                                    |_, _, _, _| {},
-                                )
-                                .absolute()
-                                .size_full(),
-                            ),
+                            .child(self.delegate.render_last_empty_col(window, cx)),
                     ),
             )
     }
