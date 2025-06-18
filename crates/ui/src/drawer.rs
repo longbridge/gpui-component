@@ -2,9 +2,9 @@ use std::{rc::Rc, time::Duration};
 
 use gpui::{
     anchored, div, point, prelude::FluentBuilder as _, px, Animation, AnimationExt as _,
-    AnyElement, App, ClickEvent, DefiniteLength, DismissEvent, Div, EventEmitter, FocusHandle,
-    InteractiveElement as _, IntoElement, KeyBinding, MouseButton, ParentElement, Pixels,
-    RenderOnce, Styled, Window,
+    AnyElement, App, Axis, ClickEvent, DefiniteLength, DismissEvent, Div, EventEmitter,
+    FocusHandle, InteractiveElement as _, IntoElement, KeyBinding, MouseButton, ParentElement,
+    Pixels, RenderOnce, Styled, Window,
 };
 
 use crate::{
@@ -13,7 +13,6 @@ use crate::{
     h_flex,
     modal::overlay_color,
     root::ContextModal as _,
-    scroll::ScrollbarAxis,
     title_bar::TITLE_BAR_HEIGHT,
     v_flex, ActiveTheme, IconName, Placement, Sizable, StyledExt as _,
 };
@@ -205,7 +204,7 @@ impl RenderOnce for Drawer {
                                 // Body
                                 div().flex_1().overflow_hidden().child(
                                     v_flex()
-                                        .scrollable(window.current_view(), ScrollbarAxis::Vertical)
+                                        .scrollable(window.current_view(), Axis::Vertical)
                                         .child(self.content),
                                 ),
                             )

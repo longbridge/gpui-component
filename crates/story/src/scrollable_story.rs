@@ -1,8 +1,8 @@
 use std::rc::Rc;
 
 use gpui::{
-    div, px, size, App, AppContext, Context, Entity, Focusable, InteractiveElement, IntoElement,
-    ParentElement, Pixels, Render, ScrollHandle, SharedString, Size, Styled, Window,
+    div, px, size, App, AppContext, Axis, Context, Entity, Focusable, InteractiveElement,
+    IntoElement, ParentElement, Pixels, Render, ScrollHandle, SharedString, Size, Styled, Window,
 };
 use gpui_component::{
     button::{Button, ButtonGroup},
@@ -144,17 +144,17 @@ impl ScrollableStory {
                             .child(
                                 Button::new("test-axis-both")
                                     .label("Both Scrollbar")
-                                    .selected(self.axis == ScrollbarAxis::Both),
+                                    .selected(self.axis.is_both()),
                             )
                             .child(
                                 Button::new("test-axis-vertical")
                                     .label("Vertical")
-                                    .selected(self.axis == ScrollbarAxis::Vertical),
+                                    .selected(self.axis.is_vertical()),
                             )
                             .child(
                                 Button::new("test-axis-horizontal")
                                     .label("Horizontal")
-                                    .selected(self.axis == ScrollbarAxis::Horizontal),
+                                    .selected(self.axis.is_horizontal()),
                             )
                             .on_click(cx.listener(|view, clicks: &Vec<usize>, _, cx| {
                                 if clicks.contains(&0) {
@@ -298,7 +298,7 @@ impl Render for ScrollableStory {
                             .p_3()
                             .w(self.test_width)
                             .id("test-1")
-                            .scrollable(cx.entity().entity_id(), ScrollbarAxis::Vertical)
+                            .scrollable(cx.entity().entity_id(), Axis::Vertical)
                             .gap_1()
                             .child("Scrollable Example")
                             .children(self.items.iter().take(500).map(|item| {

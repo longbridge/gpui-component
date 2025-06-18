@@ -5,12 +5,12 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::ActiveTheme;
+use crate::{ActiveTheme, AxisExt};
 use gpui::{
-    fill, point, px, relative, size, App, BorderStyle, Bounds, ContentMask, Corner, CursorStyle,
-    Edges, Element, EntityId, Hitbox, Hsla, IntoElement, MouseDownEvent, MouseMoveEvent,
-    MouseUpEvent, PaintQuad, Pixels, Point, Position, ScrollHandle, ScrollWheelEvent, Style,
-    UniformListScrollHandle, Window,
+    fill, point, px, relative, size, App, Axis, BorderStyle, Bounds, ContentMask, Corner,
+    CursorStyle, Edges, Element, EntityId, Hitbox, Hsla, IntoElement, MouseDownEvent,
+    MouseMoveEvent, MouseUpEvent, PaintQuad, Pixels, Point, Position, ScrollHandle,
+    ScrollWheelEvent, Style, UniformListScrollHandle, Window,
 };
 use serde::{Deserialize, Serialize};
 
@@ -85,9 +85,9 @@ pub struct ScrollbarState(Rc<Cell<ScrollbarStateInner>>);
 
 #[derive(Debug, Clone, Copy)]
 pub struct ScrollbarStateInner {
-    hovered_axis: Option<ScrollbarAxis>,
-    hovered_on_thumb: Option<ScrollbarAxis>,
-    dragged_axis: Option<ScrollbarAxis>,
+    hovered_axis: Option<Axis>,
+    hovered_on_thumb: Option<Axis>,
+    dragged_axis: Option<Axis>,
     drag_pos: Point<Pixels>,
     last_scroll_offset: Point<Pixels>,
     last_scroll_time: Option<Instant>,
@@ -118,7 +118,7 @@ impl Deref for ScrollbarState {
 }
 
 impl ScrollbarStateInner {
-    fn with_drag_pos(&self, axis: ScrollbarAxis, pos: Point<Pixels>) -> Self {
+    fn with_drag_pos(&self, axis: Axis, pos: Point<Pixels>) -> Self {
         let mut state = *self;
         if axis.is_vertical() {
             state.drag_pos.y = pos.y;
@@ -136,7 +136,7 @@ impl ScrollbarStateInner {
         state
     }
 
-    fn with_hovered(&self, axis: Option<ScrollbarAxis>) -> Self {
+    fn with_hovered(&self, axis: Option<Axis>) -> Self {
         let mut state = *self;
         state.hovered_axis = axis;
         if axis.is_some() {
@@ -145,7 +145,7 @@ impl ScrollbarStateInner {
         state
     }
 
-    fn with_hovered_on_thumb(&self, axis: Option<ScrollbarAxis>) -> Self {
+    fn with_hovered_on_thumb(&self, axis: Option<Axis>) -> Self {
         let mut state = *self;
         state.hovered_on_thumb = axis;
         if self.is_scrollbar_visible() {
@@ -201,14 +201,28 @@ pub enum ScrollbarAxis {
     Both,
 }
 
+impl From<Axis> for ScrollbarAxis {
+    fn from(axis: Axis) -> Self {
+        match axis {
+            Axis::Vertical => Self::Vertical,
+            Axis::Horizontal => Self::Horizontal,
+        }
+    }
+}
+
 impl ScrollbarAxis {
-    #[inline]
-    fn is_vertical(&self) -> bool {
+    /// Return true if the scrollbar axis is vertical.
+    pub fn is_vertical(&self) -> bool {
         matches!(self, Self::Vertical)
     }
 
-    #[inline]
-    fn is_both(&self) -> bool {
+    /// Return true if the scrollbar axis is horizontal.
+    pub fn is_horizontal(&self) -> bool {
+        matches!(self, Self::Horizontal)
+    }
+
+    /// Return true if the scrollbar axis is both vertical and horizontal.
+    pub fn is_both(&self) -> bool {
         matches!(self, Self::Both)
     }
 
@@ -223,13 +237,13 @@ impl ScrollbarAxis {
     }
 
     #[inline]
-    fn all(&self) -> Vec<ScrollbarAxis> {
+    fn all(&self) -> Vec<Axis> {
         match self {
-            Self::Vertical => vec![Self::Vertical],
-            Self::Horizontal => vec![Self::Horizontal],
+            Self::Vertical => vec![Axis::Vertical],
+            Self::Horizontal => vec![Axis::Horizontal],
             // This should keep Horizontal first, Vertical is the primary axis
             // if Vertical not need display, then Horizontal will not keep right margin.
-            Self::Both => vec![Self::Horizontal, Self::Vertical],
+            Self::Both => vec![Axis::Horizontal, Axis::Vertical],
         }
     }
 }
@@ -252,14 +266,14 @@ impl Scrollbar {
     fn new(
         view_id: EntityId,
         state: ScrollbarState,
-        axis: ScrollbarAxis,
+        axis: impl Into<ScrollbarAxis>,
         scroll_handle: impl ScrollHandleOffsetable + 'static,
         scroll_size: gpui::Size<Pixels>,
     ) -> Self {
         Self {
             view_id,
             state,
-            axis,
+            axis: axis.into(),
             scroll_size,
             scroll_handle: Rc::new(Box::new(scroll_handle)),
             max_fps: 120,
@@ -337,8 +351,8 @@ impl Scrollbar {
     }
 
     /// Set scrollbar axis.
-    pub fn axis(mut self, axis: ScrollbarAxis) -> Self {
-        self.axis = axis;
+    pub fn axis(mut self, axis: impl Into<ScrollbarAxis>) -> Self {
+        self.axis = axis.into();
         self
     }
 
@@ -416,7 +430,7 @@ pub struct PrepaintState {
 }
 
 pub struct AxisPrepaintState {
-    axis: ScrollbarAxis,
+    axis: Axis,
     bar_hitbox: Hitbox,
     bounds: Bounds<Pixels>,
     radius: Pixels,

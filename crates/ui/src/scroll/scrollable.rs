@@ -2,9 +2,10 @@ use std::{cell::Cell, rc::Rc};
 
 use super::{Scrollbar, ScrollbarAxis, ScrollbarState};
 use gpui::{
-    canvas, div, relative, AnyElement, App, Div, Element, ElementId, EntityId, GlobalElementId,
-    InteractiveElement, IntoElement, ParentElement, Pixels, Position, ScrollHandle, SharedString,
-    Size, Stateful, StatefulInteractiveElement, Style, StyleRefinement, Styled, Window,
+    canvas, div, relative, AnyElement, App, Bounds, Div, Element, ElementId, EntityId,
+    GlobalElementId, InspectorElementId, InteractiveElement, Interactivity, IntoElement, LayoutId,
+    ParentElement, Pixels, Position, ScrollHandle, SharedString, Size, Stateful,
+    StatefulInteractiveElement, Style, StyleRefinement, Styled, Window,
 };
 
 /// A scroll view is a container that allows the user to scroll through a large amount of content.
@@ -21,9 +22,9 @@ impl<E> Scrollable<E>
 where
     E: Element,
 {
-    pub(crate) fn new(view_id: EntityId, element: E, axis: ScrollbarAxis) -> Self {
+    pub(crate) fn new(view_id: EntityId, element: E, axis: impl Into<ScrollbarAxis>) -> Self {
         let id = ElementId::Name(SharedString::from(format!(
-            "ScrollView:{}-{:?}",
+            "scrollable-{}-{:?}",
             view_id,
             element.id(),
         )));
@@ -33,7 +34,7 @@ where
             _element: div().id("fake"),
             id,
             view_id,
-            axis,
+            axis: axis.into(),
         }
     }
 
@@ -51,8 +52,8 @@ where
     }
 
     /// Set the axis of the scroll view.
-    pub fn set_axis(&mut self, axis: ScrollbarAxis) {
-        self.axis = axis;
+    pub fn set_axis(&mut self, axis: impl Into<ScrollbarAxis>) {
+        self.axis = axis.into();
     }
 
     fn with_element_state<R>(
@@ -117,7 +118,7 @@ impl<E> InteractiveElement for Scrollable<E>
 where
     E: Element + InteractiveElement,
 {
-    fn interactivity(&mut self) -> &mut gpui::Interactivity {
+    fn interactivity(&mut self) -> &mut Interactivity {
         if let Some(element) = &mut self.element {
             element.interactivity()
         } else {
@@ -145,7 +146,7 @@ where
     type RequestLayoutState = AnyElement;
     type PrepaintState = ScrollViewState;
 
-    fn id(&self) -> Option<gpui::ElementId> {
+    fn id(&self) -> Option<ElementId> {
         Some(self.id.clone())
     }
 
@@ -155,11 +156,11 @@ where
 
     fn request_layout(
         &mut self,
-        id: Option<&gpui::GlobalElementId>,
-        _: Option<&gpui::InspectorElementId>,
+        id: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
         window: &mut Window,
         cx: &mut App,
-    ) -> (gpui::LayoutId, Self::RequestLayoutState) {
+    ) -> (LayoutId, Self::RequestLayoutState) {
         let mut style = Style::default();
         style.flex_grow = 1.0;
         style.position = Position::Relative;
@@ -168,7 +169,6 @@ where
 
         let axis = self.axis;
         let view_id = self.view_id;
-
         let scroll_id = self.id.clone();
         let content = self.element.take().map(|c| c.into_any_element());
 
@@ -208,8 +208,8 @@ where
                         ),
                 )
                 .into_any_element();
-            let element_id = element.request_layout(window, cx);
 
+            let element_id = element.request_layout(window, cx);
             let layout_id = window.request_layout(style, vec![element_id], cx);
 
             (layout_id, element)
@@ -218,8 +218,8 @@ where
 
     fn prepaint(
         &mut self,
-        _: Option<&gpui::GlobalElementId>,
-        _: Option<&gpui::InspectorElementId>,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
         _: gpui::Bounds<Pixels>,
         element: &mut Self::RequestLayoutState,
         window: &mut Window,
@@ -232,9 +232,9 @@ where
 
     fn paint(
         &mut self,
-        _: Option<&gpui::GlobalElementId>,
-        _: Option<&gpui::InspectorElementId>,
-        _: gpui::Bounds<Pixels>,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        _: Bounds<Pixels>,
         element: &mut Self::RequestLayoutState,
         _: &mut Self::PrepaintState,
         window: &mut Window,

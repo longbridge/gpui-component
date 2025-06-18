@@ -144,7 +144,7 @@ pub trait StyledExt: Styled + Sized {
     ///
     /// Current this is only have a vertical scrollbar.
     #[inline]
-    fn scrollable(self, view_id: EntityId, axis: ScrollbarAxis) -> Scrollable<Self>
+    fn scrollable(self, view_id: EntityId, axis: impl Into<ScrollbarAxis>) -> Scrollable<Self>
     where
         Self: Element,
     {

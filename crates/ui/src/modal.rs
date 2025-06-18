@@ -2,8 +2,8 @@ use std::{rc::Rc, time::Duration};
 
 use gpui::{
     anchored, div, hsla, point, prelude::FluentBuilder, px, relative, Animation, AnimationExt as _,
-    AnyElement, App, Bounds, ClickEvent, Div, FocusHandle, Hsla, InteractiveElement, IntoElement,
-    KeyBinding, MouseButton, ParentElement, Pixels, Point, RenderOnce, SharedString,
+    AnyElement, App, Axis, Bounds, ClickEvent, Div, FocusHandle, Hsla, InteractiveElement,
+    IntoElement, KeyBinding, MouseButton, ParentElement, Pixels, Point, RenderOnce, SharedString,
     StyleRefinement, Styled, Window,
 };
 use rust_i18n::t;
@@ -475,10 +475,7 @@ impl RenderOnce for Modal {
                                     v_flex()
                                         .pl(padding_left)
                                         .pr(padding_right)
-                                        .scrollable(
-                                            window.current_view(),
-                                            crate::scroll::ScrollbarAxis::Vertical,
-                                        )
+                                        .scrollable(window.current_view(), Axis::Vertical)
                                         .child(self.content),
                                 ),
                             )
