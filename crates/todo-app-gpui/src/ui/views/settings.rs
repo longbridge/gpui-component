@@ -2,7 +2,7 @@ use super::{
     introduction::Introduction, llm_provider::LlmProvider, mcp_provider::McpProvider,
     profile::Profile, user_guide::UserGuide,
 };
-use crate::ui::AppExt;
+use crate::ui::{AppExt, WindowExt};
 use crate::{
     app::{Quit, ToggleSearch},
     ui::components::container::Container,
@@ -44,7 +44,7 @@ impl Settings {
 }
 
 impl Settings {
-    pub fn open(init_view: Option<&str>, cx: &mut App) {
+    pub fn open(init_view: Option<&str>, parent: &mut Window, cx: &mut App) {
         cx.activate(true);
         let window_size = size(px(1024.0), px(920.0));
         let window_bounds = Bounds::centered(None, window_size, cx);
@@ -64,21 +64,39 @@ impl Settings {
         } else {
             "个人资料".to_string()
         };
+        parent.enable_window(false);
+        let parent = parent.window_handle();
         cx.create_normal_window("设置", options, move |window, cx| {
-            cx.new(|cx| Self::new(&init_view, window, cx))
+            cx.new(|cx| Self::new(&init_view, parent, window, cx))
         });
     }
 
-    fn new(init_view: &str, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    fn new(
+        init_view: &str,
+        parent: AnyWindowHandle,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let search_input = cx.new(|cx| InputState::new(window, cx).placeholder("Search..."));
-        let _subscriptions = vec![cx.subscribe(&search_input, |this, _, e, cx| match e {
-            InputEvent::Change(_) => {
-                this.active_group_index = Some(0);
-                this.active_index = Some(0);
-                cx.notify()
-            }
-            _ => {}
-        })];
+        let sub = cx.on_window_closed(move |cx| {
+            parent
+                .update(cx, |_, window, _cx| {
+                    window.activate_window();
+                    window.enable_window(true);
+                })
+                .ok();
+        });
+        let _subscriptions = vec![
+            cx.subscribe(&search_input, |this, _, e, cx| match e {
+                InputEvent::Change(_) => {
+                    this.active_group_index = Some(0);
+                    this.active_index = Some(0);
+                    cx.notify()
+                }
+                _ => {}
+            }),
+            sub,
+        ];
 
         let stories = vec![
             ("个人资料", vec![Container::panel::<Profile>(window, cx)]),
@@ -252,7 +270,7 @@ impl Render for Settings {
                                 SidebarFooter::new()
                                     .justify_between()
                                     .p_0()
-                                    .on_click(cx.listener(|this, _: &ClickEvent, window, cx| {
+                                    .on_click(cx.listener(|_, _, _, cx| {
                                         cx.open_url("https://www.shouqianba.com");
                                         // cx.notify();
                                     }))

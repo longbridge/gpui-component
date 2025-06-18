@@ -13,7 +13,8 @@ use gpui_component::{
     tooltip::Tooltip,
     *,
 };
-use crate::{models::{mcp_config::{McpProviderInfo, McpProviderManager, McpTool}, provider_config::{LlmProviderManager, ModelInfo}}, ui::{components::ViewKit, views::todo_thread::ProviderInfo, AppExt}};
+use crate::ui::{AppExt, WindowExt};
+use crate::{models::{mcp_config::{McpProviderInfo, McpProviderManager, McpTool}, provider_config::{LlmProviderManager, ModelInfo}}, ui::{components::ViewKit, views::todo_thread::ProviderInfo}};
 use crate::models::todo_item::*;
 
 actions!(todo_thread, [Tab, TabPrev, Save, Cancel, Delete]);
@@ -188,7 +189,7 @@ fn tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
 // 实现 TodoThreadEdit界面的相关方法
 impl TodoThreadEdit {
 
-    pub fn edit(todo:Todo,
+    pub fn edit(todo:Todo, parent: &mut Window,
         cx: &mut App,
     )  {
         println!("编辑Todo: {:?}", todo);
@@ -210,14 +211,16 @@ impl TodoThreadEdit {
                 window_decorations: Some(gpui::WindowDecorations::Client),
                 ..Default::default()
             };
+             parent.enable_window(false);
+            let parent = parent.window_handle();
             cx.create_normal_window(
                 format!("xTodo-{}", todo.title),
                 options,
-                move |window, cx| cx.new(|cx| Self::new(todo,window, cx)),
+                move |window, cx| cx.new(|cx| Self::new(todo,parent,window, cx)),
             );
     }
 
-    pub fn add(
+    pub fn add( parent: &mut Window,
         cx: &mut App,
     )  {
     cx.activate(true);
@@ -238,14 +241,16 @@ impl TodoThreadEdit {
                 window_decorations: Some(gpui::WindowDecorations::Client),
                 ..Default::default()
             };
+            parent.enable_window(false);
+            let parent = parent.window_handle();
             cx.create_normal_window(
                 "xTodo-创建",
                 options,
-                move |window, cx|  cx.new(|cx| Self::new(Todo::default(),window, cx)),
+                move |window, cx|  cx.new(|cx| Self::new(Todo::default(),parent,window, cx)),
             );
     }
     
-    fn new(todo:Todo,window: &mut Window, cx: &mut Context<Self>) -> Self {
+    fn new(todo:Todo,parent:AnyWindowHandle,window: &mut Window, cx: &mut Context<Self>) -> Self {
         let description_input = cx.new(|cx| {
         let mut state= InputState::new(window, cx)
                 .placeholder("详细描述任务内容和要求...")
@@ -277,7 +282,14 @@ impl TodoThreadEdit {
                 DatePickerEvent::Change(_) => {
                     cx.notify();
                 }
-            }),
+            }),cx.on_window_closed(move |cx| {
+            parent
+                .update(cx, |_, window, _cx| {
+                    window.activate_window();
+                    window.enable_window(true);
+                })
+                .ok();
+        })
         ];
 
         Self {
@@ -791,19 +803,6 @@ impl TodoThreadEdit {
     }
 }
 
-impl ViewKit for TodoThreadEdit {
-    fn title() -> &'static str {
-        "任务编辑"
-    }
-
-    fn description() -> &'static str {
-        "创建和编辑任务，配置AI助手和时间安排"
-    }
-
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
-        cx.new(|cx| Self::new(Todo::default(),window, cx))
-    }
-}
 
 impl FocusableCycle for TodoThreadEdit {
     fn cycle_focus_handles(&self, _: &mut Window, cx: &mut App) -> Vec<FocusHandle> {
@@ -889,7 +888,7 @@ impl Render for TodoThreadEdit {
                                     .child(
                                         div()
                                             .id("file-drop-zone")
-                                            .min_h_24() // 改为最小高度，而不是固定高度
+                                            .min_h_10() // 改为最小高度，而不是固定高度
                                             .w_full()
                                             .border_2()
                                             .border_color(gpui::rgb(0xD1D5DB))
@@ -915,22 +914,22 @@ impl Render for TodoThreadEdit {
                                                     .flex()
                                                     .items_center()
                                                     .justify_center()
-                                                    .p_4()
+                                                    .p_1()
                                                     .child(
                                                         v_flex()
                                                             .items_center()
-                                                            .gap_2()
+                                                            .gap_1()
                                                             .child(
                                                                 Icon::new(IconName::Upload)
-                                                                    .size_6()
+                                                                    .size_4()
                                                                     .text_color(gpui::rgb(0x6B7280)),
                                                             )
-                                                            .child(
-                                                                div()
-                                                                    .text_xs()
-                                                                    .text_color(gpui::rgb(0x9CA3AF))
-                                                                    .child("拖拽文件到此处上传或点击选择文件"),
-                                                            )
+                                                            // .child(
+                                                            //     div()
+                                                            //         .text_xs()
+                                                            //         .text_color(gpui::rgb(0x9CA3AF))
+                                                            //         .child("拖拽文件到此处上传或点击选择文件"),
+                                                            // )
                                                             .child(
                                                                 div()
                                                                     .text_xs()
@@ -943,16 +942,16 @@ impl Render for TodoThreadEdit {
                                             .when(!self.todoitem.files.is_empty(), |this| {
                                                 this.child(
                                                     div()
-                                                        .border_t_1()
-                                                        .border_color(gpui::rgb(0xE5E7EB))
-                                                        .p_3()
-                                                        .bg(gpui::rgb(0xF8F9FA))
+                                                        // .border_t_1()
+                                                        // .border_color(gpui::rgb(0xE5E7EB))
+                                                        .p_1()
+                                                       // .bg(gpui::rgb(0xF8F9FA))
                                                         .child(
                                                             v_flex()
-                                                                .gap_2()
+                                                                .gap_1()
                                                                 .child(
                                                                     h_flex()
-                                                                        .gap_2()
+                                                                        .gap_1()
                                                                         .flex_wrap()
                                                                         .children(
                                                                             self.todoitem.files.iter().enumerate().map(|(index, file)| {
@@ -960,8 +959,8 @@ impl Render for TodoThreadEdit {
                                                                                 let file_name = file.name.clone();
                                                                                 
                                                                                 // 截断文件名，最大显示15个字符
-                                                                                let display_name = if file.name.len() > 15 {
-                                                                                    format!("{}...", &file.name[..12])
+                                                                                let display_name = if file.name.chars().count() > 10 {
+                                                                                    format!("{}...", file.name.chars().take(10).collect::<String>())
                                                                                 } else {
                                                                                     file.name.clone()
                                                                                 };
@@ -970,13 +969,14 @@ impl Render for TodoThreadEdit {
                                                                                     .id(("uploaded-file", index))
                                                                                     .flex()
                                                                                     .items_center()
-                                                                                    .gap_1()
-                                                                                    .px_2()
-                                                                                    .py_1()
-                                                                                    .max_w_32() // 限制最大宽度
+                                                                                    .gap_0()
+                                                                                    .px_0()
+                                                                                    .py_0()
+                                                                                    .max_w_40() // 限制最大宽度
+                                                                                    .overflow_hidden()
                                                                                     .bg(gpui::rgb(0xF3F4F6))
-                                                                                    .border_1()
-                                                                                    .border_color(gpui::rgb(0xE5E7EB))
+                                                                                    // .border_1()
+                                                                                    // .border_color(gpui::rgb(0xE5E7EB))
                                                                                     .rounded_md()
                                                                                     .hover(|style| style.bg(gpui::rgb(0xE5E7EB)))
                                                                                     .tooltip({
@@ -1007,7 +1007,7 @@ impl Render for TodoThreadEdit {
                                                                                             .text_color(gpui::rgb(0x9CA3AF))
                                                                                             .p_0()
                                                                                             .min_w_4()
-                                                                                            .h_4()
+                                                                                            //.h_4()
                                                                                             .on_click(cx.listener(move |this, _, window, cx| {
                                                                                                 this.remove_file(&file_path_for_remove, window, cx);
                                                                                             })),

@@ -298,7 +298,9 @@ pub trait WindowExt {
     fn enable_window(&self, benable: bool) {
         use windows::Win32::UI::Input::KeyboardAndMouse::EnableWindow;
         if let Some(hwnd) = self.hwnd() {
-            unsafe { EnableWindow(hwnd, benable) };
+            unsafe {
+                let _ = EnableWindow(hwnd, benable);
+            }
         }
     }
 }

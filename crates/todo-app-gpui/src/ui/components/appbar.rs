@@ -83,7 +83,9 @@ impl Render for AppTitleBar {
                             .icon(IconName::Settings)
                             .small()
                             .ghost()
-                            .on_click(|_, window, cx| Settings::open(Some("服务提供商"), cx)),
+                            .on_click(|_, window, cx| {
+                                Settings::open(Some("服务提供商"), window, cx)
+                            }),
                     )
                     .child(
                         div().relative().child(

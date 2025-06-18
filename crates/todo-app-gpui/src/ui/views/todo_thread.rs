@@ -1030,19 +1030,19 @@ impl TodoThreadChat {
     }
 }
 
-impl ViewKit for TodoThreadChat {
-    fn title() -> &'static str {
-        "Todo对话"
-    }
+// impl ViewKit for TodoThreadChat {
+//     fn title() -> &'static str {
+//         "Todo对话"
+//     }
 
-    fn description() -> &'static str {
-        "与AI助手对话，管理您的任务和计划"
-    }
+//     fn description() -> &'static str {
+//         "与AI助手对话，管理您的任务和计划"
+//     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
-        Self::view(window, cx)
-    }
-}
+//     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+//         Self::view(window, cx)
+//     }
+// }
 
 impl FocusableCycle for TodoThreadChat {
     fn cycle_focus_handles(&self, _: &mut Window, cx: &mut App) -> Vec<FocusHandle> {

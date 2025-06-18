@@ -1,6 +1,6 @@
 use super::todo_thread_edit::TodoThreadEdit;
-use crate::models::todo_item::*;
 use crate::ui::views::todo_thread::TodoThreadChat;
+use crate::{models::todo_item::*, ui::WindowExt};
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::{
@@ -472,17 +472,14 @@ impl TodoList {
     }
 
     fn open_todo(&mut self, _: &Open, window: &mut Window, cx: &mut Context<Self>) {
-        // self.company_list.update(cx, update)
-        println!("Open action triggered");
         if let Some(todo) = self.selected_todo.clone() {
-            println!("Opening todo: {}", todo.title);
             TodoThreadChat::open(todo, cx);
         }
     }
 
     fn edit_todo(&mut self, _: &Edit, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(todo) = self.selected_todo.clone() {
-            TodoThreadEdit::edit(todo, cx);
+            TodoThreadEdit::edit(todo, window, cx);
         }
     }
 
@@ -606,8 +603,8 @@ impl Render for TodoList {
                             .size(px(24.))
                             .compact()
                             .ghost()
-                            .on_click(cx.listener(|_this, _ev, _widnow, cx| {
-                                TodoThreadEdit::add(cx);
+                            .on_click(cx.listener(|_this, _ev, widnow, cx| {
+                                TodoThreadEdit::add(widnow, cx);
                             })),
                     ),
             )
