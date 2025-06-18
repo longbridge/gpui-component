@@ -298,7 +298,6 @@ impl RenderOnce for TextInput {
             })
             .refine_style(&self.style)
             .when(state.is_multi_line(), |this| {
-                let entity_id = self.state.entity_id();
                 if state.last_layout.is_some() {
                     this.relative().child(
                         div()
@@ -308,12 +307,8 @@ impl RenderOnce for TextInput {
                             .right(px(1.))
                             .bottom_0()
                             .child(
-                                Scrollbar::vertical(
-                                    entity_id,
-                                    state.scroll_state.clone(),
-                                    state.scroll_handle.clone(),
-                                )
-                                .scroll_size(state.scroll_size),
+                                Scrollbar::vertical(&state.scroll_state, &state.scroll_handle)
+                                    .scroll_size(state.scroll_size),
                             ),
                     )
                 } else {

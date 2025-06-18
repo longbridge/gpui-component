@@ -475,7 +475,7 @@ impl RenderOnce for Modal {
                                     v_flex()
                                         .pl(padding_left)
                                         .pr(padding_right)
-                                        .scrollable(window.current_view(), Axis::Vertical)
+                                        .scrollable(Axis::Vertical)
                                         .child(self.content),
                                 ),
                             )

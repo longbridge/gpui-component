@@ -861,14 +861,7 @@ where
                 .on_scroll_wheel(cx.listener(|_, _: &ScrollWheelEvent, _, cx| {
                     cx.notify();
                 }))
-                .child(
-                    Scrollbar::uniform_scroll(
-                        cx.entity().entity_id(),
-                        state,
-                        self.vertical_scroll_handle.clone(),
-                    )
-                    .max_fps(60),
-                ),
+                .child(Scrollbar::uniform_scroll(&state, &self.vertical_scroll_handle).max_fps(60)),
         )
     }
 
@@ -890,9 +883,8 @@ where
                 cx.notify();
             }))
             .child(Scrollbar::horizontal(
-                cx.entity().entity_id(),
-                state,
-                self.horizontal_scroll_handle.clone(),
+                &state,
+                &self.horizontal_scroll_handle,
             ))
     }
 

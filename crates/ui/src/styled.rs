@@ -5,8 +5,8 @@ use crate::{
     ActiveTheme,
 };
 use gpui::{
-    div, px, App, Axis, DefiniteLength, Div, Edges, Element, ElementId, EntityId, FocusHandle,
-    Pixels, Refineable, StyleRefinement, Styled, Window,
+    div, px, App, Axis, DefiniteLength, Div, Edges, Element, ElementId, FocusHandle, Pixels,
+    Refineable, StyleRefinement, Styled, Window,
 };
 use serde::{Deserialize, Serialize};
 
@@ -144,11 +144,11 @@ pub trait StyledExt: Styled + Sized {
     ///
     /// Current this is only have a vertical scrollbar.
     #[inline]
-    fn scrollable(self, view_id: EntityId, axis: impl Into<ScrollbarAxis>) -> Scrollable<Self>
+    fn scrollable(self, axis: impl Into<ScrollbarAxis>) -> Scrollable<Self>
     where
         Self: Element,
     {
-        Scrollable::new(view_id, self, axis)
+        Scrollable::new(axis, self)
     }
 
     font_weight!(font_thin, THIN);

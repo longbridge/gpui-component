@@ -1,6 +1,6 @@
 use super::{Scrollbar, ScrollbarAxis, ScrollbarState};
 use gpui::{
-    div, relative, AnyElement, App, Bounds, Div, Element, ElementId, EntityId, GlobalElementId,
+    div, relative, AnyElement, App, Bounds, Div, Element, ElementId, GlobalElementId,
     InspectorElementId, InteractiveElement, Interactivity, IntoElement, LayoutId, ParentElement,
     Pixels, Position, ScrollHandle, SharedString, Stateful, StatefulInteractiveElement, Style,
     StyleRefinement, Styled, Window,
@@ -10,7 +10,6 @@ use gpui::{
 pub struct Scrollable<E> {
     id: ElementId,
     element: Option<E>,
-    view_id: EntityId,
     axis: ScrollbarAxis,
     /// This is a fake element to handle Styled, InteractiveElement, not used.
     _element: Stateful<Div>,
@@ -20,18 +19,15 @@ impl<E> Scrollable<E>
 where
     E: Element,
 {
-    pub(crate) fn new(view_id: EntityId, element: E, axis: impl Into<ScrollbarAxis>) -> Self {
-        let id = ElementId::Name(SharedString::from(format!(
-            "scrollable-{}-{:?}",
-            view_id,
-            element.id(),
-        )));
+    pub(crate) fn new(axis: impl Into<ScrollbarAxis>, element: E) -> Self {
+        let id = ElementId::Name(SharedString::from(
+            format!("scrollable-{:?}", element.id(),),
+        ));
 
         Self {
             element: Some(element),
             _element: div().id("fake"),
             id,
-            view_id,
             axis: axis.into(),
         }
     }
@@ -164,7 +160,6 @@ where
         style.size.height = relative(1.0).into();
 
         let axis = self.axis;
-        let view_id = self.view_id;
         let scroll_id = self.id.clone();
         let content = self.element.take().map(|c| c.into_any_element());
 
@@ -190,12 +185,7 @@ where
                         .right_0()
                         .bottom_0()
                         .child(
-                            Scrollbar::both(
-                                view_id,
-                                element_state.state.clone(),
-                                element_state.handle.clone(),
-                            )
-                            .axis(axis),
+                            Scrollbar::both(&element_state.state, &element_state.handle).axis(axis),
                         ),
                 )
                 .into_any_element();

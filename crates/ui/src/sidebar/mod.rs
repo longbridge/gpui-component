@@ -185,8 +185,7 @@ impl RenderOnce for SidebarToggleButton {
 }
 
 impl<E: Collapsible + IntoElement> RenderOnce for Sidebar<E> {
-    fn render(mut self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let view_id = window.current_view();
+    fn render(mut self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         v_flex()
             .id("sidebar")
             .w(self.width)
@@ -215,7 +214,7 @@ impl<E: Collapsible + IntoElement> RenderOnce for Sidebar<E> {
                                 .map(|(ix, c)| div().id(ix).child(c.collapsed(self.collapsed))),
                         )
                         .gap_2()
-                        .scrollable(view_id, ScrollbarAxis::Vertical),
+                        .scrollable(ScrollbarAxis::Vertical),
                 ),
             )
             .when_some(self.footer.take(), |this, footer| {

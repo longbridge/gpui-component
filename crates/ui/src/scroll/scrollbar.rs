@@ -8,10 +8,9 @@ use std::{
 use crate::{ActiveTheme, AxisExt};
 use gpui::{
     fill, point, px, relative, size, App, Axis, BorderStyle, Bounds, ContentMask, Corner,
-    CursorStyle, Edges, Element, EntityId, GlobalElementId, Hitbox, HitboxBehavior, Hsla,
-    InspectorElementId, IntoElement, LayoutId, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
-    PaintQuad, Pixels, Point, Position, ScrollHandle, ScrollWheelEvent, Size, Style,
-    UniformListScrollHandle, Window,
+    CursorStyle, Edges, Element, GlobalElementId, Hitbox, HitboxBehavior, Hsla, InspectorElementId,
+    IntoElement, LayoutId, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PaintQuad, Pixels, Point,
+    Position, ScrollHandle, ScrollWheelEvent, Size, Style, UniformListScrollHandle, Window,
 };
 use serde::{Deserialize, Serialize};
 
@@ -261,7 +260,6 @@ impl ScrollbarAxis {
 
 /// Scrollbar control for scroll-area or a uniform-list.
 pub struct Scrollbar {
-    view_id: EntityId,
     axis: ScrollbarAxis,
     scroll_handle: Rc<Box<dyn ScrollHandleOffsetable>>,
     state: ScrollbarState,
@@ -275,16 +273,14 @@ pub struct Scrollbar {
 
 impl Scrollbar {
     fn new(
-        view_id: EntityId,
-        state: ScrollbarState,
         axis: impl Into<ScrollbarAxis>,
-        scroll_handle: impl ScrollHandleOffsetable + 'static,
+        state: &ScrollbarState,
+        scroll_handle: &(impl ScrollHandleOffsetable + Clone + 'static),
     ) -> Self {
         Self {
-            view_id,
-            state,
+            state: state.clone(),
             axis: axis.into(),
-            scroll_handle: Rc::new(Box::new(scroll_handle)),
+            scroll_handle: Rc::new(Box::new(scroll_handle.clone())),
             max_fps: 120,
             scroll_size: None,
         }
@@ -292,38 +288,34 @@ impl Scrollbar {
 
     /// Create with vertical and horizontal scrollbar.
     pub fn both(
-        view_id: EntityId,
-        state: ScrollbarState,
-        scroll_handle: impl ScrollHandleOffsetable + 'static,
+        state: &ScrollbarState,
+        scroll_handle: &(impl ScrollHandleOffsetable + Clone + 'static),
     ) -> Self {
-        Self::new(view_id, state, ScrollbarAxis::Both, scroll_handle)
+        Self::new(ScrollbarAxis::Both, state, scroll_handle)
     }
 
     /// Create with horizontal scrollbar.
     pub fn horizontal(
-        view_id: EntityId,
-        state: ScrollbarState,
-        scroll_handle: impl ScrollHandleOffsetable + 'static,
+        state: &ScrollbarState,
+        scroll_handle: &(impl ScrollHandleOffsetable + Clone + 'static),
     ) -> Self {
-        Self::new(view_id, state, ScrollbarAxis::Horizontal, scroll_handle)
+        Self::new(ScrollbarAxis::Horizontal, state, scroll_handle)
     }
 
     /// Create with vertical scrollbar.
     pub fn vertical(
-        view_id: EntityId,
-        state: ScrollbarState,
-        scroll_handle: impl ScrollHandleOffsetable + 'static,
+        state: &ScrollbarState,
+        scroll_handle: &(impl ScrollHandleOffsetable + Clone + 'static),
     ) -> Self {
-        Self::new(view_id, state, ScrollbarAxis::Vertical, scroll_handle)
+        Self::new(ScrollbarAxis::Vertical, state, scroll_handle)
     }
 
     /// Create vertical scrollbar for uniform list.
     pub fn uniform_scroll(
-        view_id: EntityId,
-        state: ScrollbarState,
-        scroll_handle: UniformListScrollHandle,
+        state: &ScrollbarState,
+        scroll_handle: &(impl ScrollHandleOffsetable + Clone + 'static),
     ) -> Self {
-        Self::new(view_id, state, ScrollbarAxis::Vertical, scroll_handle)
+        Self::new(ScrollbarAxis::Vertical, state, scroll_handle)
     }
 
     /// Set a special scroll size of the content area, default is None.
@@ -653,6 +645,7 @@ impl Element for Scrollbar {
         window: &mut Window,
         cx: &mut App,
     ) {
+        let view_id = window.current_view();
         let hitbox_bounds = prepaint.hitbox.bounds;
         let is_visible =
             self.state.get().is_scrollbar_visible() || cx.theme().scrollbar_show.is_always();
@@ -718,7 +711,6 @@ impl Element for Scrollbar {
 
                     window.on_mouse_event({
                         let state = self.state.clone();
-                        let view_id = self.view_id;
                         let scroll_handle = self.scroll_handle.clone();
 
                         move |event: &ScrollWheelEvent, phase, _, cx| {
@@ -739,7 +731,6 @@ impl Element for Scrollbar {
                     if is_hover_to_show || is_visible {
                         window.on_mouse_event({
                             let state = self.state.clone();
-                            let view_id = self.view_id;
                             let scroll_handle = self.scroll_handle.clone();
 
                             move |event: &MouseDownEvent, phase, _, cx| {
@@ -788,7 +779,6 @@ impl Element for Scrollbar {
                     window.on_mouse_event({
                         let scroll_handle = self.scroll_handle.clone();
                         let state = self.state.clone();
-                        let view_id = self.view_id;
                         let max_fps_duration = Duration::from_millis((1000 / self.max_fps) as u64);
 
                         move |event: &MouseMoveEvent, _, _, cx| {
@@ -873,7 +863,6 @@ impl Element for Scrollbar {
                     });
 
                     window.on_mouse_event({
-                        let view_id = self.view_id;
                         let state = self.state.clone();
 
                         move |_event: &MouseUpEvent, phase, _, cx| {

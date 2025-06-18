@@ -202,11 +202,10 @@ impl RenderOnce for Drawer {
                             )
                             .child(
                                 // Body
-                                div().flex_1().overflow_hidden().child(
-                                    v_flex()
-                                        .scrollable(window.current_view(), Axis::Vertical)
-                                        .child(self.content),
-                                ),
+                                div()
+                                    .flex_1()
+                                    .overflow_hidden()
+                                    .child(v_flex().scrollable(Axis::Vertical).child(self.content)),
                             )
                             .when_some(self.footer, |this, footer| {
                                 // Footer

@@ -1069,7 +1069,6 @@ impl EventEmitter<DismissEvent> for Tiles {}
 impl Render for Tiles {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let view = cx.entity().clone();
-        let view_id = view.entity_id();
         let panels = self.sorted_panels();
         let scroll_bounds =
             self.panels
@@ -1140,12 +1139,8 @@ impl Render for Tiles {
                     .right_0()
                     .bottom_0()
                     .child(
-                        Scrollbar::both(
-                            view_id,
-                            self.scroll_state.clone(),
-                            self.scroll_handle.clone(),
-                        )
-                        .scroll_size(scroll_size),
+                        Scrollbar::both(&self.scroll_state, &self.scroll_handle)
+                            .scroll_size(scroll_size),
                     ),
             )
             .size_full()

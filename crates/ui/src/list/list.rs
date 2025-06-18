@@ -287,15 +287,14 @@ where
         self.selected_index
     }
 
-    fn render_scrollbar(&self, _: &mut Window, cx: &mut Context<Self>) -> Option<impl IntoElement> {
+    fn render_scrollbar(&self, _: &mut Window, _: &mut Context<Self>) -> Option<impl IntoElement> {
         if !self.scrollbar_visible {
             return None;
         }
 
         Some(Scrollbar::uniform_scroll(
-            cx.entity().entity_id(),
-            self.scroll_state.clone(),
-            self.vertical_scroll_handle.clone(),
+            &self.scroll_state,
+            &self.vertical_scroll_handle,
         ))
     }
 
