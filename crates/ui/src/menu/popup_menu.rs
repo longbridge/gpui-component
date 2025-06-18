@@ -907,7 +907,7 @@ impl Render for PopupMenu {
                     })
                     .child(
                         v_flex()
-                            .p_2()
+                            .p_1()
                             .gap_y_0p5()
                             .min_w(rems(8.))
                             .when_some(self.min_width, |this, min_width| this.min_w(min_width))
