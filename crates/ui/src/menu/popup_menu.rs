@@ -897,7 +897,6 @@ impl Render for PopupMenu {
             .popover_style(cx)
             .text_color(cx.theme().popover_foreground)
             .relative()
-            .p_1()
             .child(
                 div()
                     .id("items")
@@ -908,6 +907,7 @@ impl Render for PopupMenu {
                     })
                     .child(
                         v_flex()
+                            .p_2()
                             .gap_y_0p5()
                             .min_w(rems(8.))
                             .when_some(self.min_width, |this, min_width| this.min_w(min_width))
@@ -924,9 +924,9 @@ impl Render for PopupMenu {
                                 self.menu_items
                                     .iter()
                                     .enumerate()
-                                    // Skip last separator
+                                    // Ignore last separator
                                     .filter(|(ix, item)| {
-                                        !(*ix == items_count - 1 && item.is_separator())
+                                        !(*ix + 1 == items_count && item.is_separator())
                                     })
                                     .map(|(ix, item)| {
                                         self.render_item(ix, item, item_state, window, cx)
