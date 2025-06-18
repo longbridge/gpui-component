@@ -35,6 +35,45 @@ deepseek-001:
     initial_delay: 1000
     max_delay: 32000
     backoff_multiplier: 2.0
+shouqianba-001:
+  id: shouqianba-001
+  name: 收钱吧
+  api_url: https://hcb.aliyunddos1117.com/v1
+  api_key: ''
+  api_type: OpenAI
+  enabled: true
+  models:
+  - id: gpt-4o-mini-001
+    display_name: gpt-4o-mini
+    capabilities:
+    - Text
+    - Vision
+    - Tools
+    enabled: false
+    limits:
+      context_length: 128000
+      max_output_tokens: null
+      max_requests_per_minute: 60
+      max_requests_per_day: null
+      max_tokens_per_minute: 100000
+  - id: gpt-4o-001
+    display_name: gpt-4o
+    capabilities:
+    - Text
+    - Vision
+    - Tools
+    enabled: false
+    limits:
+      context_length: 128000
+      max_output_tokens: null
+      max_requests_per_minute: 30
+      max_requests_per_day: null
+      max_tokens_per_minute: 50000
+  retry_config:
+    max_retries: 3
+    initial_delay: 1000
+    max_delay: 32000
+    backoff_multiplier: 2.0
 gemini-001:
   id: gemini-001
   name: Gemini
@@ -71,45 +110,6 @@ gemini-001:
       max_requests_per_minute: 60
       max_requests_per_day: null
       max_tokens_per_minute: 100000
-  retry_config:
-    max_retries: 3
-    initial_delay: 1000
-    max_delay: 32000
-    backoff_multiplier: 2.0
-shouqianba-001:
-  id: shouqianba-001
-  name: 收钱吧
-  api_url: https://hcb.aliyunddos1117.com/v1
-  api_key: ''
-  api_type: OpenAI
-  enabled: true
-  models:
-  - id: gpt-4o-mini-001
-    display_name: gpt-4o-mini
-    capabilities:
-    - Text
-    - Vision
-    - Tools
-    enabled: false
-    limits:
-      context_length: 128000
-      max_output_tokens: null
-      max_requests_per_minute: 60
-      max_requests_per_day: null
-      max_tokens_per_minute: 100000
-  - id: gpt-4o-001
-    display_name: gpt-4o
-    capabilities:
-    - Text
-    - Vision
-    - Tools
-    enabled: true
-    limits:
-      context_length: 128000
-      max_output_tokens: null
-      max_requests_per_minute: 30
-      max_requests_per_day: null
-      max_tokens_per_minute: 50000
   retry_config:
     max_retries: 3
     initial_delay: 1000
@@ -167,7 +167,7 @@ openai-001:
     - Text
     - Vision
     - Tools
-    enabled: true
+    enabled: false
     limits:
       context_length: 128000
       max_output_tokens: null

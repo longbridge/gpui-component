@@ -6,17 +6,12 @@ use gpui_component::{
     checkbox::Checkbox,
     dock::PanelControl,
     dropdown::{Dropdown, DropdownState},
-    h_flex,
     input::{InputEvent, InputState, TextInput},
-    label::Label,
-    text::TextView,
-    tooltip::Tooltip,
-    v_flex,
-    wry::dpi::Size,
-    Disableable, FocusableCycle, Icon, IconName, Sizable, StyledExt, *,
+    notification::NotificationType,
+    *,
 };
 
-use crate::ui::components::ViewKit;
+use crate::{app::AppState, models::profile_config::ProfileData, ui::components::ViewKit};
 
 actions!(
     profile,
@@ -35,7 +30,7 @@ pub struct Profile {
     bio_input: Entity<InputState>,
 
     // 设置字段
-    username_input: Entity<InputState>,
+    department_input: Entity<InputState>,
 
     // 偏好设置 - 修正类型
     theme_dropdown: Entity<DropdownState<Vec<SharedString>>>,
@@ -65,31 +60,44 @@ impl Profile {
         let name_input = cx.new(|cx| {
             InputState::new(window, cx)
                 .placeholder("请输入您的姓名")
-                .default_value("高庆丰")
+                .default_value(AppState::state(cx).profile_manager.profile.name.clone())
         });
 
         let email_input = cx.new(|cx| {
             InputState::new(window, cx)
                 .placeholder("请输入邮箱地址")
-                .pattern(regex::Regex::new(r"^[^\s@]+@[^\s@]+\.[^\s@]+$").unwrap())
+                // .pattern(
+                //     regex::Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$").unwrap(),
+                // )
+                .validate(|s| s.contains("@"))
+                .default_value(AppState::state(cx).profile_manager.profile.email.clone())
         });
 
         let phone_input = cx.new(|cx| {
             InputState::new(window, cx)
                 .placeholder("请输入手机号码")
                 .mask_pattern("999-9999-9999")
+                .default_value(AppState::state(cx).profile_manager.profile.phone.clone())
         });
 
         let bio_input = cx.new(|cx| {
             InputState::new(window, cx)
                 .placeholder("简单介绍一下自己...")
                 .auto_grow(6, 15)
+                .default_value(AppState::state(cx).profile_manager.profile.bio.clone())
         });
 
-        let username_input = cx.new(|cx| {
+        let department_input = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder("用户名")
-                .pattern(regex::Regex::new(r"^[a-zA-Z0-9_]{3,20}$").unwrap())
+                .placeholder("部门")
+                // .pattern(regex::Regex::new(r"^[a-zA-Z0-9_]{3,20}$").unwrap())
+                .default_value(
+                    AppState::state(cx)
+                        .profile_manager
+                        .profile
+                        .department
+                        .clone(),
+                )
         });
 
         // 创建主题下拉框 - 参考 dropdown_story.rs 的方式
@@ -116,7 +124,7 @@ impl Profile {
             cx.subscribe_in(&name_input, window, Self::on_input_event),
             cx.subscribe_in(&email_input, window, Self::on_input_event),
             cx.subscribe_in(&phone_input, window, Self::on_input_event),
-            cx.subscribe_in(&username_input, window, Self::on_input_event),
+            cx.subscribe_in(&department_input, window, Self::on_input_event),
             cx.subscribe_in(&bio_input, window, Self::on_bio_input_event),
         ];
 
@@ -126,10 +134,10 @@ impl Profile {
             email_input,
             phone_input,
             bio_input,
-            username_input,
+            department_input,
             theme_dropdown,
             language_dropdown,
-            auto_analyze_bio: false,
+            auto_analyze_bio: AppState::state(cx).profile_manager.profile.auto_analyze_bio,
             _subscriptions,
         }
     }
@@ -149,7 +157,7 @@ impl Profile {
             email: self.email_input.read(cx).value().to_string(),
             phone: self.phone_input.read(cx).unmask_value().to_string(),
             bio: self.bio_input.read(cx).value().to_string(),
-            username: self.username_input.read(cx).value().to_string(),
+            department: self.department_input.read(cx).value().to_string(),
             theme: self
                 .theme_dropdown
                 .read(cx)
@@ -162,9 +170,26 @@ impl Profile {
                 .selected_value()
                 .map(|v| v.to_string())
                 .unwrap_or_default(),
+            auto_analyze_bio: self.auto_analyze_bio,
         };
-
-        println!("保存个人资料: {:?}", profile_data);
+        match AppState::state_mut(cx)
+            .profile_manager
+            .update_profile(profile_data)
+            .save()
+        {
+            Ok(_) => {
+                _window.push_notification((NotificationType::Success, "个人档案保存成功"), cx);
+            }
+            Err(err) => {
+                _window.push_notification(
+                    (
+                        NotificationType::Error,
+                        SharedString::new(format!("个人档案保存失败-{}", err)),
+                    ),
+                    cx,
+                );
+            }
+        }
     }
 
     fn reset(&mut self, _: &Reset, _window: &mut Window, cx: &mut Context<Self>) {
@@ -189,8 +214,8 @@ impl Profile {
                 .auto_grow(3, 6);
         });
 
-        self.username_input.update(cx, |state, cx| {
-            *state = InputState::new(_window, cx).placeholder("用户名");
+        self.department_input.update(cx, |state, cx| {
+            *state = InputState::new(_window, cx).placeholder("部门");
         });
 
         // 重置下拉框选择到第一项
@@ -321,17 +346,6 @@ impl Profile {
     }
 }
 
-#[derive(Debug)]
-struct ProfileData {
-    name: String,
-    email: String,
-    phone: String,
-    bio: String,
-    username: String,
-    theme: String,
-    language: String,
-}
-
 impl ViewKit for Profile {
     fn title() -> &'static str {
         "个人资料"
@@ -357,7 +371,7 @@ impl FocusableCycle for Profile {
             self.email_input.focus_handle(cx),
             self.phone_input.focus_handle(cx),
             self.bio_input.focus_handle(cx),
-            self.username_input.focus_handle(cx),
+            self.department_input.focus_handle(cx),
             self.theme_dropdown.focus_handle(cx),
             self.language_dropdown.focus_handle(cx),
         ]
@@ -474,6 +488,26 @@ impl Render for Profile {
                                     TextInput::new(&self.phone_input)
                                         .cleanable()
                                         .prefix(Icon::new(IconName::Phone).small().ml_3()),
+                                ),
+                            ),
+                    )
+                    .child(
+                        // 手机号码行 - 左对齐布局
+                        h_flex()
+                            .gap_4()
+                            .items_center()
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .text_color(gpui::rgb(0x6B7280))
+                                    .min_w_24()
+                                    .child("部门"),
+                            )
+                            .child(
+                                div().flex_1().max_w_80().child(
+                                    TextInput::new(&self.department_input)
+                                        .cleanable()
+                                        .prefix(Icon::new(IconName::Users).small().ml_3()),
                                 ),
                             ),
                     )

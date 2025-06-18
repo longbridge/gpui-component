@@ -1,3 +1,4 @@
+use crate::app::AppState;
 use crate::models::mcp_config::{
     McpCapability, McpParameter, McpPrompt, McpProviderInfo, McpProviderManager, McpResource,
     McpTool, McpTransport,
@@ -49,7 +50,7 @@ pub struct McpProvider {
     // 每个Provider的编辑状态输入框
     provider_inputs: std::collections::HashMap<usize, ProviderInputs>,
     _subscriptions: Vec<Subscription>,
-    mcp_provider_manager: McpProviderManager,
+    // mcp_provider_manager: McpProviderManager,
 }
 
 impl ViewKit for McpProvider {
@@ -85,32 +86,33 @@ impl McpProvider {
     }
 
     fn new(_window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let mcp_provider_manager = McpProviderManager::load();
+        //let mcp_provider_manager = McpProviderManager::load();
         Self {
             focus_handle: cx.focus_handle(),
-            providers: mcp_provider_manager.list_providers(),
+            providers: AppState::state(cx).mcp_provider.list_providers(),
             expanded_providers: vec![],
             active_capability_tabs: std::collections::HashMap::new(),
             editing_provider: None,
             provider_inputs: std::collections::HashMap::new(),
             _subscriptions: vec![],
-            mcp_provider_manager,
+            // mcp_provider_manager,
         }
     }
 
     // 保存配置到文件
-    fn save_config(&mut self) {
+    fn save_config(&mut self, cx: &mut Context<Self>) {
         println!("保存MCP配置到文件...");
         // 先同步视图数据到管理器
-        self.mcp_provider_manager.providers.clear();
+        AppState::state_mut(cx).mcp_provider.providers.clear();
         for provider in &self.providers {
-            self.mcp_provider_manager
+            AppState::state_mut(cx)
+                .mcp_provider
                 .providers
                 .insert(provider.id.clone(), provider.clone());
         }
 
         // 然后保存到文件
-        if let Err(e) = self.mcp_provider_manager.save() {
+        if let Err(e) = AppState::state_mut(cx).mcp_provider.save() {
             eprintln!("保存MCP配置失败: {}", e);
         }
     }
@@ -134,7 +136,7 @@ impl McpProvider {
         self.expanded_providers.push(new_index);
         self.start_editing(new_index, window, cx);
         cx.notify();
-        self.save_config();
+        self.save_config(cx);
     }
 
     fn cancel_edit(&mut self, _: &CancelEdit, window: &mut Window, cx: &mut Context<Self>) {
@@ -209,8 +211,8 @@ impl McpProvider {
             self.provider_inputs.remove(&index);
         }
         self.editing_provider = None;
+        self.save_config(cx);
         cx.notify();
-        self.save_config();
     }
 
     fn delete_mcp_provider(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
@@ -250,7 +252,7 @@ impl McpProvider {
                     true
                 })
         });
-        self.save_config();
+        self.save_config(cx);
     }
 
     fn confirm_delete_mcp_provider(
@@ -283,7 +285,7 @@ impl McpProvider {
 
             window.push_notification(format!("已成功删除MCP服务 \"{}\"", provider_name), cx);
             cx.notify();
-            self.save_config();
+            self.save_config(cx);
         }
     }
 
@@ -302,7 +304,7 @@ impl McpProvider {
                 self.expanded_providers.retain(|&i| i != index);
             }
 
-            self.save_config();
+            self.save_config(cx);
             cx.notify();
         }
     }
@@ -790,7 +792,7 @@ impl McpProvider {
                         if old_status { "已订阅" } else { "未订阅" },
                         if subscribed { "已订阅" } else { "未订阅" }
                     );
-                    self.save_config();
+                    self.save_config(cx);
                     cx.notify();
                 } else {
                     eprintln!("警告: 资源 '{}' 不支持订阅功能", resource.name);

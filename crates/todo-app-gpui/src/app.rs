@@ -1,3 +1,7 @@
+use crate::models::mcp_config::McpProviderManager;
+use crate::models::profile_config::ProfileManager;
+use crate::models::provider_config::LlmProviderManager;
+use crate::models::todo_item::TodoManager;
 use crate::ui::assets::Assets;
 
 use crate::ui::components::container::Container;
@@ -75,6 +79,10 @@ impl ViewKitState {
 pub struct AppState {
     /// 不可见面板的列表
     pub invisible_panels: Entity<Vec<SharedString>>,
+    pub profile_manager: ProfileManager,
+    pub llm_provider: LlmProviderManager,
+    pub mcp_provider: McpProviderManager,
+    pub todo_manager: TodoManager,
 }
 
 /// 面板名称常量
@@ -86,20 +94,23 @@ impl Global for AppState {}
 impl AppState {
     /// 初始化应用程序状态
     fn init(cx: &mut App) {
-        gpui_component::init(cx);
         let state = Self {
             invisible_panels: cx.new(|_| Vec::new()),
+            profile_manager: ProfileManager::load(),
+            llm_provider: LlmProviderManager::load(),
+            mcp_provider: McpProviderManager::load(),
+            todo_manager: TodoManager::create_fake_data(),
         };
         cx.set_global::<AppState>(state);
     }
 
     /// 获取全局应用程序状态的不可变引用
-    pub fn global(cx: &App) -> &Self {
+    pub fn state(cx: &App) -> &Self {
         cx.global::<Self>()
     }
 
     /// 获取全局应用程序状态的可变引用
-    pub fn global_mut(cx: &mut App) -> &mut Self {
+    pub fn state_mut(cx: &mut App) -> &mut Self {
         cx.global_mut::<Self>()
     }
 }

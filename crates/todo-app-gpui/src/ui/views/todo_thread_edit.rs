@@ -13,8 +13,8 @@ use gpui_component::{
     tooltip::Tooltip,
     *,
 };
-use crate::ui::{AppExt, WindowExt};
-use crate::{models::{mcp_config::{McpProviderInfo, McpProviderManager, McpTool}, provider_config::{LlmProviderManager, ModelInfo}}, ui::{components::ViewKit, views::todo_thread::ProviderInfo}};
+use crate::{models::provider_config::LlmProviderInfo, ui::{AppExt, WindowExt}};
+use crate::{models::{mcp_config::{McpProviderInfo, McpProviderManager, McpTool}, provider_config::{LlmProviderManager, ModelInfo}}, ui::{components::ViewKit}};
 use crate::models::todo_item::*;
 
 actions!(todo_thread, [Tab, TabPrev, Save, Cancel, Delete]);
@@ -126,7 +126,7 @@ fn tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
         let selected_count = self.todoitem.selected_tools.len();
 
         if selected_count == 0 {
-            "选择工具集".to_string()
+            "选择工具".to_string()
         } else if selected_count <= 2 {
             self.todoitem.selected_tools.iter().map(|item|item.tool_name.as_str()).collect::<Vec<_>>().join(", ")
         } else {
@@ -152,7 +152,7 @@ fn tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
     fn toggle_model_selection(
         &mut self,
         model: &ModelInfo,
-        provider: &ProviderInfo,
+        provider: &LlmProviderInfo,
         checked:bool,
         cx: &mut Context<Self>,
     ) {
@@ -531,7 +531,7 @@ impl TodoThreadEdit {
 
             drawer
                 .overlay(true)
-                .size(px(380.))
+                .size(px(280.))
                 .title("选择模型")
                 .child(accordion)
                 .footer(
@@ -721,7 +721,7 @@ impl TodoThreadEdit {
 
             drawer
                 .overlay(true)
-                .size(px(380.))
+                .size(px(280.))
                 .title("选择工具集")
                 .child(accordion)
                 .footer(
@@ -978,6 +978,9 @@ impl Render for TodoThreadEdit {
                                                                                     // .border_1()
                                                                                     // .border_color(gpui::rgb(0xE5E7EB))
                                                                                     .rounded_md()
+                                                                                    .on_click(|_,_,cx|{
+                                                                                        cx.stop_propagation();
+                                                                                    })
                                                                                     .hover(|style| style.bg(gpui::rgb(0xE5E7EB)))
                                                                                     .tooltip({
                                                                                         let file_name = file_name.clone();

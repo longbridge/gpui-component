@@ -2,6 +2,7 @@ use super::{
     introduction::Introduction, llm_provider::LlmProvider, mcp_provider::McpProvider,
     profile::Profile, user_guide::UserGuide,
 };
+use crate::app::AppState;
 use crate::ui::{AppExt, WindowExt};
 use crate::{
     app::{Quit, ToggleSearch},
@@ -233,8 +234,24 @@ impl Render for Settings {
                                                 .line_height(relative(1.25))
                                                 .overflow_hidden()
                                                 .text_ellipsis()
-                                                .child("高庆丰")
-                                                .child(div().child("IOT产品开发部").text_xs()),
+                                                .child(
+                                                    AppState::state(cx)
+                                                        .profile_manager
+                                                        .profile
+                                                        .name
+                                                        .clone(),
+                                                )
+                                                .child(
+                                                    div()
+                                                        .child(
+                                                            AppState::state(cx)
+                                                                .profile_manager
+                                                                .profile
+                                                                .department
+                                                                .clone(),
+                                                        )
+                                                        .text_xs(),
+                                                ),
                                         )
                                     }),
                             )

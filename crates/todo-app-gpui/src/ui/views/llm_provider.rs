@@ -1,3 +1,4 @@
+use crate::app::AppState;
 use crate::models::provider_config::{
     ApiType, LlmProviderInfo, LlmProviderManager, ModelCapability, ModelInfo, ModelLimits,
 };
@@ -14,7 +15,6 @@ use gpui_component::{
     tab::{Tab, TabBar},
     v_flex, ContextModal, Disableable, FocusableCycle, Icon, IconName, Sizable, StyledExt,
 };
-use serde::{Deserialize, Serialize};
 
 actions!(
     provider,
@@ -48,7 +48,7 @@ pub struct LlmProvider {
     // 每个Provider的编辑状态输入框
     provider_inputs: std::collections::HashMap<usize, ProviderInputs>,
     _subscriptions: Vec<Subscription>,
-    llm_provider_manager: LlmProviderManager,
+    // llm_provider_manager: LlmProviderManager,
 }
 
 impl ViewKit for LlmProvider {
@@ -84,29 +84,29 @@ impl LlmProvider {
     }
 
     fn new(_window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let llm_provider_manager = LlmProviderManager::load();
+        // let llm_provider_manager = LlmProviderManager::load();
         Self {
             focus_handle: cx.focus_handle(),
-            providers: llm_provider_manager.list_providers(),
+            providers: AppState::state(cx).llm_provider.list_providers(),
             expanded_providers: vec![],
             active_provider_tabs: std::collections::HashMap::new(),
             editing_provider: None,
             provider_inputs: std::collections::HashMap::new(),
             _subscriptions: vec![],
-            llm_provider_manager,
+            //llm_provider_manager,
         }
     }
 
     // 刷新提供商列表
     fn refresh_providers(&mut self, cx: &mut Context<Self>) {
-        self.providers = self.llm_provider_manager.list_providers();
+        self.providers = AppState::state(cx).llm_provider.list_providers();
         cx.notify();
     }
 
     // 保存配置到文件
-    fn save_config(&mut self) {
+    fn save_config(&mut self, cx: &mut Context<Self>) {
         println!("正在保存配置...");
-        if let Err(e) = self.llm_provider_manager.save() {
+        if let Err(e) = AppState::state(cx).llm_provider.save() {
             eprintln!("保存配置失败: {}", e);
         }
     }
@@ -125,7 +125,7 @@ impl LlmProvider {
         self.providers.push(new_provider);
         self.expanded_providers.push(new_index);
         self.start_editing(new_index, window, cx);
-        self.save_config();
+        self.save_config(cx);
         cx.notify();
     }
 
@@ -174,22 +174,25 @@ impl LlmProvider {
 
                 // 检查是否为新创建的提供商
                 let is_new_provider = provider.id.is_empty()
-                    || self
-                        .llm_provider_manager
+                    || AppState::state(cx)
+                        .llm_provider
                         .get_provider(&provider.id)
                         .is_none();
 
                 if is_new_provider {
                     // 新建提供商 - 使用 add_provider
                     provider.id = uuid::Uuid::new_v4().to_string();
-                    match self.llm_provider_manager.add_provider(provider.clone()) {
+                    match AppState::state_mut(cx)
+                        .llm_provider
+                        .add_provider(provider.clone())
+                    {
                         Ok(id) => {
                             provider.id = id;
                             window.push_notification(
                                 format!("成功添加服务提供商 \"{}\"", provider.name),
                                 cx,
                             );
-                            self.save_config();
+                            self.save_config(cx);
                             self.refresh_providers(cx);
                         }
                         Err(e) => {
@@ -199,8 +202,8 @@ impl LlmProvider {
                     }
                 } else {
                     // 更新现有提供商 - 使用 update_provider
-                    match self
-                        .llm_provider_manager
+                    match AppState::state_mut(cx)
+                        .llm_provider
                         .update_provider(&provider.id, provider.clone())
                     {
                         Ok(_) => {
@@ -208,7 +211,7 @@ impl LlmProvider {
                                 format!("成功更新服务提供商 \"{}\"", provider.name),
                                 cx,
                             );
-                            self.save_config();
+                            self.save_config(cx);
                             self.refresh_providers(cx);
                         }
                         Err(e) => {
@@ -279,7 +282,10 @@ impl LlmProvider {
             let provider_id = provider.id.clone();
 
             // 使用 LlmProviderManager 删除提供商
-            match self.llm_provider_manager.delete_provider(&provider_id) {
+            match AppState::state_mut(cx)
+                .llm_provider
+                .delete_provider(&provider_id)
+            {
                 Ok(_) => {
                     // 从本地列表中删除
                     self.providers.remove(index);
@@ -301,9 +307,8 @@ impl LlmProvider {
                             self.editing_provider = Some(editing - 1);
                         }
                     }
-
                     // 保存配置并刷新
-                    self.save_config();
+                    self.save_config(cx);
                     window.push_notification(
                         format!("已成功删除服务提供商 \"{}\"", provider_name),
                         cx,
@@ -328,8 +333,8 @@ impl LlmProvider {
             let provider_id = provider.id.clone();
 
             // 使用 LlmProviderManager 切换启用状态
-            match self
-                .llm_provider_manager
+            match AppState::state_mut(cx)
+                .llm_provider
                 .toggle_provider(&provider_id, enabled)
             {
                 Ok(_) => {
@@ -341,7 +346,7 @@ impl LlmProvider {
                     }
 
                     // 保存配置
-                    self.save_config();
+                    self.save_config(cx);
                     cx.notify();
                 }
                 Err(e) => {
@@ -374,12 +379,12 @@ impl LlmProvider {
                 }
 
                 // 同步到 LlmProviderManager 并保存
-                match self
-                    .llm_provider_manager
+                match AppState::state_mut(cx)
+                    .llm_provider
                     .update_provider(&provider_id, provider_clone)
                 {
                     Ok(_) => {
-                        self.save_config();
+                        self.save_config(cx);
                         cx.notify();
                     }
                     Err(e) => {

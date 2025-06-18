@@ -1,4 +1,5 @@
 use super::todo_thread_edit::TodoThreadEdit;
+use crate::app::AppState;
 use crate::ui::views::todo_thread::TodoThreadChat;
 use crate::{models::todo_item::*, ui::WindowExt};
 use gpui::prelude::*;
@@ -12,7 +13,6 @@ use gpui_component::{
     tab::TabBar,
     *,
 };
-use std::time::Duration;
 
 actions!(
     list_story,
@@ -248,7 +248,6 @@ struct TodoListDelegate {
     query: String,
     loading: bool,
     eof: bool,
-    manager: TodoManager,
 }
 
 impl ListDelegate for TodoListDelegate {
@@ -262,11 +261,11 @@ impl ListDelegate for TodoListDelegate {
         &mut self,
         query: &str,
         _: &mut Window,
-        _: &mut Context<List<Self>>,
+        cx: &mut Context<List<Self>>,
     ) -> Task<()> {
         self.query = query.to_string();
-        self.matched_todos = self
-            .manager
+        self.matched_todos = AppState::state(cx)
+            .todo_manager
             .list_todos()
             .iter()
             .filter(|todo| todo.title.to_lowercase().contains(&query.to_lowercase()))
@@ -403,16 +402,13 @@ impl TodoList {
     }
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let manager = TodoManager::create_fake_data();
-
         let delegate = TodoListDelegate {
-            matched_todos: manager.list_todos(),
+            matched_todos: AppState::state(cx).todo_manager.list_todos(),
             selected_index: None,
             confirmed_index: None,
             query: "".to_string(),
             loading: false,
             eof: false,
-            manager,
         };
 
         let todo_list = cx.new(|cx| List::new(delegate, window, cx));
@@ -486,7 +482,7 @@ impl TodoList {
     fn set_todo_filter(&mut self, filter: TodoFilter, _: &mut Window, cx: &mut Context<Self>) {
         self.todo_filter = filter;
         self.todo_list.update(cx, |list, _cx| {
-            let todos = list.delegate_mut().manager.list_todos();
+            let todos = AppState::state(_cx).todo_manager.list_todos();
             list.delegate_mut().matched_todos = match filter {
                 TodoFilter::All => todos,
                 TodoFilter::Planned => todos
