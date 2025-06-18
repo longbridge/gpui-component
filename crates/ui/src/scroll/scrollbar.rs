@@ -326,7 +326,7 @@ impl Scrollbar {
         Self::new(view_id, state, ScrollbarAxis::Vertical, scroll_handle)
     }
 
-    /// Set a speical scroll size of the content area, default is None.
+    /// Set a special scroll size of the content area, default is None.
     ///
     /// Default will sync the `content_size` from `scroll_handle`.
     pub fn scroll_size(mut self, scroll_size: Size<Pixels>) -> Self {
