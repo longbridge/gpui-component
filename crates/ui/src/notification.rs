@@ -270,9 +270,9 @@ impl Render for Notification {
             .border_1()
             .border_color(cx.theme().border)
             .bg(cx.theme().popover)
-            .rounded(cx.theme().radius)
+            .rounded(cx.theme().radius * 1.5)
             .shadow_md()
-            .py_2()
+            .py_3p5()
             .px_4()
             .gap_3()
             .when_some(icon, |this, icon| {

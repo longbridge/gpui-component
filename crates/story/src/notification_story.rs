@@ -189,7 +189,7 @@ impl Render for NotificationStory {
                                 window.push_notification(
                                     Notification::new()
                                         .id::<ManualOpenNotification>()
-                                        .message("Click the Close Notification button to close.")
+                                        .message("You can close this notification by clicking the Close button.")
                                         .autohide(false),
                                     cx,
                                 );
