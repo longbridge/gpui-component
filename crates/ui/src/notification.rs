@@ -302,25 +302,21 @@ impl Render for Notification {
                     on_click(event, window, cx);
                 }))
             })
-            .when(!self.autohide, |this| {
-                this.child(
-                    h_flex()
-                        .absolute()
-                        .top_1()
-                        .right_1()
-                        .invisible()
-                        .group_hover("", |this| this.visible())
-                        .child(
-                            Button::new("close")
-                                .icon(IconName::Close)
-                                .ghost()
-                                .xsmall()
-                                .on_click(
-                                    cx.listener(|this, _, window, cx| this.dismiss(window, cx)),
-                                ),
-                        ),
-                )
-            })
+            .child(
+                h_flex()
+                    .absolute()
+                    .top_1()
+                    .right_1()
+                    .invisible()
+                    .group_hover("", |this| this.visible())
+                    .child(
+                        Button::new("close")
+                            .icon(IconName::Close)
+                            .ghost()
+                            .xsmall()
+                            .on_click(cx.listener(|this, _, window, cx| this.dismiss(window, cx))),
+                    ),
+            )
             .with_animation(
                 ElementId::NamedInteger("slide-down".into(), closing as u64),
                 Animation::new(Duration::from_secs_f64(0.15))
