@@ -67,20 +67,20 @@ pub struct TodoThreadChat {
     todoitem:Todo,
 }
 
+const WIDTH:Pixels=px(500.0);
+const HEIGHT:Pixels=px(650.0);
+const SIZE: gpui::Size<Pixels> = size(WIDTH, HEIGHT);
+
 impl TodoThreadChat {
     pub fn open(todo:Todo,
         cx: &mut App) {
             cx.activate(true);
-            let window_size = size(px(400.0), px(600.0));
-            let window_bounds = Bounds::centered(None, window_size, cx);
+            let window_bounds = Bounds::centered(None, SIZE, cx);
             let options = WindowOptions {
                 app_id: Some("x-todo-app".to_string()),
                 window_bounds: Some(WindowBounds::Windowed(window_bounds)),
                 titlebar: Some(TitleBar::title_bar_options()),
-                window_min_size: Some(gpui::Size {
-                    width: px(400.),
-                    height: px(600.),
-                }),
+                window_min_size: Some(SIZE),
                 kind: WindowKind::Normal,
                 #[cfg(target_os = "linux")]
                 window_background: gpui::WindowBackgroundAppearance::Transparent,
@@ -99,8 +99,13 @@ impl TodoThreadChat {
      fn new(todoitem:Todo,window: &mut Window, cx: &mut Context<Self>) -> Self {
         // 聊天输入框 - 多行支持
         let chat_input = cx.new(|cx| {
+           let placeholder = if cfg!(target_os = "macos") {
+                "输入消息与AI助手对话...，按Cmd+Enter发送，按ESC清除输入框"
+            }else{
+                "输入消息与AI助手对话...，按Ctrl+Enter发送，按ESC清除输入框"
+            };
             InputState::new(window, cx)
-                .placeholder("输入消息与AI助手对话...，按Ctrl+Enter发送，按ESC清除输入框")
+                .placeholder(placeholder)
                 .clean_on_escape()
                 .multi_line()
                 .auto_grow(2, 6)
@@ -187,23 +192,6 @@ impl TodoThreadChat {
                 self.todoitem.selected_models.remove(index);
             }
         }
-        // // 检查工具是否已被选中
-        // if let Some(index) = self.todoitem.selected_models.iter().position(|t| t.model_id == model.id) {
-        //     // 如果已选中，则移除
-        //     self.todoitem.selected_models.remove(index);
-        // } else {
-        //     // 如果未选中，则添加
-        //     if let Some((id,provider)) = AppState::state(cx).llm_provider.providers.iter().find(|(id,p)| p.models.iter().any(|t| t.id == model.id)) {
-        //         if let Some(model) = provider.models.iter().find(|t| t.id == model.id) {
-        //             self.todoitem.selected_models.push(crate::models::todo_item::SelectedModel {
-        //                 provider_id: provider.id.clone(),
-        //                 provider_name: provider.name.clone(),
-        //                 model_id: model.id.clone(),
-        //                 model_name: model.display_name.clone(),
-        //             });
-        //         }
-        //     }
-        // }
           cx.notify(); // 通知主界面更新
     }
 
@@ -222,23 +210,6 @@ impl TodoThreadChat {
                 self.todoitem.selected_tools.remove(index);
             }
         }
-        // // 检查工具是否已被选中
-        // if let Some(index) = self.todoitem.selected_tools.iter().position(|t| t.tool_name == tool.name) {
-        //     // 如果已选中，则移除
-        //     self.todoitem.selected_tools.remove(index);
-        // } else {
-        //     // 如果未选中，则添加
-        //     if let Some((id,provider)) = AppState::state(cx).mcp_provider.providers.iter().find(|(id,p)| p.tools.iter().any(|t| t.name == tool.name)) {
-        //         if let Some(tool) = provider.tools.iter().find(|t| t.name == tool.name) {
-        //             self.todoitem.selected_tools.push(crate::models::todo_item::SelectedTool {
-        //                 provider_id: provider.id.clone(),
-        //                 provider_name: provider.name.clone(),
-        //                 description: tool.description.clone(),
-        //                 tool_name: tool.name.clone(),
-        //             });
-        //         }
-        //     }
-        // }
           cx.notify(); // 通知主界面更新
     }
 
