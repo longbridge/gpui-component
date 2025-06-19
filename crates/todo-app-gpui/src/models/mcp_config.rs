@@ -245,8 +245,8 @@ const MCP_CONFIG_FILE: &str = "config/mcp_providers.yml";
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct McpProviderManager {
-    #[serde(flatten, default)]
-    pub providers: HashMap<String, McpProviderInfo>,
+    #[serde(default)]
+    pub providers: Vec<McpProviderInfo>,
 }
 
 impl McpProviderManager {
@@ -258,8 +258,8 @@ impl McpProviderManager {
         }
 
         match std::fs::read_to_string(config_path) {
-            Ok(content) => match serde_yaml::from_str::<Self>(&content) {
-                Ok(config) => config,
+            Ok(content) => match serde_yaml::from_str::<Vec<McpProviderInfo>>(&content) {
+                Ok(providers) => Self { providers },
                 Err(e) => {
                     eprintln!("Failed to parse MCP config: {}", e);
                     Self::default()
@@ -280,24 +280,34 @@ impl McpProviderManager {
             std::fs::create_dir_all(parent)?;
         }
 
-        let content = serde_yaml::to_string(self)?;
+        let content = serde_yaml::to_string(&self.providers)?;
         std::fs::write(config_path, content)?;
         Ok(())
     }
 
     /// 获取所有提供商列表
     pub fn list_providers(&self) -> Vec<McpProviderInfo> {
-        self.providers.values().cloned().collect()
+        self.providers.clone()
     }
 
     /// 根据ID查询提供商
     pub fn get_provider(&self, id: &str) -> Option<&McpProviderInfo> {
-        self.providers.get(id)
+        self.providers.iter().find(|p| p.id == id)
     }
 
     /// 根据名称查询提供商
     pub fn get_provider_by_name(&self, name: &str) -> Option<&McpProviderInfo> {
-        self.providers.values().find(|p| p.name == name)
+        self.providers.iter().find(|p| p.name == name)
+    }
+
+    /// 根据索引获取提供商
+    pub fn get_provider_by_index(&self, index: usize) -> Option<&McpProviderInfo> {
+        self.providers.get(index)
+    }
+
+    /// 根据ID查找提供商索引
+    pub fn find_provider_index(&self, id: &str) -> Option<usize> {
+        self.providers.iter().position(|p| p.id == id)
     }
 
     /// 添加新的提供商
@@ -310,15 +320,15 @@ impl McpProviderManager {
         }
 
         let id = provider.id.clone();
-        self.providers.insert(id.clone(), provider);
+        self.providers.push(provider);
         Ok(id)
     }
 
     /// 更新提供商
     pub fn update_provider(&mut self, id: &str, provider: McpProviderInfo) -> anyhow::Result<()> {
-        if !self.providers.contains_key(id) {
-            return Err(anyhow::anyhow!("Provider with id '{}' not found", id));
-        }
+        let index = self
+            .find_provider_index(id)
+            .ok_or_else(|| anyhow::anyhow!("Provider with id '{}' not found", id))?;
 
         // 检查名称冲突
         if let Some(existing) = self.get_provider_by_name(&provider.name) {
@@ -330,32 +340,80 @@ impl McpProviderManager {
             }
         }
 
-        self.providers.insert(id.to_string(), provider);
+        self.providers[index] = provider;
+        Ok(())
+    }
+
+    /// 根据索引更新提供商
+    pub fn update_provider_by_index(
+        &mut self,
+        index: usize,
+        provider: McpProviderInfo,
+    ) -> anyhow::Result<()> {
+        if index >= self.providers.len() {
+            return Err(anyhow::anyhow!("Provider index {} out of bounds", index));
+        }
+
+        let old_id = &self.providers[index].id;
+
+        // 检查名称冲突
+        if let Some(existing) = self.get_provider_by_name(&provider.name) {
+            if existing.id != *old_id {
+                return Err(anyhow::anyhow!(
+                    "Provider name '{}' already exists",
+                    provider.name
+                ));
+            }
+        }
+
+        self.providers[index] = provider;
         Ok(())
     }
 
     /// 删除提供商
     pub fn delete_provider(&mut self, id: &str) -> anyhow::Result<McpProviderInfo> {
-        self.providers
-            .remove(id)
-            .ok_or_else(|| anyhow::anyhow!("Provider with id '{}' not found", id))
+        let index = self
+            .find_provider_index(id)
+            .ok_or_else(|| anyhow::anyhow!("Provider with id '{}' not found", id))?;
+
+        Ok(self.providers.remove(index))
+    }
+
+    /// 根据索引删除提供商
+    pub fn delete_provider_by_index(&mut self, index: usize) -> anyhow::Result<McpProviderInfo> {
+        if index >= self.providers.len() {
+            return Err(anyhow::anyhow!("Provider index {} out of bounds", index));
+        }
+
+        Ok(self.providers.remove(index))
     }
 
     /// 启用/禁用提供商
     pub fn toggle_provider(&mut self, id: &str, enabled: bool) -> anyhow::Result<()> {
         let provider = self
             .providers
-            .get_mut(id)
+            .iter_mut()
+            .find(|p| p.id == id)
             .ok_or_else(|| anyhow::anyhow!("Provider with id '{}' not found", id))?;
 
         provider.enabled = enabled;
         Ok(())
     }
 
+    /// 根据索引启用/禁用提供商
+    pub fn toggle_provider_by_index(&mut self, index: usize, enabled: bool) -> anyhow::Result<()> {
+        if index >= self.providers.len() {
+            return Err(anyhow::anyhow!("Provider index {} out of bounds", index));
+        }
+
+        self.providers[index].enabled = enabled;
+        Ok(())
+    }
+
     /// 获取启用的提供商
     pub fn get_enabled_providers(&self) -> Vec<&McpProviderInfo> {
         self.providers
-            .values()
+            .iter()
             .filter(|provider| provider.enabled)
             .collect()
     }
@@ -373,11 +431,31 @@ impl McpProviderManager {
     /// 批量删除提供商
     pub fn batch_delete(&mut self, ids: &[String]) -> Vec<McpProviderInfo> {
         let mut deleted = Vec::new();
+
+        // 从后往前删除，避免索引变化
         for id in ids {
-            if let Some(provider) = self.providers.remove(id) {
-                deleted.push(provider);
+            if let Some(index) = self.find_provider_index(id) {
+                deleted.push(self.providers.remove(index));
             }
         }
+
+        deleted
+    }
+
+    /// 根据索引批量删除提供商
+    pub fn batch_delete_by_indices(&mut self, mut indices: Vec<usize>) -> Vec<McpProviderInfo> {
+        let mut deleted = Vec::new();
+
+        // 从大到小排序索引，从后往前删除
+        indices.sort_by(|a, b| b.cmp(a));
+
+        for index in indices {
+            if index < self.providers.len() {
+                deleted.push(self.providers.remove(index));
+            }
+        }
+
+        deleted.reverse(); // 恢复原始顺序
         deleted
     }
 
@@ -385,11 +463,35 @@ impl McpProviderManager {
     pub fn search_providers(&self, query: &str) -> Vec<&McpProviderInfo> {
         let query_lower = query.to_lowercase();
         self.providers
-            .values()
+            .iter()
             .filter(|provider| {
                 provider.name.to_lowercase().contains(&query_lower)
                     || provider.command.to_lowercase().contains(&query_lower)
             })
             .collect()
+    }
+
+    /// 移动提供商位置
+    pub fn move_provider(&mut self, from_index: usize, to_index: usize) -> anyhow::Result<()> {
+        if from_index >= self.providers.len() || to_index >= self.providers.len() {
+            return Err(anyhow::anyhow!("Index out of bounds"));
+        }
+
+        if from_index != to_index {
+            let provider = self.providers.remove(from_index);
+            self.providers.insert(to_index, provider);
+        }
+
+        Ok(())
+    }
+
+    /// 交换两个提供商的位置
+    pub fn swap_providers(&mut self, index1: usize, index2: usize) -> anyhow::Result<()> {
+        if index1 >= self.providers.len() || index2 >= self.providers.len() {
+            return Err(anyhow::anyhow!("Index out of bounds"));
+        }
+
+        self.providers.swap(index1, index2);
+        Ok(())
     }
 }

@@ -108,7 +108,7 @@ impl McpProvider {
             AppState::state_mut(cx)
                 .mcp_provider
                 .providers
-                .insert(provider.id.clone(), provider.clone());
+                .push(provider.clone());
         }
 
         // 然后保存到文件

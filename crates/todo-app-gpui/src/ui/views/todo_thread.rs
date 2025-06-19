@@ -175,16 +175,12 @@ impl TodoThreadChat {
     fn toggle_model_selection(&mut self,checked:bool, model:&ModelInfo,provider:&LlmProviderInfo, cx: &mut Context<Self>) {
         if checked {
             // 如果选中，则添加
-            if let Some((id,provider)) = AppState::state(cx).llm_provider.providers.iter().find(|(id,p)| p.models.iter().any(|t| t.id == model.id)) {
-                if let Some(model) = provider.models.iter().find(|t| t.id == model.id) {
-                    self.todoitem.selected_models.push(crate::models::todo_item::SelectedModel {
+           self.todoitem.selected_models.push(crate::models::todo_item::SelectedModel {
                         provider_id: provider.id.clone(),
                         provider_name: provider.name.clone(),
                         model_id: model.id.clone(),
                         model_name: model.display_name.clone(),
                     });
-                }
-            }
         } else {
             // 如果取消选中，则移除
             if let Some(index) = self.todoitem.selected_models.iter().position(|t| t.model_id == model.id && t.provider_id == provider.id) {
@@ -214,16 +210,12 @@ impl TodoThreadChat {
     fn toggle_tool_selection(&mut self,checked:bool, tool:&McpTool,provider:&McpProviderInfo, cx: &mut Context<Self>) {
         if checked {
             // 如果选中，则添加
-            if let Some((id,provider)) = AppState::state(cx).mcp_provider.providers.iter().find(|(id,p)| p.tools.iter().any(|t| t.name == tool.name)) {
-                if let Some(tool) = provider.tools.iter().find(|t| t.name == tool.name) {
-                    self.todoitem.selected_tools.push(crate::models::todo_item::SelectedTool {
-                        provider_id: provider.id.clone(),
-                        provider_name: provider.name.clone(),
-                        description: tool.description.clone(),
-                        tool_name: tool.name.clone(),
-                    });
-                }
-            }
+            self.todoitem.selected_tools.push(crate::models::todo_item::SelectedTool {
+                provider_id: provider.id.clone(),
+                provider_name: provider.name.clone(),
+                description: tool.description.clone(),
+                tool_name: tool.name.clone(),
+            });
         } else {
             // 如果取消选中，则移除
             if let Some(index) = self.todoitem.selected_tools.iter().position(|t| t.tool_name == tool.name && t.provider_id == provider.id) {
@@ -273,7 +265,7 @@ impl TodoThreadChat {
                     }
                 });
 
-            for (provider_index, (id,provider)) in providers.iter().enumerate() {
+            for (provider_index, provider) in providers.iter().enumerate() {
                 let provider_name = provider.name.clone();
                 let provider_models = provider.models.clone();
                 
@@ -457,7 +449,7 @@ impl TodoThreadChat {
                     }
                 });
 
-            for (provider_index, (id,provider)) in providers.iter().enumerate() {
+            for (provider_index, provider) in providers.iter().enumerate() {
                 let provider_name = provider.name.clone();
                 let provider_tools = provider.tools.clone();
                 

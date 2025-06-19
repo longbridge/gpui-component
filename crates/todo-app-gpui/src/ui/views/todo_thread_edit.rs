@@ -367,7 +367,7 @@ impl TodoThreadEdit {
                     }
                 });
 
-            for (provider_index, (_id,provider)) in providers.into_iter().enumerate() {
+            for (provider_index, provider) in providers.into_iter().enumerate() {
                 let provider_name = provider.name.clone();
                 let provider_models = provider.models.clone();
                 
@@ -568,7 +568,7 @@ impl TodoThreadEdit {
                     }
                 });
 
-            for (provider_index, (_id,provider)) in providers.into_iter().enumerate() {
+            for (provider_index, provider) in providers.into_iter().enumerate() {
                 let provider_name = provider.name.clone();
                 let provider_tools = provider.tools.clone();
                 
