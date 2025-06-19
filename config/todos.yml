@@ -1,0 +1,51 @@
+- id: 85cf8505-f89f-436f-be9e-a98bcc0dcff4
+  title: ''
+  description: ''
+  status: Todo
+  selected_models:
+  - provider_id: shouqianba-001
+    model_id: gpt-4o-mini-001
+    model_name: gpt-4o-mini
+    provider_name: 收钱吧
+  - provider_id: shouqianba-001
+    model_id: gpt-4o-001
+    model_name: gpt-4o
+    provider_name: 收钱吧
+  - provider_id: openai-001
+    model_id: gpt-4o-mini-official-001
+    model_name: gpt-4o-mini
+    provider_name: OpenAI
+  - provider_id: openai-001
+    model_id: gpt-4o-official-001
+    model_name: gpt-4o
+    provider_name: OpenAI
+  selected_tools:
+  - provider_id: sqlite-001
+    tool_name: execute_query
+    provider_name: SQLite数据库服务器
+    description: 执行SQL查询
+  - provider_id: sqlite-001
+    tool_name: get_schema
+    provider_name: SQLite数据库服务器
+    description: 获取数据库结构
+  - provider_id: fs-001
+    tool_name: read_file
+    provider_name: 文件系统服务器
+    description: 读取指定文件的内容
+  - provider_id: fs-001
+    tool_name: write_file
+    provider_name: 文件系统服务器
+    description: 写入内容到指定文件
+  files: []
+  recurring_enabled: false
+  recurring_pattern: null
+  auto_execute: false
+  enable_notifications: true
+  push_to_feishu: false
+  execution_logs: []
+  last_execution_result: null
+  created_at: 1750316620
+  updated_at: 1750316620
+  due_date: null
+  reminder_date: null
+  completed_at: null

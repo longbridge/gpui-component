@@ -99,7 +99,7 @@ impl AppState {
             profile_manager: ProfileManager::load(),
             llm_provider: LlmProviderManager::load(),
             mcp_provider: McpProviderManager::load(),
-            todo_manager: TodoManager::create_fake_data(),
+            todo_manager: TodoManager::load(),
         };
         cx.set_global::<AppState>(state);
     }

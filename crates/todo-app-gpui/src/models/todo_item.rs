@@ -375,7 +375,7 @@ const TODO_CONFIG_FILE: &str = "config/todos.yml";
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TodoManager {
-    #[serde(flatten, default)]
+    #[serde(default)]
     pub todos: Vec<Todo>,
 }
 
@@ -388,8 +388,8 @@ impl TodoManager {
         }
 
         match std::fs::read_to_string(config_path) {
-            Ok(content) => match serde_yaml::from_str::<Self>(&content) {
-                Ok(config) => config,
+            Ok(content) => match serde_yaml::from_str::<Vec<Todo>>(&content) {
+                Ok(todos) => Self { todos },
                 Err(e) => {
                     eprintln!("Failed to parse Todo config: {}", e);
                     Self::default()
@@ -410,7 +410,7 @@ impl TodoManager {
             std::fs::create_dir_all(parent)?;
         }
 
-        let content = serde_yaml::to_string(self)?;
+        let content = serde_yaml::to_string(&self.todos)?;
         std::fs::write(config_path, content)?;
         Ok(())
     }
@@ -456,29 +456,29 @@ impl TodoManager {
     }
 
     /// 添加新的Todo
-    pub fn add_todo(&mut self, todo: Todo) -> anyhow::Result<()> {
+    pub fn add_todo(&mut self, todo: Todo) -> &mut Self {
         self.todos.push(todo);
-        Ok(())
+        self
     }
 
     /// 更新Todo
-    pub fn update_todo(&mut self, id: &str, mut todo: Todo) -> anyhow::Result<()> {
+    pub fn update_todo(&mut self, id: &str, mut todo: Todo) -> anyhow::Result<&mut Self> {
         if let Some(position) = self.todos.iter().position(|t| t.id == id) {
             todo.updated_at = Utc::now();
             self.todos[position] = todo;
         } else {
             return Err(anyhow::anyhow!("Todo with id '{}' not found", id));
         }
-        Ok(())
+        Ok(self)
     }
 
     /// 删除Todo
-    pub fn delete_todo(&mut self, id: &str) -> anyhow::Result<Option<Todo>> {
+    pub fn delete_todo(&mut self, id: &str) -> Option<Todo> {
         if let Some(position) = self.todos.iter().position(|t| t.id == id) {
             let todo = self.todos.remove(position);
-            return Ok(Some(todo));
+            return Some(todo);
         }
-        Ok(None)
+        None
     }
 
     /// 批量删除Todo

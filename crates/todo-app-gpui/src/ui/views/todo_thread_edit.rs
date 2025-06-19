@@ -2,16 +2,7 @@ use chrono::{ Utc};
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::{
-    accordion::Accordion,
-    button::{Button, ButtonVariant, ButtonVariants as _},
-    checkbox::Checkbox,
-    date_picker::{DatePicker, DatePickerEvent, DatePickerState, DateRangePreset},
-    dropdown::{Dropdown,  DropdownState},
-    input::{InputEvent, InputState, TextInput},
-    label::Label,
-    switch::Switch,
-    tooltip::Tooltip,
-    *,
+    accordion::Accordion, button::{Button, ButtonVariant, ButtonVariants as _}, checkbox::Checkbox, date_picker::{DatePicker, DatePickerEvent, DatePickerState, DateRangePreset}, dropdown::{Dropdown,  DropdownState}, input::{InputEvent, InputState, TextInput}, label::Label, notification::NotificationType, switch::Switch, tooltip::Tooltip, *
 };
 use crate::{app::AppState, models::provider_config::LlmProviderInfo, ui::AppExt};
 use crate::{models::{mcp_config::{McpProviderInfo, McpTool}, provider_config::ModelInfo}};
@@ -49,10 +40,24 @@ fn tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
     }
 
     fn save(&mut self, _: &Save, _window: &mut Window, cx: &mut Context<Self>) {
-        let selected_models = self.todoitem.selected_models.clone();
-        let selected_tools = self.todoitem.selected_tools.clone(); // 改为获取选中的工具
-
-        
+        match AppState::state_mut(cx)
+            .todo_manager
+            .add_todo(self.todoitem.clone())
+            .save()
+        {
+            Ok(_) => {
+                _window.push_notification((NotificationType::Success, "Todo保存成功"), cx);
+            }
+            Err(err) => {
+                _window.push_notification(
+                    (
+                        NotificationType::Error,
+                        SharedString::new(format!("Todo保存失败-{}", err)),
+                    ),
+                    cx,
+                );
+            }
+        }
         println!("保存Todo: {:?}", self.todoitem);
         cx.notify();
     }
@@ -263,15 +268,17 @@ impl TodoThreadEdit {
                 DatePickerEvent::Change(_) => {
                     cx.notify();
                 }
-            }),cx.on_window_closed(move |cx| {
-            parent
-                .update(cx, |_, window, _cx| {
-                    window.activate_window();
-                    #[cfg(target_os = "windows")]
-                    window.enable_window(true);
-                })
-                .ok();
-        })
+            }),
+            cx.on_window_closed(move |cx| {
+                parent
+                    .update(cx, |_, window, cx| {
+                        window.activate_window();
+                       // cx.notify();
+                        #[cfg(target_os = "windows")]
+                        window.enable_window(true);
+                    })
+                    .ok();
+            })
         ];
 
         Self {
