@@ -4,11 +4,12 @@ use gpui::*;
 use gpui_component::{
     accordion::Accordion, button::{Button, ButtonVariant, ButtonVariants as _}, checkbox::Checkbox, date_picker::{DatePicker, DatePickerEvent, DatePickerState, DateRangePreset}, dropdown::{Dropdown,  DropdownState}, input::{InputEvent, InputState, TextInput}, label::Label, notification::NotificationType, switch::Switch, tooltip::Tooltip, *
 };
-use crate::{app::AppState, models::provider_config::LlmProviderInfo, ui::AppExt};
+use crate::{app::AppState, models::provider_config::LlmProviderInfo};
 use crate::{models::{mcp_config::{McpProviderInfo, McpTool}, provider_config::ModelInfo}};
 use crate::models::todo_item::*;
+use crate::app::AppExt;
 #[cfg(target_os = "windows")]
-use crate::ui::WindowExt;
+use crate::app::WindowExt;
 
 actions!(todo_thread, [Tab, TabPrev, Save, Cancel, Delete]);
 
@@ -39,26 +40,29 @@ fn tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
         self.cycle_focus(false, window, cx);
     }
 
-    fn save(&mut self, _: &Save, _window: &mut Window, cx: &mut Context<Self>) {
+    fn save(&mut self, save: &Save, _window: &mut Window, cx: &mut Context<Self>) {
+        self.todoitem.description = self.description_input.read(cx).value().to_string();
         match AppState::state_mut(cx)
             .todo_manager
-            .add_todo(self.todoitem.clone())
+            .update_todo(self.todoitem.clone())
             .save()
         {
             Ok(_) => {
-                _window.push_notification((NotificationType::Success, "Todo保存成功"), cx);
+                // TODO: 处理保存成功的情况
+                // _window.push_notification((NotificationType::Success, "Todo保存成功"), cx);
+                cx.dispatch_global_action(save.boxed_clone());
             }
             Err(err) => {
-                _window.push_notification(
-                    (
-                        NotificationType::Error,
-                        SharedString::new(format!("Todo保存失败-{}", err)),
-                    ),
-                    cx,
-                );
+                // TODO: 处理保存失败的情况
+                // _window.push_notification(
+                //     (
+                //         NotificationType::Error,
+                //         SharedString::new(format!("Todo保存失败-{}", err)),
+                //     ),
+                //     cx,
+                // );
             }
         }
-        println!("保存Todo: {:?}", self.todoitem);
         cx.notify();
     }
 
@@ -86,7 +90,7 @@ fn tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
     ) {
         match event {
             InputEvent::PressEnter { .. } => {
-                self.save(&Save, window, cx);
+                window.dispatch_action(Box::new(Save), cx);
             }
             _ => {}
         }
@@ -171,11 +175,6 @@ fn tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
         }
         cx.notify(); // 通知主界面更新
     }
-
-    fn uploaded_files(&self) -> Vec<TodoFile> {
-        // 返回当前上传的文件列表
-        vec![] // 这里可以根据实际情况返回已上传的文件
-    }
 }
 
 const WIDTH:Pixels=px(500.0);
@@ -248,7 +247,17 @@ impl TodoThreadEdit {
             state.set_value(todo.description.clone(), window, cx);
             state
         });
-
+        window.on_window_should_close(cx, move |window,cx|{
+            window.clear_notifications(cx);
+            parent
+                    .update(cx, |_, window, cx| {
+                        #[cfg(target_os = "windows")]
+                        window.enable_window(true);
+                        window.activate_window();
+                    })
+                    .ok();
+                true
+        });
         // 时间选择器
         let due_date_picker = cx.new(|cx| DatePickerState::new(window, cx));
         let reminder_date_picker = cx.new(|cx| DatePickerState::new(window, cx));
@@ -256,7 +265,6 @@ impl TodoThreadEdit {
         let recurring_options = vec!["每日".into(), "每周".into(), "每月".into(), "每年".into()];
         let recurring_dropdown =
             cx.new(|cx| DropdownState::new(recurring_options, Some(1), window, cx));
-
         let _subscriptions = vec![
             cx.subscribe_in(&description_input, window, Self::on_input_event),
             cx.subscribe(&due_date_picker, |_, _, ev, cx| match ev {
@@ -269,16 +277,6 @@ impl TodoThreadEdit {
                     cx.notify();
                 }
             }),
-            cx.on_window_closed(move |cx| {
-                parent
-                    .update(cx, |_, window, cx| {
-                        window.activate_window();
-                       // cx.notify();
-                        #[cfg(target_os = "windows")]
-                        window.enable_window(true);
-                    })
-                    .ok();
-            })
         ];
 
         Self {
@@ -1145,7 +1143,7 @@ impl Render for TodoThreadEdit {
                             .label("保存任务")
                             .icon(IconName::Check)
                             .on_click(
-                                cx.listener(|this, _, window, cx| this.save(&Save, window, cx)),
+                                cx.listener(|this, _, window, cx| window.dispatch_action(Box::new(Save), cx)),
                             ),
                     ),
                 ),

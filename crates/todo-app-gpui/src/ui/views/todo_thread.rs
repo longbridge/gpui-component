@@ -4,9 +4,9 @@ use gpui::*;
 use gpui_component::{
     accordion::Accordion, button::{Button, ButtonVariant, ButtonVariants as _}, checkbox::Checkbox, h_flex, input::{InputEvent, InputState, TextInput}, label::Label, scroll::{ Scrollbar, ScrollbarState}, tooltip::Tooltip, Size, *
 };
-use crate::{app::AppState, models::{mcp_config::{McpProviderInfo, McpTool}, provider_config::{LlmProviderInfo, ModelInfo}}, ui::components::ViewKit};
+use crate::{app::AppState, models::{mcp_config::{McpProviderInfo, McpTool}, provider_config::{LlmProviderInfo, ModelInfo}}};
 use crate::models::todo_item::*;
-use crate::ui::AppExt;
+use crate::app::AppExt;
 
 actions!(todo_thread, [Tab, TabPrev, SendMessage]);
 

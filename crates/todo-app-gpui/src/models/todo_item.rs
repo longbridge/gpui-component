@@ -455,21 +455,15 @@ impl TodoManager {
             .collect()
     }
 
-    /// 添加新的Todo
-    pub fn add_todo(&mut self, todo: Todo) -> &mut Self {
-        self.todos.push(todo);
-        self
-    }
-
     /// 更新Todo
-    pub fn update_todo(&mut self, id: &str, mut todo: Todo) -> anyhow::Result<&mut Self> {
-        if let Some(position) = self.todos.iter().position(|t| t.id == id) {
+    pub fn update_todo(&mut self, mut todo: Todo) -> &mut Self {
+        if let Some(position) = self.todos.iter().position(|t| t.id == todo.id) {
             todo.updated_at = Utc::now();
             self.todos[position] = todo;
         } else {
-            return Err(anyhow::anyhow!("Todo with id '{}' not found", id));
+            self.todos.push(todo);
         }
-        Ok(self)
+        self
     }
 
     /// 删除Todo

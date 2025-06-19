@@ -1,9 +1,7 @@
 use super::todo_thread_edit::TodoThreadEdit;
 use crate::app::AppState;
-use crate::models::todo_item::*;
 use crate::ui::views::todo_thread::TodoThreadChat;
-#[cfg(target_os = "windows")]
-use crate::ui::WindowExt;
+use crate::{models::todo_item::*, ui::views::todo_thread_edit::Save as ToddSaved};
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::{
@@ -414,21 +412,26 @@ impl TodoList {
         };
 
         let todo_list = cx.new(|cx| List::new(delegate, window, cx));
-        let _subscriptions = vec![cx.subscribe(
-            &todo_list,
-            |this, _todo_list, ev: &ListEvent, cx| match ev {
-                ListEvent::Select(ix) => {
-                    println!("List Selected: {:?}", ix);
-                }
-                ListEvent::Confirm(ix) => {
-                    println!("List Confirmed: {:?}", ix);
-                    this.selected_todo(cx);
-                }
-                ListEvent::Cancel => {
-                    println!("List Cancelled");
-                }
-            },
-        )];
+        let _subscriptions = vec![
+            cx.subscribe(
+                &todo_list,
+                |this, _todo_list, ev: &ListEvent, cx| match ev {
+                    ListEvent::Select(ix) => {
+                        println!("List Selected: {:?}", ix);
+                    }
+                    ListEvent::Confirm(ix) => {
+                        println!("List Confirmed: {:?}", ix);
+                        this.selected_todo(cx);
+                    }
+                    ListEvent::Cancel => {
+                        println!("List Cancelled");
+                    }
+                },
+            ),
+            // cx.subscribe(&todo_list, |this, _todo_list, ev: &TodoEvent, cx| {
+
+            // }),
+        ];
 
         // Spawn a background to random refresh the list
         // cx.spawn(async move |this, cx| {
@@ -479,6 +482,19 @@ impl TodoList {
         if let Some(todo) = self.selected_todo.clone() {
             TodoThreadEdit::edit(todo, window, cx);
         }
+    }
+
+    fn delete_todo(&mut self, _: &Delete, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(todo) = self.selected_todo.clone() {
+            AppState::state_mut(cx).todo_manager.delete_todo(&todo.id);
+            self.set_active_tab(self.active_tab_ix, window, cx);
+        }
+    }
+
+    fn todo_updated(&mut self, _: &ToddSaved, window: &mut Window, cx: &mut Context<Self>) {
+        println!("Todo updated");
+        self.set_active_tab(self.active_tab_ix, window, cx);
+        //cx.notify();
     }
 
     fn set_todo_filter(&mut self, filter: TodoFilter, _: &mut Window, cx: &mut Context<Self>) {
@@ -547,6 +563,8 @@ impl Render for TodoList {
             .on_action(cx.listener(Self::clone))
             .on_action(cx.listener(Self::open_todo))
             .on_action(cx.listener(Self::edit_todo))
+            .on_action(cx.listener(Self::todo_updated))
+            .on_action(cx.listener(Self::delete_todo))
             .size_full()
             .gap_4()
             .child(

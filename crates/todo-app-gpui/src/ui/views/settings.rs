@@ -2,10 +2,10 @@ use super::{
     introduction::Introduction, llm_provider::LlmProvider, mcp_provider::McpProvider,
     profile::Profile, user_guide::UserGuide,
 };
+use crate::app::AppExt;
 use crate::app::AppState;
-use crate::ui::AppExt;
 #[cfg(target_os = "windows")]
-use crate::ui::WindowExt;
+use crate::app::WindowExt;
 use crate::{
     app::{Quit, ToggleSearch},
     ui::components::container::Container,

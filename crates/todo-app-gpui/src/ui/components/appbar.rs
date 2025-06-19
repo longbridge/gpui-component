@@ -1,16 +1,13 @@
 use super::titlebar::TitleBar;
 use crate::ui::views::settings::Settings;
-use crate::ui::AppExt;
 use crate::ui::{SelectFont, SelectLocale, SelectRadius, SelectScrollbarShow};
 use gpui::*;
 use gpui_component::{
     badge::Badge,
     button::{Button, ButtonVariants as _},
-    h_flex, locale,
     popup_menu::PopupMenuExt as _,
     scroll::ScrollbarShow,
-    set_locale, ActiveTheme, ContextModal as _, Icon, IconName, InteractiveElementExt as _,
-    Sizable as _, Sizable as _, Theme, *,
+    *,
 };
 use std::rc::Rc;
 use std::sync::Arc;
