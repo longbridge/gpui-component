@@ -40,5 +40,5 @@ gtk = { version = "0.18" }
 lto = true
 panic = "abort"
 
-[lints]
-workspace = true
+# [lints]
+# workspace = true

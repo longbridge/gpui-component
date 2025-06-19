@@ -78,5 +78,5 @@ tree-sitter-embedded-template = "0.23.0"
 [dev-dependencies]
 indoc = "2"
 
-[lints]
-workspace = true
+# [lints]
+# workspace = true
