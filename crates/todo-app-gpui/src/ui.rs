@@ -271,7 +271,9 @@ impl AppExt for App {
 
 #[cfg(target_os = "windows")]
 pub trait WindowExt {
-    fn hwnd(&self) -> Option<HWND>;
+    fn hwnd(&self) -> Option<HWND> {
+        None
+    }
 
     fn style(&self) -> i32 {
         use windows::Win32::UI::WindowsAndMessaging::{GetWindowLongW, GWL_STYLE};

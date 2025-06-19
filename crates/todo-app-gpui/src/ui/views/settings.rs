@@ -3,7 +3,9 @@ use super::{
     profile::Profile, user_guide::UserGuide,
 };
 use crate::app::AppState;
-use crate::ui::{AppExt, WindowExt};
+use crate::ui::AppExt;
+#[cfg(target_os = "windows")]
+use crate::ui::WindowExt;
 use crate::{
     app::{Quit, ToggleSearch},
     ui::components::container::Container,
@@ -70,6 +72,7 @@ impl Settings {
         cx.create_normal_window("xTo-Do 设置", options, move |window, cx| {
             cx.new(|cx| Self::new(&init_view, parent_handle, window, cx))
         });
+        #[cfg(target_os = "windows")]
         parent.enable_window(false);
     }
 
@@ -84,6 +87,7 @@ impl Settings {
             parent
                 .update(cx, |_, window, _cx| {
                     window.activate_window();
+                    #[cfg(target_os = "windows")]
                     window.enable_window(true);
                 })
                 .ok();

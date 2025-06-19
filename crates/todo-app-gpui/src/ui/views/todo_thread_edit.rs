@@ -13,9 +13,11 @@ use gpui_component::{
     tooltip::Tooltip,
     *,
 };
-use crate::{app::AppState, models::provider_config::LlmProviderInfo, ui::{AppExt, WindowExt}};
+use crate::{app::AppState, models::provider_config::LlmProviderInfo, ui::AppExt};
 use crate::{models::{mcp_config::{McpProviderInfo, McpTool}, provider_config::ModelInfo}};
 use crate::models::todo_item::*;
+#[cfg(target_os = "windows")]
+use crate::ui::WindowExt;
 
 actions!(todo_thread, [Tab, TabPrev, Save, Cancel, Delete]);
 
@@ -236,6 +238,7 @@ impl TodoThreadEdit {
                 options,
                 move |window, cx| cx.new(|cx| Self::new(todo,parent_handle,window, cx)),
             );
+            #[cfg(target_os = "windows")]
             parent.enable_window(false);
     }
 
@@ -257,13 +260,14 @@ impl TodoThreadEdit {
                 window_decorations: Some(gpui::WindowDecorations::Client),
                 ..Default::default()
             };
-            parent.enable_window(false);
-            let parent = parent.window_handle();
+            let parent_handle = parent.window_handle();
             cx.create_normal_window(
                 "xTodo-创建",
                 options,
-                move |window, cx|  cx.new(|cx| Self::new(Todo::default(),parent,window, cx)),
+                move |window, cx|  cx.new(|cx| Self::new(Todo::default(),parent_handle,window, cx)),
             );
+            #[cfg(target_os = "windows")]
+            parent.enable_window(false);
     }
     
     fn new(todo:Todo,parent:AnyWindowHandle,window: &mut Window, cx: &mut Context<Self>) -> Self {
@@ -298,6 +302,7 @@ impl TodoThreadEdit {
             parent
                 .update(cx, |_, window, _cx| {
                     window.activate_window();
+                    #[cfg(target_os = "windows")]
                     window.enable_window(true);
                 })
                 .ok();

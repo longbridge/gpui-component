@@ -1,7 +1,9 @@
 use super::todo_thread_edit::TodoThreadEdit;
 use crate::app::AppState;
+use crate::models::todo_item::*;
 use crate::ui::views::todo_thread::TodoThreadChat;
-use crate::{models::todo_item::*, ui::WindowExt};
+#[cfg(target_os = "windows")]
+use crate::ui::WindowExt;
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::{
