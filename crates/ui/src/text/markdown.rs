@@ -143,13 +143,14 @@ impl Element for MarkdownElement {
         &mut self,
         _: Option<&gpui::GlobalElementId>,
         _: Option<&gpui::InspectorElementId>,
-        _: gpui::Bounds<gpui::Pixels>,
+        _bounds: gpui::Bounds<gpui::Pixels>,
         request_layout: &mut Self::RequestLayoutState,
         _: &mut Self::PrepaintState,
         window: &mut Window,
         cx: &mut gpui::App,
     ) {
         request_layout.paint(window, cx);
+       // self.paint_selection(bounds, &request_layout.text, window, cx);
     }
 }
 

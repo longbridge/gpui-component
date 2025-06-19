@@ -91,7 +91,7 @@ pub trait ListDelegate: Sized + 'static {
     ) -> Option<AnyElement> {
         None
     }
-    fn context_menu(&self, row_ix: usize, menu: PopupMenu, window: &Window, cx: &App) -> PopupMenu {
+    fn context_menu(&self, row_ix: Option<usize>, menu: PopupMenu, window: &Window, cx: &App) -> PopupMenu {
         menu
     }
 
@@ -636,13 +636,28 @@ where
                         let view = view.clone();
                         move |this, window: &mut Window, cx: &mut Context<PopupMenu>| {
                             println!("Context menu for list {:?}",view.read(cx).right_clicked_index);
-                           let menu= if let Some(row_ix) = view.read(cx).right_clicked_index {
+                            let right_clicked_index = view.read(cx).right_clicked_index;
+                            let menu= if let Some(idx)=right_clicked_index {
+                                view.update(cx, |this,cx|{
+                                    this.right_clicked_index=None;
+                                    this.select_item(idx, window, cx);
+                                });
+                                 view.read(cx)
+                                    .delegate
+                                    .context_menu(Some(idx), this, window, cx)
+                            }else{
                                 view.read(cx)
                                     .delegate
-                                    .context_menu(row_ix, this, window, cx)
-                            } else {
-                                this
+                                    .context_menu(None, this, window, cx)
                             };
+                           
+                        //    let menu= if let Some(row_ix) = view.read(cx).right_clicked_index {
+                        //         view.read(cx)
+                        //             .delegate
+                        //             .context_menu(row_ix, this, window, cx)
+                        //     } else {
+                        //         this
+                        //     };
                             cx.notify();
                             menu
                         }

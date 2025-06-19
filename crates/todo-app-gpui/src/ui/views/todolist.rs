@@ -18,6 +18,7 @@ actions!(
     list_story,
     [
         SelectedCompany,
+        New,
         Open,
         Edit,
         Completed,
@@ -293,7 +294,7 @@ impl ListDelegate for TodoListDelegate {
     fn set_selected_index(
         &mut self,
         ix: Option<usize>,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<List<Self>>,
     ) {
         println!("Selected index: {:?}", ix);
@@ -317,26 +318,30 @@ impl ListDelegate for TodoListDelegate {
 
     fn context_menu(
         &self,
-        row_ix: usize,
+        row_ix: Option<usize>,
         menu: PopupMenu,
         _window: &Window,
-        _cx: &App,
+        cx: &App,
     ) -> PopupMenu {
-        println!("Context menu for row: {}", row_ix);
-        // self.selected_index = Some(row_ix);
+        //     println!("Context menu for row: {}", row_ix);
+        //    self.selected_index = Some(row_ix);
         menu.external_link_icon(true)
             //  .link("About", "https://github.com/longbridge/gpui-component")
-            .menu("打开", Box::new(Open))
-            .menu("编辑", Box::new(Edit))
-            .separator()
-            .menu_with_icon("克隆", IconName::Copy, Box::new(Clone))
-            .menu_with_icon("暂停", IconName::Pause, Box::new(Pause))
-            .menu_with_icon("完成", IconName::Done, Box::new(Completed))
-            .menu_with_icon("关注", IconName::Star, Box::new(Completed))
-            // .separator()
-            // .menu_with_check("删除", true, Box::new(ToggleCheck))
-            .separator()
-            .menu_with_icon("删除", IconName::Trash, Box::new(Delete))
+            .when_some(row_ix, |menu, row_idx| {
+                menu.menu("新建", Box::new(New))
+                    .menu("打开", Box::new(Open))
+                    .menu("编辑", Box::new(Edit))
+                    .separator()
+                    .menu_with_icon("克隆", IconName::Copy, Box::new(Clone))
+                    .menu_with_icon("暂停", IconName::Pause, Box::new(Pause))
+                    .menu_with_icon("完成", IconName::Done, Box::new(Completed))
+                    .menu_with_icon("关注", IconName::Star, Box::new(Completed))
+                    // .separator()
+                    // .menu_with_check("删除", true, Box::new(ToggleCheck))
+                    .separator()
+                    .menu_with_icon("删除", IconName::Trash, Box::new(Delete))
+            })
+            .when_none(&row_ix, |menu| menu.menu("新建", Box::new(New)))
     }
 
     fn loading(&self, _: &App) -> bool {
@@ -419,6 +424,7 @@ impl TodoList {
                 |this, _todo_list, ev: &ListEvent, cx| match ev {
                     ListEvent::Select(ix) => {
                         println!("List Selected: {:?}", ix);
+                         this.selected_todo(cx);
                     }
                     ListEvent::Confirm(ix) => {
                         println!("List Confirmed: {:?}", ix);
@@ -472,7 +478,9 @@ impl TodoList {
     fn clone(&mut self, _: &Clone, _: &mut Window, cx: &mut Context<Self>) {
         println!("Clone action triggered");
     }
-
+    fn new_todo(&mut self, _: &New, window: &mut Window, cx: &mut Context<Self>) {
+        TodoThreadEdit::add(window, cx);
+    }
     fn open_todo(&mut self, _: &Open, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(todo) = self.selected_todo.clone() {
             TodoThreadChat::open(todo, cx);
@@ -562,6 +570,7 @@ impl Render for TodoList {
             .track_focus(&self.focus_handle)
             //  .on_action(cx.listener(Self::selected_company))
             .on_action(cx.listener(Self::clone))
+            .on_action(cx.listener(Self::new_todo))
             .on_action(cx.listener(Self::open_todo))
             .on_action(cx.listener(Self::edit_todo))
             .on_action(cx.listener(Self::todo_updated))
@@ -614,16 +623,16 @@ impl Render for TodoList {
                                 }
                             })),
                     )
-                    .child(
-                        Button::new("icon-button-add")
-                            .icon(IconName::Plus)
-                            .size(px(24.))
-                            .compact()
-                            .ghost()
-                            .on_click(cx.listener(|_this, _ev, widnow, cx| {
-                                TodoThreadEdit::add(widnow, cx);
-                            })),
-                    ),
+                    // .child(
+                    //     Button::new("icon-button-add")
+                    //         .icon(IconName::Plus)
+                    //         .size(px(24.))
+                    //         .compact()
+                    //         .ghost()
+                    //         .on_click(cx.listener(|_this, _ev, window, cx| {
+                    //             window.dispatch_action(Box::new(New), cx);
+                    //         })),
+                    // ),
             )
             .child(
                 // 待办事项列表
