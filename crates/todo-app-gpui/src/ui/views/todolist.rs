@@ -97,26 +97,27 @@ impl RenderOnce for TodoItem {
                         v_flex()
                             .gap_1()
                             .max_w(px(500.))
+                            .h_12()
                             .overflow_x_hidden()
                             .text_xs()
-                            .child(
-                                // 标题 - 为已完成任务添加删除线
-                                div().child(
-                                    Label::new(self.item.title.clone())
-                                        .whitespace_nowrap()
-                                        .text_color(title_color)
-                                        .when(is_completed, |mut this| {
-                                            let style = this
-                                                .text_style()
-                                                .get_or_insert_with(Default::default);
-                                            style.strikethrough = Some(StrikethroughStyle {
-                                                thickness: px(1.),
-                                                color: Some(Hsla::black()),
-                                            });
-                                            this.italic()
-                                        }),
-                                ),
-                            )
+                            // .child(
+                            //     // 标题 - 为已完成任务添加删除线
+                            //     div().child(
+                            //         Label::new(self.item.title.clone())
+                            //             .whitespace_nowrap()
+                            //             .text_color(title_color)
+                            //             .when(is_completed, |mut this| {
+                            //                 let style = this
+                            //                     .text_style()
+                            //                     .get_or_insert_with(Default::default);
+                            //                 style.strikethrough = Some(StrikethroughStyle {
+                            //                     thickness: px(1.),
+                            //                     color: Some(Hsla::black()),
+                            //                 });
+                            //                 this.italic()
+                            //             }),
+                            //     ),
+                            // )
                             .child(
                                 // 描述 - 为已完成任务添加删除线
                                 div().text_ellipsis().child(
