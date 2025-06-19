@@ -196,7 +196,7 @@ impl From<Vec<u32>> for Matcher {
 
 impl<F> From<F> for Matcher
 where
-    F: Fn(&NaiveDate) -> bool + Send + Sync +'static,
+    F: Fn(&NaiveDate) -> bool + Send + Sync + 'static,
 {
     fn from(f: F) -> Self {
         Matcher::Custom(Box::new(f))
