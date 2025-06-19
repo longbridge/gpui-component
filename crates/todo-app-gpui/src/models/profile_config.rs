@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
+use crate::models::profile_config_path;
+
 #[derive(Debug, Clone, Deserialize, Serialize, Default, PartialEq)]
 pub struct ProfileData {
     #[serde(default)]
@@ -21,8 +23,6 @@ pub struct ProfileData {
     pub auto_analyze_bio: bool,
 }
 
-const PROFILE_CONFIG_FILE: &str = "config/profile.yml";
-
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ProfileManager {
     #[serde(flatten, default)]
@@ -32,8 +32,8 @@ pub struct ProfileManager {
 impl ProfileManager {
     /// 从文件加载配置
     pub fn load() -> Self {
-        let content =
-            std::fs::read_to_string(PROFILE_CONFIG_FILE).map_or("".to_string(), |content| content);
+        let content = std::fs::read_to_string(profile_config_path())
+            .map_or("".to_string(), |content| content);
 
         let manager: ProfileManager =
             serde_yaml::from_str(&content).map_or(ProfileManager::default(), |profile| profile);
@@ -44,11 +44,11 @@ impl ProfileManager {
     pub fn save(&self) -> anyhow::Result<()> {
         let content = serde_yaml::to_string(self)?;
 
-        if let Some(parent) = Path::new(PROFILE_CONFIG_FILE).parent() {
+        if let Some(parent) = profile_config_path().parent() {
             std::fs::create_dir_all(parent)?;
         }
 
-        std::fs::write(PROFILE_CONFIG_FILE, content)?;
+        std::fs::write(profile_config_path(), content)?;
         Ok(())
     }
 

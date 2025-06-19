@@ -3,6 +3,8 @@ use gpui_component::IconName;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
+use crate::models::provider_config_path;
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub enum ApiType {
     #[default] // 默认值为 OpenAI
@@ -216,8 +218,6 @@ impl Default for LlmProviderInfo {
     }
 }
 
-const CONFIG_FILE: &str = "config/llm_providers.yml";
-
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct LlmProviderManager {
     #[serde(default)]
@@ -227,7 +227,7 @@ pub struct LlmProviderManager {
 impl LlmProviderManager {
     /// 从文件加载配置
     pub fn load() -> Self {
-        let config_path = std::path::Path::new(CONFIG_FILE);
+        let config_path = provider_config_path();
         if !config_path.exists() {
             return Self::default();
         }
@@ -249,7 +249,7 @@ impl LlmProviderManager {
 
     /// 保存配置到文件
     pub fn save(&self) -> anyhow::Result<()> {
-        let config_path = std::path::Path::new(CONFIG_FILE);
+        let config_path = provider_config_path();
 
         if let Some(parent) = config_path.parent() {
             std::fs::create_dir_all(parent)?;

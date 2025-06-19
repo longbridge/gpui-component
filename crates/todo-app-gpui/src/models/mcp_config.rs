@@ -1,7 +1,9 @@
 use gpui::SharedString;
 use gpui_component::IconName;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::{collections::HashMap, env::home_dir};
+
+use crate::models::{config_path, mcp_config_path};
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub enum McpTransport {
@@ -241,8 +243,6 @@ impl Default for McpProviderInfo {
     }
 }
 
-const MCP_CONFIG_FILE: &str = "config/mcp_providers.yml";
-
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct McpProviderManager {
     #[serde(default)]
@@ -252,7 +252,7 @@ pub struct McpProviderManager {
 impl McpProviderManager {
     /// 从文件加载配置
     pub fn load() -> Self {
-        let config_path = std::path::Path::new(MCP_CONFIG_FILE);
+        let config_path = mcp_config_path();
         if !config_path.exists() {
             return Self::default();
         }
@@ -274,7 +274,7 @@ impl McpProviderManager {
 
     /// 保存配置到文件
     pub fn save(&self) -> anyhow::Result<()> {
-        let config_path = std::path::Path::new(MCP_CONFIG_FILE);
+        let config_path = mcp_config_path();
 
         if let Some(parent) = config_path.parent() {
             std::fs::create_dir_all(parent)?;

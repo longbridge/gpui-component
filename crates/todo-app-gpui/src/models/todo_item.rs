@@ -1,6 +1,7 @@
 use crate::models::{
     mcp_config::{McpProviderInfo, McpProviderManager},
     provider_config::{LlmProviderInfo, LlmProviderManager, ModelInfo},
+    todo_config_path,
 };
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
@@ -371,7 +372,6 @@ impl Todo {
 }
 
 /// Todo管理器
-const TODO_CONFIG_FILE: &str = "config/todos.yml";
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TodoManager {
@@ -382,7 +382,7 @@ pub struct TodoManager {
 impl TodoManager {
     /// 从文件加载配置
     pub fn load() -> Self {
-        let config_path = Path::new(TODO_CONFIG_FILE);
+        let config_path = todo_config_path();
         if !config_path.exists() {
             return Self::default();
         }
@@ -404,7 +404,7 @@ impl TodoManager {
 
     /// 保存配置到文件
     pub fn save(&self) -> anyhow::Result<()> {
-        let config_path = Path::new(TODO_CONFIG_FILE);
+        let config_path = todo_config_path();
 
         if let Some(parent) = config_path.parent() {
             std::fs::create_dir_all(parent)?;
