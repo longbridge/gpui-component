@@ -228,8 +228,6 @@ impl LlmProviderManager {
     pub fn load() -> Self {
         let content =
             std::fs::read_to_string(CONFIG_FILE).map_or("".to_string(), |content| content);
-        // println!("Loading LLM provider config from: {}", content);
-        // let manager: LlmProviderManager = serde_yaml::from_str(&content).unwrap();
         let manager: LlmProviderManager =
             serde_yaml::from_str(&content).map_or(LlmProviderManager::default(), |map| map);
         manager
@@ -319,19 +317,6 @@ impl LlmProviderManager {
         //self.save()?;
         Ok(())
     }
-
-    // /// 搜索提供商
-    // pub fn search_providers(&self, query: &str) -> Vec<&LlmProvider> {
-    //     let query_lower = query.to_lowercase();
-    //     self.providers
-    //         .values()
-    //         .filter(|provider| {
-    //             provider.name.to_lowercase().contains(&query_lower)
-    //                 || provider.model.to_lowercase().contains(&query_lower)
-    //                 || provider.base_url.to_lowercase().contains(&query_lower)
-    //         })
-    //         .collect()
-    // }
 
     /// 获取提供商数量
     pub fn count(&self) -> usize {

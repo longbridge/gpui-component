@@ -172,13 +172,9 @@ impl TodoThreadChat {
         cx.notify();
     }
 
-    fn toggle_model_selection(&mut self, model:&ModelInfo,provider:&LlmProviderInfo, cx: &mut Context<Self>) {
-        // 检查工具是否已被选中
-        if let Some(index) = self.todoitem.selected_models.iter().position(|t| t.model_id == model.id) {
-            // 如果已选中，则移除
-            self.todoitem.selected_models.remove(index);
-        } else {
-            // 如果未选中，则添加
+    fn toggle_model_selection(&mut self,checked:bool, model:&ModelInfo,provider:&LlmProviderInfo, cx: &mut Context<Self>) {
+        if checked {
+            // 如果选中，则添加
             if let Some((id,provider)) = AppState::state(cx).llm_provider.providers.iter().find(|(id,p)| p.models.iter().any(|t| t.id == model.id)) {
                 if let Some(model) = provider.models.iter().find(|t| t.id == model.id) {
                     self.todoitem.selected_models.push(crate::models::todo_item::SelectedModel {
@@ -189,17 +185,35 @@ impl TodoThreadChat {
                     });
                 }
             }
+        } else {
+            // 如果取消选中，则移除
+            if let Some(index) = self.todoitem.selected_models.iter().position(|t| t.model_id == model.id && t.provider_id == provider.id) {
+                self.todoitem.selected_models.remove(index);
+            }
         }
+        // // 检查工具是否已被选中
+        // if let Some(index) = self.todoitem.selected_models.iter().position(|t| t.model_id == model.id) {
+        //     // 如果已选中，则移除
+        //     self.todoitem.selected_models.remove(index);
+        // } else {
+        //     // 如果未选中，则添加
+        //     if let Some((id,provider)) = AppState::state(cx).llm_provider.providers.iter().find(|(id,p)| p.models.iter().any(|t| t.id == model.id)) {
+        //         if let Some(model) = provider.models.iter().find(|t| t.id == model.id) {
+        //             self.todoitem.selected_models.push(crate::models::todo_item::SelectedModel {
+        //                 provider_id: provider.id.clone(),
+        //                 provider_name: provider.name.clone(),
+        //                 model_id: model.id.clone(),
+        //                 model_name: model.display_name.clone(),
+        //             });
+        //         }
+        //     }
+        // }
           cx.notify(); // 通知主界面更新
     }
 
-    fn toggle_tool_selection(&mut self, tool:&McpTool,provider:&McpProviderInfo, cx: &mut Context<Self>) {
-        // 检查工具是否已被选中
-        if let Some(index) = self.todoitem.selected_tools.iter().position(|t| t.tool_name == tool.name) {
-            // 如果已选中，则移除
-            self.todoitem.selected_tools.remove(index);
-        } else {
-            // 如果未选中，则添加
+    fn toggle_tool_selection(&mut self,checked:bool, tool:&McpTool,provider:&McpProviderInfo, cx: &mut Context<Self>) {
+        if checked {
+            // 如果选中，则添加
             if let Some((id,provider)) = AppState::state(cx).mcp_provider.providers.iter().find(|(id,p)| p.tools.iter().any(|t| t.name == tool.name)) {
                 if let Some(tool) = provider.tools.iter().find(|t| t.name == tool.name) {
                     self.todoitem.selected_tools.push(crate::models::todo_item::SelectedTool {
@@ -210,7 +224,29 @@ impl TodoThreadChat {
                     });
                 }
             }
+        } else {
+            // 如果取消选中，则移除
+            if let Some(index) = self.todoitem.selected_tools.iter().position(|t| t.tool_name == tool.name && t.provider_id == provider.id) {
+                self.todoitem.selected_tools.remove(index);
+            }
         }
+        // // 检查工具是否已被选中
+        // if let Some(index) = self.todoitem.selected_tools.iter().position(|t| t.tool_name == tool.name) {
+        //     // 如果已选中，则移除
+        //     self.todoitem.selected_tools.remove(index);
+        // } else {
+        //     // 如果未选中，则添加
+        //     if let Some((id,provider)) = AppState::state(cx).mcp_provider.providers.iter().find(|(id,p)| p.tools.iter().any(|t| t.name == tool.name)) {
+        //         if let Some(tool) = provider.tools.iter().find(|t| t.name == tool.name) {
+        //             self.todoitem.selected_tools.push(crate::models::todo_item::SelectedTool {
+        //                 provider_id: provider.id.clone(),
+        //                 provider_name: provider.name.clone(),
+        //                 description: tool.description.clone(),
+        //                 tool_name: tool.name.clone(),
+        //             });
+        //         }
+        //     }
+        // }
           cx.notify(); // 通知主界面更新
     }
 
@@ -329,12 +365,12 @@ impl TodoThreadChat {
                                                                     .on_click({
                                                                         let model_clone = model.clone();
                                                                                 let provider_clone = provider.clone();
-                                                                        move |_checked, _window, cx| {
+                                                                        move |checked, _window, cx| {
                                                                             let model_name_to_toggle =
                                                                                 model_name_for_event.clone();
                                                                             // 更新原始数据
                                                                             todo_edit_entity_for_event.update(cx, |todo_edit, todo_cx| {
-                                                                                todo_edit.toggle_model_selection(&model_clone, &provider_clone, todo_cx);
+                                                                                todo_edit.toggle_model_selection(*checked,&model_clone, &provider_clone, todo_cx);
                                                                             });
                                                                             println!("切换模型选择: {}",model_name_to_toggle);
                                                                         }
@@ -389,11 +425,7 @@ impl TodoThreadChat {
                                 .label("清空选择")
                                 .on_click(move |_, window, cx| {
                                     todo_edit_entity_for_clear.update(cx, |todo_edit, todo_cx| {
-                                        // for provider in &mut todo_edit.model_manager.providers {
-                                        //     for model in &mut provider.models {
-                                        //         model.is_selected = false;
-                                        //     }
-                                        // }
+                                        todo_edit.todoitem.selected_models.clear();
                                         todo_cx.notify();
                                     });
                                     // println!("清空所有模型选择");
@@ -515,13 +547,13 @@ impl TodoThreadChat {
                                                                             .on_click({
                                                                                 let tool_clone = tool.clone();
                                                                                 let provider_clone = provider.clone();
-                                                                                move |_checked, _window, cx| {
+                                                                                move |checked, _window, cx| {
                                                                                     let tool_name_to_toggle =
                                                                                         tool_name_for_event.clone();
                                                                                     
                                                                                     // 更新原始数据
                                                                                     todo_edit_entity_for_event.update(cx, |todo_edit, todo_cx| {
-                                                                                        todo_edit.toggle_tool_selection(&tool_clone, &provider_clone, todo_cx);
+                                                                                        todo_edit.toggle_tool_selection(*checked,&tool_clone, &provider_clone, todo_cx);
                                                                                     });
                                                                                     println!(
                                                                                         "切换工具选择: {}",
