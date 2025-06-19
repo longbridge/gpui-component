@@ -10,10 +10,11 @@ use gpui::{
     RenderOnce, SharedString, StatefulInteractiveElement as _, Styled, Window,
 };
 
-#[derive(Clone, Copy)]
+#[derive(Default, Clone, Copy)]
 pub enum ButtonRounded {
     None,
     Small,
+    #[default]
     Medium,
     Large,
     Size(Pixels),
@@ -155,14 +156,22 @@ impl Default for ButtonVariant {
 }
 
 impl ButtonVariant {
-    fn is_link(&self) -> bool {
+    #[inline]
+    pub fn is_link(&self) -> bool {
         matches!(self, Self::Link)
     }
 
-    fn is_text(&self) -> bool {
+    #[inline]
+    pub fn is_text(&self) -> bool {
         matches!(self, Self::Text)
     }
 
+    #[inline]
+    pub fn is_ghost(&self) -> bool {
+        matches!(self, Self::Ghost)
+    }
+
+    #[inline]
     fn no_padding(&self) -> bool {
         self.is_link() || self.is_text()
     }
