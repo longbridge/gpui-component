@@ -6,5 +6,5 @@ edition = "2024"
 [dependencies]
 gpui = { git = "https://github.com/zed-industries/zed.git", branch = "main" }
 
-[lints]
-workspace = true
+# [lints]
+# workspace = true

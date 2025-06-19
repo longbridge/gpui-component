@@ -1,7 +1,14 @@
+use std::rc::Rc;
 
-use gpui::*;
-use gpui_component::{dock::PanelControl, highlighter::HighlightTheme, resizable::resizable_panel, text::{TextView, TextViewStyle}, *};
 use crate::ui::components::ViewKit;
+use gpui::*;
+use gpui_component::{
+    dock::PanelControl,
+    highlighter::HighlightTheme,
+    resizable::resizable_panel,
+    text::{TextView, TextViewStyle},
+    *,
+};
 
 pub struct Introduction {
     focus_handle: gpui::FocusHandle,
@@ -50,8 +57,7 @@ impl Render for Introduction {
         cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
         v_flex()
-            .p_4()
-            .gap_5()
+            .text_xs()
             .child(TextView::markdown("intro", include_str!("introduction.md")))
     }
 }

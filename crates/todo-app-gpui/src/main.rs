@@ -3,8 +3,8 @@
     windows_subsystem = "windows"
 )]
 mod app;
-mod ui;
 mod models;
+mod ui;
 
 fn main() {
     app::run();

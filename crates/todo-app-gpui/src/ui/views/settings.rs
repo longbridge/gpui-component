@@ -65,11 +65,12 @@ impl Settings {
         } else {
             "个人资料".to_string()
         };
-        parent.enable_window(false);
-        let parent = parent.window_handle();
-        cx.create_normal_window("设置", options, move |window, cx| {
-            cx.new(|cx| Self::new(&init_view, parent, window, cx))
+
+        let parent_handle = parent.window_handle();
+        cx.create_normal_window("xTo-Do 设置", options, move |window, cx| {
+            cx.new(|cx| Self::new(&init_view, parent_handle, window, cx))
         });
+        parent.enable_window(false);
     }
 
     fn new(

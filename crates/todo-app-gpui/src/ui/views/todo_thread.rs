@@ -90,7 +90,7 @@ impl TodoThreadChat {
             };
             
             cx.create_normal_window(
-                format!("xTodo-{}", todo.title),
+                format!("xTo-Do {}", todo.title),
                 options,
                 move |window, cx| cx.new(|cx| Self::new(todo,window, cx)),
             );
@@ -105,10 +105,6 @@ impl TodoThreadChat {
                 .multi_line()
                 .auto_grow(2, 6)
         });
-
-        // AI助手配置 - 使用管理器
-       // let model_manager = ModelManager::new();
-       // let mcp_tool_manager = McpToolManager::new();
 
         let _subscriptions = vec![cx.subscribe_in(&chat_input, window, Self::on_chat_input_event)];
 
@@ -129,8 +125,6 @@ impl TodoThreadChat {
             chat_input,
             is_loading: false,
             scroll_handle: ScrollHandle::new(),
-          //  model_manager,
-          //  mcp_tool_manager,
             expanded_providers: Vec::new(),
             expanded_tool_providers: Vec::new(),
             _subscriptions,
@@ -180,13 +174,13 @@ impl TodoThreadChat {
 
     fn toggle_model_selection(&mut self, model:&ModelInfo,provider:&LlmProviderInfo, cx: &mut Context<Self>) {
         // 检查工具是否已被选中
-        if let Some(index) = self.todoitem.selected_models.iter().position(|t| t.model_name == model.display_name) {
+        if let Some(index) = self.todoitem.selected_models.iter().position(|t| t.model_id == model.id) {
             // 如果已选中，则移除
             self.todoitem.selected_models.remove(index);
         } else {
             // 如果未选中，则添加
-            if let Some((id,provider)) = AppState::state(cx).llm_provider.providers.iter().find(|(id,p)| p.models.iter().any(|t| t.display_name == model.display_name)) {
-                if let Some(model) = provider.models.iter().find(|t| t.display_name == model.display_name) {
+            if let Some((id,provider)) = AppState::state(cx).llm_provider.providers.iter().find(|(id,p)| p.models.iter().any(|t| t.id == model.id)) {
+                if let Some(model) = provider.models.iter().find(|t| t.id == model.id) {
                     self.todoitem.selected_models.push(crate::models::todo_item::SelectedModel {
                         provider_id: provider.id.clone(),
                         provider_name: provider.name.clone(),
@@ -249,7 +243,7 @@ impl TodoThreadChat {
                 
                 //let has_selected_models = provider_models.iter().any(|model| model.is_selected);
                 let has_selected_models = provider_models.iter().any(|model| {
-                    todoitem.selected_models.iter().any(|selected| selected.model_name == model.display_name)
+                    todoitem.selected_models.iter().any(|selected| selected.model_id == model.id && selected.provider_id == provider.id)
                 });
                 let is_expanded = has_selected_models || expanded_providers.contains(&provider_index);
 
@@ -329,28 +323,23 @@ impl TodoThreadChat {
                                                             .child(
                                                                 Checkbox::new(checkbox_id)
                                                                     .checked(todoitem.selected_models.iter().any(|selected| 
-                                                                            selected.model_name == model.display_name
+                                                                            selected.model_id == model.id && selected.provider_id == provider.id
                                                                         ))
                                                                     .label(model.display_name.clone())
                                                                     .on_click({
                                                                         let model_clone = model.clone();
                                                                                 let provider_clone = provider.clone();
-                                                                        // let provider_id = provider.id.clone();
-                                                                        // let provider_name = provider.name.clone();
                                                                         move |_checked, _window, cx| {
                                                                             let model_name_to_toggle =
                                                                                 model_name_for_event.clone();
-                                                                            
                                                                             // 更新原始数据
-                                                                                    todo_edit_entity_for_event.update(cx, |todo_edit, todo_cx| {
-                                                                                        todo_edit.toggle_model_selection(&model_clone, &provider_clone, todo_cx);
-                                                                                    });
-                                                                                println!("切换模型选择: {}",model_name_to_toggle);
-                                                                                
-                                                                            }}
-                                                            )
-            
-                                                                    ,
+                                                                            todo_edit_entity_for_event.update(cx, |todo_edit, todo_cx| {
+                                                                                todo_edit.toggle_model_selection(&model_clone, &provider_clone, todo_cx);
+                                                                            });
+                                                                            println!("切换模型选择: {}",model_name_to_toggle);
+                                                                        }
+                                                                    }
+                                                                ),
                                                             )
                                                             .child(
                                                                 h_flex().gap_1().items_center().children(
@@ -422,7 +411,6 @@ impl TodoThreadChat {
         cx: &mut Context<Self>,
     ) {
         let todo_edit_entity = cx.entity().clone();
-
         window.open_drawer_at(placement, cx, move |drawer, _window, drawer_cx| {
             let providers = AppState::state(drawer_cx).mcp_provider.providers.clone();
             let expanded_providers = todo_edit_entity.read(drawer_cx).expanded_tool_providers.clone();
@@ -441,7 +429,7 @@ impl TodoThreadChat {
                 let provider_name = provider.name.clone();
                 let provider_tools = provider.tools.clone();
                 
-                let has_selected_tools = provider_tools.iter().any(|tool|  todoitem.selected_tools.iter().any(|selected| selected.tool_name == tool.name));
+                let has_selected_tools = provider_tools.iter().any(|tool|  todoitem.selected_tools.iter().any(|selected| selected.tool_name == tool.name && selected.provider_id == provider.id));
                 let is_expanded = has_selected_tools || expanded_providers.contains(&provider_index);
 
                 accordion = accordion.item(|item| {
@@ -521,7 +509,7 @@ impl TodoThreadChat {
                                                                     .child(
                                                                         Checkbox::new(checkbox_id)
                                                                             .checked(todoitem.selected_tools.iter().any(|selected| 
-                                                                            selected.tool_name == tool.name
+                                                                            selected.tool_name == tool.name && selected.provider_id == provider.id
                                                                         ))
                                                                             .label(tool.name.clone())
                                                                             .on_click({

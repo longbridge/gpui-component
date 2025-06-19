@@ -14,28 +14,21 @@ use gpui_component::{
     *,
 };
 use crate::{app::AppState, models::provider_config::LlmProviderInfo, ui::{AppExt, WindowExt}};
-use crate::{models::{mcp_config::{McpProviderInfo, McpProviderManager, McpTool}, provider_config::{LlmProviderManager, ModelInfo}}, ui::{components::ViewKit}};
+use crate::{models::{mcp_config::{McpProviderInfo, McpTool}, provider_config::ModelInfo}};
 use crate::models::todo_item::*;
 
 actions!(todo_thread, [Tab, TabPrev, Save, Cancel, Delete]);
 
 const CONTEXT: &str = "TodoThreadEdit";
 
-
-
 pub struct TodoThreadEdit {
     focus_handle: FocusHandle,
     description_input: Entity<InputState>,
-    // AI助手配置
-    // model_manager: LlmProviderManager,
-    // mcp_tool_manager: McpProviderManager,
-
     // 时间设置
     due_date_picker: Entity<DatePickerState>,
     reminder_date_picker: Entity<DatePickerState>,
     recurring_enabled: bool,
     recurring_dropdown: Entity<DropdownState<Vec<SharedString>>>,
-
     // 手风琴展开状态
     expanded_providers: Vec<usize>,
     expanded_tool_providers: Vec<usize>,
@@ -77,16 +70,6 @@ fn tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
         cx.notify();
     }
 
-    // fn toggle_auto_execute(&mut self, enabled: bool, _: &mut Window, cx: &mut Context<Self>) {
-    //     self.auto_execute = enabled;
-    //     cx.notify();
-    // }
-
-    // fn toggle_notifications(&mut self, enabled: bool, _: &mut Window, cx: &mut Context<Self>) {
-    //     self.enable_notifications = enabled;
-    //     cx.notify();
-    // }
-
     fn on_input_event(
         &mut self,
         _entity: &Entity<InputState>,
@@ -102,7 +85,6 @@ fn tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
         }
     }
 
-    
     // 获取模型选择显示文本
     fn get_model_display_text(&self, _cx: &App) -> String {
         let selected_count = self.todoitem.selected_models.len();
@@ -152,13 +134,13 @@ fn tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
     
     fn toggle_model_selection(&mut self, model:&ModelInfo,provider:&LlmProviderInfo, cx: &mut Context<Self>) {
         // 检查工具是否已被选中
-        if let Some(index) = self.todoitem.selected_models.iter().position(|t| t.model_name == model.display_name) {
+        if let Some(index) = self.todoitem.selected_models.iter().position(|t| t.model_id == model.id) {
             // 如果已选中，则移除
             self.todoitem.selected_models.remove(index);
         } else {
             // 如果未选中，则添加
-            if let Some((id,provider)) = AppState::state(cx).llm_provider.providers.iter().find(|(id,p)| p.models.iter().any(|t| t.display_name == model.display_name)) {
-                if let Some(model) = provider.models.iter().find(|t| t.display_name == model.display_name) {
+            if let Some((_id,provider)) = AppState::state(cx).llm_provider.providers.iter().find(|(_id,p)| p.models.iter().any(|t| t.id == model.id)) {
+                if let Some(model) = provider.models.iter().find(|t| t.id == model.id) {
                     self.todoitem.selected_models.push(crate::models::todo_item::SelectedModel {
                         provider_id: provider.id.clone(),
                         provider_name: provider.name.clone(),
@@ -171,24 +153,24 @@ fn tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
           cx.notify(); // 通知主界面更新
     }
 
-    fn toggle_tool_selection(&mut self, tool:&McpTool,provider:&McpProviderInfo, cx: &mut Context<Self>) {
-        // 检查工具是否已被选中
-        if let Some(index) = self.todoitem.selected_tools.iter().position(|t| t.tool_name == tool.name) {
-            // 如果已选中，则移除
-            self.todoitem.selected_tools.remove(index);
-        } else {
-            // 如果未选中，则添加
-            if let Some((id,provider)) = AppState::state(cx).mcp_provider.providers.iter().find(|(id,p)| p.tools.iter().any(|t| t.name == tool.name)) {
-                if let Some(tool) = provider.tools.iter().find(|t| t.name == tool.name) {
-                    self.todoitem.selected_tools.push(crate::models::todo_item::SelectedTool {
-                        provider_id: provider.id.clone(),
-                        provider_name: provider.name.clone(),
-                        description: tool.description.clone(),
-                        tool_name: tool.name.clone(),
-                    });
-                }
-            }
-        }
+    fn toggle_tool_selection(&mut self, checked:bool,tool:&McpTool,provider:&McpProviderInfo, cx: &mut Context<Self>) {
+        // // 检查工具是否已被选中
+        // if let Some(index) = self.todoitem.selected_tools.iter().position(|t| t.tool_name == tool.name) {
+        //     // 如果已选中，则移除
+        //     self.todoitem.selected_tools.remove(index);
+        // } else {
+        //     // 如果未选中，则添加
+        //     if let Some((id,provider)) = AppState::state(cx).mcp_provider.providers.iter().find(|(id,p)| p.tools.iter().any(|t| t.name == tool.name)) {
+        //         if let Some(tool) = provider.tools.iter().find(|t| t.name == tool.name) {
+        //             self.todoitem.selected_tools.push(crate::models::todo_item::SelectedTool {
+        //                 provider_id: provider.id.clone(),
+        //                 provider_name: provider.name.clone(),
+        //                 description: tool.description.clone(),
+        //                 tool_name: tool.name.clone(),
+        //             });
+        //         }
+        //     }
+        // }
           cx.notify(); // 通知主界面更新
     }
 
@@ -198,24 +180,24 @@ fn tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
     }
 }
 
+const WIDTH:Pixels=px(500.0);
+const HEIGHT:Pixels=px(650.0);
+const SIZE: gpui::Size<Pixels> = size(WIDTH, HEIGHT);
+
 // 实现 TodoThreadEdit界面的相关方法
 impl TodoThreadEdit {
 
     pub fn edit(todo:Todo, parent: &mut Window,
         cx: &mut App,
     )  {
-        println!("编辑Todo: {:?}", todo);
       cx.activate(true);
-            let window_size = size(px(600.0), px(650.0));
+            let window_size = SIZE;
             let window_bounds = Bounds::centered(None, window_size, cx);
             let options = WindowOptions {
                 app_id: Some("x-todo-app".to_string()),
                 window_bounds: Some(WindowBounds::Windowed(window_bounds)),
                 titlebar: Some(TitleBar::title_bar_options()),
-                window_min_size: Some(gpui::Size {
-                    width: px(600.),
-                    height: px(650.),
-                }),
+                window_min_size: Some(SIZE),
                 kind: WindowKind::PopUp,
                 #[cfg(target_os = "linux")]
                 window_background: gpui::WindowBackgroundAppearance::Transparent,
@@ -223,29 +205,26 @@ impl TodoThreadEdit {
                 window_decorations: Some(gpui::WindowDecorations::Client),
                 ..Default::default()
             };
-             parent.enable_window(false);
-            let parent = parent.window_handle();
+            let parent_handle = parent.window_handle();
             cx.create_normal_window(
-                format!("xTodo-{}", todo.title),
+                format!("xTo-Do {}", todo.title),
                 options,
-                move |window, cx| cx.new(|cx| Self::new(todo,parent,window, cx)),
+                move |window, cx| cx.new(|cx| Self::new(todo,parent_handle,window, cx)),
             );
+            parent.enable_window(false);
     }
 
     pub fn add( parent: &mut Window,
         cx: &mut App,
     )  {
     cx.activate(true);
-            let window_size = size(px(600.0), px(650.0));
+            let window_size = SIZE;
             let window_bounds = Bounds::centered(None, window_size, cx);
             let options = WindowOptions {
                 app_id: Some("x-todo-app".to_string()),
                 window_bounds: Some(WindowBounds::Windowed(window_bounds)),
                 titlebar: Some(TitleBar::title_bar_options()),
-                window_min_size: Some(gpui::Size {
-                    width: px(600.),
-                    height: px(650.),
-                }),
+                window_min_size: Some(SIZE),
                 kind: WindowKind::PopUp,
                 #[cfg(target_os = "linux")]
                 window_background: gpui::WindowBackgroundAppearance::Transparent,
@@ -270,10 +249,6 @@ impl TodoThreadEdit {
             state.set_value(todo.description.clone(), window, cx);
             state
         });
-
-        // 模型管理器和工具管理器
-        // let model_manager = LlmProviderManager::load();
-        // let mcp_manager = McpProviderManager::load();
 
         // 时间选择器
         let due_date_picker = cx.new(|cx| DatePickerState::new(window, cx));
@@ -307,8 +282,6 @@ impl TodoThreadEdit {
         Self {
             focus_handle: cx.focus_handle(),
             description_input,
-            // model_manager,
-            // mcp_tool_manager: mcp_manager,
             due_date_picker,
             reminder_date_picker,
             recurring_enabled: false,
@@ -375,7 +348,7 @@ impl TodoThreadEdit {
                 
                 // 检查该供应商是否有被选中的模型
                 let has_selected_models = provider_models.iter().any(|model| {
-                    todoitem.selected_models.iter().any(|selected| selected.model_name == model.display_name)
+                    todoitem.selected_models.iter().any(|selected| selected.model_id == model.id && selected.provider_id == provider.id)
                 });
                 
                 // 检查当前供应商是否应该展开
@@ -455,7 +428,7 @@ impl TodoThreadEdit {
                                                                 Checkbox::new(checkbox_id)
                                                                     .checked(
                                                                         todoitem.selected_models.iter().any(|selected| 
-                                                                            selected.model_name == model.display_name
+                                                                            selected.model_id == model.id && selected.provider_id == provider.id
                                                                         )
                                                                     )
                                                                     .label(model.display_name.clone())
@@ -575,7 +548,7 @@ impl TodoThreadEdit {
                 let provider_tools = provider.tools.clone();
                 
                 // 检查该供应商是否有被选中的工具
-                let has_selected_tools = provider_tools.iter().any(|tool|  todoitem.selected_tools.iter().any(|selected| selected.tool_name == tool.name));
+                let has_selected_tools = provider_tools.iter().any(|tool|  todoitem.selected_tools.iter().any(|selected| selected.tool_name == tool.name && selected.provider_id == provider.id));
                 let provider_tool_len = provider_tools.len();
                 // 检查当前供应商是否应该展开
                 let is_expanded = has_selected_tools || expanded_providers.contains(&provider_index);
@@ -657,19 +630,19 @@ impl TodoThreadEdit {
                                                                     .child(
                                                                         Checkbox::new(checkbox_id)
                                                                             .checked(todoitem.selected_tools.iter().any(|selected| 
-                                                                            selected.tool_name == tool.name
+                                                                            selected.tool_name == tool.name && selected.provider_id == provider.id
                                                                         ))
                                                                             .label(tool.name.clone())
                                                                             .on_click({
                                                                                 let tool_clone = tool.clone();
                                                                                 let provider_clone = provider.clone();
-                                                                                move |_checked, _window, cx| {
+                                                                                move |checked, _window, cx| {
                                                                                     let tool_name_to_toggle =
                                                                                         tool_name_for_event.clone();
                                                                                     
                                                                                     // 更新原始数据
                                                                                     todo_edit_entity_for_event.update(cx, |todo_edit, todo_cx| {
-                                                                                        todo_edit.toggle_tool_selection(&tool_clone, &provider_clone, todo_cx);
+                                                                                        todo_edit.toggle_tool_selection(checked,&tool_clone, &provider_clone, todo_cx);
                                                                                     });
                                                                                     println!(
                                                                                         "切换工具选择: {}",

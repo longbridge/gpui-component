@@ -1,20 +1,39 @@
-
+- 核心模块
+  - [x] To-Do生命周期管理
+  - [ ] Coordinator
+  - [ ] 实现MCP Server，与外部Agent协作
 - LLM服务提供商支持
-  - OpenAI
-  - Gemini
-  - Authropic
-  - Azure OpenAI
-- MCP服务器支持
-  - MCP工具调用
-  - MCP资源订阅/取消订阅
-  - MCP ping
+  - [x] OpenAI
+  - [x] Gemini
+  - [x] Authropic
+  - [x] Azure OpenAI
+- MCP规范支持
+  - [x] 工具调用
+  - [x] 资源订阅/取消订阅
+  - [x] 提示调用-引导用户交互流程
+  - [ ] *支持服务器采样*
+    - [ ] *暴露LLM/Agent能力*
+  - [ ] *支持根*
+    - [ ] *本地屏幕资源*
+    - [ ] *本地MIC资源*
+    - [ ] *本地目录/文件资源*
 - 内置工具集
-  - 顺序思维
-  - 网页爬虫
-  - 打开本地浏览器访问网站
-  - 基于Rag的长期记忆
-  - 知识图谱
-  - 文件系统
-  - 订阅飞书事件、推送飞书消息
+  - [x] Ticker
+  - [x] 执行计划
+  - [x] 基于Rag的简单记忆
+  - [x] 知识图谱
+  - [x] 文件系统
+  - [ ] *人格洞察*
+  - [ ] *交互式UI组件*
+- 外置工具集
+  - [x] 顺序思维
+  - [x] 网页爬虫
+  - [x] 订阅飞书事件、推送飞书消息
+  - [ ] *Pdf2Markdown*
+  - [ ] *Word、Excel、PPT资源提取*
+  - [ ] *图表生成*
+  - [ ] *多模态输入输出（语音、图像、视频）*
+  - [ ] *本地录音、屏幕录像*
+  - [ ] *控制本地浏览器*
 
-![Img](https://miro.medium.com/v2/resize:fit:1400/format:webp/1*WgEz5f3n3lD7MfC7NeQGOA.jpeg)
+![Architecture](7.png)
