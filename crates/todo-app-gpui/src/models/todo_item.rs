@@ -16,6 +16,7 @@ pub enum TodoStatus {
     Done,       // 已完成
     Alert,      // 警报
     Cancelled,  // 已取消
+    Deleted,
 }
 
 impl TodoStatus {
@@ -26,11 +27,12 @@ impl TodoStatus {
             TodoStatus::Alert => "警报",
             TodoStatus::Done => "已完成",
             TodoStatus::Cancelled => "已取消",
+            TodoStatus::Deleted => "已删除",
         }
     }
 
     pub fn all() -> Vec<&'static str> {
-        vec!["待办", "进行中", "警报", "已完成", "已取消"]
+        vec!["待办", "进行中", "警报", "已完成", "已取消", "已删除"]
     }
 
     pub fn from_str(s: &str) -> Self {
@@ -40,6 +42,7 @@ impl TodoStatus {
             "警报" => TodoStatus::Alert,
             "已完成" => TodoStatus::Done,
             "已取消" => TodoStatus::Cancelled,
+            "已删除" => TodoStatus::Deleted,
             _ => TodoStatus::Todo,
         }
     }
@@ -469,8 +472,8 @@ impl TodoManager {
     /// 删除Todo
     pub fn delete_todo(&mut self, id: &str) -> Option<Todo> {
         if let Some(position) = self.todos.iter().position(|t| t.id == id) {
-            let todo = self.todos.remove(position);
-            return Some(todo);
+            self.todos[position].status= TodoStatus::Deleted;
+            return Some(self.todos[position].clone());
         }
         None
     }

@@ -321,7 +321,7 @@ impl ListDelegate for TodoListDelegate {
         row_ix: Option<usize>,
         menu: PopupMenu,
         _window: &Window,
-        cx: &App,
+        _cx: &App,
     ) -> PopupMenu {
         //     println!("Context menu for row: {}", row_ix);
         //    self.selected_index = Some(row_ix);
@@ -392,6 +392,7 @@ enum TodoFilter {
     All,
     Planned,
     Completed,
+    Recycle,
 }
 pub struct TodoList {
     focus_handle: FocusHandle,
@@ -424,7 +425,7 @@ impl TodoList {
                 |this, _todo_list, ev: &ListEvent, cx| match ev {
                     ListEvent::Select(ix) => {
                         println!("List Selected: {:?}", ix);
-                         this.selected_todo(cx);
+                        this.selected_todo(cx);
                     }
                     ListEvent::Confirm(ix) => {
                         println!("List Confirmed: {:?}", ix);
@@ -520,6 +521,10 @@ impl TodoList {
                     .into_iter()
                     .filter(|todo| todo.status == TodoStatus::Done)
                     .collect(),
+                TodoFilter::Recycle => todos
+                    .into_iter()
+                    .filter(|todo| todo.status == TodoStatus::Deleted)
+                    .collect(),
             };
             list.delegate_mut().selected_index = None;
             list.delegate_mut().confirmed_index = None;
@@ -533,6 +538,7 @@ impl TodoList {
             0 => self.set_todo_filter(TodoFilter::All, window, cx),
             1 => self.set_todo_filter(TodoFilter::Planned, window, cx),
             2 => self.set_todo_filter(TodoFilter::Completed, window, cx),
+            3 => self.set_todo_filter(TodoFilter::Recycle, window, cx),
             _ => {}
         }
         cx.notify();
@@ -590,7 +596,7 @@ impl Render for TodoList {
                             .on_click(cx.listener(|this, ix: &usize, window, cx| {
                                 this.set_active_tab(*ix, window, cx);
                             }))
-                            .children(vec!["全部", "计划中", "已完成"]),
+                            .children(vec!["全部", "计划中", "已完成", "回收站"]),
                     )
                     .child(
                         ButtonGroup::new("button-group")
@@ -622,17 +628,16 @@ impl Render for TodoList {
                                     this.set_scroll(2, window, cx);
                                 }
                             })),
-                    )
-                    // .child(
-                    //     Button::new("icon-button-add")
-                    //         .icon(IconName::Plus)
-                    //         .size(px(24.))
-                    //         .compact()
-                    //         .ghost()
-                    //         .on_click(cx.listener(|_this, _ev, window, cx| {
-                    //             window.dispatch_action(Box::new(New), cx);
-                    //         })),
-                    // ),
+                    ), // .child(
+                       //     Button::new("icon-button-add")
+                       //         .icon(IconName::Plus)
+                       //         .size(px(24.))
+                       //         .compact()
+                       //         .ghost()
+                       //         .on_click(cx.listener(|_this, _ev, window, cx| {
+                       //             window.dispatch_action(Box::new(New), cx);
+                       //         })),
+                       // ),
             )
             .child(
                 // 待办事项列表
