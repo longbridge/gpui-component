@@ -16,7 +16,7 @@ use gpui::{
 use gpui::{px, App, Context, EventEmitter, MouseDownEvent, ScrollStrategy, Subscription};
 use rust_i18n::t;
 use smol::Timer;
-use std::ops::{DerefMut, Range};
+use std::ops::Range;
 use std::time::Duration;
 use std::{cell::Cell, rc::Rc};
 
@@ -91,7 +91,13 @@ pub trait ListDelegate: Sized + 'static {
     ) -> Option<AnyElement> {
         None
     }
-    fn context_menu(&self, row_ix: Option<usize>, menu: PopupMenu, window: &Window, cx: &App) -> PopupMenu {
+    fn context_menu(
+        &self,
+        row_ix: Option<usize>,
+        menu: PopupMenu,
+        window: &Window,
+        cx: &App,
+    ) -> PopupMenu {
         menu
     }
 
@@ -650,14 +656,6 @@ where
                                     .delegate
                                     .context_menu(None, this, window, cx)
                             };
-                           
-                        //    let menu= if let Some(row_ix) = view.read(cx).right_clicked_index {
-                        //         view.read(cx)
-                        //             .delegate
-                        //             .context_menu(row_ix, this, window, cx)
-                        //     } else {
-                        //         this
-                        //     };
                             cx.notify();
                             menu
                         }

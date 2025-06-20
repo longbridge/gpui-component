@@ -1,6 +1,4 @@
-use crate::{
-    h_flex, ActiveTheme, Disableable, Icon, InteractiveElementExt, Selectable, Sizable as _,
-};
+use crate::{h_flex, ActiveTheme, Disableable, Icon, Selectable, Sizable as _};
 use gpui::{
     div, prelude::FluentBuilder as _, AnyElement, App, ClickEvent, Div, ElementId,
     InteractiveElement, IntoElement, MouseButton, MouseMoveEvent, ParentElement, RenderOnce,

@@ -7,13 +7,8 @@ use gpui::{
 use gpui_component::{
     button::{Button, ButtonVariant, ButtonVariants as _},
     h_flex,
-    input::{ChatInput, InputEvent, InputState, MaskPattern, TextInput}, // Added ChatInput
-    v_flex,
-    ContextModal,
-    FocusableCycle,
-    Icon,
-    IconName,
-    Sizable,
+    input::{InputEvent, InputState, MaskPattern, TextInput},
+    v_flex, ContextModal, FocusableCycle, Icon, IconName, Sizable,
 };
 
 actions!(input_story, [Tab, TabPrev]);
@@ -299,10 +294,6 @@ impl Render for InputStory {
                         "Value: {:?}",
                         window.focused_input(cx).map(|input| input.read(cx).value())
                     ))),
-            )
-            .child(
-                // 使用 ChatInput 组件
-                section("Chat Input").child(ChatInput::new(&self.chat_input_state)),
             )
             .child(
                 h_flex()
