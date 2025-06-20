@@ -894,8 +894,8 @@ impl Render for TodoThreadEdit {
                                                 style
                                                     .border_color(gpui::rgb(0x1D4ED8))
                                                     .bg(gpui::rgb(0xE0F2FE))
-                                            })
-                                            .child(
+                                            }).when(self.todoitem.files.is_empty(),|this|{
+                                                this.child(
                                                 // 拖拽提示区域
                                                 div()
                                                     .flex()
@@ -911,12 +911,6 @@ impl Render for TodoThreadEdit {
                                                                     .size_4()
                                                                     .text_color(gpui::rgb(0x6B7280)),
                                                             )
-                                                            // .child(
-                                                            //     div()
-                                                            //         .text_xs()
-                                                            //         .text_color(gpui::rgb(0x9CA3AF))
-                                                            //         .child("拖拽文件到此处上传或点击选择文件"),
-                                                            // )
                                                             .child(
                                                                 div()
                                                                     .text_xs()
@@ -925,6 +919,8 @@ impl Render for TodoThreadEdit {
                                                             ),
                                                     ),
                                             )
+                                            })
+                                            
                                             // 文件列表区域（集成到拖拽区域内）
                                             .when(!self.todoitem.files.is_empty(), |this| {
                                                 this.child(
