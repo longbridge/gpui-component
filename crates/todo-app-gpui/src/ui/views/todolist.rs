@@ -463,45 +463,22 @@ impl TodoList {
         };
 
         let todo_list = cx.new(|cx| List::new(delegate, window, cx));
-        let _subscriptions = vec![
-            cx.subscribe(
-                &todo_list,
-                |this, _todo_list, ev: &ListEvent, cx| match ev {
-                    ListEvent::Select(ix) => {
-                        println!("List Selected: {:?}", ix);
-                        this.selected_todo(cx);
-                    }
-                    ListEvent::Confirm(ix) => {
-                        println!("List Confirmed: {:?}", ix);
-                        this.selected_todo(cx);
-                    }
-                    ListEvent::Cancel => {
-                        println!("List Cancelled");
-                    }
-                },
-            ),
-            // cx.subscribe(&todo_list, |this, _todo_list, ev: &TodoEvent, cx| {
-
-            // }),
-        ];
-
-        // Spawn a background to random refresh the list
-        // cx.spawn(async move |this, cx| {
-        //     this.update(cx, |this, cx| {
-        //         this.company_list.update(cx, |picker, _| {
-        //             picker
-        //                 .delegate_mut()
-        //                 .companies
-        //                 .iter_mut()
-        //                 .for_each(|company| {
-        //                     company.random_update();
-        //                 });
-        //         });
-        //         cx.notify();
-        //     })
-        //     .ok();
-        // })
-        // .detach();
+        let _subscriptions = vec![cx.subscribe(
+            &todo_list,
+            |this, _todo_list, ev: &ListEvent, cx| match ev {
+                ListEvent::Select(ix) => {
+                    println!("List Selected: {:?}", ix);
+                    this.selected_todo(cx);
+                }
+                ListEvent::Confirm(ix) => {
+                    println!("List Confirmed: {:?}", ix);
+                    this.selected_todo(cx);
+                }
+                ListEvent::Cancel => {
+                    println!("List Cancelled");
+                }
+            },
+        )];
 
         let mut celf = Self {
             focus_handle: cx.focus_handle(),
