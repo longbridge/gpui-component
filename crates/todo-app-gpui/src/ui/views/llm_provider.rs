@@ -1,7 +1,5 @@
 use crate::app::AppState;
-use crate::models::provider_config::{
-    ApiType, LlmProviderInfo, LlmProviderManager, ModelCapability, ModelInfo, ModelLimits,
-};
+use crate::models::provider_config::{ApiType, LlmProviderInfo, ModelInfo};
 use crate::ui::components::ViewKit;
 use gpui::prelude::*;
 use gpui::*;
@@ -129,7 +127,7 @@ impl LlmProvider {
         cx.notify();
     }
 
-    fn cancel_edit(&mut self, _: &CancelEdit, window: &mut Window, cx: &mut Context<Self>) {
+    fn cancel_edit(&mut self, _: &CancelEdit, _: &mut Window, cx: &mut Context<Self>) {
         if let Some(editing_index) = self.editing_provider {
             // 如果是新添加的空Provider，删除它
             if let Some(provider) = self.providers.get(editing_index) {

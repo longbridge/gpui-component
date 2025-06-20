@@ -1,8 +1,8 @@
-use std::ops::Range;
+use std::{ops::Range, path::Path};
 
 use gpui::{
     div, img, prelude::FluentBuilder as _, px, relative, rems, AnyElement, App, DefiniteLength,
-    ElementId, FontStyle, FontWeight, Half, HighlightStyle, InteractiveElement as _,
+    ElementId, FontStyle, FontWeight, Half, HighlightStyle, Img, InteractiveElement as _,
     InteractiveText, IntoElement, Length, ObjectFit, ParentElement, Rems, RenderOnce, SharedString,
     SharedUri, Styled, StyledImage as _, StyledText, Window,
 };
@@ -382,7 +382,7 @@ impl RenderOnce for Paragraph {
                     })
                     .into_any_element()
             }
-            Self::Image { image, .. } => img(image.url)
+            Self::Image { image, .. } => image1(image.url)
                 .object_fit(ObjectFit::Contain)
                 .max_w(relative(1.))
                 .when_some(image.width, |this, width| this.w(width))
@@ -391,6 +391,13 @@ impl RenderOnce for Paragraph {
     }
 }
 
+fn image1(uri: SharedUri) -> Img {
+    if uri.starts_with("http") {
+        img(uri)
+    } else {
+        img(Path::new(uri.to_string().as_str()))
+    }
+}
 #[derive(Default)]
 pub(crate) struct ListState {
     todo: bool,

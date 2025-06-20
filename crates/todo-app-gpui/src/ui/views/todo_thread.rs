@@ -2,9 +2,9 @@ use std::{cell::Cell, rc::Rc};
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::{
-    accordion::Accordion, button::{Button, ButtonVariant, ButtonVariants as _}, checkbox::Checkbox, h_flex, input::{InputEvent, InputState, TextInput}, label::Label, scroll::{ Scrollbar, ScrollbarState}, tooltip::Tooltip, Size, *
+    accordion::Accordion, button::{Button, ButtonVariant, ButtonVariants as _}, checkbox::Checkbox, h_flex, input::{InputEvent, InputState, TextInput}, notification::NotificationType, scroll::{ Scrollbar, ScrollbarState},  *
 };
-use crate::{app::AppState, models::{mcp_config::{McpProviderInfo, McpTool}, provider_config::{LlmProviderInfo, ModelInfo}}};
+use crate::{app::AppState, models::{mcp_config::{McpProviderInfo, McpTool}, provider_config::{LlmProviderInfo, ModelInfo}}, ui::views::todo_thread_edit::Save};
 use crate::models::todo_item::*;
 use crate::app::AppExt;
 
@@ -88,7 +88,7 @@ impl TodoThreadChat {
                 window_decorations: Some(gpui::WindowDecorations::Client),
                 ..Default::default()
             };
-            
+
             cx.create_normal_window(
                 format!("xTo-Do {}", todo.title),
                 options,
@@ -177,6 +177,32 @@ impl TodoThreadChat {
         cx.notify();
     }
 
+    fn save(&mut self,  _window: &mut Window, cx: &mut Context<Self>) {
+
+        match AppState::state_mut(cx)
+            .todo_manager
+            .update_todo(self.todoitem.clone())
+            .save()
+        {
+            Ok(_) => {
+                // TODO: 处理保存成功的情况
+                _window.push_notification((NotificationType::Success, "Todo保存成功"), cx);
+                println!("todo保存成功");
+                cx.dispatch_global_action(Box::new(Save));
+            }
+            Err(err) => {
+                // TODO: 处理保存失败的情况
+                _window.push_notification(
+                    (
+                        NotificationType::Error,
+                        SharedString::new(format!("Todo保存失败-{}", err)),
+                    ),
+                    cx,
+                );
+            }
+        }
+        cx.notify();
+    }
     fn toggle_model_selection(&mut self,checked:bool, model:&ModelInfo,provider:&LlmProviderInfo, cx: &mut Context<Self>) {
         if checked {
             // 如果选中，则添加
@@ -239,7 +265,7 @@ impl TodoThreadChat {
             for (provider_index, provider) in providers.iter().enumerate() {
                 let provider_name = provider.name.clone();
                 let provider_models = provider.models.clone();
-                
+
                 //let has_selected_models = provider_models.iter().any(|model| model.is_selected);
                 let has_selected_models = provider_models.iter().any(|model| {
                     todoitem.selected_models.iter().any(|selected| selected.model_id == model.id && selected.provider_id == provider.id)
@@ -321,19 +347,21 @@ impl TodoThreadChat {
                                                             .gap_3()
                                                             .child(
                                                                 Checkbox::new(checkbox_id)
-                                                                    .checked(todoitem.selected_models.iter().any(|selected| 
+                                                                    .checked(todoitem.selected_models.iter().any(|selected|
                                                                             selected.model_id == model.id && selected.provider_id == provider.id
                                                                         ))
                                                                     .label(model.display_name.clone())
                                                                     .on_click({
                                                                         let model_clone = model.clone();
                                                                                 let provider_clone = provider.clone();
-                                                                        move |checked, _window, cx| {
+                                                                        move |checked, window, cx| {
                                                                             let model_name_to_toggle =
                                                                                 model_name_for_event.clone();
                                                                             // 更新原始数据
                                                                             todo_edit_entity_for_event.update(cx, |todo_edit, todo_cx| {
                                                                                 todo_edit.toggle_model_selection(*checked,&model_clone, &provider_clone, todo_cx);
+                                                                                 todo_edit.save( window, todo_cx);
+                                                                                 todo_cx.notify();
                                                                             });
                                                                             println!("切换模型选择: {}",model_name_to_toggle);
                                                                         }
@@ -389,6 +417,7 @@ impl TodoThreadChat {
                                 .on_click(move |_, window, cx| {
                                     todo_edit_entity_for_clear.update(cx, |todo_edit, todo_cx| {
                                         todo_edit.todoitem.selected_models.clear();
+                                        todo_edit.save( window, todo_cx);
                                         todo_cx.notify();
                                     });
                                     // println!("清空所有模型选择");
@@ -423,7 +452,7 @@ impl TodoThreadChat {
             for (provider_index, provider) in providers.iter().enumerate() {
                 let provider_name = provider.name.clone();
                 let provider_tools = provider.tools.clone();
-                
+
                 let has_selected_tools = provider_tools.iter().any(|tool|  todoitem.selected_tools.iter().any(|selected| selected.tool_name == tool.name && selected.provider_id == provider.id));
                 let is_expanded = has_selected_tools || expanded_providers.contains(&provider_index);
 
@@ -503,20 +532,22 @@ impl TodoThreadChat {
                                                                     .gap_3()
                                                                     .child(
                                                                         Checkbox::new(checkbox_id)
-                                                                            .checked(todoitem.selected_tools.iter().any(|selected| 
+                                                                            .checked(todoitem.selected_tools.iter().any(|selected|
                                                                             selected.tool_name == tool.name && selected.provider_id == provider.id
                                                                         ))
                                                                             .label(tool.name.clone())
                                                                             .on_click({
                                                                                 let tool_clone = tool.clone();
                                                                                 let provider_clone = provider.clone();
-                                                                                move |checked, _window, cx| {
+                                                                                move |checked, window, cx| {
                                                                                     let tool_name_to_toggle =
                                                                                         tool_name_for_event.clone();
-                                                                                    
+
                                                                                     // 更新原始数据
                                                                                     todo_edit_entity_for_event.update(cx, |todo_edit, todo_cx| {
                                                                                         todo_edit.toggle_tool_selection(*checked,&tool_clone, &provider_clone, todo_cx);
+                                                                                        todo_edit.save( window, todo_cx);
+                                                                                        todo_cx.notify();
                                                                                     });
                                                                                     println!(
                                                                                         "切换工具选择: {}",
@@ -561,6 +592,7 @@ impl TodoThreadChat {
                                 .on_click(move |_, window, cx| {
                                     todo_edit_entity_for_clear.update(cx, |todo_edit, todo_cx| {
                                         todo_edit.todoitem.selected_tools.clear();
+                                        todo_edit.save( window, todo_cx);
                                         todo_cx.notify();
                                     });
                                     // println!("清空所有工具选择");

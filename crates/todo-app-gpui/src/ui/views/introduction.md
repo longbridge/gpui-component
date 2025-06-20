@@ -36,4 +36,4 @@
   - [ ] *本地录音、屏幕录像*
   - [ ] *控制本地浏览器*
 
-![Architecture](7.png)
+![Architecture](assets/7.png)

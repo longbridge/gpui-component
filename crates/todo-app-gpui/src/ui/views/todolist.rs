@@ -25,7 +25,7 @@ actions!(
         Redo,
         Pause,
         Clone,
-        Star,
+        Follow,
         Delete
     ]
 );
@@ -36,7 +36,6 @@ pub struct TodoItem {
     ix: usize,
     item: Todo,
     selected: bool,
-    star: bool,
 }
 
 impl TodoItem {
@@ -46,7 +45,6 @@ impl TodoItem {
             ix,
             base: ListItem::new(id),
             selected,
-            star: false,
         }
     }
 }
@@ -72,11 +70,11 @@ impl RenderOnce for TodoItem {
         let is_completed = self.item.status == TodoStatus::Done;
 
         // 为已完成任务设置不同的文本颜色和透明度
-        let title_color = if is_completed {
-            text_color.opacity(0.6)
-        } else {
-            text_color
-        };
+        // let title_color = if is_completed {
+        //     text_color.opacity(0.6)
+        // } else {
+        //     text_color
+        // };
 
         let description_color = if is_completed {
             text_color.opacity(0.3)
@@ -164,7 +162,9 @@ impl RenderOnce for TodoItem {
                                                     .ghost()
                                                     .icon(IconName::RefreshCW)
                                                     .small()
-                                                    .on_click(|event, win, app| {}),
+                                                    .on_click(|_, win, app| {
+                                                        win.dispatch_action(Box::new(Redo), app);
+                                                    }),
                                             )
                                         })
                                         .child(
@@ -172,14 +172,28 @@ impl RenderOnce for TodoItem {
                                                 .ghost()
                                                 .icon(IconName::Copy)
                                                 .small()
-                                                .on_click(|event, win, app| {}),
+                                                .on_click(|_, win, app| {
+                                                    win.dispatch_action(Box::new(Clone), app);
+                                                }),
                                         )
                                         .child(
                                             Button::new("button-star")
                                                 .ghost()
-                                                .icon(IconName::Star)
+                                                .when_else(
+                                                    self.item.follow,
+                                                    |this| {
+                                                        this.icon(
+                                                            Icon::new(IconName::Star)
+                                                                .xsmall()
+                                                                .text_color(yellow_500()),
+                                                        )
+                                                    },
+                                                    |this| this.icon(IconName::Star),
+                                                )
                                                 .small()
-                                                .on_click(|event, win, app| {}),
+                                                .on_click(|_, win, app| {
+                                                    win.dispatch_action(Box::new(Follow), app);
+                                                }),
                                         ),
                                 )
                             })
@@ -313,7 +327,6 @@ impl ListDelegate for TodoListDelegate {
         if let Some(company) = self.matched_todos.get(ix) {
             return Some(TodoItem::new(ix, company.clone(), ix, selected));
         }
-
         None
     }
 
@@ -334,7 +347,7 @@ impl ListDelegate for TodoListDelegate {
                     .separator()
                     .menu_with_icon("挂起", IconName::Pause, Box::new(Pause))
                     .menu_with_icon("完成", IconName::Done, Box::new(Completed))
-                    .menu_with_icon("关注", IconName::Star, Box::new(Star))
+                    .menu_with_icon("关注", IconName::Star, Box::new(Follow))
                     .separator()
                     .menu_with_icon("克隆", IconName::Copy, Box::new(Clone))
                     .menu_with_icon("新建", IconName::FilePlus2, Box::new(New))
@@ -476,22 +489,54 @@ impl TodoList {
         let picker = self.todo_list.read(cx);
         self.selected_todo = picker.delegate().selected_todo();
     }
-    fn star_todo(&mut self, _: &Star, _: &mut Window, cx: &mut Context<Self>) {
-        println!("Star action triggered");
+    fn follow_todo(&mut self, _: &Follow, window: &mut Window, cx: &mut Context<Self>) {
+        println!("Follow action triggered");
+        if let Some(mut todo) = self.selected_todo.clone() {
+            todo.follow = !todo.follow;
+            AppState::state_mut(cx).todo_manager.update_todo(todo);
+            self.set_active_tab(self.active_tab_ix, window, cx);
+        }
     }
-    fn redo_todo(&mut self, _: &Redo, _: &mut Window, cx: &mut Context<Self>) {
+    fn redo_todo(&mut self, _: &Redo, window: &mut Window, cx: &mut Context<Self>) {
         println!("Redo action triggered");
+        if let Some(mut todo) = self.selected_todo.clone() {
+            todo.status = TodoStatus::Todo;
+            AppState::state_mut(cx).todo_manager.update_todo(todo);
+            self.set_active_tab(self.active_tab_ix, window, cx);
+        }
     }
-    fn done_todo(&mut self, _: &Completed, _: &mut Window, cx: &mut Context<Self>) {
+    fn done_todo(&mut self, _: &Completed, window: &mut Window, cx: &mut Context<Self>) {
         println!("Completed action triggered");
+        if let Some(mut todo) = self.selected_todo.clone() {
+            todo.status = TodoStatus::Done;
+            AppState::state_mut(cx).todo_manager.update_todo(todo);
+            self.set_active_tab(self.active_tab_ix, window, cx);
+        }
     }
-    fn clone_todo(&mut self, _: &Clone, _: &mut Window, cx: &mut Context<Self>) {
+    fn pause_todo(&mut self, _: &Pause, window: &mut Window, cx: &mut Context<Self>) {
+        println!("Completed action triggered");
+        if let Some(mut todo) = self.selected_todo.clone() {
+            if todo.status == TodoStatus::Suspended {
+                todo.status = TodoStatus::Todo;
+            } else {
+                todo.status = TodoStatus::Suspended;
+            }
+
+            AppState::state_mut(cx).todo_manager.update_todo(todo);
+            self.set_active_tab(self.active_tab_ix, window, cx);
+        }
+    }
+    fn clone_todo(&mut self, _: &Clone, window: &mut Window, cx: &mut Context<Self>) {
         println!("Clone action triggered");
+        if let Some(todo) = self.selected_todo.clone() {
+            AppState::state_mut(cx).todo_manager.copy_todo(&todo.id);
+            self.set_active_tab(self.active_tab_ix, window, cx);
+        }
     }
     fn new_todo(&mut self, _: &New, window: &mut Window, cx: &mut Context<Self>) {
         TodoThreadEdit::add(window, cx);
     }
-    fn open_todo(&mut self, _: &Open, window: &mut Window, cx: &mut Context<Self>) {
+    fn open_todo(&mut self, _: &Open, _: &mut Window, cx: &mut Context<Self>) {
         if let Some(todo) = self.selected_todo.clone() {
             TodoThreadChat::open(todo, cx);
         }
@@ -565,7 +610,15 @@ impl TodoList {
                 }
             }),
             2 => self.todo_list.update(cx, |list, cx| {
-                list.scroll_to_item(list.delegate().items_count(cx) - 1, window, cx);
+                list.scroll_to_item(
+                    if list.delegate().items_count(cx) == 0 {
+                        0
+                    } else {
+                        list.delegate().items_count(cx) - 1
+                    },
+                    window,
+                    cx,
+                );
             }),
             _ => {}
         }
@@ -585,9 +638,10 @@ impl Render for TodoList {
             .track_focus(&self.focus_handle)
             //  .on_action(cx.listener(Self::selected_company))
             .on_action(cx.listener(Self::done_todo))
-            .on_action(cx.listener(Self::star_todo))
+            .on_action(cx.listener(Self::follow_todo))
             .on_action(cx.listener(Self::redo_todo))
             .on_action(cx.listener(Self::clone_todo))
+            .on_action(cx.listener(Self::pause_todo))
             .on_action(cx.listener(Self::new_todo))
             .on_action(cx.listener(Self::open_todo))
             .on_action(cx.listener(Self::edit_todo))

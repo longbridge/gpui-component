@@ -1,14 +1,11 @@
 use crate::app::AppState;
-use crate::models::mcp_config::{
-    McpCapability, McpParameter, McpPrompt, McpProviderInfo, McpProviderManager, McpResource,
-    McpTool, McpTransport,
-};
-use crate::ui::components::{section::section, ViewKit};
+use crate::models::mcp_config::{McpPrompt, McpProviderInfo, McpTool, McpTransport};
+use crate::ui::components::ViewKit;
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::{
     accordion::Accordion,
-    button::{Button, ButtonGroup, ButtonVariant, ButtonVariants as _},
+    button::{Button, ButtonVariant, ButtonVariants as _},
     dropdown::{Dropdown, DropdownState},
     input::{InputEvent, InputState, TextInput},
     switch::Switch,

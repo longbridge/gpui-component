@@ -1,21 +1,19 @@
 use crate::models::{
-    mcp_config::{McpProviderInfo, McpProviderManager},
-    provider_config::{LlmProviderInfo, LlmProviderManager, ModelInfo},
-    todo_config_path,
+    mcp_config::McpProviderManager, provider_config::LlmProviderManager, todo_config_path,
 };
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::path::Path;
 
 /// Todo状态枚举
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Copy)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Copy, Default)]
 pub enum TodoStatus {
-    Todo,       // 待办
+    #[default]
+    Todo, // 待办
     InProgress, // 进行中
     Done,       // 已完成
     Alert,      // 警报
     Cancelled,  // 已取消
+    Suspended,  // 暂停
     Deleted,
 }
 
@@ -27,12 +25,21 @@ impl TodoStatus {
             TodoStatus::Alert => "警报",
             TodoStatus::Done => "已完成",
             TodoStatus::Cancelled => "已取消",
+            TodoStatus::Suspended => "暂停",
             TodoStatus::Deleted => "已删除",
         }
     }
 
     pub fn all() -> Vec<&'static str> {
-        vec!["待办", "进行中", "警报", "已完成", "已取消", "已删除"]
+        vec![
+            "待办",
+            "进行中",
+            "警报",
+            "已完成",
+            "已取消",
+            "暂停",
+            "已删除",
+        ]
     }
 
     pub fn from_str(s: &str) -> Self {
@@ -42,6 +49,7 @@ impl TodoStatus {
             "警报" => TodoStatus::Alert,
             "已完成" => TodoStatus::Done,
             "已取消" => TodoStatus::Cancelled,
+            "暂停" => TodoStatus::Suspended,
             "已删除" => TodoStatus::Deleted,
             _ => TodoStatus::Todo,
         }
@@ -64,7 +72,9 @@ pub struct TodoFile {
 pub struct SelectedModel {
     pub provider_id: String,
     pub model_id: String,
+    #[serde(default)]
     pub model_name: String,
+    #[serde(default)]
     pub provider_name: String,
 }
 
@@ -73,7 +83,9 @@ pub struct SelectedModel {
 pub struct SelectedTool {
     pub provider_id: String,
     pub tool_name: String,
+    #[serde(default)]
     pub provider_name: String,
+    #[serde(default)]
     pub description: String,
 }
 
@@ -81,21 +93,34 @@ pub struct SelectedTool {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Todo {
     pub id: String,
+    #[serde(default)]
     pub title: String,
+    #[serde(default)]
     pub description: String,
+    #[serde(default)]
     pub status: TodoStatus,
     // AI配置
+    #[serde(default)]
     pub selected_models: Vec<SelectedModel>,
+    #[serde(default)]
     pub selected_tools: Vec<SelectedTool>,
     // 文件附件
+    #[serde(default)]
     pub files: Vec<TodoFile>,
     // 配置选项
+    #[serde(default)]
     pub recurring_enabled: bool,
     pub recurring_pattern: Option<String>, // "daily", "weekly", "monthly", "yearly"
+    #[serde(default)]
     pub auto_execute: bool,
+    #[serde(default)]
     pub enable_notifications: bool,
+    #[serde(default)]
     pub push_to_feishu: bool,
+    #[serde(default)]
+    pub follow: bool, // 是否关注该任务
     // 执行结果
+    #[serde(default)]
     pub execution_logs: Vec<String>,
     pub last_execution_result: Option<String>,
     // 时间戳
@@ -132,6 +157,7 @@ impl Default for Todo {
             auto_execute: false,
             enable_notifications: true,
             push_to_feishu: false,
+            follow: false, // 默认不关注
             execution_logs: Vec::new(),
             last_execution_result: None,
         }
@@ -372,6 +398,24 @@ impl Todo {
             .map(|tool| tool.description.clone())
             .collect()
     }
+
+    /// 设置关注状态
+    pub fn set_follow(&mut self, follow: bool) {
+        self.follow = follow;
+        self.updated_at = Utc::now();
+    }
+
+    /// 切换关注状态
+    pub fn toggle_follow(&mut self) {
+        self.follow = !self.follow;
+        self.updated_at = Utc::now();
+    }
+
+    pub fn copy(&self) -> Self {
+        let mut copy = self.clone();
+        copy.id = uuid::Uuid::new_v4().to_string(); // 生成新的ID
+        copy
+    }
 }
 
 /// Todo管理器
@@ -458,6 +502,15 @@ impl TodoManager {
             .collect()
     }
 
+    /// 获取关注的Todo列表
+    pub fn get_followed_todos(&self) -> Vec<Todo> {
+        self.todos
+            .iter()
+            .filter(|todo| todo.follow)
+            .cloned()
+            .collect()
+    }
+
     /// 更新Todo
     pub fn update_todo(&mut self, mut todo: Todo) -> &mut Self {
         if let Some(position) = self.todos.iter().position(|t| t.id == todo.id) {
@@ -472,12 +525,19 @@ impl TodoManager {
     /// 删除Todo
     pub fn delete_todo(&mut self, id: &str) -> Option<Todo> {
         if let Some(position) = self.todos.iter().position(|t| t.id == id) {
-            self.todos[position].status= TodoStatus::Deleted;
+            self.todos[position].status = TodoStatus::Deleted;
             return Some(self.todos[position].clone());
         }
         None
     }
-
+    pub fn copy_todo(&mut self, id: &str) -> Option<Todo> {
+        if let Some(position) = self.todos.iter().position(|t| t.id == id) {
+            let copy = self.todos[position].copy();
+            self.todos.push(copy.clone());
+            return Some(copy);
+        }
+        None
+    }
     /// 批量删除Todo
     pub fn batch_delete(&mut self, ids: &[String]) -> Vec<Todo> {
         let mut deleted = Vec::new();
@@ -526,6 +586,12 @@ impl TodoManager {
             .iter()
             .filter(|t| t.status == TodoStatus::Cancelled)
             .count();
+        let suspended = self
+            .todos
+            .iter()
+            .filter(|t| t.status == TodoStatus::Suspended)
+            .count();
+        let followed = self.todos.iter().filter(|t| t.follow).count();
         let overdue = self.todos.iter().filter(|t| t.is_overdue()).count();
 
         TodoStatistics {
@@ -534,6 +600,8 @@ impl TodoManager {
             in_progress,
             todo,
             cancelled,
+            suspended,
+            followed,
             overdue,
         }
     }
@@ -819,12 +887,14 @@ fn random_todo() -> Todo {
     let title_template = TITLES.choose(&mut rng).unwrap();
     let desc_template = DESCS.choose(&mut rng).unwrap();
 
-    // 随机生成状态 (40%待办, 30%进行中, 25%已完成, 5%已取消)
+    // 随机生成状态 (35%待办, 25%进行中, 20%已完成, 10%暂停, 5%已取消, 5%警报)
     let status = match rng.random_range(0..100) {
-        0..=39 => TodoStatus::Todo,
-        40..=69 => TodoStatus::InProgress,
-        70..=94 => TodoStatus::Done,
-        _ => TodoStatus::Cancelled,
+        0..=34 => TodoStatus::Todo,
+        35..=59 => TodoStatus::InProgress,
+        60..=79 => TodoStatus::Done,
+        80..=89 => TodoStatus::Suspended,
+        90..=94 => TodoStatus::Cancelled,
+        _ => TodoStatus::Alert,
     };
 
     // 随机生成时间
@@ -1018,6 +1088,7 @@ fn random_todo() -> Todo {
         auto_execute: rng.random_bool(0.05), // 5%概率自动执行
         enable_notifications: rng.random_bool(0.8), // 80%概率启用通知
         push_to_feishu: rng.random_bool(0.3), // 30%概率推送到飞书
+        follow: rng.random_bool(0.3),        // 30%概率关注
         execution_logs,
         last_execution_result,
     }
@@ -1031,5 +1102,7 @@ pub struct TodoStatistics {
     pub in_progress: usize,
     pub todo: usize,
     pub cancelled: usize,
+    pub suspended: usize,
+    pub followed: usize,
     pub overdue: usize,
 }

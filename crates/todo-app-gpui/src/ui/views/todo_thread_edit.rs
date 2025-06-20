@@ -1,15 +1,28 @@
-use chrono::{ Utc};
-use gpui::prelude::*;
-use gpui::*;
-use gpui_component::{
-    accordion::Accordion, button::{Button, ButtonVariant, ButtonVariants as _}, checkbox::Checkbox, date_picker::{DatePicker, DatePickerEvent, DatePickerState, DateRangePreset}, dropdown::{Dropdown,  DropdownState}, input::{InputEvent, InputState, TextInput}, label::Label, notification::NotificationType, switch::Switch, tooltip::Tooltip, *
-};
-use crate::{app::AppState, models::provider_config::LlmProviderInfo};
-use crate::{models::{mcp_config::{McpProviderInfo, McpTool}, provider_config::ModelInfo}};
-use crate::models::todo_item::*;
 use crate::app::AppExt;
 #[cfg(target_os = "windows")]
 use crate::app::WindowExt;
+use crate::models::todo_item::*;
+use crate::models::{
+    mcp_config::{McpProviderInfo, McpTool},
+    provider_config::ModelInfo,
+};
+use crate::{app::AppState, models::provider_config::LlmProviderInfo};
+use chrono::Utc;
+use gpui::prelude::*;
+use gpui::*;
+use gpui_component::{
+    accordion::Accordion,
+    button::{Button, ButtonVariant, ButtonVariants as _},
+    checkbox::Checkbox,
+    date_picker::{DatePicker, DatePickerEvent, DatePickerState, DateRangePreset},
+    dropdown::{Dropdown, DropdownState},
+    input::{InputEvent, InputState, TextInput},
+    label::Label,
+    notification::NotificationType,
+    switch::Switch,
+    tooltip::Tooltip,
+    *,
+};
 
 actions!(todo_thread, [Tab, TabPrev, Save, Cancel, Delete]);
 
@@ -22,17 +35,17 @@ pub struct TodoThreadEdit {
     due_date_picker: Entity<DatePickerState>,
     reminder_date_picker: Entity<DatePickerState>,
     recurring_enabled: bool,
-    recurring_dropdown: Entity<DropdownState<Vec<SharedString>>>,
+    recurring_input: Entity<InputState>,
     // 手风琴展开状态
     expanded_providers: Vec<usize>,
     expanded_tool_providers: Vec<usize>,
     _subscriptions: Vec<Subscription>,
 
-    todoitem:Todo,
+    todoitem: Todo,
 }
 //实现业务操作
 impl TodoThreadEdit {
-fn tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
+    fn tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
         self.cycle_focus(true, window, cx);
     }
 
@@ -49,18 +62,19 @@ fn tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
         {
             Ok(_) => {
                 // TODO: 处理保存成功的情况
-                // _window.push_notification((NotificationType::Success, "Todo保存成功"), cx);
+                _window.push_notification((NotificationType::Success, "Todo保存成功"), cx);
+                println!("todo保存成功");
                 cx.dispatch_global_action(save.boxed_clone());
             }
             Err(err) => {
                 // TODO: 处理保存失败的情况
-                // _window.push_notification(
-                //     (
-                //         NotificationType::Error,
-                //         SharedString::new(format!("Todo保存失败-{}", err)),
-                //     ),
-                //     cx,
-                // );
+                _window.push_notification(
+                    (
+                        NotificationType::Error,
+                        SharedString::new(format!("Todo保存失败-{}", err)),
+                    ),
+                    cx,
+                );
             }
         }
         cx.notify();
@@ -102,12 +116,19 @@ fn tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
         if selected_count == 0 {
             "选择模型".to_string()
         } else if selected_count <= 2 {
-            self.todoitem.selected_models.iter().map(|item|item.model_name.as_str()).collect::<Vec<_>>().join(", ")
+            self.todoitem
+                .selected_models
+                .iter()
+                .map(|item| item.model_name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
         } else {
-            let first_two = self.todoitem.selected_models
+            let first_two = self
+                .todoitem
+                .selected_models
                 .iter()
                 .take(2)
-                .map(|item|item.model_name.as_str())
+                .map(|item| item.model_name.as_str())
                 .collect::<Vec<_>>()
                 .join(", ");
             format!("{} 等{}个模型", first_two, selected_count)
@@ -121,12 +142,20 @@ fn tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
         if selected_count == 0 {
             "选择工具".to_string()
         } else if selected_count <= 2 {
-            self.todoitem.selected_tools.iter().map(|item|item.tool_name.as_str()).collect::<Vec<_>>().join(", ")
+            self.todoitem
+                .selected_tools
+                .iter()
+                .map(|item| item.tool_name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
         } else {
-            let first_two = self.todoitem.selected_tools
+            let first_two = self
+                .todoitem
+                .selected_tools
                 .iter()
                 .take(2)
-                .map(|item|item.tool_name.as_str()).collect::<Vec<_>>()
+                .map(|item| item.tool_name.as_str())
+                .collect::<Vec<_>>()
                 .join(", ");
             format!("{} 等{}个工具", first_two, selected_count)
         }
@@ -142,129 +171,143 @@ fn tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
         cx.notify();
     }
 
-    
-    fn toggle_model_selection(&mut self,checked:bool, model:&ModelInfo,provider:&LlmProviderInfo, cx: &mut Context<Self>) {
-
+    fn toggle_model_selection(
+        &mut self,
+        checked: bool,
+        model: &ModelInfo,
+        provider: &LlmProviderInfo,
+        cx: &mut Context<Self>,
+    ) {
         if checked {
             // 如果选中，则添加
-            self.todoitem.selected_models.push(crate::models::todo_item::SelectedModel {
-                provider_id: provider.id.clone(),
-                provider_name: provider.name.clone(),
-                model_id: model.id.clone(),
-                model_name: model.display_name.clone(),
-            });
+            self.todoitem
+                .selected_models
+                .push(crate::models::todo_item::SelectedModel {
+                    provider_id: provider.id.clone(),
+                    provider_name: provider.name.clone(),
+                    model_id: model.id.clone(),
+                    model_name: model.display_name.clone(),
+                });
         } else {
             // 如果未选中，则移除
-            self.todoitem.selected_models.retain(|t| t.model_id != model.id || t.provider_id != provider.id);
+            self.todoitem
+                .selected_models
+                .retain(|t| t.model_id != model.id || t.provider_id != provider.id);
         }
         cx.notify(); // 通知主界面更新
     }
 
-    fn toggle_tool_selection(&mut self, checked:bool,tool:&McpTool,provider:&McpProviderInfo, cx: &mut Context<Self>) {
-        if checked{
+    fn toggle_tool_selection(
+        &mut self,
+        checked: bool,
+        tool: &McpTool,
+        provider: &McpProviderInfo,
+        cx: &mut Context<Self>,
+    ) {
+        if checked {
             // 如果选中，则添加
-            self.todoitem.selected_tools.push(crate::models::todo_item::SelectedTool {
-                provider_id: provider.id.clone(),
-                provider_name: provider.name.clone(),
-                description: tool.description.clone(),
-                tool_name: tool.name.clone(),
-            });
+            self.todoitem
+                .selected_tools
+                .push(crate::models::todo_item::SelectedTool {
+                    provider_id: provider.id.clone(),
+                    provider_name: provider.name.clone(),
+                    description: tool.description.clone(),
+                    tool_name: tool.name.clone(),
+                });
         } else {
             // 如果未选中，则移除
-            self.todoitem.selected_tools.retain(|t| t.tool_name != tool.name || t.provider_id != provider.id);
+            self.todoitem
+                .selected_tools
+                .retain(|t| t.tool_name != tool.name || t.provider_id != provider.id);
         }
         cx.notify(); // 通知主界面更新
     }
 }
 
-const WIDTH:Pixels=px(500.0);
-const HEIGHT:Pixels=px(650.0);
+const WIDTH: Pixels = px(500.0);
+const HEIGHT: Pixels = px(650.0);
 const SIZE: gpui::Size<Pixels> = size(WIDTH, HEIGHT);
 
 // 实现 TodoThreadEdit界面的相关方法
 impl TodoThreadEdit {
-
-    pub fn edit(todo:Todo, parent: &mut Window,
-        cx: &mut App,
-    )  {
-      cx.activate(true);
-            let window_bounds = Bounds::centered(None, SIZE, cx);
-            let options = WindowOptions {
-                app_id: Some("x-todo-app".to_string()),
-                window_bounds: Some(WindowBounds::Windowed(window_bounds)),
-                titlebar: Some(TitleBar::title_bar_options()),
-                window_min_size: Some(SIZE),
-                kind: WindowKind::PopUp,
-                #[cfg(target_os = "linux")]
-                window_background: gpui::WindowBackgroundAppearance::Transparent,
-                #[cfg(target_os = "linux")]
-                window_decorations: Some(gpui::WindowDecorations::Client),
-                ..Default::default()
-            };
-            let parent_handle = parent.window_handle();
-            cx.create_normal_window(
-                format!("xTo-Do {}", todo.title),
-                options,
-                move |window, cx| cx.new(|cx| Self::new(todo,parent_handle,window, cx)),
-            );
-            #[cfg(target_os = "windows")]
-            parent.enable_window(false);
+    pub fn edit(todo: Todo, parent: &mut Window, cx: &mut App) {
+        cx.activate(true);
+        let window_bounds = Bounds::centered(None, SIZE, cx);
+        let options = WindowOptions {
+            app_id: Some("x-todo-app".to_string()),
+            window_bounds: Some(WindowBounds::Windowed(window_bounds)),
+            titlebar: Some(TitleBar::title_bar_options()),
+            window_min_size: Some(SIZE),
+            kind: WindowKind::PopUp,
+            #[cfg(target_os = "linux")]
+            window_background: gpui::WindowBackgroundAppearance::Transparent,
+            #[cfg(target_os = "linux")]
+            window_decorations: Some(gpui::WindowDecorations::Client),
+            ..Default::default()
+        };
+        let parent_handle = parent.window_handle();
+        cx.create_normal_window(
+            format!("xTo-Do {}", todo.title),
+            options,
+            move |window, cx| cx.new(|cx| Self::new(todo, parent_handle, window, cx)),
+        );
+        #[cfg(target_os = "windows")]
+        parent.enable_window(false);
     }
 
-    pub fn add( parent: &mut Window,
-        cx: &mut App,
-    )  {
-    cx.activate(true);
-            let window_size = SIZE;
-            let window_bounds = Bounds::centered(None, window_size, cx);
-            let options = WindowOptions {
-                app_id: Some("x-todo-app".to_string()),
-                window_bounds: Some(WindowBounds::Windowed(window_bounds)),
-                titlebar: Some(TitleBar::title_bar_options()),
-                window_min_size: Some(SIZE),
-                kind: WindowKind::PopUp,
-                #[cfg(target_os = "linux")]
-                window_background: gpui::WindowBackgroundAppearance::Transparent,
-                #[cfg(target_os = "linux")]
-                window_decorations: Some(gpui::WindowDecorations::Client),
-                ..Default::default()
-            };
-            let parent_handle = parent.window_handle();
-            cx.create_normal_window(
-                "xTodo-创建",
-                options,
-                move |window, cx|  cx.new(|cx| Self::new(Todo::default(),parent_handle,window, cx)),
-            );
-            #[cfg(target_os = "windows")]
-            parent.enable_window(false);
+    pub fn add(parent: &mut Window, cx: &mut App) {
+        cx.activate(true);
+        let window_size = SIZE;
+        let window_bounds = Bounds::centered(None, window_size, cx);
+        let options = WindowOptions {
+            app_id: Some("x-todo-app".to_string()),
+            window_bounds: Some(WindowBounds::Windowed(window_bounds)),
+            titlebar: Some(TitleBar::title_bar_options()),
+            window_min_size: Some(SIZE),
+            kind: WindowKind::PopUp,
+            #[cfg(target_os = "linux")]
+            window_background: gpui::WindowBackgroundAppearance::Transparent,
+            #[cfg(target_os = "linux")]
+            window_decorations: Some(gpui::WindowDecorations::Client),
+            ..Default::default()
+        };
+        let parent_handle = parent.window_handle();
+        cx.create_normal_window("xTodo-创建", options, move |window, cx| {
+            cx.new(|cx| Self::new(Todo::default(), parent_handle, window, cx))
+        });
+        #[cfg(target_os = "windows")]
+        parent.enable_window(false);
     }
-    
-    fn new(todo:Todo,parent:AnyWindowHandle,window: &mut Window, cx: &mut Context<Self>) -> Self {
+
+    fn new(
+        todo: Todo,
+        parent: AnyWindowHandle,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let description_input = cx.new(|cx| {
-        let mut state= InputState::new(window, cx)
+            let mut state = InputState::new(window, cx)
                 .placeholder("详细描述任务内容和要求...")
                 .auto_grow(10, 10);
             state.set_value(todo.description.clone(), window, cx);
             state
         });
-        window.on_window_should_close(cx, move |window,cx|{
+        window.on_window_should_close(cx, move |window, cx| {
             window.clear_notifications(cx);
             parent
-                    .update(cx, |_, window, cx| {
-                        #[cfg(target_os = "windows")]
-                        window.enable_window(true);
-                        window.activate_window();
-                    })
-                    .ok();
-                true
+                .update(cx, |_, window, cx| {
+                    #[cfg(target_os = "windows")]
+                    window.enable_window(true);
+                    window.activate_window();
+                })
+                .ok();
+            true
         });
         // 时间选择器
         let due_date_picker = cx.new(|cx| DatePickerState::new(window, cx));
         let reminder_date_picker = cx.new(|cx| DatePickerState::new(window, cx));
-
-        let recurring_options = vec!["每日".into(), "每周".into(), "每月".into(), "每年".into()];
-        let recurring_dropdown =
-            cx.new(|cx| DropdownState::new(recurring_options, Some(1), window, cx));
+        let recurring_input =
+            cx.new(|cx| InputState::new(window, cx).placeholder("cron表达式，通常由系统自动生成"));
         let _subscriptions = vec![
             cx.subscribe_in(&description_input, window, Self::on_input_event),
             cx.subscribe(&due_date_picker, |_, _, ev, cx| match ev {
@@ -285,11 +328,11 @@ impl TodoThreadEdit {
             due_date_picker,
             reminder_date_picker,
             recurring_enabled: false,
-            recurring_dropdown,
+            recurring_input,
             expanded_providers: Vec::new(),
             expanded_tool_providers: Vec::new(),
             _subscriptions,
-            todoitem:todo,
+            todoitem: todo,
         }
     }
 
@@ -315,7 +358,6 @@ impl TodoThreadEdit {
             )
             .child(div().flex_1().max_w_80().child(content))
     }
-
 
     fn open_drawer_at(
         // &mut self,
@@ -345,12 +387,12 @@ impl TodoThreadEdit {
             for (provider_index, provider) in providers.into_iter().enumerate() {
                 let provider_name = provider.name.clone();
                 let provider_models = provider.models.clone();
-                
+
                 // 检查该供应商是否有被选中的模型
                 let has_selected_models = provider_models.iter().any(|model| {
                     todoitem.selected_models.iter().any(|selected| selected.model_id == model.id && selected.provider_id == provider.id)
                 });
-                
+
                 // 检查当前供应商是否应该展开
                 let is_expanded = has_selected_models || expanded_providers.contains(&provider_index);
 
@@ -427,7 +469,7 @@ impl TodoThreadEdit {
                                                             .child(
                                                                 Checkbox::new(checkbox_id)
                                                                     .checked(
-                                                                        todoitem.selected_models.iter().any(|selected| 
+                                                                        todoitem.selected_models.iter().any(|selected|
                                                                             selected.model_id == model.id && selected.provider_id == provider.id
                                                                         )
                                                                     )
@@ -435,16 +477,18 @@ impl TodoThreadEdit {
                                                                     .on_click({
                                                                         let model_clone = model.clone();
                                                                                 let provider_clone = provider.clone();
-                                                                        move |checked, _window, cx| {
+                                                                        move |checked, window, cx| {
                                                                             let model_name_to_toggle =
                                                                                 model_name_for_event.clone();
-                                                                            
+
                                                                             // 更新原始数据
                                                                                     todo_edit_entity_for_event.update(cx, |todo_edit, todo_cx| {
                                                                                         todo_edit.toggle_model_selection(*checked,&model_clone, &provider_clone, todo_cx);
+                                                                                        todo_edit.save(&Save, window, todo_cx);
+                                                                                         todo_cx.notify();
                                                                                     });
                                                                                 println!("切换模型选择: {}",model_name_to_toggle);
-                                                                                
+
                                                                             }}),
                                                             )
                                                             .child(
@@ -507,6 +551,7 @@ impl TodoThreadEdit {
                                     // 清空所有模型选择
                                     todo_edit_entity_for_clear.update(cx, |todo_edit, todo_cx| {
                                         todo_edit.todoitem.selected_models.clear();
+                                        todo_edit.save(&Save, window, todo_cx);
                                         todo_cx.notify(); // 通知主界面更新
                                     });
                                     println!("清空所有模型选择");
@@ -546,7 +591,7 @@ impl TodoThreadEdit {
             for (provider_index, provider) in providers.into_iter().enumerate() {
                 let provider_name = provider.name.clone();
                 let provider_tools = provider.tools.clone();
-                
+
                 // 检查该供应商是否有被选中的工具
                 let has_selected_tools = provider_tools.iter().any(|tool|  todoitem.selected_tools.iter().any(|selected| selected.tool_name == tool.name && selected.provider_id == provider.id));
                 let provider_tool_len = provider_tools.len();
@@ -629,20 +674,22 @@ impl TodoThreadEdit {
                                                                     .gap_3()
                                                                     .child(
                                                                         Checkbox::new(checkbox_id)
-                                                                            .checked(todoitem.selected_tools.iter().any(|selected| 
+                                                                            .checked(todoitem.selected_tools.iter().any(|selected|
                                                                             selected.tool_name == tool.name && selected.provider_id == provider.id
                                                                         ))
                                                                             .label(tool.name.clone())
                                                                             .on_click({
                                                                                 let tool_clone = tool.clone();
                                                                                 let provider_clone = provider.clone();
-                                                                                move |checked, _window, cx| {
+                                                                                move |checked, window, cx| {
                                                                                     let tool_name_to_toggle =
                                                                                         tool_name_for_event.clone();
-                                                                                    
+
                                                                                     // 更新原始数据
                                                                                     todo_edit_entity_for_event.update(cx, |todo_edit, todo_cx| {
                                                                                         todo_edit.toggle_tool_selection(*checked,&tool_clone, &provider_clone, todo_cx);
+                                                                                         todo_edit.save(&Save, window, todo_cx);
+                                                                                         todo_cx.notify();
                                                                                     });
                                                                                     println!(
                                                                                         "切换工具选择: {}",
@@ -693,10 +740,11 @@ impl TodoThreadEdit {
                         .child(
                             Button::new("clear-all-tools")
                                 .label("清空选择")
-                                .on_click(move |_, _window, cx| {
+                                .on_click(move |_, window, cx| {
                                     // 清空所有工具选择
                                     todo_edit_entity_for_clear.update(cx, |todo_edit, todo_cx| {
                                         todo_edit.todoitem.selected_tools.clear();
+                                        todo_edit.save(&Save, window, todo_cx);
                                         todo_cx.notify();
                                     });
                                     println!("清空所有工具选择");
@@ -729,11 +777,11 @@ impl TodoThreadEdit {
                     // 获取文件大小（可选）
                     let file_size = std::fs::metadata(&path).ok().map(|metadata| metadata.len());
 
-                    let uploaded_file = TodoFile {  
+                    let uploaded_file = TodoFile {
                         name: file_name.to_string(),
                         path: path_str,
                         size: file_size,
-                        mime_type:None,
+                        mime_type: None,
                         uploaded_at: Utc::now().to_utc(),
                     };
 
@@ -763,7 +811,6 @@ impl TodoThreadEdit {
     }
 }
 
-
 impl FocusableCycle for TodoThreadEdit {
     fn cycle_focus_handles(&self, _: &mut Window, cx: &mut App) -> Vec<FocusHandle> {
         vec![
@@ -771,7 +818,7 @@ impl FocusableCycle for TodoThreadEdit {
             self.description_input.focus_handle(cx),
             self.due_date_picker.focus_handle(cx),
             self.reminder_date_picker.focus_handle(cx),
-            self.recurring_dropdown.focus_handle(cx),
+            self.recurring_input.focus_handle(cx),
         ]
     }
 }
@@ -784,27 +831,27 @@ impl Focusable for TodoThreadEdit {
 
 impl Render for TodoThreadEdit {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let due_date_presets = vec![
-            DateRangePreset::single("今天", Utc::now().naive_local().date()),
-            DateRangePreset::single(
-                "明天",
-                (Utc::now() + chrono::Duration::days(1))
-                    .naive_local()
-                    .date(),
-            ),
-            DateRangePreset::single(
-                "下周",
-                (Utc::now() + chrono::Duration::weeks(1))
-                    .naive_local()
-                    .date(),
-            ),
-            DateRangePreset::single(
-                "下个月",
-                (Utc::now() + chrono::Duration::days(30))
-                    .naive_local()
-                    .date(),
-            ),
-        ];
+        // let due_date_presets = vec![
+        //     DateRangePreset::single("今天", Utc::now().naive_local().date()),
+        //     DateRangePreset::single(
+        //         "明天",
+        //         (Utc::now() + chrono::Duration::days(1))
+        //             .naive_local()
+        //             .date(),
+        //     ),
+        //     DateRangePreset::single(
+        //         "下周",
+        //         (Utc::now() + chrono::Duration::weeks(1))
+        //             .naive_local()
+        //             .date(),
+        //     ),
+        //     DateRangePreset::single(
+        //         "下个月",
+        //         (Utc::now() + chrono::Duration::days(30))
+        //             .naive_local()
+        //             .date(),
+        //     ),
+        // ];
 
         v_flex()
             .key_context(CONTEXT)
@@ -917,14 +964,14 @@ impl Render for TodoThreadEdit {
                                                                             self.todoitem.files.iter().enumerate().map(|(index, file)| {
                                                                                 let file_path_for_remove = file.path.clone();
                                                                                 let file_name = file.name.clone();
-                                                                                
+
                                                                                 // 截断文件名，最大显示15个字符
                                                                                 let display_name = if file.name.chars().count() > 10 {
                                                                                     format!("{}...", file.name.chars().take(10).collect::<String>())
                                                                                 } else {
                                                                                     file.name.clone()
                                                                                 };
-                                                                                
+
                                                                                 div()
                                                                                     .id(("uploaded-file", index))
                                                                                     .flex()
@@ -953,7 +1000,7 @@ impl Render for TodoThreadEdit {
                                                                                         }
                                                                                     })
                                                                                     .child(
-                                                                                        
+
                                                                                         div()
                                                                                             .text_xs()
                                                                                             .font_medium()
@@ -1020,7 +1067,7 @@ impl Render for TodoThreadEdit {
                                             ),)
                             .child(
                                 h_flex()
-                                    .gap_2().justify_start()
+                                    .gap_2().justify_between()
                                     .items_center()
                                     // .child(
                                     //     div()
@@ -1058,10 +1105,10 @@ impl Render for TodoThreadEdit {
                                     ).child(
                                         h_flex()
                                         .max_w_32()
-                                        .child( DatePicker::new(&self.due_date_picker)
+                                        .child( DatePicker::new(&self.due_date_picker).number_of_months(1)
                                         .placeholder("截止日期")
                                         .cleanable()
-                                        .presets(due_date_presets.clone())
+                                      // .presets(due_date_presets.clone())
                                         .small())
                             ),
                             ).child(
@@ -1100,51 +1147,50 @@ impl Render for TodoThreadEdit {
                                                     Self::open_tool_drawer_at(Placement::Left, window, cx)
                                                 })),
                                         ),
-                                    ).child(
-                                h_flex()
-                                    .gap_2()
-                                    .items_center()
-                                    .child(
-                                        div()
-                                            .text_sm()
-                                            .text_color(gpui::rgb(0x6B7280))
-                                            .min_w_24()
-                                            .child("周期重复"),
                                     )
-                                    .child(
-                                        Switch::new("recurring")
-                                            .checked(self.recurring_enabled)
-                                            .on_click(cx.listener(
-                                                move |this, checked, window, cx| {
-                                                    this.toggle_recurring(*checked, window, cx);
-                                                },
-                                            )),
-                                    )
-                                    .when(self.recurring_enabled, |this| {
-                                        this.child(
-                                            div().ml_4().child(
-                                                Dropdown::new(&self.recurring_dropdown)
-                                                    .placeholder("选择周期")
-                                                    .small(),
-                                            ),
-                                        )
-                                    }),
-                            ),
+                            //         .child(
+                            //     h_flex()
+                            //         .gap_2()
+                            //         .items_center()
+                            //         .child(
+                            //             div()
+                            //                 .text_sm()
+                            //                 .text_color(gpui::rgb(0x6B7280))
+                            //                 .min_w_24()
+                            //                 .child("周期重复"),
+                            //         )
+                            //         .child(
+                            //             Switch::new("recurring")
+                            //                 .checked(self.recurring_enabled)
+                            //                 .on_click(cx.listener(
+                            //                     move |this, checked, window, cx| {
+                            //                         this.toggle_recurring(*checked, window, cx);
+                            //                     },
+                            //                 )),
+                            //         )
+                            //         .when(self.recurring_enabled, |this| {
+                            //             this.child(
+                            //                 div().ml_4().child(
+                            //                    TextInput::new(&self.recurring_input).cleanable(),
+                            //                 ),
+                            //             )
+                            //         }),
+                            // ),
                             )
-                            
+
                     )
-                    
+
             )
             .child(
                 h_flex().items_center().justify_center().pt_2().child(
                     h_flex().gap_1().child(
                         Button::new("save-btn")
                             .with_variant(ButtonVariant::Primary)
-                            .label("保存任务")
+                            .label("保存")
                             .icon(IconName::Check)
-                            .on_click(
-                                cx.listener(|this, _, window, cx| window.dispatch_action(Box::new(Save), cx)),
-                            ),
+                            .on_click(//
+                                cx.listener(|this,ev, window, cx| this.save(&Save, window, cx),
+                            )),
                     ),
                 ),
             )
