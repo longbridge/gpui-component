@@ -1,26 +1,19 @@
 use gpui::{
-    actions, prelude::FluentBuilder as _, px, App, AppContext as _, Context, Entity, FocusHandle,
-    Focusable, InteractiveElement, IntoElement, KeyBinding, ParentElement as _, Render,
-    SharedString, Styled, Subscription, Window,
+    actions, prelude::FluentBuilder as _, px, App, AppContext as _, Context, Entity, Focusable,
+    InteractiveElement, IntoElement, ParentElement as _, Render, SharedString, Styled,
+    Subscription, Window,
 };
 use gpui_component::{
     checkbox::Checkbox,
     h_flex,
     input::{InputEvent, OtpInput, OtpState},
-    v_flex, FocusableCycle, Sizable, StyledExt,
+    v_flex, Sizable, StyledExt,
 };
 
 use crate::section;
 actions!(input_story, [Tab, TabPrev]);
 
-const CONTEXT: &str = "OtpInputStory";
-
-pub fn init(cx: &mut App) {
-    cx.bind_keys([
-        KeyBinding::new("shift-tab", TabPrev, Some(CONTEXT)),
-        KeyBinding::new("tab", Tab, Some(CONTEXT)),
-    ])
-}
+pub fn init(_: &mut App) {}
 
 pub struct OtpInputStory {
     otp_masked: bool,
@@ -46,7 +39,7 @@ impl super::Story for OtpInputStory {
         false
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
         Self::view(window, cx)
     }
 }
@@ -93,14 +86,6 @@ impl OtpInputStory {
         }
     }
 
-    fn tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
-        self.cycle_focus(true, window, cx);
-    }
-
-    fn tab_prev(&mut self, _: &TabPrev, window: &mut Window, cx: &mut Context<Self>) {
-        self.cycle_focus(false, window, cx);
-    }
-
     fn toggle_opt_masked(&mut self, _: &bool, window: &mut Window, cx: &mut Context<Self>) {
         self.otp_masked = !self.otp_masked;
         self.otp_state.update(cx, |input, cx| {
@@ -118,11 +103,6 @@ impl OtpInputStory {
     }
 }
 
-impl FocusableCycle for OtpInputStory {
-    fn cycle_focus_handles(&self, _: &mut Window, cx: &mut App) -> Vec<FocusHandle> {
-        [self.otp_state.focus_handle(cx)].to_vec()
-    }
-}
 impl Focusable for OtpInputStory {
     fn focus_handle(&self, cx: &gpui::App) -> gpui::FocusHandle {
         self.otp_state.focus_handle(cx)
@@ -132,10 +112,7 @@ impl Focusable for OtpInputStory {
 impl Render for OtpInputStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
-            .key_context(CONTEXT)
             .id("otp-input-story")
-            .on_action(cx.listener(Self::tab))
-            .on_action(cx.listener(Self::tab_prev))
             .size_full()
             .gap_5()
             .child(

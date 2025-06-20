@@ -14,7 +14,8 @@ default-members = ["crates/story"]
 resolver = "2"
 
 [workspace.dependencies]
-gpui = { git = "https://github.com/zed-industries/zed.git" }
+gpui = { git = "https://github.com/huacnlee/zed.git", branch = "tab-index" }
+reqwest_client = { git = "https://github.com/huacnlee/zed.git", branch = "tab-index" }
 gpui-component = { path = "crates/ui" }
 gpui-component-macros = { path = "crates/macros" }
 story = { path = "crates/story" }

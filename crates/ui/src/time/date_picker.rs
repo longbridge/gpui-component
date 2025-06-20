@@ -17,7 +17,7 @@ use crate::{
 
 use super::calendar::{Calendar, CalendarEvent, CalendarState, Date, Matcher};
 
-pub fn init(cx: &mut App) {
+pub(crate) fn init(cx: &mut App) {
     let context = Some("DatePicker");
     cx.bind_keys([KeyBinding::new("escape", Cancel, context)])
 }
@@ -321,7 +321,7 @@ impl RenderOnce for DatePicker {
         div()
             .id(self.id.clone())
             .key_context("DatePicker")
-            .track_focus(&self.focus_handle(cx))
+            .track_focus(&self.focus_handle(cx).tab_stop(true))
             .when(state.open, |this| {
                 this.on_action(window.listener_for(&self.state, DatePickerState::escape))
             })

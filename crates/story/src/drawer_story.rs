@@ -178,7 +178,7 @@ impl super::Story for DrawerStory {
         "Drawer for open a popup in the edge of the window"
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
         Self::view(window, cx)
     }
 }

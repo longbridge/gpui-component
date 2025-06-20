@@ -1,6 +1,6 @@
 use gpui::{
-    actions, px, App, AppContext as _, ClickEvent, Context, Entity, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, KeyBinding, ParentElement as _, Render, Styled, Window,
+    actions, px, App, AppContext as _, ClickEvent, Context, Entity, Focusable, InteractiveElement,
+    IntoElement, ParentElement as _, Render, Styled, Window,
 };
 
 use crate::section;
@@ -8,19 +8,12 @@ use gpui_component::{
     button::Button,
     h_flex,
     input::{InputState, TextInput},
-    v_flex, FocusableCycle, Sizable,
+    v_flex, Sizable,
 };
 
 actions!(input_story, [Tab, TabPrev]);
 
-const CONTEXT: &str = "TextareaStory";
-
-pub fn init(cx: &mut App) {
-    cx.bind_keys([
-        KeyBinding::new("shift-tab", TabPrev, Some(CONTEXT)),
-        KeyBinding::new("tab", Tab, Some(CONTEXT)),
-    ])
-}
+pub fn init(_: &mut App) {}
 
 pub struct TextareaStory {
     textarea: Entity<InputState>,
@@ -40,7 +33,7 @@ impl super::Story for TextareaStory {
         false
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
         Self::view(window, cx)
     }
 }
@@ -92,14 +85,6 @@ impl TextareaStory {
         }
     }
 
-    fn tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
-        self.cycle_focus(true, window, cx);
-    }
-
-    fn tab_prev(&mut self, _: &TabPrev, window: &mut Window, cx: &mut Context<Self>) {
-        self.cycle_focus(false, window, cx);
-    }
-
     fn on_insert_text_to_textarea(
         &mut self,
         _: &ClickEvent,
@@ -123,11 +108,6 @@ impl TextareaStory {
     }
 }
 
-impl FocusableCycle for TextareaStory {
-    fn cycle_focus_handles(&self, _: &mut Window, _: &mut App) -> Vec<FocusHandle> {
-        [].to_vec()
-    }
-}
 impl Focusable for TextareaStory {
     fn focus_handle(&self, cx: &gpui::App) -> gpui::FocusHandle {
         self.textarea.focus_handle(cx)
@@ -137,10 +117,7 @@ impl Focusable for TextareaStory {
 impl Render for TextareaStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
-            .key_context(CONTEXT)
             .id("textarea-story")
-            .on_action(cx.listener(Self::tab))
-            .on_action(cx.listener(Self::tab_prev))
             .size_full()
             .justify_start()
             .gap_3()

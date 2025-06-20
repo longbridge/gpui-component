@@ -1,6 +1,6 @@
 use gpui::{
-    actions, App, AppContext as _, Context, Entity, FocusHandle, Focusable, InteractiveElement,
-    IntoElement, KeyBinding, ParentElement as _, Render, Styled, Subscription, Window,
+    actions, App, AppContext as _, Context, Entity, Focusable, InteractiveElement, IntoElement,
+    ParentElement as _, Render, Styled, Subscription, Window,
 };
 use regex::Regex;
 
@@ -8,19 +8,12 @@ use crate::section;
 use gpui_component::{
     button::{Button, ButtonVariants},
     input::{InputEvent, InputState, MaskPattern, NumberInput, NumberInputEvent, StepAction},
-    v_flex, FocusableCycle, IconName, Sizable,
+    v_flex, IconName, Sizable,
 };
 
 actions!(input_story, [Tab, TabPrev]);
 
-const CONTEXT: &str = "NumberInputStory";
-
-pub fn init(cx: &mut App) {
-    cx.bind_keys([
-        KeyBinding::new("shift-tab", TabPrev, Some(CONTEXT)),
-        KeyBinding::new("tab", Tab, Some(CONTEXT)),
-    ])
-}
+pub fn init(_: &mut App) {}
 
 pub struct NumberInputStory {
     number_input1_value: i64,
@@ -46,7 +39,7 @@ impl super::Story for NumberInputStory {
         false
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
         Self::view(window, cx)
     }
 }
@@ -97,14 +90,6 @@ impl NumberInputStory {
             number_input3_value: 0.0,
             _subscriptions,
         }
-    }
-
-    fn tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
-        self.cycle_focus(true, window, cx);
-    }
-
-    fn tab_prev(&mut self, _: &TabPrev, window: &mut Window, cx: &mut Context<Self>) {
-        self.cycle_focus(false, window, cx);
     }
 
     fn on_input_event(
@@ -189,11 +174,6 @@ impl NumberInputStory {
     }
 }
 
-impl FocusableCycle for NumberInputStory {
-    fn cycle_focus_handles(&self, _: &mut Window, _cx: &mut App) -> Vec<FocusHandle> {
-        [].to_vec()
-    }
-}
 impl Focusable for NumberInputStory {
     fn focus_handle(&self, cx: &gpui::App) -> gpui::FocusHandle {
         self.number_input1.focus_handle(cx)
@@ -201,12 +181,9 @@ impl Focusable for NumberInputStory {
 }
 
 impl Render for NumberInputStory {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         v_flex()
-            .key_context(CONTEXT)
             .id("input-story")
-            .on_action(cx.listener(Self::tab))
-            .on_action(cx.listener(Self::tab_prev))
             .size_full()
             .justify_start()
             .gap_3()

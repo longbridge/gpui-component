@@ -27,7 +27,7 @@ impl super::Story for CheckboxStory {
         "A control that allows the user to toggle between checked and not checked."
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
         Self::view(window, cx)
     }
 }

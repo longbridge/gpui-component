@@ -23,7 +23,7 @@ impl super::Story for ProgressStory {
         "Displays an indicator showing the completion progress of a task, typically displayed as a progress bar."
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
         Self::view(window, cx)
     }
 }
