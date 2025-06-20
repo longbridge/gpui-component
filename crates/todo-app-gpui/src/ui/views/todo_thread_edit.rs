@@ -62,7 +62,6 @@ impl TodoThreadEdit {
             Ok(_) => {
                 // TODO: 处理保存成功的情况
                 //_window.push_notification((NotificationType::Success, "Todo保存成功"), cx);
-                println!("todo保存成功");
                 cx.dispatch_global_action(save.boxed_clone());
             }
             Err(err) => {
