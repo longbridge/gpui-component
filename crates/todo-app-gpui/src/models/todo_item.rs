@@ -119,6 +119,10 @@ pub struct Todo {
     pub push_to_feishu: bool,
     #[serde(default)]
     pub follow: bool, // 是否关注该任务
+    #[serde(default)]
+    pub needs_recording: bool, // 是否需要录音
+    #[serde(default)]
+    pub needs_screen_recording: bool, // 是否需要录屏
     // 执行结果
     #[serde(default)]
     pub execution_logs: Vec<String>,
@@ -157,7 +161,9 @@ impl Default for Todo {
             auto_execute: false,
             enable_notifications: true,
             push_to_feishu: false,
-            follow: false, // 默认不关注
+            follow: false,
+            needs_recording: false,        // 默认不需要录音
+            needs_screen_recording: false, // 默认不需要录屏
             execution_logs: Vec::new(),
             last_execution_result: None,
         }
@@ -411,6 +417,35 @@ impl Todo {
         self.updated_at = Utc::now();
     }
 
+    /// 设置是否需要录音
+    pub fn set_needs_recording(&mut self, needs_recording: bool) {
+        self.needs_recording = needs_recording;
+        self.updated_at = Utc::now();
+    }
+
+    /// 切换录音需求状态
+    pub fn toggle_needs_recording(&mut self) {
+        self.needs_recording = !self.needs_recording;
+        self.updated_at = Utc::now();
+    }
+
+    /// 设置是否需要录屏
+    pub fn set_needs_screen_recording(&mut self, needs_screen_recording: bool) {
+        self.needs_screen_recording = needs_screen_recording;
+        self.updated_at = Utc::now();
+    }
+
+    /// 切换录屏需求状态
+    pub fn toggle_needs_screen_recording(&mut self) {
+        self.needs_screen_recording = !self.needs_screen_recording;
+        self.updated_at = Utc::now();
+    }
+
+    /// 检查是否需要媒体记录（录音或录屏）
+    pub fn needs_media_recording(&self) -> bool {
+        self.needs_recording || self.needs_screen_recording
+    }
+
     pub fn copy(&self) -> Self {
         let mut copy = self.clone();
         copy.id = uuid::Uuid::new_v4().to_string(); // 生成新的ID
@@ -511,6 +546,33 @@ impl TodoManager {
             .collect()
     }
 
+    /// 获取需要录音的Todo列表
+    pub fn get_recording_todos(&self) -> Vec<Todo> {
+        self.todos
+            .iter()
+            .filter(|todo| todo.needs_recording)
+            .cloned()
+            .collect()
+    }
+
+    /// 获取需要录屏的Todo列表
+    pub fn get_screen_recording_todos(&self) -> Vec<Todo> {
+        self.todos
+            .iter()
+            .filter(|todo| todo.needs_screen_recording)
+            .cloned()
+            .collect()
+    }
+
+    /// 获取需要媒体记录的Todo列表
+    pub fn get_media_recording_todos(&self) -> Vec<Todo> {
+        self.todos
+            .iter()
+            .filter(|todo| todo.needs_media_recording())
+            .cloned()
+            .collect()
+    }
+
     /// 更新Todo
     pub fn update_todo(&mut self, mut todo: Todo) -> &mut Self {
         if let Some(position) = self.todos.iter().position(|t| t.id == todo.id) {
@@ -593,6 +655,12 @@ impl TodoManager {
             .count();
         let followed = self.todos.iter().filter(|t| t.follow).count();
         let overdue = self.todos.iter().filter(|t| t.is_overdue()).count();
+        let needs_recording = self.todos.iter().filter(|t| t.needs_recording).count();
+        let needs_screen_recording = self
+            .todos
+            .iter()
+            .filter(|t| t.needs_screen_recording)
+            .count();
 
         TodoStatistics {
             total,
@@ -603,6 +671,8 @@ impl TodoManager {
             suspended,
             followed,
             overdue,
+            needs_recording,
+            needs_screen_recording,
         }
     }
 
@@ -1089,6 +1159,8 @@ fn random_todo() -> Todo {
         enable_notifications: rng.random_bool(0.8), // 80%概率启用通知
         push_to_feishu: rng.random_bool(0.3), // 30%概率推送到飞书
         follow: rng.random_bool(0.3),        // 30%概率关注
+        needs_recording: rng.random_bool(0.2), // 20%概率需要录音
+        needs_screen_recording: rng.random_bool(0.15), // 15%概率需要录屏
         execution_logs,
         last_execution_result,
     }
@@ -1105,4 +1177,6 @@ pub struct TodoStatistics {
     pub suspended: usize,
     pub followed: usize,
     pub overdue: usize,
+    pub needs_recording: usize,
+    pub needs_screen_recording: usize,
 }

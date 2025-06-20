@@ -34,7 +34,6 @@ pub struct TodoThreadEdit {
     // 时间设置
     due_date_picker: Entity<DatePickerState>,
     reminder_date_picker: Entity<DatePickerState>,
-    recurring_enabled: bool,
     recurring_input: Entity<InputState>,
     // 手风琴展开状态
     expanded_providers: Vec<usize>,
@@ -62,7 +61,7 @@ impl TodoThreadEdit {
         {
             Ok(_) => {
                 // TODO: 处理保存成功的情况
-                _window.push_notification((NotificationType::Success, "Todo保存成功"), cx);
+                //_window.push_notification((NotificationType::Success, "Todo保存成功"), cx);
                 println!("todo保存成功");
                 cx.dispatch_global_action(save.boxed_clone());
             }
@@ -90,8 +89,13 @@ impl TodoThreadEdit {
         cx.notify();
     }
 
-    fn toggle_recurring(&mut self, enabled: bool, _: &mut Window, cx: &mut Context<Self>) {
-        self.recurring_enabled = enabled;
+    fn toggle_audio_recording(&mut self,  _: &mut Window, cx: &mut Context<Self>) {
+        self.todoitem.toggle_needs_recording();
+        cx.notify();
+    }
+
+    fn toggle_screen_recording(&mut self,  _: &mut Window, cx: &mut Context<Self>) {
+        self.todoitem.toggle_needs_screen_recording();
         cx.notify();
     }
 
@@ -327,7 +331,6 @@ impl TodoThreadEdit {
             description_input,
             due_date_picker,
             reminder_date_picker,
-            recurring_enabled: false,
             recurring_input,
             expanded_providers: Vec::new(),
             expanded_tool_providers: Vec::new(),
@@ -831,28 +834,6 @@ impl Focusable for TodoThreadEdit {
 
 impl Render for TodoThreadEdit {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        // let due_date_presets = vec![
-        //     DateRangePreset::single("今天", Utc::now().naive_local().date()),
-        //     DateRangePreset::single(
-        //         "明天",
-        //         (Utc::now() + chrono::Duration::days(1))
-        //             .naive_local()
-        //             .date(),
-        //     ),
-        //     DateRangePreset::single(
-        //         "下周",
-        //         (Utc::now() + chrono::Duration::weeks(1))
-        //             .naive_local()
-        //             .date(),
-        //     ),
-        //     DateRangePreset::single(
-        //         "下个月",
-        //         (Utc::now() + chrono::Duration::days(30))
-        //             .naive_local()
-        //             .date(),
-        //     ),
-        // ];
-
         v_flex()
             .key_context(CONTEXT)
             .id("todo-thread-view")
@@ -1052,33 +1033,13 @@ impl Render for TodoThreadEdit {
                             .pb_2()
                             .bg(gpui::rgb(0xF9FAFB))
                             .rounded_lg()
-                            .child(h_flex()
-                                            .justify_between()
-                                            .items_center()
-                                            .child(Self::section_title("助手配置"))
-                                            .child(
-                                                Checkbox::new("push-feishu-button")
-                                                    .label("推送到飞书")
-                                                    .checked(self.todoitem.push_to_feishu)
-                                                    .on_click(cx.listener(|view, _, _, cx| {
-                                                        view.todoitem.push_to_feishu = !view.todoitem.push_to_feishu;
-                                                        cx.notify();
-                                                    })),
-                                            ),)
+                            .child(Self::section_title("助手配置"))
                             .child(
                                 h_flex()
-                                    .gap_2().justify_between()
+                                    .gap_2().justify_start()
                                     .items_center()
-                                    // .child(
-                                    //     div()
-                                    //         .text_sm()
-                                    //         .text_color(gpui::rgb(0x6B7280))
-                                    //         .min_w_24()
-                                    //         .child("模型选择"),
-                                    // )
                                     .child(
-                                        div().justify_start().child(
-                                            Button::new("show-drawer-left")
+                                       Button::new("show-drawer-left")
                                                 .label({
                                                     let display_text =
                                                         self.get_model_display_text(cx);
@@ -1101,30 +1062,8 @@ impl Render for TodoThreadEdit {
                                                 .on_click(cx.listener(|this, _, window, cx| {
                                                     Self::open_drawer_at(Placement::Left, window, cx)
                                                 })),
-                                        ),
                                     ).child(
-                                        h_flex()
-                                        .max_w_32()
-                                        .child( DatePicker::new(&self.due_date_picker).number_of_months(1)
-                                        .placeholder("截止日期")
-                                        .cleanable()
-                                      // .presets(due_date_presets.clone())
-                                        .small())
-                            ),
-                            ).child(
-                                h_flex()
-                                    .gap_2()
-                                    .items_center()
-                                    // .child(
-                                    //     div()
-                                    //         .text_sm()
-                                    //         .text_color(gpui::rgb(0x6B7280))
-                                    //         .min_w_24()
-                                    //         .child("工具集"),
-                                    // )
-                                    .child(
-                                        div().justify_start().child(
-                                            Button::new("show-tool-drawer-left")
+                                       Button::new("show-tool-drawer-left")
                                                 .label({
                                                     let display_text = self.get_tool_display_text(cx);
                                                     if display_text == "选择工具集" {
@@ -1145,8 +1084,51 @@ impl Render for TodoThreadEdit {
                                                 )
                                                 .on_click(cx.listener(|this, _, window, cx| {
                                                     Self::open_tool_drawer_at(Placement::Left, window, cx)
-                                                })),
-                                        ),
+                                                }))
+                                    ),
+                            ).child(
+                                h_flex()
+                                    .gap_2()
+                                    .items_center()
+                                    .child(
+
+                                        h_flex()
+                                    .gap_2()
+                                    .items_center().justify_start()
+                                    .child(
+                                        Checkbox::new("push-feishu-button")
+                                                    .label("推送到飞书")
+                                                    .checked(self.todoitem.push_to_feishu)
+                                                    .on_click(cx.listener(|view, _, _, cx| {
+                                                        view.todoitem.push_to_feishu = !view.todoitem.push_to_feishu;
+                                                        cx.notify();
+                                                    }))
+                                    )
+                                    .child(
+                                        Checkbox::new("needs-audio-recoding")
+                                                    .label("开启录音")
+                                                    .checked(self.todoitem.needs_recording)
+                                                    .on_click(cx.listener(|this, _, win, cx| {
+                                                       this.toggle_audio_recording( win, cx);
+                                                        cx.notify();
+                                                    }))
+                                    )
+                                    .child(
+                                        Checkbox::new("needs-screen-recoding")
+                                                    .label("开启录屏")
+                                                    .checked(self.todoitem.needs_screen_recording)
+                                                    .on_click(cx.listener(|this, _, win, cx| {
+                                                       this.toggle_screen_recording( win, cx);
+                                                        cx.notify();
+                                                    }))
+                                    ).child(
+                                        DatePicker::new(&self.due_date_picker).number_of_months(1)
+                                        .placeholder("截止日期")
+                                        .cleanable()
+                                      // .presets(due_date_presets.clone())
+                                        .small()
+                                    )
+                                    
                                     )
                             //         .child(
                             //     h_flex()
