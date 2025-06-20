@@ -603,7 +603,7 @@ impl Render for Profile {
                     .child(
                         Button::new("save-btn")
                             .with_variant(ButtonVariant::Primary)
-                            .label("保存更改")
+                            .label("保存")
                             .icon(IconName::Check)
                             .on_click(
                                 cx.listener(|this, _, window, cx| this.save(&Save, window, cx)),
