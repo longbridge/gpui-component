@@ -1,7 +1,7 @@
 use super::todo_thread_edit::TodoThreadEdit;
 use crate::app::AppState;
 use crate::ui::views::todo_thread::TodoThreadChat;
-use crate::{models::todo_item::*, ui::views::todo_thread_edit::Save as ToddSaved};
+use crate::{models::todo_item::*, ui::views::todo_thread_edit::Save as TodoSaved};
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::{
@@ -81,45 +81,27 @@ impl RenderOnce for TodoItem {
         } else {
             text_color.opacity(0.5)
         };
-
         self.base
-            .px_3()
-            .py_1()
-            .overflow_x_hidden()
+            .h_16()
             .bg(bg_color)
+            .text_color(text_color)
+            .text_sm()
             .child(
                 h_flex()
-                    .items_center()
-                    .justify_between()
-                    .gap_2()
-                    .text_color(text_color)
+                    .size_full() // 水平弹性布局
+                    .items_center() // 垂直居中对齐
+                    .justify_between() // 两端对齐
+                    .gap_1() // 间距 2 单位
+                    .text_color(text_color) // 设置文本颜色
                     .child(
+                        //左侧
                         v_flex()
+                            .size_full()
                             .gap_1()
-                            .max_w(px(500.))
-                            .h_12()
+                            .items_center()
+                            .justify_end()
                             .overflow_x_hidden()
-                            .text_xs()
-                            // .child(
-                            //     // 标题 - 为已完成任务添加删除线
-                            //     div().child(
-                            //         Label::new(self.item.title.clone())
-                            //             .whitespace_nowrap()
-                            //             .text_color(title_color)
-                            //             .when(is_completed, |mut this| {
-                            //                 let style = this
-                            //                     .text_style()
-                            //                     .get_or_insert_with(Default::default);
-                            //                 style.strikethrough = Some(StrikethroughStyle {
-                            //                     thickness: px(1.),
-                            //                     color: Some(Hsla::black()),
-                            //                 });
-                            //                 this.italic()
-                            //             }),
-                            //     ),
-                            // )
                             .child(
-                                // 描述 - 为已完成任务添加删除线
                                 div().text_ellipsis().child(
                                     Label::new(self.item.description.clone())
                                         .text_color(description_color)
@@ -134,125 +116,173 @@ impl RenderOnce for TodoItem {
                                             this.italic()
                                         }),
                                 ),
-                            ),
-                    )
-                    .child(
-                        v_flex()
-                            .h_full()
-                            .gap_1()
-                            .items_end()
-                            .justify_end()
-                            .when(selected, |div| {
-                                div.child(
-                                    h_flex()
-                                        .gap_1()
-                                        .items_center()
-                                        .justify_end()
-                                        .when(self.item.status == TodoStatus::InProgress, |div| {
-                                            div.child(
-                                                Indicator::new()
-                                                    .with_size(px(16.))
-                                                    .icon(IconName::RefreshCW)
-                                                    .color(blue_500()),
-                                            )
-                                        })
-                                        .when(self.item.status != TodoStatus::InProgress, |div| {
-                                            div.child(
-                                                Button::new("button-refresh")
-                                                    .ghost()
-                                                    .icon(IconName::RefreshCW)
-                                                    .small()
-                                                    .on_click(|_, win, app| {
-                                                        win.dispatch_action(Box::new(Redo), app);
-                                                    }),
-                                            )
-                                        })
-                                        .child(
-                                            Button::new("button-copy")
-                                                .ghost()
-                                                .icon(IconName::Copy)
-                                                .small()
-                                                .on_click(|_, win, app| {
-                                                    win.dispatch_action(Box::new(Clone), app);
-                                                }),
-                                        )
-                                        .child(
-                                            Button::new("button-star")
-                                                .ghost()
-                                                .when_else(
-                                                    self.item.follow,
-                                                    |this| {
-                                                        this.icon(
-                                                            Icon::new(IconName::Star)
-                                                                .xsmall()
-                                                                .text_color(yellow_500()),
-                                                        )
-                                                    },
-                                                    |this| this.icon(IconName::Star),
-                                                )
-                                                .small()
-                                                .on_click(|_, win, app| {
-                                                    win.dispatch_action(Box::new(Follow), app);
-                                                }),
-                                        ),
-                                )
-                            })
+                            )
                             .child(
-                                h_flex().child(
-                                    Label::new("10/01 17:36")
-                                        .whitespace_nowrap()
-                                        .text_xs()
-                                        .text_color(text_color.opacity(0.5)),
-                                ),
+                                h_flex()
+                                    .size_full()
+                                    .items_center()
+                                    .justify_between()
+                                    .gap_2()
+                                    .text_color(text_color)
+                                    .child(
+                                        //todo信息
+                                        h_flex()
+                                            .items_center()
+                                            .justify_start()
+                                            .gap_2()
+                                            .when(self.item.status == TodoStatus::Alert, |div| {
+                                                div.child(
+                                                    Icon::new(IconName::TriangleAlert)
+                                                        .xsmall()
+                                                        .text_color(yellow_500()),
+                                                )
+                                            })
+                                            .child(Icon::new(IconName::Paperclip).xsmall())
+                                            .child(if is_completed {
+                                                // 已完成任务显示完成图标
+                                                Icon::new(IconName::CircleCheck)
+                                                    .xsmall()
+                                                    .text_color(green_500())
+                                            } else if self.item.status == TodoStatus::InProgress {
+                                                // 进行中任务显示刷新图标
+                                                Icon::new(IconName::RefreshCW).xsmall()
+                                            } else {
+                                                // 待办任务显示计时器图标
+                                                Icon::new(IconName::TimerReset)
+                                                    .xsmall()
+                                                    .text_color(green_500())
+                                            })
+                                            .child(
+                                                Label::new("10/01 17:36")
+                                                    .whitespace_nowrap()
+                                                    .text_xs()
+                                                    .text_color(text_color.opacity(0.5)),
+                                            ),
+                                    )
+                                    .when(
+                                        !selected || self.item.status == TodoStatus::Done,
+                                        |this| {
+                                            this.child(
+                                                // 模型信息 - 为已完成任务降低透明度
+                                                h_flex()
+                                                    .items_center()
+                                                    .justify_end()
+                                                    .gap_2()
+                                                    .when(is_completed, |div| div.opacity(0.5))
+                                                    .child(Icon::new(IconName::Mic).xsmall())
+                                                    .child(Icon::new(IconName::Image).xsmall())
+                                                    .child(Icon::new(IconName::Brain).xsmall())
+                                                    .child(Icon::new(IconName::Wrench).xsmall()),
+                                            )
+                                        },
+                                    ),
                             ),
-                    ),
-            )
-            .child(
-                h_flex()
-                    .items_center()
-                    .justify_between()
-                    .gap_2()
-                    .text_color(text_color)
-                    .child(
-                        //todo信息
-                        h_flex()
-                            .items_center()
-                            .justify_start()
-                            .gap_2()
-                            .when(self.item.status == TodoStatus::Alert, |div| {
-                                div.child(
-                                    Icon::new(IconName::TriangleAlert)
-                                        .xsmall()
-                                        .text_color(yellow_500()),
-                                )
-                            })
-                            .child(Icon::new(IconName::Paperclip).xsmall())
-                            .child(if is_completed {
-                                // 已完成任务显示完成图标
-                                Icon::new(IconName::CircleCheck)
-                                    .xsmall()
-                                    .text_color(green_500())
-                            } else if self.item.status == TodoStatus::InProgress {
-                                // 进行中任务显示刷新图标
-                                Icon::new(IconName::RefreshCW).xsmall()
-                            } else {
-                                // 待办任务显示计时器图标
-                                Icon::new(IconName::TimerReset)
-                                    .xsmall()
-                                    .text_color(green_500())
-                            }),
                     )
-                    .child(
-                        // 模型信息 - 为已完成任务降低透明度
-                        h_flex()
-                            .items_center()
-                            .justify_end()
-                            .gap_2()
-                            .when(is_completed, |div| div.opacity(0.5))
-                            .child(Icon::new(IconName::Mic).xsmall())
-                            .child(Icon::new(IconName::Image).xsmall())
-                            .child(Icon::new(IconName::Brain).xsmall())
-                            .child(Icon::new(IconName::Wrench).xsmall()),
+                    .when(
+                        selected && self.item.status != TodoStatus::Done,
+                        |this: Div| {
+                            this.child(
+                                v_flex()
+                                    .h_full()
+                                    .items_center()
+                                    .justify_between()
+                                    .gap_1()
+                                    .child(
+                                        //右侧
+                                        h_flex().gap_1().items_center().justify_end().when(
+                                            selected,
+                                            |div| {
+                                                div.child(
+                                                    h_flex()
+                                                        .gap_1()
+                                                        .items_center()
+                                                        .justify_end()
+                                                        .when(
+                                                            self.item.status
+                                                                == TodoStatus::InProgress,
+                                                            |div| {
+                                                                div.child(
+                                                                    Indicator::new()
+                                                                        .with_size(px(16.))
+                                                                        .icon(IconName::RefreshCW)
+                                                                        .color(blue_500()),
+                                                                )
+                                                            },
+                                                        )
+                                                        .when(
+                                                            self.item.status
+                                                                != TodoStatus::InProgress,
+                                                            |div| {
+                                                                div.child(
+                                                                    Button::new("button-refresh")
+                                                                        .ghost()
+                                                                        .icon(IconName::RefreshCW)
+                                                                        .small()
+                                                                        .on_click(|_, win, app| {
+                                                                            win.dispatch_action(
+                                                                                Box::new(Redo),
+                                                                                app,
+                                                                            );
+                                                                        }),
+                                                                )
+                                                            },
+                                                        )
+                                                        .child(
+                                                            Button::new("button-copy")
+                                                                .ghost()
+                                                                .icon(IconName::Copy)
+                                                                .small()
+                                                                .on_click(|_, win, app| {
+                                                                    win.dispatch_action(
+                                                                        Box::new(Clone),
+                                                                        app,
+                                                                    );
+                                                                }),
+                                                        )
+                                                        .child(
+                                                            Button::new("button-star")
+                                                                .ghost()
+                                                                .when_else(
+                                                                    self.item.follow,
+                                                                    |this| {
+                                                                        this.icon(
+                                                                        Icon::new(IconName::Star)
+                                                                            .xsmall()
+                                                                            .text_color(
+                                                                                yellow_500(),
+                                                                            ),
+                                                                    )
+                                                                    },
+                                                                    |this| {
+                                                                        this.icon(IconName::Star)
+                                                                    },
+                                                                )
+                                                                .small()
+                                                                .on_click(|_, win, app| {
+                                                                    win.dispatch_action(
+                                                                        Box::new(Follow),
+                                                                        app,
+                                                                    );
+                                                                }),
+                                                        ),
+                                                )
+                                            },
+                                        ),
+                                    )
+                                    .child(
+                                        // 模型信息 - 为已完成任务降低透明度
+                                        h_flex()
+                                            .items_center()
+                                            .justify_end()
+                                            .gap_2()
+                                            .when(is_completed, |div| div.opacity(0.5))
+                                            .child(Icon::new(IconName::Mic).xsmall())
+                                            .child(Icon::new(IconName::Image).xsmall())
+                                            .child(Icon::new(IconName::Brain).xsmall())
+                                            .child(Icon::new(IconName::Wrench).xsmall()),
+                                    ),
+                            )
+                        },
                     ),
             )
     }
@@ -494,6 +524,7 @@ impl TodoList {
         if let Some(mut todo) = self.selected_todo.clone() {
             todo.follow = !todo.follow;
             AppState::state_mut(cx).todo_manager.update_todo(todo);
+            self.save(window, cx);
             self.set_active_tab(self.active_tab_ix, window, cx);
         }
     }
@@ -502,6 +533,7 @@ impl TodoList {
         if let Some(mut todo) = self.selected_todo.clone() {
             todo.status = TodoStatus::Todo;
             AppState::state_mut(cx).todo_manager.update_todo(todo);
+            self.save(window, cx);
             self.set_active_tab(self.active_tab_ix, window, cx);
         }
     }
@@ -510,6 +542,7 @@ impl TodoList {
         if let Some(mut todo) = self.selected_todo.clone() {
             todo.status = TodoStatus::Done;
             AppState::state_mut(cx).todo_manager.update_todo(todo);
+            self.save(window, cx);
             self.set_active_tab(self.active_tab_ix, window, cx);
         }
     }
@@ -523,6 +556,7 @@ impl TodoList {
             }
 
             AppState::state_mut(cx).todo_manager.update_todo(todo);
+            self.save(window, cx);
             self.set_active_tab(self.active_tab_ix, window, cx);
         }
     }
@@ -530,9 +564,23 @@ impl TodoList {
         println!("Clone action triggered");
         if let Some(todo) = self.selected_todo.clone() {
             AppState::state_mut(cx).todo_manager.copy_todo(&todo.id);
+            self.save(window, cx);
             self.set_active_tab(self.active_tab_ix, window, cx);
         }
     }
+
+    fn save(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        AppState::state_mut(cx).todo_manager.save().ok();
+    }
+
+    fn delete_todo(&mut self, _: &Delete, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(todo) = self.selected_todo.clone() {
+            AppState::state_mut(cx).todo_manager.delete_todo(&todo.id);
+            self.save(window, cx);
+            self.set_active_tab(self.active_tab_ix, window, cx);
+        }
+    }
+
     fn new_todo(&mut self, _: &New, window: &mut Window, cx: &mut Context<Self>) {
         TodoThreadEdit::add(window, cx);
     }
@@ -548,17 +596,9 @@ impl TodoList {
         }
     }
 
-    fn delete_todo(&mut self, _: &Delete, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(todo) = self.selected_todo.clone() {
-            AppState::state_mut(cx).todo_manager.delete_todo(&todo.id);
-            self.set_active_tab(self.active_tab_ix, window, cx);
-        }
-    }
-
-    fn todo_updated(&mut self, _: &ToddSaved, window: &mut Window, cx: &mut Context<Self>) {
+    fn todo_updated(&mut self, _: &TodoSaved, window: &mut Window, cx: &mut Context<Self>) {
         println!("Todo updated");
         self.set_active_tab(self.active_tab_ix, window, cx);
-        //cx.notify();
     }
 
     fn set_todo_filter(&mut self, filter: TodoFilter, _: &mut Window, cx: &mut Context<Self>) {
