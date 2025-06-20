@@ -55,7 +55,7 @@ impl Settings {
             app_id: Some("x-todo-app".to_string()),
             window_bounds: Some(WindowBounds::Windowed(window_bounds)),
             titlebar: Some(TitleBar::title_bar_options()),
-            kind: WindowKind::PopUp,
+            kind: WindowKind::Normal,
             #[cfg(target_os = "linux")]
             window_background: gpui::WindowBackgroundAppearance::Transparent,
             #[cfg(target_os = "linux")]
@@ -72,8 +72,9 @@ impl Settings {
         cx.create_normal_window("xTo-Do 设置", options, move |window, cx| {
             cx.new(|cx| Self::new(&init_view, parent_handle, window, cx))
         });
-        #[cfg(target_os = "windows")]
-        parent.enable_window(false);
+        // #[cfg(target_os = "windows")]
+        // parent.enable_window(false);
+       
     }
 
     fn new(
@@ -82,6 +83,7 @@ impl Settings {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
+        // window.topmost_window();
         let search_input = cx.new(|cx| InputState::new(window, cx).placeholder("Search..."));
         let sub = cx.on_window_closed(move |cx| {
             parent

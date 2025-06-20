@@ -423,6 +423,27 @@ pub trait WindowExt {
             }
         }
     }
+
+    fn topmost_window(&self) {
+        use windows::Win32::Foundation::RECT;
+        use windows::Win32::UI::WindowsAndMessaging::*;
+        if let Some(hwnd) = self.hwnd() {
+            let mut rect = RECT::default();
+            unsafe {
+                let _ = GetWindowRect(hwnd, &mut rect);
+                let _ = SetWindowPos(
+                    hwnd,
+                    Some(HWND_TOPMOST),
+                    rect.left,
+                    rect.top,
+                    rect.right - rect.left,
+                    rect.bottom - rect.top,
+                    SET_WINDOW_POS_FLAGS(0),
+                );
+                let _ = SetForegroundWindow(hwnd);
+            }
+        }
+    }
 }
 #[cfg(target_os = "windows")]
 impl WindowExt for Window {

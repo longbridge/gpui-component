@@ -14,12 +14,10 @@ use gpui_component::{
     accordion::Accordion,
     button::{Button, ButtonVariant, ButtonVariants as _},
     checkbox::Checkbox,
-    date_picker::{DatePicker, DatePickerEvent, DatePickerState, DateRangePreset},
-    dropdown::{Dropdown, DropdownState},
+    date_picker::{DatePicker, DatePickerEvent, DatePickerState},
     input::{InputEvent, InputState, TextInput},
     label::Label,
     notification::NotificationType,
-    switch::Switch,
     tooltip::Tooltip,
     *,
 };
@@ -241,7 +239,7 @@ impl TodoThreadEdit {
             window_bounds: Some(WindowBounds::Windowed(window_bounds)),
             titlebar: Some(TitleBar::title_bar_options()),
             window_min_size: Some(SIZE),
-            kind: WindowKind::PopUp,
+            kind: WindowKind::Normal,
             #[cfg(target_os = "linux")]
             window_background: gpui::WindowBackgroundAppearance::Transparent,
             #[cfg(target_os = "linux")]
@@ -254,8 +252,8 @@ impl TodoThreadEdit {
             options,
             move |window, cx| cx.new(|cx| Self::new(todo, parent_handle, window, cx)),
         );
-        #[cfg(target_os = "windows")]
-        parent.enable_window(false);
+        // #[cfg(target_os = "windows")]
+        // parent.enable_window(false);
     }
 
     pub fn add(parent: &mut Window, cx: &mut App) {
