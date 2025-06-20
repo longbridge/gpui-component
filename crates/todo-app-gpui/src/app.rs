@@ -201,9 +201,10 @@ pub fn run() {
         ]);
 
         cx.on_window_closed(|cx| {
-            if cx.windows().is_empty() {
-                cx.quit();
-            }
+            // if cx.windows().is_empty() {
+            //     cx.quit();
+            // }
+             cx.quit();
         })
         .detach();
         let window_size = size(px(WIDTH), px(HEIGHT));

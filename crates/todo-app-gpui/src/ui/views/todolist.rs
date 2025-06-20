@@ -1,5 +1,5 @@
 use super::todo_thread_edit::TodoThreadEdit;
-use crate::app::AppState;
+use crate::app::{AppState, Quit};
 use crate::ui::views::todo_thread::TodoThreadChat;
 use crate::{models::todo_item::*, ui::views::todo_thread_edit::Save as TodoSaved};
 use gpui::prelude::*;
@@ -69,17 +69,10 @@ impl RenderOnce for TodoItem {
         // 检查任务是否已完成
         let is_completed = self.item.status == TodoStatus::Done;
 
-        // 为已完成任务设置不同的文本颜色和透明度
-        // let title_color = if is_completed {
-        //     text_color.opacity(0.6)
-        // } else {
-        //     text_color
-        // };
-
         let description_color = if is_completed {
             text_color.opacity(0.3)
         } else {
-            text_color.opacity(0.5)
+            text_color.opacity(0.8)
         };
         self.base
             .h_16()
@@ -92,7 +85,7 @@ impl RenderOnce for TodoItem {
                     .items_center() // 垂直居中对齐
                     .justify_between() // 两端对齐
                     .gap_1() // 间距 2 单位
-                    .text_color(text_color) // 设置文本颜色
+                   //.text_color(text_color) // 设置文本颜色
                     .child(
                         //左侧
                         v_flex()
@@ -123,7 +116,7 @@ impl RenderOnce for TodoItem {
                                     .items_center()
                                     .justify_between()
                                     .gap_2()
-                                    .text_color(text_color)
+                                    //.text_color(text_color)
                                     .child(
                                         //todo信息
                                         h_flex()
@@ -156,7 +149,7 @@ impl RenderOnce for TodoItem {
                                                 Label::new("10/01 17:36")
                                                     .whitespace_nowrap()
                                                     .text_xs()
-                                                    .text_color(text_color.opacity(0.5)),
+                                                    .text_color(text_color.opacity(0.95)),
                                             ),
                                     )
                                     .when(
@@ -169,7 +162,8 @@ impl RenderOnce for TodoItem {
                                                     .justify_end()
                                                     .gap_2()
                                                     .when(is_completed, |div| div.opacity(0.5))
-                                                    .child(Icon::new(IconName::Mic).xsmall())
+                                                    .child(Icon::new(IconName::Ear).xsmall())
+                                                    .child(Icon::new(IconName::Eye).xsmall())
                                                     .child(Icon::new(IconName::Image).xsmall())
                                                     .child(Icon::new(IconName::Brain).xsmall())
                                                     .child(Icon::new(IconName::Wrench).xsmall()),
@@ -276,7 +270,8 @@ impl RenderOnce for TodoItem {
                                             .justify_end()
                                             .gap_2()
                                             .when(is_completed, |div| div.opacity(0.5))
-                                            .child(Icon::new(IconName::Mic).xsmall())
+                                            .child(Icon::new(IconName::Ear).xsmall())
+                                            .child(Icon::new(IconName::Eye).xsmall())
                                             .child(Icon::new(IconName::Image).xsmall())
                                             .child(Icon::new(IconName::Brain).xsmall())
                                             .child(Icon::new(IconName::Wrench).xsmall()),
@@ -449,6 +444,10 @@ pub struct TodoList {
 
 impl TodoList {
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
+        // window.on_window_should_close(cx, |win,app|{
+        //     win.dispatch_action(Box::new(Quit), app);
+        //     true
+        // });
         cx.new(|cx| Self::new(window, cx))
     }
 
