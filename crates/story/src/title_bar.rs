@@ -290,10 +290,11 @@ impl Render for FontSizeSelector {
                             .label("Border Radius")
                             .menu_with_check("8px", radius == 8, Box::new(SelectRadius(8)))
                             .menu_with_check(
-                                "4px (default)",
-                                radius == 4,
-                                Box::new(SelectRadius(4)),
+                                "6px (default)",
+                                radius == 6,
+                                Box::new(SelectRadius(6)),
                             )
+                            .menu_with_check("4px", radius == 4, Box::new(SelectRadius(4)))
                             .menu_with_check("0px", radius == 0, Box::new(SelectRadius(0)))
                             .separator()
                             .label("Scrollbar")

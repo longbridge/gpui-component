@@ -353,7 +353,6 @@ impl RenderOnce for Modal {
         let offset_top = px(layer_ix as f32 * 16.);
         let y = self.margin_top.unwrap_or(view_size.height / 10.) + offset_top;
         let x = bounds.center().x - self.width / 2.;
-        let border_radius = (cx.theme().radius * 2.).min(px(20.));
 
         let mut padding_right = px(24.);
         let mut padding_left = px(24.);
@@ -397,7 +396,7 @@ impl RenderOnce for Modal {
                             .bg(cx.theme().background)
                             .border_1()
                             .border_color(cx.theme().border)
-                            .rounded(border_radius)
+                            .rounded(cx.theme().radius_lg)
                             .shadow_xl()
                             .min_h_24()
                             .py_6()

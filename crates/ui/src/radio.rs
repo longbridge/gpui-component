@@ -75,10 +75,15 @@ impl ParentElement for Radio {
 
 impl RenderOnce for Radio {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let color = if self.disabled {
-            cx.theme().primary.opacity(0.5)
+        let (border_color, bg) = if self.checked {
+            (cx.theme().primary, cx.theme().primary)
         } else {
-            cx.theme().primary
+            (cx.theme().input, cx.theme().input.opacity(0.3))
+        };
+        let (border_color, bg) = if self.disabled {
+            (border_color.opacity(0.5), bg.opacity(0.5))
+        } else {
+            (border_color, bg)
         };
 
         // wrap a flex to patch for let Radio display inline
@@ -97,15 +102,19 @@ impl RenderOnce for Radio {
                         .flex_shrink_0()
                         .rounded_full()
                         .border_1()
-                        .border_color(color)
-                        .when(self.checked, |this| this.bg(color))
+                        .border_color(border_color)
+                        .when(cx.theme().shadow && !self.disabled, |this| this.shadow_sm())
+                        .map(|this| match self.checked {
+                            false => this.bg(cx.theme().background),
+                            _ => this.bg(bg),
+                        })
                         .child(
                             svg()
                                 .absolute()
                                 .top_px()
                                 .left_px()
                                 .size_3()
-                                .text_color(color)
+                                .text_color(bg)
                                 .when(self.checked, |this| {
                                     this.text_color(cx.theme().primary_foreground)
                                 })
@@ -126,6 +135,9 @@ impl RenderOnce for Radio {
                                     .size_full()
                                     .overflow_hidden()
                                     .line_height(relative(1.))
+                                    .when(self.disabled, |this| {
+                                        this.text_color(cx.theme().muted_foreground)
+                                    })
                                     .child(label),
                             )
                         })

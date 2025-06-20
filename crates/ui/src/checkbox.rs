@@ -100,15 +100,20 @@ impl Sizable for Checkbox {
 
 impl RenderOnce for Checkbox {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let border_color = if self.checked {
+            cx.theme().primary
+        } else {
+            cx.theme().input
+        };
         let (color, icon_color) = if self.disabled {
             (
-                cx.theme().primary.opacity(0.5),
+                border_color.opacity(0.5),
                 cx.theme().primary_foreground.opacity(0.5),
             )
         } else {
-            (cx.theme().primary, cx.theme().primary_foreground)
+            (border_color, cx.theme().primary_foreground)
         };
-        let radius = (cx.theme().radius / 2.).min(px(6.));
+        let radius = cx.theme().radius.min(px(4.));
 
         div().child(
             self.base
@@ -139,8 +144,9 @@ impl RenderOnce for Checkbox {
                         .border_1()
                         .border_color(color)
                         .rounded(radius)
+                        .when(cx.theme().shadow && !self.disabled, |this| this.shadow_sm())
                         .map(|this| match self.checked {
-                            false => this.bg(cx.theme().transparent),
+                            false => this.bg(cx.theme().background),
                             _ => this.bg(color),
                         })
                         .child(
@@ -174,6 +180,9 @@ impl RenderOnce for Checkbox {
                                         div()
                                             .size_full()
                                             .text_color(cx.theme().foreground)
+                                            .when(self.disabled, |this| {
+                                                this.text_color(cx.theme().muted_foreground)
+                                            })
                                             .line_height(relative(1.))
                                             .child(label),
                                     )

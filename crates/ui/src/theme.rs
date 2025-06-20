@@ -284,7 +284,7 @@ impl ThemeColor {
             info_active: crate::sky_600(),
             info_hover: crate::sky_500().opacity(0.9),
             info_foreground: crate::sky_50(),
-            input: hsl(240.0, 5.9, 90.0),
+            input: hsl(0.0, 0.09, 88.),
             link: hsl(221.0, 83.0, 53.0),
             link_active: hsl(221.0, 83.0, 53.0).darken(0.2),
             link_hover: hsl(221.0, 83.0, 53.0).lighten(0.2),
@@ -383,7 +383,7 @@ impl ThemeColor {
             info_active: crate::sky_900().darken(0.2),
             info_foreground: crate::sky_50(),
             info_hover: crate::sky_900().opacity(0.8),
-            input: hsl(240.0, 3.7, 15.9),
+            input: hsl(0.0, 0.0, 100.).opacity(0.15),
             link: hsl(221.0, 83.0, 53.0),
             link_active: hsl(221.0, 83.0, 53.0).darken(0.2),
             link_hover: hsl(221.0, 83.0, 53.0).lighten(0.2),
@@ -460,7 +460,10 @@ pub struct Theme {
     pub mode: ThemeMode,
     pub font_family: SharedString,
     pub font_size: Pixels,
+    /// Radius for the general elements.
     pub radius: Pixels,
+    /// Radius for the large elements, e.g.: Modal, Notification border radius.
+    pub radius_lg: Pixels,
     pub shadow: bool,
     pub transparent: Hsla,
     /// Show the scrollbar mode, default: Scrolling
@@ -645,7 +648,8 @@ impl From<ThemeColor> for Theme {
             } else {
                 "FreeMono".into()
             },
-            radius: px(4.),
+            radius: px(6.),
+            radius_lg: px(8.),
             shadow: true,
             scrollbar_show: ScrollbarShow::default(),
             tile_grid_size: px(8.),

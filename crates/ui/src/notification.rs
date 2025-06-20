@@ -266,17 +266,17 @@ impl Render for Notification {
             .group("")
             .occlude()
             .relative()
-            .w_96()
+            .w_112()
             .border_1()
             .border_color(cx.theme().border)
             .bg(cx.theme().popover)
-            .rounded(cx.theme().radius * 1.5)
+            .rounded(cx.theme().radius_lg)
             .shadow_md()
             .py_3p5()
             .px_4()
             .gap_3()
             .when_some(icon, |this, icon| {
-                this.child(div().absolute().top_3().left_4().child(icon))
+                this.child(div().absolute().py_3p5().left_4().child(icon))
             })
             .child(
                 v_flex()
@@ -294,7 +294,7 @@ impl Render for Notification {
                     }),
             )
             .when_some(self.action_builder.clone(), |this, action_builder| {
-                this.child(action_builder(window, cx).small().outline().mr_1())
+                this.child(action_builder(window, cx).small().outline().mr_3p5())
             })
             .when_some(self.on_click.clone(), |this, on_click| {
                 this.on_click(cx.listener(move |view, event, window, cx| {
@@ -305,8 +305,8 @@ impl Render for Notification {
             .child(
                 h_flex()
                     .absolute()
-                    .top_1()
-                    .right_1()
+                    .top_3p5()
+                    .right_3p5()
                     .invisible()
                     .group_hover("", |this| this.visible())
                     .child(
