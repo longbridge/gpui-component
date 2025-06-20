@@ -22,6 +22,7 @@ actions!(
         Open,
         Edit,
         Completed,
+        Redo,
         Pause,
         Clone,
         Star,
@@ -327,21 +328,21 @@ impl ListDelegate for TodoListDelegate {
         //    self.selected_index = Some(row_ix);
         menu.external_link_icon(true)
             //  .link("About", "https://github.com/longbridge/gpui-component")
-            .when_some(row_ix, |menu, row_idx| {
-                menu.menu("新建", Box::new(New))
-                    .menu("打开", Box::new(Open))
-                    .menu("编辑", Box::new(Edit))
+            .when_some(row_ix, |menu, _row_idx| {
+                menu.menu_with_icon("打开", IconName::NotepadText, Box::new(Open))
+                    .menu_with_icon("编辑", IconName::SquarePen, Box::new(Edit))
+                    .separator()
+                    .menu_with_icon("挂起", IconName::Pause, Box::new(Pause))
+                    .menu_with_icon("完成", IconName::Done, Box::new(Completed))
+                    .menu_with_icon("关注", IconName::Star, Box::new(Star))
                     .separator()
                     .menu_with_icon("克隆", IconName::Copy, Box::new(Clone))
-                    .menu_with_icon("暂停", IconName::Pause, Box::new(Pause))
-                    .menu_with_icon("完成", IconName::Done, Box::new(Completed))
-                    .menu_with_icon("关注", IconName::Star, Box::new(Completed))
-                    // .separator()
-                    // .menu_with_check("删除", true, Box::new(ToggleCheck))
+                    .menu_with_icon("新建", IconName::FilePlus2, Box::new(New))
                     .separator()
-                    .menu_with_icon("删除", IconName::Trash, Box::new(Delete))
             })
-            .when_none(&row_ix, |menu| menu.menu("新建", Box::new(New)))
+            .when_none(&row_ix, |menu| {
+                menu.menu_with_icon("新建", IconName::FilePlus2, Box::new(New))
+            })
     }
 
     fn loading(&self, _: &App) -> bool {
@@ -475,8 +476,16 @@ impl TodoList {
         let picker = self.todo_list.read(cx);
         self.selected_todo = picker.delegate().selected_todo();
     }
-
-    fn clone(&mut self, _: &Clone, _: &mut Window, cx: &mut Context<Self>) {
+    fn star_todo(&mut self, _: &Star, _: &mut Window, cx: &mut Context<Self>) {
+        println!("Star action triggered");
+    }
+    fn redo_todo(&mut self, _: &Redo, _: &mut Window, cx: &mut Context<Self>) {
+        println!("Redo action triggered");
+    }
+    fn done_todo(&mut self, _: &Completed, _: &mut Window, cx: &mut Context<Self>) {
+        println!("Completed action triggered");
+    }
+    fn clone_todo(&mut self, _: &Clone, _: &mut Window, cx: &mut Context<Self>) {
         println!("Clone action triggered");
     }
     fn new_todo(&mut self, _: &New, window: &mut Window, cx: &mut Context<Self>) {
@@ -575,12 +584,15 @@ impl Render for TodoList {
         v_flex()
             .track_focus(&self.focus_handle)
             //  .on_action(cx.listener(Self::selected_company))
-            .on_action(cx.listener(Self::clone))
+            .on_action(cx.listener(Self::done_todo))
+            .on_action(cx.listener(Self::star_todo))
+            .on_action(cx.listener(Self::redo_todo))
+            .on_action(cx.listener(Self::clone_todo))
             .on_action(cx.listener(Self::new_todo))
             .on_action(cx.listener(Self::open_todo))
             .on_action(cx.listener(Self::edit_todo))
-            .on_action(cx.listener(Self::todo_updated))
             .on_action(cx.listener(Self::delete_todo))
+            .on_action(cx.listener(Self::todo_updated))
             .size_full()
             .gap_4()
             .child(
@@ -596,7 +608,7 @@ impl Render for TodoList {
                             .on_click(cx.listener(|this, ix: &usize, window, cx| {
                                 this.set_active_tab(*ix, window, cx);
                             }))
-                            .children(vec!["全部", "计划中", "已完成", "回收站"]),
+                            .children(vec!["全部", "计划中", "已完成"]),
                     )
                     .child(
                         ButtonGroup::new("button-group")

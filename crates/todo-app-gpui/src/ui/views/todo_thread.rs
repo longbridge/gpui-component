@@ -108,7 +108,7 @@ impl TodoThreadChat {
                 .placeholder(placeholder)
                 .clean_on_escape()
                 .multi_line()
-                .auto_grow(2, 6)
+                .auto_grow(1, 6)
         });
 
         let _subscriptions = vec![cx.subscribe_in(&chat_input, window, Self::on_chat_input_event)];

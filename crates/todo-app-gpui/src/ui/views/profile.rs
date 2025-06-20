@@ -2,7 +2,15 @@ use gpui::prelude::*;
 use gpui::*;
 
 use gpui_component::{
-    button::{Button, ButtonVariant, ButtonVariants as _}, checkbox::Checkbox, dock::PanelControl, dropdown::{Dropdown, DropdownState}, input::{InputEvent, InputState, TextInput}, notification::NotificationType, text::TextView, tooltip::Tooltip, *
+    button::{Button, ButtonVariant, ButtonVariants as _},
+    checkbox::Checkbox,
+    dock::PanelControl,
+    dropdown::{Dropdown, DropdownState},
+    input::{InputEvent, InputState, TextInput},
+    notification::NotificationType,
+    text::TextView,
+    tooltip::Tooltip,
+    *,
 };
 
 use crate::{app::AppState, models::profile_config::ProfileData, ui::components::ViewKit};
@@ -63,14 +71,14 @@ impl Profile {
                 // .pattern(
                 //     regex::Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$").unwrap(),
                 // )
-                .validate(|s| s.contains("@"))
+                // .validate(|s| s.contains("@"))
                 .default_value(AppState::state(cx).profile_manager.profile.email.clone())
         });
 
         let phone_input = cx.new(|cx| {
             InputState::new(window, cx)
                 .placeholder("请输入手机号码")
-                .mask_pattern("999-9999-9999")
+                // .mask_pattern("999-9999-9999")
                 .default_value(AppState::state(cx).profile_manager.profile.phone.clone())
         });
 
