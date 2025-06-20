@@ -705,7 +705,7 @@ impl PopupMenu {
                     .h(px(1.))
                     .mx_neg_1()
                     .my_0p5()
-                    .bg(cx.theme().muted),
+                    .bg(cx.theme().border),
             ),
             PopupMenuItem::Label(label) => this.disabled(true).cursor_default().child(
                 h_flex()
