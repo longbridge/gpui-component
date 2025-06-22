@@ -126,7 +126,13 @@ actions!(input_story, [Tab, TabPrev]);
 pub fn run() {
     const WIDTH: f32 = 400.0;
     const HEIGHT: f32 = WIDTH * 2.2;
-    Application::new().with_assets(Assets).run(move |cx| {
+   
+   let app= Application::new().with_assets(Assets);
+   
+ app.background_executor().spawn(async{
+
+ }).detach();
+   app.run(move |cx| {
         gpui_component::init(cx);
         AppState::init(cx);
         Profile::init(cx);
@@ -141,6 +147,7 @@ pub fn run() {
             println!("Quit action received, quitting the application.");
             cx.quit();
         });
+    
         // 注册面板
         register_panel(cx, PANEL_NAME, |_, _, info, window, cx| {
             let story_state = match info {
@@ -201,10 +208,9 @@ pub fn run() {
         ]);
 
         cx.on_window_closed(|cx| {
-            // if cx.windows().is_empty() {
-            //     cx.quit();
-            // }
-             cx.quit();
+            if cx.windows().is_empty() {
+                cx.quit();
+            }
         })
         .detach();
         let window_size = size(px(WIDTH), px(HEIGHT));
