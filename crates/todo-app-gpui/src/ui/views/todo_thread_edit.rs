@@ -113,27 +113,12 @@ impl TodoThreadEdit {
 
     // 获取模型选择显示文本
     fn get_model_display_text(&self, _cx: &App) -> String {
-        let selected_count = self.todoitem.selected_models.len();
-        if selected_count == 0 {
+        if let Some(selected_model) = &self.todoitem.selected_model {
+           selected_model.model_name.clone()
+        }else{
             "选择模型".to_string()
-        } else if selected_count <= 2 {
-            self.todoitem
-                .selected_models
-                .iter()
-                .map(|item| item.model_name.as_str())
-                .collect::<Vec<_>>()
-                .join(", ")
-        } else {
-            let first_two = self
-                .todoitem
-                .selected_models
-                .iter()
-                .take(2)
-                .map(|item| item.model_name.as_str())
-                .collect::<Vec<_>>()
-                .join(", ");
-            format!("{} 等{}个模型", first_two, selected_count)
         }
+        
     }
 
     // 获取工具选择显示文本
@@ -182,8 +167,7 @@ impl TodoThreadEdit {
         if checked {
             // 如果选中，则添加
             self.todoitem
-                .selected_models
-                .push(crate::models::todo_item::SelectedModel {
+                .selected_model=Some(crate::models::todo_item::SelectedModel {
                     provider_id: provider.id.clone(),
                     provider_name: provider.name.clone(),
                     model_id: model.id.clone(),
@@ -192,8 +176,7 @@ impl TodoThreadEdit {
         } else {
             // 如果未选中，则移除
             self.todoitem
-                .selected_models
-                .retain(|t| t.model_id != model.id || t.provider_id != provider.id);
+                .selected_model=None;
         }
         cx.notify(); // 通知主界面更新
     }
@@ -390,7 +373,7 @@ impl TodoThreadEdit {
 
                 // 检查该供应商是否有被选中的模型
                 let has_selected_models = provider_models.iter().any(|model| {
-                    todoitem.selected_models.iter().any(|selected| selected.model_id == model.id && selected.provider_id == provider.id)
+                    todoitem.selected_model.iter().any(|selected| selected.model_id == model.id && selected.provider_id == provider.id)
                 });
 
                 // 检查当前供应商是否应该展开
@@ -469,7 +452,7 @@ impl TodoThreadEdit {
                                                             .child(
                                                                 Checkbox::new(checkbox_id)
                                                                     .checked(
-                                                                        todoitem.selected_models.iter().any(|selected|
+                                                                        todoitem.selected_model.iter().any(|selected|
                                                                             selected.model_id == model.id && selected.provider_id == provider.id
                                                                         )
                                                                     )
@@ -550,7 +533,7 @@ impl TodoThreadEdit {
                                 .on_click(move |_, window, cx| {
                                     // 清空所有模型选择
                                     todo_edit_entity_for_clear.update(cx, |todo_edit, todo_cx| {
-                                        todo_edit.todoitem.selected_models.clear();
+                                        todo_edit.todoitem.selected_model=None;
                                         todo_edit.save(&Save, window, todo_cx);
                                         todo_cx.notify(); // 通知主界面更新
                                     });

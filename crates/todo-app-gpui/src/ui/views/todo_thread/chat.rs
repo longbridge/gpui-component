@@ -39,7 +39,7 @@ impl TodoThreadChat {
         self.scroll_handle.scroll_to_bottom();
         // 从选择的模型中获取第一个作为当前使用的模型
 
-        let selected_model = self.todoitem.selected_models.first().cloned();
+        let selected_model = self.todoitem.selected_model.clone();
         println!("使用模型: {:?}", selected_model);
         // 获取当前选择的模型提供商信息
         if let Some(selected_model) = selected_model {

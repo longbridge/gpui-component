@@ -101,7 +101,7 @@ pub struct Todo {
     pub status: TodoStatus,
     // AI配置
     #[serde(default)]
-    pub selected_models: Vec<SelectedModel>,
+    pub selected_model: Option<SelectedModel>,
     #[serde(default)]
     pub selected_tools: Vec<SelectedTool>,
     // 文件附件
@@ -153,7 +153,7 @@ impl Default for Todo {
             due_date: None,
             reminder_date: None,
             completed_at: None,
-            selected_models: Vec::new(),
+            selected_model: None,
             selected_tools: Vec::new(),
             files: Vec::new(),
             recurring_enabled: false,
@@ -232,16 +232,17 @@ impl Todo {
                     model_name: model.display_name.clone(),
                     provider_name: provider.name.clone(),
                 };
-
+self.selected_model=Some(selected_model);
+ self.updated_at = Utc::now();
                 // 检查是否已存在
-                if !self
-                    .selected_models
-                    .iter()
-                    .any(|m| m.provider_id == provider_id && m.model_id == model_id)
-                {
-                    self.selected_models.push(selected_model);
-                    self.updated_at = Utc::now();
-                }
+                // if !self
+                //     .selected_model
+                //     .iter()
+                //     .any(|m| m.provider_id == provider_id && m.model_id == model_id)
+                // {
+                //     self.selected_model.push(selected_model);
+                //     self.updated_at = Utc::now();
+                // }
                 return Ok(());
             }
         }
@@ -253,15 +254,14 @@ impl Todo {
     }
 
     /// 移除选中的模型
-    pub fn remove_selected_model(&mut self, provider_id: &str, model_id: &str) {
-        self.selected_models
-            .retain(|m| !(m.provider_id == provider_id && m.model_id == model_id));
+    pub fn remove_selected_model(&mut self) {
+        self.selected_model=None;
         self.updated_at = Utc::now();
     }
 
     /// 清空所有选中的模型
-    pub fn clear_selected_models(&mut self) {
-        self.selected_models.clear();
+    pub fn clear_selected_model(&mut self) {
+        self.selected_model=None;
         self.updated_at = Utc::now();
     }
 
@@ -378,7 +378,7 @@ impl Todo {
         provider_manager: &LlmProviderManager,
     ) -> Vec<String> {
         let mut capabilities = Vec::new();
-        for selected_model in &self.selected_models {
+        for selected_model in &self.selected_model {
             if let Some(provider) = provider_manager.get_provider(&selected_model.provider_id) {
                 if let Some(model) = provider
                     .models

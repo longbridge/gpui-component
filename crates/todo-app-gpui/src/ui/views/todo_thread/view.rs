@@ -125,7 +125,7 @@ impl TodoThreadChat {
 
                 //let has_selected_models = provider_models.iter().any(|model| model.is_selected);
                 let has_selected_models = provider_models.iter().any(|model| {
-                    todoitem.selected_models.iter().any(|selected| selected.model_id == model.id && selected.provider_id == provider.id)
+                    todoitem.selected_model.iter().any(|selected| selected.model_id == model.id && selected.provider_id == provider.id)
                 });
                 let is_expanded = has_selected_models || expanded_providers.contains(&provider_index);
 
@@ -204,7 +204,7 @@ impl TodoThreadChat {
                                                             .gap_3()
                                                             .child(
                                                                 Checkbox::new(checkbox_id)
-                                                                    .checked(todoitem.selected_models.iter().any(|selected|
+                                                                    .checked(todoitem.selected_model.iter().any(|selected|
                                                                             selected.model_id == model.id && selected.provider_id == provider.id
                                                                         ))
                                                                     .label(model.display_name.clone())
@@ -273,7 +273,7 @@ impl TodoThreadChat {
                                 .label("清空选择")
                                 .on_click(move |_, window, cx| {
                                     todo_edit_entity_for_clear.update(cx, |todo_edit, todo_cx| {
-                                        todo_edit.todoitem.selected_models.clear();
+                                        todo_edit.todoitem.selected_model=None;
                                         todo_edit.save( window, todo_cx);
                                         todo_cx.notify();
                                     });

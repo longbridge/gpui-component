@@ -625,7 +625,7 @@ impl LlmProvider {
                                                     .items_center()
                                                     .px_1()
                                                     .text_xs()
-                                                    .bg(gpui::rgb(0x7C3AED))
+                                                    // .bg(gpui::rgb(0x7C3AED))
                                                     .rounded_md()
                                                     .text_color(gpui::rgb(0x374151))
                                                     .child(context_length.to_string()),
@@ -640,7 +640,7 @@ impl LlmProvider {
                                                     .items_center()
                                                     .px_1()
                                                     .text_xs()
-                                                    .bg(gpui::rgb(0x7C3AED))
+                                                  //  .bg(gpui::rgb(0x7C3AED))
                                                     .rounded_md()
                                                     .text_color(gpui::rgb(0x374151))
                                                     .child(max_output_tokens.to_string()),

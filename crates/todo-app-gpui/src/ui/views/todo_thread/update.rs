@@ -19,18 +19,10 @@ use gpui_component::{
 impl TodoThreadChat {
     // 获取模型选择显示文本
     pub(crate) fn get_model_display_text(&self, _cx: &App) -> String {
-        let selected_models = self.todoitem.selected_models.clone();
-        let selected_count = selected_models.len();
-
-        if selected_count == 0 {
-            "".to_string()
-        } else if selected_count == 1 {
-            selected_models[0].model_name.clone()
+        if let Some(selected_model) = &self.todoitem.selected_model {
+            selected_model.model_name.clone()
         } else {
-            format!(
-                "{} 等{}个模型",
-                selected_models[0].model_name, selected_count
-            )
+            "".to_string()
         }
     }
 
@@ -94,8 +86,7 @@ impl TodoThreadChat {
         if checked {
             // 如果选中，则添加
             self.todoitem
-                .selected_models
-                .push(crate::models::todo_item::SelectedModel {
+                .selected_model=Some(crate::models::todo_item::SelectedModel {
                     provider_id: provider.id.clone(),
                     provider_name: provider.name.clone(),
                     model_id: model.id.clone(),
@@ -103,14 +94,7 @@ impl TodoThreadChat {
                 });
         } else {
             // 如果取消选中，则移除
-            if let Some(index) = self
-                .todoitem
-                .selected_models
-                .iter()
-                .position(|t| t.model_id == model.id && t.provider_id == provider.id)
-            {
-                self.todoitem.selected_models.remove(index);
-            }
+            self.todoitem.selected_model=None;
         }
         cx.notify(); // 通知主界面更新
     }
