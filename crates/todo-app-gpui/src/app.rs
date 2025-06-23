@@ -136,13 +136,15 @@ pub fn run() {
         McpProvider::init(cx);
         Settings::init(cx);
         let http_client = std::sync::Arc::new(
-            reqwest_client::ReqwestClient::user_agent("gpui-component/story").unwrap(),
+            reqwest_client::ReqwestClient::user_agent("xtodo-utility").unwrap(),
         );
         cx.set_http_client(http_client);
         cx.on_action(|_: &Quit, cx: &mut App| {
             println!("Quit action received, quitting the application.");
             cx.quit();
         });
+
+        // cx.activate(true);
 
         // 注册面板
         register_panel(cx, PANEL_NAME, |_, _, info, window, cx| {
@@ -216,8 +218,8 @@ pub fn run() {
             window_bounds: Some(WindowBounds::Windowed(window_bounds)),
             titlebar: Some(TitleBar::title_bar_options()),
             window_min_size: None,
-
             kind: WindowKind::Normal,
+            show: true,
             #[cfg(target_os = "linux")]
             window_background: gpui::WindowBackgroundAppearance::Transparent,
             #[cfg(target_os = "linux")]
@@ -225,6 +227,7 @@ pub fn run() {
             ..Default::default()
         };
         cx.create_todo_window(options, move |window, cx| TodoMainWindow::view(window, cx));
+
         cx.activate(true);
     });
 }
@@ -340,6 +343,7 @@ impl AppExt for App {
         E: Into<AnyView>,
         F: FnOnce(&mut Window, &mut App) -> E + Send + 'static,
     {
+        let show = options.show;
         let window = self
             .open_window(options, |window, cx| {
                 #[cfg(target_os = "windows")]
@@ -361,13 +365,15 @@ impl AppExt for App {
                 cx.new(|cx| Root::new(root.into(), window, cx))
             })
             .expect("failed to open window");
+        if show {
+            window
+                .update(self, |_, window, _| {
+                    window.activate_window();
+                    window.set_window_title("X-Todo Utility");
+                })
+                .expect("failed to update window");
+        }
 
-        window
-            .update(self, |_, window, _| {
-                window.activate_window();
-                window.set_window_title("X-Todo Utility");
-            })
-            .expect("failed to update window");
         window
         // self.spawn(async move |cx| {
         //     let window = cx

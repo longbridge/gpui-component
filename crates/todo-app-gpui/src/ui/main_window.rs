@@ -9,15 +9,17 @@ pub struct TodoMainWindow {
 
 impl TodoMainWindow {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        window.on_window_should_close(cx, |win,app|{
+        window.on_window_should_close(cx, |win, app| {
             app.quit();
             true
         });
-       cx.spawn_in(window, async move |win,app|{
-        app.update(|win,app|{
-            app.dispatch_action(&Open);
-        }).ok();
-       }).detach();
+        cx.spawn_in(window, async move |win, app: &mut AsyncWindowContext| {
+            app.update(|win, app| {
+                app.dispatch_action(&Open);
+            })
+            .ok();
+        })
+        .detach();
         let root = TodoList::view(window, cx);
 
         Self { root }
