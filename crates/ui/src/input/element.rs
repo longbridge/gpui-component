@@ -333,14 +333,15 @@ impl TextElement {
         &self,
         state: &InputState,
         line_height: Pixels,
-        bounds: &Bounds<Pixels>,
+        input_height: Pixels,
     ) -> Range<usize> {
         if state.is_single_line() {
             return 0..1;
         }
 
         let scroll_top = -state.scroll_handle.offset().y;
-        let mut visible_range = 0..state.text_wrapper.lines.len();
+        let total_lines = state.text_wrapper.lines.len();
+        let mut visible_range = 0..total_lines;
         let mut line_top = px(0.);
         for (ix, line) in state.text_wrapper.lines.iter().enumerate() {
             line_top += line.height(line_height);
@@ -348,8 +349,9 @@ impl TextElement {
             if line_top < scroll_top {
                 visible_range.start = ix;
             }
-            if line_top > scroll_top + bounds.size.height {
-                visible_range.end = ix;
+
+            if line_top > scroll_top + input_height {
+                visible_range.end = (ix + 1).min(total_lines);
                 break;
             }
         }
@@ -536,7 +538,7 @@ impl Element for TextElement {
         let state = self.input.read(cx);
         let line_height = window.line_height();
 
-        let visible_range = self.calculate_visible_range(&state, line_height, &bounds);
+        let visible_range = self.calculate_visible_range(&state, line_height, bounds.size.height);
         let highlight_styles = self.highlight_lines(&visible_range, cx);
 
         let multi_line = self.input.read(cx).is_multi_line();
@@ -910,6 +912,7 @@ impl Element for TextElement {
 
         // Paint text
         let mut offset_y = mask_offset_y + invisible_top_padding;
+
         for line in prepaint
             .last_layout
             .iter()
