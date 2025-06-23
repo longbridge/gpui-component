@@ -685,21 +685,6 @@ impl TodoManager {
     pub fn count(&self) -> usize {
         self.todos.len()
     }
-
-    /// 创建大量伪造的测试数据 (1000条)
-    pub fn create_fake_data() -> Self {
-        let mut manager = TodoManager::default();
-
-        // 生成1000条Todo数据
-        let fake_todos: Vec<Todo> = (0..1000).map(|_| random_todo()).collect();
-
-        // 将所有伪造的Todo添加到管理器中
-        for todo in fake_todos {
-            manager.todos.push(todo);
-        }
-
-        manager
-    }
 }
 
 /// Todo统计信息
