@@ -85,7 +85,7 @@ impl RenderOnce for TodoItem {
                     .items_center() // 垂直居中对齐
                     .justify_between() // 两端对齐
                     .gap_1() // 间距 2 单位
-                   //.text_color(text_color) // 设置文本颜色
+                    //.text_color(text_color) // 设置文本颜色
                     .child(
                         //左侧
                         v_flex()
@@ -310,7 +310,11 @@ impl ListDelegate for TodoListDelegate {
             .todo_manager
             .list_todos()
             .iter()
-            .filter(|todo| todo.title.to_lowercase().contains(&query.to_lowercase()))
+            .filter(|todo| {
+                todo.description
+                    .to_lowercase()
+                    .contains(&query.to_lowercase())
+            })
             .cloned()
             .collect();
         Task::ready(())
