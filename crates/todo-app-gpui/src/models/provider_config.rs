@@ -365,7 +365,11 @@ impl LlmProviderInfo {
 
                 ModelInfo {
                     id: id.clone(),
-                    display_name: id,
+                    display_name: std::path::Path::new(&id)
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or(&id)
+                        .to_string(),
                     capabilities,
                     enabled: true,
                     limits,
