@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use super::todo_thread_edit::TodoThreadEdit;
 use crate::app::{AppState, Quit};
 use crate::ui::views::todo_thread::TodoThreadChat;
@@ -341,8 +343,9 @@ impl ListDelegate for TodoListDelegate {
         _window: &mut Window,
         cx: &mut Context<List<Self>>,
     ) {
-        println!("Selected index: {:?}", ix);
+        // println!("Selected index: {:?}", ix);
         self.selected_index = ix;
+        // Remove windows that are no longer active
         cx.notify();
     }
 
@@ -444,6 +447,8 @@ pub struct TodoList {
     _subscriptions: Vec<Subscription>,
     todo_filter: TodoFilter,
     active_tab_ix: usize,
+    opened_windows: HashMap<String, WindowHandle<Root>>,
+    edited_windows: HashMap<String, WindowHandle<Root>>,
 }
 
 impl TodoList {
@@ -490,6 +495,8 @@ impl TodoList {
             _subscriptions,
             todo_filter: TodoFilter::default(),
             active_tab_ix: 0,
+            opened_windows: HashMap::new(),
+            edited_windows: HashMap::new(),
         };
         celf.set_active_tab(1, window, cx);
         celf
@@ -498,6 +505,10 @@ impl TodoList {
     fn selected_todo(&mut self, cx: &mut Context<Self>) {
         let picker = self.todo_list.read(cx);
         self.selected_todo = picker.delegate().selected_todo();
+        self.opened_windows
+            .retain(|_, handle| handle.is_active(cx).is_some());
+        self.edited_windows
+            .retain(|_, handle| handle.is_active(cx).is_some());
     }
     fn follow_todo(&mut self, _: &Follow, window: &mut Window, cx: &mut Context<Self>) {
         println!("Follow action triggered");
@@ -566,13 +577,47 @@ impl TodoList {
     }
     fn open_todo(&mut self, _: &Open, _: &mut Window, cx: &mut Context<Self>) {
         if let Some(todo) = self.selected_todo.clone() {
-            TodoThreadChat::open(todo, cx);
+            let todo_id = todo.id.clone();
+
+            match self.opened_windows.get(&todo_id) {
+                Some(handle) if handle.is_active(cx).is_some() => {
+                    // Window exists and is active, just focus it
+                    handle
+                        .update(cx, |_, window, cx| {
+                            window.activate_window();
+                            cx.notify();
+                        })
+                        .ok();
+                }
+                _ => {
+                    // Window doesn't exist or is inactive, create new one
+                    let handle = TodoThreadChat::open(todo, cx);
+                    self.opened_windows.insert(todo_id, handle);
+                }
+            }
         }
     }
 
     fn edit_todo(&mut self, _: &Edit, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(todo) = self.selected_todo.clone() {
-            TodoThreadEdit::edit(todo, window, cx);
+            let todo_id = todo.id.clone();
+
+            match self.edited_windows.get(&todo_id) {
+                Some(handle) if handle.is_active(cx).is_some() => {
+                    // Window exists and is active, just focus it
+                    handle
+                        .update(cx, |_, window, cx| {
+                            window.activate_window();
+                            cx.notify();
+                        })
+                        .ok();
+                }
+                _ => {
+                    // Window doesn't exist or is inactive, create new one
+                    let handle = TodoThreadEdit::edit(todo, window, cx);
+                    self.edited_windows.insert(todo_id, handle);
+                }
+            }
         }
     }
 

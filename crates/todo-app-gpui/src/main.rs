@@ -5,7 +5,19 @@
 mod app;
 mod models;
 mod ui;
+pub mod xbus;
 
-fn main() {
+#[tokio::main]
+async fn main() {
+    // tracing_subscriber::fmt()
+    //     .with_env_filter(
+    //         tracing_subscriber::EnvFilter::from_default_env()
+    //             .add_directive(tracing::Level::ERROR.into()),
+    //     )
+    //     .with_writer(std::io::stderr)
+    //     .with_ansi(true)
+    //     .with_line_number(true)
+    //     .with_file(true)
+    //     .init();
     app::run();
 }

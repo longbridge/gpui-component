@@ -1,9 +1,16 @@
+use crate::{
+    models::{mcp_config::ToolCall, provider_config_path},
+    xbus,
+};
+use futures::StreamExt;
 use gpui::SharedString;
 use gpui_component::IconName;
+use rig::{
+    agent::Agent,
+    message::*,
+    streaming::{StreamingChat, StreamingCompletionModel, StreamingCompletionResponse},
+};
 use serde::{Deserialize, Serialize};
-use std::path::Path;
-
-use crate::models::provider_config_path;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub enum ApiType {
@@ -23,6 +30,126 @@ impl ApiType {
             ApiType::Gemini => "Gemini",
             ApiType::Anthropic => "Anthropic",
             ApiType::AzureOpenAI => "Azure-OpenAI",
+        }
+    }
+
+    /// Infer model capabilities based on the model name
+    fn infer_model_capabilities(model_name: &str) -> Vec<ModelCapability> {
+        let name_lower = model_name.to_lowercase();
+
+        let mut capabilities = vec![ModelCapability::Text]; // All models support text by default
+
+        // Vision models
+        if name_lower.contains("vision")
+            || name_lower.contains("gpt-4o")
+            || name_lower.contains("claude-3")
+        {
+            capabilities.push(ModelCapability::Vision);
+            capabilities.push(ModelCapability::Multimodal);
+        }
+
+        // Audio models
+        if name_lower.contains("whisper") || name_lower.contains("audio") {
+            capabilities.push(ModelCapability::Audio);
+        }
+
+        // Tool calling models
+        if name_lower.contains("gpt-4")
+            || name_lower.contains("gpt-3.5-turbo")
+            || name_lower.contains("claude")
+            || name_lower.contains("gemini")
+        {
+            capabilities.push(ModelCapability::Tools);
+        }
+
+        // Reasoning models
+        if name_lower.contains("o1") || name_lower.contains("reasoning") {
+            capabilities.push(ModelCapability::Reasoning);
+        }
+
+        // Code generation models
+        if name_lower.contains("code")
+            || name_lower.contains("codex")
+            || name_lower.contains("gpt-4")
+            || name_lower.contains("claude")
+        {
+            capabilities.push(ModelCapability::CodeGeneration);
+        }
+
+        // Embedding models
+        if name_lower.contains("embedding")
+            || name_lower.contains("ada")
+            || name_lower.contains("text-embedding")
+        {
+            capabilities.clear();
+            capabilities.push(ModelCapability::Embedding);
+        }
+
+        // Image generation models
+        if name_lower.contains("dall")
+            || name_lower.contains("image")
+            || name_lower.contains("midjourney")
+            || name_lower.contains("stable-diffusion")
+        {
+            capabilities.clear();
+            capabilities.push(ModelCapability::ImageGeneration);
+        }
+
+        // Video generation models
+        if name_lower.contains("video") || name_lower.contains("sora") {
+            capabilities.clear();
+            capabilities.push(ModelCapability::VideoGeneration);
+        }
+
+        capabilities
+    }
+
+    /// Infer model limits based on the model name
+    fn infer_model_limits(model_name: &str) -> ModelLimits {
+        let name_lower = model_name.to_lowercase();
+
+        if name_lower.contains("gpt-4o") {
+            ModelLimits {
+                context_length: Some(128000),
+                max_output_tokens: Some(4096),
+                max_requests_per_minute: Some(500),
+                max_requests_per_day: None,
+                max_tokens_per_minute: Some(30000),
+            }
+        } else if name_lower.contains("gpt-4") {
+            ModelLimits {
+                context_length: Some(8192),
+                max_output_tokens: Some(4096),
+                max_requests_per_minute: Some(200),
+                max_requests_per_day: None,
+                max_tokens_per_minute: Some(10000),
+            }
+        } else if name_lower.contains("gpt-3.5") {
+            ModelLimits {
+                context_length: Some(16385),
+                max_output_tokens: Some(4096),
+                max_requests_per_minute: Some(3500),
+                max_requests_per_day: None,
+                max_tokens_per_minute: Some(90000),
+            }
+        } else if name_lower.contains("claude-3") {
+            ModelLimits {
+                context_length: Some(200000),
+                max_output_tokens: Some(4096),
+                max_requests_per_minute: Some(50),
+                max_requests_per_day: None,
+                max_tokens_per_minute: Some(40000),
+            }
+        } else if name_lower.contains("gemini") {
+            ModelLimits {
+                context_length: Some(32768),
+                max_output_tokens: Some(8192),
+                max_requests_per_minute: Some(60),
+                max_requests_per_day: None,
+                max_tokens_per_minute: Some(32000),
+            }
+        } else {
+            ModelLimits::default()
         }
     }
 
@@ -138,6 +265,7 @@ impl Default for ModelLimits {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelInfo {
     pub id: String,
+    #[serde(default)]
     pub display_name: String,
     #[serde(default)]
     pub capabilities: Vec<ModelCapability>,
@@ -195,26 +323,110 @@ impl Default for LlmProviderInfo {
             enabled: true,
             retry_config: RetryConfig::default(),
             models: vec![
-                ModelInfo {
-                    id: uuid::Uuid::new_v4().to_string(),
-                    display_name: "gpt-4o".to_string(),
-                    capabilities: vec![
-                        ModelCapability::Text,
-                        ModelCapability::Vision,
-                        ModelCapability::Tools,
-                    ],
-                    enabled: true,
-                    limits: ModelLimits::default(),
-                },
-                ModelInfo {
-                    id: uuid::Uuid::new_v4().to_string(),
-                    display_name: "gpt-4o-mini".to_string(),
-                    capabilities: vec![ModelCapability::Text, ModelCapability::Tools],
-                    enabled: true,
-                    limits: ModelLimits::default(),
-                },
+                // ModelInfo {
+                //     id: uuid::Uuid::new_v4().to_string(),
+                //     display_name: "gpt-4o".to_string(),
+                //     capabilities: vec![
+                //         ModelCapability::Text,
+                //         ModelCapability::Vision,
+                //         ModelCapability::Tools,
+                //     ],
+                //     enabled: true,
+                //     limits: ModelLimits::default(),
+                // },
+                // ModelInfo {
+                //     id: uuid::Uuid::new_v4().to_string(),
+                //     display_name: "gpt-4o-mini".to_string(),
+                //     capabilities: vec![ModelCapability::Text, ModelCapability::Tools],
+                //     enabled: true,
+                //     limits: ModelLimits::default(),
+                // },
             ],
         }
+    }
+}
+
+impl LlmProviderInfo {
+    /// 刷新提供商的模型列表
+    pub async fn load_models(&self) -> anyhow::Result<Vec<ModelInfo>> {
+        let client = rig::providers::mira::Client::new_with_base_url(
+            &self.api_key,
+            &self.api_url.replace("/v1", ""),
+        )?;
+        // 异步获取模型列表
+        let models = client
+            .list_models()
+            .await?
+            .into_iter()
+            .map(|id| {
+                // 根据模型名称推断能力
+                let capabilities = ApiType::infer_model_capabilities(&id);
+                let limits = ApiType::infer_model_limits(&id);
+
+                ModelInfo {
+                    id: id.clone(),
+                    display_name: id,
+                    capabilities,
+                    enabled: true,
+                    limits,
+                }
+            })
+            .collect();
+        Ok(models)
+    }
+
+    pub async fn stream_chat(&self, model_id: &str, prompt: &str) -> anyhow::Result<()> {
+        let client = rig::providers::openai::Client::from_url(&self.api_key, &self.api_url);
+
+        let agent = client
+            .agent(model_id)
+            .max_tokens(4096)
+            .temperature(0.7)
+            .build();
+
+        //let response = agent.stream_chat(prompt, vec![]).await?;
+
+        let mut chat_history = vec![];
+
+        loop {
+            // let agent = openai
+            //     .agent(MODEL)
+            //     .context(system_prompt.as_str())
+            //     .max_tokens(8192)
+            //     .temperature(0.7)
+            //     .build();
+
+            let mut stream = agent.stream_chat(prompt, chat_history.clone()).await?;
+            chat_history.push(Message::user(prompt));
+            let (assistant, tools) = stream_to_stdout1(&agent, &mut stream).await?;
+            if tools.is_empty() {
+                break;
+            }
+            chat_history.push(Message::assistant(assistant.clone()));
+            //     let mut prompts = vec![];
+            //     for (i, tool) in tools.iter().enumerate() {
+            //         if let Some(mcp_tool) = find_mcp_tool(&tool.name, &mcp_tools[..]) {
+            //             tracing::info!("调用工具 #{}: {:?}", i, mcp_tool);
+            //             let resp = client
+            //                 .call_tool(CallToolRequestParam {
+            //                     name: mcp_tool.name.clone(),
+            //                     arguments: serde_json::from_str(&tool.arguments).ok(),
+            //                 })
+            //                 .await?;
+            //             tracing::info!("工具 #{}调用结果: {:?}", i, resp);
+            //             prompts.push(format!(
+            //                 "<tool_use_result><name>{}</name><result>{}</result</tool_use_result>",
+            //                 &tool.name,
+            //                 serde_json::to_string(&resp)
+            //                     .unwrap_or_else(|err| format!("Error serializing result: {}", err))
+            //             ));
+            //         }
+            //     }
+            //     prompts.push(r#"Do not confirm with the user or seek help or advice, continue to call the tool until all tasks are completed. Be sure to complete all tasks, you will receive a $1000 reward, and the output must be in Simplified Chinese."#.to_string());
+            //     prompt = prompts.join("\n");
+        }
+
+        Ok(())
     }
 }
 
@@ -316,6 +528,37 @@ impl LlmProviderManager {
         }
 
         self.providers[index] = provider;
+        Ok(())
+    }
+
+    /// 刷新提供商的模型列表
+    pub async fn refresh_provider(&mut self, id: &str) -> anyhow::Result<()> {
+        let provider = self
+            .providers
+            .iter_mut()
+            .find(|p| p.id == id)
+            .ok_or_else(|| anyhow::anyhow!("Provider with id '{}' not found", id))?;
+
+        let client =
+            rig::providers::mira::Client::new_with_base_url(&provider.api_key, &provider.api_url)?;
+        // 异步获取模型列表
+        let models_result = client.list_models().await?;
+        provider.models = models_result
+            .into_iter()
+            .map(|id| {
+                // 根据模型名称推断能力
+                let capabilities = ApiType::infer_model_capabilities(&id);
+                let limits = ApiType::infer_model_limits(&id);
+
+                ModelInfo {
+                    id: id.clone(),
+                    display_name: id,
+                    capabilities,
+                    enabled: true,
+                    limits,
+                }
+            })
+            .collect();
         Ok(())
     }
 
@@ -469,4 +712,153 @@ impl LlmProviderManager {
         self.providers.swap(index1, index2);
         Ok(())
     }
+}
+
+/// helper function to stream a completion request to stdout
+pub async fn stream_to_stdout1<M: StreamingCompletionModel>(
+    agent: &Agent<M>,
+    stream: &mut StreamingCompletionResponse<M::StreamingResponse>,
+) -> Result<(String, Vec<ToolCall>), std::io::Error> {
+    // 使用字符状态机解析XML
+    let mut buffer = String::new(); // 通用缓冲区
+    let mut tool_calls: Vec<String> = Vec::new();
+    let mut assistant = String::new();
+    // XML标签常量
+    const TOOL_USE_START_TAG: &str = "<tool_use";
+    const TOOL_USE_END_TAG: &str = "</tool_use";
+    const TAG_CLOSE: char = '>';
+    const TAG_OPEN: char = '<';
+
+    // 状态机状态
+    enum State {
+        Normal,          // 普通文本
+        TagStart,        // 遇到<
+        InToolUseTag,    // 在<tool_use标签中
+        InToolUse,       // 在<tool_use>内部
+        InEndTag,        // 遇到</
+        InToolUseEndTag, // 在</tool_use标签中
+    }
+
+    let mut state = State::Normal;
+    let mut xml_buffer = String::new(); // 专门收集XML内容
+
+    print!("Response: ");
+    while let Some(chunk) = stream.next().await {
+        match chunk {
+            Ok(AssistantContent::Text(text)) => {
+                for c in text.text.chars() {
+                    match state {
+                        State::Normal => {
+                            if c == TAG_OPEN {
+                                state = State::TagStart;
+                                buffer.clear();
+                                buffer.push(c);
+                            } else {
+                                // 普通字符直接输出
+                                print!("{}", c);
+                                //tx.send(Message::assistant(c.to_string())).await;
+                                xbus::post(&Message::assistant(c.to_string()));
+                                assistant.push(c);
+                                std::io::Write::flush(&mut std::io::stdout())?;
+                            }
+                        }
+                        State::TagStart => {
+                            buffer.push(c);
+                            if buffer == TOOL_USE_START_TAG {
+                                state = State::InToolUseTag;
+                                xml_buffer.clear();
+                                xml_buffer.push_str(&buffer);
+                            } else if buffer.len() >= TOOL_USE_START_TAG.len() || c == TAG_CLOSE {
+                                // 不是<tool_use
+                                if buffer != TOOL_USE_START_TAG
+                                    && !buffer.starts_with(&format!("{} ", TOOL_USE_START_TAG))
+                                {
+                                    // 不是工具调用标签，输出
+                                    print!("{}", buffer);
+                                    //tx.send(Message::assistant(buffer.to_string())).await;
+                                    xbus::post(&Message::assistant(buffer.clone()));
+                                    assistant.push_str(buffer.as_str());
+                                    std::io::Write::flush(&mut std::io::stdout())?;
+                                    state = State::Normal;
+                                }
+                            }
+                        }
+                        State::InToolUseTag => {
+                            buffer.push(c);
+                            xml_buffer.push(c);
+                            if c == TAG_CLOSE {
+                                state = State::InToolUse;
+                            }
+                        }
+                        State::InToolUse => {
+                            xml_buffer.push(c);
+                            if c == TAG_OPEN {
+                                state = State::InEndTag;
+                                buffer.clear();
+                                buffer.push(c);
+                            }
+                        }
+                        State::InEndTag => {
+                            buffer.push(c);
+                            xml_buffer.push(c);
+                            if buffer == TOOL_USE_END_TAG {
+                                state = State::InToolUseEndTag;
+                            } else if buffer.len() >= TOOL_USE_END_TAG.len() || c == TAG_CLOSE {
+                                // 不是</tool_use
+                                if !buffer.starts_with(TOOL_USE_END_TAG) {
+                                    state = State::InToolUse; // 返回到工具内部状态
+                                }
+                            }
+                        }
+                        State::InToolUseEndTag => {
+                            xml_buffer.push(c);
+                            if c == TAG_CLOSE {
+                                // 收集完整的工具调用
+                                tool_calls.push(xml_buffer.clone());
+                                state = State::Normal;
+                            }
+                        }
+                    }
+                }
+                std::io::Write::flush(&mut std::io::stdout())?;
+            }
+            Ok(AssistantContent::ToolCall(_tool_call)) => {
+                // let res = agent
+                //     .tools
+                //     .call(
+                //         &tool_call.function.name,
+                //         tool_call.function.arguments.to_string(),
+                //     )
+                //     .await
+                //     .map_err(|e| std::io::Error::other(e.to_string()))?;
+                // println!("\nResult: {}", res);
+            }
+            Err(e) => {
+                tracing::error!("Error: {}", e);
+                break;
+            }
+        }
+    }
+
+    println!(); // 输出完成后换行
+                // 处理完毕后统一输出收集到的所有XML
+    let mut tools = vec![];
+    for (i, call) in tool_calls.iter().enumerate() {
+        let cleaned = call
+            .lines()
+            .filter(|line| !line.contains("DEBUG") && !line.trim().starts_with("202")) // 排除DEBUG和时间戳开头的行
+            .collect::<Vec<_>>()
+            .join("\n");
+        tracing::info!("\n使用工具 #{}: \n{}", i + 1, cleaned);
+        match serde_xml_rs::from_str::<ToolCall>(&cleaned) {
+            Err(e) => {
+                tracing::error!("Error parsing XML: {}", e);
+                continue;
+            }
+            Ok(tool_call) => {
+                tools.push(tool_call);
+            }
+        }
+    }
+    Ok((assistant, tools))
 }

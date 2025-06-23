@@ -22,6 +22,22 @@ unindent = "0.2.3"
 uuid = "1.17.0"
 serde_yaml = "0.9.33"
 tempfile = "3.10.0"
+rmcp = { git = "https://github.com/modelcontextprotocol/rust-sdk", branch = "main" }
+rig-core = { git = "https://github.com/gqf2008/rig", branch = "main" }
+tokio = { version = "1.45.1", features = ["rt", "rt-multi-thread"] }
+crossbeam-skiplist = "0.1"
+futures = "0.3.31"
+futures-util = { version = "0.3.31", default-features = false, features = [
+    "sink",
+    "std",
+] }
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.19", features = [
+    "env-filter",
+    "std",
+    "fmt",
+] }
+serde-xml-rs = "0.8.1"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.61.1", features = [

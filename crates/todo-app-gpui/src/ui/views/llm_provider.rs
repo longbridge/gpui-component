@@ -1,5 +1,5 @@
 use crate::app::AppState;
-use crate::models::provider_config::{ApiType, LlmProviderInfo, ModelInfo};
+use crate::models::provider_config::{ApiType, LlmProviderInfo, LlmProviderManager, ModelInfo};
 use crate::ui::components::ViewKit;
 use gpui::prelude::*;
 use gpui::*;
@@ -456,6 +456,35 @@ impl LlmProvider {
         cx: &mut Context<Self>,
     ) {
         self.active_provider_tabs.insert(provider_index, tab_index);
+        let provider = self.providers.get(provider_index).cloned();
+        provider.map(|provider| {
+            if tab_index == 1 {
+                cx.spawn(async move |this, cx| {
+                    let models = provider.load_models().await;
+                    match models {
+                        Ok(models) => {
+                            this.update(cx, |this, cx| {
+                                if let Some(provider) = this.providers.get_mut(provider_index) {
+                                    provider.models = models;
+                                    AppState::state_mut(cx)
+                                        .llm_provider
+                                        .update_provider(&provider.id, provider.clone())
+                                        .unwrap_or_else(|e| {
+                                            eprintln!("更新模型列表失败: {}", e);
+                                        });
+                                }
+                                cx.notify();
+                            })
+                            .ok();
+                        }
+                        Err(e) => {
+                            eprintln!("加载模型列表失败: {}", e);
+                        }
+                    }
+                })
+                .detach();
+            }
+        });
         cx.notify();
     }
 

@@ -495,3 +495,9 @@ impl McpProviderManager {
         Ok(())
     }
 }
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ToolCall {
+    pub name: String,
+    pub arguments: String,
+}

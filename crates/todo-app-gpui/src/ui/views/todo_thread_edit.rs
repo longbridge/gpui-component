@@ -231,7 +231,7 @@ const SIZE: gpui::Size<Pixels> = size(WIDTH, HEIGHT);
 
 // 实现 TodoThreadEdit界面的相关方法
 impl TodoThreadEdit {
-    pub fn edit(todo: Todo, parent: &mut Window, cx: &mut App) {
+    pub fn edit(todo: Todo, parent: &mut Window, cx: &mut App)->WindowHandle<Root> {
         cx.activate(true);
         let window_bounds = Bounds::centered(None, SIZE, cx);
         let options = WindowOptions {
@@ -251,7 +251,7 @@ impl TodoThreadEdit {
             format!("xTo-Do {}", todo.title),
             options,
             move |window, cx| cx.new(|cx| Self::new(todo, parent_handle, window, cx)),
-        );
+        )
         // #[cfg(target_os = "windows")]
         // parent.enable_window(false);
     }
@@ -688,8 +688,8 @@ impl TodoThreadEdit {
                                                                                     // 更新原始数据
                                                                                     todo_edit_entity_for_event.update(cx, |todo_edit, todo_cx| {
                                                                                         todo_edit.toggle_tool_selection(*checked,&tool_clone, &provider_clone, todo_cx);
-                                                                                         todo_edit.save(&Save, window, todo_cx);
-                                                                                         todo_cx.notify();
+                                                                                        todo_edit.save(&Save, window, todo_cx);
+                                                                                        todo_cx.notify();
                                                                                     });
                                                                                     println!(
                                                                                         "切换工具选择: {}",
