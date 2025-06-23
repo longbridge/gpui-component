@@ -245,6 +245,7 @@ impl ParentElement for TitleBar {
 impl RenderOnce for TitleBar {
     fn render(mut self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let is_linux = cfg!(target_os = "linux");
+        let is_macos = cfg!(target_os = "macos");
 
         let paddings = self.base.style().padding.clone();
         self.base.style().padding.left = None;
@@ -262,6 +263,9 @@ impl RenderOnce for TitleBar {
                 .bg(cx.theme().title_bar)
                 .when(is_linux, |this| {
                     this.on_double_click(|_, window, _| window.zoom_window())
+                })
+                .when(is_macos, |this| {
+                    this.on_double_click(|_, window, _| window.titlebar_double_click())
                 })
                 .child(
                     h_flex()
