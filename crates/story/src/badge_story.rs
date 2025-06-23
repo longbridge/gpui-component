@@ -33,7 +33,7 @@ impl super::Story for BadgeStory {
         "A red dot that indicates the number of unread messages."
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
         Self::view(window, cx)
     }
 

@@ -62,7 +62,7 @@ impl super::Story for ChartStory {
         "Beautiful Charts & Graphs."
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
         Self::view(window, cx)
     }
 

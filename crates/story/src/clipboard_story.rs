@@ -21,7 +21,7 @@ impl super::Story for ClipboardStory {
         "A button that helps you copy text or other content to your clipboard."
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
         Self::view(window, cx)
     }
 }

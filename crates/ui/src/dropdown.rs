@@ -26,7 +26,7 @@ pub enum ListEvent {
 }
 
 const CONTEXT: &str = "Dropdown";
-pub fn init(cx: &mut App) {
+pub(crate) fn init(cx: &mut App) {
     cx.bind_keys([
         KeyBinding::new("up", SelectPrev, Some(CONTEXT)),
         KeyBinding::new("down", SelectNext, Some(CONTEXT)),
@@ -467,9 +467,9 @@ where
         if !self.open {
             self.open = true;
             cx.notify();
-        } else {
-            self.list.focus_handle(cx).focus(window);
         }
+
+        self.list.focus_handle(cx).focus(window);
     }
 
     fn toggle_menu(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
@@ -697,7 +697,7 @@ where
         div()
             .id(self.id.clone())
             .key_context(CONTEXT)
-            .track_focus(&self.focus_handle(cx))
+            .track_focus(&self.focus_handle(cx).tab_stop(!self.disabled))
             .on_action(window.listener_for(&self.state, DropdownState::up))
             .on_action(window.listener_for(&self.state, DropdownState::down))
             .on_action(window.listener_for(&self.state, DropdownState::enter))

@@ -1,13 +1,14 @@
 use std::rc::Rc;
 
 use crate::{
-    h_flex, indicator::Indicator, tooltip::Tooltip, ActiveTheme, Colorize as _, Disableable, Icon,
-    Selectable, Sizable, Size, StyleSized,
+    h_flex, indicator::Indicator, tooltip::Tooltip, ActiveTheme, Colorize as _, Disableable,
+    FocusableExt as _, Icon, Selectable, Sizable, Size, StyleSized,
 };
 use gpui::{
     div, prelude::FluentBuilder as _, relative, Action, AnyElement, App, ClickEvent, Corners, Div,
-    Edges, ElementId, Hsla, InteractiveElement, IntoElement, MouseButton, ParentElement, Pixels,
-    RenderOnce, SharedString, StatefulInteractiveElement as _, Styled, Window,
+    Edges, ElementId, FocusHandle, Hsla, InteractiveElement, IntoElement, MouseButton,
+    ParentElement, Pixels, RenderOnce, SharedString, StatefulInteractiveElement as _, Styled,
+    Window,
 };
 
 #[derive(Default, Clone, Copy)]
@@ -181,6 +182,7 @@ impl ButtonVariant {
 #[derive(IntoElement)]
 pub struct Button {
     pub base: Div,
+    tracked_focus_handle: Option<FocusHandle>,
     id: ElementId,
     icon: Option<Icon>,
     label: Option<SharedString>,
@@ -214,6 +216,7 @@ impl Button {
     pub fn new(id: impl Into<ElementId>) -> Self {
         Self {
             base: div().flex_shrink_0(),
+            tracked_focus_handle: None,
             id: id.into(),
             icon: None,
             label: None,
@@ -322,6 +325,11 @@ impl Button {
         self.loading_icon = Some(icon.into());
         self
     }
+
+    pub fn track_focus(mut self, focus_handle: &FocusHandle) -> Self {
+        self.tracked_focus_handle = Some(focus_handle.clone().tab_stop(true));
+        self
+    }
 }
 
 impl Disableable for Button {
@@ -379,13 +387,17 @@ impl InteractiveElement for Button {
 }
 
 impl RenderOnce for Button {
-    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let style: ButtonVariant = self.variant;
         let normal_style = style.normal(self.outline, cx);
         let icon_size = match self.size {
             Size::Size(v) => Size::Size(v * 0.75),
             _ => self.size,
         };
+        let is_focused = self
+            .tracked_focus_handle
+            .as_ref()
+            .map_or(false, |handle| handle.is_focused(window));
 
         self.base
             .id(self.id)
@@ -487,6 +499,7 @@ impl RenderOnce for Button {
                     .border_color(disabled_style.border)
                     .shadow_none()
             })
+            .focus_ring(is_focused, cx)
             .child({
                 h_flex()
                     .id("label")

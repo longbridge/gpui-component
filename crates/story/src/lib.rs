@@ -250,7 +250,6 @@ pub fn init(cx: &mut App) {
 
     gpui_component::init(cx);
     AppState::init(cx);
-    input_story::init(cx);
     number_input_story::init(cx);
     textarea_story::init(cx);
     dropdown_story::init(cx);
@@ -440,7 +439,7 @@ pub enum ContainerEvent {
     Close,
 }
 
-pub trait Story: Focusable + Render + Sized {
+pub trait Story: Render + Sized {
     fn klass() -> &'static str {
         std::any::type_name::<Self>().split("::").last().unwrap()
     }
@@ -458,7 +457,7 @@ pub trait Story: Focusable + Render + Sized {
     fn title_bg() -> Option<Hsla> {
         None
     }
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable>;
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render>;
 
     fn on_active(&mut self, active: bool, window: &mut Window, cx: &mut App) {
         let _ = active;
@@ -503,13 +502,12 @@ impl StoryContainer {
         let description = S::description();
         let story = S::new_view(window, cx);
         let story_klass = S::klass();
-        let focus_handle = story.focus_handle(cx);
 
         let view = cx.new(|cx| {
             let mut story = Self::new(window, cx)
                 .story(story.into(), story_klass)
                 .on_active(S::on_active_any);
-            story.focus_handle = focus_handle;
+            story.focus_handle = cx.focus_handle();
             story.closable = S::closable();
             story.zoomable = S::zoomable();
             story.name = name.into();

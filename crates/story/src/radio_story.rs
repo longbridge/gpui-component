@@ -27,7 +27,7 @@ impl super::Story for RadioStory {
         "A set of checkable buttons—known as radio buttons—where no more than one of the buttons can be checked at a time."
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
         Self::view(window, cx)
     }
 }

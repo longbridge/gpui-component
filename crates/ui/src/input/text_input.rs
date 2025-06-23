@@ -182,7 +182,7 @@ impl RenderOnce for TextInput {
             .id(("input", self.state.entity_id()))
             .flex()
             .key_context(crate::input::CONTEXT)
-            .track_focus(&state.focus_handle)
+            .track_focus(&state.focus_handle.clone().tab_stop(!self.disabled))
             .when(!state.disabled, |this| {
                 this.on_action(window.listener_for(&self.state, InputState::backspace))
                     .on_action(window.listener_for(&self.state, InputState::delete))

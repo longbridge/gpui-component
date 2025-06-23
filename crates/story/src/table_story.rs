@@ -591,7 +591,7 @@ impl super::Story for TableStory {
         "A complex data table with selection, sorting, column moving, and loading more."
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
         Self::view(window, cx)
     }
 

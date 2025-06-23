@@ -100,7 +100,7 @@ pub enum InputEvent {
 
 pub(super) const CONTEXT: &str = "Input";
 
-pub fn init(cx: &mut App) {
+pub(crate) fn init(cx: &mut App) {
     cx.bind_keys([
         KeyBinding::new("backspace", Backspace, Some(CONTEXT)),
         KeyBinding::new("delete", Delete, Some(CONTEXT)),
@@ -1343,6 +1343,7 @@ impl InputState {
 
     pub(super) fn indent(&mut self, block: bool, window: &mut Window, cx: &mut Context<Self>) {
         let Some(tab_size) = self.mode.tab_size() else {
+            cx.propagate();
             return;
         };
 
@@ -1399,6 +1400,7 @@ impl InputState {
 
     pub(super) fn outdent(&mut self, block: bool, window: &mut Window, cx: &mut Context<Self>) {
         let Some(tab_size) = self.mode.tab_size() else {
+            cx.propagate();
             return;
         };
 

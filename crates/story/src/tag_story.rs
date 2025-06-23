@@ -20,7 +20,7 @@ impl super::Story for TagStory {
         "A short item that can be used to categorize or label content."
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
         Self::view(window, cx)
     }
 }

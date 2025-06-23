@@ -93,7 +93,7 @@ impl super::Story for PopoverStory {
         "A popup displays content on top of the main page."
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
         Self::view(window, cx)
     }
 }

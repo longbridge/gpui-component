@@ -28,7 +28,7 @@ impl super::Story for TabsStory {
         "A set of layered sections of content—known as tab panels—that are displayed one at a time."
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
         Self::view(window, cx)
     }
 }

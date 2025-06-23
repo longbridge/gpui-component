@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{scroll::ScrollbarShow, Colorize as _};
 
-pub fn init(cx: &mut App) {
+pub(crate) fn init(cx: &mut App) {
     Theme::sync_system_appearance(None, cx);
     Theme::sync_scrollbar_appearance(cx);
 }
