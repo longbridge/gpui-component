@@ -6,7 +6,7 @@ use gpui::{
 use crate::{h_flex, red_500, white};
 
 #[derive(Default)]
-enum BadgeStyle {
+enum BadgeVariant {
     Dot,
     #[default]
     Number,
@@ -17,7 +17,7 @@ pub struct Badge {
     base: Div,
     count: usize,
     max: usize,
-    style: BadgeStyle,
+    variant: BadgeVariant,
 }
 
 impl Badge {
@@ -26,12 +26,12 @@ impl Badge {
             base: div(),
             count: 0,
             max: 99,
-            style: Default::default(),
+            variant: Default::default(),
         }
     }
 
     pub fn dot(mut self) -> Self {
-        self.style = BadgeStyle::Dot;
+        self.variant = BadgeVariant::Dot;
         self
     }
 
@@ -61,9 +61,9 @@ impl RenderOnce for Badge {
                     .justify_center()
                     .rounded_full()
                     .bg(red_500())
-                    .map(|this| match self.style {
-                        BadgeStyle::Dot => this.top(px(0.)).right(px(0.)).size(px(6.)),
-                        BadgeStyle::Number => {
+                    .map(|this| match self.variant {
+                        BadgeVariant::Dot => this.top(px(0.)).right(px(0.)).size(px(6.)),
+                        BadgeVariant::Number => {
                             let count = if self.count > self.max {
                                 format!("{}+", self.max)
                             } else {
