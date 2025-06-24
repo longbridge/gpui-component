@@ -319,15 +319,22 @@ impl Render for Notification {
             )
             .with_animation(
                 ElementId::NamedInteger("slide-down".into(), closing as u64),
-                Animation::new(Duration::from_secs_f64(0.15))
+                Animation::new(Duration::from_secs_f64(0.25))
                     .with_easing(cubic_bezier(0.4, 0., 0.2, 1.)),
                 move |this, delta| {
                     if closing {
                         let x_offset = px(0.) + delta * px(45.);
-                        this.left(px(0.) + x_offset).opacity(1. - delta)
+                        let opacity = 1. - delta;
+                        this.left(px(0.) + x_offset)
+                            .shadow_none()
+                            .opacity(opacity)
+                            .when(opacity < 0.85, |this| this.shadow_none())
                     } else {
                         let y_offset = px(-45.) + delta * px(45.);
-                        this.top(px(0.) + y_offset).opacity(delta)
+                        let opacity = delta;
+                        this.top(px(0.) + y_offset)
+                            .opacity(opacity)
+                            .when(opacity < 0.85, |this| this.shadow_none())
                     }
                 },
             )
