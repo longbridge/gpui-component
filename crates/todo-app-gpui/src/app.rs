@@ -23,6 +23,15 @@ use serde::{Deserialize, Serialize};
 #[cfg(target_os = "windows")]
 use windows::Win32::Foundation::HWND;
 
+///前台发生的事件
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+pub enum FoEvent {
+    McpConfigUpdated,
+    LlmConfigUpdated,
+    TodoDialogMessage(String), // 任务对话框消息
+    TodoUpdated,               // 任务更新事件
+}
+
 actions!(story, [Quit, Open, CloseWindow, ToggleSearch]);
 
 /// 故事状态，用于序列化和反序列化故事信息
@@ -140,7 +149,6 @@ pub fn run() {
         );
         cx.set_http_client(http_client);
         cx.on_action(|_: &Quit, cx: &mut App| {
-            println!("Quit action received, quitting the application.");
             cx.quit();
         });
 
@@ -211,6 +219,7 @@ pub fn run() {
             }
         })
         .detach();
+        cx.activate(true);
         let window_size = size(px(WIDTH), px(HEIGHT));
         let window_bounds = Bounds::centered(None, window_size, cx);
         let options = WindowOptions {
@@ -227,8 +236,6 @@ pub fn run() {
             ..Default::default()
         };
         cx.create_todo_window(options, move |window, cx| TodoMainWindow::view(window, cx));
-
-        cx.activate(true);
     });
 }
 
@@ -302,37 +309,6 @@ impl AppExt for App {
             })
             .expect("failed to update window");
         window
-        // self.spawn(async move |cx| {
-        //     let window = cx
-        //         .open_window(options, |window, cx| {
-        //             #[cfg(target_os = "windows")]
-        //             {
-        //                 // use windows::Win32::UI::WindowsAndMessaging::{
-        //                 //     WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_SIZEBOX, WS_SYSMENU,
-        //                 // };
-        //                 // window.set_display_affinity(0x00000011);
-        //                 // let mut style = window.style();
-        //                 // style &= !(WS_SIZEBOX.0 as i32
-        //                 //     | WS_MINIMIZEBOX.0 as i32
-        //                 //     | WS_MAXIMIZEBOX.0 as i32
-        //                 //     | WS_SYSMENU.0 as i32);
-        //                 // window.set_style(style);
-        //             }
-        //             let view = crate_view_fn(window, cx);
-        //             let root = cx.new(|_cx| TodoRoot::with_no_title_bar(view));
-        //             cx.new(|cx| Root::new(root.into(), window, cx))
-        //         })
-        //         .expect("failed to open window");
-        //     window
-        //         .update(cx, |_, window, _| {
-        //             window.activate_window();
-        //             window.set_window_title("X-Todo Utility");
-        //         })
-        //         .expect("failed to update window");
-
-        //     Ok::<_, anyhow::Error>(())
-        // })
-        // .detach();
     }
     fn create_todo_window<F, E>(
         &mut self,
@@ -369,45 +345,11 @@ impl AppExt for App {
             window
                 .update(self, |_, window, _| {
                     window.activate_window();
-                    window.set_window_title("X-Todo Utility");
+                    window.set_window_title("x-Todo Utility");
                 })
                 .expect("failed to update window");
         }
-
         window
-        // self.spawn(async move |cx| {
-        //     let window = cx
-        //         .open_window(options, |window, cx| {
-        //             #[cfg(target_os = "windows")]
-        //             {
-        //                 // use windows::Win32::UI::WindowsAndMessaging::{
-        //                 //     WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_SIZEBOX, WS_SYSMENU,
-        //                 // };
-        //                 //window.set_display_affinity(0x00000011);
-        //                 // let mut style = window.style();
-        //                 // style &= !(WS_SIZEBOX.0 as i32
-        //                 //     | WS_MINIMIZEBOX.0 as i32
-        //                 //     | WS_MAXIMIZEBOX.0 as i32
-        //                 //     | WS_SYSMENU.0 as i32);
-        //                 // window.set_style(style);
-        //             }
-        //             let view = crate_view_fn(window, cx);
-        //             let root = cx.new(|cx| TodoRoot::new(view, window, cx));
-
-        //             cx.new(|cx| Root::new(root.into(), window, cx))
-        //         })
-        //         .expect("failed to open window");
-
-        //     window
-        //         .update(cx, |_, window, _| {
-        //             window.activate_window();
-        //             window.set_window_title("X-Todo Utility");
-        //         })
-        //         .expect("failed to update window");
-
-        //     Ok::<_, anyhow::Error>(())
-        // })
-        // .detach();
     }
 
     fn create_normal_window<F, E>(
@@ -450,39 +392,6 @@ impl AppExt for App {
             })
             .expect("failed to update window");
         window
-        // self.spawn(async move |cx| {
-        //     let window = cx
-        //         .open_window(options, |window, cx| {
-        //             #[cfg(target_os = "windows")]
-        //             {
-        //                 // use windows::Win32::UI::WindowsAndMessaging::{
-        //                 //     WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_SIZEBOX, WS_SYSMENU,
-        //                 // };
-        //                 // window.set_display_affinity(0x00000011);
-        //                 // let mut style = window.style();
-        //                 // style &= !(WS_SIZEBOX.0 as i32
-        //                 //     | WS_MINIMIZEBOX.0 as i32
-        //                 //     | WS_MAXIMIZEBOX.0 as i32
-        //                 //     | WS_SYSMENU.0 as i32);
-        //                 // window.set_style(style);
-        //             }
-        //             let view = crate_view_fn(window, cx);
-        //             let root = cx.new(|cx| NormalRoot::new(title.clone(), view, window, cx));
-
-        //             cx.new(|cx| Root::new(root.into(), window, cx))
-        //         })
-        //         .expect("failed to open window");
-
-        //     window
-        //         .update(cx, |_, window, _| {
-        //             window.activate_window();
-        //             window.set_window_title(&title);
-        //         })
-        //         .expect("failed to update window");
-
-        //     Ok::<_, anyhow::Error>(window)
-        // })
-        // .detach();
     }
 
     fn dispatch_global_action(&mut self, action: Box<dyn Action>) {

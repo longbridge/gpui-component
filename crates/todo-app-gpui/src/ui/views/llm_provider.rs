@@ -1,6 +1,7 @@
-use crate::app::AppState;
+use crate::app::{AppState, FoEvent};
 use crate::models::provider_config::{ApiType, LlmProviderInfo, LlmProviderManager, ModelInfo};
 use crate::ui::components::ViewKit;
+use crate::xbus;
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::{
@@ -107,6 +108,7 @@ impl LlmProvider {
         if let Err(e) = AppState::state(cx).llm_provider.save() {
             eprintln!("保存配置失败: {}", e);
         }
+        xbus::post(&FoEvent::LlmConfigUpdated);
     }
 
     fn tab(&mut self, _: &Tab1, window: &mut Window, cx: &mut Context<Self>) {
@@ -640,7 +642,7 @@ impl LlmProvider {
                                                     .items_center()
                                                     .px_1()
                                                     .text_xs()
-                                                  //  .bg(gpui::rgb(0x7C3AED))
+                                                    //  .bg(gpui::rgb(0x7C3AED))
                                                     .rounded_md()
                                                     .text_color(gpui::rgb(0x374151))
                                                     .child(max_output_tokens.to_string()),

@@ -12,12 +12,6 @@ use std::{cell::Cell, rc::Rc};
 
 actions!(todo_thread, [Tab, TabPrev, SendMessage]);
 
-#[derive(Debug, Clone)]
-pub enum TodoEvent {
-    TodoChatClosed(String),
-    TodoEditClosed(String),
-}
-
 const CONTEXT: &str = "TodoThread";
 
 #[derive(Debug, Clone)]
@@ -73,8 +67,6 @@ pub struct TodoThreadChat {
     todoitem: Todo,
 }
 
-impl EventEmitter<TodoEvent> for TodoThreadChat {}
-
 const WIDTH: Pixels = px(500.0);
 const HEIGHT: Pixels = px(650.0);
 const SIZE: gpui::Size<Pixels> = size(WIDTH, HEIGHT);
@@ -127,41 +119,41 @@ impl TodoThreadChat {
         cx.spawn(async move |this, app| {
             //println!("开始接收AI助手响应");
             let _sub = _sub;
-            loop {
+            'a: loop {
                 Timer::after(Duration::from_millis(5)).await;
-                match rx.try_recv() {
-                    Err(tokio::sync::mpsc::error::TryRecvError::Empty) => {
-                        continue;
-                    }
-                    Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => {
-                        break;
-                    }
-                    Ok(msg) => {
-                        let entity = this.clone();
-                        match msg {
+                let mut buffer = String::new();
+                loop {
+                    match rx.try_recv() {
+                        Err(tokio::sync::mpsc::error::TryRecvError::Empty) => {
+                            break;
+                        }
+                        Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => {
+                            break 'a;
+                        }
+                        Ok(msg) => match msg {
                             rig::message::Message::Assistant { content } => match content.first() {
                                 AssistantContent::Text(text) => {
-                                    entity
-                                        .update(app, |this, cx| {
-                                            if let Some(last_message) =
-                                                this.chat_messages.last_mut()
-                                            {
-                                                last_message.content.push_str(&text.text);
-                                            }
-                                            this.is_loading = false;
-                                            this.scroll_handle.scroll_to_bottom();
-                                            cx.notify();
-                                        })
-                                        .ok();
+                                    buffer.push_str(&text.text);
                                 }
                                 AssistantContent::ToolCall(tool_call) => {}
                             },
                             rig::message::Message::User { content } => {}
-                        }
+                        },
                     }
                 }
+                let entity = this.clone();
+                entity
+                    .update(app, |this, cx| {
+                        if let Some(last_message) = this.chat_messages.last_mut() {
+                            last_message.content.push_str(&buffer);
+                        }
+                        this.is_loading = false;
+                        this.scroll_handle.scroll_to_bottom();
+                        cx.notify();
+                    })
+                    .ok();
             }
-            // println!("AI助手响应完成");
+            println!("AI助手响应完成");
         })
         .detach();
 

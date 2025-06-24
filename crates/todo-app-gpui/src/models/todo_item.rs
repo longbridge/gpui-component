@@ -232,8 +232,8 @@ impl Todo {
                     model_name: model.display_name.clone(),
                     provider_name: provider.name.clone(),
                 };
-self.selected_model=Some(selected_model);
- self.updated_at = Utc::now();
+                self.selected_model = Some(selected_model);
+                self.updated_at = Utc::now();
                 // 检查是否已存在
                 // if !self
                 //     .selected_model
@@ -255,13 +255,13 @@ self.selected_model=Some(selected_model);
 
     /// 移除选中的模型
     pub fn remove_selected_model(&mut self) {
-        self.selected_model=None;
+        self.selected_model = None;
         self.updated_at = Utc::now();
     }
 
     /// 清空所有选中的模型
     pub fn clear_selected_model(&mut self) {
-        self.selected_model=None;
+        self.selected_model = None;
         self.updated_at = Utc::now();
     }
 
@@ -278,7 +278,7 @@ self.selected_model=Some(selected_model);
                     provider_id: provider_id.to_string(),
                     tool_name: tool_name.to_string(),
                     provider_name: provider.name.clone(),
-                    description: tool.description.clone(),
+                    description: tool.description.clone().unwrap_or_default().to_string(),
                 };
 
                 // 检查是否已存在

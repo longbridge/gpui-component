@@ -1,9 +1,49 @@
 use gpui::SharedString;
 use gpui_component::IconName;
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ACCEPT, AUTHORIZATION};
+use rmcp::transport::sse_client::SseClientConfig;
+use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use std::time::Duration;
 use std::{collections::HashMap, env::home_dir};
 
 use crate::models::{config_path, mcp_config_path};
+use rig::extractor::ExtractorBuilder;
+use rig::providers::cohere::completion::Tool;
+use rig::providers::together::TOPPY_M_7B;
+use rig::streaming::{
+    stream_to_stdout, StreamingChat, StreamingCompletionModel, StreamingCompletionResponse,
+    StreamingPrompt,
+};
+use rig::tool::{ToolDyn as RigTool, ToolSet};
+use rig::{completion::Prompt, providers::openai::Client};
+use rmcp::transport::{ConfigureCommandExt, StreamableHttpClientTransport, TokioChildProcess};
+use rmcp::{
+    model::{CallToolRequestParam, CallToolResult},
+    service::{RunningService, ServerSink},
+    transport::{auth::AuthClient, auth::OAuthState, SseClientTransport},
+    RoleClient,
+};
+pub use rmcp::{
+    model::{
+        ClientCapabilities, ClientInfo, Implementation, Prompt as McpPrompt,
+        Resource as McpResource, ResourceTemplate as McpResourceTemplate, Tool as McpTool,
+    },
+    ServiceExt,
+};
+
+use anyhow::Result;
+use futures::{stream, StreamExt};
+use rig::agent::Agent;
+use rig::completion::Message;
+use rig::completion::ToolDefinition;
+use rig::completion::{CompletionError, CompletionModel};
+use rig::message::{AssistantContent, UserContent};
+use rig::tool::ToolSetError;
+use rig::OneOrMany;
+use std::boxed::Box;
+use std::future::Future;
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub enum McpTransport {
@@ -52,65 +92,65 @@ impl McpCapability {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct McpResource {
-    pub uri: String,
-    pub name: String,
-    pub description: String,
-    pub mime_type: Option<String>,
-    pub subscribable: bool, // 是否支持订阅
-    pub subscribed: bool,   // 当前是否已订阅
-}
+// #[derive(Debug, Clone, Deserialize, Serialize)]
+// pub struct McpResource {
+//     pub uri: String,
+//     pub name: String,
+//     pub description: String,
+//     pub mime_type: Option<String>,
+//     pub subscribable: bool, // 是否支持订阅
+//     pub subscribed: bool,   // 当前是否已订阅
+// }
 
-impl Default for McpResource {
-    fn default() -> Self {
-        Self {
-            uri: String::new(),
-            name: String::new(),
-            description: String::new(),
-            mime_type: None,
-            subscribable: true,
-            subscribed: false,
-        }
-    }
-}
+// impl Default for McpResource {
+//     fn default() -> Self {
+//         Self {
+//             uri: String::new(),
+//             name: String::new(),
+//             description: String::new(),
+//             mime_type: None,
+//             subscribable: true,
+//             subscribed: false,
+//         }
+//     }
+// }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct McpTool {
-    pub name: String,
-    #[serde(default)]
-    pub description: String,
-    #[serde(default)]
-    pub parameters: Vec<McpParameter>,
-}
+// #[derive(Debug, Clone, Deserialize, Serialize)]
+// pub struct McpTool {
+//     pub name: String,
+//     #[serde(default)]
+//     pub description: String,
+//     #[serde(default)]
+//     pub parameters: Vec<McpParameter>,
+// }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct McpParameter {
-    pub name: String,
-    pub param_type: String,
-    #[serde(default)]
-    pub description: String,
-    #[serde(default)]
-    pub required: bool,
-}
+// #[derive(Debug, Clone, Deserialize, Serialize)]
+// pub struct McpParameter {
+//     pub name: String,
+//     pub param_type: String,
+//     #[serde(default)]
+//     pub description: String,
+//     #[serde(default)]
+//     pub required: bool,
+// }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct McpPrompt {
-    pub name: String,
-    #[serde(default)]
-    pub description: String,
-    #[serde(default)]
-    pub arguments: Vec<McpArgument>,
-}
+// #[derive(Debug, Clone, Deserialize, Serialize)]
+// pub struct McpPrompt {
+//     pub name: String,
+//     #[serde(default)]
+//     pub description: String,
+//     #[serde(default)]
+//     pub arguments: Vec<McpArgument>,
+// }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct McpArgument {
-    pub name: String,
-    #[serde(default)]
-    pub description: String,
-    #[serde(default)]
-    pub required: bool,
-}
+// #[derive(Debug, Clone, Deserialize, Serialize)]
+// pub struct McpArgument {
+//     pub name: String,
+//     #[serde(default)]
+//     pub description: String,
+//     #[serde(default)]
+//     pub required: bool,
+// }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct McpProviderInfo {
@@ -129,13 +169,59 @@ pub struct McpProviderInfo {
     #[serde(default)]
     pub description: String,
     #[serde(default)]
-    pub resources: Vec<McpResource>,
+    pub resources: Vec<ResourceDefinition>,
+    #[serde(default)]
+    pub resource_templates: Vec<ResourceTemplateDefinition>,
     #[serde(default)]
     pub tools: Vec<McpTool>,
     #[serde(default)]
     pub prompts: Vec<McpPrompt>,
     #[serde(default)]
     pub env_vars: std::collections::HashMap<String, String>,
+    #[serde(skip)]
+    pub client: Option<Arc<RunningService<RoleClient, rmcp::model::InitializeRequestParam>>>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ResourceDefinition {
+    resource: McpResource,
+    pub subscribed: bool,
+    pub subscribable: bool,
+}
+
+impl std::ops::Deref for ResourceDefinition {
+    type Target = McpResource;
+
+    fn deref(&self) -> &Self::Target {
+        &self.resource
+    }
+}
+
+impl std::ops::DerefMut for ResourceDefinition {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.resource
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ResourceTemplateDefinition {
+    pub resource_templates: McpResourceTemplate,
+    pub subscribed: bool,
+    pub subscribable: bool,
+}
+
+impl std::ops::Deref for ResourceTemplateDefinition {
+    type Target = McpResourceTemplate;
+
+    fn deref(&self) -> &Self::Target {
+        &self.resource_templates
+    }
+}
+
+impl std::ops::DerefMut for ResourceTemplateDefinition {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.resource_templates
+    }
 }
 
 impl Default for McpProviderInfo {
@@ -144,106 +230,192 @@ impl Default for McpProviderInfo {
             id: uuid::Uuid::new_v4().to_string(),
             name: String::new(),
             command: String::new(),
-            // args: Vec::new(),
             transport: McpTransport::Stdio,
             enabled: true,
-            capabilities: vec![McpCapability::Resources, McpCapability::Tools],
+            capabilities: vec![],
             description: String::new(),
-            resources: vec![
-                McpResource {
-                    uri: "file:///home/user/documents".to_string(),
-                    name: "文档文件夹".to_string(),
-                    description: "用户文档目录访问".to_string(),
-                    mime_type: Some("inode/directory".to_string()),
-                    subscribable: true,
-                    subscribed: false,
-                },
-                McpResource {
-                    uri: "file:///home/user/config.json".to_string(),
-                    name: "配置文件".to_string(),
-                    description: "应用配置文件".to_string(),
-                    mime_type: Some("application/json".to_string()),
-                    subscribable: true,
-                    subscribed: false,
-                },
-            ],
-            tools: vec![
-                McpTool {
-                    name: "read_file".to_string(),
-                    description: "读取指定文件的内容".to_string(),
-                    parameters: vec![
-                        McpParameter {
-                            name: "path".to_string(),
-                            param_type: "string".to_string(),
-                            description: "要读取的文件路径".to_string(),
-                            required: true,
-                        },
-                        McpParameter {
-                            name: "encoding".to_string(),
-                            param_type: "string".to_string(),
-                            description: "文件编码格式".to_string(),
-                            required: false,
-                        },
-                    ],
-                },
-                McpTool {
-                    name: "write_file".to_string(),
-                    description: "写入内容到指定文件".to_string(),
-                    parameters: vec![
-                        McpParameter {
-                            name: "path".to_string(),
-                            param_type: "string".to_string(),
-                            description: "目标文件路径".to_string(),
-                            required: true,
-                        },
-                        McpParameter {
-                            name: "content".to_string(),
-                            param_type: "string".to_string(),
-                            description: "要写入的内容".to_string(),
-                            required: true,
-                        },
-                    ],
-                },
-            ],
-            prompts: vec![
-                McpPrompt {
-                    name: "code_review".to_string(),
-                    description: "对代码进行审查和建议".to_string(),
-                    arguments: vec![
-                        McpArgument {
-                            name: "code".to_string(),
-                            description: "要审查的代码内容".to_string(),
-                            required: true,
-                        },
-                        McpArgument {
-                            name: "language".to_string(),
-                            description: "编程语言类型".to_string(),
-                            required: false,
-                        },
-                    ],
-                },
-                McpPrompt {
-                    name: "explain_concept".to_string(),
-                    description: "解释技术概念".to_string(),
-                    arguments: vec![McpArgument {
-                        name: "concept".to_string(),
-                        description: "要解释的概念".to_string(),
-                        required: true,
-                    }],
-                },
-            ],
-            env_vars: std::collections::HashMap::from([
-                (
-                    "PATH".to_string(),
-                    "/usr/local/bin:/usr/bin:/bin".to_string(),
-                ),
-                ("NODE_ENV".to_string(), "production".to_string()),
-            ]),
+            resources: vec![],
+            tools: vec![],
+            resource_templates: vec![],
+            prompts: vec![],
+            env_vars: std::collections::HashMap::new(),
+            client: None,
         }
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+impl McpProviderInfo {
+    pub async fn get_tool_set(&self) -> anyhow::Result<ToolSet> {
+        let mut tool_set = ToolSet::default();
+        if let Some(client) = self.client.as_ref() {
+            let server = client.peer().clone();
+            tool_set = get_tool_set(server).await?;
+        }
+        Ok(tool_set)
+    }
+}
+
+impl McpProviderInfo {
+    pub async fn start(&mut self) -> anyhow::Result<&mut Self> {
+        match self.transport {
+            McpTransport::Stdio => self.start_stdio().await,
+            McpTransport::Sse => self.start_sse().await,
+            McpTransport::Streamable => self.start_streamable().await,
+        }
+    }
+
+    async fn start_stdio(&mut self) -> anyhow::Result<&mut Self> {
+        use tokio::process::Command;
+        let mut command = self.command.split(" ");
+        let transport = TokioChildProcess::new(
+            Command::new(command.nth(0).unwrap_or_default()).configure(|cmd| {
+                self.env_vars.iter().for_each(|(key, val)| {
+                    cmd.env(key, val);
+                });
+                cmd.args(command.skip(1));
+            }),
+        )?;
+
+        let client_info = ClientInfo {
+            protocol_version: Default::default(),
+            capabilities: ClientCapabilities::default(),
+            client_info: Implementation {
+                name: "xTo-Do/mcp-client".to_string(),
+                version: "0.0.1".to_string(),
+            },
+        };
+        let client = client_info.serve(transport).await?;
+        self.start_serve(client).await
+    }
+
+    async fn start_sse(&mut self) -> anyhow::Result<&mut Self> {
+        //let client = AuthClient::new(reqwest_client::ReqwestClient::new(), am);
+        //let client = reqwest::Client::default();
+
+        let mut headers: HeaderMap<HeaderValue> = HeaderMap::new();
+        headers.insert(ACCEPT, HeaderValue::from_static("*/*"));
+        for (key, val) in self.env_vars.iter() {
+            let key = HeaderName::from_bytes(key.as_bytes())?;
+            let val = val.parse()?;
+            headers.insert(key, val);
+        }
+
+        let client = reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(15))
+            .timeout(Duration::from_secs(90))
+            .read_timeout(Duration::from_secs(900))
+            .default_headers(headers)
+            .build()?;
+        let transport = SseClientTransport::start_with_client(
+            client,
+            SseClientConfig {
+                sse_endpoint: self.command.clone().into(),
+                ..Default::default()
+            },
+        )
+        .await?;
+        // let transport = SseClientTransport::start(self.command.clone()).await?;
+        let client_info = ClientInfo {
+            protocol_version: Default::default(),
+            capabilities: ClientCapabilities::default(),
+            client_info: Implementation {
+                name: "xTo-Do/mcp-client".to_string(),
+                version: "0.0.1".to_string(),
+            },
+        };
+        let client = client_info.serve(transport).await?;
+        self.start_serve(client).await
+    }
+
+    async fn start_streamable(&mut self) -> anyhow::Result<&mut Self> {
+        let mut headers: HeaderMap<HeaderValue> = HeaderMap::new();
+        headers.insert(ACCEPT, HeaderValue::from_static("*/*"));
+        for (key, val) in self.env_vars.iter() {
+            let key = HeaderName::from_bytes(key.as_bytes())?;
+            let val = val.parse()?;
+            headers.insert(key, val);
+        }
+
+        let client = reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(15))
+            .timeout(Duration::from_secs(90))
+            .read_timeout(Duration::from_secs(900))
+            .default_headers(headers)
+            .build()?;
+        let transport = StreamableHttpClientTransport::with_client(
+            client,
+            StreamableHttpClientTransportConfig {
+                uri: self.command.clone().into(),
+                ..Default::default()
+            },
+        );
+        //let transport = StreamableHttpClientTransport::from_uri(self.command.clone());
+        let client_info = ClientInfo {
+            protocol_version: Default::default(),
+            capabilities: ClientCapabilities::default(),
+            client_info: Implementation {
+                name: "test sse client".to_string(),
+                version: "0.0.1".to_string(),
+            },
+        };
+        let client = client_info.serve(transport).await?;
+        self.start_serve(client).await
+    }
+
+    async fn start_serve(
+        &mut self,
+        client: RunningService<RoleClient, rmcp::model::InitializeRequestParam>,
+    ) -> anyhow::Result<&mut Self> {
+        let server_info = client.peer_info().cloned().unwrap_or_default();
+        let tools = client.list_all_tools().await?;
+        let prompts = client.list_all_prompts().await?;
+        let resources = client.list_all_resources().await?;
+        let resource_templates = client.list_all_resource_templates().await?;
+        self.client = Some(Arc::new(client));
+        self.tools = tools;
+        self.prompts = prompts;
+        self.resources = resources
+            .into_iter()
+            .map(|r| ResourceDefinition {
+                resource: r,
+                subscribed: false,
+                subscribable: server_info
+                    .capabilities
+                    .resources
+                    .clone()
+                    .unwrap_or_default()
+                    .subscribe
+                    .unwrap_or_default(),
+            })
+            .collect();
+        self.resource_templates = resource_templates
+            .into_iter()
+            .map(|r| ResourceTemplateDefinition {
+                resource_templates: r,
+                subscribed: false,
+                subscribable: server_info
+                    .capabilities
+                    .resources
+                    .clone()
+                    .unwrap_or_default()
+                    .subscribe
+                    .unwrap_or_default(),
+            })
+            .collect();
+        if !self.tools.is_empty() {
+            self.capabilities.push(McpCapability::Tools);
+        }
+        if !self.prompts.is_empty() {
+            self.capabilities.push(McpCapability::Prompts);
+        }
+        if !self.resources.is_empty() || !self.resource_templates.is_empty() {
+            self.capabilities.push(McpCapability::Resources);
+        }
+        Ok(self)
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Default)]
 pub struct McpProviderManager {
     #[serde(default)]
     pub providers: Vec<McpProviderInfo>,
@@ -256,20 +428,12 @@ impl McpProviderManager {
         if !config_path.exists() {
             return Self::default();
         }
-
-        match std::fs::read_to_string(config_path) {
-            Ok(content) => match serde_yaml::from_str::<Vec<McpProviderInfo>>(&content) {
-                Ok(providers) => Self { providers },
-                Err(e) => {
-                    eprintln!("Failed to parse MCP config: {}", e);
-                    Self::default()
-                }
-            },
-            Err(e) => {
-                eprintln!("Failed to read MCP config file: {}", e);
-                Self::default()
-            }
-        }
+        let content = std::fs::read_to_string(config_path).unwrap_or_default();
+        let providers = serde_yaml::from_str::<Vec<McpProviderInfo>>(&content).unwrap_or_default();
+        // for provider in providers.iter_mut() {
+        //     *provider = provider.clone().start().await?;
+        // }
+        Self { providers }
     }
 
     /// 保存配置到文件
@@ -295,209 +459,280 @@ impl McpProviderManager {
         self.providers.iter().find(|p| p.id == id)
     }
 
-    /// 根据名称查询提供商
-    pub fn get_provider_by_name(&self, name: &str) -> Option<&McpProviderInfo> {
-        self.providers.iter().find(|p| p.name == name)
-    }
+    // /// 根据名称查询提供商
+    // pub fn get_provider_by_name(&self, name: &str) -> Option<&McpProviderInfo> {
+    //     self.providers.iter().find(|p| p.name == name)
+    // }
 
-    /// 根据索引获取提供商
-    pub fn get_provider_by_index(&self, index: usize) -> Option<&McpProviderInfo> {
-        self.providers.get(index)
-    }
+    // /// 根据索引获取提供商
+    // pub fn get_provider_by_index(&self, index: usize) -> Option<&McpProviderInfo> {
+    //     self.providers.get(index)
+    // }
 
-    /// 根据ID查找提供商索引
-    pub fn find_provider_index(&self, id: &str) -> Option<usize> {
-        self.providers.iter().position(|p| p.id == id)
-    }
+    // /// 根据ID查找提供商索引
+    // pub fn find_provider_index(&self, id: &str) -> Option<usize> {
+    //     self.providers.iter().position(|p| p.id == id)
+    // }
 
-    /// 添加新的提供商
-    pub fn add_provider(&mut self, provider: McpProviderInfo) -> anyhow::Result<String> {
-        if self.get_provider_by_name(&provider.name).is_some() {
-            return Err(anyhow::anyhow!(
-                "Provider '{}' already exists",
-                provider.name
-            ));
-        }
+    // /// 添加新的提供商
+    // pub fn add_provider(&mut self, provider: McpProviderInfo) -> anyhow::Result<String> {
+    //     if self.get_provider_by_name(&provider.name).is_some() {
+    //         return Err(anyhow::anyhow!(
+    //             "Provider '{}' already exists",
+    //             provider.name
+    //         ));
+    //     }
 
-        let id = provider.id.clone();
-        self.providers.push(provider);
-        Ok(id)
-    }
+    //     let id = provider.id.clone();
+    //     self.providers.push(provider);
+    //     Ok(id)
+    // }
 
-    /// 更新提供商
-    pub fn update_provider(&mut self, id: &str, provider: McpProviderInfo) -> anyhow::Result<()> {
-        let index = self
-            .find_provider_index(id)
-            .ok_or_else(|| anyhow::anyhow!("Provider with id '{}' not found", id))?;
+    // /// 更新提供商
+    // pub fn update_provider(&mut self, id: &str, provider: McpProviderInfo) -> anyhow::Result<()> {
+    //     let index = self
+    //         .find_provider_index(id)
+    //         .ok_or_else(|| anyhow::anyhow!("Provider with id '{}' not found", id))?;
 
-        // 检查名称冲突
-        if let Some(existing) = self.get_provider_by_name(&provider.name) {
-            if existing.id != id {
-                return Err(anyhow::anyhow!(
-                    "Provider name '{}' already exists",
-                    provider.name
-                ));
-            }
-        }
+    //     // 检查名称冲突
+    //     if let Some(existing) = self.get_provider_by_name(&provider.name) {
+    //         if existing.id != id {
+    //             return Err(anyhow::anyhow!(
+    //                 "Provider name '{}' already exists",
+    //                 provider.name
+    //             ));
+    //         }
+    //     }
 
-        self.providers[index] = provider;
-        Ok(())
-    }
+    //     self.providers[index] = provider;
+    //     Ok(())
+    // }
 
-    /// 根据索引更新提供商
-    pub fn update_provider_by_index(
-        &mut self,
-        index: usize,
-        provider: McpProviderInfo,
-    ) -> anyhow::Result<()> {
-        if index >= self.providers.len() {
-            return Err(anyhow::anyhow!("Provider index {} out of bounds", index));
-        }
+    // /// 根据索引更新提供商
+    // pub fn update_provider_by_index(
+    //     &mut self,
+    //     index: usize,
+    //     provider: McpProviderInfo,
+    // ) -> anyhow::Result<()> {
+    //     if index >= self.providers.len() {
+    //         return Err(anyhow::anyhow!("Provider index {} out of bounds", index));
+    //     }
 
-        let old_id = &self.providers[index].id;
+    //     let old_id = &self.providers[index].id;
 
-        // 检查名称冲突
-        if let Some(existing) = self.get_provider_by_name(&provider.name) {
-            if existing.id != *old_id {
-                return Err(anyhow::anyhow!(
-                    "Provider name '{}' already exists",
-                    provider.name
-                ));
-            }
-        }
+    //     // 检查名称冲突
+    //     if let Some(existing) = self.get_provider_by_name(&provider.name) {
+    //         if existing.id != *old_id {
+    //             return Err(anyhow::anyhow!(
+    //                 "Provider name '{}' already exists",
+    //                 provider.name
+    //             ));
+    //         }
+    //     }
 
-        self.providers[index] = provider;
-        Ok(())
-    }
+    //     self.providers[index] = provider;
+    //     Ok(())
+    // }
 
-    /// 删除提供商
-    pub fn delete_provider(&mut self, id: &str) -> anyhow::Result<McpProviderInfo> {
-        let index = self
-            .find_provider_index(id)
-            .ok_or_else(|| anyhow::anyhow!("Provider with id '{}' not found", id))?;
+    // /// 删除提供商
+    // pub fn delete_provider(&mut self, id: &str) -> anyhow::Result<McpProviderInfo> {
+    //     let index = self
+    //         .find_provider_index(id)
+    //         .ok_or_else(|| anyhow::anyhow!("Provider with id '{}' not found", id))?;
 
-        Ok(self.providers.remove(index))
-    }
+    //     Ok(self.providers.remove(index))
+    // }
 
-    /// 根据索引删除提供商
-    pub fn delete_provider_by_index(&mut self, index: usize) -> anyhow::Result<McpProviderInfo> {
-        if index >= self.providers.len() {
-            return Err(anyhow::anyhow!("Provider index {} out of bounds", index));
-        }
+    // /// 根据索引删除提供商
+    // pub fn delete_provider_by_index(&mut self, index: usize) -> anyhow::Result<McpProviderInfo> {
+    //     if index >= self.providers.len() {
+    //         return Err(anyhow::anyhow!("Provider index {} out of bounds", index));
+    //     }
 
-        Ok(self.providers.remove(index))
-    }
+    //     Ok(self.providers.remove(index))
+    // }
 
-    /// 启用/禁用提供商
-    pub fn toggle_provider(&mut self, id: &str, enabled: bool) -> anyhow::Result<()> {
-        let provider = self
-            .providers
-            .iter_mut()
-            .find(|p| p.id == id)
-            .ok_or_else(|| anyhow::anyhow!("Provider with id '{}' not found", id))?;
+    // /// 启用/禁用提供商
+    // pub fn toggle_provider(&mut self, id: &str, enabled: bool) -> anyhow::Result<()> {
+    //     let provider = self
+    //         .providers
+    //         .iter_mut()
+    //         .find(|p| p.id == id)
+    //         .ok_or_else(|| anyhow::anyhow!("Provider with id '{}' not found", id))?;
 
-        provider.enabled = enabled;
-        Ok(())
-    }
+    //     provider.enabled = enabled;
+    //     Ok(())
+    // }
 
-    /// 根据索引启用/禁用提供商
-    pub fn toggle_provider_by_index(&mut self, index: usize, enabled: bool) -> anyhow::Result<()> {
-        if index >= self.providers.len() {
-            return Err(anyhow::anyhow!("Provider index {} out of bounds", index));
-        }
+    // /// 根据索引启用/禁用提供商
+    // pub fn toggle_provider_by_index(&mut self, index: usize, enabled: bool) -> anyhow::Result<()> {
+    //     if index >= self.providers.len() {
+    //         return Err(anyhow::anyhow!("Provider index {} out of bounds", index));
+    //     }
 
-        self.providers[index].enabled = enabled;
-        Ok(())
-    }
+    //     self.providers[index].enabled = enabled;
+    //     Ok(())
+    // }
 
-    /// 获取启用的提供商
-    pub fn get_enabled_providers(&self) -> Vec<&McpProviderInfo> {
-        self.providers
-            .iter()
-            .filter(|provider| provider.enabled)
-            .collect()
-    }
+    // /// 获取启用的提供商
+    // pub fn get_enabled_providers(&self) -> Vec<&McpProviderInfo> {
+    //     self.providers
+    //         .iter()
+    //         .filter(|provider| provider.enabled)
+    //         .collect()
+    // }
 
-    /// 获取提供商数量
-    pub fn count(&self) -> usize {
-        self.providers.len()
-    }
+    // /// 获取提供商数量
+    // pub fn count(&self) -> usize {
+    //     self.providers.len()
+    // }
 
-    /// 清空所有提供商
-    pub fn clear(&mut self) {
-        self.providers.clear();
-    }
+    // /// 清空所有提供商
+    // pub fn clear(&mut self) {
+    //     self.providers.clear();
+    // }
 
-    /// 批量删除提供商
-    pub fn batch_delete(&mut self, ids: &[String]) -> Vec<McpProviderInfo> {
-        let mut deleted = Vec::new();
+    // /// 批量删除提供商
+    // pub fn batch_delete(&mut self, ids: &[String]) -> Vec<McpProviderInfo> {
+    //     let mut deleted = Vec::new();
 
-        // 从后往前删除，避免索引变化
-        for id in ids {
-            if let Some(index) = self.find_provider_index(id) {
-                deleted.push(self.providers.remove(index));
-            }
-        }
+    //     // 从后往前删除，避免索引变化
+    //     for id in ids {
+    //         if let Some(index) = self.find_provider_index(id) {
+    //             deleted.push(self.providers.remove(index));
+    //         }
+    //     }
 
-        deleted
-    }
+    //     deleted
+    // }
 
-    /// 根据索引批量删除提供商
-    pub fn batch_delete_by_indices(&mut self, mut indices: Vec<usize>) -> Vec<McpProviderInfo> {
-        let mut deleted = Vec::new();
+    // /// 根据索引批量删除提供商
+    // pub fn batch_delete_by_indices(&mut self, mut indices: Vec<usize>) -> Vec<McpProviderInfo> {
+    //     let mut deleted = Vec::new();
 
-        // 从大到小排序索引，从后往前删除
-        indices.sort_by(|a, b| b.cmp(a));
+    //     // 从大到小排序索引，从后往前删除
+    //     indices.sort_by(|a, b| b.cmp(a));
 
-        for index in indices {
-            if index < self.providers.len() {
-                deleted.push(self.providers.remove(index));
-            }
-        }
+    //     for index in indices {
+    //         if index < self.providers.len() {
+    //             deleted.push(self.providers.remove(index));
+    //         }
+    //     }
 
-        deleted.reverse(); // 恢复原始顺序
-        deleted
-    }
+    //     deleted.reverse(); // 恢复原始顺序
+    //     deleted
+    // }
 
-    /// 搜索提供商
-    pub fn search_providers(&self, query: &str) -> Vec<&McpProviderInfo> {
-        let query_lower = query.to_lowercase();
-        self.providers
-            .iter()
-            .filter(|provider| {
-                provider.name.to_lowercase().contains(&query_lower)
-                    || provider.command.to_lowercase().contains(&query_lower)
-            })
-            .collect()
-    }
+    // /// 搜索提供商
+    // pub fn search_providers(&self, query: &str) -> Vec<&McpProviderInfo> {
+    //     let query_lower = query.to_lowercase();
+    //     self.providers
+    //         .iter()
+    //         .filter(|provider| {
+    //             provider.name.to_lowercase().contains(&query_lower)
+    //                 || provider.command.to_lowercase().contains(&query_lower)
+    //         })
+    //         .collect()
+    // }
 
-    /// 移动提供商位置
-    pub fn move_provider(&mut self, from_index: usize, to_index: usize) -> anyhow::Result<()> {
-        if from_index >= self.providers.len() || to_index >= self.providers.len() {
-            return Err(anyhow::anyhow!("Index out of bounds"));
-        }
+    // /// 移动提供商位置
+    // pub fn move_provider(&mut self, from_index: usize, to_index: usize) -> anyhow::Result<()> {
+    //     if from_index >= self.providers.len() || to_index >= self.providers.len() {
+    //         return Err(anyhow::anyhow!("Index out of bounds"));
+    //     }
 
-        if from_index != to_index {
-            let provider = self.providers.remove(from_index);
-            self.providers.insert(to_index, provider);
-        }
+    //     if from_index != to_index {
+    //         let provider = self.providers.remove(from_index);
+    //         self.providers.insert(to_index, provider);
+    //     }
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 
-    /// 交换两个提供商的位置
-    pub fn swap_providers(&mut self, index1: usize, index2: usize) -> anyhow::Result<()> {
-        if index1 >= self.providers.len() || index2 >= self.providers.len() {
-            return Err(anyhow::anyhow!("Index out of bounds"));
-        }
+    // /// 交换两个提供商的位置
+    // pub fn swap_providers(&mut self, index1: usize, index2: usize) -> anyhow::Result<()> {
+    //     if index1 >= self.providers.len() || index2 >= self.providers.len() {
+    //         return Err(anyhow::anyhow!("Index out of bounds"));
+    //     }
 
-        self.providers.swap(index1, index2);
-        Ok(())
-    }
+    //     self.providers.swap(index1, index2);
+    //     Ok(())
+    // }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ToolCall {
     pub name: String,
     pub arguments: String,
+}
+
+pub struct McpToolAdaptor {
+    tool: McpTool,
+    server: ServerSink,
+}
+
+impl RigTool for McpToolAdaptor {
+    fn name(&self) -> String {
+        self.tool.name.to_string()
+    }
+
+    fn definition(
+        &self,
+        _prompt: String,
+    ) -> std::pin::Pin<Box<dyn Future<Output = rig::completion::ToolDefinition> + Send + Sync + '_>>
+    {
+        Box::pin(std::future::ready(rig::completion::ToolDefinition {
+            name: self.name(),
+            description: self
+                .tool
+                .description
+                .as_deref()
+                .unwrap_or_default()
+                .to_string(),
+            parameters: self.tool.schema_as_json_value(),
+        }))
+    }
+
+    fn call(
+        &self,
+        args: String,
+    ) -> std::pin::Pin<
+        Box<dyn Future<Output = Result<String, rig::tool::ToolError>> + Send + Sync + '_>,
+    > {
+        let server = self.server.clone();
+        Box::pin(async move {
+            let call_mcp_tool_result = server
+                .call_tool(CallToolRequestParam {
+                    name: self.tool.name.clone(),
+                    arguments: serde_json::from_str(&args)
+                        .map_err(rig::tool::ToolError::JsonError)?,
+                })
+                .await
+                .inspect(|result| tracing::info!(?result))
+                .inspect_err(|error| tracing::error!(%error))
+                .map_err(|e| rig::tool::ToolError::ToolCallError(Box::new(e)))?;
+
+            Ok(convert_mcp_call_tool_result_to_string(call_mcp_tool_result))
+        })
+    }
+}
+
+pub fn convert_mcp_call_tool_result_to_string(result: CallToolResult) -> String {
+    serde_json::to_string(&result).unwrap()
+}
+
+pub async fn get_tool_set(server: ServerSink) -> anyhow::Result<ToolSet> {
+    let tools = server.list_all_tools().await?;
+
+    let mut tool_builder = ToolSet::builder();
+    for tool in tools {
+        tracing::info!("get tool: {}", tool.name);
+        let adaptor = McpToolAdaptor {
+            tool: tool.clone(),
+            server: server.clone(),
+        };
+        tool_builder = tool_builder.static_tool(adaptor);
+    }
+    let tool_set = tool_builder.build();
+    Ok(tool_set)
 }

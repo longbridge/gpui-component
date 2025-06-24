@@ -3,10 +3,10 @@
     windows_subsystem = "windows"
 )]
 mod app;
+mod backoffice;
 mod models;
 mod ui;
 pub mod xbus;
-
 
 #[tokio::main]
 async fn main() {

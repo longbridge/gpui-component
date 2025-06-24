@@ -85,16 +85,15 @@ impl TodoThreadChat {
     ) {
         if checked {
             // 如果选中，则添加
-            self.todoitem
-                .selected_model=Some(crate::models::todo_item::SelectedModel {
-                    provider_id: provider.id.clone(),
-                    provider_name: provider.name.clone(),
-                    model_id: model.id.clone(),
-                    model_name: model.display_name.clone(),
-                });
+            self.todoitem.selected_model = Some(crate::models::todo_item::SelectedModel {
+                provider_id: provider.id.clone(),
+                provider_name: provider.name.clone(),
+                model_id: model.id.clone(),
+                model_name: model.display_name.clone(),
+            });
         } else {
             // 如果取消选中，则移除
-            self.todoitem.selected_model=None;
+            self.todoitem.selected_model = None;
         }
         cx.notify(); // 通知主界面更新
     }
@@ -113,8 +112,8 @@ impl TodoThreadChat {
                 .push(crate::models::todo_item::SelectedTool {
                     provider_id: provider.id.clone(),
                     provider_name: provider.name.clone(),
-                    description: tool.description.clone(),
-                    tool_name: tool.name.clone(),
+                    description: tool.description.clone().unwrap_or_default().to_string(),
+                    tool_name: tool.name.clone().to_string(),
                 });
         } else {
             // 如果取消选中，则移除

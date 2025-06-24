@@ -195,8 +195,8 @@ impl TodoThreadEdit {
                 .push(crate::models::todo_item::SelectedTool {
                     provider_id: provider.id.clone(),
                     provider_name: provider.name.clone(),
-                    description: tool.description.clone(),
-                    tool_name: tool.name.clone(),
+                    description: tool.description.clone().unwrap_or_default().to_string(),
+                    tool_name: tool.name.clone().to_string(),
                 });
         } else {
             // 如果未选中，则移除
@@ -468,7 +468,7 @@ impl TodoThreadEdit {
                                                                                     todo_edit_entity_for_event.update(cx, |todo_edit, todo_cx| {
                                                                                         todo_edit.toggle_model_selection(*checked,&model_clone, &provider_clone, todo_cx);
                                                                                         todo_edit.save(&Save, window, todo_cx);
-                                                                                         todo_cx.notify();
+                                                                                        todo_cx.notify();
                                                                                     });
                                                                                 println!("切换模型选择: {}",model_name_to_toggle);
 
@@ -660,7 +660,7 @@ impl TodoThreadEdit {
                                                                             .checked(todoitem.selected_tools.iter().any(|selected|
                                                                             selected.tool_name == tool.name && selected.provider_id == provider.id
                                                                         ))
-                                                                            .label(tool.name.clone())
+                                                                            .label(tool.name.clone().to_string())
                                                                             .on_click({
                                                                                 let tool_clone = tool.clone();
                                                                                 let provider_clone = provider.clone();
@@ -688,7 +688,7 @@ impl TodoThreadEdit {
                                                             .pl_6()
                                                             .text_xs()
                                                             .text_color(gpui::rgb(0x6B7280))
-                                                            .child(tool.description.clone()),
+                                                            .child(tool.description.clone().unwrap_or_default().to_string()),
                                                     ),
                                             )
                                     },
@@ -813,7 +813,7 @@ impl Focusable for TodoThreadEdit {
 }
 
 impl Render for TodoThreadEdit {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .key_context(CONTEXT)
             .id("todo-thread-view")

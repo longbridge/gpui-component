@@ -10,6 +10,7 @@ use super::{HighlightTheme, Language};
 /// A syntax highlighter that supports incremental parsing, multiline text,
 /// and caching of highlight results.
 #[allow(unused)]
+#[derive(Default)]
 pub struct SyntaxHighlighter {
     language_name: &'static str,
     language: Option<Language>,
@@ -41,7 +42,7 @@ pub struct SyntaxHighlighter {
 impl SyntaxHighlighter {
     /// Create a new SyntaxHighlighter for HTML.
     pub fn new(lang: &str) -> Self {
-        Self::build_combined_injections_query(&lang).unwrap()
+        Self::build_combined_injections_query(&lang).unwrap_or_default()
     }
 
     /// Build the combined injections query for the given language.

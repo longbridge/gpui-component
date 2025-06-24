@@ -392,7 +392,7 @@ impl TodoThreadChat {
                                                                             .checked(todoitem.selected_tools.iter().any(|selected|
                                                                             selected.tool_name == tool.name && selected.provider_id == provider.id
                                                                         ))
-                                                                            .label(tool.name.clone())
+                                                                            .label(tool.name.clone().to_string())
                                                                             .on_click({
                                                                                 let tool_clone = tool.clone();
                                                                                 let provider_clone = provider.clone();
@@ -421,7 +421,7 @@ impl TodoThreadChat {
                                                             .pl_6()
                                                             .text_xs()
                                                             .text_color(gpui::rgb(0x6B7280))
-                                                            .child(tool.description.clone()),
+                                                            .child(tool.description.clone().unwrap_or_default().to_string()),
                                                     ),
                                             )
                                     },

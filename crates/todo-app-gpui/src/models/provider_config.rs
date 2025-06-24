@@ -536,35 +536,35 @@ impl LlmProviderManager {
     }
 
     /// 刷新提供商的模型列表
-    pub async fn refresh_provider(&mut self, id: &str) -> anyhow::Result<()> {
-        let provider = self
-            .providers
-            .iter_mut()
-            .find(|p| p.id == id)
-            .ok_or_else(|| anyhow::anyhow!("Provider with id '{}' not found", id))?;
+    // pub async fn refresh_provider(&mut self, id: &str) -> anyhow::Result<()> {
+    //     let provider = self
+    //         .providers
+    //         .iter_mut()
+    //         .find(|p| p.id == id)
+    //         .ok_or_else(|| anyhow::anyhow!("Provider with id '{}' not found", id))?;
 
-        let client =
-            rig::providers::mira::Client::new_with_base_url(&provider.api_key, &provider.api_url)?;
-        // 异步获取模型列表
-        let models_result = client.list_models().await?;
-        provider.models = models_result
-            .into_iter()
-            .map(|id| {
-                // 根据模型名称推断能力
-                let capabilities = ApiType::infer_model_capabilities(&id);
-                let limits = ApiType::infer_model_limits(&id);
+    //     let client =
+    //         rig::providers::mira::Client::new_with_base_url(&provider.api_key, &provider.api_url)?;
+    //     // 异步获取模型列表
+    //     let models_result = client.list_models().await?;
+    //     provider.models = models_result
+    //         .into_iter()
+    //         .map(|id| {
+    //             // 根据模型名称推断能力
+    //             let capabilities = ApiType::infer_model_capabilities(&id);
+    //             let limits = ApiType::infer_model_limits(&id);
 
-                ModelInfo {
-                    id: id.clone(),
-                    display_name: id,
-                    capabilities,
-                    enabled: true,
-                    limits,
-                }
-            })
-            .collect();
-        Ok(())
-    }
+    //             ModelInfo {
+    //                 id: id.clone(),
+    //                 display_name: id,
+    //                 capabilities,
+    //                 enabled: true,
+    //                 limits,
+    //             }
+    //         })
+    //         .collect();
+    //     Ok(())
+    // }
 
     /// 根据索引更新提供商
     pub fn update_provider_by_index(
