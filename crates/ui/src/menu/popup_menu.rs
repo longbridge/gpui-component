@@ -813,10 +813,10 @@ impl PopupMenu {
                     )
                     .when(hovered, |this| {
                         let (anchor, left) =
-                            if window.bounds().size.width - bounds.origin.x < max_width {
-                                (Corner::TopRight, -px(12.))
+                            if max_width + bounds.origin.x > window.bounds().size.width {
+                                (Corner::TopRight, -px(14.))
                             } else {
-                                (Corner::TopLeft, bounds.size.width + px(4.))
+                                (Corner::TopLeft, bounds.size.width)
                             };
 
                         let is_bottom_pos =
@@ -829,7 +829,7 @@ impl PopupMenu {
                                     div()
                                         .occlude()
                                         .when(is_bottom_pos, |this| this.bottom_0())
-                                        .when(!is_bottom_pos, |this| this.top(-px(4.)))
+                                        .when(!is_bottom_pos, |this| this.top_neg_1())
                                         .left(left)
                                         .child(menu.clone()),
                                 )
