@@ -1,13 +1,13 @@
 use std::{cell::Cell, rc::Rc};
 
 use gpui::{
-    div, prelude::FluentBuilder as _, AnyElement, App, Div, ElementId, InteractiveElement,
-    IntoElement, ParentElement, RenderOnce, SharedString, StatefulInteractiveElement, Styled as _,
+    div, prelude::FluentBuilder as _, AnyElement, App, ElementId, InteractiveElement, IntoElement,
+    ParentElement, RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement, Styled,
     Window,
 };
 use smallvec::{smallvec, SmallVec};
 
-use crate::{h_flex, ActiveTheme, Disableable, Icon, Sizable, Size};
+use crate::{h_flex, ActiveTheme, Disableable, Icon, Sizable, Size, StyledExt};
 
 #[derive(Default, Copy, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ToggleVariant {
@@ -28,7 +28,7 @@ pub trait ToggleVariants: Sized {
 
 #[derive(IntoElement)]
 pub struct Toggle {
-    base: Div,
+    style: StyleRefinement,
     checked: bool,
     size: Size,
     variant: ToggleVariant,
@@ -46,7 +46,7 @@ pub struct InteractiveToggle {
 impl Toggle {
     fn new() -> Self {
         Self {
-            base: div(),
+            style: StyleRefinement::default(),
             checked: false,
             size: Size::default(),
             variant: ToggleVariant::default(),
@@ -98,6 +98,12 @@ impl Sizable for Toggle {
     }
 }
 
+impl Styled for Toggle {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
 impl ParentElement for Toggle {
     fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
         self.children.extend(elements);
@@ -105,12 +111,12 @@ impl ParentElement for Toggle {
 }
 
 impl RenderOnce for Toggle {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl gpui::IntoElement {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let checked = self.checked;
         let disabled = self.disabled;
         let hoverable = !disabled && !checked;
 
-        self.base
+        div()
             .flex()
             .flex_row()
             .items_center()
@@ -138,6 +144,7 @@ impl RenderOnce for Toggle {
                 this.bg(cx.theme().accent)
                     .text_color(cx.theme().accent_foreground)
             })
+            .refine_style(&self.style)
             .children(self.children)
     }
 }
@@ -185,7 +192,7 @@ impl ParentElement for InteractiveToggle {
 }
 
 impl RenderOnce for InteractiveToggle {
-    fn render(self, _: &mut Window, _: &mut App) -> impl gpui::IntoElement {
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         let checked = self.toggle.checked;
         let disabled = self.toggle.disabled;
 
@@ -203,6 +210,7 @@ impl RenderOnce for InteractiveToggle {
 #[derive(IntoElement)]
 pub struct ToggleGroup {
     id: ElementId,
+    style: StyleRefinement,
     size: Size,
     variant: ToggleVariant,
     disabled: bool,
@@ -214,6 +222,7 @@ impl ToggleGroup {
     pub fn new(id: impl Into<ElementId>) -> Self {
         Self {
             id: id.into(),
+            style: StyleRefinement::default(),
             size: Size::default(),
             variant: ToggleVariant::default(),
             disabled: false,
@@ -267,8 +276,14 @@ impl Disableable for ToggleGroup {
     }
 }
 
+impl Styled for ToggleGroup {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
 impl RenderOnce for ToggleGroup {
-    fn render(self, _: &mut Window, _: &mut App) -> impl gpui::IntoElement {
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         let disabled = self.disabled;
         let checks = self
             .items
@@ -280,6 +295,7 @@ impl RenderOnce for ToggleGroup {
         h_flex()
             .id(self.id)
             .gap_1()
+            .refine_style(&self.style)
             .children(self.items.into_iter().enumerate().map({
                 |(ix, item)| {
                     let state = state.clone();
