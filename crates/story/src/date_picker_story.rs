@@ -182,18 +182,14 @@ impl Render for DatePickerStory {
                 ),
             )
             .child(
-                section("Small with 180px width").max_w_md().child(
-                    DatePicker::new(&self.date_picker_small)
-                        .small()
-                        .width(px(180.)),
-                ),
+                section("Small with 180px width")
+                    .max_w_md()
+                    .child(DatePicker::new(&self.date_picker_small).small().w(px(180.))),
             )
             .child(
-                section("Large").max_w_md().child(
-                    DatePicker::new(&self.date_picker_large)
-                        .large()
-                        .width(px(300.)),
-                ),
+                section("Large")
+                    .max_w_md()
+                    .child(DatePicker::new(&self.date_picker_large).large().w(px(300.))),
             )
             .child(
                 section("Custom (First 5 days of each month disabled)")
