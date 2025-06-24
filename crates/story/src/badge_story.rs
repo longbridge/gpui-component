@@ -3,7 +3,8 @@ use gpui::{
     Render, Styled, Window,
 };
 use gpui_component::{
-    badge::Badge, dock::PanelControl, v_flex, ActiveTheme, Icon, IconName, Sizable as _,
+    badge::Badge, blue_500, dock::PanelControl, v_flex, yellow_500, ActiveTheme, Icon, IconName,
+    Sizable as _,
 };
 
 use crate::section;
@@ -81,6 +82,39 @@ impl Render for BadgeStory {
                     .child(
                         Badge::new().count(103).child(
                             img("https://avatars.githubusercontent.com/u/28998859?v=4")
+                                .size_10()
+                                .border_1()
+                                .border_color(cx.theme().border)
+                                .rounded_full(),
+                        ),
+                    ),
+            )
+            .child(
+                section("Badge with dot").max_w_md().child(
+                    Badge::new().dot().count(1).child(
+                        img("https://avatars.githubusercontent.com/u/5518?v=4")
+                            .size_10()
+                            .border_1()
+                            .border_color(cx.theme().border)
+                            .rounded_full(),
+                    ),
+                ),
+            )
+            .child(
+                section("Badge with Color")
+                    .max_w_md()
+                    .child(
+                        Badge::new().count(3).color(blue_500()).child(
+                            img("https://avatars.githubusercontent.com/u/5518?v=4")
+                                .size_10()
+                                .border_1()
+                                .border_color(cx.theme().border)
+                                .rounded_full(),
+                        ),
+                    )
+                    .child(
+                        Badge::new().dot().color(yellow_500()).count(1).child(
+                            img("https://avatars.githubusercontent.com/u/5518?v=4")
                                 .size_10()
                                 .border_1()
                                 .border_color(cx.theme().border)

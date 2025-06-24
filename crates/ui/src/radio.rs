@@ -13,6 +13,7 @@ use gpui::{
 #[derive(IntoElement)]
 pub struct Radio {
     base: Div,
+    style: StyleRefinement,
     id: ElementId,
     label: Option<Text>,
     children: Vec<AnyElement>,
@@ -26,6 +27,7 @@ impl Radio {
         Self {
             id: id.into(),
             base: div(),
+            style: StyleRefinement::default(),
             label: None,
             children: Vec::new(),
             checked: false,
@@ -57,7 +59,7 @@ impl Radio {
 
 impl Styled for Radio {
     fn style(&mut self) -> &mut gpui::StyleRefinement {
-        self.base.style()
+        &mut self.style
     }
 }
 impl InteractiveElement for Radio {
@@ -95,6 +97,7 @@ impl RenderOnce for Radio {
                 .text_color(cx.theme().foreground)
                 .items_start()
                 .line_height(relative(1.))
+                .refine_style(&self.style)
                 .child(
                     div()
                         .relative()

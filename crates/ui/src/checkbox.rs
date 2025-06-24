@@ -4,8 +4,8 @@ use crate::{
 };
 use gpui::{
     div, prelude::FluentBuilder as _, px, relative, rems, svg, AnyElement, App, Div, ElementId,
-    InteractiveElement, IntoElement, ParentElement, RenderOnce, StatefulInteractiveElement, Styled,
-    Window,
+    InteractiveElement, IntoElement, ParentElement, RenderOnce, StatefulInteractiveElement,
+    StyleRefinement, Styled, Window,
 };
 
 /// A Checkbox element.
@@ -13,6 +13,7 @@ use gpui::{
 pub struct Checkbox {
     id: ElementId,
     base: Div,
+    style: StyleRefinement,
     label: Option<Text>,
     children: Vec<AnyElement>,
     checked: bool,
@@ -26,6 +27,7 @@ impl Checkbox {
         Self {
             id: id.into(),
             base: div(),
+            style: StyleRefinement::default(),
             label: None,
             children: Vec::new(),
             checked: false,
@@ -60,7 +62,7 @@ impl StatefulInteractiveElement for Checkbox {}
 
 impl Styled for Checkbox {
     fn style(&mut self) -> &mut gpui::StyleRefinement {
-        self.base.style()
+        &mut self.style
     }
 }
 
@@ -130,6 +132,10 @@ impl RenderOnce for Checkbox {
                     Size::Large => this.text_lg(),
                     _ => this,
                 })
+                .when(self.disabled, |this| {
+                    this.text_color(cx.theme().muted_foreground)
+                })
+                .refine_style(&self.style)
                 .child(
                     v_flex()
                         .relative()
@@ -192,9 +198,6 @@ impl RenderOnce for Checkbox {
                             })
                             .children(self.children),
                     )
-                })
-                .when(self.disabled, |this| {
-                    this.text_color(cx.theme().muted_foreground)
                 })
                 .when_some(
                     self.on_click.filter(|_| !self.disabled),

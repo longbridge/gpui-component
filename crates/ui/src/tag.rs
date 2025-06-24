@@ -1,8 +1,8 @@
-use crate::{theme::ActiveTheme as _, ColorName, Sizable, Size};
+use crate::{theme::ActiveTheme as _, ColorName, Sizable, Size, StyledExt};
 use gpui::{
     div, prelude::FluentBuilder as _, relative, rems, transparent_white, AbsoluteLength,
-    AnyElement, App, Div, Hsla, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
-    Styled, Window,
+    AnyElement, App, Hsla, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
+    StyleRefinement, Styled, Window,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -122,20 +122,22 @@ impl TagVariant {
 /// Only support: Medium, Small
 #[derive(IntoElement)]
 pub struct Tag {
-    base: Div,
+    style: StyleRefinement,
     variant: TagVariant,
     outline: bool,
     size: Size,
     rounded: Option<AbsoluteLength>,
+    children: Vec<AnyElement>,
 }
 impl Tag {
     fn new() -> Self {
         Self {
-            base: div().flex().items_center().border_1(),
+            style: StyleRefinement::default(),
             variant: TagVariant::default(),
             outline: false,
             size: Size::default(),
             rounded: None,
+            children: Vec::new(),
         }
     }
 
@@ -215,7 +217,7 @@ impl Sizable for Tag {
 }
 impl ParentElement for Tag {
     fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
-        self.base.extend(elements);
+        self.children.extend(elements);
     }
 }
 impl RenderOnce for Tag {
@@ -235,7 +237,10 @@ impl RenderOnce for Tag {
             .into(),
         );
 
-        self.base
+        div()
+            .flex()
+            .items_center()
+            .border_1()
             .line_height(relative(1.))
             .text_xs()
             .map(|this| match self.size {
@@ -247,5 +252,7 @@ impl RenderOnce for Tag {
             .border_color(border)
             .rounded(rounded)
             .hover(|this| this.opacity(0.9))
+            .refine_style(&self.style)
+            .children(self.children)
     }
 }

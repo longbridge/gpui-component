@@ -2,20 +2,22 @@ use std::rc::Rc;
 
 use gpui::{
     div, prelude::FluentBuilder as _, App, ClickEvent, ElementId, InteractiveElement as _,
-    IntoElement, ParentElement, RenderOnce, SharedString, StatefulInteractiveElement, Styled,
-    Window,
+    IntoElement, ParentElement, RenderOnce, SharedString, StatefulInteractiveElement,
+    StyleRefinement, Styled, Window,
 };
 
-use crate::{h_flex, ActiveTheme, Icon, IconName};
+use crate::{h_flex, ActiveTheme, Icon, IconName, StyledExt};
 
 #[derive(IntoElement)]
 pub struct Breadcrumb {
+    style: StyleRefinement,
     items: Vec<BreadcrumbItem>,
 }
 
 #[derive(IntoElement)]
 pub struct BreadcrumbItem {
     id: ElementId,
+    style: StyleRefinement,
     text: SharedString,
     on_click: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>>,
     disabled: bool,
@@ -26,6 +28,7 @@ impl BreadcrumbItem {
     pub fn new(id: impl Into<ElementId>, text: impl Into<SharedString>) -> Self {
         Self {
             id: id.into(),
+            style: StyleRefinement::default(),
             text: text.into(),
             on_click: None,
             disabled: false,
@@ -53,6 +56,12 @@ impl BreadcrumbItem {
     }
 }
 
+impl Styled for BreadcrumbItem {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
 impl RenderOnce for BreadcrumbItem {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         div()
@@ -63,6 +72,7 @@ impl RenderOnce for BreadcrumbItem {
             .when(self.disabled, |this| {
                 this.text_color(cx.theme().muted_foreground)
             })
+            .refine_style(&self.style)
             .when(!self.disabled, |this| {
                 this.when_some(self.on_click, |this, on_click| {
                     this.cursor_pointer().on_click(move |event, window, cx| {
@@ -75,7 +85,10 @@ impl RenderOnce for BreadcrumbItem {
 
 impl Breadcrumb {
     pub fn new() -> Self {
-        Self { items: Vec::new() }
+        Self {
+            items: Vec::new(),
+            style: StyleRefinement::default(),
+        }
     }
 
     /// Add an item to the breadcrumb.
@@ -93,6 +106,12 @@ impl RenderOnce for BreadcrumbSeparator {
             .text_color(cx.theme().muted_foreground)
             .size_3p5()
             .into_any_element()
+    }
+}
+
+impl Styled for Breadcrumb {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
     }
 }
 
@@ -114,6 +133,7 @@ impl RenderOnce for Breadcrumb {
             .gap_1p5()
             .text_sm()
             .text_color(cx.theme().muted_foreground)
+            .refine_style(&self.style)
             .children(children)
     }
 }

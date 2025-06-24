@@ -8,8 +8,8 @@ use std::{
 use gpui::{
     div, prelude::FluentBuilder, px, Animation, AnimationExt, AnyElement, App, AppContext,
     ClickEvent, Context, DismissEvent, ElementId, Entity, EventEmitter, InteractiveElement as _,
-    IntoElement, ParentElement as _, Render, SharedString, StatefulInteractiveElement, Styled,
-    Subscription, Window,
+    IntoElement, ParentElement as _, Render, SharedString, StatefulInteractiveElement,
+    StyleRefinement, Styled, Subscription, Window,
 };
 use smol::Timer;
 
@@ -64,6 +64,7 @@ pub struct Notification {
     ///
     /// None means the notification will be added to the end of the list.
     id: NotificationId,
+    style: StyleRefinement,
     type_: Option<NotificationType>,
     title: Option<SharedString>,
     message: Option<SharedString>,
@@ -117,6 +118,7 @@ impl Notification {
 
         Self {
             id: id.into(),
+            style: StyleRefinement::default(),
             title: None,
             message: None,
             type_: None,
@@ -252,6 +254,11 @@ impl Notification {
 }
 impl EventEmitter<DismissEvent> for Notification {}
 impl FluentBuilder for Notification {}
+impl Styled for Notification {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
 impl Render for Notification {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let closing = self.closing;
@@ -275,6 +282,7 @@ impl Render for Notification {
             .py_3p5()
             .px_4()
             .gap_3()
+            .refine_style(&self.style)
             .when_some(icon, |this, icon| {
                 this.child(div().absolute().py_3p5().left_4().child(icon))
             })

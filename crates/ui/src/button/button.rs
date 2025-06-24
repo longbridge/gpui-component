@@ -2,12 +2,13 @@ use std::rc::Rc;
 
 use crate::{
     h_flex, indicator::Indicator, tooltip::Tooltip, ActiveTheme, Colorize as _, Disableable, Icon,
-    Selectable, Sizable, Size, StyleSized,
+    Selectable, Sizable, Size, StyleSized, StyledExt,
 };
 use gpui::{
     div, prelude::FluentBuilder as _, relative, Action, AnyElement, App, ClickEvent, Corners, Div,
-    Edges, ElementId, Hsla, InteractiveElement, IntoElement, MouseButton, ParentElement, Pixels,
-    RenderOnce, SharedString, StatefulInteractiveElement as _, Styled, Window,
+    Edges, ElementId, Hsla, InteractiveElement, Interactivity, IntoElement, MouseButton,
+    ParentElement, Pixels, RenderOnce, SharedString, StatefulInteractiveElement as _,
+    StyleRefinement, Styled, Window,
 };
 
 #[derive(Default, Clone, Copy)]
@@ -180,7 +181,8 @@ impl ButtonVariant {
 /// A Button element.
 #[derive(IntoElement)]
 pub struct Button {
-    pub base: Div,
+    base: Div,
+    style: StyleRefinement,
     id: ElementId,
     icon: Option<Icon>,
     label: Option<SharedString>,
@@ -214,6 +216,7 @@ impl Button {
     pub fn new(id: impl Into<ElementId>) -> Self {
         Self {
             base: div().flex_shrink_0(),
+            style: StyleRefinement::default(),
             id: id.into(),
             icon: None,
             label: None,
@@ -361,19 +364,19 @@ impl ButtonVariants for Button {
 }
 
 impl Styled for Button {
-    fn style(&mut self) -> &mut gpui::StyleRefinement {
-        self.base.style()
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
     }
 }
 
 impl ParentElement for Button {
-    fn extend(&mut self, elements: impl IntoIterator<Item = gpui::AnyElement>) {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
         self.children.extend(elements)
     }
 }
 
 impl InteractiveElement for Button {
-    fn interactivity(&mut self) -> &mut gpui::Interactivity {
+    fn interactivity(&mut self) -> &mut Interactivity {
         self.base.interactivity()
     }
 }
@@ -389,6 +392,7 @@ impl RenderOnce for Button {
 
         self.base
             .id(self.id)
+            .flex_shrink_0()
             .cursor_default()
             .flex()
             .items_center()
@@ -465,6 +469,14 @@ impl RenderOnce for Button {
                             .text_color(active_style.fg)
                     })
             })
+            .when(self.disabled, |this| {
+                let disabled_style = style.disabled(self.outline, cx);
+                this.bg(disabled_style.bg)
+                    .text_color(disabled_style.fg)
+                    .border_color(disabled_style.border)
+                    .shadow_none()
+            })
+            .refine_style(&self.style)
             .when_some(
                 self.on_click.filter(|_| !self.disabled && !self.loading),
                 |this, on_click| {
@@ -480,13 +492,6 @@ impl RenderOnce for Button {
                     })
                 },
             )
-            .when(self.disabled, |this| {
-                let disabled_style = style.disabled(self.outline, cx);
-                this.bg(disabled_style.bg)
-                    .text_color(disabled_style.fg)
-                    .border_color(disabled_style.border)
-                    .shadow_none()
-            })
             .child({
                 h_flex()
                     .id("label")

@@ -1,9 +1,9 @@
 use std::rc::Rc;
 
 use gpui::{
-    div, prelude::FluentBuilder as _, px, relative, App, ClickEvent, Div, ElementId, Empty, Hsla,
-    InteractiveElement, IntoElement, ParentElement as _, RenderOnce, SharedString, Stateful,
-    StatefulInteractiveElement, Styled, Window,
+    div, prelude::FluentBuilder as _, px, relative, App, ClickEvent, ElementId, Empty, Hsla,
+    InteractiveElement, IntoElement, ParentElement as _, RenderOnce, SharedString,
+    StatefulInteractiveElement, StyleRefinement, Styled, Window,
 };
 
 use crate::{h_flex, text::Text, ActiveTheme as _, Icon, IconName, Sizable, Size, StyledExt};
@@ -40,7 +40,8 @@ impl AlertVariant {
 /// Alert used to display a message to the user.
 #[derive(IntoElement)]
 pub struct Alert {
-    base: Stateful<Div>,
+    id: ElementId,
+    style: StyleRefinement,
     variant: AlertVariant,
     icon: Option<Icon>,
     title: Option<SharedString>,
@@ -55,7 +56,8 @@ impl Alert {
     /// Create a new alert with the given message.
     fn new(id: impl Into<ElementId>, message: impl Into<Text>) -> Self {
         Self {
-            base: h_flex().id(id),
+            id: id.into(),
+            style: StyleRefinement::default(),
             variant: AlertVariant::default(),
             icon: None,
             title: None,
@@ -147,7 +149,7 @@ impl Sizable for Alert {
 
 impl Styled for Alert {
     fn style(&mut self) -> &mut gpui::StyleRefinement {
-        self.base.style()
+        &mut self.style
     }
 }
 
@@ -180,7 +182,8 @@ impl RenderOnce for Alert {
 
         let color = self.variant.color(cx);
 
-        self.base
+        h_flex()
+            .id(self.id)
             .w_full()
             .bg(color.opacity(0.06))
             .text_color(self.variant.fg(cx))
@@ -199,6 +202,7 @@ impl RenderOnce for Alert {
                     .border_color(color)
                     .items_start()
             })
+            .refine_style(&self.style)
             .child(
                 div()
                     .flex()

@@ -13,8 +13,8 @@ use super::{Button, ButtonRounded, ButtonVariant, ButtonVariants};
 
 #[derive(IntoElement)]
 pub struct DropdownButton {
-    style: StyleRefinement,
     id: ElementId,
+    style: StyleRefinement,
     button: Option<Button>,
     popup_menu:
         Option<Box<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static>>,
@@ -30,8 +30,8 @@ pub struct DropdownButton {
 impl DropdownButton {
     pub fn new(id: impl Into<ElementId>) -> Self {
         Self {
-            style: StyleRefinement::default(),
             id: id.into(),
+            style: StyleRefinement::default(),
             button: None,
             popup_menu: None,
             selected: false,
