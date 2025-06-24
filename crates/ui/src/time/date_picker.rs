@@ -2,8 +2,8 @@ use chrono::NaiveDate;
 use gpui::{
     anchored, deferred, div, prelude::FluentBuilder as _, px, App, AppContext, Context, ElementId,
     Empty, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement,
-    KeyBinding, Length, MouseButton, ParentElement as _, Render, RenderOnce, SharedString,
-    StatefulInteractiveElement as _, Styled, Subscription, Window,
+    KeyBinding, MouseButton, ParentElement as _, Render, RenderOnce, SharedString,
+    StatefulInteractiveElement as _, StyleRefinement, Styled, Subscription, Window,
 };
 use rust_i18n::t;
 
@@ -231,11 +231,11 @@ impl DatePickerState {
 #[derive(IntoElement)]
 pub struct DatePicker {
     id: ElementId,
+    style: StyleRefinement,
     state: Entity<DatePickerState>,
     cleanable: bool,
     placeholder: Option<SharedString>,
     size: Size,
-    width: Length,
     number_of_months: usize,
     presets: Option<Vec<DateRangePreset>>,
 }
@@ -249,6 +249,12 @@ impl Sizable for DatePicker {
 impl Focusable for DatePicker {
     fn focus_handle(&self, cx: &App) -> FocusHandle {
         self.state.focus_handle(cx)
+    }
+}
+
+impl Styled for DatePicker {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
     }
 }
 
@@ -266,7 +272,7 @@ impl DatePicker {
             cleanable: true,
             placeholder: None,
             size: Size::default(),
-            width: Length::Auto,
+            style: StyleRefinement::default(),
             number_of_months: 2,
             presets: None,
         }
@@ -281,12 +287,6 @@ impl DatePicker {
     /// Set true to show the clear button when the input field is not empty.
     pub fn cleanable(mut self) -> Self {
         self.cleanable = true;
-        self
-    }
-
-    /// Set width of the date picker input field, default is `Length::Auto`.
-    pub fn width(mut self, width: impl Into<Length>) -> Self {
-        self.width = width.into();
         self
     }
 
@@ -325,13 +325,11 @@ impl RenderOnce for DatePicker {
             .when(state.open, |this| {
                 this.on_action(window.listener_for(&self.state, DatePickerState::escape))
             })
+            .flex_none()
             .w_full()
             .relative()
-            .map(|this| match self.width {
-                Length::Definite(l) => this.flex_none().w(l),
-                Length::Auto => this.w_full(),
-            })
             .input_text_size(self.size)
+            .refine_style(&self.style)
             .child(
                 div()
                     .id("date-picker-input")
@@ -423,7 +421,8 @@ impl RenderOnce for DatePicker {
                                         .child(
                                             Calendar::new(&state.calendar)
                                                 .number_of_months(self.number_of_months)
-                                                .bordered(false)
+                                                .border_0()
+                                                .rounded_none()
                                                 .with_size(self.size),
                                         ),
                                 ),

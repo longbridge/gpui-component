@@ -19,7 +19,6 @@ pub struct DatePickerStory {
     date_picker_value: Option<String>,
     date_range_picker: Entity<DatePickerState>,
     default_range_mode_picker: Entity<DatePickerState>,
-
     _subscriptions: Vec<Subscription>,
 }
 
@@ -175,33 +174,29 @@ impl Render for DatePickerStory {
         v_flex()
             .gap_3()
             .child(
-                section("Normal").max_w_md().child(
+                section("Normal").max_w_128().child(
                     DatePicker::new(&self.date_picker)
                         .cleanable()
                         .presets(presets),
                 ),
             )
             .child(
-                section("Small with 180px width").max_w_md().child(
-                    DatePicker::new(&self.date_picker_small)
-                        .small()
-                        .width(px(180.)),
-                ),
+                section("Small with 180px width")
+                    .max_w_128()
+                    .child(DatePicker::new(&self.date_picker_small).small().w(px(180.))),
             )
             .child(
-                section("Large").max_w_md().child(
-                    DatePicker::new(&self.date_picker_large)
-                        .large()
-                        .width(px(300.)),
-                ),
+                section("Large")
+                    .max_w_128()
+                    .child(DatePicker::new(&self.date_picker_large).large().w(px(300.))),
             )
             .child(
                 section("Custom (First 5 days of each month disabled)")
-                    .max_w_md()
+                    .max_w_128()
                     .child(DatePicker::new(&self.data_picker_custom)),
             )
             .child(
-                section("Date Range").max_w_md().child(
+                section("Date Range").max_w_128().child(
                     DatePicker::new(&self.date_range_picker)
                         .number_of_months(2)
                         .cleanable()
@@ -209,7 +204,7 @@ impl Render for DatePickerStory {
                 ),
             )
             .child(
-                section("Default Range Mode").max_w_md().child(
+                section("Default Range Mode").max_w_128().child(
                     DatePicker::new(&self.default_range_mode_picker)
                         .placeholder("Range mode picker")
                         .cleanable()
@@ -217,7 +212,7 @@ impl Render for DatePickerStory {
                 ),
             )
             .child(
-                section("Date Picker Value").max_w_md().child(
+                section("Date Picker Value").max_w_128().child(
                     format!("Date picker value: {:?}", self.date_picker_value).into_element(),
                 ),
             )

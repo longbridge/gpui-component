@@ -730,12 +730,14 @@ where
                     })
                     .child(
                         h_flex()
+                            .id("inner")
                             .w_full()
                             .items_center()
                             .justify_between()
                             .gap_1()
                             .child(
                                 div()
+                                    .id("title")
                                     .w_full()
                                     .overflow_hidden()
                                     .whitespace_nowrap()

@@ -4,13 +4,14 @@ use chrono::{Datelike, Local, NaiveDate};
 use gpui::{
     prelude::FluentBuilder as _, px, relative, App, ClickEvent, Context, ElementId, Empty, Entity,
     EventEmitter, FocusHandle, InteractiveElement, IntoElement, ParentElement, Render, RenderOnce,
-    SharedString, StatefulInteractiveElement, Styled, Window,
+    SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Window,
 };
 use rust_i18n::t;
 
 use crate::{
     button::{Button, ButtonVariants as _},
     h_flex, v_flex, ActiveTheme, Disableable as _, IconName, Selectable, Sizable, Size,
+    StyledExt as _,
 };
 
 use super::utils::days_in_month;
@@ -245,6 +246,15 @@ impl Matcher {
     }
 }
 
+#[derive(IntoElement)]
+pub struct Calendar {
+    size: Size,
+    state: Entity<CalendarState>,
+    style: StyleRefinement,
+    /// Number of the months view to show.
+    number_of_months: usize,
+}
+
 /// Use to store the state of the calendar.
 pub struct CalendarState {
     focus_handle: FocusHandle,
@@ -258,15 +268,6 @@ pub struct CalendarState {
     /// Number of the months view to show.
     number_of_months: usize,
     disabled: Option<Matcher>,
-}
-
-#[derive(IntoElement)]
-pub struct Calendar {
-    size: Size,
-    state: Entity<CalendarState>,
-    bordered: bool,
-    /// Number of the months view to show.
-    number_of_months: usize,
 }
 
 impl CalendarState {
@@ -498,7 +499,7 @@ impl Calendar {
         Self {
             size: Size::default(),
             state: state.clone(),
-            bordered: true,
+            style: StyleRefinement::default(),
             number_of_months: 1,
         }
     }
@@ -506,12 +507,6 @@ impl Calendar {
     /// Set number of months to show, default is 1.
     pub fn number_of_months(mut self, number_of_months: usize) -> Self {
         self.number_of_months = number_of_months;
-        self
-    }
-
-    /// Set bordered, default: `true`.
-    pub fn bordered(mut self, bordered: bool) -> Self {
-        self.bordered = bordered;
         self
     }
 
@@ -907,6 +902,13 @@ impl Sizable for Calendar {
         self
     }
 }
+
+impl Styled for Calendar {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
 impl EventEmitter<CalendarEvent> for CalendarState {}
 impl RenderOnce for Calendar {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
@@ -917,10 +919,12 @@ impl RenderOnce for Calendar {
 
         v_flex()
             .track_focus(&self.state.read(cx).focus_handle)
-            .when(self.bordered, |this| {
-                this.border_1().border_color(cx.theme().border).p_3()
-            })
+            .border_1()
+            .border_color(cx.theme().border)
+            .rounded(cx.theme().radius_lg)
+            .p_3()
             .gap_0p5()
+            .refine_style(&self.style)
             .child(self.render_header(window, cx))
             .child(
                 v_flex()
