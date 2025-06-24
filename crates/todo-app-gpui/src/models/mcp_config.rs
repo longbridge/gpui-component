@@ -1,14 +1,7 @@
+use crate::models::{config_path, mcp_config_path};
 use gpui::SharedString;
 use gpui_component::IconName;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ACCEPT, AUTHORIZATION};
-use rmcp::transport::sse_client::SseClientConfig;
-use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
-use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-use std::time::Duration;
-use std::{collections::HashMap, env::home_dir};
-
-use crate::models::{config_path, mcp_config_path};
 use rig::extractor::ExtractorBuilder;
 use rig::providers::cohere::completion::Tool;
 use rig::providers::together::TOPPY_M_7B;
@@ -18,6 +11,8 @@ use rig::streaming::{
 };
 use rig::tool::{ToolDyn as RigTool, ToolSet};
 use rig::{completion::Prompt, providers::openai::Client};
+use rmcp::transport::sse_client::SseClientConfig;
+use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
 use rmcp::transport::{ConfigureCommandExt, StreamableHttpClientTransport, TokioChildProcess};
 use rmcp::{
     model::{CallToolRequestParam, CallToolResult},
@@ -32,6 +27,11 @@ pub use rmcp::{
     },
     ServiceExt,
 };
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use std::time::Duration;
+use std::{collections::HashMap, env::home_dir};
+use tokio::process::Command;
 
 use anyhow::Result;
 use futures::{stream, StreamExt};
@@ -91,66 +91,6 @@ impl McpCapability {
         }
     }
 }
-
-// #[derive(Debug, Clone, Deserialize, Serialize)]
-// pub struct McpResource {
-//     pub uri: String,
-//     pub name: String,
-//     pub description: String,
-//     pub mime_type: Option<String>,
-//     pub subscribable: bool, // 是否支持订阅
-//     pub subscribed: bool,   // 当前是否已订阅
-// }
-
-// impl Default for McpResource {
-//     fn default() -> Self {
-//         Self {
-//             uri: String::new(),
-//             name: String::new(),
-//             description: String::new(),
-//             mime_type: None,
-//             subscribable: true,
-//             subscribed: false,
-//         }
-//     }
-// }
-
-// #[derive(Debug, Clone, Deserialize, Serialize)]
-// pub struct McpTool {
-//     pub name: String,
-//     #[serde(default)]
-//     pub description: String,
-//     #[serde(default)]
-//     pub parameters: Vec<McpParameter>,
-// }
-
-// #[derive(Debug, Clone, Deserialize, Serialize)]
-// pub struct McpParameter {
-//     pub name: String,
-//     pub param_type: String,
-//     #[serde(default)]
-//     pub description: String,
-//     #[serde(default)]
-//     pub required: bool,
-// }
-
-// #[derive(Debug, Clone, Deserialize, Serialize)]
-// pub struct McpPrompt {
-//     pub name: String,
-//     #[serde(default)]
-//     pub description: String,
-//     #[serde(default)]
-//     pub arguments: Vec<McpArgument>,
-// }
-
-// #[derive(Debug, Clone, Deserialize, Serialize)]
-// pub struct McpArgument {
-//     pub name: String,
-//     #[serde(default)]
-//     pub description: String,
-//     #[serde(default)]
-//     pub required: bool,
-// }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct McpProviderInfo {
@@ -265,17 +205,21 @@ impl McpProviderInfo {
     }
 
     async fn start_stdio(&mut self) -> anyhow::Result<&mut Self> {
-        use tokio::process::Command;
         let mut command = self.command.split(" ");
-        let transport = TokioChildProcess::new(
+        let command = if cfg!(target_os = "windows") {
+            Command::new("powershell").configure(|cmd| {
+                cmd.arg("-Command")
+                    .arg(&self.command)
+                    .envs(&self.env_vars)
+                    .creation_flags(0x08000000);
+            })
+        } else {
             Command::new(command.nth(0).unwrap_or_default()).configure(|cmd| {
-                self.env_vars.iter().for_each(|(key, val)| {
-                    cmd.env(key, val);
-                });
-                cmd.args(command.skip(1));
-            }),
-        )?;
+                cmd.envs(&self.env_vars).args(command.skip(1));
+            })
+        };
 
+        let transport = TokioChildProcess::new(command)?;
         let client_info = ClientInfo {
             protocol_version: Default::default(),
             capabilities: ClientCapabilities::default(),

@@ -557,6 +557,23 @@ impl Render for Profile {
                                             .on_click(cx.listener(|this, checked, window, cx| {
                                                 this.toggle_auto_analyze(*checked, window, cx);
                                             })),
+                                    )
+                                    .child(
+                                        Button::new("input-my-data")
+                                            .small()
+                                            // .text_sm()
+                                            .label("导入数据")
+                                            .icon(IconName::Brain)
+                                            .with_variant(ButtonVariant::Secondary)
+                                            .on_click(cx.listener(|this, _, window, cx| {})),
+                                    )
+                                    .child(
+                                        Button::new("export-my-data")
+                                            .small()
+                                            .label("导出数据")
+                                            .icon(IconName::Brain)
+                                            .with_variant(ButtonVariant::Secondary)
+                                            .on_click(cx.listener(|this, _, window, cx| {})),
                                     ),
                             ),
                     ),
