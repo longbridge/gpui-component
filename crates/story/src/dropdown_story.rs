@@ -236,7 +236,7 @@ impl Render for DropdownStory {
                     Dropdown::new(&self.fruit_dropdown)
                         .disabled(self.disabled)
                         .icon(IconName::Search)
-                        .width(px(320.))
+                        .w(px(320.))
                         .menu_width(px(400.)),
                 ),
             )
