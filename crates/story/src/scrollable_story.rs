@@ -7,8 +7,9 @@ use gpui::{
 use gpui_component::{
     button::{Button, ButtonGroup},
     divider::Divider,
-    gray_100, gray_800, h_flex,
+    h_flex,
     label::Label,
+    neutral_100, neutral_800,
     scroll::{Scrollbar, ScrollbarAxis, ScrollbarState},
     v_flex, v_virtual_list, ActiveTheme as _, Selectable, StyledExt as _,
 };
@@ -238,9 +239,9 @@ impl Render for ScrollableStory {
                                                                     .bg(
                                                                         if cx.theme().mode.is_dark()
                                                                         {
-                                                                            gray_800()
+                                                                            neutral_800()
                                                                         } else {
-                                                                            gray_100()
+                                                                            neutral_100()
                                                                         },
                                                                     )
                                                                     .child(if i == 0 {

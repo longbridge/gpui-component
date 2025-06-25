@@ -3,7 +3,7 @@ use gpui::{
     Window,
 };
 
-use gpui_component::{h_flex, indigo_500, tag::Tag, v_flex, ColorName, Sizable};
+use gpui_component::{h_flex, indigo_50, indigo_500, tag::Tag, v_flex, ColorName, Sizable};
 
 use crate::section;
 
@@ -56,7 +56,7 @@ impl Render for TagStory {
                         .child(Tag::warning().child("Warning"))
                         .child(Tag::info().child("Info"))
                         .child(
-                            Tag::custom(indigo_500(), indigo_500(), indigo_500()).child("Custom"),
+                            Tag::custom(indigo_500(), indigo_50(), indigo_500()).child("Custom"),
                         ),
                 ),
             )
