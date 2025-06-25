@@ -53,11 +53,9 @@ impl ResizableStory {
     }
 }
 
-fn panel_box(content: impl Into<SharedString>, cx: &App) -> AnyElement {
+fn panel_box(content: impl Into<SharedString>, _: &App) -> AnyElement {
     div()
         .p_4()
-        .border_1()
-        .border_color(cx.theme().border)
         .size_full()
         .child(content.into())
         .into_any_element()
@@ -69,42 +67,52 @@ impl Render for ResizableStory {
             .size_full()
             .gap_6()
             .child(
-                div().h(px(800.)).child(
-                    v_resizable("resizable-1", self.state1.clone())
-                        .group(
-                            h_resizable("resizable-1.1", self.state2.clone())
-                                .size(px(150.))
-                                .child(
-                                    resizable_panel()
-                                        .size(px(150.))
-                                        .size_range(px(120.)..px(300.))
-                                        .child(panel_box("Left (120px .. 300px)", cx)),
-                                )
-                                .child(resizable_panel().child(panel_box("Center", cx)))
-                                .child(
-                                    resizable_panel()
-                                        .size(px(300.))
-                                        .child(panel_box("Right", cx)),
-                                ),
-                        )
-                        .child(resizable_panel().child(panel_box("Center", cx)))
-                        .child(
-                            resizable_panel()
-                                .size(px(80.))
-                                .size_range(px(80.)..Pixels::MAX)
-                                .child(panel_box("Bottom (80px .. 150px)", cx)),
-                        ),
-                ),
+                div()
+                    .h(px(600.))
+                    .border_1()
+                    .border_color(cx.theme().border)
+                    .child(
+                        v_resizable("resizable-1", self.state1.clone())
+                            .group(
+                                h_resizable("resizable-1.1", self.state2.clone())
+                                    .size(px(150.))
+                                    .child(
+                                        resizable_panel()
+                                            .size(px(150.))
+                                            .size_range(px(120.)..px(300.))
+                                            .child(panel_box("Left (120px .. 300px)", cx)),
+                                    )
+                                    .child(resizable_panel().child(panel_box("Center", cx)))
+                                    .child(
+                                        resizable_panel()
+                                            .size(px(300.))
+                                            .child(panel_box("Right", cx)),
+                                    ),
+                            )
+                            .child(resizable_panel().child(panel_box("Center", cx)))
+                            .child(
+                                resizable_panel()
+                                    .size(px(80.))
+                                    .size_range(px(80.)..Pixels::MAX)
+                                    .child(panel_box("Bottom (80px .. 150px)", cx)),
+                            ),
+                    ),
             )
             .child(
-                h_resizable("resizable-3", self.state3.clone())
+                div()
+                    .h(px(400.))
+                    .border_1()
+                    .border_color(cx.theme().border)
                     .child(
-                        resizable_panel()
-                            .size(px(200.))
-                            .size_range(px(200.)..px(400.))
-                            .child(panel_box("Left 2", cx)),
-                    )
-                    .child(resizable_panel().child(panel_box("Right (Grow)", cx))),
+                        h_resizable("resizable-3", self.state3.clone())
+                            .child(
+                                resizable_panel()
+                                    .size(px(200.))
+                                    .size_range(px(200.)..px(400.))
+                                    .child(panel_box("Left 2", cx)),
+                            )
+                            .child(resizable_panel().child(panel_box("Right (Grow)", cx))),
+                    ),
             )
     }
 }

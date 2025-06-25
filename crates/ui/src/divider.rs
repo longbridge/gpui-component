@@ -1,43 +1,49 @@
+use crate::{ActiveTheme, StyledExt};
 use gpui::{
-    div, prelude::FluentBuilder as _, px, Axis, Div, Hsla, IntoElement, ParentElement, RenderOnce,
-    SharedString, Styled,
+    div, prelude::FluentBuilder as _, px, App, Axis, Div, Hsla, IntoElement, ParentElement,
+    RenderOnce, SharedString, StyleRefinement, Styled, Window,
 };
-
-use crate::ActiveTheme;
 
 /// A divider that can be either vertical or horizontal.
 #[derive(IntoElement)]
 pub struct Divider {
     base: Div,
+    style: StyleRefinement,
     label: Option<SharedString>,
     axis: Axis,
     color: Option<Hsla>,
 }
 
 impl Divider {
+    /// Creates a vertical divider.
     pub fn vertical() -> Self {
         Self {
             base: div().h_full(),
             axis: Axis::Vertical,
             label: None,
             color: None,
+            style: StyleRefinement::default(),
         }
     }
 
+    /// Creates a horizontal divider.
     pub fn horizontal() -> Self {
         Self {
             base: div().w_full(),
             axis: Axis::Horizontal,
             label: None,
             color: None,
+            style: StyleRefinement::default(),
         }
     }
 
+    /// Sets the label for the divider.
     pub fn label(mut self, label: impl Into<SharedString>) -> Self {
         self.label = Some(label.into());
         self
     }
 
+    /// Sets the color for the divider line.
     pub fn color(mut self, color: impl Into<Hsla>) -> Self {
         self.color = Some(color.into());
         self
@@ -45,20 +51,19 @@ impl Divider {
 }
 
 impl Styled for Divider {
-    fn style(&mut self) -> &mut gpui::StyleRefinement {
-        self.base.style()
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
     }
 }
 
 impl RenderOnce for Divider {
-    fn render(self, _: &mut gpui::Window, cx: &mut gpui::App) -> impl IntoElement {
-        let theme = cx.theme();
-
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         self.base
             .flex()
             .flex_shrink_0()
             .items_center()
             .justify_center()
+            .refine_style(&self.style)
             .child(
                 div()
                     .absolute()
@@ -76,7 +81,7 @@ impl RenderOnce for Divider {
                         .mx_auto()
                         .text_xs()
                         .bg(cx.theme().background)
-                        .text_color(theme.muted_foreground)
+                        .text_color(cx.theme().muted_foreground)
                         .child(label),
                 )
             })

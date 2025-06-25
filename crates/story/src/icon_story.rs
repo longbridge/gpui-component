@@ -5,7 +5,7 @@ use gpui::{
 use gpui_component::{
     button::{Button, ButtonVariant, ButtonVariants},
     dock::PanelControl,
-    gray_500, green_500, h_flex, red_500, v_flex, Icon, IconName,
+    green_500, h_flex, neutral_500, red_500, v_flex, Icon, IconName,
 };
 
 use crate::section;
@@ -80,7 +80,11 @@ impl Render for IconStory {
                         .gap_4()
                         .child(
                             Button::new("like1")
-                                .icon(Icon::new(IconName::Heart).text_color(gray_500()).size_6())
+                                .icon(
+                                    Icon::new(IconName::Heart)
+                                        .text_color(neutral_500())
+                                        .size_6(),
+                                )
                                 .with_variant(ButtonVariant::Ghost),
                         )
                         .child(

@@ -12,11 +12,12 @@ use gpui_component::{
     h_flex,
     input::{InputState, TextInput},
     modal::ModalButtonProps,
-    v_flex, ContextModal as _,
+    text::TextView,
+    v_flex, ActiveTheme, ContextModal as _,
 };
 
 use crate::section;
-actions!(modal_story, [TestAction]);
+actions!(story, [TestAction]);
 
 pub struct ModalStory {
     focus_handle: FocusHandle,
@@ -184,6 +185,9 @@ impl Focusable for ModalStory {
 
 impl Render for ModalStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let modal_overlay = self.modal_overlay;
+        let overlay_closable = self.overlay_closable;
+
         div()
             .id("modal-story")
             .track_focus(&self.focus_handle)
@@ -270,10 +274,12 @@ impl Render for ModalStory {
                             Button::new("confirm-modal0")
                                 .primary()
                                 .label("Submit")
-                                .on_click(cx.listener(|_, _, window, cx| {
-                                    window.open_modal(cx, |modal, _, _| {
+                                .on_click(cx.listener(move |_, _, window, cx| {
+                                    window.open_modal(cx, move |modal, _, _| {
                                         modal
                                             .confirm()
+                                            .overlay(modal_overlay)
+                                            .overlay_closable(overlay_closable)
                                             .child("Are you sure to submit?")
                                             .on_ok(|_, window, cx| {
                                                 window
@@ -296,10 +302,14 @@ impl Render for ModalStory {
                             Button::new("confirm-modal1")
                                 .danger()
                                 .label("Delete Item")
-                                .on_click(cx.listener(|_, _, window, cx| {
-                                    window.open_modal(cx, |modal, _, _| {
+                                .on_click(cx.listener(move |_, _, window, cx| {
+                                    window.open_modal(cx, move |modal, _, _| {
                                         modal
+                                            .rounded_lg()
+                                            .p_3()
                                             .confirm()
+                                            .overlay(modal_overlay)
+                                            .overlay_closable(overlay_closable)
                                             .child("Are you sure to delete this item?")
                                             .button_props(
                                                 ModalButtonProps::default()
@@ -330,16 +340,59 @@ impl Render for ModalStory {
                         section("Alert Modal").child(
                             Button::new("alert-modal")
                                 .label("Alert")
-                                .on_click(cx.listener(|_, _, window, cx| {
-                                    window.open_modal(cx, |modal, _, _| {
+                                .on_click(cx.listener(move |_, _, window, cx| {
+                                    window.open_modal(cx, move |modal, _, _| {
                                         modal
                                             .confirm()
+                                            .overlay(modal_overlay)
+                                            .overlay_closable(overlay_closable)
                                             .child("You are successfully logged in.")
                                             .alert()
                                             .on_close(|_, window, cx| {
                                                 window
                                                     .push_notification("You have pressed Ok.", cx);
                                             })
+                                    });
+                                })),
+                        ),
+                    )
+                    .child(
+                        section("Scrollable Modal").child(
+                            Button::new("scrollable-modal")
+                                .label("Scrollable Modal")
+                                .on_click(cx.listener(move |_, _, window, cx| {
+                                    window.open_modal(cx, move |modal, _, _| {
+                                        modal
+                                            .h(px(450.))
+                                            .overlay(modal_overlay)
+                                            .overlay_closable(overlay_closable)
+                                            .title("Modal with scrollbar")
+                                            .child(TextView::markdown(
+                                                "markdown1",
+                                                include_str!("../../../README.md"),
+                                            ))
+                                    });
+                                })),
+                        ),
+                    )
+                    .child(
+                        section("Custom Modal style").child(
+                            Button::new("custom-modal-style")
+                                .label("Custom Modal Style")
+                                .on_click(cx.listener(move |_, _, window, cx| {
+                                    window.open_modal(cx, move |modal, _, cx| {
+                                        modal
+                                            .rounded_lg()
+                                            .p_0()
+                                            .title(div().pt_4().px_4().child("Custom Modal Title"))
+                                            .child(
+                                                div()
+                                                    .bg(cx.theme().info)
+                                                    .text_color(cx.theme().info_foreground)
+                                                    .p_4()
+                                                    .rounded_b_lg()
+                                                    .child("This is a custom modal content."),
+                                            )
                                     });
                                 })),
                         ),

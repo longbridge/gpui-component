@@ -11,7 +11,7 @@ use gpui_component::{
 use serde::Deserialize;
 use story::Assets;
 
-#[derive(Clone, Action, PartialEq, Eq, Deserialize)]
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = example, no_json)]
 struct ChangeSize(Size);
 

@@ -10,7 +10,7 @@ use gpui::{
     Entity, FocusHandle, InteractiveElement, IntoElement, ParentElement as _, Render, Styled,
     Window,
 };
-use std::rc::Rc;
+use std::{any::TypeId, rc::Rc};
 
 /// Extension trait for [`WindowContext`] and [`ViewContext`] to add drawer functionality.
 pub trait ContextModal: Sized {
@@ -46,7 +46,13 @@ pub trait ContextModal: Sized {
 
     /// Pushes a notification to the notification list.
     fn push_notification(&mut self, note: impl Into<Notification>, cx: &mut App);
+
+    /// Removes the notification with the given id.
+    fn remove_notification<T: Sized + 'static>(&mut self, cx: &mut App);
+
+    /// Clears all notifications.
     fn clear_notifications(&mut self, cx: &mut App);
+
     /// Returns number of notifications.
     fn notifications(&mut self, cx: &mut App) -> Rc<Vec<Entity<Notification>>>;
 
@@ -158,6 +164,16 @@ impl ContextModal for Window {
         })
     }
 
+    fn remove_notification<T: Sized + 'static>(&mut self, cx: &mut App) {
+        Root::update(self, cx, move |root, window, cx| {
+            root.notification.update(cx, |view, cx| {
+                let id = TypeId::of::<T>();
+                view.close(id, window, cx);
+            });
+            cx.notify();
+        })
+    }
+
     fn clear_notifications(&mut self, cx: &mut App) {
         Root::update(self, cx, move |root, window, cx| {
             root.notification
@@ -179,63 +195,6 @@ impl ContextModal for Window {
         Root::read(self, cx).focused_input.clone()
     }
 }
-
-// impl<V> ContextModal for Context<'_, V> {
-//     fn open_drawer<F>(&mut self, cx: &mut App, build: F)
-//     where
-//         F: Fn(Drawer, &mut Window, &mut App) -> Drawer + 'static,
-//     {
-//         self.deref_mut().open_drawer(cx, build)
-//     }
-
-//     fn open_drawer_at<F>(&mut self, cx: &mut App, placement: Placement, build: F)
-//     where
-//         F: Fn(Drawer, &mut Window, &mut App) -> Drawer + 'static,
-//     {
-//         self.deref_mut().open_drawer_at(cx, placement, build)
-//     }
-
-//     fn has_active_modal(&self, cx: &mut App) -> bool {
-//         self.deref().has_active_modal(cx)
-//     }
-
-//     fn close_drawer(&mut self, cx: &mut App) {
-//         self.deref_mut().close_drawer(cx)
-//     }
-
-//     fn open_modal<F>(&mut self, cx: &mut App, build: F)
-//     where
-//         F: Fn(Modal, &mut Window, &mut App) -> Modal + 'static,
-//     {
-//         self.deref_mut().open_modal(cx, build)
-//     }
-
-//     fn has_active_drawer(&self, cx: &mut App) -> bool {
-//         self.deref().has_active_drawer(cx)
-//     }
-
-//     /// Close the last active modal.
-//     fn close_modal(&mut self, cx: &mut App) {
-//         self.deref_mut().close_modal(cx)
-//     }
-
-//     /// Close all modals.
-//     fn close_all_modals(&mut self, cx: &mut App) {
-//         self.deref_mut().close_all_modals(cx)
-//     }
-
-//     fn push_notification(&mut self, cx: &mut App, note: impl Into<Notification>) {
-//         self.deref_mut().push_notification(cx, note)
-//     }
-
-//     fn clear_notifications(&mut self, cx: &mut App) {
-//         self.deref_mut().clear_notifications(cx)
-//     }
-
-//     fn notifications(&self, cx: &mut App) -> Rc<Vec<Entity<Notification>>> {
-//         self.deref().notifications(cx)
-//     }
-// }
 
 /// Root is a view for the App window for as the top level view (Must be the first view in the window).
 ///

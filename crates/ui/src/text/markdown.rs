@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use gpui::{
     div, prelude::FluentBuilder as _, AnyElement, App, Element, ElementId, IntoElement,
     ParentElement, SharedString, Styled, Window,
@@ -57,6 +59,7 @@ pub struct MarkdownState {
     raw: SharedString,
     root: Option<Result<element::Node, SharedString>>,
     style: TextViewStyle,
+    _last_parsed: Option<Instant>,
 }
 
 impl MarkdownState {
@@ -67,8 +70,18 @@ impl MarkdownState {
             return;
         }
 
+        if let Some(last_parsed) = self._last_parsed {
+            if last_parsed.elapsed().as_millis() < 500 {
+                return;
+            }
+        }
+
         self.raw = new_text;
+        // NOTE: About 100ms
+        // let measure = crate::Measure::new("parse_markdown");
         self.root = Some(parse_markdown(&self.raw, &style, cx));
+        // measure.end();
+        self._last_parsed = Some(Instant::now());
         self.style = style.clone();
     }
 }

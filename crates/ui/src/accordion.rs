@@ -1,9 +1,9 @@
 use std::{cell::RefCell, collections::HashSet, rc::Rc, sync::Arc};
 
 use gpui::{
-    div, prelude::FluentBuilder as _, rems, AnyElement, App, Div, ElementId,
-    InteractiveElement as _, IntoElement, ParentElement, RenderOnce, SharedString,
-    StatefulInteractiveElement as _, Styled, Window,
+    div, prelude::FluentBuilder as _, rems, AnyElement, App, ElementId, InteractiveElement as _,
+    IntoElement, ParentElement, RenderOnce, SharedString, StatefulInteractiveElement as _, Styled,
+    Window,
 };
 
 use crate::{h_flex, v_flex, ActiveTheme as _, Icon, IconName, Sizable, Size};
@@ -12,7 +12,6 @@ use crate::{h_flex, v_flex, ActiveTheme as _, Icon, IconName, Sizable, Size};
 #[derive(IntoElement)]
 pub struct Accordion {
     id: ElementId,
-    base: Div,
     multiple: bool,
     size: Size,
     bordered: bool,
@@ -25,7 +24,6 @@ impl Accordion {
     pub fn new(id: impl Into<ElementId>) -> Self {
         Self {
             id: id.into(),
-            base: v_flex().gap_1(),
             multiple: false,
             size: Size::default(),
             bordered: true,
@@ -83,8 +81,9 @@ impl RenderOnce for Accordion {
         let open_ixs = Rc::new(RefCell::new(HashSet::new()));
         let is_multiple = self.multiple;
 
-        self.base
+        v_flex()
             .id(self.id)
+            .when(self.bordered, |this| this.gap_1())
             .children(
                 self.children
                     .into_iter()
@@ -241,14 +240,15 @@ impl RenderOnce for AccordionItem {
                         })
                         .when(self.open, |this| {
                             this.when(self.bordered, |this| {
-                                this.bg(cx.theme().accordion_active)
-                                    .text_color(cx.theme().foreground)
+                                this.text_color(cx.theme().foreground)
                                     .border_b_1()
                                     .border_color(cx.theme().border)
                             })
                         })
                         .when(!self.bordered, |this| {
-                            this.border_b_1().border_color(cx.theme().border)
+                            this.border_b_1()
+                                .border_color(cx.theme().border)
+                                .rounded_t(cx.theme().radius)
                         })
                         .child(
                             // This h_flex contains the optional icon and the user-provided title.

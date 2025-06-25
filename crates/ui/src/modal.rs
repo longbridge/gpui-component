@@ -2,9 +2,9 @@ use std::{rc::Rc, time::Duration};
 
 use gpui::{
     anchored, div, hsla, point, prelude::FluentBuilder, px, relative, Animation, AnimationExt as _,
-    AnyElement, App, Bounds, ClickEvent, Div, FocusHandle, Hsla, InteractiveElement, IntoElement,
-    KeyBinding, MouseButton, ParentElement, Pixels, Point, RenderOnce, SharedString, Styled,
-    Window,
+    AnyElement, App, Axis, Bounds, ClickEvent, Div, FocusHandle, Hsla, InteractiveElement,
+    IntoElement, KeyBinding, MouseButton, ParentElement, Pixels, Point, RenderOnce, SharedString,
+    StyleRefinement, Styled, Window,
 };
 use rust_i18n::t;
 
@@ -74,7 +74,7 @@ impl ModalButtonProps {
 
 #[derive(IntoElement)]
 pub struct Modal {
-    base: Div,
+    style: StyleRefinement,
     title: Option<AnyElement>,
     footer: Option<FooterFn>,
     content: Div,
@@ -97,35 +97,19 @@ pub struct Modal {
     pub(crate) overlay_visible: bool,
 }
 
-pub(crate) fn overlay_color(overlay: bool, _: &Window, cx: &App) -> Hsla {
+pub(crate) fn overlay_color(overlay: bool, cx: &App) -> Hsla {
     if !overlay {
         return hsla(0., 0., 0., 0.);
     }
 
-    if cx.theme().mode.is_dark() {
-        hsla(0., 1., 1., 0.06)
-    } else {
-        hsla(0., 0., 0., 0.06)
-    }
+    cx.theme().overlay
 }
 
 impl Modal {
     pub fn new(_: &mut Window, cx: &mut App) -> Self {
-        let radius = (cx.theme().radius * 2.).min(px(20.));
-
-        let base = v_flex()
-            .bg(cx.theme().background)
-            .border_1()
-            .border_color(cx.theme().border)
-            .rounded(radius)
-            .shadow_xl()
-            .min_h_24()
-            .p_4()
-            .gap_4();
-
         Self {
-            base,
             focus_handle: cx.focus_handle(),
+            style: StyleRefinement::default(),
             title: None,
             footer: None,
             content: v_flex(),
@@ -287,7 +271,7 @@ impl ParentElement for Modal {
 
 impl Styled for Modal {
     fn style(&mut self) -> &mut gpui::StyleRefinement {
-        self.base.style()
+        &mut self.style
     }
 }
 
@@ -370,15 +354,25 @@ impl RenderOnce for Modal {
         let y = self.margin_top.unwrap_or(view_size.height / 10.) + offset_top;
         let x = bounds.center().x - self.width / 2.;
 
+        let mut padding_right = px(24.);
+        let mut padding_left = px(24.);
+        if let Some(pl) = self.style.padding.left {
+            padding_left = pl.to_pixels(self.width.into(), window.rem_size());
+        }
+        if let Some(pr) = self.style.padding.right {
+            padding_right = pr.to_pixels(self.width.into(), window.rem_size());
+        }
+
         anchored()
             .position(point(window_paddings.left, window_paddings.top))
             .snap_to_window()
             .child(
                 div()
+                    .id("modal")
                     .w(view_size.width)
                     .h(view_size.height)
                     .when(self.overlay_visible, |this| {
-                        this.occlude().bg(overlay_color(self.overlay, window, cx))
+                        this.occlude().bg(overlay_color(self.overlay, cx))
                     })
                     .when(self.overlay_closable, |this| {
                         // Only the last modal owns the `mouse down - close modal` event.
@@ -397,8 +391,18 @@ impl RenderOnce for Modal {
                         })
                     })
                     .child(
-                        self.base
-                            .id(SharedString::from(format!("modal-{layer_ix}")))
+                        v_flex()
+                            .id(layer_ix)
+                            .bg(cx.theme().background)
+                            .border_1()
+                            .border_color(cx.theme().border)
+                            .rounded(cx.theme().radius_lg)
+                            .shadow_xl()
+                            .min_h_24()
+                            .py_6()
+                            .gap_4()
+                            .refine_style(&self.style)
+                            .px_0()
                             .key_context(CONTEXT)
                             .track_focus(&self.focus_handle)
                             .when(self.keyboard, |this| {
@@ -431,6 +435,7 @@ impl RenderOnce for Modal {
                                     }
                                 })
                             })
+                            // There style is high priority, can't be overridden.
                             .absolute()
                             .occlude()
                             .relative()
@@ -440,39 +445,50 @@ impl RenderOnce for Modal {
                             .when_some(self.max_width, |this, w| this.max_w(w))
                             .when_some(self.title, |this, title| {
                                 this.child(
-                                    div().font_semibold().line_height(relative(1.)).child(title),
+                                    div()
+                                        .font_semibold()
+                                        .pl(padding_left)
+                                        .pr(padding_right)
+                                        .line_height(relative(1.))
+                                        .child(title),
                                 )
                             })
                             .when(self.show_close, |this| {
                                 this.child(
-                                    Button::new(SharedString::from(format!(
-                                        "modal-close-{layer_ix}"
-                                    )))
-                                    .absolute()
-                                    .top_2()
-                                    .right_2()
-                                    .small()
-                                    .ghost()
-                                    .icon(IconName::Close)
-                                    .on_click(
-                                        move |_, window, cx| {
+                                    Button::new("close")
+                                        .absolute()
+                                        .top_4()
+                                        .right_4()
+                                        .small()
+                                        .ghost()
+                                        .icon(IconName::Close)
+                                        .on_click(move |_, window, cx| {
                                             on_cancel(&ClickEvent::default(), window, cx);
                                             on_close(&ClickEvent::default(), window, cx);
                                             window.close_modal(cx);
-                                        },
-                                    ),
+                                        }),
                                 )
                             })
-                            .child(div().w_full().flex_1().child(self.content))
+                            .child(
+                                div().w_full().flex_1().overflow_hidden().child(
+                                    v_flex()
+                                        .pl(padding_left)
+                                        .pr(padding_right)
+                                        .scrollable(Axis::Vertical)
+                                        .child(self.content),
+                                ),
+                            )
                             .when(self.footer.is_some(), |this| {
                                 let footer = self.footer.unwrap();
 
-                                this.child(h_flex().gap_2().justify_end().children(footer(
-                                    render_ok,
-                                    render_cancel,
-                                    window,
-                                    cx,
-                                )))
+                                this.child(
+                                    h_flex()
+                                        .gap_2()
+                                        .pl(padding_left)
+                                        .pr(padding_right)
+                                        .justify_end()
+                                        .children(footer(render_ok, render_cancel, window, cx)),
+                                )
                             })
                             .with_animation(
                                 "slide-down",

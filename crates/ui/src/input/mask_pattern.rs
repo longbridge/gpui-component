@@ -202,11 +202,25 @@ impl MaskPattern {
                     return false;
                 }
 
-                // check if the integer part is valid
-                if !int_part
+                let sign_positions: Vec<usize> = int_part
                     .chars()
-                    .all(|ch| ch.is_ascii_digit() || Some(ch) == *separator)
-                {
+                    .enumerate()
+                    .filter_map(|(i, ch)| match is_sign(&ch) {
+                        true => Some(i),
+                        false => None,
+                    })
+                    .collect();
+
+                // only one sign is valid
+                // sign is only valid at the beginning of the string
+                if sign_positions.len() > 1 || sign_positions.first() > Some(&0) {
+                    return false;
+                }
+
+                // check if the integer part is valid
+                if !int_part.chars().enumerate().all(|(i, ch)| {
+                    ch.is_ascii_digit() || is_sign(&ch) && i == 0 || Some(ch) == *separator
+                }) {
                     return false;
                 }
 
@@ -288,7 +302,15 @@ impl MaskPattern {
                     });
 
                     // Reverse the integer part for easier grouping
-                    let chars: Vec<char> = int_part.chars().rev().collect();
+                    let mut chars: Vec<char> = int_part.chars().rev().collect();
+
+                    // Removing the sign from formatting to avoid cases such as: -,123
+                    let maybe_signed = if let Some(pos) = chars.iter().position(is_sign) {
+                        Some(chars.remove(pos))
+                    } else {
+                        None
+                    };
+
                     let mut result = String::new();
                     for (i, ch) in chars.iter().enumerate() {
                         if i > 0 && i % 3 == 0 {
@@ -307,6 +329,13 @@ impl MaskPattern {
                     } else {
                         int_with_sep
                     };
+
+                    let final_str = if let Some(sign) = maybe_signed {
+                        format!("{}{}", sign, final_str)
+                    } else {
+                        final_str
+                    };
+
                     return final_str.into();
                 }
 
@@ -377,6 +406,11 @@ impl MaskPattern {
             Self::None => mask_text.to_owned(),
         }
     }
+}
+
+#[inline]
+fn is_sign(ch: &char) -> bool {
+    matches!(ch, '+' | '-')
 }
 
 #[cfg(test)]
@@ -558,5 +592,46 @@ mod tests {
         };
 
         assert_eq!(mask.mask("1234567.1234567"), "1,234,567");
+    }
+
+    #[test]
+    fn test_signed_number_numbers() {
+        let mask = MaskPattern::Number {
+            separator: Some(','),
+            fraction: Some(2),
+        };
+
+        assert_eq!(mask.is_valid("-"), true);
+        assert_eq!(mask.is_valid("-1234567"), true);
+        assert_eq!(mask.is_valid("-1,234,567"), true);
+        assert_eq!(mask.is_valid("-1234567."), true);
+        assert_eq!(mask.is_valid("-1234567.89"), true);
+
+        assert_eq!(mask.is_valid("+"), true);
+        assert_eq!(mask.is_valid("+1234567"), true);
+        assert_eq!(mask.is_valid("+1,234,567"), true);
+        assert_eq!(mask.is_valid("+1234567."), true);
+        assert_eq!(mask.is_valid("+1234567.89"), true);
+
+        // Only one sign is valid
+        assert_eq!(mask.is_valid("+-"), false);
+        assert_eq!(mask.is_valid("-+"), false);
+        assert_eq!(mask.is_valid("+-1234567"), false);
+
+        // No sign is valid in the middle of the number
+        assert_eq!(mask.is_valid("1,-234,567"), false);
+        assert_eq!(mask.is_valid("12-34567.89"), false);
+
+        // Signs in fractions are invalid
+        assert_eq!(mask.is_valid("+1234567.-"), false);
+
+        // The separator does not show up before the sign i.e. -,123
+        assert_eq!(mask.mask("-123"), "-123");
+
+        assert_eq!(mask.mask("-1234567"), "-1,234,567");
+        assert_eq!(mask.mask("+1234567"), "+1,234,567");
+        assert_eq!(mask.unmask("-1,234,567"), "-1234567");
+        assert_eq!(mask.mask("-1234567."), "-1,234,567.");
+        assert_eq!(mask.mask("-1234567.89"), "-1,234,567.89");
     }
 }

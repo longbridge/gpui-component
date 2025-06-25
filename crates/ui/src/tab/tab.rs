@@ -536,6 +536,10 @@ impl Selectable for Tab {
         self.selected = selected;
         self
     }
+
+    fn is_selected(&self) -> bool {
+        self.selected
+    }
 }
 
 impl InteractiveElement for Tab {
@@ -638,7 +642,7 @@ impl RenderOnce for Tab {
                     })
                     .bg(tab_style.inner_bg)
                     .rounded(tab_style.inner_radius)
-                    .when(tab_style.shadow, |this| this.shadow_sm())
+                    .when(tab_style.shadow, |this| this.shadow_xs())
                     .hover(|this| {
                         this.bg(hover_style.inner_bg)
                             .rounded(hover_style.inner_radius)

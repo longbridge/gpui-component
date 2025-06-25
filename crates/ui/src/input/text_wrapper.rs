@@ -10,12 +10,18 @@ pub(super) struct LineWrap {
     pub(super) range: Range<usize>,
 }
 
+impl LineWrap {
+    pub(super) fn height(&self, line_height: Pixels) -> Pixels {
+        line_height * (self.wrap_lines + 1)
+    }
+}
+
 /// Used to prepare the text with soft_wrap to be get lines to displayed in the TextArea
 ///
 /// After use lines to calculate the scroll size of the TextArea
 pub(super) struct TextWrapper {
     pub(super) text: SharedString,
-    /// The wrapped lines, value is start and end index of the line (by split \n).
+    /// The wrapped lines, value is start and end index of the line.
     pub(super) wrapped_lines: Vec<Range<usize>>,
     /// The lines by split \n
     pub(super) lines: Vec<LineWrap>,
@@ -65,7 +71,7 @@ impl TextWrapper {
             .line_wrapper(self.font.clone(), self.font_size);
 
         let mut prev_line_ix = 0;
-        for line in text.lines() {
+        for line in text.split('\n') {
             let mut line_wraps = vec![];
             let mut prev_boundary_ix = 0;
 
@@ -77,7 +83,7 @@ impl TextWrapper {
 
             lines.push(LineWrap {
                 wrap_lines: line_wraps.len(),
-                range: prev_line_ix..line.len(),
+                range: prev_line_ix..prev_line_ix + line.len(),
             });
 
             wrapped_lines.extend(line_wraps);
@@ -86,16 +92,7 @@ impl TextWrapper {
                 wrapped_lines.push(prev_line_ix + prev_boundary_ix..prev_line_ix + line.len());
             }
 
-            prev_line_ix += line.len();
-        }
-
-        // Add last empty line.
-        if text.chars().last().unwrap_or('\n') == '\n' {
-            wrapped_lines.push(text.len()..text.len());
-            lines.push(LineWrap {
-                wrap_lines: 0,
-                range: text.len()..text.len(),
-            });
+            prev_line_ix += line.len() + 1;
         }
 
         self.text = text;

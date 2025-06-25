@@ -1,20 +1,22 @@
 use gpui::{
     div, relative, Action, IntoElement, KeyContext, Keystroke, ParentElement as _, RenderOnce,
-    Styled as _, Window,
+    StyleRefinement, Styled, Window,
 };
 
-use crate::ActiveTheme;
+use crate::{ActiveTheme, StyledExt};
 
 /// A key binding tag
 #[derive(IntoElement, Clone, Debug)]
 pub struct Kbd {
-    stroke: gpui::Keystroke,
+    style: StyleRefinement,
+    stroke: Keystroke,
     appearance: bool,
 }
 
 impl From<Keystroke> for Kbd {
     fn from(stroke: Keystroke) -> Self {
         Self {
+            style: StyleRefinement::default(),
             stroke,
             appearance: true,
         }
@@ -24,6 +26,7 @@ impl From<Keystroke> for Kbd {
 impl Kbd {
     pub fn new(stroke: Keystroke) -> Self {
         Self {
+            style: StyleRefinement::default(),
             stroke,
             appearance: true,
         }
@@ -182,6 +185,12 @@ impl Kbd {
     }
 }
 
+impl Styled for Kbd {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
 impl RenderOnce for Kbd {
     fn render(self, _: &mut gpui::Window, cx: &mut gpui::App) -> impl gpui::IntoElement {
         if !self.appearance {
@@ -200,6 +209,7 @@ impl RenderOnce for Kbd {
             .rounded_sm()
             .line_height(relative(1.))
             .text_xs()
+            .refine_style(&self.style)
             .child(Self::format(&self.stroke))
             .into_any_element()
     }

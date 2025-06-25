@@ -6,7 +6,7 @@ use gpui::{
 };
 
 use super::{blink_cursor::BlinkCursor, InputEvent};
-use crate::{h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable, Size};
+use crate::{h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable, Size, StyledExt as _};
 
 pub struct OtpState {
     focus_handle: FocusHandle,
@@ -244,7 +244,7 @@ impl RenderOnce for OtpInput {
                     .border_color(cx.theme().input)
                     .bg(cx.theme().background)
                     .when(is_input_focused, |this| this.border_color(cx.theme().ring))
-                    .when(cx.theme().shadow, |this| this.shadow_sm())
+                    .when(cx.theme().shadow, |this| this.shadow_xs())
                     .items_center()
                     .justify_center()
                     .rounded(cx.theme().radius)

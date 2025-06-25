@@ -1,15 +1,15 @@
-use std::cell::Cell;
 use std::rc::Rc;
 
 use gpui::{
-    div, px, size, App, AppContext, Context, Entity, Focusable, InteractiveElement, IntoElement,
-    ParentElement, Pixels, Render, ScrollHandle, SharedString, Size, Styled, Window,
+    div, px, size, App, AppContext, Axis, Context, Entity, Focusable, InteractiveElement,
+    IntoElement, ParentElement, Pixels, Render, ScrollHandle, SharedString, Size, Styled, Window,
 };
 use gpui_component::{
     button::{Button, ButtonGroup},
     divider::Divider,
-    gray_100, gray_800, h_flex,
+    h_flex,
     label::Label,
+    neutral_100, neutral_800,
     scroll::{Scrollbar, ScrollbarAxis, ScrollbarState},
     v_flex, v_virtual_list, ActiveTheme as _, Selectable, StyledExt as _,
 };
@@ -18,7 +18,7 @@ pub struct ScrollableStory {
     focus_handle: gpui::FocusHandle,
     scroll_handle: ScrollHandle,
     scroll_size: gpui::Size<Pixels>,
-    scroll_state: Rc<Cell<ScrollbarState>>,
+    scroll_state: ScrollbarState,
     items: Vec<String>,
     item_sizes: Rc<Vec<Size<Pixels>>>,
     test_width: Pixels,
@@ -41,7 +41,7 @@ impl ScrollableStory {
         Self {
             focus_handle: cx.focus_handle(),
             scroll_handle: ScrollHandle::new(),
-            scroll_state: Rc::new(Cell::new(ScrollbarState::default())),
+            scroll_state: ScrollbarState::default(),
             scroll_size: gpui::Size::default(),
             items,
             item_sizes: Rc::new(item_sizes),
@@ -80,7 +80,7 @@ impl ScrollableStory {
             .map(|_| size(self.test_width, ITEM_HEIGHT))
             .collect::<Vec<_>>()
             .into();
-        self.scroll_state.set(ScrollbarState::default());
+        self.scroll_state = ScrollbarState::default();
         cx.notify();
     }
 
@@ -145,17 +145,17 @@ impl ScrollableStory {
                             .child(
                                 Button::new("test-axis-both")
                                     .label("Both Scrollbar")
-                                    .selected(self.axis == ScrollbarAxis::Both),
+                                    .selected(self.axis.is_both()),
                             )
                             .child(
                                 Button::new("test-axis-vertical")
                                     .label("Vertical")
-                                    .selected(self.axis == ScrollbarAxis::Vertical),
+                                    .selected(self.axis.is_vertical()),
                             )
                             .child(
                                 Button::new("test-axis-horizontal")
                                     .label("Horizontal")
-                                    .selected(self.axis == ScrollbarAxis::Horizontal),
+                                    .selected(self.axis.is_horizontal()),
                             )
                             .on_click(cx.listener(|view, clicks: &Vec<usize>, _, cx| {
                                 if clicks.contains(&0) {
@@ -199,8 +199,6 @@ impl Render for ScrollableStory {
         _: &mut gpui::Window,
         cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
-        let view = cx.entity().clone();
-
         v_flex()
             .size_full()
             .gap_4()
@@ -241,9 +239,9 @@ impl Render for ScrollableStory {
                                                                     .bg(
                                                                         if cx.theme().mode.is_dark()
                                                                         {
-                                                                            gray_800()
+                                                                            neutral_800()
                                                                         } else {
-                                                                            gray_100()
+                                                                            neutral_100()
                                                                         },
                                                                     )
                                                                     .child(if i == 0 {
@@ -273,12 +271,10 @@ impl Render for ScrollableStory {
                                     .left_0()
                                     .right_0()
                                     .bottom_0()
-                                    .child(Scrollbar::vertical(
-                                        view.entity_id(),
-                                        self.scroll_state.clone(),
-                                        self.scroll_handle.clone(),
-                                        self.scroll_size,
-                                    ))
+                                    .child(
+                                        Scrollbar::both(&self.scroll_state, &self.scroll_handle)
+                                            .axis(self.axis),
+                                    )
                             }),
                     ),
                 ),
@@ -296,7 +292,7 @@ impl Render for ScrollableStory {
                             .p_3()
                             .w(self.test_width)
                             .id("test-1")
-                            .scrollable(cx.entity().entity_id(), ScrollbarAxis::Vertical)
+                            .scrollable(Axis::Vertical)
                             .gap_1()
                             .child("Scrollable Example")
                             .children(self.items.iter().take(500).map(|item| {

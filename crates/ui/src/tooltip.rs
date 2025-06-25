@@ -1,9 +1,9 @@
 use gpui::{
     div, prelude::FluentBuilder, px, Action, AnyElement, AnyView, App, AppContext, Context,
-    IntoElement, ParentElement, Render, SharedString, Styled, Window,
+    IntoElement, ParentElement, Render, SharedString, StyleRefinement, Styled, Window,
 };
 
-use crate::{h_flex, text::Text, ActiveTheme, Kbd};
+use crate::{h_flex, text::Text, ActiveTheme, Kbd, StyledExt};
 
 enum TooltipContext {
     Text(Text),
@@ -11,6 +11,7 @@ enum TooltipContext {
 }
 
 pub struct Tooltip {
+    style: StyleRefinement,
     content: TooltipContext,
     key_binding: Option<Kbd>,
     action: Option<(Box<dyn Action>, Option<SharedString>)>,
@@ -20,6 +21,7 @@ impl Tooltip {
     /// Create a Tooltip with a text content.
     pub fn new(text: impl Into<Text>) -> Self {
         Self {
+            style: StyleRefinement::default(),
             content: TooltipContext::Text(text.into()),
             key_binding: None,
             action: None,
@@ -33,6 +35,7 @@ impl Tooltip {
         F: Fn(&mut Window, &mut App) -> E + 'static,
     {
         Self {
+            style: StyleRefinement::default(),
             key_binding: None,
             action: None,
             content: TooltipContext::Element(Box::new(move |window, cx| {
@@ -60,7 +63,11 @@ impl Tooltip {
 }
 
 impl FluentBuilder for Tooltip {}
-
+impl Styled for Tooltip {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
 impl Render for Tooltip {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let key_binding = if let Some(key_binding) = &self.key_binding {
@@ -94,6 +101,7 @@ impl Render for Tooltip {
                 .px_2()
                 .text_sm()
                 .gap_3()
+                .refine_style(&self.style)
                 .map(|this| {
                     this.child(div().map(|this| match self.content {
                         TooltipContext::Text(ref text) => this.child(text.clone()),

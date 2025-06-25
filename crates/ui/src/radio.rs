@@ -13,6 +13,7 @@ use gpui::{
 #[derive(IntoElement)]
 pub struct Radio {
     base: Div,
+    style: StyleRefinement,
     id: ElementId,
     label: Option<Text>,
     children: Vec<AnyElement>,
@@ -26,6 +27,7 @@ impl Radio {
         Self {
             id: id.into(),
             base: div(),
+            style: StyleRefinement::default(),
             label: None,
             children: Vec::new(),
             checked: false,
@@ -57,7 +59,7 @@ impl Radio {
 
 impl Styled for Radio {
     fn style(&mut self) -> &mut gpui::StyleRefinement {
-        self.base.style()
+        &mut self.style
     }
 }
 impl InteractiveElement for Radio {
@@ -75,10 +77,15 @@ impl ParentElement for Radio {
 
 impl RenderOnce for Radio {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let color = if self.disabled {
-            cx.theme().primary.opacity(0.5)
+        let (border_color, bg) = if self.checked {
+            (cx.theme().primary, cx.theme().primary)
         } else {
-            cx.theme().primary
+            (cx.theme().input, cx.theme().input.opacity(0.3))
+        };
+        let (border_color, bg) = if self.disabled {
+            (border_color.opacity(0.5), bg.opacity(0.5))
+        } else {
+            (border_color, bg)
         };
 
         // wrap a flex to patch for let Radio display inline
@@ -90,6 +97,7 @@ impl RenderOnce for Radio {
                 .text_color(cx.theme().foreground)
                 .items_start()
                 .line_height(relative(1.))
+                .refine_style(&self.style)
                 .child(
                     div()
                         .relative()
@@ -97,15 +105,19 @@ impl RenderOnce for Radio {
                         .flex_shrink_0()
                         .rounded_full()
                         .border_1()
-                        .border_color(color)
-                        .when(self.checked, |this| this.bg(color))
+                        .border_color(border_color)
+                        .when(cx.theme().shadow && !self.disabled, |this| this.shadow_xs())
+                        .map(|this| match self.checked {
+                            false => this.bg(cx.theme().background),
+                            _ => this.bg(bg),
+                        })
                         .child(
                             svg()
                                 .absolute()
                                 .top_px()
                                 .left_px()
                                 .size_3()
-                                .text_color(color)
+                                .text_color(bg)
                                 .when(self.checked, |this| {
                                     this.text_color(cx.theme().primary_foreground)
                                 })
@@ -126,6 +138,9 @@ impl RenderOnce for Radio {
                                     .size_full()
                                     .overflow_hidden()
                                     .line_height(relative(1.))
+                                    .when(self.disabled, |this| {
+                                        this.text_color(cx.theme().muted_foreground)
+                                    })
                                     .child(label),
                             )
                         })
@@ -146,6 +161,7 @@ impl RenderOnce for Radio {
 /// A Radio group element.
 #[derive(IntoElement)]
 pub struct RadioGroup {
+    id: ElementId,
     style: StyleRefinement,
     radios: Vec<Radio>,
     layout: Axis,
@@ -155,8 +171,9 @@ pub struct RadioGroup {
 }
 
 impl RadioGroup {
-    fn new() -> Self {
+    fn new(id: impl Into<ElementId>) -> Self {
         Self {
+            id: id.into(),
             style: StyleRefinement::default().flex_1(),
             on_change: None,
             layout: Axis::Vertical,
@@ -167,13 +184,13 @@ impl RadioGroup {
     }
 
     /// Create a new Radio group with default Vertical layout.
-    pub fn vertical() -> Self {
-        Self::new()
+    pub fn vertical(id: impl Into<ElementId>) -> Self {
+        Self::new(id)
     }
 
     /// Create a new Radio group with Horizontal layout.
-    pub fn horizontal() -> Self {
-        Self::new().layout(Axis::Horizontal)
+    pub fn horizontal(id: impl Into<ElementId>) -> Self {
+        Self::new(id).layout(Axis::Horizontal)
     }
 
     /// Set the layout of the Radio group. Default is `Axis::Vertical`.
@@ -249,14 +266,15 @@ impl RenderOnce for RadioGroup {
             h_flex().w_full().flex_wrap()
         };
 
-        let mut container = div();
+        let mut container = div().id(self.id);
         *container.style() = self.style;
 
         container.child(
             base.gap_3()
-                .children(self.radios.into_iter().enumerate().map(|(ix, radio)| {
+                .children(self.radios.into_iter().enumerate().map(|(ix, mut radio)| {
                     let checked = selected_ix == Some(ix);
 
+                    radio.id = ix.into();
                     radio.disabled(disabled).checked(checked).when_some(
                         on_change.clone(),
                         |this, on_change| {

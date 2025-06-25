@@ -1,24 +1,24 @@
 use gpui::{
-    prelude::FluentBuilder, App, Context, Corner, Corners, Div, Edges, ElementId,
-    InteractiveElement as _, IntoElement, ParentElement, RenderOnce, Styled, Window,
+    div, prelude::FluentBuilder, App, Context, Corner, Corners, Edges, ElementId,
+    InteractiveElement as _, IntoElement, ParentElement, RenderOnce, StyleRefinement, Styled,
+    Window,
 };
 
 use crate::{
-    h_flex,
     popup_menu::{PopupMenu, PopupMenuExt},
-    IconName, Sizable, Size,
+    IconName, Selectable, Sizable, Size, StyledExt as _,
 };
 
 use super::{Button, ButtonRounded, ButtonVariant, ButtonVariants};
 
 #[derive(IntoElement)]
 pub struct DropdownButton {
-    base: Div,
     id: ElementId,
+    style: StyleRefinement,
     button: Option<Button>,
     popup_menu:
         Option<Box<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static>>,
-
+    selected: bool,
     // The button props
     compact: Option<bool>,
     outline: Option<bool>,
@@ -30,16 +30,16 @@ pub struct DropdownButton {
 impl DropdownButton {
     pub fn new(id: impl Into<ElementId>) -> Self {
         Self {
-            base: h_flex(),
             id: id.into(),
+            style: StyleRefinement::default(),
             button: None,
             popup_menu: None,
-
+            selected: false,
             compact: None,
             outline: None,
             variant: None,
             size: None,
-            rounded: ButtonRounded::Medium,
+            rounded: ButtonRounded::default(),
         }
     }
 
@@ -74,7 +74,7 @@ impl DropdownButton {
 
 impl Styled for DropdownButton {
     fn style(&mut self) -> &mut gpui::StyleRefinement {
-        self.base.style()
+        &mut self.style
     }
 }
 
@@ -92,19 +92,41 @@ impl ButtonVariants for DropdownButton {
     }
 }
 
+impl Selectable for DropdownButton {
+    fn element_id(&self) -> &ElementId {
+        &self.id
+    }
+
+    fn selected(mut self, selected: bool) -> Self {
+        self.selected = selected;
+        self
+    }
+
+    fn is_selected(&self) -> bool {
+        self.selected
+    }
+}
+
 impl RenderOnce for DropdownButton {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        self.base
+        let rounded = self
+            .variant
+            .map(|variant| variant.is_ghost() && !self.selected)
+            .unwrap_or(false);
+
+        div()
             .id(self.id)
+            .h_flex()
+            .refine_style(&self.style)
             .when_some(self.button, |this, button| {
                 this.child(
                     button
                         .rounded(self.rounded)
                         .border_corners(Corners {
                             top_left: true,
-                            top_right: false,
+                            top_right: rounded,
                             bottom_left: true,
-                            bottom_right: false,
+                            bottom_right: rounded,
                         })
                         .border_edges(Edges {
                             left: true,
@@ -112,6 +134,7 @@ impl RenderOnce for DropdownButton {
                             right: true,
                             bottom: true,
                         })
+                        .selected(self.selected)
                         .when_some(self.compact, |this, _| this.compact())
                         .when_some(self.outline, |this, _| this.outline())
                         .when_some(self.size, |this, size| this.with_size(size))
@@ -119,21 +142,22 @@ impl RenderOnce for DropdownButton {
                 )
                 .when_some(self.popup_menu, |this, popup_menu| {
                     this.child(
-                        Button::new("btn")
+                        Button::new("popup")
                             .icon(IconName::ChevronDown)
                             .rounded(self.rounded)
                             .border_edges(Edges {
-                                left: false,
+                                left: rounded,
                                 top: true,
                                 right: true,
                                 bottom: true,
                             })
                             .border_corners(Corners {
-                                top_left: false,
+                                top_left: rounded,
                                 top_right: true,
-                                bottom_left: false,
+                                bottom_left: rounded,
                                 bottom_right: true,
                             })
+                            .selected(self.selected)
                             .when_some(self.compact, |this, _| this.compact())
                             .when_some(self.outline, |this, _| this.outline())
                             .when_some(self.size, |this, size| this.with_size(size))

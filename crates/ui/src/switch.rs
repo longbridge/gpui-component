@@ -1,17 +1,18 @@
 use crate::{
     h_flex, text::Text, tooltip::Tooltip, ActiveTheme, Colorize, Disableable, Side, Sizable, Size,
+    StyledExt,
 };
 use gpui::{
-    div, prelude::FluentBuilder as _, px, Animation, AnimationExt as _, AnyElement, App, Div,
-    Element, ElementId, GlobalElementId, InteractiveElement, IntoElement, LayoutId,
-    ParentElement as _, SharedString, StatefulInteractiveElement, Styled, Window,
+    div, prelude::FluentBuilder as _, px, Animation, AnimationExt as _, AnyElement, App, Element,
+    ElementId, GlobalElementId, InteractiveElement, IntoElement, LayoutId, ParentElement as _,
+    SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Window,
 };
 use std::{cell::RefCell, rc::Rc, time::Duration};
 
 /// A Switch element that can be toggled on or off.
 pub struct Switch {
     id: ElementId,
-    base: Div,
+    style: StyleRefinement,
     checked: bool,
     disabled: bool,
     label: Option<Text>,
@@ -26,7 +27,7 @@ impl Switch {
         let id: ElementId = id.into();
         Self {
             id: id.clone(),
-            base: div(),
+            style: StyleRefinement::default(),
             checked: false,
             disabled: false,
             label: None,
@@ -68,7 +69,7 @@ impl Switch {
 
 impl Styled for Switch {
     fn style(&mut self) -> &mut gpui::StyleRefinement {
-        self.base.style()
+        &mut self.style
     }
 }
 
@@ -123,7 +124,6 @@ impl Element for Switch {
             let state = state.unwrap_or_default();
             let checked = self.checked;
             let on_click = self.on_click.clone();
-            let style = self.base.style();
 
             let (bg, toggle_bg) = match self.checked {
                 true => (cx.theme().primary, cx.theme().background),
@@ -156,10 +156,8 @@ impl Element for Switch {
                 cx.theme().radius
             };
 
-            let mut root = div();
-            *root.style() = style.clone();
-
-            let mut element = root
+            let mut element = div()
+                .refine_style(&self.style)
                 .child(
                     h_flex()
                         .id(self.id.clone())

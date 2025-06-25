@@ -2,9 +2,9 @@ use std::{rc::Rc, time::Duration};
 
 use gpui::{
     anchored, div, point, prelude::FluentBuilder as _, px, Animation, AnimationExt as _,
-    AnyElement, App, ClickEvent, DefiniteLength, DismissEvent, Div, EventEmitter, FocusHandle,
-    InteractiveElement as _, IntoElement, KeyBinding, MouseButton, ParentElement, Pixels,
-    RenderOnce, Styled, Window,
+    AnyElement, App, Axis, ClickEvent, DefiniteLength, DismissEvent, Div, EventEmitter,
+    FocusHandle, InteractiveElement as _, IntoElement, KeyBinding, MouseButton, ParentElement,
+    Pixels, RenderOnce, Styled, Window,
 };
 
 use crate::{
@@ -13,7 +13,6 @@ use crate::{
     h_flex,
     modal::overlay_color,
     root::ContextModal as _,
-    scroll::ScrollbarAxis,
     title_bar::TITLE_BAR_HEIGHT,
     v_flex, ActiveTheme, IconName, Placement, Sizable, StyledExt as _,
 };
@@ -136,7 +135,7 @@ impl RenderOnce for Drawer {
                     .occlude()
                     .w(size.width)
                     .h(size.height - titlebar_height)
-                    .bg(overlay_color(self.overlay, window, cx))
+                    .bg(overlay_color(self.overlay, cx))
                     .when(self.overlay, |this| {
                         this.on_mouse_down(MouseButton::Left, {
                             let on_close = self.on_close.clone();
@@ -203,11 +202,10 @@ impl RenderOnce for Drawer {
                             )
                             .child(
                                 // Body
-                                div().flex_1().overflow_hidden().child(
-                                    v_flex()
-                                        .scrollable(window.current_view(), ScrollbarAxis::Vertical)
-                                        .child(self.content),
-                                ),
+                                div()
+                                    .flex_1()
+                                    .overflow_hidden()
+                                    .child(v_flex().scrollable(Axis::Vertical).child(self.content)),
                             )
                             .when_some(self.footer, |this, footer| {
                                 // Footer

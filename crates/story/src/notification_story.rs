@@ -4,12 +4,20 @@ use gpui::{
 };
 
 use gpui_component::{
-    button::{Button, ButtonVariants as _},
+    button::{Button, ButtonVariants},
     notification::{Notification, NotificationType},
+    text::TextView,
     ContextModal as _,
 };
 
 use crate::section;
+
+const NOTIFICATION_MARKDOWN: &str = r#"
+This is a custom notification.
+- List item 1
+- List item 2
+- [Click here](https://github.com/longbridge/gpui-component)
+"#;
 
 pub struct NotificationStory {
     focus_handle: FocusHandle,
@@ -130,9 +138,10 @@ impl Render for NotificationStory {
                             struct TestNotification;
 
                             window.push_notification(
-                                Notification::new("There was a problem with your request.")
+                                Notification::new()
                                     .id::<TestNotification>()
                                     .title("Uh oh! Something went wrong.")
+                                    .message("There was a problem with your request.")
                                     .autohide(false)
                                     .action(|_, cx| {
                                         Button::new("try-again").label("Try again").on_click(
@@ -151,5 +160,49 @@ impl Render for NotificationStory {
                         })),
                 ),
             )
+            .child(
+                section("Custom Notification").child(
+                    Button::new("show-notify-custom")
+                        .label("Show Custom Notification")
+                        .on_click(cx.listener(|_, _, window, cx| {
+                            window.push_notification(
+                                Notification::new().content(|_, _| {
+                                    TextView::markdown(
+                                        "notification-markdown",
+                                        NOTIFICATION_MARKDOWN,
+                                    )
+                                    .into_any_element()
+                                }),
+                                cx,
+                            )
+                        })),
+                ),
+            )
+            .child({
+                struct ManualOpenNotification;
+
+                section("Manual Close Notification")
+                    .child(
+                        Button::new("manual-open-notify")
+                            .label("Show")
+                            .on_click(cx.listener(|_, _, window, cx| {
+                                window.push_notification(
+                                    Notification::new()
+                                        .id::<ManualOpenNotification>()
+                                        .message("You can close this notification by clicking the Close button.")
+                                        .autohide(false),
+                                    cx,
+                                );
+                            })),
+                    )
+                    .child(
+                        Button::new("manual-close-notify")
+                            .danger()
+                            .label("Close")
+                            .on_click(cx.listener(|_, _, window, cx| {
+                                window.remove_notification::<ManualOpenNotification>(cx);
+                            })),
+                    )
+            })
     }
 }

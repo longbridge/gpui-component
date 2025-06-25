@@ -1,43 +1,47 @@
 use gpui::SharedString;
-use tree_sitter::Query;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, enum_iterator::Sequence)]
 pub enum Language {
-    Json,
-    Markdown,
-    MarkdownInline,
-    Toml,
-    Yaml,
-    Rust,
-    Go,
-    C,
-    Cpp,
-    JavaScript,
-    Zig,
-    Java,
-    Python,
-    Ruby,
+    Plain,
     Bash,
-    Html,
-    Css,
-    Swift,
-    Scala,
-    CSharp,
-    GraphQL,
-    Proto,
-    Make,
+    C,
     CMake,
-    TypeScript,
-    Tsx,
+    CSharp,
+    Cpp,
+    Css,
     Diff,
+    Ejs,
     Elixir,
     Erb,
-    Ejs,
+    Go,
+    GraphQL,
+    Html,
+    Java,
+    JavaScript,
+    JsDoc,
+    Json,
+    Make,
+    Markdown,
+    MarkdownInline,
+    Proto,
+    Python,
+    Ruby,
+    Rust,
+    Scala,
+    Sql,
+    Swift,
+    Toml,
+    Tsx,
+    TypeScript,
+    Yaml,
+    Zig,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LanguageConfig {
+    pub name: SharedString,
     pub language: tree_sitter::Language,
+    pub injection_languages: Vec<SharedString>,
     pub highlights: SharedString,
     pub injections: SharedString,
     pub locals: SharedString,
@@ -45,13 +49,17 @@ pub struct LanguageConfig {
 
 impl LanguageConfig {
     pub fn new(
+        name: impl Into<SharedString>,
         language: tree_sitter::Language,
+        injection_languages: Vec<SharedString>,
         highlights: &str,
         injections: &str,
         locals: &str,
     ) -> Self {
         Self {
+            name: name.into(),
             language,
+            injection_languages,
             highlights: SharedString::from(highlights.to_string()),
             injections: SharedString::from(injections.to_string()),
             locals: SharedString::from(locals.to_string()),
@@ -71,89 +79,104 @@ impl Language {
 
     pub fn name(&self) -> &'static str {
         match self {
-            Self::Json => "json",
-            Self::Markdown => "markdown",
-            Self::MarkdownInline => "markdown_inline",
-            Self::Toml => "toml",
-            Self::Yaml => "yaml",
-            Self::Rust => "rust",
-            Self::Go => "go",
-            Self::C => "c",
-            Self::Cpp => "cpp",
-            Self::JavaScript => "javascript",
-            Self::Zig => "zig",
-            Self::Java => "java",
-            Self::Python => "python",
-            Self::Ruby => "ruby",
+            Self::Plain => "text",
             Self::Bash => "bash",
-            Self::Html => "html",
-            Self::Css => "css",
-            Self::Swift => "swift",
-            Self::Scala => "scala",
-            Self::CSharp => "csharp",
-            Self::GraphQL => "graphql",
-            Self::Proto => "proto",
-            Self::Make => "make",
+            Self::C => "c",
             Self::CMake => "cmake",
-            Self::TypeScript => "typescript",
-            Self::Tsx => "tsx",
+            Self::CSharp => "csharp",
+            Self::Cpp => "cpp",
+            Self::Css => "css",
             Self::Diff => "diff",
+            Self::Ejs => "ejs",
             Self::Elixir => "elixir",
             Self::Erb => "erb",
-            Self::Ejs => "ejs",
+            Self::Go => "go",
+            Self::GraphQL => "graphql",
+            Self::Html => "html",
+            Self::Java => "java",
+            Self::JavaScript => "javascript",
+            Self::JsDoc => "jsdoc",
+            Self::Json => "json",
+            Self::Make => "make",
+            Self::Markdown => "markdown",
+            Self::MarkdownInline => "markdown_inline",
+            Self::Proto => "proto",
+            Self::Python => "python",
+            Self::Ruby => "ruby",
+            Self::Rust => "rust",
+            Self::Scala => "scala",
+            Self::Sql => "sql",
+            Self::Swift => "swift",
+            Self::Toml => "toml",
+            Self::Tsx => "tsx",
+            Self::TypeScript => "typescript",
+            Self::Yaml => "yaml",
+            Self::Zig => "zig",
         }
     }
 
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn from_str(s: &str) -> Self {
         match s {
-            "json" | "jsonc" => Some(Self::Json),
-            "markdown" | "md" | "mdx" => Some(Self::Markdown),
-            "markdown_inline" | "markdown-inline" => Some(Self::MarkdownInline),
-            "toml" => Some(Self::Toml),
-            "yaml" | "yml" => Some(Self::Yaml),
-            "rust" | "rs" => Some(Self::Rust),
-            "go" => Some(Self::Go),
-            "c" => Some(Self::C),
-            "cpp" | "c++" => Some(Self::Cpp),
-            "javascript" | "js" => Some(Self::JavaScript),
-            "zig" => Some(Self::Zig),
-            "java" => Some(Self::Java),
-            "python" | "py" => Some(Self::Python),
-            "ruby" | "rb" => Some(Self::Ruby),
-            "bash" | "sh" => Some(Self::Bash),
-            "html" => Some(Self::Html),
-            "css" | "scss" => Some(Self::Css),
-            "swift" => Some(Self::Swift),
-            "scala" => Some(Self::Scala),
-            "csharp" | "cs" => Some(Self::CSharp),
-            "graphql" => Some(Self::GraphQL),
-            "proto" | "protobuf" => Some(Self::Proto),
-            "make" | "makefile" => Some(Self::Make),
-            "cmake" => Some(Self::CMake),
-            "typescript" | "ts" => Some(Self::TypeScript),
-            "tsx" => Some(Self::Tsx),
-            "diff" => Some(Self::Diff),
-            "elixir" | "ex" => Some(Self::Elixir),
-            "erb" => Some(Self::Erb),
-            "ejs" => Some(Self::Ejs),
-            _ => None,
+            "bash" | "sh" => Self::Bash,
+            "c" => Self::C,
+            "cmake" => Self::CMake,
+            "cpp" | "c++" => Self::Cpp,
+            "csharp" | "cs" => Self::CSharp,
+            "css" | "scss" => Self::Css,
+            "diff" => Self::Diff,
+            "ejs" => Self::Ejs,
+            "elixir" | "ex" => Self::Elixir,
+            "erb" => Self::Erb,
+            "go" => Self::Go,
+            "graphql" => Self::GraphQL,
+            "html" => Self::Html,
+            "java" => Self::Java,
+            "javascript" | "js" => Self::JavaScript,
+            "jsdoc" => Self::JsDoc,
+            "json" | "jsonc" => Self::Json,
+            "make" | "makefile" => Self::Make,
+            "markdown" | "md" | "mdx" => Self::Markdown,
+            "markdown_inline" | "markdown-inline" => Self::MarkdownInline,
+            "proto" | "protobuf" => Self::Proto,
+            "python" | "py" => Self::Python,
+            "ruby" | "rb" => Self::Ruby,
+            "rust" | "rs" => Self::Rust,
+            "scala" => Self::Scala,
+            "sql" => Self::Sql,
+            "swift" => Self::Swift,
+            "toml" => Self::Toml,
+            "tsx" => Self::Tsx,
+            "typescript" | "ts" => Self::TypeScript,
+            "yaml" | "yml" => Self::Yaml,
+            "zig" => Self::Zig,
+            _ => Self::Plain,
         }
     }
 
     #[allow(unused)]
-    pub(super) fn injection_languages(&self) -> Vec<Self> {
+    pub(super) fn injection_languages(&self) -> Vec<SharedString> {
         match self {
-            Self::Markdown => vec![Self::MarkdownInline, Self::Html, Self::Toml, Self::Yaml],
+            Self::Markdown => vec!["markdown-inline", "html", "toml", "yaml"],
             Self::MarkdownInline => vec![],
-            Self::Html => vec![Self::JavaScript, Self::Css],
-            Self::Rust => vec![Self::Rust],
+            Self::Html => vec!["javascript", "css"],
+            Self::Rust => vec!["rust"],
+            Self::JavaScript | Self::TypeScript => vec![
+                "jsdoc",
+                "json",
+                "css",
+                "html",
+                "sql",
+                "typescript",
+                "javascript",
+                "tsx",
+                "yaml",
+                "graphql",
+            ],
             _ => vec![],
         }
-    }
-
-    pub(super) fn query(&self) -> Query {
-        let config = self.config();
-        Query::new(&config.language, &config.highlights).unwrap()
+        .into_iter()
+        .map(|s| s.into())
+        .collect()
     }
 
     /// Return the language info for the language.
@@ -161,9 +184,10 @@ impl Language {
     /// (language, query, injection, locals)
     pub(super) fn config(&self) -> LanguageConfig {
         let (language, query, injection, locals) = match self {
+            Self::Plain => (tree_sitter_json::LANGUAGE, "", "", ""),
             Self::Json => (
                 tree_sitter_json::LANGUAGE,
-                tree_sitter_json::HIGHLIGHTS_QUERY,
+                include_str!("languages/json/highlights.scm"),
                 "",
                 "",
             ),
@@ -199,7 +223,7 @@ impl Language {
             ),
             Self::Go => (
                 tree_sitter_go::LANGUAGE,
-                tree_sitter_go::HIGHLIGHTS_QUERY,
+                include_str!("languages/go/highlights.scm"),
                 "",
                 "",
             ),
@@ -217,14 +241,20 @@ impl Language {
             ),
             Self::JavaScript => (
                 tree_sitter_javascript::LANGUAGE,
-                tree_sitter_javascript::HIGHLIGHT_QUERY,
-                tree_sitter_javascript::INJECTIONS_QUERY,
+                include_str!("languages/javascript/highlights.scm"),
+                include_str!("languages/javascript/injections.scm"),
                 tree_sitter_javascript::LOCALS_QUERY,
+            ),
+            Self::JsDoc => (
+                tree_sitter_jsdoc::LANGUAGE,
+                tree_sitter_jsdoc::HIGHLIGHTS_QUERY,
+                "",
+                "",
             ),
             Self::Zig => (
                 tree_sitter_zig::LANGUAGE,
-                tree_sitter_zig::HIGHLIGHTS_QUERY,
-                tree_sitter_zig::INJECTIONS_QUERY,
+                include_str!("languages/zig/highlights.scm"),
+                include_str!("languages/zig/injections.scm"),
                 "",
             ),
             Self::Java => (
@@ -270,6 +300,12 @@ impl Language {
                 "",
                 tree_sitter_scala::LOCALS_QUERY,
             ),
+            Self::Sql => (
+                tree_sitter_sequel::LANGUAGE,
+                tree_sitter_sequel::HIGHLIGHTS_QUERY,
+                "",
+                "",
+            ),
             Self::CSharp => (tree_sitter_c_sharp::LANGUAGE, "", "", ""),
             Self::GraphQL => (tree_sitter_graphql::LANGUAGE, "", "", ""),
             Self::Proto => (tree_sitter_proto::LANGUAGE, "", "", ""),
@@ -282,8 +318,8 @@ impl Language {
             Self::CMake => (tree_sitter_cmake::LANGUAGE, "", "", ""),
             Self::TypeScript => (
                 tree_sitter_typescript::LANGUAGE_TYPESCRIPT,
-                tree_sitter_typescript::HIGHLIGHTS_QUERY,
-                "",
+                include_str!("languages/typescript/highlights.scm"),
+                include_str!("languages/javascript/injections.scm"),
                 tree_sitter_typescript::LOCALS_QUERY,
             ),
             Self::Tsx => (
@@ -320,7 +356,14 @@ impl Language {
 
         let language = tree_sitter::Language::new(language);
 
-        LanguageConfig::new(language, query, injection, locals)
+        LanguageConfig::new(
+            self.name(),
+            language,
+            self.injection_languages(),
+            query,
+            injection,
+            locals,
+        )
     }
 }
 
@@ -338,6 +381,7 @@ mod tests {
         assert_eq!(Language::Go.name(), "go");
         assert_eq!(Language::C.name(), "c");
         assert_eq!(Language::Cpp.name(), "cpp");
+        assert_eq!(Language::Sql.name(), "sql");
         assert_eq!(Language::JavaScript.name(), "javascript");
         assert_eq!(Language::Zig.name(), "zig");
         assert_eq!(Language::CSharp.name(), "csharp");

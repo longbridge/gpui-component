@@ -100,7 +100,7 @@ impl Render for LabelStory {
                     ),
             )
             .child(
-                section("Maksed Label").max_w_md().child(
+                section("Masked Label").max_w_md().child(
                     v_flex()
                         .w_full()
                         .gap_4()

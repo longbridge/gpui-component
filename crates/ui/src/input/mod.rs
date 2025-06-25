@@ -1,8 +1,9 @@
 mod blink_cursor;
 mod change;
 mod clear_button;
-mod code_highlighter;
 mod element;
+mod hover_popover;
+mod marker;
 mod mask_pattern;
 mod mode;
 mod number_input;
@@ -12,6 +13,7 @@ mod text_input;
 mod text_wrapper;
 
 pub(crate) use clear_button::*;
+pub use marker::*;
 pub use mask_pattern::MaskPattern;
 pub use mode::TabSize;
 pub use number_input::{NumberInput, NumberInputEvent, StepAction};

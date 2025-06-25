@@ -20,22 +20,21 @@ use gpui_component::{
     v_flex, ActiveTheme, Sizable,
 };
 
-// 定义动作类型，用于处理公司选择事件
-actions!(list_story, [SelectedCompany]);
+actions!(story, [SelectedCompany]);
 
 /// 公司数据结构，包含公司的基本信息和股价数据
 #[derive(Clone, Default)]
 struct Company {
-    name: SharedString,              // 公司名称
-    industry: SharedString,          // 所属行业
-    last_done: f64,                 // 最新成交价
-    prev_close: f64,                // 前收盘价
+    name: SharedString,     // 公司名称
+    industry: SharedString, // 所属行业
+    last_done: f64,         // 最新成交价
+    prev_close: f64,        // 前收盘价
 
-    change_percent: f64,            // 涨跌幅百分比
+    change_percent: f64,              // 涨跌幅百分比
     change_percent_str: SharedString, // 涨跌幅百分比字符串
-    last_done_str: SharedString,    // 最新成交价字符串
-    prev_close_str: SharedString,   // 前收盘价字符串
-    // description: String,         // 公司描述（注释掉）
+    last_done_str: SharedString,      // 最新成交价字符串
+    prev_close_str: SharedString,     // 前收盘价字符串
+                                      // description: String,         // 公司描述（注释掉）
 }
 
 impl Company {
@@ -62,10 +61,10 @@ impl Company {
 /// 公司列表项组件，用于渲染单个公司的信息
 #[derive(IntoElement)]
 struct CompanyListItem {
-    base: ListItem,     // 基础列表项组件
-    ix: usize,         // 在列表中的索引
-    company: Company,  // 公司数据
-    selected: bool,    // 是否被选中
+    base: ListItem,   // 基础列表项组件
+    ix: usize,        // 在列表中的索引
+    company: Company, // 公司数据
+    selected: bool,   // 是否被选中
 }
 
 impl CompanyListItem {
@@ -85,46 +84,46 @@ impl RenderOnce for CompanyListItem {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         // 根据选中状态确定文本颜色
         let text_color = if self.selected {
-            cx.theme().accent_foreground  // 选中时使用强调色
+            cx.theme().accent_foreground // 选中时使用强调色
         } else {
-            cx.theme().foreground        // 未选中时使用默认前景色
+            cx.theme().foreground // 未选中时使用默认前景色
         };
 
         // 根据涨跌幅确定趋势颜色
         let trend_color = match self.company.change_percent {
-            change if change > 0.0 => hsl(0.0, 79.0, 53.0),    // 上涨：红色
-            change if change < 0.0 => hsl(100.0, 79.0, 53.0),  // 下跌：绿色
-            _ => cx.theme().foreground,                          // 平盘：默认色
+            change if change > 0.0 => hsl(0.0, 79.0, 53.0), // 上涨：红色
+            change if change < 0.0 => hsl(100.0, 79.0, 53.0), // 下跌：绿色
+            _ => cx.theme().foreground,                     // 平盘：默认色
         };
 
         // 根据选中状态和索引确定背景色
         let bg_color = if self.selected {
-            cx.theme().list_active      // 选中时的背景色
+            cx.theme().list_active // 选中时的背景色
         } else if self.ix % 2 == 0 {
-            cx.theme().list            // 偶数行背景色
+            cx.theme().list // 偶数行背景色
         } else {
-            cx.theme().list_even       // 奇数行背景色
+            cx.theme().list_even // 奇数行背景色
         };
 
         // 构建列表项的布局结构
         self.base
-            .px_3()                    // 水平内边距 3 单位
-            .py_1()                    // 垂直内边距 1 单位
-            .overflow_x_hidden()       // 隐藏水平溢出
-            .bg(bg_color)              // 设置背景色
+            .px_3() // 水平内边距 3 单位
+            .py_1() // 垂直内边距 1 单位
+            .overflow_x_hidden() // 隐藏水平溢出
+            .bg(bg_color) // 设置背景色
             .child(
-                h_flex()               // 水平弹性布局
-                    .items_center()    // 垂直居中对齐
+                h_flex() // 水平弹性布局
+                    .items_center() // 垂直居中对齐
                     .justify_between() // 两端对齐
-                    .gap_2()          // 间距 2 单位
+                    .gap_2() // 间距 2 单位
                     .text_color(text_color) // 设置文本颜色
                     .child(
                         // 左侧：公司名称和行业信息
-                        v_flex()       // 垂直弹性布局
-                            .gap_1()   // 间距 1 单位
-                            .max_w(px(500.))    // 最大宽度 500 像素
+                        v_flex() // 垂直弹性布局
+                            .gap_1() // 间距 1 单位
+                            .max_w(px(500.)) // 最大宽度 500 像素
                             .overflow_x_hidden() // 隐藏水平溢出
-                            .flex_nowrap()      // 不换行
+                            .flex_nowrap() // 不换行
                             .child(Label::new(self.company.name.clone()).whitespace_nowrap()) // 公司名称
                             .child(
                                 div().text_sm().overflow_x_hidden().child(
@@ -137,13 +136,13 @@ impl RenderOnce for CompanyListItem {
                     .child(
                         // 右侧：股价和涨跌幅信息
                         h_flex()
-                            .gap_2()           // 间距 2 单位
-                            .items_center()    // 垂直居中
-                            .justify_end()     // 右对齐
+                            .gap_2() // 间距 2 单位
+                            .items_center() // 垂直居中
+                            .justify_end() // 右对齐
                             .child(
                                 // 最新成交价
                                 div()
-                                    .w(px(65.))        // 固定宽度 65 像素
+                                    .w(px(65.)) // 固定宽度 65 像素
                                     .text_color(text_color)
                                     .child(self.company.last_done_str.clone()),
                             )
@@ -152,10 +151,10 @@ impl RenderOnce for CompanyListItem {
                                 h_flex().w(px(65.)).justify_end().child(
                                     div()
                                         .rounded(cx.theme().radius) // 圆角
-                                        .whitespace_nowrap()        // 不换行
-                                        .text_size(px(12.))        // 字体大小 12 像素
-                                        .px_1()                    // 水平内边距 1 单位
-                                        .text_color(trend_color)   // 趋势颜色
+                                        .whitespace_nowrap() // 不换行
+                                        .text_size(px(12.)) // 字体大小 12 像素
+                                        .px_1() // 水平内边距 1 单位
+                                        .text_color(trend_color) // 趋势颜色
                                         .child(self.company.change_percent_str.clone()),
                                 ),
                             ),
@@ -172,7 +171,7 @@ struct CompanyListDelegate {
     confirmed_index: Option<usize>,  // 确认选中的索引
     query: String,                   // 搜索查询字符串
     loading: bool,                   // 是否正在加载
-    eof: bool,                      // 是否到达末尾
+    eof: bool,                       // 是否到达末尾
 }
 
 impl ListDelegate for CompanyListDelegate {
@@ -285,10 +284,10 @@ impl CompanyListDelegate {
 
 /// 列表故事主组件，展示公司列表的功能
 pub struct ListStory {
-    focus_handle: FocusHandle,                        // 焦点处理句柄
-    company_list: Entity<List<CompanyListDelegate>>,  // 公司列表组件
-    selected_company: Option<Company>,                // 当前选中的公司
-    _subscriptions: Vec<Subscription>,                // 事件订阅列表
+    focus_handle: FocusHandle,                       // 焦点处理句柄
+    company_list: Entity<List<CompanyListDelegate>>, // 公司列表组件
+    selected_company: Option<Company>,               // 当前选中的公司
+    _subscriptions: Vec<Subscription>,               // 事件订阅列表
 }
 
 /// 实现 Story trait，定义组件的基本信息
@@ -325,18 +324,18 @@ impl ListStory {
 
         // 创建列表代理对象，管理列表的状态和行为
         let delegate = CompanyListDelegate {
-            matched_companies: companies.clone(),  // 匹配搜索条件的公司列表
-            companies,                             // 所有公司的完整列表
-            selected_index: Some(0),               // 当前选中的索引，默认选中第一项
-            confirmed_index: None,                 // 确认选中的索引
-            query: "".to_string(),                 // 当前搜索查询字符串
-            loading: false,                        // 是否正在加载数据
+            matched_companies: companies.clone(), // 匹配搜索条件的公司列表
+            companies,                            // 所有公司的完整列表
+            selected_index: Some(0),              // 当前选中的索引，默认选中第一项
+            confirmed_index: None,                // 确认选中的索引
+            query: "".to_string(),                // 当前搜索查询字符串
+            loading: false,                       // 是否正在加载数据
             eof: false,                           // 是否已经到达数据末尾
         };
 
         // 创建 List 组件实体，传入代理对象和上下文
         let company_list = cx.new(|cx| List::new(delegate, window, cx));
-        
+
         // 注释掉的代码：可以手动设置选中索引
         // company_list.update(cx, |list, cx| {
         //     list.set_selected_index(Some(3), cx);
@@ -368,26 +367,27 @@ impl ListStory {
                 // 更新公司列表，遍历所有公司并随机更新其数据
                 this.company_list.update(cx, |picker, _| {
                     picker
-                        .delegate_mut()           // 获取代理对象的可变引用
-                        .companies               // 访问公司列表
-                        .iter_mut()              // 创建可变迭代器
-                        .for_each(|company| {   // 对每个公司执行随机更新
+                        .delegate_mut() // 获取代理对象的可变引用
+                        .companies // 访问公司列表
+                        .iter_mut() // 创建可变迭代器
+                        .for_each(|company| {
+                            // 对每个公司执行随机更新
                             company.random_update();
                         });
                 });
                 // 通知界面需要重新渲染
                 cx.notify();
             })
-            .ok();  // 忽略更新可能的错误
+            .ok(); // 忽略更新可能的错误
         })
-        .detach();  // 分离任务，让其在后台独立运行
+        .detach(); // 分离任务，让其在后台独立运行
 
         // 返回新创建的 ListStory 实例
         Self {
-            focus_handle: cx.focus_handle(),    // 创建焦点处理句柄
-            company_list,                       // 公司列表组件
-            selected_company: None,             // 当前选中的公司，初始为空
-            _subscriptions,                     // 事件订阅列表
+            focus_handle: cx.focus_handle(), // 创建焦点处理句柄
+            company_list,                    // 公司列表组件
+            selected_company: None,          // 当前选中的公司，初始为空
+            _subscriptions,                  // 事件订阅列表
         }
     }
 
@@ -396,7 +396,7 @@ impl ListStory {
     fn selected_company(&mut self, _: &SelectedCompany, _: &mut Window, cx: &mut Context<Self>) {
         // 读取公司列表组件的状态
         let picker = self.company_list.read(cx);
-        
+
         // 如果有选中的公司，则更新当前组件的选中状态
         if let Some(company) = picker.delegate().selected_company() {
             self.selected_company = Some(company);
@@ -420,9 +420,9 @@ fn random_company() -> Company {
         industry: fake::faker::company::en::Industry().fake::<String>().into(),
         last_done,
         prev_close,
-        ..Default::default()  // 其他字段使用默认值
+        ..Default::default() // 其他字段使用默认值
     }
-    .prepare()  // 预处理数据，计算涨跌幅等
+    .prepare() // 预处理数据，计算涨跌幅等
 }
 
 /// 实现焦点管理接口
@@ -436,21 +436,21 @@ impl Focusable for ListStory {
 /// 实现渲染接口，定义组件的视觉表现
 impl Render for ListStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        v_flex()  // 垂直弹性布局
-            .track_focus(&self.focus_handle)                    // 跟踪焦点
-            .on_action(cx.listener(Self::selected_company))     // 监听公司选择动作
-            .size_full()                                        // 占满整个空间
-            .gap_4()                                           // 间距 4 单位
+        v_flex() // 垂直弹性布局
+            .track_focus(&self.focus_handle) // 跟踪焦点
+            .on_action(cx.listener(Self::selected_company)) // 监听公司选择动作
+            .size_full() // 占满整个空间
+            .gap_4() // 间距 4 单位
             .child(
                 // 顶部按钮组
-                h_flex()  // 水平弹性布局
-                    .gap_2()      // 间距 2 单位
-                    .flex_wrap()  // 允许换行
+                h_flex() // 水平弹性布局
+                    .gap_2() // 间距 2 单位
+                    .flex_wrap() // 允许换行
                     .child(
                         // 滚动到顶部按钮
                         Button::new("scroll-top")
                             .child("Scroll to Top")
-                            .small()  // 小尺寸
+                            .small() // 小尺寸
                             .on_click(cx.listener(|this, _, window, cx| {
                                 // 滚动到第一项
                                 this.company_list.update(cx, |list, cx| {
@@ -492,7 +492,7 @@ impl Render for ListStory {
                         // 加载状态复选框
                         Checkbox::new("loading")
                             .label("Loading")
-                            .checked(self.company_list.read(cx).delegate().loading)  // 绑定加载状态
+                            .checked(self.company_list.read(cx).delegate().loading) // 绑定加载状态
                             .on_click(cx.listener(|this, check: &bool, _, cx| {
                                 // 切换加载状态
                                 this.company_list.update(cx, |this, cx| {
@@ -505,12 +505,12 @@ impl Render for ListStory {
             .child(
                 // 主列表容器
                 div()
-                    .flex_1()                                   // 占满剩余空间
-                    .w_full()                                   // 全宽
-                    .border_1()                                 // 1 像素边框
-                    .border_color(cx.theme().border)            // 主题边框颜色
-                    .rounded(cx.theme().radius)                 // 主题圆角
-                    .child(self.company_list.clone()),          // 包含公司列表组件
+                    .flex_1() // 占满剩余空间
+                    .w_full() // 全宽
+                    .border_1() // 1 像素边框
+                    .border_color(cx.theme().border) // 主题边框颜色
+                    .rounded(cx.theme().radius) // 主题圆角
+                    .child(self.company_list.clone()), // 包含公司列表组件
             )
     }
 }

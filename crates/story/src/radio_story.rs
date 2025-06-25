@@ -104,7 +104,7 @@ impl Render for RadioStory {
             )
             .child(
                 section("Radio Group").max_w_md().child(
-                    RadioGroup::horizontal()
+                    RadioGroup::horizontal("radio_group_1")
                         .children(["One", "Two", "Three"])
                         .selected_index(self.radio_group_checked)
                         .on_change(cx.listener(|this, selected_ix: &usize, _, cx| {
@@ -117,7 +117,7 @@ impl Render for RadioStory {
                 section("Radio Group Vertical (With container style)")
                     .max_w_md()
                     .child(
-                        RadioGroup::vertical()
+                        RadioGroup::vertical("radio_group_2")
                             .w(px(220.))
                             .p_2()
                             .border_1()
@@ -127,11 +127,7 @@ impl Render for RadioStory {
                             .child(Radio::new("one1").label("United States"))
                             .child(Radio::new("one2").label("Canada"))
                             .child(Radio::new("one3").label("Mexico"))
-                            .selected_index(self.radio_group_checked)
-                            .on_change(cx.listener(|this, selected_ix: &usize, _, cx| {
-                                this.radio_group_checked = Some(*selected_ix);
-                                cx.notify();
-                            })),
+                            .selected_index(Some(1)),
                     ),
             )
     }

@@ -5,8 +5,8 @@ use crate::{
     ActiveTheme,
 };
 use gpui::{
-    div, px, App, Axis, DefiniteLength, Div, Edges, Element, ElementId, EntityId, FocusHandle,
-    Pixels, Styled, Window,
+    div, hsla, point, px, App, Axis, BoxShadow, DefiniteLength, Div, Edges, Element, ElementId,
+    FocusHandle, Pixels, Refineable, StyleRefinement, Styled, Window,
 };
 use serde::{Deserialize, Serialize};
 
@@ -34,6 +34,12 @@ macro_rules! font_weight {
 
 /// Extends [`gpui::Styled`] with specific styling methods.
 pub trait StyledExt: Styled + Sized {
+    /// Refine the style of this element, applying the given style refinement.
+    fn refine_style(mut self, style: &StyleRefinement) -> Self {
+        self.style().refine(style);
+        self
+    }
+
     /// Apply self into a horizontal flex layout.
     #[inline]
     fn h_flex(self) -> Self {
@@ -138,11 +144,11 @@ pub trait StyledExt: Styled + Sized {
     ///
     /// Current this is only have a vertical scrollbar.
     #[inline]
-    fn scrollable(self, view_id: EntityId, axis: ScrollbarAxis) -> Scrollable<Self>
+    fn scrollable(self, axis: impl Into<ScrollbarAxis>) -> Scrollable<Self>
     where
         Self: Element,
     {
-        Scrollable::new(view_id, self, axis)
+        Scrollable::new(axis, self)
     }
 
     font_weight!(font_thin, THIN);
@@ -163,6 +169,17 @@ pub trait StyledExt: Styled + Sized {
             .border_color(cx.theme().border)
             .shadow_lg()
             .rounded(cx.theme().radius)
+    }
+
+    /// TODO: Remove this after PR is merged
+    /// https://github.com/zed-industries/zed/pull/33361
+    fn shadow_xs(self) -> Self {
+        self.shadow(vec![BoxShadow {
+            color: hsla(0., 0., 0., 0.05),
+            offset: point(px(0.), px(1.)),
+            blur_radius: px(2.),
+            spread_radius: px(0.),
+        }])
     }
 }
 
@@ -279,6 +296,26 @@ impl Size {
             _ => other,
         }
     }
+
+    pub fn input_px(&self) -> Pixels {
+        match self {
+            Self::Large => px(20.),
+            Self::Medium => px(12.),
+            Self::Small => px(8.),
+            Self::XSmall => px(4.),
+            _ => px(8.),
+        }
+    }
+
+    pub fn input_py(&self) -> Pixels {
+        match self {
+            Size::Large => px(16.),
+            Size::Medium => px(8.),
+            Size::Small => px(4.),
+            Size::XSmall => px(0.),
+            _ => px(4.),
+        }
+    }
 }
 
 impl From<Pixels> for Size {
@@ -289,9 +326,14 @@ impl From<Pixels> for Size {
 
 /// A trait for defining element that can be selected.
 pub trait Selectable: Sized {
+    /// Returns the element id of the element.
     fn element_id(&self) -> &ElementId;
+
     /// Set the selected state of the element.
     fn selected(self, selected: bool) -> Self;
+
+    /// Returns true if the element is selected.
+    fn is_selected(&self) -> bool;
 }
 
 /// A trait for defining element that can be disabled.
@@ -363,40 +405,22 @@ impl<T: Styled> StyleSized<T> for T {
 
     #[inline]
     fn input_pl(self, size: Size) -> Self {
-        match size {
-            Size::Large => self.pl_5(),
-            Size::Medium => self.pl_3(),
-            _ => self.pl_2(),
-        }
+        self.pl(size.input_px())
     }
 
     #[inline]
     fn input_pr(self, size: Size) -> Self {
-        match size {
-            Size::Large => self.pr_5(),
-            Size::Medium => self.pr_3(),
-            _ => self.pr_2(),
-        }
+        self.pr(size.input_px())
     }
 
     #[inline]
     fn input_px(self, size: Size) -> Self {
-        match size {
-            Size::Large => self.px_5(),
-            Size::Medium => self.px_3(),
-            _ => self.px_2(),
-        }
+        self.px(size.input_px())
     }
 
     #[inline]
     fn input_py(self, size: Size) -> Self {
-        match size {
-            Size::Large => self.py_5(),
-            Size::Medium => self.py_2(),
-            Size::Small => self.py_1(),
-            Size::XSmall => self.py_0(),
-            _ => self.py_1(),
-        }
+        self.py(size.input_py())
     }
 
     #[inline]

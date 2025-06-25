@@ -13,11 +13,11 @@ use gpui_component::{
 };
 use serde::Deserialize;
 
-#[derive(Clone, Action, PartialEq, Deserialize)]
-#[action(namespace = popover_story, no_json)]
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
+#[action(namespace = story, no_json)]
 struct Info(usize);
 
-actions!(popover_story, [Copy, Paste, Cut, SearchAll, ToggleCheck]);
+actions!(story, [Copy, Paste, Cut, SearchAll, ToggleCheck]);
 
 pub fn init(cx: &mut App) {
     cx.bind_keys([
@@ -187,12 +187,14 @@ impl Render for PopoverStory {
                                                 .child(Divider::horizontal())
                                                 .child(
                                                     Button::new("info1")
-                                                        .label("Yes")
+                                                        .primary()
+                                                        .label("Ok")
                                                         .w(px(80.))
                                                         .small(),
                                                 )
                                                 .into_any()
                                         })
+                                        .p_4()
                                         .max_w(px(600.))
                                     })
                                 }),
@@ -212,12 +214,14 @@ impl Render for PopoverStory {
                                             .child(Divider::horizontal())
                                             .child(
                                                 Button::new("info1")
-                                                    .label("Yes")
+                                                    .primary()
+                                                    .label("Ok")
                                                     .w(px(80.))
                                                     .small(),
                                             )
                                             .into_any()
                                     })
+                                    .p_4()
                                 })
                             }),
                     ),
@@ -250,8 +254,10 @@ impl Render for PopoverStory {
                                                 .child(
                                                     h_flex()
                                                         .gap_2()
+                                                        .justify_end()
                                                         .child(
                                                             Button::new("info1")
+                                                                .primary()
                                                                 .label("Ok")
                                                                 .w(px(80.))
                                                                 .small()
@@ -278,6 +284,7 @@ impl Render for PopoverStory {
                                                 )
                                                 .into_any()
                                         })
+                                        .p_4()
                                     })
                                 }),
                         ),

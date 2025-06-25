@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>File Upload</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 20px;
+      }
+      h1 {
+        color: #333;
+      }
+      form {
+        margin-top: 20px;
+      }
+      input[type="file"] {
+        margin-bottom: 10px;
+      }
+      button {
+        background-color: #007bff;
+        color: white;
+        border: none;
+        padding: 10px 15px;
+        cursor: pointer;
+      }
+      button:hover {
+        background-color: #0056b3;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>File Upload</h1>
+    <form id="uploadForm">
+      <label for="fileInput">Choose a file (Images or Text only):</label><br />
+      <input
+        type="file"
+        id="fileInput"
+        name="file"
+        accept="image/*,text/plain,application/json"
+      /><br />
+      <button type="button" onclick="uploadFile()">Upload</button>
+    </form>
+    <p id="status"></p>
+
+    <script>
+      function uploadFile() {
+        const fileInput = document.getElementById("fileInput");
+        const status = document.getElementById("status");
+
+        if (fileInput.files.length === 0) {
+          status.textContent = "No file selected.";
+          status.style.color = "red";
+          return;
+        }
+
+        const file = fileInput.files[0];
+        status.textContent = `Uploading: ${file.name} (${file.size} bytes)`;
+        status.style.color = "green";
+
+        // Simulate an upload process
+        setTimeout(() => {
+          status.textContent = `File "${file.name}" uploaded successfully!`;
+        }, 2000);
+      }
+    </script>
+  </body>
+</html>

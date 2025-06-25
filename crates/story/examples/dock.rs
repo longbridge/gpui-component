@@ -16,11 +16,11 @@ use story::{
     SwitchStory, TableStory, TooltipStory, WebViewStory,
 };
 
-#[derive(Clone, Action, PartialEq, Eq, Deserialize)]
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = story, no_json)]
 pub struct AddPanel(DockPlacement);
 
-#[derive(Clone, Action, PartialEq, Eq, Deserialize)]
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = story, no_json)]
 pub struct TogglePanelVisible(SharedString);
 

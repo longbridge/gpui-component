@@ -165,7 +165,7 @@ impl RenderOnce for SidebarMenuItem {
                             return this;
                         }
 
-                        this.bg(cx.theme().accent)
+                        this.bg(cx.theme().sidebar_accent.opacity(0.8))
                             .text_color(cx.theme().sidebar_accent_foreground)
                     })
                     .when(is_active && !is_submenu, |this| {

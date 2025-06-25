@@ -11,7 +11,7 @@ use gpui_component::{
 
 use crate::section;
 
-actions!(dropdown_story, [Tab, TabPrev]);
+actions!(story, [Tab, TabPrev]);
 
 const CONTEXT: &str = "DropdownStory";
 pub fn init(cx: &mut App) {
@@ -236,7 +236,7 @@ impl Render for DropdownStory {
                     Dropdown::new(&self.fruit_dropdown)
                         .disabled(self.disabled)
                         .icon(IconName::Search)
-                        .width(px(320.))
+                        .w(px(320.))
                         .menu_width(px(400.)),
                 ),
             )

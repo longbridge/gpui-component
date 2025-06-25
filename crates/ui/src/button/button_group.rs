@@ -1,19 +1,20 @@
 use gpui::{
-    div, prelude::FluentBuilder as _, App, Corners, Div, Edges, ElementId, InteractiveElement,
-    IntoElement, ParentElement, RenderOnce, StatefulInteractiveElement as _, Styled, Window,
+    div, prelude::FluentBuilder as _, App, Corners, Edges, ElementId, InteractiveElement,
+    IntoElement, ParentElement, RenderOnce, StatefulInteractiveElement as _, StyleRefinement,
+    Styled, Window,
 };
 use std::{cell::Cell, rc::Rc};
 
 use crate::{
     button::{Button, ButtonVariant, ButtonVariants},
-    Disableable, Sizable, Size,
+    Disableable, Sizable, Size, StyledExt,
 };
 
 /// A ButtonGroup element, to wrap multiple buttons in a group.
 #[derive(IntoElement)]
 pub struct ButtonGroup {
-    pub base: Div,
     id: ElementId,
+    style: StyleRefinement,
     children: Vec<Button>,
     pub(super) multiple: bool,
     pub(super) disabled: bool,
@@ -38,9 +39,9 @@ impl ButtonGroup {
     /// Creates a new ButtonGroup.
     pub fn new(id: impl Into<ElementId>) -> Self {
         Self {
-            base: div(),
-            children: Vec::new(),
             id: id.into(),
+            style: StyleRefinement::default(),
+            children: Vec::new(),
             variant: None,
             size: None,
             compact: false,
@@ -122,7 +123,7 @@ impl Sizable for ButtonGroup {
 
 impl Styled for ButtonGroup {
     fn style(&mut self) -> &mut gpui::StyleRefinement {
-        self.base.style()
+        &mut self.style
     }
 }
 
@@ -145,10 +146,11 @@ impl RenderOnce for ButtonGroup {
             }
         }
 
-        self.base
+        div()
             .id(self.id)
             .flex()
             .items_center()
+            .refine_style(&self.style)
             .children(
                 self.children
                     .into_iter()

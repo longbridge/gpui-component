@@ -1,8 +1,6 @@
 use std::{
     any::Any,
-    cell::Cell,
     fmt::{Debug, Formatter},
-    rc::Rc,
     sync::Arc,
 };
 
@@ -139,7 +137,7 @@ pub struct Tiles {
     resizing_drag_data: Option<ResizeDrag>,
     bounds: Bounds<Pixels>,
     history: History<TileChange>,
-    scroll_state: Rc<Cell<ScrollbarState>>,
+    scroll_state: ScrollbarState,
     scroll_handle: ScrollHandle,
 }
 
@@ -193,7 +191,7 @@ impl Tiles {
             resizing_drag_data: None,
             bounds: Bounds::default(),
             history: History::new().group_interval(std::time::Duration::from_millis(100)),
-            scroll_state: Rc::new(Cell::new(ScrollbarState::default())),
+            scroll_state: ScrollbarState::default(),
             scroll_handle: ScrollHandle::default(),
         }
     }
@@ -1071,7 +1069,6 @@ impl EventEmitter<DismissEvent> for Tiles {}
 impl Render for Tiles {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let view = cx.entity().clone();
-        let view_id = view.entity_id();
         let panels = self.sorted_panels();
         let scroll_bounds =
             self.panels
@@ -1141,12 +1138,10 @@ impl Render for Tiles {
                     .left_0()
                     .right_0()
                     .bottom_0()
-                    .child(Scrollbar::both(
-                        view_id,
-                        self.scroll_state.clone(),
-                        self.scroll_handle.clone(),
-                        scroll_size,
-                    )),
+                    .child(
+                        Scrollbar::both(&self.scroll_state, &self.scroll_handle)
+                            .scroll_size(scroll_size),
+                    ),
             )
             .size_full()
     }

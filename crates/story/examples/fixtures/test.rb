@@ -16,13 +16,13 @@ end
 # - Logging capabilities
 class HelloWorld < Object
   include Logging
-  
+
   @@instances = 0
   VERSION = '1.0.0'
-  
+
   attr_accessor :name
   attr_reader :created_at
-  
+
   def initialize(name: 'World', options: {})
     @name = name
     @created_at = Time.now

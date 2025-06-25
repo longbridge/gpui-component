@@ -1,4 +1,4 @@
-use std::{cell::Cell, ops::Range, rc::Rc, time::Duration};
+use std::{ops::Range, rc::Rc, time::Duration};
 
 use crate::{
     actions::{Cancel, SelectNext, SelectPrev},
@@ -140,16 +140,14 @@ pub struct Table<D: TableDelegate> {
     bounds: Bounds<Pixels>,
     /// The bounds of the fixed head cols.
     fixed_head_cols_bounds: Bounds<Pixels>,
-    /// The bounds of the table head content.
-    head_content_bounds: Bounds<Pixels>,
 
     col_groups: Vec<ColGroup>,
     fixed_cols: FixedCols,
 
     pub vertical_scroll_handle: UniformListScrollHandle,
-    pub vertical_scrollbar_state: Rc<Cell<ScrollbarState>>,
+    pub vertical_scroll_state: ScrollbarState,
     pub horizontal_scroll_handle: ScrollHandle,
-    pub horizontal_scrollbar_state: Rc<Cell<ScrollbarState>>,
+    pub horizontal_scroll_state: ScrollbarState,
 
     scrollbar_visible: Edges<bool>,
     selected_row: Option<usize>,
@@ -295,7 +293,6 @@ pub trait TableDelegate: Sized + 'static {
         h_flex()
             .size_full()
             .justify_center()
-            .py_6()
             .text_color(cx.theme().muted_foreground.opacity(0.6))
             .child(Icon::new(IconName::Inbox).size_12())
             .into_any_element()
@@ -392,8 +389,8 @@ where
             fixed_cols: FixedCols::default(),
             horizontal_scroll_handle: ScrollHandle::new(),
             vertical_scroll_handle: UniformListScrollHandle::new(),
-            vertical_scrollbar_state: Rc::new(Cell::new(ScrollbarState::new())),
-            horizontal_scrollbar_state: Rc::new(Cell::new(ScrollbarState::new())),
+            vertical_scroll_state: ScrollbarState::default(),
+            horizontal_scroll_state: ScrollbarState::default(),
             selection_state: SelectionState::Row,
             selected_row: None,
             right_clicked_row: None,
@@ -401,7 +398,6 @@ where
             resizing_col: None,
             bounds: Bounds::default(),
             fixed_head_cols_bounds: Bounds::default(),
-            head_content_bounds: Bounds::default(),
             stripe: false,
             border: true,
             size: Size::default(),
@@ -807,22 +803,6 @@ where
         }
     }
 
-    /// Returns the size of the content area.
-    fn head_content_bounds(&self) -> gpui::Bounds<Pixels> {
-        let has_fixed_cols = self.fixed_head_cols_bounds.size.width > px(0.0);
-        Bounds {
-            origin: if has_fixed_cols {
-                self.fixed_head_cols_bounds.origin
-            } else {
-                self.head_content_bounds.origin
-            },
-            size: gpui::size(
-                self.fixed_head_cols_bounds.size.width + self.head_content_bounds.size.width,
-                self.head_content_bounds.size.height,
-            ),
-        }
-    }
-
     #[inline]
     fn render_cell(&self, col_ix: usize, _window: &mut Window, _cx: &mut Context<Self>) -> Div {
         let Some(col_group) = self.col_groups.get(col_ix) else {
@@ -868,7 +848,7 @@ where
         _: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<impl IntoElement> {
-        let state = self.vertical_scrollbar_state.clone();
+        let state = self.vertical_scroll_state.clone();
 
         Some(
             div()
@@ -881,14 +861,7 @@ where
                 .on_scroll_wheel(cx.listener(|_, _: &ScrollWheelEvent, _, cx| {
                     cx.notify();
                 }))
-                .child(
-                    Scrollbar::uniform_scroll(
-                        cx.entity().entity_id(),
-                        state,
-                        self.vertical_scroll_handle.clone(),
-                    )
-                    .max_fps(60),
-                ),
+                .child(Scrollbar::uniform_scroll(&state, &self.vertical_scroll_handle).max_fps(60)),
         )
     }
 
@@ -897,12 +870,12 @@ where
         _: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let state = self.horizontal_scrollbar_state.clone();
+        let state = self.horizontal_scroll_state.clone();
 
         div()
             .occlude()
             .absolute()
-            .left_0()
+            .left(self.fixed_head_cols_bounds.size.width)
             .right_0()
             .bottom_0()
             .h(scroll::WIDTH)
@@ -910,10 +883,8 @@ where
                 cx.notify();
             }))
             .child(Scrollbar::horizontal(
-                cx.entity().entity_id(),
-                state,
-                self.horizontal_scroll_handle.clone(),
-                self.head_content_bounds().size,
+                &state,
+                &self.horizontal_scroll_handle,
             ))
     }
 
@@ -1137,6 +1108,11 @@ where
         let view = cx.entity().clone();
         let horizontal_scroll_handle = self.horizontal_scroll_handle.clone();
 
+        // Reset fixed head columns bounds, if no fixed columns are present
+        if left_cols_count == 0 {
+            self.fixed_head_cols_bounds = Bounds::default();
+        }
+
         h_flex()
             .w_full()
             .h(self.size.table_row_height())
@@ -1204,17 +1180,7 @@ where
                                         self.render_th(left_cols_count + col_ix, window, cx)
                                     }),
                             )
-                            .child(self.delegate.render_last_empty_col(window, cx))
-                            .child(
-                                canvas(
-                                    move |bounds, _, cx| {
-                                        view.update(cx, |r, _| r.head_content_bounds = bounds)
-                                    },
-                                    |_, _, _, _| {},
-                                )
-                                .absolute()
-                                .size_full(),
-                            ),
+                            .child(self.delegate.render_last_empty_col(window, cx)),
                     ),
             )
     }

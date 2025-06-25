@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>JS Dialog</title>
+    <script>
+      function showAlert() {
+        alert("This is an alert dialog!");
+      }
+
+      function showConfirm() {
+        const result = confirm("Do you confirm this action?");
+        alert("You selected: " + (result ? "OK" : "Cancel"));
+      }
+
+      function showPrompt() {
+        const input = prompt("Please enter your name:", "Guest");
+        if (input !== null) {
+          alert("Hello, " + input + "!");
+        } else {
+          alert("Prompt was canceled.");
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <h1>JavaScript Dialog</h1>
+    <button onclick="showAlert()">Show Alert</button>
+    <button onclick="showConfirm()">Show Confirm</button>
+    <button onclick="showPrompt()">Show Prompt</button>
+  </body>
+</html>

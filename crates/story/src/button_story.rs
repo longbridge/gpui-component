@@ -12,7 +12,7 @@ use gpui_component::{
 
 use crate::section;
 
-actions!(button_story, [Disabled, Loading, Selected, Compact]);
+actions!(story, [Disabled, Loading, Selected, Compact]);
 
 pub struct ButtonStory {
     focus_handle: gpui::FocusHandle,
@@ -695,6 +695,7 @@ impl Render for ButtonStory {
                         DropdownButton::new("dropdown-button1")
                             .small()
                             .button(Button::new("btn").label("Click Me"))
+                            .selected(selected)
                             .popup_menu(move |this, _, _| {
                                 this.menu("Disabled", Box::new(Disabled))
                                     .menu("Loading", Box::new(Loading))
@@ -705,6 +706,7 @@ impl Render for ButtonStory {
                     .child(
                         DropdownButton::new("dropdown-button2")
                             .button(Button::new("btn").label("Click Me"))
+                            .selected(selected)
                             .popup_menu(move |this, _, _| {
                                 this.menu("Disabled", Box::new(Disabled))
                                     .menu("Loading", Box::new(Loading))
@@ -716,6 +718,19 @@ impl Render for ButtonStory {
                         DropdownButton::new("dropdown-button3")
                             .outline()
                             .button(Button::new("btn").label("Outline Dropdown"))
+                            .selected(selected)
+                            .popup_menu(move |this, _, _| {
+                                this.menu("Disabled", Box::new(Disabled))
+                                    .menu("Loading", Box::new(Loading))
+                                    .menu("Selected", Box::new(Selected))
+                                    .menu("Compact", Box::new(Compact))
+                            }),
+                    )
+                    .child(
+                        DropdownButton::new("dropdown-button4")
+                            .ghost()
+                            .button(Button::new("btn").label("Ghost Dropdown"))
+                            .selected(selected)
                             .popup_menu(move |this, _, _| {
                                 this.menu("Disabled", Box::new(Disabled))
                                     .menu("Loading", Box::new(Loading))

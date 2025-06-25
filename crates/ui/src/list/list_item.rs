@@ -105,6 +105,10 @@ impl Selectable for ListItem {
         self.selected = selected;
         self
     }
+
+    fn is_selected(&self) -> bool {
+        self.selected
+    }
 }
 
 impl Styled for ListItem {

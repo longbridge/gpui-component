@@ -16,7 +16,7 @@ use gpui_component::{
 
 use crate::{section, Story};
 
-actions!(tooltip, [Info]);
+actions!(story, [Info]);
 
 pub fn init(cx: &mut App) {
     cx.bind_keys([KeyBinding::new("ctrl-shift-delete", Info, Some("Tooltip"))]);

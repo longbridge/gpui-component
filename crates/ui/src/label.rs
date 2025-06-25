@@ -1,14 +1,15 @@
 use gpui::{
-    div, rems, App, Div, IntoElement, ParentElement, RenderOnce, SharedString, Styled, Window,
+    div, rems, App, IntoElement, ParentElement, RenderOnce, SharedString, StyleRefinement, Styled,
+    Window,
 };
 
-use crate::ActiveTheme;
+use crate::{ActiveTheme, StyledExt};
 
 const MASKED: &'static str = "•";
 
 #[derive(IntoElement)]
 pub struct Label {
-    base: Div,
+    style: StyleRefinement,
     label: SharedString,
     chars_count: usize,
     masked: bool,
@@ -19,7 +20,7 @@ impl Label {
         let label: SharedString = label.into();
         let chars_count = label.chars().count();
         Self {
-            base: div().line_height(rems(1.25)),
+            style: Default::default(),
             label,
             chars_count,
             masked: false,
@@ -34,7 +35,7 @@ impl Label {
 
 impl Styled for Label {
     fn style(&mut self) -> &mut gpui::StyleRefinement {
-        self.base.style()
+        &mut self.style
     }
 }
 
@@ -47,7 +48,9 @@ impl RenderOnce for Label {
         };
 
         div()
+            .line_height(rems(1.25))
             .text_color(cx.theme().foreground)
-            .child(self.base.child(text))
+            .refine_style(&self.style)
+            .child(text)
     }
 }

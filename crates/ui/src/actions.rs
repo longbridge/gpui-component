@@ -9,4 +9,3 @@ pub struct Confirm {
 }
 
 actions!(list, [Cancel, SelectPrev, SelectNext]);
-// impl_internal_actions!(list, [Confirm]);

@@ -12,12 +12,15 @@ UI components for building fantastic desktop applications using [GPUI](https://g
 - **Flexible Layout**: Dock layout for panel arrangements, resizing, and freeform (Tiles) layouts.
 - **High Performance**: Virtualized Table and List components for smooth large-data rendering.
 - **Content Rendering**: Native support for Markdown and simple HTML.
+- **Charting**: Built-in charts for visualization your data.
+- **Code Highlighting**: Code Editor and Syntax highlighting.
+- **Wef**: (Experimental) Offscreen rendering webview based on [CEF](https://github.com/chromiumembedded/cef).
 
 ## Showcase
 
 Here is the first application: [Longbridge Pro](https://longbridge.com/desktop), built using GPUI Component.
 
-<img width="1763" alt="Image" src="https://github.com/user-attachments/assets/3e2f4eb7-fd27-4343-b6dc-184465599e99" />
+<img width="1763" alt="Image" src="https://assets.lbctrl.com/uploads/32c11b27-b90d-4fce-a6b8-7d72e99fb231/longbridge-pro.png" />
 
 We built multi-theme support in the application. This feature is not included in GPUI Component itself, but is based on the `Theme` feature, so it's easy to implement.
 
@@ -25,10 +28,8 @@ We built multi-theme support in the application. This feature is not included in
 
 GPUI and GPUI Component are still in development, so you need to add dependencies by git.
 
-GPUI Component depends on a specific version of `gpui` (kept updated with upstream) to include WebView support.
-
 ```toml
-gpui = { git = "https://github.com/huacnlee/zed.git", branch = "webview" }
+gpui = { git = "https://github.com/zed-industries/zed.git" }
 gpui-component = { git = "https://github.com/longbridge/gpui-component.git" }
 ```
 

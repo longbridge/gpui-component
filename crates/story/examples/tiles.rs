@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::{sync::Arc, time::Duration};
 use story::{Assets, ButtonStory, IconStory, StoryContainer};
 
-actions!(main_menu, [Quit]);
+actions!(story, [Quit]);
 
 const TILES_DOCK_AREA: DockAreaTab = DockAreaTab {
     id: "story-tiles",

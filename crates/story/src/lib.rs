@@ -5,6 +5,7 @@ mod assets;
 mod badge_story;
 mod button_story;
 mod calendar_story;
+mod chart_story;
 mod checkbox_story;
 mod clipboard_story;
 mod color_picker_story;
@@ -55,6 +56,7 @@ pub use alert_story::AlertStory;
 pub use badge_story::BadgeStory;
 pub use button_story::ButtonStory;
 pub use calendar_story::CalendarStory;
+pub use chart_story::ChartStory;
 pub use checkbox_story::CheckboxStory;
 pub use clipboard_story::ClipboardStory;
 pub use color_picker_story::ColorPickerStory;
@@ -89,6 +91,7 @@ pub use textarea_story::TextareaStory;
 pub use title_bar::AppTitleBar;
 pub use toggle_story::ToggleStory;
 pub use tooltip_story::TooltipStory;
+use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
 pub use webview_story::WebViewStory;
 pub use welcome_story::WelcomeStory;
 
@@ -103,30 +106,22 @@ use gpui_component::{
     v_flex, ActiveTheme, ContextModal, IconName, Root, TitleBar,
 };
 
-/// 选择滚动条显示方式的操作
-#[derive(Clone, Action, PartialEq, Eq, Deserialize)]
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = story, no_json)]
 pub struct SelectScrollbarShow(ScrollbarShow);
 
-#[derive(Clone, Action, PartialEq, Eq, Deserialize)]
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = story, no_json)]
 pub struct SelectLocale(SharedString);
 
-#[derive(Clone, Action, PartialEq, Eq, Deserialize)]
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = story, no_json)]
 pub struct SelectFont(usize);
 
-#[derive(Clone, Action, PartialEq, Eq, Deserialize)]
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = story, no_json)]
 pub struct SelectRadius(usize);
 
-// // 实现内部操作类型
-// impl_internal_actions!(
-//     story,
-//     [SelectLocale, SelectFont, SelectRadius, SelectScrollbarShow]
-// );
-
-// 定义应用程序操作
 actions!(story, [Quit, Open, CloseWindow, ToggleSearch]);
 
 /// 面板名称常量
@@ -313,7 +308,14 @@ impl Global for AppState {}
 
 /// 初始化应用程序
 pub fn init(cx: &mut App) {
-    // 初始化组件库
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer())
+        .with(
+            tracing_subscriber::EnvFilter::from_default_env()
+                .add_directive("gpui_component=trace".parse().unwrap()),
+        )
+        .init();
+
     gpui_component::init(cx);
 
     // 初始化应用程序状态
@@ -662,7 +664,8 @@ impl StoryContainer {
         cx: &mut Context<Self>,
     ) {
         struct Info;
-        let note = Notification::new(format!("You have clicked panel info on: {}", self.name))
+        let note = Notification::new()
+            .message(format!("You have clicked panel info on: {}", self.name))
             .id::<Info>();
         window.push_notification(note, cx);
     }
@@ -680,8 +683,9 @@ impl StoryContainer {
         }
 
         struct Search;
-        let note =
-            Notification::new(format!("You have toggled search on: {}", self.name)).id::<Search>();
+        let note = Notification::new()
+            .message(format!("You have toggled search on: {}", self.name))
+            .id::<Search>();
         window.push_notification(note, cx);
     }
 }

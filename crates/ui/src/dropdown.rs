@@ -2,8 +2,8 @@ use gpui::{
     anchored, canvas, deferred, div, prelude::FluentBuilder, px, rems, AnyElement, App, AppContext,
     Bounds, ClickEvent, Context, DismissEvent, ElementId, Empty, Entity, EventEmitter, FocusHandle,
     Focusable, InteractiveElement, IntoElement, KeyBinding, Length, ParentElement, Pixels, Render,
-    RenderOnce, SharedString, StatefulInteractiveElement, Styled, Subscription, Task, WeakEntity,
-    Window,
+    RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Subscription,
+    Task, WeakEntity, Window,
 };
 use rust_i18n::t;
 
@@ -278,6 +278,7 @@ pub struct DropdownState<D: DropdownDelegate + 'static> {
 #[derive(IntoElement)]
 pub struct Dropdown<D: DropdownDelegate + 'static> {
     id: ElementId,
+    style: StyleRefinement,
     state: Entity<DropdownState<D>>,
     size: Size,
     icon: Option<Icon>,
@@ -285,7 +286,6 @@ pub struct Dropdown<D: DropdownDelegate + 'static> {
     placeholder: Option<SharedString>,
     title_prefix: Option<SharedString>,
     empty: Option<AnyElement>,
-    width: Length,
     menu_width: Length,
     disabled: bool,
 }
@@ -298,6 +298,15 @@ pub struct SearchableVec<T> {
 impl<T: DropdownItem + Clone> SearchableVec<T> {
     pub fn new(items: impl Into<Vec<T>>) -> Self {
         let items = items.into();
+        Self {
+            items: items.clone(),
+            matched_items: items,
+        }
+    }
+}
+
+impl<T: DropdownItem + Clone> From<Vec<T>> for SearchableVec<T> {
+    fn from(items: Vec<T>) -> Self {
         Self {
             items: items.clone(),
             matched_items: items,
@@ -343,15 +352,6 @@ impl<T: DropdownItem + Clone> DropdownDelegate for SearchableVec<T> {
             .collect();
 
         Task::ready(())
-    }
-}
-
-impl From<Vec<SharedString>> for SearchableVec<SharedString> {
-    fn from(items: Vec<SharedString>) -> Self {
-        Self {
-            items: items.clone(),
-            matched_items: items,
-        }
     }
 }
 
@@ -575,6 +575,7 @@ where
     pub fn new(state: &Entity<DropdownState<D>>) -> Self {
         Self {
             id: ("dropdown", state.entity_id()).into(),
+            style: StyleRefinement::default(),
             state: state.clone(),
             placeholder: None,
             size: Size::Medium,
@@ -582,16 +583,9 @@ where
             cleanable: false,
             title_prefix: None,
             empty: None,
-            width: Length::Auto,
             menu_width: Length::Auto,
             disabled: false,
         }
-    }
-
-    /// Set the width of the dropdown input, default: Length::Auto
-    pub fn width(mut self, width: impl Into<Length>) -> Self {
-        self.width = width.into();
-        self
     }
 
     /// Set the width of the dropdown menu, default: Length::Auto
@@ -719,6 +713,15 @@ where
     }
 }
 
+impl<D> Styled for Dropdown<D>
+where
+    D: DropdownDelegate,
+{
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
 impl<D> RenderOnce for Dropdown<D>
 where
     D: DropdownDelegate + 'static,
@@ -755,10 +758,9 @@ where
             .on_action(window.listener_for(&self.state, DropdownState::escape))
             .size_full()
             .relative()
-            .input_text_size(self.size)
             .child(
                 div()
-                    .id(ElementId::Name(format!("{}-input", self.id).into()))
+                    .id("input")
                     .relative()
                     .flex()
                     .items_center()
@@ -767,27 +769,26 @@ where
                     .border_1()
                     .border_color(cx.theme().input)
                     .rounded(cx.theme().radius)
-                    .when(cx.theme().shadow, |this| this.shadow_sm())
+                    .when(cx.theme().shadow, |this| this.shadow_xs())
                     .map(|this| if self.disabled { this } else { this })
                     .overflow_hidden()
                     .input_text_size(self.size)
-                    .map(|this| match self.width {
-                        Length::Definite(l) => this.flex_none().w(l),
-                        Length::Auto => this.w_full(),
-                    })
                     .when(outline_visible, |this| this.focused_border(cx))
                     .input_size(self.size)
+                    .refine_style(&self.style)
                     .when(allow_open, |this| {
                         this.on_click(window.listener_for(&self.state, DropdownState::toggle_menu))
                     })
                     .child(
                         h_flex()
+                            .id("inner")
                             .w_full()
                             .items_center()
                             .justify_between()
                             .gap_1()
                             .child(
                                 div()
+                                    .id("title")
                                     .w_full()
                                     .overflow_hidden()
                                     .whitespace_nowrap()

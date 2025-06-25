@@ -4,8 +4,8 @@ use crate::{
 };
 use gpui::{
     div, prelude::FluentBuilder as _, px, relative, rems, svg, AnyElement, App, Div, ElementId,
-    InteractiveElement, IntoElement, ParentElement, RenderOnce, StatefulInteractiveElement, Styled,
-    Window,
+    InteractiveElement, IntoElement, ParentElement, RenderOnce, StatefulInteractiveElement,
+    StyleRefinement, Styled, Window,
 };
 
 /// A Checkbox element.
@@ -13,6 +13,7 @@ use gpui::{
 pub struct Checkbox {
     id: ElementId,
     base: Div,
+    style: StyleRefinement,
     label: Option<Text>,
     children: Vec<AnyElement>,
     checked: bool,
@@ -26,6 +27,7 @@ impl Checkbox {
         Self {
             id: id.into(),
             base: div(),
+            style: StyleRefinement::default(),
             label: None,
             children: Vec::new(),
             checked: false,
@@ -60,7 +62,7 @@ impl StatefulInteractiveElement for Checkbox {}
 
 impl Styled for Checkbox {
     fn style(&mut self) -> &mut gpui::StyleRefinement {
-        self.base.style()
+        &mut self.style
     }
 }
 
@@ -79,6 +81,10 @@ impl Selectable for Checkbox {
     fn selected(self, selected: bool) -> Self {
         self.checked(selected)
     }
+
+    fn is_selected(&self) -> bool {
+        self.checked
+    }
 }
 
 impl ParentElement for Checkbox {
@@ -96,15 +102,20 @@ impl Sizable for Checkbox {
 
 impl RenderOnce for Checkbox {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let border_color = if self.checked {
+            cx.theme().primary
+        } else {
+            cx.theme().input
+        };
         let (color, icon_color) = if self.disabled {
             (
-                cx.theme().primary.opacity(0.5),
+                border_color.opacity(0.5),
                 cx.theme().primary_foreground.opacity(0.5),
             )
         } else {
-            (cx.theme().primary, cx.theme().primary_foreground)
+            (border_color, cx.theme().primary_foreground)
         };
-        let radius = (cx.theme().radius / 2.).min(px(6.));
+        let radius = cx.theme().radius.min(px(4.));
 
         div().child(
             self.base
@@ -121,6 +132,10 @@ impl RenderOnce for Checkbox {
                     Size::Large => this.text_lg(),
                     _ => this,
                 })
+                .when(self.disabled, |this| {
+                    this.text_color(cx.theme().muted_foreground)
+                })
+                .refine_style(&self.style)
                 .child(
                     v_flex()
                         .relative()
@@ -135,8 +150,9 @@ impl RenderOnce for Checkbox {
                         .border_1()
                         .border_color(color)
                         .rounded(radius)
+                        .when(cx.theme().shadow && !self.disabled, |this| this.shadow_xs())
                         .map(|this| match self.checked {
-                            false => this.bg(cx.theme().transparent),
+                            false => this.bg(cx.theme().background),
                             _ => this.bg(color),
                         })
                         .child(
@@ -170,6 +186,9 @@ impl RenderOnce for Checkbox {
                                         div()
                                             .size_full()
                                             .text_color(cx.theme().foreground)
+                                            .when(self.disabled, |this| {
+                                                this.text_color(cx.theme().muted_foreground)
+                                            })
                                             .line_height(relative(1.))
                                             .child(label),
                                     )
@@ -179,9 +198,6 @@ impl RenderOnce for Checkbox {
                             })
                             .children(self.children),
                     )
-                })
-                .when(self.disabled, |this| {
-                    this.text_color(cx.theme().muted_foreground)
                 })
                 .when_some(
                     self.on_click.filter(|_| !self.disabled),

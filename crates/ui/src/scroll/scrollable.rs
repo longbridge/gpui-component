@@ -1,17 +1,15 @@
-use std::{cell::Cell, rc::Rc};
-
 use super::{Scrollbar, ScrollbarAxis, ScrollbarState};
 use gpui::{
-    canvas, div, relative, AnyElement, App, Div, Element, ElementId, EntityId, GlobalElementId,
-    InteractiveElement, IntoElement, ParentElement, Pixels, Position, ScrollHandle, SharedString,
-    Size, Stateful, StatefulInteractiveElement, Style, StyleRefinement, Styled, Window,
+    div, relative, AnyElement, App, Bounds, Div, Element, ElementId, GlobalElementId,
+    InspectorElementId, InteractiveElement, Interactivity, IntoElement, LayoutId, ParentElement,
+    Pixels, Position, ScrollHandle, SharedString, Stateful, StatefulInteractiveElement, Style,
+    StyleRefinement, Styled, Window,
 };
 
 /// A scroll view is a container that allows the user to scroll through a large amount of content.
 pub struct Scrollable<E> {
     id: ElementId,
     element: Option<E>,
-    view_id: EntityId,
     axis: ScrollbarAxis,
     /// This is a fake element to handle Styled, InteractiveElement, not used.
     _element: Stateful<Div>,
@@ -21,19 +19,16 @@ impl<E> Scrollable<E>
 where
     E: Element,
 {
-    pub(crate) fn new(view_id: EntityId, element: E, axis: ScrollbarAxis) -> Self {
-        let id = ElementId::Name(SharedString::from(format!(
-            "ScrollView:{}-{:?}",
-            view_id,
-            element.id(),
-        )));
+    pub(crate) fn new(axis: impl Into<ScrollbarAxis>, element: E) -> Self {
+        let id = ElementId::Name(SharedString::from(
+            format!("scrollable-{:?}", element.id(),),
+        ));
 
         Self {
             element: Some(element),
             _element: div().id("fake"),
             id,
-            view_id,
-            axis,
+            axis: axis.into(),
         }
     }
 
@@ -51,8 +46,8 @@ where
     }
 
     /// Set the axis of the scroll view.
-    pub fn set_axis(&mut self, axis: ScrollbarAxis) {
-        self.axis = axis;
+    pub fn set_axis(&mut self, axis: impl Into<ScrollbarAxis>) {
+        self.axis = axis.into();
     }
 
     fn with_element_state<R>(
@@ -74,8 +69,7 @@ where
 }
 
 pub struct ScrollViewState {
-    scroll_size: Rc<Cell<Size<Pixels>>>,
-    state: Rc<Cell<ScrollbarState>>,
+    state: ScrollbarState,
     handle: ScrollHandle,
 }
 
@@ -83,8 +77,7 @@ impl Default for ScrollViewState {
     fn default() -> Self {
         Self {
             handle: ScrollHandle::new(),
-            scroll_size: Rc::new(Cell::new(Size::default())),
-            state: Rc::new(Cell::new(ScrollbarState::default())),
+            state: ScrollbarState::default(),
         }
     }
 }
@@ -117,7 +110,7 @@ impl<E> InteractiveElement for Scrollable<E>
 where
     E: Element + InteractiveElement,
 {
-    fn interactivity(&mut self) -> &mut gpui::Interactivity {
+    fn interactivity(&mut self) -> &mut Interactivity {
         if let Some(element) = &mut self.element {
             element.interactivity()
         } else {
@@ -145,7 +138,7 @@ where
     type RequestLayoutState = AnyElement;
     type PrepaintState = ScrollViewState;
 
-    fn id(&self) -> Option<gpui::ElementId> {
+    fn id(&self) -> Option<ElementId> {
         Some(self.id.clone())
     }
 
@@ -155,11 +148,11 @@ where
 
     fn request_layout(
         &mut self,
-        id: Option<&gpui::GlobalElementId>,
-        _: Option<&gpui::InspectorElementId>,
+        id: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
         window: &mut Window,
         cx: &mut App,
-    ) -> (gpui::LayoutId, Self::RequestLayoutState) {
+    ) -> (LayoutId, Self::RequestLayoutState) {
         let mut style = Style::default();
         style.flex_grow = 1.0;
         style.position = Position::Relative;
@@ -167,16 +160,10 @@ where
         style.size.height = relative(1.0).into();
 
         let axis = self.axis;
-        let view_id = self.view_id;
-
         let scroll_id = self.id.clone();
         let content = self.element.take().map(|c| c.into_any_element());
 
         self.with_element_state(id.unwrap(), window, cx, |_, element_state, window, cx| {
-            let handle = element_state.handle.clone();
-            let state = element_state.state.clone();
-            let scroll_size = element_state.scroll_size.clone();
-
             let mut element = div()
                 .relative()
                 .size_full()
@@ -184,16 +171,11 @@ where
                 .child(
                     div()
                         .id(scroll_id)
-                        .track_scroll(&handle)
+                        .track_scroll(&element_state.handle)
                         .overflow_scroll()
                         .relative()
                         .size_full()
-                        .child(div().children(content).child({
-                            let scroll_size = element_state.scroll_size.clone();
-                            canvas(move |b, _, _| scroll_size.set(b.size), |_, _, _, _| {})
-                                .absolute()
-                                .size_full()
-                        })),
+                        .child(div().children(content)),
                 )
                 .child(
                     div()
@@ -203,13 +185,12 @@ where
                         .right_0()
                         .bottom_0()
                         .child(
-                            Scrollbar::both(view_id, state, handle.clone(), scroll_size.get())
-                                .axis(axis),
+                            Scrollbar::both(&element_state.state, &element_state.handle).axis(axis),
                         ),
                 )
                 .into_any_element();
-            let element_id = element.request_layout(window, cx);
 
+            let element_id = element.request_layout(window, cx);
             let layout_id = window.request_layout(style, vec![element_id], cx);
 
             (layout_id, element)
@@ -218,9 +199,9 @@ where
 
     fn prepaint(
         &mut self,
-        _: Option<&gpui::GlobalElementId>,
-        _: Option<&gpui::InspectorElementId>,
-        _: gpui::Bounds<Pixels>,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        _: Bounds<Pixels>,
         element: &mut Self::RequestLayoutState,
         window: &mut Window,
         cx: &mut App,
@@ -232,9 +213,9 @@ where
 
     fn paint(
         &mut self,
-        _: Option<&gpui::GlobalElementId>,
-        _: Option<&gpui::InspectorElementId>,
-        _: gpui::Bounds<Pixels>,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        _: Bounds<Pixels>,
         element: &mut Self::RequestLayoutState,
         _: &mut Self::PrepaintState,
         window: &mut Window,
