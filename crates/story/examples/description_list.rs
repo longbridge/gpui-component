@@ -11,10 +11,9 @@ use gpui_component::{
 use serde::Deserialize;
 use story::Assets;
 
-#[derive(Clone, PartialEq, Eq, Deserialize)]
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
+#[action(namespace = example, no_json)]
 struct ChangeSize(Size);
-
-impl_internal_actions!(example, [ChangeSize]);
 
 pub struct Example {
     layout: Axis,

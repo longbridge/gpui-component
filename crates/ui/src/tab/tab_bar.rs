@@ -5,19 +5,18 @@ use crate::popup_menu::PopupMenuExt as _;
 use crate::{h_flex, ActiveTheme, IconName, Selectable, Sizable, Size, StyledExt};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    div, impl_internal_actions, AnyElement, App, Corner, Div, Edges, ElementId, IntoElement,
-    ParentElement, RenderOnce, ScrollHandle, Stateful, StatefulInteractiveElement as _,
-    StyleRefinement, Styled, Window,
+    div, Action, AnyElement, App, Corner, Div, Edges, ElementId, IntoElement, ParentElement,
+    RenderOnce, ScrollHandle, Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled,
+    Window,
 };
 use gpui::{px, InteractiveElement};
 use smallvec::SmallVec;
 
 use super::{Tab, TabVariant};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Action, Debug, Clone, Copy, PartialEq, Eq)]
+#[action(namespace = tab_bar, no_json)]
 pub struct SelectTab(usize);
-
-impl_internal_actions!(tab_bar, [SelectTab]);
 
 #[derive(IntoElement)]
 pub struct TabBar {

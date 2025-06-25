@@ -11,7 +11,7 @@ use gpui_component::{
 
 use crate::section;
 
-actions!(dropdown_story, [Tab, TabPrev]);
+actions!(story, [Tab, TabPrev]);
 
 const CONTEXT: &str = "DropdownStory";
 pub fn init(cx: &mut App) {

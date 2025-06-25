@@ -2,6 +2,7 @@
 //!
 //! Based on the `Input` example from the `gpui` crate.
 //! https://github.com/zed-industries/zed/blob/main/crates/gpui/examples/input.rs
+use gpui::Action;
 use serde::Deserialize;
 use smallvec::SmallVec;
 use std::cell::RefCell;
@@ -10,12 +11,11 @@ use std::rc::Rc;
 use unicode_segmentation::*;
 
 use gpui::{
-    actions, div, impl_internal_actions, point, prelude::FluentBuilder as _, px, relative, App,
-    AppContext, Bounds, ClipboardItem, Context, Entity, EntityInputHandler, EventEmitter,
-    FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent,
-    MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point,
-    Render, ScrollHandle, ScrollWheelEvent, SharedString, Styled as _, Subscription,
-    UTF16Selection, Window, WrappedLine,
+    actions, div, point, prelude::FluentBuilder as _, px, relative, App, AppContext, Bounds,
+    ClipboardItem, Context, Entity, EntityInputHandler, EventEmitter, FocusHandle, Focusable,
+    InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent, MouseButton, MouseDownEvent,
+    MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Render, ScrollHandle,
+    ScrollWheelEvent, SharedString, Styled as _, Subscription, UTF16Selection, Window, WrappedLine,
 };
 
 // TODO:
@@ -34,13 +34,12 @@ use crate::input::hover_popover::DiagnosticPopover;
 use crate::input::marker::Marker;
 use crate::{history::History, scroll::ScrollbarState, Root};
 
-#[derive(Clone, PartialEq, Eq, Deserialize)]
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
+#[action(namespace = input, no_json)]
 pub struct Enter {
     /// Is confirm with secondary.
     pub secondary: bool,
 }
-
-impl_internal_actions!(input, [Enter]);
 
 actions!(
     input,

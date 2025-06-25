@@ -11,7 +11,7 @@ use gpui_component::{
 };
 
 use crate::section;
-actions!(input_story, [Tab, TabPrev]);
+actions!(story, [Tab, TabPrev]);
 
 const CONTEXT: &str = "OtpInputStory";
 

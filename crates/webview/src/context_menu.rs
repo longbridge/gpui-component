@@ -1,4 +1,4 @@
-use gpui::{App, Entity, Window, impl_actions};
+use gpui::{Action, App, Entity, Window};
 use gpui_component::popup_menu::PopupMenu;
 use rust_i18n::t;
 use schemars::JsonSchema;
@@ -7,7 +7,8 @@ use wef::{ContextMenuParams, Frame, LogicalUnit, Point};
 
 use crate::WebView;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, JsonSchema)]
+#[derive(Action, Debug, Clone, Copy, PartialEq, Eq, Deserialize, JsonSchema)]
+#[action(namespace = webview)]
 pub(crate) enum ContextMenuAction {
     CopyLinkAddress,
     Undo,
@@ -21,8 +22,6 @@ pub(crate) enum ContextMenuAction {
     GoForward,
     Reload,
 }
-
-impl_actions!(webview, [ContextMenuAction]);
 
 pub(crate) struct ContextMenuInfo {
     pub(crate) crood: Point<LogicalUnit<i32>>,

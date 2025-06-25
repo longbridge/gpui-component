@@ -43,8 +43,8 @@ mod welcome_story;
 
 pub use assets::Assets;
 use gpui::{
-    actions, div, impl_internal_actions, prelude::FluentBuilder as _, px, rems, size, AnyElement,
-    AnyView, App, AppContext, Bounds, Context, Div, Entity, EventEmitter, Focusable, Global, Hsla,
+    actions, div, prelude::FluentBuilder as _, px, rems, size, Action, AnyElement, AnyView, App,
+    AppContext, Bounds, Context, Div, Entity, EventEmitter, Focusable, Global, Hsla,
     InteractiveElement, IntoElement, KeyBinding, Menu, MenuItem, ParentElement, Render, RenderOnce,
     SharedString, StatefulInteractiveElement, Styled, Window, WindowBounds, WindowKind,
     WindowOptions,
@@ -105,22 +105,21 @@ use gpui_component::{
     v_flex, ActiveTheme, ContextModal, IconName, Root, TitleBar,
 };
 
-#[derive(Clone, PartialEq, Eq, Deserialize)]
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
+#[action(namespace = story, no_json)]
 pub struct SelectScrollbarShow(ScrollbarShow);
 
-#[derive(Clone, PartialEq, Eq, Deserialize)]
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
+#[action(namespace = story, no_json)]
 pub struct SelectLocale(SharedString);
 
-#[derive(Clone, PartialEq, Eq, Deserialize)]
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
+#[action(namespace = story, no_json)]
 pub struct SelectFont(usize);
 
-#[derive(Clone, PartialEq, Eq, Deserialize)]
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
+#[action(namespace = story, no_json)]
 pub struct SelectRadius(usize);
-
-impl_internal_actions!(
-    story,
-    [SelectLocale, SelectFont, SelectRadius, SelectScrollbarShow]
-);
 
 actions!(story, [Quit, Open, CloseWindow, ToggleSearch]);
 

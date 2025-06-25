@@ -17,7 +17,7 @@ use gpui_component::{
 };
 
 use crate::section;
-actions!(modal_story, [TestAction]);
+actions!(story, [TestAction]);
 
 pub struct ModalStory {
     focus_handle: FocusHandle,

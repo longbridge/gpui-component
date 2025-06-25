@@ -15,7 +15,7 @@ use gpui_component::{
     v_flex, AxisExt, FocusableCycle, Selectable, Sizable, Size,
 };
 
-actions!(input_story, [Tab, TabPrev]);
+actions!(story, [Tab, TabPrev]);
 
 pub struct FormStory {
     name_input: Entity<InputState>,

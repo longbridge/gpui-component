@@ -11,7 +11,7 @@ use gpui_component::{
     v_flex, FocusableCycle, IconName, Sizable,
 };
 
-actions!(input_story, [Tab, TabPrev]);
+actions!(story, [Tab, TabPrev]);
 
 const CONTEXT: &str = "NumberInputStory";
 
