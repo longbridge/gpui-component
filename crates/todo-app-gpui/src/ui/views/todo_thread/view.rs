@@ -519,12 +519,8 @@ impl Render for TodoThreadChat {
                                 .left_0()
                                 .right_0()
                                 .bottom_0()
-                                .child(Scrollbar::vertical(
-                                    cx.entity().entity_id(),
-                                    self.scroll_state.clone(),
-                                    self.scroll_handle.clone(),
-                                    self.scroll_size,
-                                )),
+                                .child( Scrollbar::vertical(&self.scroll_state, &self.scroll_handle)
+                                        .scroll_size(self.scroll_size),),
                         ),
                 ),
             )

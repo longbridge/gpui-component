@@ -57,7 +57,7 @@ pub struct TodoThreadChat {
     is_loading: bool,
     scroll_handle: ScrollHandle,
     scroll_size: gpui::Size<Pixels>,
-    scroll_state: Rc<Cell<ScrollbarState>>,
+    scroll_state: ScrollbarState,
 
     // 手风琴展开状态
     expanded_providers: Vec<usize>,
@@ -179,7 +179,7 @@ impl TodoThreadChat {
             expanded_providers: Vec::new(),
             expanded_tool_providers: Vec::new(),
             _subscriptions,
-            scroll_state: Rc::new(Cell::new(ScrollbarState::default())),
+            scroll_state: ScrollbarState::default(),
             scroll_size: gpui::Size::default(),
             todoitem,
         }

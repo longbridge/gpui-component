@@ -2,8 +2,9 @@ use std::ops::Range;
 use std::time::Duration;
 
 use crate::actions::{Cancel, Confirm, SelectNext, SelectPrev};
-use crate::context_menu::ContextMenuExt;
+use crate::event::InteractiveElementExt;
 use crate::input::InputState;
+use crate::menu::context_menu::ContextMenuExt;
 use crate::popup_menu::PopupMenu;
 use crate::{h_flex, Icon, Sizable as _};
 use crate::{
@@ -11,7 +12,6 @@ use crate::{
     scroll::{Scrollbar, ScrollbarState},
     v_flex, ActiveTheme, IconName, Size,
 };
-use crate::{Icon, InteractiveElementExt, Sizable as _};
 use gpui::{
     div, prelude::FluentBuilder, uniform_list, AnyElement, AppContext, Entity, FocusHandle,
     Focusable, InteractiveElement, IntoElement, KeyBinding, Length, ListSizingBehavior,
@@ -20,9 +20,6 @@ use gpui::{
 use gpui::{px, App, Context, EventEmitter, MouseDownEvent, ScrollStrategy, Subscription};
 use rust_i18n::t;
 use smol::Timer;
-use std::ops::Range;
-use std::time::Duration;
-use std::{cell::Cell, rc::Rc};
 
 use super::loading::Loading;
 
@@ -100,15 +97,6 @@ pub trait ListDelegate: Sized + 'static {
     ) -> Option<AnyElement> {
         None
     }
-    fn context_menu(
-        &self,
-        row_ix: Option<usize>,
-        menu: PopupMenu,
-        window: &Window,
-        cx: &App,
-    ) -> PopupMenu {
-        menu
-    }
 
     /// Returns the loading state to show the loading view.
     fn loading(&self, cx: &App) -> bool {
@@ -137,14 +125,6 @@ pub trait ListDelegate: Sized + 'static {
     /// This will always to `set_selected_index` before confirm.
     fn confirm(&mut self, secondary: bool, window: &mut Window, cx: &mut Context<List<Self>>) {}
 
-    fn on_double_click(
-        &mut self,
-        ev: &gpui::ClickEvent,
-        window: &mut Window,
-        cx: &mut Context<List<Self>>,
-    ) {
-        // Default is do nothing
-    }
     /// Cancel the selection, e.g.: Pressed ESC.
     fn cancel(&mut self, window: &mut Window, cx: &mut Context<List<Self>>) {}
 
@@ -171,6 +151,23 @@ pub trait ListDelegate: Sized + 'static {
     /// This is always called when the table is near the bottom,
     /// so you must check if there is more data to load or lock the loading state.
     fn load_more(&mut self, window: &mut Window, cx: &mut Context<List<Self>>) {}
+
+    fn on_double_click(
+        &mut self,
+        ev: &gpui::ClickEvent,
+        window: &mut Window,
+        cx: &mut Context<List<Self>>,
+    ) {
+    }
+    fn context_menu(
+        &self,
+        row_ix: Option<usize>,
+        menu: PopupMenu,
+        window: &Window,
+        cx: &App,
+    ) -> PopupMenu {
+        menu
+    }
 }
 
 pub struct List<D: ListDelegate> {
@@ -515,7 +512,6 @@ where
 
         self.select_item(selected_index, window, cx);
     }
-
     fn on_double_click(
         &mut self,
         ev: &gpui::ClickEvent,
@@ -524,7 +520,6 @@ where
     ) {
         self.delegate.on_double_click(ev, window, cx);
     }
-
     fn render_list_item(
         &mut self,
         ix: usize,
@@ -551,14 +546,10 @@ where
                             .right(px(0.))
                             .bottom(px(1.))
                             .when(selected, |this| this.bg(cx.theme().list_active))
-                            // .border_0()
+                            .border_1()
                             .border_color(cx.theme().list_active_border),
                     )
                 })
-                .on_double_click(cx.listener(|this, ev, window, cx| {
-                    this.on_double_click(ev, window, cx);
-                    cx.stop_propagation();
-                }))
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener(move |this, ev: &MouseDownEvent, window, cx| {
@@ -602,6 +593,7 @@ where
     D: ListDelegate,
 {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let view = cx.entity().clone();
         let vertical_scroll_handle = self.vertical_scroll_handle.clone();
         let items_count = self.delegate.items_count(cx);
         let loading = self.delegate.loading(cx);
@@ -662,7 +654,7 @@ where
                     .context_menu({
                         let view = view.clone();
                         move |this, window: &mut Window, cx: &mut Context<PopupMenu>| {
-                            println!("Context menu for list {:?}",view.read(cx).right_clicked_index);
+                            // println!("Context menu for list {:?}",view.read(cx).right_clicked_index);
                             let right_clicked_index = view.read(cx).right_clicked_index;
                             let menu= if let Some(idx)=right_clicked_index {
                                 view.update(cx, |this,cx|{
@@ -721,7 +713,7 @@ where
                                             .flex_grow()
                                             .with_sizing_behavior(sizing_behavior)
                                             .track_scroll(vertical_scroll_handle)
-                                            .into_any_element()
+                                            .into_any_element(),
                                         )
                                     })
                                     .children(self.render_scrollbar(window, cx)),
