@@ -718,7 +718,7 @@ where
                     .border_1()
                     .border_color(cx.theme().input)
                     .rounded(cx.theme().radius)
-                    .when(cx.theme().shadow, |this| this.shadow_sm())
+                    .when(cx.theme().shadow, |this| this.shadow_xs())
                     .map(|this| if self.disabled { this } else { this })
                     .overflow_hidden()
                     .input_text_size(self.size)

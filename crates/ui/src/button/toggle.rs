@@ -7,7 +7,7 @@ use gpui::{
 };
 use smallvec::{smallvec, SmallVec};
 
-use crate::{h_flex, ActiveTheme, Disableable, Icon, Sizable, Size, StyledExt};
+use crate::{h_flex, ActiveTheme, Disableable, Icon, Sizable, Size, StyleSized as _, StyledExt};
 
 #[derive(Default, Copy, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ToggleVariant {
@@ -132,7 +132,7 @@ impl RenderOnce for Toggle {
                 this.border_1()
                     .border_color(cx.theme().border)
                     .bg(cx.theme().background)
-                    .when(cx.theme().shadow, |this| this.shadow_sm())
+                    .when(cx.theme().shadow, |this| this.shadow_xs())
             })
             .when(hoverable, |this| {
                 this.hover(|this| {

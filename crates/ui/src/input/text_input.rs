@@ -259,7 +259,7 @@ impl RenderOnce for TextInput {
                     .when(self.bordered, |this| {
                         this.border_color(cx.theme().input)
                             .border_1()
-                            .when(cx.theme().shadow, |this| this.shadow_sm())
+                            .when(cx.theme().shadow, |this| this.shadow_xs())
                             .when(focused && self.focus_bordered, |this| {
                                 this.focused_border(cx)
                             })

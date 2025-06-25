@@ -1,6 +1,8 @@
 use std::rc::Rc;
 
-use crate::{h_flex, text::Text, v_flex, ActiveTheme, AxisExt, IconName, StyledExt};
+use crate::{
+    h_flex, text::Text, v_flex, ActiveTheme, AxisExt, IconName, StyleSized as _, StyledExt,
+};
 use gpui::{
     div, prelude::FluentBuilder, relative, svg, AnyElement, App, Axis, Div, ElementId,
     InteractiveElement, IntoElement, ParentElement, RenderOnce, SharedString,
@@ -106,7 +108,7 @@ impl RenderOnce for Radio {
                         .rounded_full()
                         .border_1()
                         .border_color(border_color)
-                        .when(cx.theme().shadow && !self.disabled, |this| this.shadow_sm())
+                        .when(cx.theme().shadow && !self.disabled, |this| this.shadow_xs())
                         .map(|this| match self.checked {
                             false => this.bg(cx.theme().background),
                             _ => this.bg(bg),

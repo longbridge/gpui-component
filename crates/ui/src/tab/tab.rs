@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
-use crate::{h_flex, ActiveTheme, Icon, IconName, Selectable, Sizable, Size, StyledExt};
+use crate::{
+    h_flex, ActiveTheme, Icon, IconName, Selectable, Sizable, Size, StyleSized as _, StyledExt,
+};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     div, px, AnyElement, App, ClickEvent, Div, Edges, ElementId, Hsla, InteractiveElement,
@@ -642,7 +644,7 @@ impl RenderOnce for Tab {
                     })
                     .bg(tab_style.inner_bg)
                     .rounded(tab_style.inner_radius)
-                    .when(tab_style.shadow, |this| this.shadow_sm())
+                    .when(tab_style.shadow, |this| this.shadow_xs())
                     .hover(|this| {
                         this.bg(hover_style.inner_bg)
                             .rounded(hover_style.inner_radius)

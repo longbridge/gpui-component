@@ -9,7 +9,7 @@ use crate::{
     highlighter::LanguageRegistry,
     input::{InputState, Marker},
     text::TextView,
-    ActiveTheme as _,
+    ActiveTheme as _, StyleSized as _,
 };
 
 pub struct DiagnosticPopover {
@@ -112,7 +112,7 @@ impl Render for DiagnosticPopover {
                 .border_1()
                 .border_color(border)
                 .rounded(cx.theme().radius)
-                .shadow_sm()
+                .shadow_xs()
                 .child(TextView::markdown("message", message))
                 .child(
                     canvas(

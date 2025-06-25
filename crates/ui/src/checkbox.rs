@@ -1,6 +1,6 @@
 use crate::{
     text::Text, v_flex, ActiveTheme, Disableable, IconName, Selectable, Sizable, Size,
-    StyledExt as _,
+    StyleSized as _, StyledExt as _,
 };
 use gpui::{
     div, prelude::FluentBuilder as _, px, relative, rems, svg, AnyElement, App, Div, ElementId,
@@ -150,7 +150,7 @@ impl RenderOnce for Checkbox {
                         .border_1()
                         .border_color(color)
                         .rounded(radius)
-                        .when(cx.theme().shadow && !self.disabled, |this| this.shadow_sm())
+                        .when(cx.theme().shadow && !self.disabled, |this| this.shadow_xs())
                         .map(|this| match self.checked {
                             false => this.bg(cx.theme().background),
                             _ => this.bg(color),

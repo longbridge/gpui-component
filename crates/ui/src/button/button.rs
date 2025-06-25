@@ -400,7 +400,7 @@ impl RenderOnce for Button {
             .when(self.variant.is_link(), |this| this.cursor_pointer())
             .overflow_hidden()
             .when(cx.theme().shadow && normal_style.shadow, |this| {
-                this.shadow_sm()
+                this.shadow_xs()
             })
             .when(!style.no_padding(), |this| {
                 if self.label.is_none() && self.children.is_empty() {
@@ -614,14 +614,50 @@ impl ButtonVariant {
         }
     }
 
-    fn border_color(&self, _outline: bool, cx: &mut App) -> Hsla {
+    fn border_color(&self, bg: Hsla, outline: bool, cx: &mut App) -> Hsla {
         match self {
-            ButtonVariant::Primary => cx.theme().primary,
-            ButtonVariant::Secondary => cx.theme().border,
-            ButtonVariant::Danger => cx.theme().danger,
-            ButtonVariant::Info => cx.theme().info,
-            ButtonVariant::Warning => cx.theme().warning,
-            ButtonVariant::Success => cx.theme().success,
+            ButtonVariant::Secondary => {
+                if outline {
+                    cx.theme().border
+                } else {
+                    bg
+                }
+            }
+            ButtonVariant::Primary => {
+                if outline {
+                    cx.theme().primary
+                } else {
+                    bg
+                }
+            }
+            ButtonVariant::Danger => {
+                if outline {
+                    cx.theme().danger
+                } else {
+                    bg
+                }
+            }
+            ButtonVariant::Info => {
+                if outline {
+                    cx.theme().info
+                } else {
+                    bg
+                }
+            }
+            ButtonVariant::Warning => {
+                if outline {
+                    cx.theme().warning
+                } else {
+                    bg
+                }
+            }
+            ButtonVariant::Success => {
+                if outline {
+                    cx.theme().success
+                } else {
+                    bg
+                }
+            }
             ButtonVariant::Ghost | ButtonVariant::Link | ButtonVariant::Text => {
                 cx.theme().transparent
             }
@@ -636,9 +672,9 @@ impl ButtonVariant {
         }
     }
 
-    fn shadow(&self, _outline: bool, _: &App) -> bool {
+    fn shadow(&self, outline: bool, _: &App) -> bool {
         match self {
-            ButtonVariant::Primary | ButtonVariant::Secondary | ButtonVariant::Danger => true,
+            ButtonVariant::Primary | ButtonVariant::Secondary | ButtonVariant::Danger => outline,
             ButtonVariant::Custom(c) => c.shadow,
             _ => false,
         }
@@ -646,7 +682,7 @@ impl ButtonVariant {
 
     fn normal(&self, outline: bool, cx: &mut App) -> ButtonVariantStyle {
         let bg = self.bg_color(outline, cx);
-        let border = self.border_color(outline, cx);
+        let border = self.border_color(bg, outline, cx);
         let fg = self.text_color(outline, cx);
         let underline = self.underline(cx);
         let shadow = self.shadow(outline, cx);
@@ -716,7 +752,7 @@ impl ButtonVariant {
             }
         };
 
-        let border = self.border_color(outline, cx);
+        let border = self.border_color(bg, outline, cx);
         let fg = match self {
             ButtonVariant::Link => cx.theme().link_hover,
             _ => self.text_color(outline, cx),
@@ -789,7 +825,7 @@ impl ButtonVariant {
                 }
             }
         };
-        let border = self.border_color(outline, cx);
+        let border = self.border_color(bg, outline, cx);
         let fg = match self {
             ButtonVariant::Link => cx.theme().link_active,
             ButtonVariant::Text => cx.theme().foreground.opacity(0.7),
@@ -820,7 +856,7 @@ impl ButtonVariant {
             ButtonVariant::Custom(colors) => colors.active,
         };
 
-        let border = self.border_color(outline, cx);
+        let border = self.border_color(bg, outline, cx);
         let fg = match self {
             ButtonVariant::Link => cx.theme().link_active,
             ButtonVariant::Text => cx.theme().foreground.opacity(0.7),
