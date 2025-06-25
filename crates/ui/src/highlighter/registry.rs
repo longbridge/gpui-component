@@ -338,17 +338,17 @@ impl StatusColors {
 
     #[inline]
     pub fn hint(&self) -> Hsla {
-        self.hint.unwrap_or(crate::gray_500())
+        self.hint.unwrap_or(crate::neutral_500())
     }
 
     #[inline]
     pub fn hint_background(&self) -> Hsla {
-        self.hint_background.unwrap_or(crate::gray_200())
+        self.hint_background.unwrap_or(crate::neutral_200())
     }
 
     #[inline]
     pub fn hint_border(&self) -> Hsla {
-        self.hint_border.unwrap_or(crate::gray_500())
+        self.hint_border.unwrap_or(crate::neutral_500())
     }
 }
 

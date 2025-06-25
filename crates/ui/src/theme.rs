@@ -349,7 +349,7 @@ impl ThemeColor {
             warning_hover: yellow_500().opacity(0.9),
             warning_foreground: gray_50(),
             overlay: black().opacity(0.05),
-            window_border: neutral_300(),
+            window_border: neutral_200(),
         }
     }
 
@@ -448,7 +448,7 @@ impl ThemeColor {
             warning_foreground: yellow_50(),
             warning_hover: yellow_900().lighten(0.1),
             overlay: white().opacity(0.03),
-            window_border: neutral_700(),
+            window_border: neutral_800(),
         }
     }
 }

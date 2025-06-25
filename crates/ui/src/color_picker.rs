@@ -187,8 +187,8 @@ impl ColorPicker {
             state: state.clone(),
             featured_colors: vec![
                 crate::black(),
-                crate::gray_600(),
-                crate::gray_400(),
+                crate::neutral_600(),
+                crate::neutral_400(),
                 crate::white(),
                 crate::red_600(),
                 crate::orange_600(),
