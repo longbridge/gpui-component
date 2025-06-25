@@ -5,9 +5,9 @@ use std::{
 
 use fake::{Fake, Faker};
 use gpui::{
-    div, impl_internal_actions, prelude::FluentBuilder as _, px, AnyElement, App, AppContext,
-    ClickEvent, Context, Edges, Entity, Focusable, InteractiveElement, IntoElement, ParentElement,
-    Pixels, Render, SharedString, StatefulInteractiveElement, Styled, Timer, Window,
+    div, prelude::FluentBuilder as _, px, Action, AnyElement, App, AppContext, ClickEvent, Context,
+    Edges, Entity, Focusable, InteractiveElement, IntoElement, ParentElement, Pixels, Render,
+    SharedString, StatefulInteractiveElement, Styled, Timer, Window,
 };
 use gpui_component::{
     button::Button,
@@ -23,13 +23,13 @@ use gpui_component::{
 };
 use serde::Deserialize;
 
-#[derive(Clone, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Action, PartialEq, Eq, Deserialize)]
+#[action(namespace = table_story, no_json)]
 struct ChangeSize(Size);
 
-#[derive(Clone, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Action, PartialEq, Eq, Deserialize)]
+#[action(namespace = table_story, no_json)]
 struct OpenDetail(usize);
-
-impl_internal_actions!(table_story, [ChangeSize, OpenDetail]);
 
 #[derive(Clone, Debug, Default)]
 struct Stock {

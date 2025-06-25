@@ -18,12 +18,6 @@ use gpui_component::{
     sidebar::{Sidebar, SidebarFooter, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuItem},
     white, *,
 };
-use serde::Deserialize;
-
-#[derive(Clone, PartialEq, Eq, Deserialize)]
-pub struct SelectCompany(SharedString);
-
-impl_internal_actions!(sidebar_story, [SelectCompany]);
 
 pub struct Settings {
     stories: Vec<(&'static str, Vec<Entity<Container>>)>,
@@ -74,7 +68,6 @@ impl Settings {
         });
         // #[cfg(target_os = "windows")]
         // parent.enable_window(false);
-       
     }
 
     fn new(

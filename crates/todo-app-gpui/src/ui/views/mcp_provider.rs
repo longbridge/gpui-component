@@ -175,10 +175,7 @@ impl McpProvider {
 
                 // 解析启动参数
                 let args_text = inputs.args_input.read(cx).value().to_string();
-                provider.command = args_text
-                    .split_whitespace()
-                    .map(|s| s.to_string())
-                    .collect();
+                provider.command = args_text;
 
                 // 解析环境变量
                 let env_text = inputs.env_input.read(cx).value().to_string();

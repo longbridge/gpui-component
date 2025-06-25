@@ -7,8 +7,8 @@ edition = "2021"
 anyhow.workspace = true
 chrono = { version = "0.4", features = ["serde"] }
 fake = { version = "4.3.0", features = ["dummy"] }
-# gpui.workspace = true
-gpui = { git = "https://github.com/huacnlee/zed.git", branch = "webview" }
+gpui.workspace = true
+# gpui = { git = "https://github.com/huacnlee/zed.git", branch = "webview" }
 gpui-component = { workspace = true, features = ["webview"] }
 # story = { workspace = true }
 rand = "0.9.1"
@@ -24,7 +24,7 @@ uuid = "1.17.0"
 serde_yaml = "0.9.33"
 tempfile = "3.10.0"
 rig-core = { git = "https://github.com/gqf2008/rig", branch = "main" }
-tokio = { version = "1.45.1", features = ["rt", "rt-multi-thread"] }
+tokio = { version = "1.45.1", features = ["full"] }
 crossbeam-skiplist = "0.1"
 futures = "0.3.31"
 futures-util = { version = "0.3.31", default-features = false, features = [
@@ -69,5 +69,5 @@ gtk = { version = "0.18" }
 lto = true
 panic = "abort"
 
-# [lints]
-# workspace = true
+[lints]
+workspace = true

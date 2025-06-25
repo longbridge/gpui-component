@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use gpui::{
-    div, impl_internal_actions, prelude::FluentBuilder, relative, App, AppContext, ClickEvent,
-    Context, Entity, Focusable, IntoElement, ParentElement, Render, SharedString, Styled, Window,
+    div, prelude::FluentBuilder, relative, Action, App, AppContext, ClickEvent, Context, Entity,
+    Focusable, IntoElement, ParentElement, Render, SharedString, Styled, Window,
 };
 
 use gpui_component::{
@@ -21,10 +21,9 @@ use gpui_component::{
 };
 use serde::Deserialize;
 
-#[derive(Clone, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Action, PartialEq, Eq, Deserialize)]
+#[action(namespace = sidebar_story, no_json)]
 pub struct SelectCompany(SharedString);
-
-impl_internal_actions!(sidebar_story, [SelectCompany]);
 
 pub struct SidebarStory {
     active_items: HashMap<Item, bool>,

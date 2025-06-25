@@ -4,26 +4,25 @@ pub(crate) mod main_window;
 pub(crate) mod views;
 
 use crate::ui::components::{appbar::AppTitleBar, appbar::NormalTitleBar};
-use gpui::{prelude::FluentBuilder, Window, *};
+use gpui::{prelude::FluentBuilder, *};
 use gpui_component::{scroll::ScrollbarShow, v_flex, Root};
 use serde::Deserialize;
 
-#[derive(Clone, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Action, PartialEq, Eq, Deserialize)]
+#[action(namespace = todo, no_json)]
 pub struct SelectScrollbarShow(ScrollbarShow);
 
-#[derive(Clone, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Action, PartialEq, Eq, Deserialize)]
+#[action(namespace = todo, no_json)]
 pub struct SelectLocale(SharedString);
 
-#[derive(Clone, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Action, PartialEq, Eq, Deserialize)]
+#[action(namespace = todo, no_json)]
 pub struct SelectFont(usize);
 
-#[derive(Clone, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Action, PartialEq, Eq, Deserialize)]
+#[action(namespace = todo, no_json)]
 pub struct SelectRadius(usize);
-
-impl_internal_actions!(
-    story,
-    [SelectLocale, SelectFont, SelectRadius, SelectScrollbarShow]
-);
 
 /// 故事根组件，包含标题栏和主视图
 pub(crate) struct TodoRoot {

@@ -206,18 +206,16 @@ impl McpProviderInfo {
 
     async fn start_stdio(&mut self) -> anyhow::Result<&mut Self> {
         let mut command = self.command.split(" ");
-        let command = if cfg!(target_os = "windows") {
-            Command::new("powershell").configure(|cmd| {
-                cmd.arg("-Command")
-                    .arg(&self.command)
-                    .envs(&self.env_vars)
-                    .creation_flags(0x08000000);
-            })
-        } else {
-            Command::new(command.nth(0).unwrap_or_default()).configure(|cmd| {
-                cmd.envs(&self.env_vars).args(command.skip(1));
-            })
-        };
+        println!(
+            "Starting MCP provider with command: program({:?}) args({:?})",
+            command.clone().nth(0),
+            command.clone().skip(1).collect::<Vec<_>>()
+        );
+        let command = Command::new(command.nth(0).unwrap_or_default()).configure(|cmd| {
+            cmd.args(command.skip(1).collect::<Vec<_>>())
+                .envs(&self.env_vars);
+            // .creation_flags(0x08000000);
+        });
 
         let transport = TokioChildProcess::new(command)?;
         let client_info = ClientInfo {

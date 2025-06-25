@@ -1,7 +1,7 @@
 use gpui::{
-    actions, div, impl_internal_actions, px, App, AppContext, Context, Corner, DismissEvent,
-    Element, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement,
-    KeyBinding, MouseButton, ParentElement as _, Render, Styled as _, Window,
+    actions, div, px, Action, App, AppContext, Context, Corner, DismissEvent, Element, Entity,
+    EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding, MouseButton,
+    ParentElement as _, Render, Styled as _, Window,
 };
 use gpui_component::{
     button::{Button, ButtonVariants as _},
@@ -13,11 +13,11 @@ use gpui_component::{
 };
 use serde::Deserialize;
 
-#[derive(Clone, PartialEq, Deserialize)]
+#[derive(Clone, Action, PartialEq, Deserialize)]
+#[action(namespace = popover_story, no_json)]
 struct Info(usize);
 
 actions!(popover_story, [Copy, Paste, Cut, SearchAll, ToggleCheck]);
-impl_internal_actions!(popover_story, [Info]);
 
 pub fn init(cx: &mut App) {
     cx.bind_keys([

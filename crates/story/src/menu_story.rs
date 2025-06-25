@@ -1,7 +1,7 @@
 use gpui::{
-    actions, div, impl_internal_actions, px, App, AppContext, Context, Corner, Entity, FocusHandle,
-    Focusable, InteractiveElement, IntoElement, KeyBinding, ParentElement as _, Render,
-    SharedString, Styled as _, Window,
+    actions, div, px, Action, App, AppContext, Context, Corner, Entity, FocusHandle, Focusable,
+    InteractiveElement, IntoElement, KeyBinding, ParentElement as _, Render, SharedString,
+    Styled as _, Window,
 };
 use gpui_component::{
     button::Button, context_menu::ContextMenuExt, h_flex, popup_menu::PopupMenuExt as _, v_flex,
@@ -11,11 +11,11 @@ use serde::Deserialize;
 
 use crate::section;
 
-#[derive(Clone, PartialEq, Deserialize)]
+#[derive(Clone, Action, PartialEq, Deserialize)]
+#[action(namespace = menu_story, no_json)]
 struct Info(usize);
 
-actions!(popover_story, [Copy, Paste, Cut, SearchAll, ToggleCheck]);
-impl_internal_actions!(popover_story, [Info]);
+actions!(menu_story, [Copy, Paste, Cut, SearchAll, ToggleCheck]);
 
 pub fn init(cx: &mut App) {
     cx.bind_keys([

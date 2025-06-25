@@ -43,8 +43,8 @@ mod welcome_story;
 
 pub use assets::Assets;
 use gpui::{
-    actions, div, impl_internal_actions, prelude::FluentBuilder as _, px, rems, size, AnyElement,
-    AnyView, App, AppContext, Bounds, Context, Div, Entity, EventEmitter, Focusable, Global, Hsla,
+    actions, div, prelude::FluentBuilder as _, px, rems, size, Action, AnyElement, AnyView, App,
+    AppContext, Bounds, Context, Div, Entity, EventEmitter, Focusable, Global, Hsla,
     InteractiveElement, IntoElement, KeyBinding, Menu, MenuItem, ParentElement, Render, RenderOnce,
     SharedString, StatefulInteractiveElement, Styled, Window, WindowBounds, WindowKind,
     WindowOptions,
@@ -104,26 +104,27 @@ use gpui_component::{
 };
 
 /// 选择滚动条显示方式的操作
-#[derive(Clone, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Action, PartialEq, Eq, Deserialize)]
+#[action(namespace = story, no_json)]
 pub struct SelectScrollbarShow(ScrollbarShow);
 
-/// 选择区域设置的操作
-#[derive(Clone, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Action, PartialEq, Eq, Deserialize)]
+#[action(namespace = story, no_json)]
 pub struct SelectLocale(SharedString);
 
-/// 选择字体的操作
-#[derive(Clone, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Action, PartialEq, Eq, Deserialize)]
+#[action(namespace = story, no_json)]
 pub struct SelectFont(usize);
 
-/// 选择圆角的操作
-#[derive(Clone, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Action, PartialEq, Eq, Deserialize)]
+#[action(namespace = story, no_json)]
 pub struct SelectRadius(usize);
 
-// 实现内部操作类型
-impl_internal_actions!(
-    story,
-    [SelectLocale, SelectFont, SelectRadius, SelectScrollbarShow]
-);
+// // 实现内部操作类型
+// impl_internal_actions!(
+//     story,
+//     [SelectLocale, SelectFont, SelectRadius, SelectScrollbarShow]
+// );
 
 // 定义应用程序操作
 actions!(story, [Quit, Open, CloseWindow, ToggleSearch]);
@@ -158,7 +159,7 @@ impl AppState {
 }
 
 /// 创建新窗口的通用函数
-/// 
+///
 /// # 参数
 /// - `title`: 窗口标题
 /// - `crate_view_fn`: 创建视图的函数
@@ -170,14 +171,14 @@ where
 {
     // 设置默认窗口大小
     let mut window_size = size(px(1600.0), px(1200.0));
-    
+
     // 根据主显示器大小调整窗口大小
     if let Some(display) = cx.primary_display() {
         let display_size = display.bounds().size;
         window_size.width = window_size.width.min(display_size.width * 0.85);
         window_size.height = window_size.height.min(display_size.height * 0.85);
     }
-    
+
     // 计算窗口居中位置
     let window_bounds = Bounds::centered(None, window_size, cx);
     let title = SharedString::from(title.to_string());
@@ -224,7 +225,7 @@ where
 }
 
 /// 使用自定义选项创建新窗口
-/// 
+///
 /// # 参数
 /// - `title`: 窗口标题
 /// - `options`: 窗口选项配置
@@ -265,8 +266,8 @@ pub fn create_new_window_options<F, E>(
 
 /// 故事根组件，包含标题栏和主视图
 struct StoryRoot {
-    title_bar: Entity<AppTitleBar>,    // 应用程序标题栏
-    view: AnyView,                     // 主视图
+    title_bar: Entity<AppTitleBar>, // 应用程序标题栏
+    view: AnyView,                  // 主视图
 }
 
 impl StoryRoot {
@@ -289,8 +290,8 @@ impl Render for StoryRoot {
     /// 渲染故事根组件
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // 渲染各种覆盖层
-        let drawer_layer = Root::render_drawer_layer(window, cx);      // 抽屉层
-        let modal_layer = Root::render_modal_layer(window, cx);        // 模态层
+        let drawer_layer = Root::render_drawer_layer(window, cx); // 抽屉层
+        let modal_layer = Root::render_modal_layer(window, cx); // 模态层
         let notification_layer = Root::render_notification_layer(window, cx); // 通知层
 
         div()
@@ -298,11 +299,11 @@ impl Render for StoryRoot {
             .child(
                 v_flex()
                     .size_full()
-                    .child(self.title_bar.clone())                     // 标题栏
+                    .child(self.title_bar.clone()) // 标题栏
                     .child(div().flex_1().overflow_hidden().child(self.view.clone())), // 主视图
             )
-            .children(drawer_layer)                                    // 添加抽屉层
-            .children(modal_layer)                                     // 添加模态层
+            .children(drawer_layer) // 添加抽屉层
+            .children(modal_layer) // 添加模态层
             .child(div().absolute().top_8().children(notification_layer)) // 添加通知层
     }
 }
@@ -314,10 +315,10 @@ impl Global for AppState {}
 pub fn init(cx: &mut App) {
     // 初始化组件库
     gpui_component::init(cx);
-    
+
     // 初始化应用程序状态
     AppState::init(cx);
-    
+
     // 初始化各种故事组件
     input_story::init(cx);
     number_input_story::init(cx);
@@ -337,8 +338,8 @@ pub fn init(cx: &mut App) {
 
     // 绑定键盘快捷键
     cx.bind_keys([
-        KeyBinding::new("/", ToggleSearch, None),     // 斜杠键切换搜索
-        KeyBinding::new("cmd-q", Quit, None),         // Cmd+Q 退出
+        KeyBinding::new("/", ToggleSearch, None), // 斜杠键切换搜索
+        KeyBinding::new("cmd-q", Quit, None),     // Cmd+Q 退出
     ]);
 
     // 处理退出操作
@@ -413,9 +414,9 @@ actions!(story, [ShowPanelInfo]);
 /// 故事章节组件，用于组织和展示相关的故事内容
 #[derive(IntoElement)]
 struct StorySection {
-    base: Div,                    // 基础 div 元素
-    title: AnyElement,            // 标题元素
-    children: Vec<AnyElement>,    // 子元素列表
+    base: Div,                 // 基础 div 元素
+    title: AnyElement,         // 标题元素
+    children: Vec<AnyElement>, // 子元素列表
 }
 
 impl StorySection {
@@ -466,25 +467,25 @@ impl RenderOnce for StorySection {
     /// 渲染故事章节
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         v_flex()
-            .gap_2()                                    // 间距 2 单位
-            .mb_5()                                     // 底部外边距 5 单位
-            .w_full()                                   // 全宽
+            .gap_2() // 间距 2 单位
+            .mb_5() // 底部外边距 5 单位
+            .w_full() // 全宽
             .child(
                 h_flex()
-                    .justify_between()                  // 两端对齐
-                    .w_full()                          // 全宽
-                    .gap_4()                           // 间距 4 单位
-                    .child(self.title),                // 标题
+                    .justify_between() // 两端对齐
+                    .w_full() // 全宽
+                    .gap_4() // 间距 4 单位
+                    .child(self.title), // 标题
             )
             .child(
                 v_flex()
-                    .p_4()                             // 内边距 4 单位
-                    .overflow_x_hidden()               // 隐藏水平溢出
-                    .border_1()                        // 1 像素边框
-                    .border_color(cx.theme().border)   // 主题边框颜色
-                    .rounded_lg()                      // 大圆角
-                    .items_center()                    // 垂直居中
-                    .justify_center()                  // 水平居中
+                    .p_4() // 内边距 4 单位
+                    .overflow_x_hidden() // 隐藏水平溢出
+                    .border_1() // 1 像素边框
+                    .border_color(cx.theme().border) // 主题边框颜色
+                    .rounded_lg() // 大圆角
+                    .items_center() // 垂直居中
+                    .justify_center() // 水平居中
                     .child(self.base.children(self.children)), // 内容
             )
     }
@@ -498,34 +499,34 @@ pub(crate) fn section(title: impl IntoElement) -> StorySection {
     StorySection {
         title: title.into_any_element(),
         base: h_flex()
-            .flex_wrap()                               // 允许换行
-            .justify_center()                          // 水平居中
-            .items_center()                            // 垂直居中
-            .w_full()                                  // 全宽
-            .gap_4(),                                  // 间距 4 单位
+            .flex_wrap() // 允许换行
+            .justify_center() // 水平居中
+            .items_center() // 垂直居中
+            .w_full() // 全宽
+            .gap_4(), // 间距 4 单位
         children: vec![],
     }
 }
 
 /// 故事容器组件，用于包装和展示单个故事
 pub struct StoryContainer {
-    focus_handle: gpui::FocusHandle,                  // 焦点处理句柄
-    pub name: SharedString,                           // 容器名称
-    pub title_bg: Option<Hsla>,                       // 标题背景色
-    pub description: SharedString,                    // 描述
-    width: Option<gpui::Pixels>,                      // 宽度
-    height: Option<gpui::Pixels>,                     // 高度
-    story: Option<AnyView>,                           // 故事视图
-    story_klass: Option<SharedString>,                // 故事类名
-    closable: bool,                                   // 是否可关闭
-    zoomable: Option<PanelControl>,                   // 是否可缩放
+    focus_handle: gpui::FocusHandle,   // 焦点处理句柄
+    pub name: SharedString,            // 容器名称
+    pub title_bg: Option<Hsla>,        // 标题背景色
+    pub description: SharedString,     // 描述
+    width: Option<gpui::Pixels>,       // 宽度
+    height: Option<gpui::Pixels>,      // 高度
+    story: Option<AnyView>,            // 故事视图
+    story_klass: Option<SharedString>, // 故事类名
+    closable: bool,                    // 是否可关闭
+    zoomable: Option<PanelControl>,    // 是否可缩放
     on_active: Option<fn(AnyView, bool, &mut Window, &mut App)>, // 激活回调
 }
 
 /// 容器事件枚举
 #[derive(Debug)]
 pub enum ContainerEvent {
-    Close,  // 关闭事件
+    Close, // 关闭事件
 }
 
 /// 故事特征，定义故事组件的基本行为
@@ -537,27 +538,27 @@ pub trait Story: Focusable + Render + Sized {
 
     /// 故事标题
     fn title() -> &'static str;
-    
+
     /// 故事描述
     fn description() -> &'static str {
         ""
     }
-    
+
     /// 是否可关闭
     fn closable() -> bool {
         true
     }
-    
+
     /// 是否可缩放
     fn zoomable() -> Option<PanelControl> {
         Some(PanelControl::default())
     }
-    
+
     /// 标题背景色
     fn title_bg() -> Option<Hsla> {
         None
     }
-    
+
     /// 创建新视图
     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable>;
 
@@ -567,7 +568,7 @@ pub trait Story: Focusable + Render + Sized {
         let _ = window;
         let _ = cx;
     }
-    
+
     /// 任意视图的激活状态改变回调
     fn on_active_any(view: AnyView, active: bool, window: &mut Window, cx: &mut App)
     where
@@ -688,7 +689,7 @@ impl StoryContainer {
 /// 故事状态，用于序列化和反序列化故事信息
 #[derive(Debug, Serialize, Deserialize)]
 pub struct StoryState {
-    pub story_klass: SharedString,  // 故事类名
+    pub story_klass: SharedString, // 故事类名
 }
 
 impl StoryState {
@@ -863,20 +864,20 @@ impl Focusable for StoryContainer {
 impl Render for StoryContainer {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
-            .id("story-container")                              // 元素 ID
-            .size_full()                                        // 占满容器
-            .overflow_y_scroll()                                // 垂直滚动
-            .track_focus(&self.focus_handle)                    // 跟踪焦点
+            .id("story-container") // 元素 ID
+            .size_full() // 占满容器
+            .overflow_y_scroll() // 垂直滚动
+            .track_focus(&self.focus_handle) // 跟踪焦点
             .on_action(cx.listener(Self::on_action_panel_info)) // 监听面板信息操作
             .on_action(cx.listener(Self::on_action_toggle_search)) // 监听切换搜索操作
             .when_some(self.story.clone(), |this, story| {
                 this.child(
                     v_flex()
-                        .id("story-children")                   // 子元素 ID
-                        .w_full()                              // 全宽
-                        .flex_1()                              // 占满剩余空间
-                        .p_4()                                 // 内边距 4 单位
-                        .child(story),                         // 故事内容
+                        .id("story-children") // 子元素 ID
+                        .w_full() // 全宽
+                        .flex_1() // 占满剩余空间
+                        .p_4() // 内边距 4 单位
+                        .child(story), // 故事内容
                 )
             })
     }

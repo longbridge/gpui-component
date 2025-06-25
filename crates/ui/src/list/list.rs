@@ -519,20 +519,20 @@ where
             .id("list-item")
             .w_full()
             .relative()
-            .pt(px(2.))
-            .pb(px(2.))
+            .pt(px(1.))
+            .pb(px(1.))
             .children(self.delegate.render_item(ix, window, cx))
             .when(self.selectable, |this| {
                 this.when(selected || right_clicked, |this| {
                     this.child(
                         div()
                             .absolute()
-                            .top(px(2.))
+                            .top(px(1.))
                             .left(px(0.))
                             .right(px(0.))
-                            .bottom(px(2.))
+                            .bottom(px(1.))
                             .when(selected, |this| this.bg(cx.theme().list_active))
-                           // .border_0()
+                            // .border_0()
                             .border_color(cx.theme().list_active_border),
                     )
                 })

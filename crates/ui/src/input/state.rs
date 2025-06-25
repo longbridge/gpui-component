@@ -11,12 +11,12 @@ use std::rc::Rc;
 use unicode_segmentation::*;
 
 use gpui::{
-    actions, div, impl_internal_actions, point, prelude::FluentBuilder as _, px, relative, App,
-    AppContext, Bounds, ClipboardItem, Context, Entity, EntityInputHandler, EventEmitter,
-    FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent,
-    MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point,
-    Render, ScrollHandle, ScrollWheelEvent, SharedString, Styled as _, Subscription,
-    UTF16Selection, Window, WrappedLine,
+    actions, div, point, prelude::FluentBuilder as _, px, relative, Action, App, AppContext,
+    Bounds, ClipboardItem, Context, Entity, EntityInputHandler, EventEmitter, FocusHandle,
+    Focusable, InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent, MouseButton,
+    MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Render,
+    ScrollHandle, ScrollWheelEvent, SharedString, Styled as _, Subscription, UTF16Selection,
+    Window, WrappedLine,
 };
 
 // TODO:
@@ -34,13 +34,12 @@ use super::{
 use crate::highlighter::SyntaxHighlighter;
 use crate::{history::History, scroll::ScrollbarState, Root};
 
-#[derive(Clone, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Action, PartialEq, Eq, Deserialize)]
+#[action(namespace = input, no_json)]
 pub struct Enter {
     /// Is confirm with secondary.
     pub secondary: bool,
 }
-
-impl_internal_actions!(input, [Enter]);
 
 actions!(
     input,
