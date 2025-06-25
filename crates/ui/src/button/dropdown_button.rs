@@ -109,9 +109,9 @@ impl Selectable for DropdownButton {
 
 impl RenderOnce for DropdownButton {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        let is_ghost = self
+        let rounded = self
             .variant
-            .map(|variant| variant.is_ghost())
+            .map(|variant| variant.is_ghost() && !self.selected)
             .unwrap_or(false);
 
         div()
@@ -124,9 +124,9 @@ impl RenderOnce for DropdownButton {
                         .rounded(self.rounded)
                         .border_corners(Corners {
                             top_left: true,
-                            top_right: is_ghost,
+                            top_right: rounded,
                             bottom_left: true,
-                            bottom_right: is_ghost,
+                            bottom_right: rounded,
                         })
                         .border_edges(Edges {
                             left: true,
@@ -146,15 +146,15 @@ impl RenderOnce for DropdownButton {
                             .icon(IconName::ChevronDown)
                             .rounded(self.rounded)
                             .border_edges(Edges {
-                                left: is_ghost,
+                                left: rounded,
                                 top: true,
                                 right: true,
                                 bottom: true,
                             })
                             .border_corners(Corners {
-                                top_left: is_ghost,
+                                top_left: rounded,
                                 top_right: true,
-                                bottom_left: is_ghost,
+                                bottom_left: rounded,
                                 bottom_right: true,
                             })
                             .selected(self.selected)
