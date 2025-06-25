@@ -4,6 +4,7 @@ use crate::ui::components::ViewKit;
 use crate::xbus;
 use gpui::prelude::*;
 use gpui::*;
+use gpui_component::tooltip::Tooltip;
 use gpui_component::{
     accordion::Accordion,
     button::{Button, ButtonVariant, ButtonVariants as _},
@@ -587,6 +588,7 @@ impl LlmProvider {
         v_flex()
             .gap_2()
             .children(models.iter().enumerate().map(|(model_index, model)| {
+                let model_id = model.id.clone();
                 let model_name = model.display_name.clone();
                 let model_enabled = model.enabled;
                 let model_capabilities = model.capabilities.clone();
@@ -605,13 +607,20 @@ impl LlmProvider {
                             .gap_3()
                             .child(
                                 div()
+                                    .id(SharedString::new(format!(
+                                        "model-{}-{}",
+                                        provider_index, model_index
+                                    )))
                                     .font_medium()
                                     .text_color(if model_enabled {
                                         gpui::rgb(0x111827)
                                     } else {
                                         gpui::rgb(0xD1D5DB)
                                     })
-                                    .child(model_name.clone()),
+                                    .child(model_name.clone())
+                                    .tooltip(move |window, cx| {
+                                        Tooltip::new(model_id.clone()).build(window, cx)
+                                    }),
                             )
                             .child(
                                 h_flex()

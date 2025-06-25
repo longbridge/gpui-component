@@ -7,8 +7,12 @@ use gpui::SharedString;
 use gpui_component::IconName;
 use rig::{
     agent::Agent,
+    completion::{Chat, Completion},
     message::*,
-    streaming::{StreamingChat, StreamingCompletionModel, StreamingCompletionResponse},
+    streaming::{
+        StreamingChat, StreamingCompletion, StreamingCompletionModel, StreamingCompletionResponse,
+        StreamingPrompt,
+    },
 };
 use serde::{Deserialize, Serialize};
 
@@ -399,9 +403,16 @@ impl LlmProviderInfo {
             //     .max_tokens(8192)
             //     .temperature(0.7)
             //     .build();
+            // let mut stream = agent.stream_prompt(prompt).await?;
+            // let mut stream = agent.stream_chat(prompt, chat_history.clone()).await?;
 
-            let mut stream = agent.stream_chat(prompt, chat_history.clone()).await?;
+            let mut stream = agent
+                .stream_completion(prompt, chat_history.clone())
+                .await?
+                .stream()
+                .await?; //agent.stream_chat(prompt, chat_history.clone()).await?;
             chat_history.push(Message::user(prompt));
+
             let (assistant, tools) = stream_to_stdout1(&agent, &mut stream).await?;
             if tools.is_empty() {
                 break;

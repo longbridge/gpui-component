@@ -120,7 +120,7 @@ impl TodoThreadChat {
             //println!("开始接收AI助手响应");
             let _sub = _sub;
             'a: loop {
-                Timer::after(Duration::from_millis(5)).await;
+                Timer::after(Duration::from_millis(10)).await;
                 let mut buffer = String::new();
                 loop {
                     match rx.try_recv() {
@@ -141,6 +141,9 @@ impl TodoThreadChat {
                         },
                     }
                 }
+                if buffer.is_empty() {
+                    continue;
+                }
                 let entity = this.clone();
                 entity
                     .update(app, |this, cx| {
@@ -153,7 +156,6 @@ impl TodoThreadChat {
                     })
                     .ok();
             }
-            println!("AI助手响应完成");
         })
         .detach();
 

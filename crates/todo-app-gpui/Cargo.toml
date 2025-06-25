@@ -68,6 +68,3 @@ gtk = { version = "0.18" }
 [profile.release]
 lto = true
 panic = "abort"
-
-[lints]
-workspace = true
