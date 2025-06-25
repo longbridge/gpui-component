@@ -170,6 +170,17 @@ pub trait StyledExt: Styled + Sized {
             .shadow_lg()
             .rounded(cx.theme().radius)
     }
+
+    /// TODO: Remove this after PR is merged
+    /// https://github.com/zed-industries/zed/pull/33361
+    fn shadow_xs(self) -> Self {
+        self.shadow(vec![BoxShadow {
+            color: hsla(0., 0., 0., 0.05),
+            offset: point(px(0.), px(1.)),
+            blur_radius: px(2.),
+            spread_radius: px(0.),
+        }])
+    }
 }
 
 impl<E: Styled> StyledExt for E {}
@@ -358,7 +369,6 @@ pub trait Sizable: Sized {
 
 #[allow(unused)]
 pub trait StyleSized<T: Styled> {
-    fn shadow_xs(self) -> Self;
     fn input_text_size(self, size: Size) -> Self;
     fn input_size(self, size: Size) -> Self;
     fn input_pl(self, size: Size) -> Self;
@@ -479,17 +489,6 @@ impl<T: Styled> StyleSized<T> for T {
             Size::Small => self.text_sm(),
             _ => self.text_base(),
         }
-    }
-
-    /// TODO: Remove this after PR is merged
-    /// https://github.com/zed-industries/zed/pull/33361
-    fn shadow_xs(self) -> Self {
-        self.shadow(vec![BoxShadow {
-            color: hsla(0., 0., 0., 0.05),
-            offset: point(px(0.), px(1.)),
-            blur_radius: px(2.),
-            spread_radius: px(0.),
-        }])
     }
 }
 

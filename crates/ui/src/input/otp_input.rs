@@ -6,7 +6,7 @@ use gpui::{
 };
 
 use super::{blink_cursor::BlinkCursor, InputEvent};
-use crate::{h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable, Size, StyleSized as _};
+use crate::{h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable, Size, StyledExt as _};
 
 pub struct OtpState {
     focus_handle: FocusHandle,

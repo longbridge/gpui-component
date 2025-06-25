@@ -1,8 +1,6 @@
 use std::rc::Rc;
 
-use crate::{
-    h_flex, text::Text, v_flex, ActiveTheme, AxisExt, IconName, StyleSized as _, StyledExt,
-};
+use crate::{h_flex, text::Text, v_flex, ActiveTheme, AxisExt, IconName, StyledExt};
 use gpui::{
     div, prelude::FluentBuilder, relative, svg, AnyElement, App, Axis, Div, ElementId,
     InteractiveElement, IntoElement, ParentElement, RenderOnce, SharedString,

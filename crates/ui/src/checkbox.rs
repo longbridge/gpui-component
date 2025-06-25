@@ -1,6 +1,6 @@
 use crate::{
     text::Text, v_flex, ActiveTheme, Disableable, IconName, Selectable, Sizable, Size,
-    StyleSized as _, StyledExt as _,
+    StyledExt as _,
 };
 use gpui::{
     div, prelude::FluentBuilder as _, px, relative, rems, svg, AnyElement, App, Div, ElementId,

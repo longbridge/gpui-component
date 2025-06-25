@@ -1,8 +1,6 @@
 use std::sync::Arc;
 
-use crate::{
-    h_flex, ActiveTheme, Icon, IconName, Selectable, Sizable, Size, StyleSized as _, StyledExt,
-};
+use crate::{h_flex, ActiveTheme, Icon, IconName, Selectable, Sizable, Size, StyledExt};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     div, px, AnyElement, App, ClickEvent, Div, Edges, ElementId, Hsla, InteractiveElement,
