@@ -70,10 +70,10 @@ impl TextElement {
         let input = self.input.read(cx);
         let mut selected_range = input.selected_range.clone();
         if let Some(marked_range) = &input.marked_range {
-            selected_range = marked_range.end..marked_range.end;
+            selected_range = (marked_range.end..marked_range.end).into();
         }
 
-        let cursor_offset = input.cursor_offset();
+        let cursor = input.cursor();
         let mut current_line_index = None;
         let mut scroll_offset = input.scroll_handle.offset();
         let mut cursor_bounds = None;
@@ -99,7 +99,7 @@ impl TextElement {
 
             let line_origin = point(px(0.), offset_y);
             if cursor_pos.is_none() {
-                let offset = cursor_offset.saturating_sub(prev_lines_offset);
+                let offset = cursor.offset.saturating_sub(prev_lines_offset);
                 if let Some(pos) = line.position_for_index(offset, line_height) {
                     current_line_index = Some(line_ix);
                     cursor_pos = Some(line_origin + pos);
@@ -126,7 +126,7 @@ impl TextElement {
         if let (Some(cursor_pos), Some(cursor_start), Some(cursor_end)) =
             (cursor_pos, cursor_start, cursor_end)
         {
-            let cursor_moved = input.last_cursor_offset != Some(cursor_offset);
+            let cursor_moved = input.last_cursor != Some(cursor);
             let selection_changed = input.last_selected_range != Some(selected_range.clone());
 
             if cursor_moved || selection_changed {
@@ -204,7 +204,7 @@ impl TextElement {
         let mut selected_range = input.selected_range.clone();
         if let Some(marked_range) = &input.marked_range {
             if !marked_range.is_empty() {
-                selected_range = marked_range.end..marked_range.end;
+                selected_range = (marked_range.end..marked_range.end).into();
             }
         }
         if selected_range.is_empty() {
@@ -639,16 +639,16 @@ impl Element for TextElement {
             // IME marked text
             vec![
                 TextRun {
-                    len: marked_range.start,
+                    len: marked_range.start.offset,
                     ..run.clone()
                 },
                 TextRun {
-                    len: marked_range.end - marked_range.start,
+                    len: marked_range.end.offset - marked_range.start.offset,
                     underline: marked_run.underline,
                     ..run.clone()
                 },
                 TextRun {
-                    len: display_text.len() - marked_range.end,
+                    len: display_text.len() - marked_range.end.offset,
                     ..run.clone()
                 },
             ]
@@ -934,7 +934,7 @@ impl Element for TextElement {
         self.input.update(cx, |input, cx| {
             input.last_layout = Some(prepaint.last_layout.clone());
             input.last_bounds = Some(bounds);
-            input.last_cursor_offset = Some(input.cursor_offset());
+            input.last_cursor = Some(input.cursor());
             input.set_input_bounds(input_bounds, cx);
             input.last_selected_range = Some(selected_range);
             input.scroll_size = prepaint.scroll_size;
