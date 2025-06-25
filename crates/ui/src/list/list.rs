@@ -546,7 +546,7 @@ where
                             .right(px(0.))
                             .bottom(px(1.))
                             .when(selected, |this| this.bg(cx.theme().list_active))
-                            .border_1()
+                            // .border_1()
                             .border_color(cx.theme().list_active_border),
                     )
                 })
