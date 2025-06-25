@@ -4,3 +4,4 @@
 .vscode
 index.scip
 *.log
+Cargo.lock

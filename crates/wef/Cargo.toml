@@ -25,5 +25,5 @@ serde_json = "1.0.140"
 tuple_len = "3.0.0"
 futures-util = "0.3.31"
 
-[lints]
-workspace = true
+# [lints]
+# workspace = true

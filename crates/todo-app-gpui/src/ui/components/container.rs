@@ -116,8 +116,9 @@ impl Container {
         cx: &mut Context<Self>,
     ) {
         struct Info;
-        let note = Notification::new(format!("You have clicked panel info on: {}", self.name))
-            .id::<Info>();
+        let note = Notification::new()
+            .id::<Info>()
+            .message(format!("You have clicked panel info on: {}", self.name));
         window.push_notification(note, cx);
     }
 
@@ -134,8 +135,9 @@ impl Container {
         }
 
         struct Search;
-        let note =
-            Notification::new(format!("You have toggled search on: {}", self.name)).id::<Search>();
+        let note = Notification::new()
+            .id::<Search>()
+            .message(format!("You have toggled search on: {}", self.name));
         window.push_notification(note, cx);
     }
 }

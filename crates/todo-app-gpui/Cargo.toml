@@ -8,13 +8,12 @@ anyhow.workspace = true
 chrono = { version = "0.4", features = ["serde"] }
 fake = { version = "4.3.0", features = ["dummy"] }
 gpui.workspace = true
-# gpui = { git = "https://github.com/huacnlee/zed.git", branch = "webview" }
 gpui-component = { workspace = true, features = ["webview"] }
 # story = { workspace = true }
 rand = "0.9.1"
 raw-window-handle = { version = "0.6", features = ["std"] }
 regex = "1"
-reqwest_client = { git = "https://github.com/huacnlee/zed.git", branch = "webview" }
+reqwest_client.workspace = true
 reqwest = "0.12"
 rust-embed = "8.5.0"
 serde = "1"
