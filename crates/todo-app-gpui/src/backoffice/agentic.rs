@@ -1,6 +1,8 @@
+mod feedback;
 mod llm;
 mod mcp;
 mod prompts;
+mod regulator;
 
 use actix::prelude::*;
 

@@ -206,17 +206,12 @@ impl McpProviderInfo {
 
     async fn start_stdio(&mut self) -> anyhow::Result<&mut Self> {
         let mut command = self.command.split(" ");
-        println!(
-            "Starting MCP provider with command: program({:?}) args({:?})",
-            command.clone().nth(0),
-            command.clone().skip(1).collect::<Vec<_>>()
-        );
         let command = Command::new(command.nth(0).unwrap_or_default()).configure(|cmd| {
-            cmd.args(command.skip(1).collect::<Vec<_>>())
-                .envs(&self.env_vars);
+            let args = command.skip(0).collect::<Vec<_>>();
+            cmd.args(args).envs(&self.env_vars);
             // .creation_flags(0x08000000);
         });
-
+        println!("Starting MCP provider with command: {:?}", command);
         let transport = TokioChildProcess::new(command)?;
         let client_info = ClientInfo {
             protocol_version: Default::default(),
@@ -306,41 +301,66 @@ impl McpProviderInfo {
         client: RunningService<RoleClient, rmcp::model::InitializeRequestParam>,
     ) -> anyhow::Result<&mut Self> {
         let server_info = client.peer_info().cloned().unwrap_or_default();
-        let tools = client.list_all_tools().await?;
-        let prompts = client.list_all_prompts().await?;
-        let resources = client.list_all_resources().await?;
-        let resource_templates = client.list_all_resource_templates().await?;
+        println!("Server info: {:#?}", server_info);
+        if let Some(capability) = server_info.capabilities.tools {
+            let tools = client.list_all_tools().await?;
+            self.tools = tools;
+            if let Some(list_changed) = capability.list_changed {
+                if list_changed {
+                    println!("Server supports tool list changes.");
+                } else {
+                    println!("Server does not support tool list changes.");
+                }
+            }
+        }
+
+        if let Some(capability) = server_info.capabilities.prompts {
+            let prompts = client.list_all_prompts().await?;
+            self.prompts = prompts;
+            if let Some(list_changed) = capability.list_changed {
+                if list_changed {
+                    println!("Server supports prompt list changes.");
+                } else {
+                    println!("Server does not support prompt list changes.");
+                }
+            }
+        }
+        if let Some(capability) = server_info.capabilities.resources {
+            let resources = client.list_all_resources().await?;
+            let resource_templates = client.list_all_resource_templates().await?;
+            let subscribable = capability.subscribe.unwrap_or_default();
+            self.resources = resources
+                .iter()
+                .map(|r| ResourceDefinition {
+                    resource: r.clone(),
+                    subscribed: false,
+                    subscribable,
+                })
+                .collect();
+            self.resource_templates = resource_templates
+                .into_iter()
+                .map(|r| ResourceTemplateDefinition {
+                    resource_templates: r,
+                    subscribed: false,
+                    subscribable,
+                })
+                .collect();
+            if let Some(list_changed) = capability.list_changed {
+                if list_changed {
+                    println!("Server supports resource list changes.");
+                } else {
+                    println!("Server does not support resource list changes.");
+                }
+            }
+            if let Some(subscribe) = capability.subscribe {
+                if subscribe {
+                    println!("Server supports resource subscription.");
+                } else {
+                    println!("Server does not support resource subscription.");
+                }
+            }
+        }
         self.client = Some(Arc::new(client));
-        self.tools = tools;
-        self.prompts = prompts;
-        self.resources = resources
-            .into_iter()
-            .map(|r| ResourceDefinition {
-                resource: r,
-                subscribed: false,
-                subscribable: server_info
-                    .capabilities
-                    .resources
-                    .clone()
-                    .unwrap_or_default()
-                    .subscribe
-                    .unwrap_or_default(),
-            })
-            .collect();
-        self.resource_templates = resource_templates
-            .into_iter()
-            .map(|r| ResourceTemplateDefinition {
-                resource_templates: r,
-                subscribed: false,
-                subscribable: server_info
-                    .capabilities
-                    .resources
-                    .clone()
-                    .unwrap_or_default()
-                    .subscribe
-                    .unwrap_or_default(),
-            })
-            .collect();
         if !self.tools.is_empty() {
             self.capabilities.push(McpCapability::Tools);
         }

@@ -77,7 +77,7 @@ impl WebViewStory {
         });
 
         let address_input =
-            cx.new(|cx| InputState::new(window, cx).default_value("https://google.com"));
+            cx.new(|cx| InputState::new(window, cx).default_value("https://www.shouqianba.com"));
 
         let url = address_input.read(cx).value().clone();
         webview.update(cx, |view, _| {

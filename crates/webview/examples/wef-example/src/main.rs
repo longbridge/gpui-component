@@ -51,7 +51,7 @@ impl Main {
             .build();
 
         cx.new(|cx| {
-            let url = "https://www.google.com";
+            let url = "https://www.shouqianba.com";
 
             // create webview
             let webview = WebView::with_func_registry(url, func_registry.clone(), window, cx);

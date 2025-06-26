@@ -8823,6 +8823,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "crossbeam-skiplist",
+ "dirs 6.0.0",
  "fake 4.3.0",
  "futures",
  "futures-util",

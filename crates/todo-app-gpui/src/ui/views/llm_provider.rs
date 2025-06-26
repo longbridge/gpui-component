@@ -688,22 +688,22 @@ impl LlmProvider {
                                 ),
                             ),
                     )
-                    .child(
-                        h_flex().items_center().gap_2().child(
-                            // 修复：使用二元组格式，参考mcp_provider.rs的实现
-                            Switch::new(("model-enabled", provider_index * 1000 + model_index))
-                                .checked(model_enabled)
-                                .on_click(cx.listener(move |this, checked, window, cx| {
-                                    this.toggle_model_enabled(
-                                        provider_index,
-                                        model_index,
-                                        *checked,
-                                        window,
-                                        cx,
-                                    );
-                                })),
-                        ),
-                    )
+                // .child(
+                //     h_flex().items_center().gap_2().child(
+                //         // 修复：使用二元组格式，参考mcp_provider.rs的实现
+                //         Switch::new(("model-enabled", provider_index * 1000 + model_index))
+                //             .checked(model_enabled)
+                //             .on_click(cx.listener(move |this, checked, window, cx| {
+                //                 this.toggle_model_enabled(
+                //                     provider_index,
+                //                     model_index,
+                //                     *checked,
+                //                     window,
+                //                     cx,
+                //                 );
+                //             })),
+                //     ),
+                // )
             }))
             .when(models.is_empty(), |this| {
                 this.child(
