@@ -4,7 +4,7 @@
   "style": {
     "editor.foreground": "#000000",
     "editor.background": "#ffffff",
-    "editor.active_line.background": "#F0F0F0",
+    "editor.active_line.background": "#F5F5F5",
     "editor.line_number": "#929292",
     "editor.active_line_number": "#000000",
     "conflict": "#C5060B",

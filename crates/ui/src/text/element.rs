@@ -581,6 +581,7 @@ impl Node {
     fn render_codeblock(
         code_block: CodeBlock,
         mb: Rems,
+        style: &TextViewStyle,
         _: &mut Window,
         cx: &mut App,
     ) -> AnyElement {
@@ -588,7 +589,11 @@ impl Node {
             .mb(mb)
             .p_3()
             .rounded(cx.theme().radius)
-            .bg(cx.theme().accent)
+            .bg(style
+                .highlight_theme
+                .style
+                .active_line
+                .unwrap_or(cx.theme().background))
             .font_family("Menlo, Monaco, Consolas, monospace")
             .text_size(rems(0.875))
             .relative()
@@ -600,7 +605,7 @@ impl Node {
         self,
         list_state: Option<ListState>,
         is_last_child: bool,
-        text_view_style: &TextViewStyle,
+        style: &TextViewStyle,
         window: &mut Window,
         cx: &mut App,
     ) -> impl IntoElement {
@@ -608,7 +613,7 @@ impl Node {
         let mb = if in_list || is_last_child {
             rems(0.)
         } else {
-            text_view_style.paragraph_gap
+            style.paragraph_gap
         };
 
         match self {
@@ -617,7 +622,7 @@ impl Node {
                     let children_len = children.len();
                     children.into_iter().enumerate().map(move |(index, c)| {
                         let is_last_child = index == children_len - 1;
-                        c.render(None, is_last_child, text_view_style, window, cx)
+                        c.render(None, is_last_child, style, window, cx)
                     })
                 })
                 .into_any_element(),
@@ -633,7 +638,7 @@ impl Node {
                     _ => (rems(1.), FontWeight::NORMAL),
                 };
 
-                let text_size = text_size.to_pixels(text_view_style.heading_base_font_size);
+                let text_size = text_size.to_pixels(style.heading_base_font_size);
 
                 h_flex()
                     .mb(rems(0.3))
@@ -669,7 +674,7 @@ impl Node {
                                 todo: list_state.todo,
                                 depth: list_state.depth,
                             },
-                            text_view_style,
+                            style,
                             window,
                             cx,
                         ));
@@ -681,7 +686,9 @@ impl Node {
                     items
                 })
                 .into_any_element(),
-            Node::CodeBlock(code_block) => Self::render_codeblock(code_block, mb, window, cx),
+            Node::CodeBlock(code_block) => {
+                Self::render_codeblock(code_block, mb, style, window, cx)
+            }
             Node::Table { .. } => Self::render_table(&self, window, cx).into_any_element(),
             Node::Divider => div()
                 .bg(cx.theme().border)
