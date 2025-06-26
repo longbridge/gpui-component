@@ -588,7 +588,7 @@ impl Node {
             .mb(mb)
             .p_3()
             .rounded(cx.theme().radius)
-            .bg(cx.theme().secondary)
+            .bg(cx.theme().accent)
             .font_family("Menlo, Monaco, Consolas, monospace")
             .text_size(rems(0.875))
             .relative()
