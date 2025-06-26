@@ -355,7 +355,7 @@ impl ThemeColor {
 
     pub fn dark() -> Self {
         Self {
-            accent: neutral_800(),
+            accent: neutral_900(),
             accent_foreground: neutral_50(),
             accordion: neutral_950(),
             accordion_active: neutral_800(),

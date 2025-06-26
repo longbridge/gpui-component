@@ -581,7 +581,7 @@ impl Node {
     fn render_codeblock(
         code_block: CodeBlock,
         mb: Rems,
-        style: &TextViewStyle,
+        _: &TextViewStyle,
         _: &mut Window,
         cx: &mut App,
     ) -> AnyElement {
@@ -589,11 +589,7 @@ impl Node {
             .mb(mb)
             .p_3()
             .rounded(cx.theme().radius)
-            .bg(style
-                .highlight_theme
-                .style
-                .active_line
-                .unwrap_or(cx.theme().background))
+            .bg(cx.theme().accent)
             .font_family("Menlo, Monaco, Consolas, monospace")
             .text_size(rems(0.875))
             .relative()
