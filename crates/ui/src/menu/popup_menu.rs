@@ -1,8 +1,9 @@
 use crate::actions::{Cancel, Confirm, SelectNext, SelectPrev};
+use crate::menu::menu_item::MenuItem;
 use crate::scroll::{Scrollbar, ScrollbarState};
 use crate::{
-    button::Button, h_flex, list::ListItem, popover::Popover, v_flex, ActiveTheme, Icon, IconName,
-    Selectable, Sizable as _,
+    button::Button, h_flex, popover::Popover, v_flex, ActiveTheme, Icon, IconName, Selectable,
+    Sizable as _,
 };
 use crate::{Kbd, StyledExt};
 use gpui::{
@@ -686,7 +687,7 @@ impl PopupMenu {
         const EDGE_PADDING: Pixels = px(8.);
         const INNER_PADDING: Pixels = px(4.);
 
-        let this = ListItem::new(ix)
+        let this = MenuItem::new(ix)
             .relative()
             .text_sm()
             .py_0()
