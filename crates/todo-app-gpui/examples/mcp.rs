@@ -1,3 +1,4 @@
+#![windows_subsystem = "windows"]
 use gpui::SharedString;
 use gpui_component::IconName;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ACCEPT, AUTHORIZATION};
@@ -46,8 +47,16 @@ use std::future::Future;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let command = Command::new(std::env::args().nth(1).unwrap()).configure(|cmd| {
-        cmd.args(std::env::args().skip(2).collect::<Vec<_>>());
+    let env_vars = HashMap::from([("GITHUB_PERSONAL_ACCESS_TOKEN".to_string(),"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".to_string())]);
+    // let command = Command::new(std::env::args().nth(1).unwrap()).configure(|cmd| {
+    //     cmd.args(std::env::args().skip(2).collect::<Vec<_>>())
+    //         .envs(&env_vars);
+    //     // .creation_flags(0x08000000);
+    // });
+    let command = Command::new("github-mcp-server.exe").configure(|cmd| {
+        cmd.args(&["stdio"])
+            .envs(&env_vars)
+            .creation_flags(0x08000000);
         // .creation_flags(0x08000000);
     });
 
@@ -107,5 +116,5 @@ async fn main() -> anyhow::Result<()> {
             }
         }
     }
-    Ok(())
+    loop {}
 }

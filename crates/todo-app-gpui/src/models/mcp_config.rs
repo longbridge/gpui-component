@@ -208,8 +208,9 @@ impl McpProviderInfo {
         let mut command = self.command.split(" ");
         let command = Command::new(command.nth(0).unwrap_or_default()).configure(|cmd| {
             let args = command.skip(0).collect::<Vec<_>>();
-            cmd.args(args).envs(&self.env_vars);
-            // .creation_flags(0x08000000);
+            cmd.args(args)
+                .envs(&self.env_vars)
+                .creation_flags(0x08000000);
         });
         println!("Starting MCP provider with command: {:?}", command);
         let transport = TokioChildProcess::new(command)?;
@@ -389,9 +390,13 @@ impl McpProviderManager {
         }
         let content = std::fs::read_to_string(config_path).unwrap_or_default();
         let providers = serde_yaml::from_str::<Vec<McpProviderInfo>>(&content).unwrap_or_default();
-        // for provider in providers.iter_mut() {
-        //     *provider = provider.clone().start().await?;
-        // }
+        let mut providers_clone = providers.clone();
+        tokio::spawn(async move {
+            for provider in providers_clone.iter_mut() {
+                provider.start().await.unwrap();
+            }
+        });
+
         Self { providers }
     }
 

@@ -1,7 +1,4 @@
-#![cfg_attr(
-    all(not(debug_assertions), target_os = "windows"),
-    windows_subsystem = "windows"
-)]
+#![cfg_attr(all(target_os = "windows"), windows_subsystem = "windows")]
 mod app;
 mod backoffice;
 mod models;
@@ -10,7 +7,6 @@ pub mod xbus;
 
 #[tokio::main]
 async fn main() {
-    
     // tracing_subscriber::fmt()
     //     .with_env_filter(
     //         tracing_subscriber::EnvFilter::from_default_env()
