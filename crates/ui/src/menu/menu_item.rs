@@ -94,7 +94,7 @@ impl ParentElement for MenuItem {
 }
 
 impl RenderOnce for MenuItem {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         h_flex()
             .id(self.id)
             .gap_x_1()
