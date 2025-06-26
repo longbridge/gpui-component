@@ -3,14 +3,7 @@ use crate::app::AppState;
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::{
-    accordion::Accordion,
-    button::{Button, ButtonVariant, ButtonVariants as _},
-    checkbox::Checkbox,
-    h_flex,
-    input::TextInput,
-    scroll::Scrollbar,
-    text::TextView,
-    *,
+    accordion::Accordion, button::{Button, ButtonVariant, ButtonVariants as _}, checkbox::Checkbox, h_flex, input::TextInput, tooltip::Tooltip, scroll::Scrollbar, text::TextView, *
 };
 
 impl FocusableCycle for TodoThreadChat {
@@ -180,6 +173,7 @@ impl TodoThreadChat {
                                 .p_2()
                                 .children(provider_models.iter().enumerate().map(
                                     |(model_index, model)| {
+                                        let model_id = model.id.clone();
                                         let model_name_for_event = model.display_name.clone();
                                         let checkbox_id = SharedString::new(format!(
                                             "chat-model-{}-{}",
@@ -208,6 +202,9 @@ impl TodoThreadChat {
                                                                             selected.model_id == model.id && selected.provider_id == provider.id
                                                                         ))
                                                                     .label(model.display_name.clone())
+                                                                    .tooltip(move |window, cx| {     
+                                                                        Tooltip::new(model_id.clone()).build(window, cx)
+                                                                    })
                                                                     .on_click({
                                                                         let model_clone = model.clone();
                                                                                 let provider_clone = provider.clone();

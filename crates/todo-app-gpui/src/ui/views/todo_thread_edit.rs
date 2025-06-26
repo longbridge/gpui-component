@@ -430,6 +430,7 @@ impl TodoThreadEdit {
                                 .p_2()
                                 .children(provider_models.iter().enumerate().map(
                                     |(model_index, model)| {
+                                        let model_id = model.id.clone();
                                         let model_name_for_event = model.display_name.clone();
                                         let checkbox_id = SharedString::new(format!("model-{}-{}",provider_index, model_index));
                                         let todo_edit_entity_for_event = todo_edit_entity.clone();
@@ -456,7 +457,9 @@ impl TodoThreadEdit {
                                                                             selected.model_id == model.id && selected.provider_id == provider.id
                                                                         )
                                                                     )
-                                                                    .label(model.display_name.clone())
+                                                                    .label(model.display_name.clone()).tooltip(move |window, cx| {
+                                                                        Tooltip::new(model_id.clone()).build(window, cx)
+                                                                    })
                                                                     .on_click({
                                                                         let model_clone = model.clone();
                                                                                 let provider_clone = provider.clone();
