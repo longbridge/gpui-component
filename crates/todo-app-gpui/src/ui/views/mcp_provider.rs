@@ -87,7 +87,10 @@ impl McpProvider {
         //let mcp_provider_manager = McpProviderManager::load();
         Self {
             focus_handle: cx.focus_handle(),
-            providers: AppState::state(cx).mcp_provider.list_providers(),
+            providers: AppState::state(cx)
+                .mcp_provider
+                .load_providers()
+                .unwrap_or_default(),
             expanded_providers: vec![],
             active_capability_tabs: std::collections::HashMap::new(),
             editing_provider: None,
@@ -100,17 +103,11 @@ impl McpProvider {
     // 保存配置到文件
     fn save_config(&mut self, cx: &mut Context<Self>) {
         println!("保存MCP配置到文件...");
-        // 先同步视图数据到管理器
-        AppState::state_mut(cx).mcp_provider.providers.clear();
-        for provider in &self.providers {
-            AppState::state_mut(cx)
-                .mcp_provider
-                .providers
-                .push(provider.clone());
-        }
-
         // 然后保存到文件
-        if let Err(e) = AppState::state_mut(cx).mcp_provider.save() {
+        if let Err(e) = AppState::state_mut(cx)
+            .mcp_provider
+            .save_providers(&self.providers[..])
+        {
             eprintln!("保存MCP配置失败: {}", e);
         }
         xbus::post(&FoEvent::McpConfigUpdated);
@@ -298,6 +295,7 @@ impl McpProvider {
             if enabled {
                 let mut provider = provider.clone();
                 let win_handle = window.window_handle();
+
                 cx.spawn(async move |this, cx| match provider.start().await {
                     Ok(_) => {
                         this.update(cx, |this, cx| {

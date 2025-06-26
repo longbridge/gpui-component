@@ -114,7 +114,7 @@ impl AppState {
             invisible_panels: cx.new(|_| Vec::new()),
             profile_manager: ProfileManager::load(),
             llm_provider: LlmProviderManager::load(),
-            mcp_provider: McpProviderManager::load(),
+            mcp_provider: McpProviderManager::default(),
             todo_manager: TodoManager::load(),
         };
         cx.set_global::<AppState>(state);

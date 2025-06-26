@@ -557,7 +557,7 @@ impl TodoThreadEdit {
 
         window.open_drawer_at(placement, cx, move |drawer, _window, drawer_cx| {
             // 从 entity 中读取当前的工具数据
-            let providers = AppState::state(drawer_cx).mcp_provider.providers.clone();
+            let providers = AppState::state(drawer_cx).mcp_provider.load_providers().unwrap_or_default();
             let expanded_providers = todo_edit_entity.read(drawer_cx).expanded_tool_providers.clone();
             let todoitem = todo_edit_entity.read(drawer_cx).todoitem.clone();
             // 创建手风琴组件并添加切换监听器

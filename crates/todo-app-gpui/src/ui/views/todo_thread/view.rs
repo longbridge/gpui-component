@@ -293,7 +293,7 @@ impl TodoThreadChat {
     ) {
         let todo_edit_entity = cx.entity().clone();
         window.open_drawer_at(placement, cx, move |drawer, _window, drawer_cx| {
-            let providers = AppState::state(drawer_cx).mcp_provider.providers.clone();
+            let providers = AppState::state(drawer_cx).mcp_provider.load_providers().unwrap_or_default();
             let expanded_providers = todo_edit_entity.read(drawer_cx).expanded_tool_providers.clone();
             let todoitem = todo_edit_entity.read(drawer_cx).todoitem.clone();
             let mut accordion = Accordion::new("chat-tool-providers")
@@ -519,8 +519,10 @@ impl Render for TodoThreadChat {
                                 .left_0()
                                 .right_0()
                                 .bottom_0()
-                                .child( Scrollbar::vertical(&self.scroll_state, &self.scroll_handle)
-                                        .scroll_size(self.scroll_size),),
+                                .child(
+                                    Scrollbar::vertical(&self.scroll_state, &self.scroll_handle)
+                                        .scroll_size(self.scroll_size),
+                                ),
                         ),
                 ),
             )

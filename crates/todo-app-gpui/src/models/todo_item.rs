@@ -272,7 +272,7 @@ impl Todo {
         provider_id: &str,
         tool_name: &str,
     ) -> anyhow::Result<()> {
-        if let Some(provider) = mcp_manager.get_provider(provider_id) {
+        if let Ok(Some(provider)) = mcp_manager.get_provider(provider_id) {
             if let Some(tool) = provider.tools.iter().find(|t| t.name == tool_name) {
                 let selected_tool = SelectedTool {
                     provider_id: provider_id.to_string(),
