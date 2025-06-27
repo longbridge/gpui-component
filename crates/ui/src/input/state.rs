@@ -1704,9 +1704,9 @@ impl InputState {
     /// The offset is the UTF-8 offset.
     ///
     /// Ensure the offset use self.next_boundary or self.previous_boundary to get the correct offset.
-    fn move_to(&mut self, offset: Cursor, _: &mut Window, cx: &mut Context<Self>) {
-        let offset = Cursor::new(offset.offset.clamp(0, self.text.len()));
-        self.selected_range = (offset..offset).into();
+    fn move_to(&mut self, cursor: Cursor, _: &mut Window, cx: &mut Context<Self>) {
+        let cursor = Cursor::new(cursor.offset.clamp(0, self.text.len()));
+        self.selected_range = (cursor..cursor).into();
         self.pause_blink_cursor(cx);
         self.update_preferred_x_offset(cx);
         cx.notify()

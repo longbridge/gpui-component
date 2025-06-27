@@ -67,19 +67,19 @@ impl TextElement {
         window: &mut Window,
         cx: &mut App,
     ) -> (Option<Bounds<Pixels>>, Point<Pixels>, Option<usize>) {
-        let input = self.input.read(cx);
-        let mut selected_range = input.selected_range.clone();
-        if let Some(marked_range) = &input.marked_range {
+        let state = self.input.read(cx);
+        let mut selected_range = state.selected_range.clone();
+        if let Some(marked_range) = &state.marked_range {
             selected_range = (marked_range.end..marked_range.end).into();
         }
 
-        let cursor = input.cursor();
+        let cursor = state.cursor();
         let mut current_line_index = None;
-        let mut scroll_offset = input.scroll_handle.offset();
+        let mut scroll_offset = state.scroll_handle.offset();
         let mut cursor_bounds = None;
 
         // If the input has a fixed height (Otherwise is auto-grow), we need to add a bottom margin to the input.
-        let bottom_margin = if input.is_auto_grow() {
+        let bottom_margin = if state.is_auto_grow() {
             px(0.) + line_height
         } else {
             BOTTOM_MARGIN_ROWS * line_height + line_height
@@ -100,8 +100,22 @@ impl TextElement {
             let line_origin = point(px(0.), offset_y);
             if cursor_pos.is_none() {
                 let offset = cursor.offset.saturating_sub(prev_lines_offset);
-                if let Some(pos) = line.position_for_index(offset, line_height) {
+                let is_move_left = state
+                    .last_cursor
+                    .filter(|last_cursor| *last_cursor != cursor)
+                    .map(|last_cursor| last_cursor > cursor);
+
+                if let Some(mut pos) = line.position_for_index(offset, line_height) {
                     current_line_index = Some(line_ix);
+                    if is_move_left == Some(true) {
+                        // If the x is the wrap line end, move to the next line start.
+                        if let Some(next_pos) = line.position_for_index(offset + 1, line_height) {
+                            if next_pos.y > pos.y {
+                                pos.x = px(0.);
+                                pos.y = next_pos.y;
+                            }
+                        }
+                    }
                     cursor_pos = Some(line_origin + pos);
                 }
             }
@@ -126,8 +140,8 @@ impl TextElement {
         if let (Some(cursor_pos), Some(cursor_start), Some(cursor_end)) =
             (cursor_pos, cursor_start, cursor_end)
         {
-            let cursor_moved = input.last_cursor != Some(cursor);
-            let selection_changed = input.last_selected_range != Some(selected_range.clone());
+            let cursor_moved = state.last_cursor != Some(cursor);
+            let selection_changed = state.last_selected_range != Some(selected_range);
 
             if cursor_moved || selection_changed {
                 scroll_offset.x =
@@ -152,7 +166,7 @@ impl TextElement {
                     scroll_offset.y
                 };
 
-                if input.selection_reversed {
+                if state.selection_reversed {
                     if scroll_offset.x + cursor_start.x < px(0.) {
                         // selection start is out of left
                         scroll_offset.x = -cursor_start.x;
@@ -173,7 +187,7 @@ impl TextElement {
                 }
             }
 
-            if input.show_cursor(window, cx) {
+            if state.show_cursor(window, cx) {
                 // cursor blink
                 let cursor_height = line_height;
                 cursor_bounds = Some(Bounds::new(
