@@ -230,7 +230,7 @@ impl Render for Example {
                         .child({
                             let loc = self.input_state.read(cx).line_column();
                             let cursor = self.input_state.read(cx).cursor();
-                            format!("{}:{} ({} c)", loc.line, loc.column, cursor.offset())
+                            format!("{} ({} c)", loc, cursor.offset())
                         }),
                 ),
         )

@@ -1,5 +1,6 @@
 use std::{
     cmp::Ordering,
+    fmt,
     ops::{Add, Deref, Range, Sub},
 };
 
@@ -171,5 +172,23 @@ impl From<(usize, usize)> for LineColumn {
             line: value.0.max(1),
             column: value.1.max(1),
         }
+    }
+}
+
+impl fmt::Display for LineColumn {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}:{}", self.line, self.column)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::input::LineColumn;
+
+    #[test]
+    fn test_line_column_display() {
+        assert_eq!(LineColumn::from((1, 2)).to_string(), "1:2");
+        assert_eq!(LineColumn::from((10, 10)).to_string(), "10:10");
+        assert_eq!(LineColumn::from((0, 0)).to_string(), "1:1");
     }
 }
