@@ -32,7 +32,7 @@ use super::{
 };
 use crate::input::hover_popover::DiagnosticPopover;
 use crate::input::marker::Marker;
-use crate::input::{Cursor, Selection};
+use crate::input::{Cursor, LineColumn, Selection};
 use crate::{history::History, scroll::ScrollbarState, Root};
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
@@ -820,6 +820,11 @@ impl InputState {
     /// Return the value without mask.
     pub fn unmask_value(&self) -> SharedString {
         self.mask_pattern.unmask(&self.text).into()
+    }
+
+    /// Return the line and column (1-based) of the cursor.
+    pub fn line_column(&self) -> LineColumn {
+        self.text_wrapper.line_column(self.cursor().offset)
     }
 
     /// Focus the input field.
@@ -1711,7 +1716,10 @@ impl InputState {
         cx.notify()
     }
 
-    pub(super) fn cursor(&self) -> Cursor {
+    /// Get the cursor position.
+    ///
+    /// The offset is the UTF-8 offset.
+    pub fn cursor(&self) -> Cursor {
         if let Some(marked_range) = &self.marked_range {
             return marked_range.end;
         }

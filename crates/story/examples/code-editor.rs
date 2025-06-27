@@ -1,11 +1,11 @@
 use gpui::*;
 use gpui_component::{
-    checkbox::Checkbox,
+    button::{Button, ButtonVariants as _},
     dropdown::{Dropdown, DropdownEvent, DropdownState},
     h_flex,
     highlighter::{Language, LanguageConfig, LanguageRegistry},
     input::{InputEvent, InputState, Marker, TabSize, TextInput},
-    v_flex,
+    v_flex, ActiveTheme, Selectable, Sizable,
 };
 use story::Assets;
 
@@ -185,44 +185,55 @@ impl Render for Example {
         self.update_highlighter(window, cx);
         self.set_markers(window, cx);
 
-        v_flex()
-            .size_full()
-            .child(
-                h_flex()
-                    .p_4()
-                    .pb_0()
-                    .gap_4()
-                    .flex_shrink_0()
-                    .items_center()
-                    .justify_between()
-                    .child(Dropdown::new(&self.language_state).title_prefix("Language: "))
-                    .child(
-                        Checkbox::new("line-numbger")
-                            .checked(self.line_number)
-                            .on_click(cx.listener(|this, checked: &bool, window, cx| {
-                                this.line_number = *checked;
-                                this.input_state.update(cx, |state, cx| {
-                                    state.set_line_number(this.line_number, window, cx);
-                                });
-                                cx.notify();
-                            }))
-                            .label("Line Number"),
-                    ),
-            )
-            .child(
-                div()
-                    .id("source")
-                    .w_full()
-                    .flex_1()
-                    .p_4()
-                    .font_family("Monaco")
-                    .text_size(px(12.))
-                    .child(
-                        TextInput::new(&self.input_state)
-                            .h_full()
-                            .focus_bordered(false),
-                    ),
-            )
+        v_flex().size_full().child(
+            v_flex()
+                .id("source")
+                .w_full()
+                .flex_1()
+                .p_4()
+                .gap_2()
+                .child(
+                    TextInput::new(&self.input_state)
+                        .h_full()
+                        .font_family("Monaco")
+                        .text_size(px(12.))
+                        .focus_bordered(false),
+                )
+                .child(
+                    h_flex()
+                        .justify_between()
+                        .text_sm()
+                        .text_color(cx.theme().muted_foreground)
+                        .child(
+                            h_flex()
+                                .gap_3()
+                                .child(
+                                    Dropdown::new(&self.language_state)
+                                        .menu_width(px(160.))
+                                        .small(),
+                                )
+                                .child(
+                                    Button::new("line-number")
+                                        .ghost()
+                                        .label("Line Number")
+                                        .small()
+                                        .selected(self.line_number)
+                                        .on_click(cx.listener(|this, _, window, cx| {
+                                            this.line_number = !this.line_number;
+                                            this.input_state.update(cx, |state, cx| {
+                                                state.set_line_number(this.line_number, window, cx);
+                                            });
+                                            cx.notify();
+                                        })),
+                                ),
+                        )
+                        .child({
+                            let loc = self.input_state.read(cx).line_column();
+                            let cursor = self.input_state.read(cx).cursor();
+                            format!("{}:{} ({} c)", loc.line, loc.column, cursor.offset())
+                        }),
+                ),
+        )
     }
 }
 

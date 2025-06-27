@@ -6,23 +6,18 @@ use std::{
 /// Cursor of the text.
 #[derive(Debug, Copy, Clone, Default)]
 pub struct Cursor {
-    /// The byte offset.
+    /// The byte offset in the text (zero-based).
     pub(super) offset: usize,
-    /// Whether the cursor is before or after the offset, default: false.
-    pub(super) after: bool,
 }
 
 impl Cursor {
     pub fn new(offset: usize) -> Self {
-        Self {
-            offset,
-            after: false,
-        }
+        Self { offset }
     }
 
-    pub fn after(mut self) -> Self {
-        self.after = true;
-        self
+    /// Returns the byte offset in the text (zero-based).
+    pub fn offset(&self) -> usize {
+        self.offset
     }
 }
 
@@ -158,5 +153,23 @@ impl From<Selection> for Range<usize> {
 impl From<&Selection> for Range<usize> {
     fn from(value: &Selection) -> Self {
         value.start.offset..value.end.offset
+    }
+}
+
+/// Line and column position (1-based) in the source code.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct LineColumn {
+    /// Line number (1-based)
+    pub line: usize,
+    /// Column number (1-based)
+    pub column: usize,
+}
+
+impl From<(usize, usize)> for LineColumn {
+    fn from(value: (usize, usize)) -> Self {
+        Self {
+            line: value.0.max(1),
+            column: value.1.max(1),
+        }
     }
 }

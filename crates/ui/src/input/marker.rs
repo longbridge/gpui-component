@@ -1,4 +1,7 @@
-use crate::{highlighter::HighlightTheme, input::InputState};
+use crate::{
+    highlighter::HighlightTheme,
+    input::{InputState, LineColumn},
+};
 use gpui::{px, HighlightStyle, Hsla, SharedString, UnderlineStyle};
 use itertools::Itertools;
 use std::ops::Range;
@@ -72,24 +75,6 @@ impl Marker {
                 .sum::<usize>();
 
         self.range = Some(start_byte..end_byte);
-    }
-}
-
-/// Line and column position (1-based) in the source code.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct LineColumn {
-    /// Line number (1-based)
-    pub line: usize,
-    /// Column number (1-based)
-    pub column: usize,
-}
-
-impl From<(usize, usize)> for LineColumn {
-    fn from(value: (usize, usize)) -> Self {
-        Self {
-            line: value.0.max(1),
-            column: value.1.max(1),
-        }
     }
 }
 
