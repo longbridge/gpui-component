@@ -1376,7 +1376,7 @@ impl InputState {
         };
 
         let tab_indent = tab_size.to_string();
-        let selected_range = self.selected_range.clone();
+        let selected_range = self.selected_range;
         let mut added_len = 0;
         let is_selected = !self.selected_range.is_empty();
 
@@ -1434,7 +1434,7 @@ impl InputState {
         };
 
         let tab_indent = tab_size.to_string();
-        let selected_range = self.selected_range.clone();
+        let selected_range = self.selected_range;
         let mut removed_len = 0;
         let is_selected = !self.selected_range.is_empty();
 
@@ -1639,9 +1639,7 @@ impl InputState {
             return;
         }
 
-        let selected_text = self
-            .text_for_range_utf8(self.selected_range.clone())
-            .to_string();
+        let selected_text = self.text_for_range_utf8(self.selected_range).to_string();
         cx.write_to_clipboard(ClipboardItem::new_string(selected_text));
         self.replace_text_in_range(None, "", window, cx);
     }
@@ -1682,7 +1680,7 @@ impl InputState {
         self.history.ignore = true;
         if let Some(changes) = self.history.undo() {
             for change in changes {
-                let range_utf16 = self.range_to_utf16(&change.new_range.clone().into());
+                let range_utf16 = self.range_to_utf16(&change.new_range.into());
                 self.replace_text_in_range(Some(range_utf16), &change.old_text, window, cx);
             }
         }
@@ -1693,7 +1691,7 @@ impl InputState {
         self.history.ignore = true;
         if let Some(changes) = self.history.redo() {
             for change in changes {
-                let range_utf16 = self.range_to_utf16(&change.old_range.clone().into());
+                let range_utf16 = self.range_to_utf16(&change.old_range.into());
                 self.replace_text_in_range(Some(range_utf16), &change.new_text, window, cx);
             }
         }
@@ -1909,7 +1907,7 @@ impl InputState {
         }
 
         self.selected_range = (start..end).into();
-        self.selected_word_range = Some(self.selected_range.clone());
+        self.selected_word_range = Some(self.selected_range);
         cx.notify()
     }
 
@@ -2131,7 +2129,6 @@ impl EntityInputHandler for InputState {
         _cx: &mut Context<Self>,
     ) -> Option<Range<usize>> {
         self.marked_range
-            .clone()
             .map(|range| self.range_to_utf16(&range.into()))
     }
 
@@ -2157,7 +2154,7 @@ impl EntityInputHandler for InputState {
         let range = range_utf16
             .as_ref()
             .map(|range_utf16| self.range_from_utf16(range_utf16))
-            .or(self.marked_range.clone().map(|range| range.into()))
+            .or(self.marked_range.map(|range| range.into()))
             .unwrap_or(self.selected_range.into());
 
         let pending_text: SharedString = (self.text_for_range_utf8(0..range.start).to_owned()
@@ -2204,7 +2201,7 @@ impl EntityInputHandler for InputState {
         let range = range_utf16
             .as_ref()
             .map(|range_utf16| self.range_from_utf16(range_utf16))
-            .or(self.marked_range.clone().map(|range| range.into()))
+            .or(self.marked_range.map(|range| range.into()))
             .unwrap_or(self.selected_range.into());
         let pending_text: SharedString = (self.text_for_range_utf8(0..range.start).to_owned()
             + new_text

@@ -4,21 +4,12 @@ use std::{
 };
 
 /// Cursor of the text.
-#[derive(Debug, Copy, Clone, Hash)]
+#[derive(Debug, Copy, Clone, Default)]
 pub struct Cursor {
     /// The byte offset.
     pub(super) offset: usize,
     /// Whether the cursor is before or after the offset, default: false.
     pub(super) after: bool,
-}
-
-impl Default for Cursor {
-    fn default() -> Self {
-        Self {
-            offset: 0,
-            after: false,
-        }
-    }
 }
 
 impl Cursor {
@@ -124,7 +115,7 @@ impl Deref for Cursor {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub struct Selection {
     pub start: Cursor,
     pub end: Cursor,

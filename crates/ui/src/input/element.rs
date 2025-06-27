@@ -68,7 +68,7 @@ impl TextElement {
         cx: &mut App,
     ) -> (Option<Bounds<Pixels>>, Point<Pixels>, Option<usize>) {
         let state = self.input.read(cx);
-        let mut selected_range = state.selected_range.clone();
+        let mut selected_range = state.selected_range;
         if let Some(marked_range) = &state.marked_range {
             selected_range = (marked_range.end..marked_range.end).into();
         }
@@ -202,7 +202,7 @@ impl TextElement {
         cx: &mut App,
     ) -> Option<Path<Pixels>> {
         let input = self.input.read(cx);
-        let mut selected_range = input.selected_range.clone();
+        let mut selected_range = input.selected_range;
         if let Some(marked_range) = &input.marked_range {
             if !marked_range.is_empty() {
                 selected_range = (marked_range.end..marked_range.end).into();
@@ -824,7 +824,7 @@ impl Element for TextElement {
         let focus_handle = self.input.read(cx).focus_handle.clone();
         let focused = focus_handle.is_focused(window);
         let bounds = prepaint.bounds;
-        let selected_range = self.input.read(cx).selected_range.clone();
+        let selected_range = self.input.read(cx).selected_range;
         let visible_range = &prepaint.last_layout.visible_range;
 
         window.handle_input(
