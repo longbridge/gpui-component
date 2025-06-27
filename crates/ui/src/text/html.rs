@@ -417,7 +417,6 @@ fn parse_paragraph(
                     let (child_text, child_marks) = parse_paragraph(&mut child_paragraph, &child);
                     merge_child_text(&mut text, &mut marks, &child_text, &child_marks);
                 }
-
                 marks.push((
                     0..text.len(),
                     InlineTextStyle {
@@ -530,7 +529,7 @@ fn parse_paragraph(
                 let (child_text, child_marks) = parse_paragraph(&mut child_paragraph, &child);
                 merge_child_text(&mut text, &mut marks, &child_text, &child_marks);
             }
-            paragraph.push(element::TextNode {
+            paragraph.push(TextNode {
                 text: text.clone(),
                 marks: marks.clone(),
             });
@@ -639,6 +638,7 @@ fn parse_node(node: &Rc<Node>, paragraph: &mut Paragraph) -> element::Node {
                 let ordered = name.local == local_name!("ol");
 
                 let mut list_children = vec![];
+
                 for child in node.children.borrow().iter() {
                     let mut child_paragraph = Paragraph::default();
                     list_children.push(parse_node(child, &mut child_paragraph));
