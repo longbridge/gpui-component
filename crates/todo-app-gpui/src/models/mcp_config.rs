@@ -210,8 +210,8 @@ impl McpProviderInfo {
             let args = command.skip(0).collect::<Vec<_>>();
             cmd.args(args)
                 .envs(&self.env_vars);
-            if cfg!(target_os = "windows") {        
-                cmd.creation_flags(0x08000000);}
+            #[cfg(target_os = "windows")]
+            cmd.creation_flags(0x08000000);
         });
         println!("Starting MCP provider with command: {:?}", command);
         let transport = TokioChildProcess::new(command)?;
