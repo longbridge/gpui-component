@@ -310,14 +310,7 @@ impl RenderOnce for Paragraph {
 
                 for text_node in children.into_iter() {
                     let text_len = text_node.text.len();
-                    let part = if text.len() == 0 {
-                        // trim start for first text
-                        text_node.text.trim_start()
-                    } else {
-                        text_node.text.as_str()
-                    };
-
-                    text.push_str(part);
+                    text.push_str(&text_node.text);
 
                     let mut node_highlights = vec![];
                     for (range, style) in text_node.marks {
