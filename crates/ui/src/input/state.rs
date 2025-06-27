@@ -646,7 +646,8 @@ impl InputState {
         }
 
         let new_offset = (prev_lines_offset + new_local_index).min(self.text.len());
-        self.selected_range = (Cursor::new(new_offset)..Cursor::new(new_offset)).into();
+        let new_cursor = Cursor::new(new_offset);
+        self.selected_range = (new_cursor..new_cursor).into();
         self.pause_blink_cursor(cx);
         // Set back the preferred_x_offset
         self.preferred_x_offset = preferred_x_offset;

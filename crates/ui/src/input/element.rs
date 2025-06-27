@@ -100,22 +100,9 @@ impl TextElement {
             let line_origin = point(px(0.), offset_y);
             if cursor_pos.is_none() {
                 let offset = cursor.offset.saturating_sub(prev_lines_offset);
-                let is_move_left = state
-                    .last_cursor
-                    .filter(|last_cursor| *last_cursor != cursor)
-                    .map(|last_cursor| last_cursor > cursor);
 
-                if let Some(mut pos) = line.position_for_index(offset, line_height) {
+                if let Some(pos) = line.position_for_index(offset, line_height) {
                     current_line_index = Some(line_ix);
-                    if is_move_left == Some(true) {
-                        // If the x is the wrap line end, move to the next line start.
-                        if let Some(next_pos) = line.position_for_index(offset + 1, line_height) {
-                            if next_pos.y > pos.y {
-                                pos.x = px(0.);
-                                pos.y = next_pos.y;
-                            }
-                        }
-                    }
                     cursor_pos = Some(line_origin + pos);
                 }
             }
