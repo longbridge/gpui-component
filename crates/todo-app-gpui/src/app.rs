@@ -1,6 +1,6 @@
-use crate::models::mcp_config::McpProviderManager;
+use crate::models::mcp_config::McpProviderConfig;
 use crate::models::profile_config::ProfileManager;
-use crate::models::provider_config::LlmProviderManager;
+use crate::models::provider_config::LlmProviders;
 use crate::models::todo_item::TodoManager;
 use crate::ui::assets::Assets;
 

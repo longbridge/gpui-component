@@ -1,8 +1,8 @@
 use crate::app::AppExt;
 #[cfg(target_os = "windows")]
 use crate::app::WindowExt;
-use crate::models::mcp_config::McpProviderManager;
-use crate::models::provider_config::LlmProviderManager;
+use crate::models::mcp_config::McpProviderConfig;
+use crate::models::provider_config::LlmProviders;
 use crate::models::todo_item::*;
 use crate::models::{
     mcp_config::{McpProviderInfo, McpTool},
@@ -354,7 +354,7 @@ impl TodoThreadEdit {
         let todo_edit_entity = cx.entity().clone();
         window.open_drawer_at(placement, cx, move |drawer, _window, drawer_cx| {
             // 从 entity 中读取当前的模型数据
-            let providers =  LlmProviderManager::load_providers().clone();
+            let providers =  LlmProviders::load_providers().clone();
             let expanded_providers = todo_edit_entity.read(drawer_cx).expanded_providers.clone();
             let todoitem = todo_edit_entity.read(drawer_cx).todoitem.clone();
 
@@ -562,7 +562,7 @@ impl TodoThreadEdit {
 
         window.open_drawer_at(placement, cx, move |drawer, _window, drawer_cx| {
             // 从 entity 中读取当前的工具数据
-            let providers = McpProviderManager::load_providers().unwrap_or_default();
+            let providers = McpProviderConfig::load_providers().unwrap_or_default();
             let expanded_providers = todo_edit_entity.read(drawer_cx).expanded_tool_providers.clone();
             let todoitem = todo_edit_entity.read(drawer_cx).todoitem.clone();
             // 创建手风琴组件并添加切换监听器

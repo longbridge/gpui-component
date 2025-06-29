@@ -380,9 +380,9 @@ impl McpProviderInfo {
 }
 
 #[derive(Debug, Serialize, Deserialize, Default)]
-pub struct McpProviderManager;
+pub struct McpProviderConfig;
 
-impl McpProviderManager {
+impl McpProviderConfig {
     /// 从文件加载所有提供商配置
     pub fn load_providers() -> anyhow::Result<Vec<McpProviderInfo>> {
         let config_path = mcp_config_path();

@@ -446,9 +446,9 @@ impl LlmProviderInfo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct LlmProviderManager;
+pub struct LlmProviders;
 
-impl LlmProviderManager {
+impl LlmProviders {
     /// 从文件加载所有提供商
     pub fn load_providers() -> Vec<LlmProviderInfo> {
         let config_path = provider_config_path();

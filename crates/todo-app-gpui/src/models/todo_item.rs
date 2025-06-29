@@ -1,5 +1,5 @@
 use crate::models::{
-    mcp_config::McpProviderManager, provider_config::LlmProviderManager, todo_config_path,
+    mcp_config::McpProviderConfig, provider_config::LlmProviders, todo_config_path,
 };
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
@@ -223,7 +223,7 @@ impl Todo {
         provider_id: &str,
         model_id: &str,
     ) -> anyhow::Result<()> {
-        if let Some(provider) = LlmProviderManager::get_provider(provider_id) {
+        if let Some(provider) = LlmProviders::get_provider(provider_id) {
             if let Some(model) = provider.models.iter().find(|m| m.id == model_id) {
                 let selected_model = SelectedModel {
                     provider_id: provider_id.to_string(),
@@ -270,7 +270,7 @@ impl Todo {
         provider_id: &str,
         tool_name: &str,
     ) -> anyhow::Result<()> {
-        if let Ok(Some(provider)) = McpProviderManager::get_provider(provider_id) {
+        if let Ok(Some(provider)) = McpProviderConfig::get_provider(provider_id) {
             if let Some(tool) = provider.tools.iter().find(|t| t.name == tool_name) {
                 let selected_tool = SelectedTool {
                     provider_id: provider_id.to_string(),
@@ -376,7 +376,7 @@ impl Todo {
     ) -> Vec<String> {
         let mut capabilities = Vec::new();
         for selected_model in &self.selected_model {
-            if let Some(provider) = LlmProviderManager::get_provider(&selected_model.provider_id) {
+            if let Some(provider) = LlmProviders::get_provider(&selected_model.provider_id) {
                 if let Some(model) = provider
                     .models
                     .iter()
