@@ -19,7 +19,6 @@ webview = ["dep:wry"]
 [dependencies]
 gpui.workspace = true
 gpui-component-macros.workspace = true
-
 anyhow = "1"
 enum-iterator = "2.1.0"
 futures-util = "0.3.31"

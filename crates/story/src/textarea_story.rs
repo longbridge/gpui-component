@@ -136,6 +136,8 @@ impl Focusable for TextareaStory {
 
 impl Render for TextareaStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let loc = self.textarea.read(cx).line_column();
+
         v_flex()
             .key_context(CONTEXT)
             .id("textarea-story")
@@ -152,19 +154,28 @@ impl Render for TextareaStory {
                         .child(TextInput::new(&self.textarea).h(px(320.)))
                         .child(
                             h_flex()
-                                .gap_2()
+                                .justify_between()
                                 .child(
-                                    Button::new("btn-insert-text")
-                                        .xsmall()
-                                        .label("Insert Text")
-                                        .on_click(cx.listener(Self::on_insert_text_to_textarea)),
+                                    h_flex()
+                                        .gap_2()
+                                        .child(
+                                            Button::new("btn-insert-text")
+                                                .xsmall()
+                                                .label("Insert Text")
+                                                .on_click(
+                                                    cx.listener(Self::on_insert_text_to_textarea),
+                                                ),
+                                        )
+                                        .child(
+                                            Button::new("btn-replace-text")
+                                                .xsmall()
+                                                .label("Replace Text")
+                                                .on_click(
+                                                    cx.listener(Self::on_replace_text_to_textarea),
+                                                ),
+                                        ),
                                 )
-                                .child(
-                                    Button::new("btn-replace-text")
-                                        .xsmall()
-                                        .label("Replace Text")
-                                        .on_click(cx.listener(Self::on_replace_text_to_textarea)),
-                                ),
+                                .child(format!("{}:{}", loc.line, loc.column)),
                         ),
                 ),
             )

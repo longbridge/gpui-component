@@ -1,6 +1,7 @@
 mod blink_cursor;
 mod change;
 mod clear_button;
+mod cursor;
 mod element;
 mod hover_popover;
 mod marker;
@@ -13,6 +14,7 @@ mod text_input;
 mod text_wrapper;
 
 pub(crate) use clear_button::*;
+pub(super) use cursor::*;
 pub use marker::*;
 pub use mask_pattern::MaskPattern;
 pub use mode::TabSize;

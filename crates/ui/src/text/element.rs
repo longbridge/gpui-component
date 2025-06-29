@@ -2,7 +2,7 @@ use std::ops::Range;
 
 use gpui::{
     div, img, prelude::FluentBuilder as _, px, relative, rems, AnyElement, App, DefiniteLength,
-    ElementId, FontStyle, FontWeight, Half, HighlightStyle, InteractiveElement as _,
+    Div, ElementId, FontStyle, FontWeight, Half, HighlightStyle, InteractiveElement as _,
     InteractiveText, IntoElement, Length, ObjectFit, ParentElement, Rems, RenderOnce, SharedString,
     SharedUri, Styled, StyledImage as _, StyledText, Window,
 };
@@ -310,14 +310,7 @@ impl RenderOnce for Paragraph {
 
                 for text_node in children.into_iter() {
                     let text_len = text_node.text.len();
-                    let part = if text.len() == 0 {
-                        // trim start for first text
-                        text_node.text.trim_start()
-                    } else {
-                        text_node.text.as_str()
-                    };
-
-                    text.push_str(part);
+                    text.push_str(&text_node.text);
 
                     let mut node_highlights = vec![];
                     for (range, style) in text_node.marks {
@@ -415,10 +408,33 @@ impl Node {
             } => v_flex()
                 .when(spread, |this| this.child(div()))
                 .children({
-                    let mut items = Vec::with_capacity(children.len());
-                    for child in children.into_iter() {
+                    let mut items: Vec<Div> = Vec::with_capacity(children.len());
+                    for (child_ix, child) in children.iter().enumerate() {
                         match &child {
                             Node::Paragraph(_) => {
+                                let last_not_list = child_ix > 0
+                                    && !matches!(children[child_ix - 1], Node::List { .. });
+
+                                let text = child.clone().render(
+                                    Some(ListState {
+                                        depth: state.depth + 1,
+                                        ordered: state.ordered,
+                                        todo: checked.is_some(),
+                                    }),
+                                    true,
+                                    text_view_style,
+                                    window,
+                                    cx,
+                                );
+
+                                // merge content into last item.
+                                if last_not_list {
+                                    if let Some(item_item) = items.last_mut() {
+                                        item_item.extend(vec![text.into_any_element()]);
+                                        continue;
+                                    }
+                                }
+
                                 items.push(
                                     h_flex()
                                         .relative()
@@ -455,23 +471,11 @@ impl Node {
                                                     }),
                                             )
                                         })
-                                        .child(div().flex_1().overflow_hidden().child(
-                                            child.render(
-                                                Some(ListState {
-                                                    depth: state.depth + 1,
-                                                    ordered: state.ordered,
-                                                    todo: checked.is_some(),
-                                                }),
-                                                true,
-                                                text_view_style,
-                                                window,
-                                                cx,
-                                            ),
-                                        )),
+                                        .child(text),
                                 );
                             }
                             Node::List { .. } => {
-                                items.push(div().ml(rems(1.)).child(child.render(
+                                items.push(div().ml(rems(1.)).child(child.clone().render(
                                     Some(ListState {
                                         depth: state.depth + 1,
                                         ordered: state.ordered,
