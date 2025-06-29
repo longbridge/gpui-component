@@ -1,10 +1,9 @@
-use crate::{h_flex, v_flex, ActiveTheme as _, Collapsible, Icon, IconName, StyledExt};
 use crate::context_menu::ContextMenuExt;
+use crate::{h_flex, v_flex, ActiveTheme as _, Collapsible, Icon, IconName, StyledExt};
 use gpui::{
     div, percentage, prelude::FluentBuilder as _, AnyElement, App, ClickEvent, ElementId,
-    InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, SharedString,
-    StatefulInteractiveElement as _, Styled as _, Window,
-    ParentElement
+    InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
+    SharedString, StatefulInteractiveElement as _, Styled as _, Window,
 };
 use std::rc::Rc;
 
