@@ -1,8 +1,10 @@
 use crate::{h_flex, v_flex, ActiveTheme as _, Collapsible, Icon, IconName, StyledExt};
+use crate::context_menu::ContextMenuExt;
 use gpui::{
     div, percentage, prelude::FluentBuilder as _, AnyElement, App, ClickEvent, ElementId,
     InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, SharedString,
     StatefulInteractiveElement as _, Styled as _, Window,
+    ParentElement
 };
 use std::rc::Rc;
 
@@ -64,8 +66,17 @@ pub struct SidebarMenuItem {
     active: bool,
     collapsed: bool,
     children: Vec<Self>,
+    context_menu: Vec<AnyElement>,
     suffix: Option<AnyElement>,
 }
+
+impl ParentElement for SidebarMenuItem {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.context_menu.extend(elements);
+    }
+}
+
+impl ContextMenuExt for SidebarMenuItem {}
 
 impl SidebarMenuItem {
     /// Create a new SidebarMenuItem with a label
@@ -78,6 +89,7 @@ impl SidebarMenuItem {
             active: false,
             collapsed: false,
             children: Vec::new(),
+            context_menu: Vec::new(),
             suffix: None,
         }
     }
@@ -150,6 +162,7 @@ impl RenderOnce for SidebarMenuItem {
         div()
             .id(self.id.clone())
             .w_full()
+            .children(self.context_menu)
             .child(
                 h_flex()
                     .size_full()

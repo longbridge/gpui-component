@@ -1,25 +1,18 @@
 use std::collections::HashMap;
 
 use gpui::{
-    div, prelude::FluentBuilder, relative, Action, App, AppContext, ClickEvent, Context, Entity,
-    Focusable, IntoElement, ParentElement, Render, SharedString, Styled, Window,
+    actions, div, prelude::FluentBuilder, relative, Action, App, AppContext, ClickEvent, Context, Entity, Focusable, InteractiveElement, IntoElement, ParentElement, Render, SharedString, Styled, Window
 };
 
 use gpui_component::{
-    badge::Badge,
-    blue_500,
-    breadcrumb::{Breadcrumb, BreadcrumbItem},
-    divider::Divider,
-    h_flex,
-    popup_menu::PopupMenuExt,
-    sidebar::{
+    badge::Badge, blue_500, breadcrumb::{Breadcrumb, BreadcrumbItem}, context_menu::ContextMenuExt, divider::Divider, h_flex, popup_menu::PopupMenuExt, sidebar::{
         Sidebar, SidebarFooter, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuItem,
         SidebarToggleButton,
-    },
-    switch::Switch,
-    v_flex, white, ActiveTheme, Icon, IconName, Side, Sizable,
+    }, switch::Switch, v_flex, white, ActiveTheme, Icon, IconName, Side, Sizable
 };
 use serde::Deserialize;
+
+actions!(story, [HideMenu]);
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = story, no_json)]
@@ -53,6 +46,11 @@ impl SidebarStory {
             focus_handle: cx.focus_handle(),
             checked: false,
         }
+    }
+
+    fn on_hide_menu_clicking(&mut self, _: &HideMenu, _: &mut Window, cx: &mut Context<Self>) {
+        self.collapsed = !self.collapsed;
+        cx.notify()
     }
 
     fn render_content(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -244,6 +242,7 @@ impl Render for SidebarStory {
         ];
 
         h_flex()
+            .on_action(cx.listener(Self::on_hide_menu_clicking))
             .rounded(cx.theme().radius)
             .border_1()
             .border_color(cx.theme().border)
@@ -313,6 +312,16 @@ impl Render for SidebarStory {
                             groups[0].iter().map(|item| {
                                 SidebarMenuItem::new(item.label())
                                     .icon(item.icon())
+                                    .context_menu({
+                                        move |this, _window, _cx| {
+                                            this.external_link_icon(false)
+                                                .menu("Toggle Sidebar", Box::new(HideMenu))
+                                                .link("About", "https://github.com/longbridge/gpui-component")
+                                                .separator()
+                                                .label("This is a label")
+                                                .separator()
+                                        }
+                                    })
                                     .active(self.active_items.contains_key(item))
                                     .children(item.items().into_iter().enumerate().map(
                                         |(ix, sub_item)| {
