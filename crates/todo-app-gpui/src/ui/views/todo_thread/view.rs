@@ -1,5 +1,5 @@
 use super::*;
-use crate::app::AppState;
+use crate::{app::AppState, models::{mcp_config::McpProviderManager, provider_config::LlmProviderManager}};
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::{
@@ -98,8 +98,7 @@ impl TodoThreadChat {
         let todo_edit_entity = cx.entity().clone();
 
         window.open_drawer_at(placement, cx, move |drawer, _window, drawer_cx| {
-           // let providers = todo_edit_entity.read(drawer_cx).model_manager.providers.clone();
-            let providers = AppState::state(drawer_cx).llm_provider.providers.clone();
+            let providers =  LlmProviderManager::load_providers().clone();
             let expanded_providers = todo_edit_entity.read(drawer_cx).expanded_providers.clone();
             let todoitem = todo_edit_entity.read(drawer_cx).todoitem.clone();
             let mut accordion = Accordion::new("chat-model-providers")
@@ -290,7 +289,7 @@ impl TodoThreadChat {
     ) {
         let todo_edit_entity = cx.entity().clone();
         window.open_drawer_at(placement, cx, move |drawer, _window, drawer_cx| {
-            let providers = AppState::state(drawer_cx).mcp_provider.load_providers().unwrap_or_default();
+            let providers = McpProviderManager::load_providers().unwrap_or_default();
             let expanded_providers = todo_edit_entity.read(drawer_cx).expanded_tool_providers.clone();
             let todoitem = todo_edit_entity.read(drawer_cx).todoitem.clone();
             let mut accordion = Accordion::new("chat-tool-providers")

@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use super::*;
-use crate::app::AppState;
+use crate::{app::AppState, models::provider_config::LlmProviderManager};
 use futures::channel;
 use gpui::*;
 use rig::message::*;
@@ -43,9 +43,7 @@ impl TodoThreadChat {
         println!("使用模型: {:?}", selected_model);
         // 获取当前选择的模型提供商信息
         if let Some(selected_model) = selected_model {
-            let provider_info = AppState::state(cx)
-                .llm_provider
-                .providers
+            let provider_info =  LlmProviderManager::load_providers()
                 .iter()
                 .find(|provider| provider.id == selected_model.provider_id)
                 .cloned();

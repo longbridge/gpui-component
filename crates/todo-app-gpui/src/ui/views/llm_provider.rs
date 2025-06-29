@@ -87,7 +87,7 @@ impl LlmProvider {
         // let llm_provider_manager = LlmProviderManager::load();
         Self {
             focus_handle: cx.focus_handle(),
-            providers: AppState::state(cx).llm_provider.list_providers(),
+            providers: LlmProviderManager::list_providers(),
             expanded_providers: vec![],
             active_provider_tabs: std::collections::HashMap::new(),
             editing_provider: None,
@@ -99,14 +99,14 @@ impl LlmProvider {
 
     // 刷新提供商列表
     fn refresh_providers(&mut self, cx: &mut Context<Self>) {
-        self.providers = AppState::state(cx).llm_provider.list_providers();
+        self.providers =  LlmProviderManager::list_providers();
         cx.notify();
     }
 
     // 保存配置到文件
     fn save_config(&mut self, cx: &mut Context<Self>) {
         println!("正在保存配置...");
-        if let Err(e) = AppState::state(cx).llm_provider.save() {
+        if let Err(e) = LlmProviderManager::save_providers(&self.providers[..]) {
             eprintln!("保存配置失败: {}", e);
         }
         xbus::post(&FoEvent::LlmConfigUpdated);
@@ -175,17 +175,13 @@ impl LlmProvider {
 
                 // 检查是否为新创建的提供商
                 let is_new_provider = provider.id.is_empty()
-                    || AppState::state(cx)
-                        .llm_provider
-                        .get_provider(&provider.id)
+                    ||  LlmProviderManager::get_provider(&provider.id)
                         .is_none();
 
                 if is_new_provider {
                     // 新建提供商 - 使用 add_provider
                     provider.id = uuid::Uuid::new_v4().to_string();
-                    match AppState::state_mut(cx)
-                        .llm_provider
-                        .add_provider(provider.clone())
+                    match  LlmProviderManager::add_provider(provider.clone())
                     {
                         Ok(id) => {
                             provider.id = id;
@@ -203,9 +199,7 @@ impl LlmProvider {
                     }
                 } else {
                     // 更新现有提供商 - 使用 update_provider
-                    match AppState::state_mut(cx)
-                        .llm_provider
-                        .update_provider(&provider.id, provider.clone())
+                    match  LlmProviderManager::update_provider(&provider.id, provider.clone())
                     {
                         Ok(_) => {
                             window.push_notification(
@@ -283,9 +277,7 @@ impl LlmProvider {
             let provider_id = provider.id.clone();
 
             // 使用 LlmProviderManager 删除提供商
-            match AppState::state_mut(cx)
-                .llm_provider
-                .delete_provider(&provider_id)
+            match  LlmProviderManager::delete_provider(&provider_id)
             {
                 Ok(_) => {
                     // 从本地列表中删除
@@ -334,9 +326,7 @@ impl LlmProvider {
             let provider_id = provider.id.clone();
 
             // 使用 LlmProviderManager 切换启用状态
-            match AppState::state_mut(cx)
-                .llm_provider
-                .toggle_provider(&provider_id, enabled)
+            match  LlmProviderManager::toggle_provider(&provider_id, enabled)
             {
                 Ok(_) => {
                     provider.enabled = enabled;
@@ -380,9 +370,7 @@ impl LlmProvider {
                 }
 
                 // 同步到 LlmProviderManager 并保存
-                match AppState::state_mut(cx)
-                    .llm_provider
-                    .update_provider(&provider_id, provider_clone)
+                match LlmProviderManager::update_provider(&provider_id, provider_clone)
                 {
                     Ok(_) => {
                         self.save_config(cx);
@@ -469,9 +457,7 @@ impl LlmProvider {
                             this.update(cx, |this, cx| {
                                 if let Some(provider) = this.providers.get_mut(provider_index) {
                                     provider.models = models;
-                                    AppState::state_mut(cx)
-                                        .llm_provider
-                                        .update_provider(&provider.id, provider.clone())
+                                    LlmProviderManager::update_provider(&provider.id, provider.clone())
                                         .unwrap_or_else(|e| {
                                             eprintln!("更新模型列表失败: {}", e);
                                         });

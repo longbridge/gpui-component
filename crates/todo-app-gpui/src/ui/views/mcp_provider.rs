@@ -1,5 +1,5 @@
 use crate::app::{AppState, FoEvent};
-use crate::models::mcp_config::{McpPrompt, McpProviderInfo, McpTool, McpTransport};
+use crate::models::mcp_config::{McpPrompt, McpProviderInfo, McpProviderManager, McpTool, McpTransport};
 use crate::ui::components::ViewKit;
 use crate::xbus;
 use gpui::prelude::*;
@@ -84,12 +84,9 @@ impl McpProvider {
     }
 
     fn new(_window: &mut Window, cx: &mut Context<Self>) -> Self {
-        //let mcp_provider_manager = McpProviderManager::load();
         Self {
             focus_handle: cx.focus_handle(),
-            providers: AppState::state(cx)
-                .mcp_provider
-                .load_providers()
+            providers: McpProviderManager::load_providers()
                 .unwrap_or_default(),
             expanded_providers: vec![],
             active_capability_tabs: std::collections::HashMap::new(),
@@ -104,9 +101,7 @@ impl McpProvider {
     fn save_config(&mut self, cx: &mut Context<Self>) {
         println!("保存MCP配置到文件...");
         // 然后保存到文件
-        if let Err(e) = AppState::state_mut(cx)
-            .mcp_provider
-            .save_providers(&self.providers[..])
+        if let Err(e) = McpProviderManager::save_providers(&self.providers[..])
         {
             eprintln!("保存MCP配置失败: {}", e);
         }

@@ -220,11 +220,10 @@ impl Todo {
     /// 添加选中的模型
     pub fn add_selected_model(
         &mut self,
-        provider_manager: &LlmProviderManager,
         provider_id: &str,
         model_id: &str,
     ) -> anyhow::Result<()> {
-        if let Some(provider) = provider_manager.get_provider(provider_id) {
+        if let Some(provider) = LlmProviderManager::get_provider(provider_id) {
             if let Some(model) = provider.models.iter().find(|m| m.id == model_id) {
                 let selected_model = SelectedModel {
                     provider_id: provider_id.to_string(),
@@ -268,11 +267,10 @@ impl Todo {
     /// 添加选中的工具
     pub fn add_selected_tool(
         &mut self,
-        mcp_manager: &McpProviderManager,
         provider_id: &str,
         tool_name: &str,
     ) -> anyhow::Result<()> {
-        if let Ok(Some(provider)) = mcp_manager.get_provider(provider_id) {
+        if let Ok(Some(provider)) = McpProviderManager::get_provider(provider_id) {
             if let Some(tool) = provider.tools.iter().find(|t| t.name == tool_name) {
                 let selected_tool = SelectedTool {
                     provider_id: provider_id.to_string(),
@@ -375,11 +373,10 @@ impl Todo {
     /// 获取模型能力总结
     pub fn get_model_capabilities_summary(
         &self,
-        provider_manager: &LlmProviderManager,
     ) -> Vec<String> {
         let mut capabilities = Vec::new();
         for selected_model in &self.selected_model {
-            if let Some(provider) = provider_manager.get_provider(&selected_model.provider_id) {
+            if let Some(provider) = LlmProviderManager::get_provider(&selected_model.provider_id) {
                 if let Some(model) = provider
                     .models
                     .iter()

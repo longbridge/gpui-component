@@ -446,75 +446,74 @@ impl LlmProviderInfo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct LlmProviderManager {
-    #[serde(default)]
-    pub providers: Vec<LlmProviderInfo>,
-}
+pub struct LlmProviderManager;
 
 impl LlmProviderManager {
-    /// 从文件加载配置
-    pub fn load() -> Self {
+    /// 从文件加载所有提供商
+    pub fn load_providers() -> Vec<LlmProviderInfo> {
         let config_path = provider_config_path();
         if !config_path.exists() {
-            return Self::default();
+            return Vec::new();
         }
 
         match std::fs::read_to_string(config_path) {
             Ok(content) => match serde_yaml::from_str::<Vec<LlmProviderInfo>>(&content) {
-                Ok(providers) => Self { providers },
+                Ok(providers) => providers,
                 Err(e) => {
                     eprintln!("Failed to parse LLM provider config: {}", e);
-                    Self::default()
+                    Vec::new()
                 }
             },
             Err(e) => {
                 eprintln!("Failed to read LLM provider config file: {}", e);
-                Self::default()
+                Vec::new()
             }
         }
     }
 
-    /// 保存配置到文件
-    pub fn save(&self) -> anyhow::Result<()> {
+    /// 保存所有提供商到文件
+    pub fn save_providers(providers: &[LlmProviderInfo]) -> anyhow::Result<()> {
         let config_path = provider_config_path();
 
         if let Some(parent) = config_path.parent() {
             std::fs::create_dir_all(parent)?;
         }
 
-        let content = serde_yaml::to_string(&self.providers)?;
+        let content = serde_yaml::to_string(providers)?;
         std::fs::write(config_path, content)?;
         Ok(())
     }
 
     /// 获取所有提供商列表
-    pub fn list_providers(&self) -> Vec<LlmProviderInfo> {
-        self.providers.clone()
+    pub fn list_providers() -> Vec<LlmProviderInfo> {
+        Self::load_providers()
     }
 
     /// 根据ID查询提供商
-    pub fn get_provider(&self, id: &str) -> Option<&LlmProviderInfo> {
-        self.providers.iter().find(|p| p.id == id)
+    pub fn get_provider(id: &str) -> Option<LlmProviderInfo> {
+        Self::load_providers().into_iter().find(|p| p.id == id)
     }
 
     /// 根据名称查询提供商
-    pub fn get_provider_by_name(&self, name: &str) -> Option<&LlmProviderInfo> {
-        self.providers.iter().find(|p| p.name == name)
+    pub fn get_provider_by_name(name: &str) -> Option<LlmProviderInfo> {
+        Self::load_providers().into_iter().find(|p| p.name == name)
     }
 
     /// 根据索引获取提供商
-    pub fn get_provider_by_index(&self, index: usize) -> Option<&LlmProviderInfo> {
-        self.providers.get(index)
+    pub fn get_provider_by_index(index: usize) -> Option<LlmProviderInfo> {
+        Self::load_providers().get(index).cloned()
     }
 
     /// 根据ID查找提供商索引
-    pub fn find_provider_index(&self, id: &str) -> Option<usize> {
-        self.providers.iter().position(|p| p.id == id)
+    pub fn find_provider_index(id: &str) -> Option<usize> {
+        Self::load_providers().iter().position(|p| p.id == id)
     }
 
     /// 添加新的提供商
-    pub fn add_provider(&mut self, provider: LlmProviderInfo) -> anyhow::Result<String> {
-        if self.get_provider_by_name(&provider.name).is_some() {
+    pub fn add_provider(provider: LlmProviderInfo) -> anyhow::Result<String> {
+        let mut providers = Self::load_providers();
+        
+        if providers.iter().any(|p| p.name == provider.name) {
             return Err(anyhow::anyhow!(
                 "Provider '{}' already exists",
                 provider.name
@@ -522,18 +521,21 @@ impl LlmProviderManager {
         }
 
         let id = provider.id.clone();
-        self.providers.push(provider);
+        providers.push(provider);
+        Self::save_providers(&providers)?;
         Ok(id)
     }
 
     /// 更新提供商
-    pub fn update_provider(&mut self, id: &str, provider: LlmProviderInfo) -> anyhow::Result<()> {
-        let index = self
-            .find_provider_index(id)
+    pub fn update_provider(id: &str, provider: LlmProviderInfo) -> anyhow::Result<()> {
+        let mut providers = Self::load_providers();
+        let index = providers
+            .iter()
+            .position(|p| p.id == id)
             .ok_or_else(|| anyhow::anyhow!("Provider with id '{}' not found", id))?;
 
         // 检查名称冲突
-        if let Some(existing) = self.get_provider_by_name(&provider.name) {
+        if let Some(existing) = providers.iter().find(|p| p.name == provider.name) {
             if existing.id != id {
                 return Err(anyhow::anyhow!(
                     "Provider name '{}' already exists",
@@ -542,55 +544,25 @@ impl LlmProviderManager {
             }
         }
 
-        self.providers[index] = provider;
+        providers[index] = provider;
+        Self::save_providers(&providers)?;
         Ok(())
     }
 
-    /// 刷新提供商的模型列表
-    // pub async fn refresh_provider(&mut self, id: &str) -> anyhow::Result<()> {
-    //     let provider = self
-    //         .providers
-    //         .iter_mut()
-    //         .find(|p| p.id == id)
-    //         .ok_or_else(|| anyhow::anyhow!("Provider with id '{}' not found", id))?;
-
-    //     let client =
-    //         rig::providers::mira::Client::new_with_base_url(&provider.api_key, &provider.api_url)?;
-    //     // 异步获取模型列表
-    //     let models_result = client.list_models().await?;
-    //     provider.models = models_result
-    //         .into_iter()
-    //         .map(|id| {
-    //             // 根据模型名称推断能力
-    //             let capabilities = ApiType::infer_model_capabilities(&id);
-    //             let limits = ApiType::infer_model_limits(&id);
-
-    //             ModelInfo {
-    //                 id: id.clone(),
-    //                 display_name: id,
-    //                 capabilities,
-    //                 enabled: true,
-    //                 limits,
-    //             }
-    //         })
-    //         .collect();
-    //     Ok(())
-    // }
-
     /// 根据索引更新提供商
     pub fn update_provider_by_index(
-        &mut self,
         index: usize,
         provider: LlmProviderInfo,
     ) -> anyhow::Result<()> {
-        if index >= self.providers.len() {
+        let mut providers = Self::load_providers();
+        if index >= providers.len() {
             return Err(anyhow::anyhow!("Provider index {} out of bounds", index));
         }
 
-        let old_id = &self.providers[index].id;
+        let old_id = &providers[index].id;
 
         // 检查名称冲突
-        if let Some(existing) = self.get_provider_by_name(&provider.name) {
+        if let Some(existing) = providers.iter().find(|p| p.name == provider.name) {
             if existing.id != *old_id {
                 return Err(anyhow::anyhow!(
                     "Provider name '{}' already exists",
@@ -599,88 +571,109 @@ impl LlmProviderManager {
             }
         }
 
-        self.providers[index] = provider;
+        providers[index] = provider;
+        Self::save_providers(&providers)?;
         Ok(())
     }
 
     /// 删除提供商
-    pub fn delete_provider(&mut self, id: &str) -> anyhow::Result<LlmProviderInfo> {
-        let index = self
-            .find_provider_index(id)
+    pub fn delete_provider(id: &str) -> anyhow::Result<LlmProviderInfo> {
+        let mut providers = Self::load_providers();
+        let index = providers
+            .iter()
+            .position(|p| p.id == id)
             .ok_or_else(|| anyhow::anyhow!("Provider with id '{}' not found", id))?;
 
-        Ok(self.providers.remove(index))
+        let removed = providers.remove(index);
+        Self::save_providers(&providers)?;
+        Ok(removed)
     }
 
     /// 根据索引删除提供商
-    pub fn delete_provider_by_index(&mut self, index: usize) -> anyhow::Result<LlmProviderInfo> {
-        if index >= self.providers.len() {
+    pub fn delete_provider_by_index(index: usize) -> anyhow::Result<LlmProviderInfo> {
+        let mut providers = Self::load_providers();
+        if index >= providers.len() {
             return Err(anyhow::anyhow!("Provider index {} out of bounds", index));
         }
 
-        Ok(self.providers.remove(index))
+        let removed = providers.remove(index);
+        Self::save_providers(&providers)?;
+        Ok(removed)
     }
 
     /// 启用/禁用提供商
-    pub fn toggle_provider(&mut self, id: &str, enabled: bool) -> anyhow::Result<()> {
-        let provider = self
-            .providers
+    pub fn toggle_provider(id: &str, enabled: bool) -> anyhow::Result<()> {
+        let mut providers = Self::load_providers();
+        let provider = providers
             .iter_mut()
             .find(|p| p.id == id)
             .ok_or_else(|| anyhow::anyhow!("Provider with id '{}' not found", id))?;
 
         provider.enabled = enabled;
+        Self::save_providers(&providers)?;
         Ok(())
     }
 
     /// 根据索引启用/禁用提供商
-    pub fn toggle_provider_by_index(&mut self, index: usize, enabled: bool) -> anyhow::Result<()> {
-        if index >= self.providers.len() {
+    pub fn toggle_provider_by_index(index: usize, enabled: bool) -> anyhow::Result<()> {
+        let mut providers = Self::load_providers();
+        if index >= providers.len() {
             return Err(anyhow::anyhow!("Provider index {} out of bounds", index));
         }
 
-        self.providers[index].enabled = enabled;
+        providers[index].enabled = enabled;
+        Self::save_providers(&providers)?;
         Ok(())
     }
 
     /// 获取提供商数量
-    pub fn count(&self) -> usize {
-        self.providers.len()
+    pub fn count() -> usize {
+        Self::load_providers().len()
     }
 
     /// 获取启用的提供商
-    pub fn get_enabled_providers(&self) -> Vec<&LlmProviderInfo> {
-        self.providers
-            .iter()
+    pub fn get_enabled_providers() -> Vec<LlmProviderInfo> {
+        Self::load_providers()
+            .into_iter()
             .filter(|provider| provider.enabled)
             .collect()
     }
 
     /// 批量删除提供商
-    pub fn batch_delete(&mut self, ids: &[String]) -> Vec<LlmProviderInfo> {
+    pub fn batch_delete(ids: &[String]) -> Vec<LlmProviderInfo> {
+        let mut providers = Self::load_providers();
         let mut deleted = Vec::new();
 
         // 从后往前删除，避免索引变化
         for id in ids {
-            if let Some(index) = self.find_provider_index(id) {
-                deleted.push(self.providers.remove(index));
+            if let Some(index) = providers.iter().position(|p| &p.id == id) {
+                deleted.push(providers.remove(index));
             }
+        }
+
+        if !deleted.is_empty() {
+            Self::save_providers(&providers).ok();
         }
 
         deleted
     }
 
     /// 根据索引批量删除提供商
-    pub fn batch_delete_by_indices(&mut self, mut indices: Vec<usize>) -> Vec<LlmProviderInfo> {
+    pub fn batch_delete_by_indices(mut indices: Vec<usize>) -> Vec<LlmProviderInfo> {
+        let mut providers = Self::load_providers();
         let mut deleted = Vec::new();
 
         // 从大到小排序索引，从后往前删除
         indices.sort_by(|a, b| b.cmp(a));
 
         for index in indices {
-            if index < self.providers.len() {
-                deleted.push(self.providers.remove(index));
+            if index < providers.len() {
+                deleted.push(providers.remove(index));
             }
+        }
+
+        if !deleted.is_empty() {
+            Self::save_providers(&providers).ok();
         }
 
         deleted.reverse(); // 恢复原始顺序
@@ -688,15 +681,16 @@ impl LlmProviderManager {
     }
 
     /// 清空所有提供商
-    pub fn clear(&mut self) {
-        self.providers.clear();
+    pub fn clear() -> anyhow::Result<()> {
+        Self::save_providers(&[])?;
+        Ok(())
     }
 
     /// 搜索提供商
-    pub fn search_providers(&self, query: &str) -> Vec<&LlmProviderInfo> {
+    pub fn search_providers(query: &str) -> Vec<LlmProviderInfo> {
         let query_lower = query.to_lowercase();
-        self.providers
-            .iter()
+        Self::load_providers()
+            .into_iter()
             .filter(|provider| {
                 provider.name.to_lowercase().contains(&query_lower)
                     || provider.api_url.to_lowercase().contains(&query_lower)
@@ -705,26 +699,30 @@ impl LlmProviderManager {
     }
 
     /// 移动提供商位置
-    pub fn move_provider(&mut self, from_index: usize, to_index: usize) -> anyhow::Result<()> {
-        if from_index >= self.providers.len() || to_index >= self.providers.len() {
+    pub fn move_provider(from_index: usize, to_index: usize) -> anyhow::Result<()> {
+        let mut providers = Self::load_providers();
+        if from_index >= providers.len() || to_index >= providers.len() {
             return Err(anyhow::anyhow!("Index out of bounds"));
         }
 
         if from_index != to_index {
-            let provider = self.providers.remove(from_index);
-            self.providers.insert(to_index, provider);
+            let provider = providers.remove(from_index);
+            providers.insert(to_index, provider);
+            Self::save_providers(&providers)?;
         }
 
         Ok(())
     }
 
     /// 交换两个提供商的位置
-    pub fn swap_providers(&mut self, index1: usize, index2: usize) -> anyhow::Result<()> {
-        if index1 >= self.providers.len() || index2 >= self.providers.len() {
+    pub fn swap_providers(index1: usize, index2: usize) -> anyhow::Result<()> {
+        let mut providers = Self::load_providers();
+        if index1 >= providers.len() || index2 >= providers.len() {
             return Err(anyhow::anyhow!("Index out of bounds"));
         }
 
-        self.providers.swap(index1, index2);
+        providers.swap(index1, index2);
+        Self::save_providers(&providers)?;
         Ok(())
     }
 }

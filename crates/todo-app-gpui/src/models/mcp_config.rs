@@ -384,7 +384,7 @@ pub struct McpProviderManager;
 
 impl McpProviderManager {
     /// 从文件加载所有提供商配置
-    pub fn load_providers(&self) -> anyhow::Result<Vec<McpProviderInfo>> {
+    pub fn load_providers() -> anyhow::Result<Vec<McpProviderInfo>> {
         let config_path = mcp_config_path();
         if !config_path.exists() {
             return Ok(vec![]);
@@ -396,7 +396,7 @@ impl McpProviderManager {
     }
 
     /// 保存所有提供商配置到文件
-    pub fn save_providers(&self, providers: &[McpProviderInfo]) -> anyhow::Result<()> {
+    pub fn save_providers( providers: &[McpProviderInfo]) -> anyhow::Result<()> {
         let config_path = mcp_config_path();
 
         if let Some(parent) = config_path.parent() {
@@ -409,29 +409,29 @@ impl McpProviderManager {
     }
 
     /// 根据ID查询单个提供商配置
-    pub fn get_provider(&self, id: &str) -> anyhow::Result<Option<McpProviderInfo>> {
-        let providers = self.load_providers()?;
+    pub fn get_provider( id: &str) -> anyhow::Result<Option<McpProviderInfo>> {
+        let providers =Self::load_providers()?;
         Ok(providers.into_iter().find(|p| p.id == id))
     }
 
     /// 添加新的提供商配置
-    pub fn add_provider(&self, provider: McpProviderInfo) -> anyhow::Result<()> {
-        let mut providers = self.load_providers()?;
+    pub fn add_provider( provider: McpProviderInfo) -> anyhow::Result<()> {
+        let mut providers = Self::load_providers()?;
         providers.push(provider);
-        self.save_providers(&providers)
+        Self::save_providers(&providers)
     }
 
     /// 更新提供商配置
     pub fn update_provider(
-        &self,
+       
         id: &str,
         updated_provider: McpProviderInfo,
     ) -> anyhow::Result<bool> {
-        let mut providers = self.load_providers()?;
+        let mut providers = Self::load_providers()?;
 
         if let Some(provider) = providers.iter_mut().find(|p| p.id == id) {
             *provider = updated_provider;
-            self.save_providers(&providers)?;
+            Self::save_providers(&providers)?;
             Ok(true)
         } else {
             Ok(false)
@@ -439,14 +439,14 @@ impl McpProviderManager {
     }
 
     /// 删除提供商配置
-    pub fn remove_provider(&self, id: &str) -> anyhow::Result<bool> {
-        let mut providers = self.load_providers()?;
+    pub fn remove_provider( id: &str) -> anyhow::Result<bool> {
+        let mut providers =  Self::load_providers()?;
         let original_len = providers.len();
 
         providers.retain(|p| p.id != id);
 
         if providers.len() != original_len {
-            self.save_providers(&providers)?;
+           Self::save_providers(&providers)?;
             Ok(true)
         } else {
             Ok(false)
@@ -454,12 +454,12 @@ impl McpProviderManager {
     }
 
     /// 启用/禁用提供商
-    pub fn set_provider_enabled(&self, id: &str, enabled: bool) -> anyhow::Result<bool> {
-        let mut providers = self.load_providers()?;
+    pub fn set_provider_enabled( id: &str, enabled: bool) -> anyhow::Result<bool> {
+        let mut providers = Self::load_providers()?;
 
         if let Some(provider) = providers.iter_mut().find(|p| p.id == id) {
             provider.enabled = enabled;
-            self.save_providers(&providers)?;
+            Self::save_providers(&providers)?;
             Ok(true)
         } else {
             Ok(false)
@@ -467,14 +467,14 @@ impl McpProviderManager {
     }
 
     /// 获取所有启用的提供商
-    pub fn get_enabled_providers(&self) -> anyhow::Result<Vec<McpProviderInfo>> {
-        let providers = self.load_providers()?;
+    pub fn get_enabled_providers() -> anyhow::Result<Vec<McpProviderInfo>> {
+        let providers = Self::load_providers()?;
         Ok(providers.into_iter().filter(|p| p.enabled).collect())
     }
 
     /// 启动指定提供商（返回启动后的实例）
-    pub async fn start_provider(&self, id: &str) -> anyhow::Result<Option<McpProviderInfo>> {
-        if let Some(mut provider) = self.get_provider(id)? {
+    pub async fn start_provider( id: &str) -> anyhow::Result<Option<McpProviderInfo>> {
+        if let Some(mut provider) = Self::get_provider(id)? {
             provider.start().await?;
             Ok(Some(provider))
         } else {
@@ -483,8 +483,8 @@ impl McpProviderManager {
     }
 
     /// 启动所有启用的提供商
-    pub async fn start_enabled_providers(&self) -> anyhow::Result<Vec<McpProviderInfo>> {
-        let providers = self.get_enabled_providers()?;
+    pub async fn start_enabled_providers() -> anyhow::Result<Vec<McpProviderInfo>> {
+        let providers = Self::get_enabled_providers()?;
         let mut started_providers = Vec::new();
 
         for mut provider in providers {

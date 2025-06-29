@@ -96,8 +96,6 @@ pub struct AppState {
     /// 不可见面板的列表
     pub invisible_panels: Entity<Vec<SharedString>>,
     pub profile_manager: ProfileManager,
-    pub llm_provider: LlmProviderManager,
-    pub mcp_provider: McpProviderManager,
     pub todo_manager: TodoManager,
 }
 
@@ -113,8 +111,6 @@ impl AppState {
         let state = Self {
             invisible_panels: cx.new(|_| Vec::new()),
             profile_manager: ProfileManager::load(),
-            llm_provider: LlmProviderManager::load(),
-            mcp_provider: McpProviderManager::default(),
             todo_manager: TodoManager::load(),
         };
         cx.set_global::<AppState>(state);
