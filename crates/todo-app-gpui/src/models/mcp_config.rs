@@ -28,6 +28,7 @@ pub use rmcp::{
     ServiceExt,
 };
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use std::{collections::HashMap, env::home_dir};
@@ -284,6 +285,7 @@ impl McpProviderInfo {
                 ..Default::default()
             },
         );
+
         //let transport = StreamableHttpClientTransport::from_uri(self.command.clone());
         let client_info = ClientInfo {
             protocol_version: Default::default(),
@@ -382,6 +384,9 @@ impl McpProviderInfo {
 pub struct McpProviderConfig;
 
 impl McpProviderConfig {
+    pub fn config_path() -> PathBuf {
+        mcp_config_path()
+    }
     /// 从文件加载所有提供商配置
     pub fn load_providers() -> anyhow::Result<Vec<McpProviderInfo>> {
         let config_path = mcp_config_path();

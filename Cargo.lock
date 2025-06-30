@@ -8926,6 +8926,7 @@ dependencies = [
  "gpui-component",
  "gtk",
  "homedir",
+ "log",
  "rand 0.9.1",
  "raw-window-handle",
  "regex",

@@ -12,12 +12,12 @@ pub struct TodoMainWindow {
 
 impl TodoMainWindow {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        window.on_window_should_close(cx, |win, app| {
+        window.on_window_should_close(cx, |_win, app| {
             app.quit();
             true
         });
-        cx.spawn_in(window, async move |win, app: &mut AsyncWindowContext| {
-            app.update(|win, app| {
+        cx.spawn_in(window, async move |_this, app: &mut AsyncWindowContext| {
+            app.update(|_win, app| {
                 app.dispatch_action(&Open);
             })
             .ok();
@@ -31,7 +31,8 @@ impl TodoMainWindow {
                 tx.try_send(event.clone()).ok();
             }
         });
-        cx.spawn(async move |this, cx| {
+        cx.spawn(async move |_this, cx| {
+            use tokio::sync::mpsc::error::TryRecvError;
             let _sub = subscription;
             let handle = win_handle;
             loop {
@@ -43,13 +44,13 @@ impl TodoMainWindow {
                             None => continue,
                         };
                         handle
-                            .update(cx, |_, window, cx| {
+                            .update(cx, |_this, window, cx| {
                                 window.push_notification(note, cx);
                             })
                             .ok();
                     }
-                    Err(tokio::sync::mpsc::error::TryRecvError::Empty) => continue,
-                    Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => break,
+                    Err(TryRecvError::Empty) => continue,
+                    Err(TryRecvError::Disconnected) => break,
                 }
             }
         })
