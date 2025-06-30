@@ -8,7 +8,7 @@ use std::{
 static BUS: OnceLock<EventBus> = OnceLock::new();
 
 pub fn post<E: Any + 'static + Debug>(event: &E) {
-    let bus = BUS.get_or_init(|| EventBus::new());
+    let bus = BUS.get_or_init(EventBus::new);
     bus.post(event);
 }
 
