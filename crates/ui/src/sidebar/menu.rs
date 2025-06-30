@@ -64,14 +64,14 @@ pub struct SidebarMenuItem {
     handler: Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>,
     active: bool,
     collapsed: bool,
-    children: Vec<Self>,
-    context_menu: Vec<AnyElement>,
+    items: Vec<Self>,
+    children: Vec<AnyElement>,
     suffix: Option<AnyElement>,
 }
 
 impl ParentElement for SidebarMenuItem {
     fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
-        self.context_menu.extend(elements);
+        self.children.extend(elements);
     }
 }
 
@@ -87,8 +87,8 @@ impl SidebarMenuItem {
             handler: Rc::new(|_, _, _| {}),
             active: false,
             collapsed: false,
+            items: Vec::new(),
             children: Vec::new(),
-            context_menu: Vec::new(),
             suffix: None,
         }
     }
@@ -127,7 +127,7 @@ impl SidebarMenuItem {
     }
 
     pub fn children(mut self, children: impl IntoIterator<Item = impl Into<Self>>) -> Self {
-        self.children = children.into_iter().map(Into::into).collect();
+        self.items = children.into_iter().map(Into::into).collect();
         self
     }
 
@@ -138,7 +138,7 @@ impl SidebarMenuItem {
     }
 
     fn is_submenu(&self) -> bool {
-        self.children.len() > 0
+        self.items.len() > 0
     }
 
     fn is_open(&self) -> bool {
@@ -161,7 +161,7 @@ impl RenderOnce for SidebarMenuItem {
         div()
             .id(self.id.clone())
             .w_full()
-            .children(self.context_menu)
+            .children(self.children)
             .child(
                 h_flex()
                     .size_full()
@@ -229,7 +229,7 @@ impl RenderOnce for SidebarMenuItem {
                         .pl_2p5()
                         .py_0p5()
                         .children(
-                            self.children
+                            self.items
                                 .into_iter()
                                 .enumerate()
                                 .map(|(ix, item)| item.id(ix)),
