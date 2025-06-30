@@ -1,9 +1,10 @@
-use std::{env::home_dir, path::PathBuf};
-
 pub mod mcp_config;
 pub mod profile_config;
+pub mod prompts;
 pub mod provider_config;
 pub mod todo_item;
+
+use std::{env::home_dir, path::PathBuf};
 
 const MCP_CONFIG_FILE: &str = "config/mcp_providers.yml";
 const PROFILE_CONFIG_FILE: &str = "config/profile.yml";

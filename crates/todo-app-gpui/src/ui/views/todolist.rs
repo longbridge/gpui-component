@@ -308,9 +308,7 @@ impl ListDelegate for TodoListDelegate {
         cx: &mut Context<List<Self>>,
     ) -> Task<()> {
         self.query = query.to_string();
-        self.matched_todos = AppState::state(cx)
-            .todo_manager
-            .list_todos()
+        self.matched_todos = TodoManager::list_todos()
             .iter()
             .filter(|todo| {
                 todo.description
@@ -462,7 +460,7 @@ impl TodoList {
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let delegate = TodoListDelegate {
-            matched_todos: AppState::state(cx).todo_manager.list_todos(),
+            matched_todos: TodoManager::list_todos(),
             selected_index: None,
             confirmed_index: None,
             query: "".to_string(),
@@ -514,8 +512,7 @@ impl TodoList {
         println!("Follow action triggered");
         if let Some(mut todo) = self.selected_todo.clone() {
             todo.follow = !todo.follow;
-            AppState::state_mut(cx).todo_manager.update_todo(todo);
-            self.save(window, cx);
+            TodoManager::update_todo(todo);
             self.set_active_tab(self.active_tab_ix, window, cx);
         }
     }
@@ -523,8 +520,7 @@ impl TodoList {
         println!("Redo action triggered");
         if let Some(mut todo) = self.selected_todo.clone() {
             todo.status = TodoStatus::Todo;
-            AppState::state_mut(cx).todo_manager.update_todo(todo);
-            self.save(window, cx);
+            TodoManager::update_todo(todo);
             self.set_active_tab(self.active_tab_ix, window, cx);
         }
     }
@@ -532,8 +528,7 @@ impl TodoList {
         println!("Completed action triggered");
         if let Some(mut todo) = self.selected_todo.clone() {
             todo.status = TodoStatus::Done;
-            AppState::state_mut(cx).todo_manager.update_todo(todo);
-            self.save(window, cx);
+            TodoManager::update_todo(todo);
             self.set_active_tab(self.active_tab_ix, window, cx);
         }
     }
@@ -546,28 +541,21 @@ impl TodoList {
                 todo.status = TodoStatus::Suspended;
             }
 
-            AppState::state_mut(cx).todo_manager.update_todo(todo);
-            self.save(window, cx);
+            TodoManager::update_todo(todo);
             self.set_active_tab(self.active_tab_ix, window, cx);
         }
     }
     fn clone_todo(&mut self, _: &Clone, window: &mut Window, cx: &mut Context<Self>) {
         println!("Clone action triggered");
         if let Some(todo) = self.selected_todo.clone() {
-            AppState::state_mut(cx).todo_manager.copy_todo(&todo.id);
-            self.save(window, cx);
+            TodoManager::copy_todo(&todo.id);
             self.set_active_tab(self.active_tab_ix, window, cx);
         }
     }
 
-    fn save(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        AppState::state_mut(cx).todo_manager.save().ok();
-    }
-
     fn delete_todo(&mut self, _: &Delete, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(todo) = self.selected_todo.clone() {
-            AppState::state_mut(cx).todo_manager.delete_todo(&todo.id);
-            self.save(window, cx);
+            TodoManager::delete_todo(&todo.id);
             self.set_active_tab(self.active_tab_ix, window, cx);
         }
     }
@@ -629,7 +617,7 @@ impl TodoList {
     fn set_todo_filter(&mut self, filter: TodoFilter, _: &mut Window, cx: &mut Context<Self>) {
         self.todo_filter = filter;
         self.todo_list.update(cx, |list, _cx| {
-            let todos = AppState::state(_cx).todo_manager.list_todos();
+            let todos = TodoManager::list_todos();
             list.delegate_mut().matched_todos = match filter {
                 TodoFilter::All => todos,
                 TodoFilter::Planned => todos

@@ -9,12 +9,19 @@ chrono = { version = "0.4", features = ["serde"] }
 fake = { version = "4.3.0", features = ["dummy"] }
 gpui.workspace = true
 gpui-component = { workspace = true, features = ["webview"] }
-# story = { workspace = true }
+reqwest = { version = "0.12", default-features = false, features = [
+    "charset",
+    "http2",
+    "macos-system-configuration",
+    "rustls-tls-native-roots",
+    "socks",
+    "stream",
+] }
 rand = "0.9.1"
+# story = { workspace = true }
 raw-window-handle = { version = "0.6", features = ["std"] }
 regex = "1"
 reqwest_client.workspace = true
-reqwest = "0.12"
 rust-embed = "8.5.0"
 serde = "1"
 serde_json = "1.0.140"
@@ -51,7 +58,11 @@ rmcp = { git = "https://github.com/modelcontextprotocol/rust-sdk", branch = "mai
 actix = "0.13.5"
 actix-rt = "2.10.0"
 dirs = "6.0.0"
-
+homedir = "0.3.4"
+cron = "0.15.0"
+duration-str = "0.17.0"
+chrono-tz = "0.10.3"
+sysinfo = "0.35.1"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.61.1", features = [
@@ -66,6 +77,6 @@ windows = { version = "0.61.1", features = [
 gtk = { version = "0.18" }
 
 
-[profile.release]
-lto = true
-panic = "abort"
+# [profile.release]
+# lto = true
+# panic = "abort"

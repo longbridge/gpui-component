@@ -1,7 +1,10 @@
-use crate::app::Open;
+use std::time::Duration;
+
+use crate::{app::Open, backoffice::BoEvent, xbus};
 
 use super::views::todolist::TodoList;
 use gpui::*;
+use gpui_component::ContextModal;
 
 pub struct TodoMainWindow {
     root: Entity<TodoList>,
@@ -21,7 +24,35 @@ impl TodoMainWindow {
         })
         .detach();
         let root = TodoList::view(window, cx);
-
+        let win_handle = window.window_handle();
+        let (tx, mut rx) = tokio::sync::mpsc::channel(100);
+        let subscription = xbus::subscribe(move |event: &BoEvent| {
+            if event.is_notification() {
+                tx.try_send(event.clone()).ok();
+            }
+        });
+        cx.spawn(async move |this, cx| {
+            let _sub = subscription;
+            let handle = win_handle;
+            loop {
+                Timer::after(Duration::from_millis(100)).await;
+                match rx.try_recv() {
+                    Ok(note) => {
+                        let note = match note.to_notification() {
+                            Some(n) => n,
+                            None => continue,
+                        };
+                        handle
+                            .update(cx, |_, window, cx| {
+                                window.push_notification(note, cx);
+                            })
+                            .ok();
+                    }
+                    Err(tokio::sync::mpsc::error::TryRecvError::Empty) => continue,
+                    Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => break,
+                }
+            }
+        });
         Self { root }
     }
 

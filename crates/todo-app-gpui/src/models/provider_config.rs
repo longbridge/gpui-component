@@ -14,6 +14,7 @@ use rig::{
         StreamingPrompt,
     },
 };
+use rmcp::model::Tool;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -443,6 +444,60 @@ impl LlmProviderInfo {
 
         Ok(())
     }
+
+    pub async fn stream_chat_with_available_tools(
+        &self,
+        model_id: &str,
+        prompt: &str,
+        tools: Vec<Tool>,
+        chat_history: Vec<Message>,
+    ) -> anyhow::Result<()> {
+        let system_prompt = super::prompts::prompt(tools);
+        let client = rig::providers::openai::Client::from_url(&self.api_key, &self.api_url);
+        let mut chat_history = vec![];
+        loop {
+            let agent = client
+                .agent(model_id)
+                .context(system_prompt.as_str())
+                .max_tokens(4096)
+                .temperature(0.7)
+                .build();
+            let mut stream = agent
+                .stream_completion(prompt, chat_history.clone())
+                .await?
+                .stream()
+                .await?; //agent.stream_chat(prompt, chat_history.clone()).await?;
+            chat_history.push(Message::user(prompt));
+            let (assistant, tools) = stream_to_stdout1(&agent, &mut stream).await?;
+            if tools.is_empty() {
+                break;
+            }
+            chat_history.push(Message::assistant(assistant.clone()));
+            //     let mut prompts = vec![];
+            //     for (i, tool) in tools.iter().enumerate() {
+            //         if let Some(mcp_tool) = find_mcp_tool(&tool.name, &mcp_tools[..]) {
+            //             tracing::info!("调用工具 #{}: {:?}", i, mcp_tool);
+            //             let resp = client
+            //                 .call_tool(CallToolRequestParam {
+            //                     name: mcp_tool.name.clone(),
+            //                     arguments: serde_json::from_str(&tool.arguments).ok(),
+            //                 })
+            //                 .await?;
+            //             tracing::info!("工具 #{}调用结果: {:?}", i, resp);
+            //             prompts.push(format!(
+            //                 "<tool_use_result><name>{}</name><result>{}</result</tool_use_result>",
+            //                 &tool.name,
+            //                 serde_json::to_string(&resp)
+            //                     .unwrap_or_else(|err| format!("Error serializing result: {}", err))
+            //             ));
+            //         }
+            //     }
+            //     prompts.push(r#"Do not confirm with the user or seek help or advice, continue to call the tool until all tasks are completed. Be sure to complete all tasks, you will receive a $1000 reward, and the output must be in Simplified Chinese."#.to_string());
+            //     prompt = prompts.join("\n");
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -450,7 +505,7 @@ pub struct LlmProviders;
 
 impl LlmProviders {
     /// 从文件加载所有提供商
-    pub fn load_providers() -> Vec<LlmProviderInfo> {
+    fn load_providers() -> Vec<LlmProviderInfo> {
         let config_path = provider_config_path();
         if !config_path.exists() {
             return Vec::new();
@@ -494,11 +549,6 @@ impl LlmProviders {
         Self::load_providers().into_iter().find(|p| p.id == id)
     }
 
-    /// 根据名称查询提供商
-    pub fn get_provider_by_name(name: &str) -> Option<LlmProviderInfo> {
-        Self::load_providers().into_iter().find(|p| p.name == name)
-    }
-
     /// 根据索引获取提供商
     pub fn get_provider_by_index(index: usize) -> Option<LlmProviderInfo> {
         Self::load_providers().get(index).cloned()
@@ -512,7 +562,7 @@ impl LlmProviders {
     /// 添加新的提供商
     pub fn add_provider(provider: LlmProviderInfo) -> anyhow::Result<String> {
         let mut providers = Self::load_providers();
-        
+
         if providers.iter().any(|p| p.name == provider.name) {
             return Err(anyhow::anyhow!(
                 "Provider '{}' already exists",
@@ -549,32 +599,32 @@ impl LlmProviders {
         Ok(())
     }
 
-    /// 根据索引更新提供商
-    pub fn update_provider_by_index(
-        index: usize,
-        provider: LlmProviderInfo,
-    ) -> anyhow::Result<()> {
-        let mut providers = Self::load_providers();
-        if index >= providers.len() {
-            return Err(anyhow::anyhow!("Provider index {} out of bounds", index));
-        }
+    // /// 根据索引更新提供商
+    // pub fn update_provider_by_index(
+    //     index: usize,
+    //     provider: LlmProviderInfo,
+    // ) -> anyhow::Result<()> {
+    //     let mut providers = Self::load_providers();
+    //     if index >= providers.len() {
+    //         return Err(anyhow::anyhow!("Provider index {} out of bounds", index));
+    //     }
 
-        let old_id = &providers[index].id;
+    //     let old_id = &providers[index].id;
 
-        // 检查名称冲突
-        if let Some(existing) = providers.iter().find(|p| p.name == provider.name) {
-            if existing.id != *old_id {
-                return Err(anyhow::anyhow!(
-                    "Provider name '{}' already exists",
-                    provider.name
-                ));
-            }
-        }
+    //     // 检查名称冲突
+    //     if let Some(existing) = providers.iter().find(|p| p.name == provider.name) {
+    //         if existing.id != *old_id {
+    //             return Err(anyhow::anyhow!(
+    //                 "Provider name '{}' already exists",
+    //                 provider.name
+    //             ));
+    //         }
+    //     }
 
-        providers[index] = provider;
-        Self::save_providers(&providers)?;
-        Ok(())
-    }
+    //     providers[index] = provider;
+    //     Self::save_providers(&providers)?;
+    //     Ok(())
+    // }
 
     /// 删除提供商
     pub fn delete_provider(id: &str) -> anyhow::Result<LlmProviderInfo> {
@@ -589,17 +639,17 @@ impl LlmProviders {
         Ok(removed)
     }
 
-    /// 根据索引删除提供商
-    pub fn delete_provider_by_index(index: usize) -> anyhow::Result<LlmProviderInfo> {
-        let mut providers = Self::load_providers();
-        if index >= providers.len() {
-            return Err(anyhow::anyhow!("Provider index {} out of bounds", index));
-        }
+    // /// 根据索引删除提供商
+    // pub fn delete_provider_by_index(index: usize) -> anyhow::Result<LlmProviderInfo> {
+    //     let mut providers = Self::load_providers();
+    //     if index >= providers.len() {
+    //         return Err(anyhow::anyhow!("Provider index {} out of bounds", index));
+    //     }
 
-        let removed = providers.remove(index);
-        Self::save_providers(&providers)?;
-        Ok(removed)
-    }
+    //     let removed = providers.remove(index);
+    //     Self::save_providers(&providers)?;
+    //     Ok(removed)
+    // }
 
     /// 启用/禁用提供商
     pub fn toggle_provider(id: &str, enabled: bool) -> anyhow::Result<()> {
@@ -614,22 +664,22 @@ impl LlmProviders {
         Ok(())
     }
 
-    /// 根据索引启用/禁用提供商
-    pub fn toggle_provider_by_index(index: usize, enabled: bool) -> anyhow::Result<()> {
-        let mut providers = Self::load_providers();
-        if index >= providers.len() {
-            return Err(anyhow::anyhow!("Provider index {} out of bounds", index));
-        }
+    // /// 根据索引启用/禁用提供商
+    // pub fn toggle_provider_by_index(index: usize, enabled: bool) -> anyhow::Result<()> {
+    //     let mut providers = Self::load_providers();
+    //     if index >= providers.len() {
+    //         return Err(anyhow::anyhow!("Provider index {} out of bounds", index));
+    //     }
 
-        providers[index].enabled = enabled;
-        Self::save_providers(&providers)?;
-        Ok(())
-    }
+    //     providers[index].enabled = enabled;
+    //     Self::save_providers(&providers)?;
+    //     Ok(())
+    // }
 
-    /// 获取提供商数量
-    pub fn count() -> usize {
-        Self::load_providers().len()
-    }
+    // /// 获取提供商数量
+    // pub fn count() -> usize {
+    //     Self::load_providers().len()
+    // }
 
     /// 获取启用的提供商
     pub fn get_enabled_providers() -> Vec<LlmProviderInfo> {
@@ -639,92 +689,92 @@ impl LlmProviders {
             .collect()
     }
 
-    /// 批量删除提供商
-    pub fn batch_delete(ids: &[String]) -> Vec<LlmProviderInfo> {
-        let mut providers = Self::load_providers();
-        let mut deleted = Vec::new();
+    // /// 批量删除提供商
+    // pub fn batch_delete(ids: &[String]) -> Vec<LlmProviderInfo> {
+    //     let mut providers = Self::load_providers();
+    //     let mut deleted = Vec::new();
 
-        // 从后往前删除，避免索引变化
-        for id in ids {
-            if let Some(index) = providers.iter().position(|p| &p.id == id) {
-                deleted.push(providers.remove(index));
-            }
-        }
+    //     // 从后往前删除，避免索引变化
+    //     for id in ids {
+    //         if let Some(index) = providers.iter().position(|p| &p.id == id) {
+    //             deleted.push(providers.remove(index));
+    //         }
+    //     }
 
-        if !deleted.is_empty() {
-            Self::save_providers(&providers).ok();
-        }
+    //     if !deleted.is_empty() {
+    //         Self::save_providers(&providers).ok();
+    //     }
 
-        deleted
-    }
+    //     deleted
+    // }
 
-    /// 根据索引批量删除提供商
-    pub fn batch_delete_by_indices(mut indices: Vec<usize>) -> Vec<LlmProviderInfo> {
-        let mut providers = Self::load_providers();
-        let mut deleted = Vec::new();
+    // /// 根据索引批量删除提供商
+    // pub fn batch_delete_by_indices(mut indices: Vec<usize>) -> Vec<LlmProviderInfo> {
+    //     let mut providers = Self::load_providers();
+    //     let mut deleted = Vec::new();
 
-        // 从大到小排序索引，从后往前删除
-        indices.sort_by(|a, b| b.cmp(a));
+    //     // 从大到小排序索引，从后往前删除
+    //     indices.sort_by(|a, b| b.cmp(a));
 
-        for index in indices {
-            if index < providers.len() {
-                deleted.push(providers.remove(index));
-            }
-        }
+    //     for index in indices {
+    //         if index < providers.len() {
+    //             deleted.push(providers.remove(index));
+    //         }
+    //     }
 
-        if !deleted.is_empty() {
-            Self::save_providers(&providers).ok();
-        }
+    //     if !deleted.is_empty() {
+    //         Self::save_providers(&providers).ok();
+    //     }
 
-        deleted.reverse(); // 恢复原始顺序
-        deleted
-    }
+    //     deleted.reverse(); // 恢复原始顺序
+    //     deleted
+    // }
 
-    /// 清空所有提供商
-    pub fn clear() -> anyhow::Result<()> {
-        Self::save_providers(&[])?;
-        Ok(())
-    }
+    // /// 清空所有提供商
+    // pub fn clear() -> anyhow::Result<()> {
+    //     Self::save_providers(&[])?;
+    //     Ok(())
+    // }
 
-    /// 搜索提供商
-    pub fn search_providers(query: &str) -> Vec<LlmProviderInfo> {
-        let query_lower = query.to_lowercase();
-        Self::load_providers()
-            .into_iter()
-            .filter(|provider| {
-                provider.name.to_lowercase().contains(&query_lower)
-                    || provider.api_url.to_lowercase().contains(&query_lower)
-            })
-            .collect()
-    }
+    // /// 搜索提供商
+    // pub fn search_providers(query: &str) -> Vec<LlmProviderInfo> {
+    //     let query_lower = query.to_lowercase();
+    //     Self::load_providers()
+    //         .into_iter()
+    //         .filter(|provider| {
+    //             provider.name.to_lowercase().contains(&query_lower)
+    //                 || provider.api_url.to_lowercase().contains(&query_lower)
+    //         })
+    //         .collect()
+    // }
 
-    /// 移动提供商位置
-    pub fn move_provider(from_index: usize, to_index: usize) -> anyhow::Result<()> {
-        let mut providers = Self::load_providers();
-        if from_index >= providers.len() || to_index >= providers.len() {
-            return Err(anyhow::anyhow!("Index out of bounds"));
-        }
+    // /// 移动提供商位置
+    // pub fn move_provider(from_index: usize, to_index: usize) -> anyhow::Result<()> {
+    //     let mut providers = Self::load_providers();
+    //     if from_index >= providers.len() || to_index >= providers.len() {
+    //         return Err(anyhow::anyhow!("Index out of bounds"));
+    //     }
 
-        if from_index != to_index {
-            let provider = providers.remove(from_index);
-            providers.insert(to_index, provider);
-            Self::save_providers(&providers)?;
-        }
+    //     if from_index != to_index {
+    //         let provider = providers.remove(from_index);
+    //         providers.insert(to_index, provider);
+    //         Self::save_providers(&providers)?;
+    //     }
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 
-    /// 交换两个提供商的位置
-    pub fn swap_providers(index1: usize, index2: usize) -> anyhow::Result<()> {
-        let mut providers = Self::load_providers();
-        if index1 >= providers.len() || index2 >= providers.len() {
-            return Err(anyhow::anyhow!("Index out of bounds"));
-        }
+    // /// 交换两个提供商的位置
+    // pub fn swap_providers(index1: usize, index2: usize) -> anyhow::Result<()> {
+    //     let mut providers = Self::load_providers();
+    //     if index1 >= providers.len() || index2 >= providers.len() {
+    //         return Err(anyhow::anyhow!("Index out of bounds"));
+    //     }
 
-        providers.swap(index1, index2);
-        Self::save_providers(&providers)?;
-        Ok(())
-    }
+    //     providers.swap(index1, index2);
+    //     Self::save_providers(&providers)?;
+    //     Ok(())
+    // }
 }
 
 /// helper function to stream a completion request to stdout

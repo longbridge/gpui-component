@@ -51,11 +51,7 @@ impl TodoThreadChat {
     }
 
     pub(crate) fn save(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
-        match AppState::state_mut(cx)
-            .todo_manager
-            .update_todo(self.todoitem.clone())
-            .save()
-        {
+        match TodoManager::update_todo(self.todoitem.clone()) {
             Ok(_) => {
                 // TODO: 处理保存成功的情况
                 //_window.push_notification((NotificationType::Success, "Todo保存成功"), cx);

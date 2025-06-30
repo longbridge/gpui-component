@@ -218,11 +218,7 @@ impl Todo {
     }
 
     /// 添加选中的模型
-    pub fn add_selected_model(
-        &mut self,
-        provider_id: &str,
-        model_id: &str,
-    ) -> anyhow::Result<()> {
+    pub fn add_selected_model(&mut self, provider_id: &str, model_id: &str) -> anyhow::Result<()> {
         if let Some(provider) = LlmProviders::get_provider(provider_id) {
             if let Some(model) = provider.models.iter().find(|m| m.id == model_id) {
                 let selected_model = SelectedModel {
@@ -265,11 +261,7 @@ impl Todo {
     }
 
     /// 添加选中的工具
-    pub fn add_selected_tool(
-        &mut self,
-        provider_id: &str,
-        tool_name: &str,
-    ) -> anyhow::Result<()> {
+    pub fn add_selected_tool(&mut self, provider_id: &str, tool_name: &str) -> anyhow::Result<()> {
         if let Ok(Some(provider)) = McpProviderConfig::get_provider(provider_id) {
             if let Some(tool) = provider.tools.iter().find(|t| t.name == tool_name) {
                 let selected_tool = SelectedTool {
@@ -371,9 +363,7 @@ impl Todo {
     }
 
     /// 获取模型能力总结
-    pub fn get_model_capabilities_summary(
-        &self,
-    ) -> Vec<String> {
+    pub fn get_model_capabilities_summary(&self) -> Vec<String> {
         let mut capabilities = Vec::new();
         for selected_model in &self.selected_model {
             if let Some(provider) = LlmProviders::get_provider(&selected_model.provider_id) {
@@ -450,66 +440,62 @@ impl Todo {
     }
 }
 
-/// Todo管理器
-
+/// Todo管理器 - 无状态管理器，所有方法都是静态的
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct TodoManager {
-    #[serde(default)]
-    pub todos: Vec<Todo>,
-}
+pub struct TodoManager;
 
 impl TodoManager {
     /// 从文件加载配置
-    pub fn load() -> Self {
+    fn load() -> Vec<Todo> {
         let config_path = todo_config_path();
         if !config_path.exists() {
-            return Self::default();
+            return Vec::new();
         }
 
         match std::fs::read_to_string(config_path) {
             Ok(content) => match serde_yaml::from_str::<Vec<Todo>>(&content) {
-                Ok(todos) => Self { todos },
+                Ok(todos) => todos,
                 Err(e) => {
                     eprintln!("Failed to parse Todo config: {}", e);
-                    Self::default()
+                    Vec::new()
                 }
             },
             Err(e) => {
                 eprintln!("Failed to read Todo config file: {}", e);
-                Self::default()
+                Vec::new()
             }
         }
     }
 
     /// 保存配置到文件
-    pub fn save(&self) -> anyhow::Result<()> {
+    pub fn save(todos: &[Todo]) -> anyhow::Result<()> {
         let config_path = todo_config_path();
 
         if let Some(parent) = config_path.parent() {
             std::fs::create_dir_all(parent)?;
         }
 
-        let content = serde_yaml::to_string(&self.todos)?;
+        let content = serde_yaml::to_string(todos)?;
         std::fs::write(config_path, content)?;
         Ok(())
     }
 
     /// 获取所有Todo列表
-    pub fn list_todos(&self) -> Vec<Todo> {
+    pub fn list_todos() -> Vec<Todo> {
         // 按更新时间倒序排列
-        let mut todos = self.todos.clone();
-        todos.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
-        todos
+        let mut result = Self::load();
+        result.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+        result
     }
 
     /// 根据ID查询Todo
-    pub fn get_todo(&self, id: &str) -> Option<&Todo> {
-        self.todos.iter().find(|todo| todo.id == id)
+    pub fn get_todo(id: &str) -> Option<Todo> {
+        Self::list_todos().into_iter().find(|todo| todo.id == id)
     }
 
     /// 根据状态筛选Todo
-    pub fn get_todos_by_status(&self, status: TodoStatus) -> Vec<Todo> {
-        self.todos
+    pub fn get_todos_by_status(status: TodoStatus) -> Vec<Todo> {
+        Self::list_todos()
             .iter()
             .filter(|todo| todo.status == status)
             .cloned()
@@ -517,8 +503,8 @@ impl TodoManager {
     }
 
     /// 获取过期的Todo
-    pub fn get_overdue_todos(&self) -> Vec<Todo> {
-        self.todos
+    pub fn get_overdue_todos() -> Vec<Todo> {
+        Self::list_todos()
             .iter()
             .filter(|todo| todo.is_overdue())
             .cloned()
@@ -526,8 +512,8 @@ impl TodoManager {
     }
 
     /// 获取需要提醒的Todo
-    pub fn get_reminder_todos(&self) -> Vec<Todo> {
-        self.todos
+    pub fn get_reminder_todos() -> Vec<Todo> {
+        Self::list_todos()
             .iter()
             .filter(|todo| todo.needs_reminder())
             .cloned()
@@ -535,8 +521,8 @@ impl TodoManager {
     }
 
     /// 获取关注的Todo列表
-    pub fn get_followed_todos(&self) -> Vec<Todo> {
-        self.todos
+    pub fn get_followed_todos() -> Vec<Todo> {
+        Self::list_todos()
             .iter()
             .filter(|todo| todo.follow)
             .cloned()
@@ -544,8 +530,8 @@ impl TodoManager {
     }
 
     /// 获取需要录音的Todo列表
-    pub fn get_recording_todos(&self) -> Vec<Todo> {
-        self.todos
+    pub fn get_recording_todos() -> Vec<Todo> {
+        Self::list_todos()
             .iter()
             .filter(|todo| todo.needs_recording)
             .cloned()
@@ -553,8 +539,8 @@ impl TodoManager {
     }
 
     /// 获取需要录屏的Todo列表
-    pub fn get_screen_recording_todos(&self) -> Vec<Todo> {
-        self.todos
+    pub fn get_screen_recording_todos() -> Vec<Todo> {
+        Self::list_todos()
             .iter()
             .filter(|todo| todo.needs_screen_recording)
             .cloned()
@@ -562,57 +548,55 @@ impl TodoManager {
     }
 
     /// 获取需要媒体记录的Todo列表
-    pub fn get_media_recording_todos(&self) -> Vec<Todo> {
-        self.todos
+    pub fn get_media_recording_todos() -> Vec<Todo> {
+        Self::list_todos()
             .iter()
             .filter(|todo| todo.needs_media_recording())
             .cloned()
             .collect()
     }
 
-    /// 更新Todo
-    pub fn update_todo(&mut self, mut todo: Todo) -> &mut Self {
-        if let Some(position) = self.todos.iter().position(|t| t.id == todo.id) {
+    /// 更新Todo - 返回新的Vec
+    pub fn update_todo(mut todo: Todo) -> anyhow::Result<()> {
+        let mut todos = Self::list_todos();
+        if let Some(position) = todos.iter().position(|t| t.id == todo.id) {
             todo.updated_at = Utc::now();
-            self.todos[position] = todo;
+            todos[position] = todo;
         } else {
-            self.todos.push(todo);
+            todos.push(todo);
         }
-        self
+        Self::save(todos.as_slice())?;
+        Ok(())
     }
 
-    /// 删除Todo
-    pub fn delete_todo(&mut self, id: &str) -> Option<Todo> {
-        if let Some(position) = self.todos.iter().position(|t| t.id == id) {
-            self.todos[position].status = TodoStatus::Deleted;
-            return Some(self.todos[position].clone());
+    /// 删除Todo - 标记为已删除状态
+    pub fn delete_todo(id: &str) -> anyhow::Result<Option<Todo>> {
+        let mut todos = Self::list_todos();
+        if let Some(position) = todos.iter().position(|t| t.id == id) {
+            todos[position].status = TodoStatus::Deleted;
+            Self::save(todos.as_slice())?;
+            return Ok(Some(todos[position].clone()));
         }
-        None
+        Ok(None)
     }
-    pub fn copy_todo(&mut self, id: &str) -> Option<Todo> {
-        if let Some(position) = self.todos.iter().position(|t| t.id == id) {
-            let copy = self.todos[position].copy();
-            self.todos.push(copy.clone());
-            return Some(copy);
+
+    /// 复制Todo
+    pub fn copy_todo(id: &str) -> anyhow::Result<Option<Todo>> {
+        let mut todos = Self::list_todos();
+        if let Some(position) = todos.iter().position(|t| t.id == id) {
+            let copy = todos[position].copy();
+            todos.push(copy.clone());
+            Self::save(todos.as_slice())?;
+            return Ok(Some(copy));
         }
-        None
-    }
-    /// 批量删除Todo
-    pub fn batch_delete(&mut self, ids: &[String]) -> Vec<Todo> {
-        let mut deleted = Vec::new();
-        for id in ids {
-            if let Some(position) = self.todos.iter().position(|t| t.id == *id) {
-                let todo = self.todos.remove(position);
-                deleted.push(todo);
-            }
-        }
-        deleted
+        Ok(None)
     }
 
     /// 搜索Todo
-    pub fn search_todos(&self, query: &str) -> Vec<Todo> {
+    pub fn search_todos(query: &str) -> Vec<Todo> {
+        let todos = Self::list_todos();
         let query_lower = query.to_lowercase();
-        self.todos
+        todos
             .iter()
             .filter(|todo| {
                 todo.title.to_lowercase().contains(&query_lower)
@@ -623,41 +607,33 @@ impl TodoManager {
     }
 
     /// 获取Todo统计信息
-    pub fn get_statistics(&self) -> TodoStatistics {
-        let total = self.todos.len();
-        let completed = self
-            .todos
+    pub fn get_statistics() -> TodoStatistics {
+        let mut todos = Self::list_todos();
+        let total = todos.len();
+        let completed = todos
             .iter()
             .filter(|t| t.status == TodoStatus::Done)
             .count();
-        let in_progress = self
-            .todos
+        let in_progress = todos
             .iter()
             .filter(|t| t.status == TodoStatus::InProgress)
             .count();
-        let todo = self
-            .todos
+        let todo = todos
             .iter()
             .filter(|t| t.status == TodoStatus::Todo)
             .count();
-        let cancelled = self
-            .todos
+        let cancelled = todos
             .iter()
             .filter(|t| t.status == TodoStatus::Cancelled)
             .count();
-        let suspended = self
-            .todos
+        let suspended = todos
             .iter()
             .filter(|t| t.status == TodoStatus::Suspended)
             .count();
-        let followed = self.todos.iter().filter(|t| t.follow).count();
-        let overdue = self.todos.iter().filter(|t| t.is_overdue()).count();
-        let needs_recording = self.todos.iter().filter(|t| t.needs_recording).count();
-        let needs_screen_recording = self
-            .todos
-            .iter()
-            .filter(|t| t.needs_screen_recording)
-            .count();
+        let followed = todos.iter().filter(|t| t.follow).count();
+        let overdue = todos.iter().filter(|t| t.is_overdue()).count();
+        let needs_recording = todos.iter().filter(|t| t.needs_recording).count();
+        let needs_screen_recording = todos.iter().filter(|t| t.needs_screen_recording).count();
 
         TodoStatistics {
             total,
@@ -671,16 +647,6 @@ impl TodoManager {
             needs_recording,
             needs_screen_recording,
         }
-    }
-
-    /// 清空所有Todo
-    pub fn clear(&mut self) {
-        self.todos.clear();
-    }
-
-    /// 获取Todo数量
-    pub fn count(&self) -> usize {
-        self.todos.len()
     }
 }
 

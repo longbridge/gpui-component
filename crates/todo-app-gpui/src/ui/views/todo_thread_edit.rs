@@ -54,11 +54,8 @@ impl TodoThreadEdit {
 
     fn save(&mut self, save: &Save, _window: &mut Window, cx: &mut Context<Self>) {
         self.todoitem.description = self.description_input.read(cx).value().to_string();
-        match AppState::state_mut(cx)
-            .todo_manager
-            .update_todo(self.todoitem.clone())
-            .save()
-        {
+       
+        match TodoManager::update_todo(self.todoitem.clone()) {
             Ok(_) => {
                 // TODO: 处理保存成功的情况
                 //_window.push_notification((NotificationType::Success, "Todo保存成功"), cx);
@@ -354,7 +351,7 @@ impl TodoThreadEdit {
         let todo_edit_entity = cx.entity().clone();
         window.open_drawer_at(placement, cx, move |drawer, _window, drawer_cx| {
             // 从 entity 中读取当前的模型数据
-            let providers =  LlmProviders::load_providers().clone();
+            let providers =  LlmProviders::get_enabled_providers().clone();
             let expanded_providers = todo_edit_entity.read(drawer_cx).expanded_providers.clone();
             let todoitem = todo_edit_entity.read(drawer_cx).todoitem.clone();
 
@@ -562,7 +559,7 @@ impl TodoThreadEdit {
 
         window.open_drawer_at(placement, cx, move |drawer, _window, drawer_cx| {
             // 从 entity 中读取当前的工具数据
-            let providers = McpProviderConfig::load_providers().unwrap_or_default();
+            let providers = McpProviderConfig::get_enabled_providers().unwrap_or_default();
             let expanded_providers = todo_edit_entity.read(drawer_cx).expanded_tool_providers.clone();
             let todoitem = todo_edit_entity.read(drawer_cx).todoitem.clone();
             // 创建手风琴组件并添加切换监听器

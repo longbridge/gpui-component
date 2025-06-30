@@ -96,7 +96,7 @@ pub struct AppState {
     /// 不可见面板的列表
     pub invisible_panels: Entity<Vec<SharedString>>,
     pub profile_manager: ProfileManager,
-    pub todo_manager: TodoManager,
+    // pub todo_manager: TodoManager,
 }
 
 /// 面板名称常量
@@ -111,7 +111,6 @@ impl AppState {
         let state = Self {
             invisible_panels: cx.new(|_| Vec::new()),
             profile_manager: ProfileManager::load(),
-            todo_manager: TodoManager::load(),
         };
         cx.set_global::<AppState>(state);
     }

@@ -47,17 +47,17 @@ version = "0.58.0"
 # todo = "deny"
 # type_complexity = "allow"
 
-# [profile.release]
-# lto = true
-# panic = "abort"
+[profile.release]
+lto = true
+panic = "abort"
 
-# [profile.dev]
-# codegen-units = 16
-# debug = "limited"
-# split-debuginfo = "unpacked"
+[profile.dev]
+codegen-units = 16
+debug = "limited"
+split-debuginfo = "unpacked"
 
-# [profile.dev.package]
-# resvg = { opt-level = 3 }
-# rustybuzz = { opt-level = 3 }
-# taffy = { opt-level = 3 }
-# ttf-parser = { opt-level = 3 }
+[profile.dev.package]
+resvg = { opt-level = 3 }
+rustybuzz = { opt-level = 3 }
+taffy = { opt-level = 3 }
+ttf-parser = { opt-level = 3 }

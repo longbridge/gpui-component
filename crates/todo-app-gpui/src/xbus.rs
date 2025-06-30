@@ -12,8 +12,8 @@ pub fn post<E: Any + 'static + Debug>(event: &E) {
     bus.post(event);
 }
 
-pub fn subscribe<'a, E: Any + 'static + Debug, F: Fn(&E) + Send + 'static>(f: F) -> Subscription {
-    let bus = BUS.get_or_init(|| EventBus::new());
+pub fn subscribe<E: Any + 'static + Debug, F: Fn(&E) + Send + 'static>(f: F) -> Subscription {
+    let bus = BUS.get_or_init(EventBus::new);
     bus.subscribe(f)
 }
 
