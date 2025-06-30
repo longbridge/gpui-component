@@ -136,6 +136,7 @@ impl RenderOnce for Checkbox {
                     this.text_color(cx.theme().muted_foreground)
                 })
                 .refine_style(&self.style)
+                .flex_shrink_0()
                 .child(
                     v_flex()
                         .relative()
