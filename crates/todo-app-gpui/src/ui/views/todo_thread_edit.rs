@@ -8,6 +8,7 @@ use crate::models::{
     mcp_config::{McpProviderInfo, McpTool},
     provider_config::ModelInfo,
 };
+use crate::ui::views::todo_thread::{Tab, TabPrev};
 use crate::{app::AppState, models::provider_config::LlmProviderInfo};
 use chrono::Utc;
 use gpui::prelude::*;
@@ -24,7 +25,7 @@ use gpui_component::{
     *,
 };
 
-actions!(todo_thread, [Tab, TabPrev, Save, Cancel, Delete]);
+actions!(todo_thread, [ Save, Cancel, Delete]);
 
 const CONTEXT: &str = "TodoThreadEdit";
 

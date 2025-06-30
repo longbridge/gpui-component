@@ -125,7 +125,7 @@ impl AppState {
         cx.global_mut::<Self>()
     }
 }
-actions!(input_story, [Tab, TabPrev]);
+// actions!(input_story, [Tab, TabPrev]);
 
 pub fn run() {
     const WIDTH: f32 = 400.0;
