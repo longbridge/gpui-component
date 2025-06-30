@@ -38,7 +38,7 @@ tracing = "0.1.41"
 unicode-segmentation = "1.12.0"
 usvg = { version = "0.45.0", default-features = false, features = ["text"] }
 uuid = "1.10"
-wry = { version = "0.48.0", optional = true }
+wry = { version = "0.52.1", optional = true }
 
 # Chart
 num-traits = "0.2"
