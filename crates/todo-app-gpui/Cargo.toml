@@ -64,6 +64,8 @@ duration-str = "0.17.0"
 chrono-tz = "0.10.3"
 sysinfo = "0.35.1"
 log = "0.4.27"
+ftlog="0.2.15"
+
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.61.1", features = [

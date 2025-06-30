@@ -286,12 +286,12 @@ impl McpProvider {
     ) {
         if let Some(provider) = self.providers.get_mut(index) {
             provider.enabled = enabled;
-
             if enabled {
-                let mut provider = provider.clone();
+                let provider = provider.clone();
+                let name = provider.name.clone();
                 let win_handle = window.window_handle();
                 cx.spawn(async move |this, cx| match provider.start().await {
-                    Ok(_) => {
+                    Ok(provider) => {
                         this.update(cx, |this, cx| {
                             if let Some(existing_provider) = this.providers.get_mut(index) {
                                 *existing_provider = provider;
@@ -305,7 +305,7 @@ impl McpProvider {
                         win_handle
                             .update(cx, |_this, window, cx| {
                                 window.push_notification(
-                                    format!("启动MCP服务 '{}' 失败: {}", provider.name, err),
+                                    format!("启动MCP服务 '{}' 失败: {}",name, err),
                                     cx,
                                 );
                                 cx.notify(_this.entity_id());

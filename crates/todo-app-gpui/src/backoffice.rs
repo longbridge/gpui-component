@@ -9,11 +9,14 @@ use gpui_component::notification::Notification;
 use rmcp::model::{Prompt, ReadResourceResult, Resource, Tool};
 use std::fs::File;
 
+use crate::{backoffice::mcp::McpRegistry, models::mcp_config::McpProviderInfo};
+
 ///后台事件
-#[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub enum BoEvent {
     TodoUpdated,
     LlmConfigUpdated,
+    McpProviderStarted(McpProviderInfo),
     McpToolListUpdated(String, Vec<Tool>),
     McpResourceListUpdated(String, Vec<Resource>),
     McpPromptListUpdated(String, Vec<Prompt>),
@@ -123,6 +126,11 @@ fn mtime<P: AsRef<std::path::Path>>(path: P) -> anyhow::Result<u64> {
         std::fs::metadata(path.as_ref())?.last_write_time()
     };
     Ok(mtime)
+}
+
+pub fn start() {
+   let addr= McpRegistry::from_registry();
+    log::info!("McpRegistry started at {:?}", addr);
 }
 
 // #[derive(Default)]

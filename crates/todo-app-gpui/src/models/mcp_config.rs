@@ -1,4 +1,6 @@
+use crate::backoffice::BoEvent;
 use crate::models::{config_path, mcp_config_path};
+use crate::xbus;
 use gpui::SharedString;
 use gpui_component::IconName;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ACCEPT, AUTHORIZATION};
@@ -11,17 +13,19 @@ use rig::streaming::{
 };
 use rig::tool::{ToolDyn as RigTool, ToolSet};
 use rig::{completion::Prompt, providers::openai::Client};
+use rmcp::model::{CreateMessageRequestMethod, CreateMessageRequestParam, CreateMessageResult, ListRootsResult, LoggingLevel, ProtocolVersion, ReadResourceRequestParam, ResourceUpdatedNotificationParam};
+use rmcp::service::{NotificationContext, RequestContext};
 use rmcp::transport::sse_client::SseClientConfig;
 use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
 use rmcp::transport::{ConfigureCommandExt, StreamableHttpClientTransport, TokioChildProcess};
 use rmcp::{
-    model::{CallToolRequestParam, CallToolResult},
+    model::{CallToolRequestParam, CallToolResult,Content},
     service::{RunningService, ServerSink},
     transport::{auth::AuthClient, auth::OAuthState, SseClientTransport},
-    RoleClient,
+    RoleClient,Peer, ClientHandler
 };
-pub use rmcp::{
-    model::{
+pub use rmcp::{Error as McpError,
+    model::{Root,
         ClientCapabilities, ClientInfo, Implementation, Prompt as McpPrompt,
         Resource as McpResource, ResourceTemplate as McpResourceTemplate, Tool as McpTool,
     },
@@ -93,7 +97,7 @@ impl McpCapability {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone,  Deserialize, Serialize)]
 pub struct McpProviderInfo {
     pub id: String,
     pub name: String,
@@ -120,12 +124,12 @@ pub struct McpProviderInfo {
     #[serde(default)]
     pub env_vars: std::collections::HashMap<String, String>,
     #[serde(skip)]
-    pub client: Option<Arc<RunningService<RoleClient, rmcp::model::InitializeRequestParam>>>,
+    pub client: Option<Arc<RunningService<RoleClient,McpClientHandler>>>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ResourceDefinition {
-    resource: McpResource,
+    pub resource: McpResource,
     pub subscribed: bool,
     pub subscribable: bool,
 }
@@ -197,7 +201,7 @@ impl McpProviderInfo {
 }
 
 impl McpProviderInfo {
-    pub async fn start(&mut self) -> anyhow::Result<&mut Self> {
+    pub async fn start(mut self) -> anyhow::Result<Self> {
         match self.transport {
             McpTransport::Stdio => self.start_stdio().await,
             McpTransport::Sse => self.start_sse().await,
@@ -205,7 +209,7 @@ impl McpProviderInfo {
         }
     }
 
-    async fn start_stdio(&mut self) -> anyhow::Result<&mut Self> {
+    async fn start_stdio(mut self) -> anyhow::Result<Self> {
         let mut command = self.command.split(" ");
         let command = Command::new(command.nth(0).unwrap_or_default()).configure(|cmd| {
             let args = command.skip(0).collect::<Vec<_>>();
@@ -215,19 +219,12 @@ impl McpProviderInfo {
         });
         println!("Starting MCP provider with command: {:?}", command);
         let transport = TokioChildProcess::new(command)?;
-        let client_info = ClientInfo {
-            protocol_version: Default::default(),
-            capabilities: ClientCapabilities::default(),
-            client_info: Implementation {
-                name: "xTo-Do/mcp-client".to_string(),
-                version: "0.0.1".to_string(),
-            },
-        };
+        let client_info = McpClientHandler::new( self.id.clone());
         let client = client_info.serve(transport).await?;
         self.start_serve(client).await
     }
 
-    async fn start_sse(&mut self) -> anyhow::Result<&mut Self> {
+    async fn start_sse(mut self) -> anyhow::Result<Self> {
         let mut headers: HeaderMap<HeaderValue> = HeaderMap::new();
         headers.insert(ACCEPT, HeaderValue::from_static("*/*"));
         for (key, val) in self.env_vars.iter() {
@@ -250,20 +247,12 @@ impl McpProviderInfo {
             },
         )
         .await?;
-        // let transport = SseClientTransport::start(self.command.clone()).await?;
-        let client_info = ClientInfo {
-            protocol_version: Default::default(),
-            capabilities: ClientCapabilities::default(),
-            client_info: Implementation {
-                name: "xTo-Do/mcp-client".to_string(),
-                version: "0.0.1".to_string(),
-            },
-        };
+        let client_info = McpClientHandler::new( self.id.clone());
         let client = client_info.serve(transport).await?;
         self.start_serve(client).await
     }
 
-    async fn start_streamable(&mut self) -> anyhow::Result<&mut Self> {
+    async fn start_streamable(mut self) -> anyhow::Result<Self> {
         let mut headers: HeaderMap<HeaderValue> = HeaderMap::new();
         headers.insert(ACCEPT, HeaderValue::from_static("*/*"));
         for (key, val) in self.env_vars.iter() {
@@ -287,25 +276,15 @@ impl McpProviderInfo {
         );
 
         //let transport = StreamableHttpClientTransport::from_uri(self.command.clone());
-        let client_info = ClientInfo {
-            protocol_version: Default::default(),
-            capabilities: ClientCapabilities::default(),
-            client_info: Implementation {
-                name: "test sse client".to_string(),
-                version: "0.0.1".to_string(),
-            },
-        };
-        // tokio::spawn(async move {
-        //     let client = client_info.serve(transport).await?;
-        // }).await;
+        let client_info =McpClientHandler::new( self.id.clone());
         let client = client_info.serve(transport).await?;
         self.start_serve(client).await
     }
 
     async fn start_serve(
-        &mut self,
-        client: RunningService<RoleClient, rmcp::model::InitializeRequestParam>,
-    ) -> anyhow::Result<&mut Self> {
+        mut self,
+        client: RunningService<RoleClient, McpClientHandler>,
+    ) -> anyhow::Result<Self> {
         let server_info = client.peer_info().cloned().unwrap_or_default();
         println!("Server info: {:#?}", server_info);
         if let Some(capability) = server_info.capabilities.tools {
@@ -474,9 +453,8 @@ impl McpProviderConfig {
 
     /// 启动指定提供商（返回启动后的实例）
     pub async fn start_provider(id: &str) -> anyhow::Result<Option<McpProviderInfo>> {
-        if let Some(mut provider) = Self::get_provider(id)? {
-            provider.start().await?;
-            Ok(Some(provider))
+        if let Some( provider) = Self::get_provider(id)? {
+            Ok(Some(provider.start().await?))
         } else {
             Ok(None)
         }
@@ -487,8 +465,8 @@ impl McpProviderConfig {
         let providers = Self::get_enabled_providers()?;
         let mut started_providers = Vec::new();
 
-        for mut provider in providers {
-            if let Ok(_) = provider.start().await {
+        for  provider in providers {
+            if let Ok(provider) = provider.start().await {
                 started_providers.push(provider);
             }
         }
@@ -572,4 +550,182 @@ pub async fn get_tool_set(server: ServerSink) -> anyhow::Result<ToolSet> {
     }
     let tool_set = tool_builder.build();
     Ok(tool_set)
+}
+
+
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct McpClientHandler {
+    pub protocol_version: ProtocolVersion,
+    pub capabilities: ClientCapabilities,
+    pub client_info: Implementation,
+    // pub peer: Option<Peer<RoleClient>>,
+    pub id: String,
+}
+
+impl McpClientHandler {
+    pub fn new(id: String) -> Self {
+        Self {
+            protocol_version:Default::default(),
+            capabilities: ClientCapabilities::default(),
+            client_info: Implementation {
+                name: "xTo-Do/mcp-client".into(),
+                version: "0.1.0".into(),
+            },
+            // peer: None,
+            id,
+        }
+    }
+}
+
+impl ClientHandler for McpClientHandler {
+    //sampling
+    async fn create_message(
+        &self,
+        params: CreateMessageRequestParam,
+        _context: RequestContext<RoleClient>,
+    ) -> Result<CreateMessageResult, McpError> {
+        log::info!("Create message: {params:#?}");
+        
+        Err(McpError::method_not_found::<CreateMessageRequestMethod>())
+    }
+    async fn list_roots(
+        &self,
+        _context: RequestContext<RoleClient>,
+    ) -> Result<ListRootsResult, McpError> {
+        Ok(ListRootsResult {
+            roots: vec![
+                Root {
+                    uri: "capture://audio".into(),
+                    name: Some("音频设备".into()),
+                },
+                Root {
+                    uri: "capture://screen".into(),
+                    name: Some("捕获屏幕".into()),
+                },
+            ],
+        })
+    }
+
+    async fn on_prompt_list_changed(&self, ctx: NotificationContext<RoleClient>) {
+        log::info!("Prompt list changed");
+        
+        match ctx.peer.list_prompts(None).await {
+            Ok(prompts) => {
+                log::info!("Prompt list: {prompts:#?}");
+                xbus::post(BoEvent::McpPromptListUpdated(
+                    self.id.clone(),
+                    prompts.prompts,
+                ));
+            }
+            Err(err) => {
+                log::error!("Failed to list prompts: {err}");
+                xbus::post(BoEvent::Notification(
+                    crate::backoffice::NotificationKind::Error,
+                    format!("Failed to list prompts: {err}"),
+                ));
+            }
+        }
+    }
+    async fn on_resource_list_changed(&self, ctx: NotificationContext<RoleClient>) {
+        ctx.peer.list_all_resources().await.map_or_else(
+            |err| {
+                log::error!("Failed to list resources: {err}");
+                xbus::post(BoEvent::Notification(
+                    crate::backoffice::NotificationKind::Error,
+                    format!("Failed to list resources: {err}"),
+                ));
+            },
+            |resources| {
+                log::info!("Resource list changed: {resources:#?}");
+                xbus::post(BoEvent::McpResourceListUpdated(self.id.clone(), resources));
+            },
+        );
+    }
+    async fn on_tool_list_changed(&self, context: NotificationContext<RoleClient>) {
+        log::info!("Tool list changed");
+        match context.peer.list_tools(None).await {
+            Ok(tools) => {
+                log::info!("Tool list: {tools:#?}");
+                xbus::post(BoEvent::McpToolListUpdated(self.id.clone(), tools.tools));
+            }
+            Err(err) => {
+                log::error!("Failed to list tools: {err}");
+                xbus::post(BoEvent::Notification(
+                    crate::backoffice::NotificationKind::Error,
+                    format!("Failed to list tools: {err}"),
+                ));
+            }
+        }
+    }
+    async fn on_cancelled(
+        &self,
+        params: rmcp::model::CancelledNotificationParam,
+        _context: NotificationContext<RoleClient>,
+    ) {
+        log::info!("Cancelled: {params:#?}");
+        xbus::post(BoEvent::Notification(
+            crate::backoffice::NotificationKind::Info,
+            format!("Cancelled: {:?}", params.reason),
+        ));
+    }
+
+    async fn on_logging_message(
+        &self,
+        params: rmcp::model::LoggingMessageNotificationParam,
+        _context: NotificationContext<RoleClient>,
+    ) {
+        log::info!("Logging message: {params:#?}");
+        if params.level == LoggingLevel::Error {
+            xbus::post(BoEvent::Notification(
+                crate::backoffice::NotificationKind::Error,
+                format!("Logging error: {}", params.data.to_string()),
+            ));
+        } else if params.level == LoggingLevel::Warning {
+            xbus::post(BoEvent::Notification(
+                crate::backoffice::NotificationKind::Warning,
+                format!("Logging warning: {}", params.data.to_string()),
+            ));
+        } else {
+            xbus::post(BoEvent::Notification(
+                crate::backoffice::NotificationKind::Info,
+                format!("Logging info: {}", params.data.to_string()),
+            ));
+        }
+        xbus::post(BoEvent::Notification(
+            crate::backoffice::NotificationKind::Info,
+            format!("Logging message: {:?}", params.data.to_string()),
+        ));
+    }
+
+    async fn on_progress(
+        &self,
+        params: rmcp::model::ProgressNotificationParam,
+        context: NotificationContext<RoleClient>,
+    ) {
+    }
+    async fn on_resource_updated(
+        &self,
+        params: ResourceUpdatedNotificationParam,
+        context: NotificationContext<RoleClient>,
+    ) {
+        
+        match context
+            .peer
+            .read_resource(ReadResourceRequestParam { uri: params.uri })
+            .await
+        {
+            Ok(result) => {
+                log::info!("Resource updated: {result:#?}");
+                xbus::post(BoEvent::McpResourceResult(self.id.clone(), result));
+            }
+            Err(err) => {
+                log::error!("Failed to read resource: {err}");
+                xbus::post(BoEvent::Notification(
+                    crate::backoffice::NotificationKind::Error,
+                    format!("Failed to read resource: {err}"),
+                ));
+            }
+        }
+    }
 }

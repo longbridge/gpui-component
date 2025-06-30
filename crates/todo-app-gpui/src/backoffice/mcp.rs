@@ -1,19 +1,27 @@
 use actix::{prelude::*, WeakAddr};
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ACCEPT, AUTHORIZATION};
+use rmcp::model::{CreateMessageRequestMethod, CreateMessageRequestParam, CreateMessageResult, ListRootsResult, LoggingLevel, ProtocolVersion, ReadResourceRequestParam, ResourceUpdatedNotificationParam};
+use rmcp::service::{NotificationContext, RequestContext};
+use rmcp::transport::sse_client::SseClientConfig;
+use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
+use rmcp::transport::{ConfigureCommandExt, StreamableHttpClientTransport, TokioChildProcess};
 use rmcp::{
-    model::{
-        CallToolRequestParam, CallToolResult, ClientCapabilities, ClientInfo, ClientRequest,
-        Content, CreateMessageRequestMethod, CreateMessageRequestParam, CreateMessageResult,
-        GetMeta, Implementation, JsonObject, ListRootsResult, LoggingLevel, Meta,
-        PingRequestMethod, ProtocolVersion, ReadResourceRequestParam,
-        ResourceUpdatedNotificationParam, Root, SubscribeRequest, SubscribeRequestParam,
+    model::{CallToolRequestParam, CallToolResult,Content},
+    service::{RunningService, ServerSink},
+    transport::{auth::AuthClient, auth::OAuthState, SseClientTransport},
+    RoleClient,Peer, ClientHandler
+};
+pub use rmcp::{Error as McpError,
+    model::{Root,
+        ClientCapabilities, Implementation, Prompt as McpPrompt,
+        Resource as McpResource, ResourceTemplate as McpResourceTemplate, Tool as McpTool,
     },
-    service::{NotificationContext, RequestContext},
-    ClientHandler, Error as McpError, Peer, RoleClient,
+    ServiceExt,
 };
 use std::any::Any;
 use std::{collections::HashMap, time::Duration};
 
-use crate::models::mcp_config::{McpProviderConfig, McpProviderInfo};
+use crate::models::mcp_config::{*};
 use crate::{
     backoffice::{BoEvent, YamlFile},
     xbus,
@@ -45,9 +53,6 @@ pub struct McpCallToolResult {
     result: Vec<Content>,
     is_error: bool,
 }
-
-///     type Result = Result<u8,u8>;
-/// }
 
 pub struct McpRegistry {
     providers: HashMap<String, Addr<McpProvider>>,
@@ -110,27 +115,45 @@ impl Actor for McpRegistry {
 
     fn started(&mut self, ctx: &mut Self::Context) {
         ctx.run_interval(Duration::from_secs(1), Self::tick);
+        log::info!("McpRegistry started");
     }
 }
 
 pub struct McpProvider {
-    info: McpProviderInfo,
+    provider: McpProviderInfo,
+    
 }
 
 impl McpProvider {
-    pub fn new(info: McpProviderInfo) -> Self {
-        Self { info }
-    }
-
-    pub fn info(&self) -> &McpProviderInfo {
-        &self.info
+    pub fn new(provider: McpProviderInfo) -> Self {
+        Self {
+            provider,
+        }
     }
 }
 impl Actor for McpProvider {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Self::Context) {
-        log::info!("McpProvider {}/{} started", self.info.id, self.info.name);
+       let provider = self.provider.clone();
+        provider.start().into_actor(self).then(|res,act,ctx|{
+            match res {
+                Ok(provider) => {
+                    log::info!("McpProvider {} started successfully", provider.id);
+                    act.provider = provider;
+                    xbus::post(BoEvent::McpProviderStarted(act.provider.clone()));
+                }
+                Err(err) => {
+                    log::error!("Failed to start McpProvider {}: {}", act.provider.id, err);
+                    xbus::post(BoEvent::Notification(
+                        crate::backoffice::NotificationKind::Error,
+                        format!("Failed to start McpProvider {}: {}", act.provider.id, err),
+                    ));
+                }
+            }
+            fut::ready(())
+        }).wait(ctx);
+       
     }
 }
 
@@ -138,7 +161,7 @@ impl Handler<ExitFromRegistry> for McpProvider {
     type Result = ();
 
     fn handle(&mut self, _msg: ExitFromRegistry, ctx: &mut Self::Context) -> Self::Result {
-        log::info!("McpProvider {} exit", self.info.id);
+        log::info!("McpProvider {} exit", self.provider.id);
         ctx.stop();
     }
 }
@@ -168,8 +191,23 @@ pub struct McpClient {
     pub protocol_version: ProtocolVersion,
     pub capabilities: ClientCapabilities,
     pub client_info: Implementation,
-    pub peer: Option<Peer<RoleClient>>,
+    // pub peer: Option<Peer<RoleClient>>,
     pub id: String,
+}
+
+impl McpClient {
+    pub fn new(id: String) -> Self {
+        Self {
+            protocol_version:Default::default(),
+            capabilities: ClientCapabilities::default(),
+            client_info: Implementation {
+                name: "xTo-Do/mcp-client".into(),
+                version: "0.1.0".into(),
+            },
+            // peer: None,
+            id,
+        }
+    }
 }
 
 impl ClientHandler for McpClient {
@@ -180,6 +218,7 @@ impl ClientHandler for McpClient {
         _context: RequestContext<RoleClient>,
     ) -> Result<CreateMessageResult, McpError> {
         log::info!("Create message: {params:#?}");
+        
         Err(McpError::method_not_found::<CreateMessageRequestMethod>())
     }
     async fn list_roots(
@@ -202,6 +241,7 @@ impl ClientHandler for McpClient {
 
     async fn on_prompt_list_changed(&self, ctx: NotificationContext<RoleClient>) {
         log::info!("Prompt list changed");
+        
         match ctx.peer.list_prompts(None).await {
             Ok(prompts) => {
                 log::info!("Prompt list: {prompts:#?}");
@@ -301,6 +341,7 @@ impl ClientHandler for McpClient {
         params: ResourceUpdatedNotificationParam,
         context: NotificationContext<RoleClient>,
     ) {
+        
         match context
             .peer
             .read_resource(ReadResourceRequestParam { uri: params.uri })
