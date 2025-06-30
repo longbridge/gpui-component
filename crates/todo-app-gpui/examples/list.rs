@@ -35,7 +35,9 @@ impl Render for UniformListExample {
     }
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
+    //
     Application::new().run(|cx: &mut App| {
         let bounds = Bounds::centered(None, size(px(300.0), px(300.0)), cx);
         cx.open_window(

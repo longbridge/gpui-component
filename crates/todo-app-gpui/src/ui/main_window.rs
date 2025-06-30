@@ -52,7 +52,8 @@ impl TodoMainWindow {
                     Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => break,
                 }
             }
-        });
+        })
+        .detach();
         Self { root }
     }
 
