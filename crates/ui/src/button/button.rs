@@ -520,7 +520,7 @@ impl RenderOnce for Button {
                     })
                     .children(self.children)
             })
-            .when(self.loading, |this| {
+            .when(self.loading && !self.disabled, |this| {
                 this.bg(normal_style.bg.opacity(0.8))
                     .border_color(normal_style.border.opacity(0.8))
                     .text_color(normal_style.fg.opacity(0.8))
