@@ -520,7 +520,11 @@ impl RenderOnce for Button {
                     })
                     .children(self.children)
             })
-            .when(self.loading, |this| this.bg(normal_style.bg.opacity(0.8)))
+            .when(self.loading, |this| {
+                this.bg(normal_style.bg.opacity(0.8))
+                    .border_color(normal_style.border.opacity(0.8))
+                    .text_color(normal_style.fg.opacity(0.8))
+            })
             .when_some(self.tooltip, |this, (tooltip, action)| {
                 this.tooltip(move |window, cx| {
                     Tooltip::new(tooltip.clone())
