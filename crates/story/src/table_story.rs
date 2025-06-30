@@ -24,11 +24,11 @@ use gpui_component::{
 use serde::Deserialize;
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
-#[action(namespace = story, no_json)]
+#[action(namespace = table_story, no_json)]
 struct ChangeSize(Size);
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
-#[action(namespace = story, no_json)]
+#[action(namespace = table_story, no_json)]
 struct OpenDetail(usize);
 
 #[derive(Clone, Debug, Default)]

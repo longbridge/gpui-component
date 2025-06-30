@@ -2,9 +2,9 @@ use std::{sync::Arc, time::Duration};
 
 use fake::Fake;
 use gpui::{
-    actions, div, prelude::FluentBuilder as _, px, App, AppContext, Context, Entity, FocusHandle,
-    Focusable, InteractiveElement as _, IntoElement, ParentElement, Render, SharedString, Styled,
-    Task, Timer, WeakEntity, Window,
+    div, prelude::FluentBuilder as _, px, App, AppContext, Context, Entity, FocusHandle, Focusable,
+    InteractiveElement as _, IntoElement, ParentElement, Render, SharedString, Styled, Task, Timer,
+    WeakEntity, Window,
 };
 use raw_window_handle::HasWindowHandle;
 
@@ -21,8 +21,7 @@ use gpui_component::{
 };
 
 use crate::section;
-
-actions!(story, [TestAction]);
+use crate::TestAction;
 
 pub struct ListItemDeletegate {
     story: WeakEntity<DrawerStory>,

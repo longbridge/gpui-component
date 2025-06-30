@@ -1,5 +1,5 @@
 use gpui::{
-    div, px, AnyElement, App, AppContext, Context, Entity, Focusable, IntoElement,
+    div, px, AnyElement, App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement,
     ParentElement as _, Pixels, Render, SharedString, Styled, Window,
 };
 use gpui_component::{
@@ -8,7 +8,7 @@ use gpui_component::{
 };
 
 pub struct ResizableStory {
-    focus_handle: gpui::FocusHandle,
+    focus_handle: FocusHandle,
     state1: Entity<ResizableState>,
     state2: Entity<ResizableState>,
     state3: Entity<ResizableState>,

@@ -1,5 +1,5 @@
 use gpui::{
-    actions, div, prelude::FluentBuilder as _, App, AppContext, Axis, Context, Entity, Focusable,
+    div, prelude::FluentBuilder as _, App, AppContext, Axis, Context, Entity, Focusable,
     InteractiveElement, IntoElement, ParentElement as _, Render, Styled, Window,
 };
 use gpui_component::{
@@ -14,8 +14,6 @@ use gpui_component::{
     switch::Switch,
     v_flex, AxisExt, FocusableCycle, Selectable, Sizable, Size,
 };
-
-actions!(story, [Tab, TabPrev]);
 
 pub struct FormStory {
     name_input: Entity<InputState>,

@@ -1,6 +1,6 @@
 use gpui::{
-    px, App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render, Styled,
-    Window,
+    px, App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement,
+    Render, Styled, Window,
 };
 
 use gpui_component::{h_flex, indigo_50, indigo_500, tag::Tag, v_flex, ColorName, Sizable};
@@ -8,7 +8,7 @@ use gpui_component::{h_flex, indigo_50, indigo_500, tag::Tag, v_flex, ColorName,
 use crate::section;
 
 pub struct TagStory {
-    focus_handle: gpui::FocusHandle,
+    focus_handle: FocusHandle,
 }
 
 impl super::Story for TagStory {
@@ -37,7 +37,7 @@ impl TagStory {
     }
 }
 impl Focusable for TagStory {
-    fn focus_handle(&self, _: &gpui::App) -> gpui::FocusHandle {
+    fn focus_handle(&self, _: &App) -> FocusHandle {
         self.focus_handle.clone()
     }
 }

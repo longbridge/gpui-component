@@ -1,6 +1,6 @@
 use gpui::{
-    px, App, AppContext, Context, Div, Entity, Focusable, IntoElement, ParentElement, Render,
-    SharedString, Styled, Window,
+    px, App, AppContext, Context, Div, Entity, FocusHandle, Focusable, IntoElement, ParentElement,
+    Render, SharedString, Styled, Window,
 };
 
 use gpui_component::{
@@ -10,7 +10,7 @@ use gpui_component::{
 use crate::section;
 
 pub struct SwitchStory {
-    focus_handle: gpui::FocusHandle,
+    focus_handle: FocusHandle,
     switch1: bool,
     switch2: bool,
     switch3: bool,

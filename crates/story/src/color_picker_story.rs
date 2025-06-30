@@ -13,7 +13,6 @@ use crate::section;
 pub struct ColorPickerStory {
     color: Entity<ColorPickerState>,
     selected_color: Option<Hsla>,
-
     _subscriptions: Vec<Subscription>,
 }
 

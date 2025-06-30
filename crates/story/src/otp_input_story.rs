@@ -1,7 +1,7 @@
 use gpui::{
-    actions, prelude::FluentBuilder as _, px, App, AppContext as _, Context, Entity, FocusHandle,
-    Focusable, InteractiveElement, IntoElement, KeyBinding, ParentElement as _, Render,
-    SharedString, Styled, Subscription, Window,
+    prelude::FluentBuilder as _, px, App, AppContext as _, Context, Entity, FocusHandle, Focusable,
+    InteractiveElement, IntoElement, KeyBinding, ParentElement as _, Render, SharedString, Styled,
+    Subscription, Window,
 };
 use gpui_component::{
     checkbox::Checkbox,
@@ -10,8 +10,7 @@ use gpui_component::{
     v_flex, FocusableCycle, Sizable, StyledExt,
 };
 
-use crate::section;
-actions!(story, [Tab, TabPrev]);
+use crate::{section, Tab, TabPrev};
 
 const CONTEXT: &str = "OtpInputStory";
 

@@ -22,7 +22,7 @@ use gpui_component::{
 use serde::Deserialize;
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
-#[action(namespace = story, no_json)]
+#[action(namespace = sidebar_story, no_json)]
 pub struct SelectCompany(SharedString);
 
 pub struct SidebarStory {

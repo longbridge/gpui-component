@@ -1,17 +1,15 @@
 use gpui::{
-    actions, px, App, AppContext as _, ClickEvent, Context, Entity, FocusHandle, Focusable,
+    px, App, AppContext as _, ClickEvent, Context, Entity, FocusHandle, Focusable,
     InteractiveElement, IntoElement, KeyBinding, ParentElement as _, Render, Styled, Window,
 };
 
-use crate::section;
+use crate::{section, Tab, TabPrev};
 use gpui_component::{
     button::Button,
     h_flex,
     input::{InputState, TextInput},
     v_flex, FocusableCycle, Sizable,
 };
-
-actions!(story, [Tab, TabPrev]);
 
 const CONTEXT: &str = "TextareaStory";
 

@@ -1,7 +1,6 @@
 use gpui::{
-    actions, div, prelude::FluentBuilder as _, px, App, AppContext, Context, Entity, FocusHandle,
-    Focusable, InteractiveElement as _, IntoElement, ParentElement, Render, SharedString, Styled,
-    Window,
+    div, prelude::FluentBuilder as _, px, App, AppContext, Context, Entity, FocusHandle, Focusable,
+    InteractiveElement as _, IntoElement, ParentElement, Render, SharedString, Styled, Window,
 };
 
 use gpui_component::{
@@ -16,8 +15,7 @@ use gpui_component::{
     v_flex, ActiveTheme, ContextModal as _,
 };
 
-use crate::section;
-actions!(story, [TestAction]);
+use crate::{section, TestAction};
 
 pub struct ModalStory {
     focus_handle: FocusHandle,

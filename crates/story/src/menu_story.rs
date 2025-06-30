@@ -12,10 +12,10 @@ use serde::Deserialize;
 use crate::section;
 
 #[derive(Action, Clone, PartialEq, Deserialize)]
-#[action(namespace = story, no_json)]
+#[action(namespace = menu_story, no_json)]
 struct Info(usize);
 
-actions!(story, [Copy, Paste, Cut, SearchAll, ToggleCheck]);
+actions!(menu_story, [Copy, Paste, Cut, SearchAll, ToggleCheck]);
 
 pub fn init(cx: &mut App) {
     cx.bind_keys([

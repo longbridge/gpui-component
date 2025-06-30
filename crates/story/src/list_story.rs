@@ -16,7 +16,7 @@ use gpui_component::{
     v_flex, ActiveTheme, Sizable,
 };
 
-actions!(story, [SelectedCompany]);
+actions!(list_story, [SelectedCompany]);
 
 #[derive(Clone, Default)]
 struct Company {

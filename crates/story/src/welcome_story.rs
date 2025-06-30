@@ -1,11 +1,13 @@
-use gpui::{App, AppContext, Context, Entity, Focusable, ParentElement, Render, Styled, Window};
+use gpui::{
+    App, AppContext, Context, Entity, FocusHandle, Focusable, ParentElement, Render, Styled, Window,
+};
 
 use gpui_component::{dock::PanelControl, text::TextView, v_flex};
 
 use crate::Story;
 
 pub struct WelcomeStory {
-    focus_handle: gpui::FocusHandle,
+    focus_handle: FocusHandle,
 }
 
 impl WelcomeStory {

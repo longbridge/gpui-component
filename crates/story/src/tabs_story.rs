@@ -1,5 +1,6 @@
 use gpui::{
-    App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render, Styled, Window,
+    App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement, Render,
+    Styled, Window,
 };
 
 use gpui_component::{
@@ -13,7 +14,7 @@ use gpui_component::{
 use crate::section;
 
 pub struct TabsStory {
-    focus_handle: gpui::FocusHandle,
+    focus_handle: FocusHandle,
     active_tab_ix: usize,
     size: Size,
     menu: bool,

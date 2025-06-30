@@ -1,5 +1,5 @@
 use gpui::{
-    actions, prelude::FluentBuilder, px, App, AppContext as _, ClickEvent, Context, Entity,
+    prelude::FluentBuilder, px, Action, App, AppContext as _, ClickEvent, Context, Entity,
     Focusable, InteractiveElement, IntoElement, ParentElement as _, Render, Styled as _, Window,
 };
 
@@ -9,10 +9,18 @@ use gpui_component::{
     h_flex, indigo, v_flex, white, ActiveTheme, Disableable as _, Icon, IconName, Selectable as _,
     Sizable as _, Theme,
 };
+use serde::Deserialize;
 
 use crate::section;
 
-actions!(story, [Disabled, Loading, Selected, Compact]);
+#[derive(Clone, Action, PartialEq, Eq, Deserialize)]
+#[action(namespace = button_story, no_json)]
+enum ButtonAction {
+    Disabled,
+    Loading,
+    Selected,
+    Compact,
+}
 
 pub struct ButtonStory {
     focus_handle: gpui::FocusHandle,
@@ -100,10 +108,14 @@ impl Render for ButtonStory {
             });
 
         v_flex()
-            .on_action(cx.listener(|this, _: &Disabled, _, _| this.disabled = !this.disabled))
-            .on_action(cx.listener(|this, _: &Loading, _, _| this.loading = !this.loading))
-            .on_action(cx.listener(|this, _: &Selected, _, _| this.selected = !this.selected))
-            .on_action(cx.listener(|this, _: &Compact, _, _| this.compact = !this.compact))
+            .on_action(
+                cx.listener(|this, action: &ButtonAction, _, _| match action {
+                    ButtonAction::Disabled => this.disabled = !this.disabled,
+                    ButtonAction::Loading => this.loading = !this.loading,
+                    ButtonAction::Selected => this.selected = !this.selected,
+                    ButtonAction::Compact => this.compact = !this.compact,
+                }),
+            )
             .gap_6()
             .child(
                 h_flex()
@@ -697,10 +709,26 @@ impl Render for ButtonStory {
                             .button(Button::new("btn").label("Click Me"))
                             .selected(selected)
                             .popup_menu(move |this, _, _| {
-                                this.menu("Disabled", Box::new(Disabled))
-                                    .menu("Loading", Box::new(Loading))
-                                    .menu("Selected", Box::new(Selected))
-                                    .menu("Compact", Box::new(Compact))
+                                this.menu_with_check(
+                                    "Disabled",
+                                    disabled,
+                                    Box::new(ButtonAction::Disabled),
+                                )
+                                .menu_with_check(
+                                    "Loading",
+                                    loading,
+                                    Box::new(ButtonAction::Loading),
+                                )
+                                .menu_with_check(
+                                    "Selected",
+                                    selected,
+                                    Box::new(ButtonAction::Selected),
+                                )
+                                .menu_with_check(
+                                    "Compact",
+                                    compact,
+                                    Box::new(ButtonAction::Compact),
+                                )
                             }),
                     )
                     .child(
@@ -708,10 +736,26 @@ impl Render for ButtonStory {
                             .button(Button::new("btn").label("Click Me"))
                             .selected(selected)
                             .popup_menu(move |this, _, _| {
-                                this.menu("Disabled", Box::new(Disabled))
-                                    .menu("Loading", Box::new(Loading))
-                                    .menu("Selected", Box::new(Selected))
-                                    .menu("Compact", Box::new(Compact))
+                                this.menu_with_check(
+                                    "Disabled",
+                                    disabled,
+                                    Box::new(ButtonAction::Disabled),
+                                )
+                                .menu_with_check(
+                                    "Loading",
+                                    loading,
+                                    Box::new(ButtonAction::Loading),
+                                )
+                                .menu_with_check(
+                                    "Selected",
+                                    selected,
+                                    Box::new(ButtonAction::Selected),
+                                )
+                                .menu_with_check(
+                                    "Compact",
+                                    compact,
+                                    Box::new(ButtonAction::Compact),
+                                )
                             }),
                     )
                     .child(
@@ -720,10 +764,26 @@ impl Render for ButtonStory {
                             .button(Button::new("btn").label("Outline Dropdown"))
                             .selected(selected)
                             .popup_menu(move |this, _, _| {
-                                this.menu("Disabled", Box::new(Disabled))
-                                    .menu("Loading", Box::new(Loading))
-                                    .menu("Selected", Box::new(Selected))
-                                    .menu("Compact", Box::new(Compact))
+                                this.menu_with_check(
+                                    "Disabled",
+                                    disabled,
+                                    Box::new(ButtonAction::Disabled),
+                                )
+                                .menu_with_check(
+                                    "Loading",
+                                    loading,
+                                    Box::new(ButtonAction::Loading),
+                                )
+                                .menu_with_check(
+                                    "Selected",
+                                    selected,
+                                    Box::new(ButtonAction::Selected),
+                                )
+                                .menu_with_check(
+                                    "Compact",
+                                    compact,
+                                    Box::new(ButtonAction::Compact),
+                                )
                             }),
                     )
                     .child(
@@ -732,10 +792,26 @@ impl Render for ButtonStory {
                             .button(Button::new("btn").label("Ghost Dropdown"))
                             .selected(selected)
                             .popup_menu(move |this, _, _| {
-                                this.menu("Disabled", Box::new(Disabled))
-                                    .menu("Loading", Box::new(Loading))
-                                    .menu("Selected", Box::new(Selected))
-                                    .menu("Compact", Box::new(Compact))
+                                this.menu_with_check(
+                                    "Disabled",
+                                    disabled,
+                                    Box::new(ButtonAction::Disabled),
+                                )
+                                .menu_with_check(
+                                    "Loading",
+                                    loading,
+                                    Box::new(ButtonAction::Loading),
+                                )
+                                .menu_with_check(
+                                    "Selected",
+                                    selected,
+                                    Box::new(ButtonAction::Selected),
+                                )
+                                .menu_with_check(
+                                    "Compact",
+                                    compact,
+                                    Box::new(ButtonAction::Compact),
+                                )
                             }),
                     ),
             )

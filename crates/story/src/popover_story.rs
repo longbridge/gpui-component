@@ -14,10 +14,10 @@ use gpui_component::{
 use serde::Deserialize;
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
-#[action(namespace = story, no_json)]
+#[action(namespace = popover_story, no_json)]
 struct Info(usize);
 
-actions!(story, [Copy, Paste, Cut, SearchAll, ToggleCheck]);
+actions!(popover_story, [Copy, Paste, Cut, SearchAll, ToggleCheck]);
 
 pub fn init(cx: &mut App) {
     cx.bind_keys([

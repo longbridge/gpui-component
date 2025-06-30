@@ -125,6 +125,8 @@ actions!(story, [Quit, Open, CloseWindow, ToggleSearch]);
 
 const PANEL_NAME: &str = "StoryContainer";
 
+actions!(story, [TestAction, Tab, TabPrev]);
+
 pub struct AppState {
     pub invisible_panels: Entity<Vec<SharedString>>,
 }

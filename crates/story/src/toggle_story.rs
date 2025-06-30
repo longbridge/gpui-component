@@ -1,5 +1,5 @@
 use gpui::{
-    actions, App, AppContext as _, Context, Entity, Focusable, IntoElement, ParentElement as _,
+    App, AppContext as _, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement as _,
     Render, Styled as _, Window,
 };
 
@@ -8,10 +8,8 @@ use gpui_component::{
     h_flex, v_flex, IconName, Sizable,
 };
 
-actions!(story, [Disabled, Loading, Selected, Compact]);
-
 pub struct ToggleStory {
-    focus_handle: gpui::FocusHandle,
+    focus_handle: FocusHandle,
     single_toggle: usize,
     checked: Vec<bool>,
 }

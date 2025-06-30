@@ -1,6 +1,6 @@
 use gpui::{
-    actions, px, App, AppContext, Context, Entity, Focusable, InteractiveElement, IntoElement,
-    KeyBinding, ParentElement, Render, SharedString, Styled, Window,
+    px, App, AppContext, Context, Entity, Focusable, InteractiveElement, IntoElement, KeyBinding,
+    ParentElement, Render, SharedString, Styled, Window,
 };
 
 use gpui_component::{
@@ -10,8 +10,7 @@ use gpui_component::{
 };
 
 use crate::section;
-
-actions!(story, [Tab, TabPrev]);
+use crate::{Tab, TabPrev};
 
 const CONTEXT: &str = "DropdownStory";
 pub fn init(cx: &mut App) {

@@ -1,17 +1,15 @@
 use gpui::{
-    actions, App, AppContext as _, Context, Entity, FocusHandle, Focusable, InteractiveElement,
-    IntoElement, KeyBinding, ParentElement as _, Render, Styled, Subscription, Window,
+    App, AppContext as _, Context, Entity, FocusHandle, Focusable, InteractiveElement, IntoElement,
+    KeyBinding, ParentElement as _, Render, Styled, Subscription, Window,
 };
 use regex::Regex;
 
-use crate::section;
+use crate::{section, Tab, TabPrev};
 use gpui_component::{
     button::{Button, ButtonVariants},
     input::{InputEvent, InputState, MaskPattern, NumberInput, NumberInputEvent, StepAction},
     v_flex, FocusableCycle, IconName, Sizable,
 };
-
-actions!(story, [Tab, TabPrev]);
 
 const CONTEXT: &str = "NumberInputStory";
 

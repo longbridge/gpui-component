@@ -1,17 +1,14 @@
 use gpui::{
-    actions, div, App, AppContext as _, Context, Entity, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, KeyBinding, ParentElement as _, Render, Styled, Subscription,
-    Window,
+    div, App, AppContext as _, Context, Entity, FocusHandle, Focusable, InteractiveElement,
+    IntoElement, KeyBinding, ParentElement as _, Render, Styled, Subscription, Window,
 };
 
-use crate::section;
+use crate::{section, Tab, TabPrev};
 use gpui_component::{
     button::{Button, ButtonVariants as _},
     input::{InputEvent, InputState, MaskPattern, TextInput},
     v_flex, ContextModal, FocusableCycle, Icon, IconName, Sizable,
 };
-
-actions!(story, [Tab, TabPrev]);
 
 const CONTEXT: &str = "InputStory";
 
