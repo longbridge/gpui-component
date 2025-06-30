@@ -820,7 +820,7 @@ pub async fn stream_to_stdout1<M: StreamingCompletionModel>(
                                 // 普通字符直接输出
                                 print!("{}", c);
                                 //tx.send(Message::assistant(c.to_string())).await;
-                                xbus::post(&Message::assistant(c.to_string()));
+                                xbus::post(Message::assistant(c.to_string()));
                                 assistant.push(c);
                                 std::io::Write::flush(&mut std::io::stdout())?;
                             }
@@ -839,7 +839,7 @@ pub async fn stream_to_stdout1<M: StreamingCompletionModel>(
                                     // 不是工具调用标签，输出
                                     print!("{}", buffer);
                                     //tx.send(Message::assistant(buffer.to_string())).await;
-                                    xbus::post(&Message::assistant(buffer.clone()));
+                                    xbus::post(Message::assistant(buffer.clone()));
                                     assistant.push_str(buffer.as_str());
                                     std::io::Write::flush(&mut std::io::stdout())?;
                                     state = State::Normal;
