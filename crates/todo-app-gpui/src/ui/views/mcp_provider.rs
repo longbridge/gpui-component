@@ -1,6 +1,6 @@
 use crate::app::{AppState, FoEvent};
 use crate::models::mcp_config::{
-    McpPrompt, McpProviderConfig, McpProviderInfo, McpTool, McpTransport,
+    McpConfigManager, McpPrompt, McpProviderInfo, McpServerConfig, McpTool, McpTransport,
 };
 use crate::ui::components::ViewKit;
 use crate::xbus;
@@ -43,7 +43,7 @@ struct ProviderInputs {
 
 pub struct McpProvider {
     focus_handle: FocusHandle,
-    providers: Vec<McpProviderInfo>,
+    providers: Vec<McpServerConfig>,
     expanded_providers: Vec<usize>,
     active_capability_tabs: std::collections::HashMap<usize, usize>,
     editing_provider: Option<usize>,
@@ -88,7 +88,7 @@ impl McpProvider {
     fn new(_window: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
-            providers: McpProviderConfig::load_providers().unwrap_or_default(),
+            providers: McpConfigManager::load_providers().unwrap_or_default(),
             expanded_providers: vec![],
             active_capability_tabs: std::collections::HashMap::new(),
             editing_provider: None,
@@ -102,7 +102,7 @@ impl McpProvider {
     fn save_config(&mut self, cx: &mut Context<Self>) {
         println!("保存MCP配置到文件...");
         // 然后保存到文件
-        if let Err(e) = McpProviderConfig::save_providers(&self.providers[..]) {
+        if let Err(e) = McpConfigManager::save_providers(&self.providers[..]) {
             eprintln!("保存MCP配置失败: {}", e);
         }
         xbus::post(&FoEvent::McpConfigUpdated);
@@ -305,7 +305,7 @@ impl McpProvider {
                         win_handle
                             .update(cx, |_this, window, cx| {
                                 window.push_notification(
-                                    format!("启动MCP服务 '{}' 失败: {}",name, err),
+                                    format!("启动MCP服务 '{}' 失败: {}", name, err),
                                     cx,
                                 );
                                 cx.notify(_this.entity_id());

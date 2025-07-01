@@ -6,22 +6,27 @@ mod todo;
 
 use actix::prelude::*;
 use gpui_component::notification::Notification;
-use rmcp::model::{Prompt, ReadResourceResult, Resource, Tool};
+use rmcp::model::{Prompt, ReadResourceResult, Resource, ResourceContents, Tool};
 use std::fs::File;
 
-use crate::{backoffice::mcp::McpRegistry, models::mcp_config::McpProviderInfo};
+use crate::{backoffice::mcp::McpRegistry, models::mcp_config::McpServerConfig};
 
 ///后台事件
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub enum BoEvent {
     TodoUpdated,
     LlmConfigUpdated,
-    McpProviderStarted(McpProviderInfo),
+    McpServerStarted(McpServerConfig),
     McpToolListUpdated(String, Vec<Tool>),
     McpResourceListUpdated(String, Vec<Resource>),
     McpPromptListUpdated(String, Vec<Prompt>),
     McpResourceResult(String, ReadResourceResult),
     McpSamplingRequest(String, String, String),
+    McpResourceUpdated {
+        server_id: String,
+        uri: String,
+        contents: Vec<ResourceContents>,
+    },
     Notification(NotificationKind, String),
 }
 
@@ -129,7 +134,7 @@ fn mtime<P: AsRef<std::path::Path>>(path: P) -> anyhow::Result<u64> {
 }
 
 pub fn start() {
-   let addr= McpRegistry::from_registry();
+    let addr = McpRegistry::from_registry();
     log::info!("McpRegistry started at {:?}", addr);
 }
 

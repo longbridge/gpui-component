@@ -1,31 +1,18 @@
-use actix::{prelude::*, WeakAddr};
-use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ACCEPT, AUTHORIZATION};
-use rmcp::model::{CreateMessageRequestMethod, CreateMessageRequestParam, CreateMessageResult, ListRootsResult, LoggingLevel, ProtocolVersion, ReadResourceRequestParam, ResourceUpdatedNotificationParam};
-use rmcp::service::{NotificationContext, RequestContext};
-use rmcp::transport::sse_client::SseClientConfig;
-use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
-use rmcp::transport::{ConfigureCommandExt, StreamableHttpClientTransport, TokioChildProcess};
-use rmcp::{
-    model::{CallToolRequestParam, CallToolResult,Content},
-    service::{RunningService, ServerSink},
-    transport::{auth::AuthClient, auth::OAuthState, SseClientTransport},
-    RoleClient,Peer, ClientHandler
-};
-pub use rmcp::{Error as McpError,
-    model::{Root,
-        ClientCapabilities, Implementation, Prompt as McpPrompt,
-        Resource as McpResource, ResourceTemplate as McpResourceTemplate, Tool as McpTool,
-    },
-    ServiceExt,
-};
-use std::any::Any;
-use std::{collections::HashMap, time::Duration};
-
-use crate::models::mcp_config::{*};
+mod adaptor;
+mod client;
+mod server;
+use crate::backoffice::mcp::server::McpServerInstance;
+use crate::models::mcp_config::*;
 use crate::{
     backoffice::{BoEvent, YamlFile},
     xbus,
 };
+use actix::prelude::*;
+use rmcp::model::{Content, ResourceContents};
+use rmcp::model::{Prompt as McpPrompt, Resource as McpResource, Tool as McpTool};
+use std::any::Any;
+use std::{collections::HashMap, sync::Arc, time::Duration};
+use tokio::sync::RwLock;
 
 #[derive(Message, Debug)]
 #[rtype(result = "()")]
@@ -54,16 +41,188 @@ pub struct McpCallToolResult {
     is_error: bool,
 }
 
+pub struct McpServerActor {
+    instance: Option<McpServerInstance>,
+    config: McpServerConfig,
+}
+
+impl McpServerActor {
+    pub fn new(config: McpServerConfig) -> Self {
+        Self {
+            instance: None,
+            config,
+        }
+    }
+}
+
+impl Actor for McpServerActor {
+    type Context = Context<Self>;
+
+    fn started(&mut self, ctx: &mut Self::Context) {
+        let config = self.config.clone();
+
+        // 异步启动实例
+        async move { McpServerInstance::new(config).start().await }
+            .into_actor(self)
+            .then(|res, act, _ctx| {
+                match res {
+                    Ok(instance) => {
+                        log::info!("MCP Server {} started successfully", instance.config.id);
+
+                        // 通知 Registry 更新实例缓存
+                        let registry = McpRegistry::global();
+                        registry.do_send(UpdateInstanceCache {
+                            server_id: instance.config.id.clone(),
+                            instance: Some(instance.clone()),
+                        });
+
+                        act.instance = Some(instance);
+                        xbus::post(BoEvent::McpServerStarted(act.config.clone()));
+                    }
+                    Err(err) => {
+                        log::error!("Failed to start MCP Server {}: {}", act.config.id, err);
+                        xbus::post(BoEvent::Notification(
+                            crate::backoffice::NotificationKind::Error,
+                            format!("Failed to start MCP Server {}: {}", act.config.id, err),
+                        ));
+                    }
+                }
+                fut::ready(())
+            })
+            .wait(ctx);
+    }
+}
+
+impl Handler<ExitFromRegistry> for McpServerActor {
+    type Result = ResponseActFuture<Self, ()>;
+
+    fn handle(&mut self, _msg: ExitFromRegistry, _ctx: &mut Self::Context) -> Self::Result {
+        log::info!("MCP Server {} exiting", self.config.id);
+
+        let server_id = self.config.id.clone();
+
+        // 异步停止实例
+        async move {
+            // 通知 Registry 移除实例缓存
+            let registry = McpRegistry::global();
+            registry.do_send(UpdateInstanceCache {
+                server_id,
+                instance: None,
+            });
+        }
+        .into_actor(self)
+        .then(|_res, _act, ctx| {
+            ctx.stop();
+            fut::ready(())
+        })
+        .boxed_local()
+    }
+}
+
+// 移除 McpInstanceManager，将其功能整合到 McpRegistry
 pub struct McpRegistry {
-    providers: HashMap<String, Addr<McpProvider>>,
+    servers: HashMap<String, Addr<McpServerActor>>,
+    instances: Arc<RwLock<HashMap<String, McpServerInstance>>>, // 添加实例管理
     file: YamlFile,
+}
+
+impl McpRegistry {
+    /// 获取全局注册表实例
+    pub fn global() -> Addr<Self> {
+        McpRegistry::from_registry()
+    }
+
+    /// 静态方法：调用工具
+    pub async fn call_tool(
+        server_id: &str,
+        tool_name: &str,
+        args: &str,
+    ) -> anyhow::Result<McpCallToolResult> {
+        let registry = Self::global();
+        let result = registry
+            .send(McpCallToolRequest {
+                id: server_id.to_string(),
+                name: tool_name.to_string(),
+                arguments: args.to_string(),
+            })
+            .await?;
+        Ok(result)
+    }
+
+    /// 静态方法：获取服务器实例
+    pub async fn get_instance(server_id: &str) -> anyhow::Result<Option<McpServerInstance>> {
+        let registry = Self::global();
+
+        let result = registry
+            .send(GetServerInstance {
+                server_id: server_id.to_string(),
+            })
+            .await?;
+
+        Ok(result)
+    }
+
+    /// 静态方法：获取所有实例
+    pub async fn get_all_instances() -> anyhow::Result<HashMap<String, McpServerInstance>> {
+        let registry = Self::global();
+
+        let result = registry.send(GetAllInstances).await?;
+
+        Ok(result)
+    }
+
+    fn check_and_update(&mut self, ctx: &mut Context<Self>) -> anyhow::Result<()> {
+        if self.file.modified()? {
+            let configs = McpConfigManager::load_servers()?;
+            let enabled_ids: Vec<_> = configs
+                .iter()
+                .filter(|config| config.enabled)
+                .map(|config| config.id.as_str())
+                .collect();
+
+            // 移除不再启用的服务器
+            let servers_to_remove: Vec<String> = self
+                .servers
+                .keys()
+                .filter(|id| !enabled_ids.contains(&id.as_str()))
+                .cloned()
+                .collect();
+
+            for server_id in servers_to_remove {
+                if let Some(addr) = self.servers.remove(&server_id) {
+                    addr.do_send(ExitFromRegistry);
+                    // 同时从实例管理中移除
+                    let instances = self.instances.clone();
+                    let id = server_id.clone();
+                    ctx.spawn(
+                        async move {
+                            let mut instances = instances.write().await;
+                            instances.remove(&id);
+                        }
+                        .into_actor(self),
+                    );
+                }
+            }
+
+            // 添加新启用的服务器
+            for config in configs.iter().filter(|c| c.enabled) {
+                if !self.servers.contains_key(&config.id) {
+                    let server_actor = McpServerActor::new(config.clone());
+                    let addr = server_actor.start();
+                    self.servers.insert(config.id.clone(), addr);
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 impl Default for McpRegistry {
     fn default() -> Self {
-        let file = YamlFile::new(McpProviderConfig::config_path());
+        let file = YamlFile::new(McpConfigManager::config_path());
         Self {
-            providers: HashMap::new(),
+            servers: HashMap::new(),
+            instances: Arc::new(RwLock::new(HashMap::new())),
             file,
         }
     }
@@ -75,38 +234,12 @@ impl SystemService for McpRegistry {}
 impl McpRegistry {
     fn tick(&mut self, ctx: &mut Context<Self>) {
         if let Ok(false) = &self.file.exist() {
-            self.providers.clear();
+            self.servers.clear();
             return;
         }
         if let Err(err) = self.check_and_update(ctx) {
             log::error!("{} {err}", self.file.path.display());
         }
-    }
-    fn check_and_update(&mut self, ctx: &mut Context<Self>) -> anyhow::Result<()> {
-        if self.file.modified()? {
-            let providers = McpProviderConfig::load_providers()?;
-            let names = providers
-                .iter()
-                .filter(|provider| provider.enabled)
-                .map(|provider| provider.id.as_str())
-                .collect::<Vec<&str>>();
-            self.providers.retain(|name, addr| {
-                if !names.contains(&name.as_str()) {
-                    addr.do_send(ExitFromRegistry);
-                    false
-                } else {
-                    true
-                }
-            });
-            for provider in providers.iter().filter(|p| p.enabled) {
-                if !self.providers.contains_key(&provider.id) {
-                    let mcp_provider = McpProvider::new(provider.clone());
-                    let addr = mcp_provider.start();
-                    self.providers.insert(provider.id.clone(), addr);
-                }
-            }
-        }
-        Ok(())
     }
 }
 
@@ -119,245 +252,258 @@ impl Actor for McpRegistry {
     }
 }
 
-pub struct McpProvider {
-    provider: McpProviderInfo,
-    
-}
-
-impl McpProvider {
-    pub fn new(provider: McpProviderInfo) -> Self {
-        Self {
-            provider,
-        }
-    }
-}
-impl Actor for McpProvider {
-    type Context = Context<Self>;
-
-    fn started(&mut self, ctx: &mut Self::Context) {
-       let provider = self.provider.clone();
-        provider.start().into_actor(self).then(|res,act,ctx|{
-            match res {
-                Ok(provider) => {
-                    log::info!("McpProvider {} started successfully", provider.id);
-                    act.provider = provider;
-                    xbus::post(BoEvent::McpProviderStarted(act.provider.clone()));
-                }
-                Err(err) => {
-                    log::error!("Failed to start McpProvider {}: {}", act.provider.id, err);
-                    xbus::post(BoEvent::Notification(
-                        crate::backoffice::NotificationKind::Error,
-                        format!("Failed to start McpProvider {}: {}", act.provider.id, err),
-                    ));
-                }
-            }
-            fut::ready(())
-        }).wait(ctx);
-       
-    }
-}
-
-impl Handler<ExitFromRegistry> for McpProvider {
-    type Result = ();
-
-    fn handle(&mut self, _msg: ExitFromRegistry, ctx: &mut Self::Context) -> Self::Result {
-        log::info!("McpProvider {} exit", self.provider.id);
-        ctx.stop();
-    }
-}
-
-impl Handler<McpCallToolRequest> for McpProvider {
-    type Result = MessageResult<McpCallToolRequest>;
+impl Handler<McpCallToolRequest> for McpRegistry {
+    type Result = ResponseActFuture<Self, McpCallToolResult>;
 
     fn handle(&mut self, msg: McpCallToolRequest, _ctx: &mut Self::Context) -> Self::Result {
-        log::info!(
-            "McpCallToolRequest: id={}, name={}, arguments={}",
-            msg.id,
-            msg.name,
-            msg.arguments
-        );
-        // Here you would implement the logic to call the tool and return the result.
-        // For now, we return an empty result.
-        MessageResult(McpCallToolResult {
-            id: msg.id,
-            name: msg.name,
-            result: vec![],
-            is_error: false,
-        })
+        let instances = self.instances.clone();
+        let server_id = msg.id.clone();
+        let tool_name = msg.name.clone();
+        let arguments = msg.arguments.clone();
+
+        async move {
+            // 从实例缓存中获取服务器实例
+            let instances = instances.read().await;
+            if let Some(instance) = instances.get(&server_id) {
+                // 调用工具
+                match instance.call_tool(&tool_name, &arguments).await {
+                    Ok(result) => McpCallToolResult {
+                        id: server_id.clone(),
+                        name: tool_name,
+                        result: result.content,
+                        is_error: false,
+                    },
+                    Err(err) => McpCallToolResult {
+                        id: server_id.clone(),
+                        name: tool_name,
+                        result: vec![Content::text(format!("Tool execution error: {}", err))],
+                        is_error: true,
+                    },
+                }
+            } else {
+                // 服务器实例不存在
+                McpCallToolResult {
+                    id: server_id.clone(),
+                    name: tool_name,
+                    result: vec![Content::text(format!(
+                        "MCP Server instance '{}' not found",
+                        server_id
+                    ))],
+                    is_error: true,
+                }
+            }
+        }
+        .into_actor(self)
+        .boxed_local()
     }
 }
 
-pub struct McpClient {
-    pub protocol_version: ProtocolVersion,
-    pub capabilities: ClientCapabilities,
-    pub client_info: Implementation,
-    // pub peer: Option<Peer<RoleClient>>,
-    pub id: String,
+// 添加一个新的消息类型来更新实例缓存
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct UpdateInstanceCache {
+    pub server_id: String,
+    pub instance: Option<McpServerInstance>,
 }
 
-impl McpClient {
-    pub fn new(id: String) -> Self {
-        Self {
-            protocol_version:Default::default(),
-            capabilities: ClientCapabilities::default(),
-            client_info: Implementation {
-                name: "xTo-Do/mcp-client".into(),
-                version: "0.1.0".into(),
-            },
-            // peer: None,
-            id,
+impl Handler<UpdateInstanceCache> for McpRegistry {
+    type Result = ResponseActFuture<Self, ()>;
+
+    fn handle(&mut self, msg: UpdateInstanceCache, _ctx: &mut Self::Context) -> Self::Result {
+        let instances = self.instances.clone();
+
+        async move {
+            let mut instances = instances.write().await;
+            if let Some(instance) = msg.instance {
+                instances.insert(msg.server_id, instance);
+            } else {
+                instances.remove(&msg.server_id);
+            }
         }
+        .into_actor(self)
+        .boxed_local()
     }
 }
 
-impl ClientHandler for McpClient {
-    //sampling
-    async fn create_message(
-        &self,
-        params: CreateMessageRequestParam,
-        _context: RequestContext<RoleClient>,
-    ) -> Result<CreateMessageResult, McpError> {
-        log::info!("Create message: {params:#?}");
-        
-        Err(McpError::method_not_found::<CreateMessageRequestMethod>())
-    }
-    async fn list_roots(
-        &self,
-        _context: RequestContext<RoleClient>,
-    ) -> Result<ListRootsResult, McpError> {
-        Ok(ListRootsResult {
-            roots: vec![
-                Root {
-                    uri: "capture://audio".into(),
-                    name: Some("音频设备".into()),
-                },
-                Root {
-                    uri: "capture://screen".into(),
-                    name: Some("捕获屏幕".into()),
-                },
-            ],
-        })
-    }
+// 定义获取实例的消息
+#[derive(Message)]
+#[rtype(result = "Option<McpServerInstance>")]
+pub struct GetServerInstance {
+    pub server_id: String,
+}
 
-    async fn on_prompt_list_changed(&self, ctx: NotificationContext<RoleClient>) {
-        log::info!("Prompt list changed");
-        
-        match ctx.peer.list_prompts(None).await {
-            Ok(prompts) => {
-                log::info!("Prompt list: {prompts:#?}");
-                xbus::post(BoEvent::McpPromptListUpdated(
-                    self.id.clone(),
-                    prompts.prompts,
-                ));
-            }
-            Err(err) => {
-                log::error!("Failed to list prompts: {err}");
-                xbus::post(BoEvent::Notification(
-                    crate::backoffice::NotificationKind::Error,
-                    format!("Failed to list prompts: {err}"),
-                ));
-            }
-        }
-    }
-    async fn on_resource_list_changed(&self, ctx: NotificationContext<RoleClient>) {
-        ctx.peer.list_all_resources().await.map_or_else(
-            |err| {
-                log::error!("Failed to list resources: {err}");
-                xbus::post(BoEvent::Notification(
-                    crate::backoffice::NotificationKind::Error,
-                    format!("Failed to list resources: {err}"),
-                ));
-            },
-            |resources| {
-                log::info!("Resource list changed: {resources:#?}");
-                xbus::post(BoEvent::McpResourceListUpdated(self.id.clone(), resources));
-            },
-        );
-    }
-    async fn on_tool_list_changed(&self, context: NotificationContext<RoleClient>) {
-        log::info!("Tool list changed");
-        match context.peer.list_tools(None).await {
-            Ok(tools) => {
-                log::info!("Tool list: {tools:#?}");
-                xbus::post(BoEvent::McpToolListUpdated(self.id.clone(), tools.tools));
-            }
-            Err(err) => {
-                log::error!("Failed to list tools: {err}");
-                xbus::post(BoEvent::Notification(
-                    crate::backoffice::NotificationKind::Error,
-                    format!("Failed to list tools: {err}"),
-                ));
-            }
-        }
-    }
-    async fn on_cancelled(
-        &self,
-        params: rmcp::model::CancelledNotificationParam,
-        _context: NotificationContext<RoleClient>,
-    ) {
-        log::info!("Cancelled: {params:#?}");
-        xbus::post(BoEvent::Notification(
-            crate::backoffice::NotificationKind::Info,
-            format!("Cancelled: {:?}", params.reason),
-        ));
-    }
+impl Handler<GetServerInstance> for McpRegistry {
+    type Result = ResponseActFuture<Self, Option<McpServerInstance>>;
 
-    async fn on_logging_message(
-        &self,
-        params: rmcp::model::LoggingMessageNotificationParam,
-        _context: NotificationContext<RoleClient>,
-    ) {
-        log::info!("Logging message: {params:#?}");
-        if params.level == LoggingLevel::Error {
-            xbus::post(BoEvent::Notification(
-                crate::backoffice::NotificationKind::Error,
-                format!("Logging error: {}", params.data.to_string()),
-            ));
-        } else if params.level == LoggingLevel::Warning {
-            xbus::post(BoEvent::Notification(
-                crate::backoffice::NotificationKind::Warning,
-                format!("Logging warning: {}", params.data.to_string()),
-            ));
-        } else {
-            xbus::post(BoEvent::Notification(
-                crate::backoffice::NotificationKind::Info,
-                format!("Logging info: {}", params.data.to_string()),
-            ));
-        }
-        xbus::post(BoEvent::Notification(
-            crate::backoffice::NotificationKind::Info,
-            format!("Logging message: {:?}", params.data.to_string()),
-        ));
-    }
+    fn handle(&mut self, msg: GetServerInstance, _ctx: &mut Self::Context) -> Self::Result {
+        let instances = self.instances.clone();
+        let server_id = msg.server_id;
 
-    async fn on_progress(
-        &self,
-        params: rmcp::model::ProgressNotificationParam,
-        context: NotificationContext<RoleClient>,
-    ) {
+        async move {
+            let instances = instances.read().await;
+            instances.get(&server_id).cloned()
+        }
+        .into_actor(self)
+        .boxed_local()
     }
-    async fn on_resource_updated(
-        &self,
-        params: ResourceUpdatedNotificationParam,
-        context: NotificationContext<RoleClient>,
-    ) {
-        
-        match context
-            .peer
-            .read_resource(ReadResourceRequestParam { uri: params.uri })
-            .await
-        {
-            Ok(result) => {
-                log::info!("Resource updated: {result:#?}");
-                xbus::post(BoEvent::McpResourceResult(self.id.clone(), result));
-            }
-            Err(err) => {
-                log::error!("Failed to read resource: {err}");
-                xbus::post(BoEvent::Notification(
-                    crate::backoffice::NotificationKind::Error,
-                    format!("Failed to read resource: {err}"),
-                ));
+}
+
+// 定义获取所有实例的消息
+#[derive(Message)]
+#[rtype(result = "HashMap<String, McpServerInstance>")]
+pub struct GetAllInstances;
+
+impl Handler<GetAllInstances> for McpRegistry {
+    type Result = ResponseActFuture<Self, HashMap<String, McpServerInstance>>;
+
+    fn handle(&mut self, _msg: GetAllInstances, _ctx: &mut Self::Context) -> Self::Result {
+        let instances = self.instances.clone();
+
+        async move {
+            let instances = instances.read().await;
+            instances.clone()
+        }
+        .into_actor(self)
+        .boxed_local()
+    }
+}
+
+// 添加更新工具列表的消息
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct UpdateInstanceTools {
+    pub server_id: String,
+    pub tools: Vec<McpTool>,
+}
+
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct UpdateInstancePrompts {
+    pub server_id: String,
+    pub prompts: Vec<McpPrompt>,
+}
+
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct UpdateInstanceResources {
+    pub server_id: String,
+    pub resources: Vec<McpResource>,
+}
+
+// 为 McpRegistry 实现处理器
+impl Handler<UpdateInstanceTools> for McpRegistry {
+    type Result = ResponseActFuture<Self, ()>;
+
+    fn handle(&mut self, msg: UpdateInstanceTools, _ctx: &mut Self::Context) -> Self::Result {
+        let instances = self.instances.clone();
+
+        async move {
+            let mut instances = instances.write().await;
+            if let Some(instance) = instances.get_mut(&msg.server_id) {
+                instance.tools = msg.tools;
+                log::info!("Updated tools for server: {}", msg.server_id);
             }
         }
+        .into_actor(self)
+        .boxed_local()
+    }
+}
+
+impl Handler<UpdateInstancePrompts> for McpRegistry {
+    type Result = ResponseActFuture<Self, ()>;
+
+    fn handle(&mut self, msg: UpdateInstancePrompts, _ctx: &mut Self::Context) -> Self::Result {
+        let instances = self.instances.clone();
+
+        async move {
+            let mut instances = instances.write().await;
+            if let Some(instance) = instances.get_mut(&msg.server_id) {
+                instance.prompts = msg.prompts;
+                log::info!("Updated prompts for server: {}", msg.server_id);
+            }
+        }
+        .into_actor(self)
+        .boxed_local()
+    }
+}
+
+impl Handler<UpdateInstanceResources> for McpRegistry {
+    type Result = ResponseActFuture<Self, ()>;
+
+    fn handle(&mut self, msg: UpdateInstanceResources, _ctx: &mut Self::Context) -> Self::Result {
+        let instances = self.instances.clone();
+
+        async move {
+            let mut instances = instances.write().await;
+            if let Some(instance) = instances.get_mut(&msg.server_id) {
+                // 更新资源定义
+                let subscribable = instance
+                    .resources
+                    .first()
+                    .map(|r| r.subscribable)
+                    .unwrap_or(false);
+
+                instance.resources = msg
+                    .resources
+                    .iter()
+                    .map(|r| crate::backoffice::mcp::server::ResourceDefinition {
+                        resource: r.clone(),
+                        subscribed: false,
+                        subscribable,
+                        cached_contents: None,
+                        last_updated: None,
+                    })
+                    .collect();
+
+                log::info!("Updated resources for server: {}", msg.server_id);
+            }
+        }
+        .into_actor(self)
+        .boxed_local()
+    }
+}
+
+// 添加资源更新的消息
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct UpdateInstanceResourceContent {
+    pub server_id: String,
+    pub uri: String,
+    pub contents: Vec<ResourceContents>,
+}
+
+impl Handler<UpdateInstanceResourceContent> for McpRegistry {
+    type Result = ResponseActFuture<Self, ()>;
+
+    fn handle(
+        &mut self,
+        msg: UpdateInstanceResourceContent,
+        _ctx: &mut Self::Context,
+    ) -> Self::Result {
+        let instances = self.instances.clone();
+        async move {
+            let mut instances = instances.write().await;
+            if let Some(instance) = instances.get_mut(&msg.server_id) {
+                // 查找并更新对应的资源
+                for resource_def in &mut instance.resources {
+                    if resource_def.resource.uri == msg.uri {
+                        resource_def.update_contents(msg.contents);
+                        log::info!(
+                            "Updated cached content for resource {} in server {}",
+                            msg.uri,
+                            msg.server_id
+                        );
+                        break;
+                    }
+                }
+            } else {
+                log::warn!(
+                    "Server instance {} not found for resource update",
+                    msg.server_id
+                );
+            }
+        }
+        .into_actor(self)
+        .boxed_local()
     }
 }

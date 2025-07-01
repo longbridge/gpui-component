@@ -1,7 +1,4 @@
-use crate::{
-    models::{mcp_config::ToolCall, provider_config_path},
-    xbus,
-};
+use crate::{models::provider_config_path, xbus};
 use futures::StreamExt;
 use gpui::SharedString;
 use gpui_component::IconName;

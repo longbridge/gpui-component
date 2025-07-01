@@ -1,5 +1,5 @@
 use crate::models::{
-    mcp_config::McpProviderConfig, provider_config::LlmProviders, todo_config_path,
+    mcp_config::McpConfigManager, provider_config::LlmProviders, todo_config_path,
 };
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
@@ -262,26 +262,24 @@ impl Todo {
 
     /// 添加选中的工具
     pub fn add_selected_tool(&mut self, provider_id: &str, tool_name: &str) -> anyhow::Result<()> {
-        if let Ok(Some(provider)) = McpProviderConfig::get_provider(provider_id) {
-            if let Some(tool) = provider.tools.iter().find(|t| t.name == tool_name) {
-                let selected_tool = SelectedTool {
-                    provider_id: provider_id.to_string(),
-                    tool_name: tool_name.to_string(),
-                    provider_name: provider.name.clone(),
-                    description: tool.description.clone().unwrap_or_default().to_string(),
-                };
+        if let Ok(Some(provider)) = McpConfigManager::get_server(provider_id) {
+            let selected_tool = SelectedTool {
+                provider_id: provider_id.to_string(),
+                tool_name: tool_name.to_string(),
+                provider_name: provider.name.clone(),
+                description: String::new(),
+            };
 
-                // 检查是否已存在
-                if !self
-                    .selected_tools
-                    .iter()
-                    .any(|t| t.provider_id == provider_id && t.tool_name == tool_name)
-                {
-                    self.selected_tools.push(selected_tool);
-                    self.updated_at = Utc::now();
-                }
-                return Ok(());
+            // 检查是否已存在
+            if !self
+                .selected_tools
+                .iter()
+                .any(|t| t.provider_id == provider_id && t.tool_name == tool_name)
+            {
+                self.selected_tools.push(selected_tool);
+                self.updated_at = Utc::now();
             }
+            return Ok(());
         }
         Err(anyhow::anyhow!(
             "Tool not found: {}/{}",
