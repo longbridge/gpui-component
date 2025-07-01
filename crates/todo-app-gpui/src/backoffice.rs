@@ -145,22 +145,12 @@ pub fn start() -> anyhow::Result<()> {
         .enable_all()
         .build()?;
     std::thread::spawn(move || {
-        log::debug!("Startup backoffice service");
         let sys = System::with_tokio_rt(|| rt);
         sys.block_on(async {
             McpRegistry::from_registry();
         });
-        sys.run().unwrap();
-        log::debug!("Startup backoffice ...............");
+        sys.run().ok();
     });
-    // let addr = McpRegistry::from_registry();
-    // println!("McpRegistry started at {:?}", addr);
-    // let info = addr
-    //     .send(GetServerInstance {
-    //         server_id: "2c00bb46-6c4e-4f91-92b4-47b69e8ba62b".to_string(),
-    //     })
-    //     .await?;
-    // println!("McpRegistry GetServerInstance at {:?}", info);
     Ok(())
 }
 
