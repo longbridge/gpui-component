@@ -229,10 +229,15 @@ impl Default for McpRegistry {
 }
 
 impl Supervised for McpRegistry {}
-impl SystemService for McpRegistry {}
+impl SystemService for McpRegistry {
+    fn service_started(&mut self, ctx: &mut Context<Self>) {
+        println!("McpRegistry service started");
+    }
+}
 
 impl McpRegistry {
     fn tick(&mut self, ctx: &mut Context<Self>) {
+        println!("McpRegistry tick");
         if let Ok(false) = &self.file.exist() {
             self.servers.clear();
             return;
@@ -248,7 +253,7 @@ impl Actor for McpRegistry {
 
     fn started(&mut self, ctx: &mut Self::Context) {
         ctx.run_interval(Duration::from_secs(1), Self::tick);
-        log::info!("McpRegistry started");
+        println!("McpRegistry started");
     }
 }
 

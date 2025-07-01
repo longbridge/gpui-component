@@ -135,7 +135,7 @@ fn mtime<P: AsRef<std::path::Path>>(path: P) -> anyhow::Result<u64> {
 
 pub fn start() {
     let addr = McpRegistry::from_registry();
-    log::info!("McpRegistry started at {:?}", addr);
+    println!("McpRegistry started at {:?}", addr);
 }
 
 // #[derive(Default)]

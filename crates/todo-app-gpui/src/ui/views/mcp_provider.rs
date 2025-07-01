@@ -2,10 +2,8 @@ use crate::app::{AppState, FoEvent};
 use crate::backoffice::mcp::McpRegistry; // 新增导入
 use crate::models::mcp_config::{
     McpConfigManager,
-    McpPrompt,
     McpServerConfig,
-    McpTool,
-    McpTransport, // 更新导入
+    McpTransport, // 移除 McpPrompt, McpTool - 这些现在从 rmcp 导入
 };
 use crate::ui::components::ViewKit;
 use crate::xbus;
@@ -20,6 +18,8 @@ use gpui_component::{
     tab::{Tab, TabBar},
     *,
 };
+// 从 rmcp 导入需要的类型
+use rmcp::model::{Prompt as McpPrompt, Resource as McpResource, Tool as McpTool};
 
 actions!(
     mcp_provider,
@@ -48,11 +48,14 @@ struct ProviderInputs {
 
 pub struct McpProvider {
     focus_handle: FocusHandle,
-    providers: Vec<McpServerConfig>, // 更新类型
+    providers: Vec<McpServerConfig>,
     expanded_providers: Vec<usize>,
     active_capability_tabs: std::collections::HashMap<usize, usize>,
     editing_provider: Option<usize>,
     provider_inputs: std::collections::HashMap<usize, ProviderInputs>,
+    // 缓存从 Registry 获取的能力数据
+    cached_capabilities:
+        std::collections::HashMap<String, (Vec<McpTool>, Vec<McpPrompt>, Vec<McpResource>)>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -91,11 +94,12 @@ impl McpProvider {
     fn new(_window: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
-            providers: McpConfigManager::load_servers().unwrap_or_default(), // 更新方法调用
+            providers: McpConfigManager::load_servers().unwrap_or_default(),
             expanded_providers: vec![],
             active_capability_tabs: std::collections::HashMap::new(),
             editing_provider: None,
             provider_inputs: std::collections::HashMap::new(),
+            cached_capabilities: std::collections::HashMap::new(),
             _subscriptions: vec![],
         }
     }
@@ -103,7 +107,6 @@ impl McpProvider {
     // 保存配置到文件
     fn save_config(&self, cx: &mut Context<Self>) {
         println!("保存MCP配置到文件...");
-        // 更新方法调用
         if let Err(e) = McpConfigManager::save_servers(&self.providers[..]) {
             eprintln!("保存MCP配置失败: {}", e);
         }
@@ -125,7 +128,7 @@ impl McpProvider {
         cx: &mut Context<Self>,
     ) {
         let new_index = self.providers.len();
-        self.providers.push(McpServerConfig::default()); // 更新类型
+        self.providers.push(McpServerConfig::default());
         self.expanded_providers.push(new_index);
         self.start_editing(new_index, window, cx);
         cx.notify();
@@ -279,6 +282,16 @@ impl McpProvider {
         }
     }
 
+    // 更新获取能力信息的方法，改为异步从 Registry 获取
+    fn get_provider_capabilities_async(
+        &self,
+        provider_id: &str,
+        cx: &mut Context<Self>,
+    ) -> (Vec<McpTool>, Vec<McpPrompt>, Vec<McpResource>) {
+        // 返回空数据，实际数据通过异步更新
+        (vec![], vec![], vec![])
+    }
+
     // 异步获取提供商能力
     fn refresh_provider_capabilities(&mut self, provider_id: String, cx: &mut Context<Self>) {
         cx.spawn(async move |this, cx| {
@@ -289,10 +302,10 @@ impl McpProvider {
                 let prompts = instance.list_prompts().await.unwrap_or_default();
                 let resources = instance.list_resources().await.unwrap_or_default();
 
-                // 更新UI
+                // 更新缓存和UI
                 this.update(cx, |this, cx| {
-                    // 这里可以缓存获取到的数据
-                    // this.cached_capabilities.insert(provider_id, (tools, prompts, resources));
+                    this.cached_capabilities
+                        .insert(provider_id.clone(), (tools, prompts, resources));
                     cx.notify();
                 })
                 .ok();
@@ -310,10 +323,7 @@ impl McpProvider {
     ) {
         if let Some(provider) = self.providers.get_mut(index) {
             provider.enabled = enabled;
-            cx.notify();
-        }
 
-        if let Some(provider) = self.providers.get(index) {
             let provider_id = provider.id.clone();
             let provider_name = provider.name.clone();
 
@@ -321,14 +331,18 @@ impl McpProvider {
 
             if enabled {
                 // 异步刷新能力信息
-                self.refresh_provider_capabilities(provider_id, cx);
+                self.refresh_provider_capabilities(provider_id.clone(), cx);
                 window.push_notification(
                     format!("MCP服务 '{}' 已启用，正在启动...", provider_name),
                     cx,
                 );
             } else {
+                // 清除缓存的能力数据
+                self.cached_capabilities.remove(&provider_id);
                 window.push_notification(format!("MCP服务 '{}' 已禁用", provider_name), cx);
             }
+
+            cx.notify();
         }
     }
 
@@ -346,10 +360,12 @@ impl McpProvider {
     fn get_provider_capabilities(
         &self,
         provider_id: &str,
-    ) -> (Vec<McpTool>, Vec<McpPrompt>, Vec<rmcp::model::Resource>) {
-        // 这里应该异步获取，暂时返回空数据
-        // 在实际实现中，可以通过消息系统或回调来更新UI
-        (vec![], vec![], vec![])
+    ) -> (Vec<McpTool>, Vec<McpPrompt>, Vec<McpResource>) {
+        // 从缓存中获取数据
+        self.cached_capabilities
+            .get(provider_id)
+            .cloned()
+            .unwrap_or_default()
     }
 
     fn start_editing(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
@@ -813,215 +829,7 @@ impl Render for McpProvider {
 }
 
 impl McpProvider {
-    // 如果你需要更精确的控制，可以使用这个带提供商索引的版本
-    fn toggle_resource_subscription_by_index(
-        &mut self,
-        provider_index: usize,
-        resource_index: usize,
-        subscribed: bool,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if let Some(provider) = self.providers.get_mut(provider_index) {
-            if let Some(resource) = provider.resources.get_mut(resource_index) {
-                if resource.subscribable {
-                    let old_status = resource.subscribed;
-                    resource.subscribed = subscribed;
-
-                    println!(
-                        "提供商 '{}' 的资源 '{}' 订阅状态从 {} 变更为 {}",
-                        provider.name,
-                        resource.name,
-                        if old_status { "已订阅" } else { "未订阅" },
-                        if subscribed { "已订阅" } else { "未订阅" }
-                    );
-                    self.save_config(cx);
-                    cx.notify();
-                } else {
-                    eprintln!("警告: 资源 '{}' 不支持订阅功能", resource.name);
-                }
-            } else {
-                eprintln!(
-                    "警告: 提供商索引 {} 中不存在资源索引 {}",
-                    provider_index, resource_index
-                );
-            }
-        } else {
-            eprintln!("警告: 不存在提供商索引 {}", provider_index);
-        }
-    }
-
-    fn toggle_resource_template_subscription_by_index(
-        &mut self,
-        provider_index: usize,
-        resource_index: usize,
-        subscribed: bool,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if let Some(provider) = self.providers.get_mut(provider_index) {
-            if let Some(resource) = provider.resource_templates.get_mut(resource_index) {
-                if resource.subscribable {
-                    let old_status = resource.subscribed;
-                    resource.subscribed = subscribed;
-
-                    println!(
-                        "提供商 '{}' 的资源 '{}' 订阅状态从 {} 变更为 {}",
-                        provider.name,
-                        resource.name,
-                        if old_status { "已订阅" } else { "未订阅" },
-                        if subscribed { "已订阅" } else { "未订阅" }
-                    );
-                    self.save_config(cx);
-                    cx.notify();
-                } else {
-                    eprintln!("警告: 资源 '{}' 不支持订阅功能", resource.name);
-                }
-            } else {
-                eprintln!(
-                    "警告: 提供商索引 {} 中不存在资源索引 {}",
-                    provider_index, resource_index
-                );
-            }
-        } else {
-            eprintln!("警告: 不存在提供商索引 {}", provider_index);
-        }
-    }
-
-    // 将静态方法改为实例方法，支持资源订阅交互
-    fn render_resources_content_interactive(
-        &mut self,
-        provider_index: usize,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
-        let provider = &self.providers[provider_index];
-
-        v_flex()
-            .gap_2()
-            .children(
-                provider
-                    .resources
-                    .iter()
-                    .enumerate()
-                    .map(|(resource_index, resource)| {
-                        v_flex()
-                            .gap_2()
-                            .p_3()
-                            .bg(gpui::rgb(0xFAFAFA))
-                            .rounded_md()
-                            .border_1()
-                            .border_color(gpui::rgb(0xE5E7EB))
-                            .child(
-                                h_flex()
-                                    .w_full()
-                                    .justify_between()
-                                    .items_center()
-                                    .child(
-                                        h_flex()
-                                            .items_center()
-                                            .gap_2()
-                                            .child(
-                                                Icon::new(IconName::Database)
-                                                    .small()
-                                                    .text_color(gpui::rgb(0x059669)),
-                                            )
-                                            .child(
-                                                div()
-                                                    .font_medium()
-                                                    .text_color(gpui::rgb(0x111827))
-                                                    .child(resource.name.clone()),
-                                            )
-                                            .when(resource.subscribable, |this| {
-                                                this.child(
-                                                    div()
-                                                        .px_2()
-                                                        .py_1()
-                                                        .bg(if resource.subscribed {
-                                                            gpui::rgb(0xDCFCE7)
-                                                        } else {
-                                                            gpui::rgb(0xF3F4F6)
-                                                        })
-                                                        .text_color(if resource.subscribed {
-                                                            gpui::rgb(0x166534)
-                                                        } else {
-                                                            gpui::rgb(0x6B7280)
-                                                        })
-                                                        .rounded_md()
-                                                        .text_xs()
-                                                        .child(if resource.subscribed {
-                                                            "已订阅"
-                                                        } else {
-                                                            "可订阅"
-                                                        }),
-                                                )
-                                            })
-                                            .when(resource.mime_type.is_some(), |this| {
-                                                this.child(
-                                                    div()
-                                                        .px_2()
-                                                        .py_1()
-                                                        .bg(gpui::rgb(0xE0F2FE))
-                                                        .text_color(gpui::rgb(0x0369A1))
-                                                        .rounded_md()
-                                                        .text_xs()
-                                                        .child(
-                                                            resource
-                                                                .mime_type
-                                                                .as_ref()
-                                                                .unwrap()
-                                                                .clone(),
-                                                        ),
-                                                )
-                                            }),
-                                    )
-                                    .when(resource.subscribable, |this| {
-                                        this.child(
-                                            Switch::new((
-                                                SharedString::new(format!(
-                                                    "resource-subscription-{}",
-                                                    provider_index
-                                                )),
-                                                resource_index,
-                                            ))
-                                            .checked(resource.subscribed)
-                                            .on_click({
-                                                let provider_index = provider_index;
-                                                let resource_index = resource_index;
-                                                cx.listener(move |view, checked, window, cx| {
-                                                    view.toggle_resource_subscription_by_index(
-                                                        provider_index,
-                                                        resource_index,
-                                                        *checked,
-                                                        window,
-                                                        cx,
-                                                    );
-                                                })
-                                            }),
-                                        )
-                                    }),
-                            )
-                            .child(div().text_sm().text_color(gpui::rgb(0x6B7280)).child(
-                                resource.description.clone().unwrap_or_default().to_string(),
-                            ))
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .text_color(gpui::rgb(0x9CA3AF))
-                                    .child(resource.uri.clone()),
-                            )
-                    }),
-            )
-            .when(provider.resources.is_empty(), |this| {
-                this.child(
-                    div()
-                        .text_sm()
-                        .text_color(gpui::rgb(0x9CA3AF))
-                        .child("暂无可用资源"),
-                )
-            })
-    }
-
-    // 修改能力内容渲染方法，使用交互式资源组件
+    // 只保留从缓存获取数据的静态渲染方法
     fn render_capability_content_interactive(
         &mut self,
         provider: &McpServerConfig,
@@ -1032,12 +840,12 @@ impl McpProvider {
         div().child(match tab_index {
             0 => div().child(Self::render_config_content_static(provider)),
             1 => {
-                // 从 Registry 获取资源信息
+                // 从缓存获取资源信息 - 使用静态方法
                 let (_, _, resources) = self.get_provider_capabilities(&provider.id);
                 div().child(Self::render_resources_content_static(&resources))
             }
             2 => {
-                // 资源模板暂时显示空内容
+                // 资源模板 - 暂时显示空内容
                 div().child(
                     div()
                         .text_sm()
@@ -1046,12 +854,12 @@ impl McpProvider {
                 )
             }
             3 => {
-                // 从 Registry 获取工具信息
+                // 从缓存获取工具信息
                 let (tools, _, _) = self.get_provider_capabilities(&provider.id);
                 div().child(Self::render_tools_content_static(&tools))
             }
             4 => {
-                // 从 Registry 获取提示信息
+                // 从缓存获取提示信息
                 let (_, prompts, _) = self.get_provider_capabilities(&provider.id);
                 div().child(Self::render_prompts_content_static(&prompts))
             }
@@ -1059,7 +867,7 @@ impl McpProvider {
         })
     }
 
-    // 渲染配置信息的静态方法（更新字段名）
+    // 保留这些静态渲染方法
     fn render_config_content_static(provider: &McpServerConfig) -> impl IntoElement {
         v_flex().gap_3().child(
             div()
@@ -1149,8 +957,8 @@ impl McpProvider {
         )
     }
 
-    // 新增：渲染资源的静态方法
-    fn render_resources_content_static(resources: &[rmcp::model::Resource]) -> impl IntoElement {
+    // 渲染资源的静态方法
+    fn render_resources_content_static(resources: &[McpResource]) -> impl IntoElement {
         v_flex()
             .gap_2()
             .children(resources.iter().map(|resource| {
@@ -1174,7 +982,7 @@ impl McpProvider {
                                 div()
                                     .font_medium()
                                     .text_color(gpui::rgb(0x111827))
-                                    .child(resource.name.clone()),
+                                    .child(SharedString::new(resource.name.clone())),
                             )
                             .when_some(resource.mime_type.clone(), |this, mime_type| {
                                 this.child(
@@ -1214,23 +1022,118 @@ impl McpProvider {
             })
     }
 
-    // 移除原来的交互式资源订阅功能，因为现在通过 McpRegistry 管理
-    // 如果需要订阅功能，可以通过发送消息到 McpRegistry 来实现
-
-    // ...existing render methods for tools and prompts...
-}
-
-// 为了获取实时状态，可以添加事件监听
-impl McpProvider {
-    fn subscribe_to_mcp_events(&mut self, cx: &mut Context<Self>) {
-        // 监听 MCP 服务器状态变化事件
-        // 这里可以通过 xbus 或其他事件系统来获取状态更新
-
-        // 示例：监听服务器启动事件
-        // let subscription = cx.subscribe_to_event(|this, event: McpServerStartedEvent, cx| {
-        //     // 更新 UI 状态
-        //     cx.notify();
-        // });
-        // self._subscriptions.push(subscription);
+    // 渲染工具的静态方法
+    fn render_tools_content_static(tools: &[McpTool]) -> impl IntoElement {
+        v_flex()
+            .gap_2()
+            .children(tools.iter().map(|tool| {
+                v_flex()
+                    .gap_2()
+                    .p_3()
+                    .bg(gpui::rgb(0xFAFAFA))
+                    .rounded_md()
+                    .border_1()
+                    .border_color(gpui::rgb(0xE5E7EB))
+                    .child(
+                        h_flex()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                Icon::new(IconName::Wrench)
+                                    .small()
+                                    .text_color(gpui::rgb(0x0369A1)),
+                            )
+                            .child(
+                                div()
+                                    .font_medium()
+                                    .text_color(gpui::rgb(0x111827))
+                                    .child(SharedString::new(tool.name.clone())),
+                            ),
+                    )
+                    .when_some(tool.description.clone(), |this, description| {
+                        this.child(
+                            div()
+                                .text_sm()
+                                .text_color(gpui::rgb(0x6B7280))
+                                .child(SharedString::new(description)),
+                        )
+                    })
+                    .when(!tool.input_schema.is_empty(), |this| {
+                        this.child(
+                            div()
+                                .text_xs()
+                                .text_color(gpui::rgb(0x9CA3AF))
+                                .child("输入参数已定义"),
+                        )
+                    })
+            }))
+            .when(tools.is_empty(), |this| {
+                this.child(
+                    div()
+                        .text_sm()
+                        .text_color(gpui::rgb(0x9CA3AF))
+                        .child("暂无可用工具"),
+                )
+            })
     }
+
+    // 渲染提示的静态方法
+    fn render_prompts_content_static(prompts: &[McpPrompt]) -> impl IntoElement {
+        v_flex()
+            .gap_2()
+            .children(prompts.iter().map(|prompt| {
+                v_flex()
+                    .gap_2()
+                    .p_3()
+                    .bg(gpui::rgb(0xFAFAFA))
+                    .rounded_md()
+                    .border_1()
+                    .border_color(gpui::rgb(0xE5E7EB))
+                    .child(
+                        h_flex()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                Icon::new(IconName::SquarePen)
+                                    .small()
+                                    .text_color(gpui::rgb(0x9333EA)),
+                            )
+                            .child(
+                                div()
+                                    .font_medium()
+                                    .text_color(gpui::rgb(0x111827))
+                                    .child(prompt.name.clone()),
+                            ),
+                    )
+                    .when_some(prompt.description.clone(), |this, description| {
+                        this.child(
+                            div()
+                                .text_sm()
+                                .text_color(gpui::rgb(0x6B7280))
+                                .child(description),
+                        )
+                    })
+                    .when_some(prompt.arguments.as_ref(), |this, arguments| {
+                        this.child(
+                            div()
+                                .text_xs()
+                                .text_color(gpui::rgb(0x9CA3AF))
+                                .child(format!("参数: {}", arguments.len())),
+                        )
+                    })
+            }))
+            .when(prompts.is_empty(), |this| {
+                this.child(
+                    div()
+                        .text_sm()
+                        .text_color(gpui::rgb(0x9CA3AF))
+                        .child("暂无可用提示"),
+                )
+            })
+    }
+
+    // 删除事件监听方法，因为还没有实现相应的事件系统
+    // 删除 subscribe_to_mcp_events 方法
 }
+
+// 删除不需要的实现，保留核心的 ViewKit, Focusable, Render 等

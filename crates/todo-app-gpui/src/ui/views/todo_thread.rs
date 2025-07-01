@@ -1,14 +1,19 @@
 mod chat;
-mod update;
 mod view;
 use crate::models::todo_item::*;
 use crate::{app::AppExt, xbus};
 use gpui::prelude::*;
 use gpui::*;
-use gpui_component::{input::InputState, scroll::ScrollbarState, *};
+use gpui_component::{
+    input::{InputEvent, InputState},
+    scroll::ScrollbarState,
+    *,
+};
 use rig::message::AssistantContent;
 use std::time::Duration;
-use std::{cell::Cell, rc::Rc};
+
+// 从 rmcp 导入 MCP 类型
+use rmcp::model::Tool as McpTool;
 
 actions!(todo_thread, [Tab, TabPrev, SendMessage]);
 
@@ -62,6 +67,9 @@ pub struct TodoThreadChat {
     // 手风琴展开状态
     expanded_providers: Vec<usize>,
     expanded_tool_providers: Vec<usize>,
+
+    // 新增：缓存从 McpRegistry 获取的工具数据
+    cached_server_tools: std::collections::HashMap<String, Vec<McpTool>>,
 
     _subscriptions: Vec<Subscription>,
     todoitem: Todo,
@@ -178,10 +186,161 @@ impl TodoThreadChat {
             scroll_handle: ScrollHandle::new(),
             expanded_providers: Vec::new(),
             expanded_tool_providers: Vec::new(),
+            cached_server_tools: std::collections::HashMap::new(), // 新增初始化
             _subscriptions,
             scroll_state: ScrollbarState::default(),
             scroll_size: gpui::Size::default(),
             todoitem,
+        }
+    }
+
+    // 新增：获取缓存的工具数据
+    fn get_server_tools(&self, server_id: &str) -> Vec<McpTool> {
+        self.cached_server_tools
+            .get(server_id)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    // 新增：获取模型选择显示文本
+    fn get_model_display_text(&self, _cx: &App) -> String {
+        if let Some(selected_model) = &self.todoitem.selected_model {
+            selected_model.model_name.clone()
+        } else {
+            "选择模型".to_string()
+        }
+    }
+
+    // 新增：获取工具选择显示文本
+    fn get_tool_display_text(&self, _cx: &App) -> String {
+        let selected_count = self.todoitem.selected_tools.len();
+
+        if selected_count == 0 {
+            "选择工具".to_string()
+        } else if selected_count <= 2 {
+            self.todoitem
+                .selected_tools
+                .iter()
+                .map(|item| item.tool_name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        } else {
+            let first_two = self
+                .todoitem
+                .selected_tools
+                .iter()
+                .take(2)
+                .map(|item| item.tool_name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("{} 等{}个工具", first_two, selected_count)
+        }
+    }
+
+    // 新增：切换手风琴状态
+    fn toggle_accordion(&mut self, open_indices: &[usize], cx: &mut Context<Self>) {
+        self.expanded_providers = open_indices.to_vec();
+        cx.notify();
+    }
+
+    fn toggle_tool_accordion(&mut self, open_indices: &[usize], cx: &mut Context<Self>) {
+        self.expanded_tool_providers = open_indices.to_vec();
+        cx.notify();
+    }
+
+    // 新增：切换模型选择
+    fn toggle_model_selection(
+        &mut self,
+        checked: bool,
+        model: &crate::models::provider_config::ModelInfo,
+        provider: &crate::models::provider_config::LlmProviderInfo,
+        cx: &mut Context<Self>,
+    ) {
+        if checked {
+            self.todoitem.selected_model = Some(crate::models::todo_item::SelectedModel {
+                provider_id: provider.id.clone(),
+                provider_name: provider.name.clone(),
+                model_id: model.id.clone(),
+                model_name: model.display_name.clone(),
+            });
+        } else {
+            self.todoitem.selected_model = None;
+        }
+        cx.notify();
+    }
+
+    // 新增：切换工具选择
+    fn toggle_tool_selection(
+        &mut self,
+        checked: bool,
+        tool: &McpTool,
+        server: &crate::models::mcp_config::McpServerConfig,
+        cx: &mut Context<Self>,
+    ) {
+        if checked {
+            self.todoitem
+                .selected_tools
+                .push(crate::models::todo_item::SelectedTool {
+                    provider_id: server.id.clone(),
+                    provider_name: server.name.clone(),
+                    description: tool
+                        .description
+                        .as_ref()
+                        .map(|desc| desc.to_string())
+                        .unwrap_or_default(),
+                    tool_name: tool.name.to_string(),
+                });
+        } else {
+            self.todoitem
+                .selected_tools
+                .retain(|t| t.tool_name != tool.name || t.provider_id != server.id);
+        }
+        cx.notify();
+    }
+
+    // 新增：保存方法（用于在选择模型/工具后保存状态）
+    fn save(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // 这里可以保存 todoitem 的状态
+        // 根据需要实现具体的保存逻辑
+        match crate::models::todo_item::TodoManager::update_todo(self.todoitem.clone()) {
+            Ok(_) => {
+                // 保存成功，可以显示通知
+                log::info!("Todo item saved successfully");
+            }
+            Err(err) => {
+                // 保存失败，显示错误通知
+                log::error!("Failed to save todo item: {}", err);
+                window.push_notification(
+                    (
+                        gpui_component::notification::NotificationType::Error,
+                        SharedString::new(format!("保存失败: {}", err)),
+                    ),
+                    cx,
+                );
+            }
+        }
+        cx.notify();
+    }
+
+    pub(crate) fn tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
+        self.cycle_focus(true, window, cx);
+    }
+
+    pub(crate) fn on_chat_input_event(
+        &mut self,
+        _entity: &Entity<InputState>,
+        event: &InputEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        match event {
+            InputEvent::PressEnter { secondary, .. } if *secondary => {
+                window.dispatch_action(Box::new(SendMessage), cx);
+            }
+            InputEvent::PressEnter { .. } => {
+                // 普通Enter只是换行，不做任何处理
+            }
+            _ => {}
         }
     }
 }

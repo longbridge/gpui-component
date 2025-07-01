@@ -1,10 +1,14 @@
 use super::*;
+use crate::backoffice::mcp::McpRegistry; // 新增导入
 use crate::{app::AppState, models::{mcp_config::McpConfigManager, provider_config::LlmProviders}};
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::{
     accordion::Accordion, button::{Button, ButtonVariant, ButtonVariants as _}, checkbox::Checkbox, h_flex, input::TextInput, tooltip::Tooltip, scroll::Scrollbar, text::TextView, *
 };
+
+// 从 rmcp 导入 MCP 类型
+use rmcp::model::{Tool as McpTool};
 
 impl FocusableCycle for TodoThreadChat {
     fn cycle_focus_handles(&self, _: &mut Window, cx: &mut App) -> Vec<FocusHandle> {
@@ -115,7 +119,6 @@ impl TodoThreadChat {
                 let provider_name = provider.name.clone();
                 let provider_models = provider.models.clone();
 
-                //let has_selected_models = provider_models.iter().any(|model| model.is_selected);
                 let has_selected_models = provider_models.iter().any(|model| {
                     todoitem.selected_model.iter().any(|selected| selected.model_id == model.id && selected.provider_id == provider.id)
                 });
@@ -184,8 +187,6 @@ impl TodoThreadChat {
                                             .p_1()
                                             .bg(gpui::rgb(0xFAFAFA))
                                             .rounded_md()
-                                            // .border_1()
-                                            // .border_color(gpui::rgb(0xE5E7EB))
                                             .hover(|style| style.bg(gpui::rgb(0xF3F4F6)))
                                             .child(
                                                 h_flex()
@@ -273,8 +274,6 @@ impl TodoThreadChat {
                                         todo_edit.save( window, todo_cx);
                                         todo_cx.notify();
                                     });
-                                    // println!("清空所有模型选择");
-                                    // window.close_drawer(cx);
                                 }),
                         ),
                 )
@@ -288,10 +287,17 @@ impl TodoThreadChat {
         cx: &mut Context<Self>,
     ) {
         let todo_edit_entity = cx.entity().clone();
+        
         window.open_drawer_at(placement, cx, move |drawer, _window, drawer_cx| {
-            let providers = McpConfigManager::get_enabled_providers().unwrap_or_default();
+            // 使用新的 API 获取启用的服务器
+            let servers = McpConfigManager::load_servers().unwrap_or_default()
+                .into_iter()
+                .filter(|s| s.enabled)
+                .collect::<Vec<_>>();
+            
             let expanded_providers = todo_edit_entity.read(drawer_cx).expanded_tool_providers.clone();
             let todoitem = todo_edit_entity.read(drawer_cx).todoitem.clone();
+            
             let mut accordion = Accordion::new("chat-tool-providers")
                 .on_toggle_click({
                     let todo_edit_entity_for_toggle = todo_edit_entity.clone();
@@ -302,12 +308,45 @@ impl TodoThreadChat {
                     }
                 });
 
-            for (provider_index, provider) in providers.iter().enumerate() {
-                let provider_name = provider.name.clone();
-                let provider_tools = provider.tools.clone();
+            for (provider_index, server) in servers.into_iter().enumerate() {
+                let server_name = server.name.clone();
+                let server_id = server.id.clone();
+                
+                // 从缓存获取工具列表，如果没有则显示加载状态
+                let server_tools = todo_edit_entity.read(drawer_cx)
+                    .get_server_tools(&server.id);
 
-                let has_selected_tools = provider_tools.iter().any(|tool|  todoitem.selected_tools.iter().any(|selected| selected.tool_name == tool.name && selected.provider_id == provider.id));
+                // 检查该服务器是否有被选中的工具
+                let has_selected_tools = server_tools.iter().any(|tool| {
+                    todoitem.selected_tools.iter().any(|selected| {
+                        selected.tool_name == tool.name && selected.provider_id == server.id
+                    })
+                });
+                
+                let provider_tool_len = server_tools.len();
                 let is_expanded = has_selected_tools || expanded_providers.contains(&provider_index);
+
+                // 如果还没有加载工具数据，异步加载
+                if server_tools.is_empty() {
+                    let server_id_for_load = server_id.clone();
+                    let todo_edit_entity_for_load = todo_edit_entity.clone();
+                    
+                    drawer_cx.spawn(async move | cx| {
+                        if let Ok(Some(instance)) = McpRegistry::get_instance(&server_id_for_load).await {
+                            match instance.list_tools().await {
+                                Ok(tools) => {
+                                    todo_edit_entity_for_load.update(cx, |todo_edit, todo_cx| {
+                                        todo_edit.cached_server_tools.insert(server_id_for_load.clone(), tools);
+                                        todo_cx.notify();
+                                    }).ok();
+                                }
+                                Err(err) => {
+                                    log::error!("Failed to load tools for server {}: {}", server_id_for_load, err);
+                                }
+                            }
+                        }
+                    }).detach();
+                }
 
                 accordion = accordion.item(|item| {
                     item.open(is_expanded)
@@ -325,7 +364,7 @@ impl TodoThreadChat {
                                             div()
                                                 .font_medium()
                                                 .text_color(gpui::rgb(0x374151))
-                                                .child(provider_name.clone()),
+                                                .child(server_name.clone()),
                                         )
                                         .when(has_selected_tools, |this| {
                                             this.child(
@@ -351,77 +390,93 @@ impl TodoThreadChat {
                                         })
                                         .rounded_md()
                                         .text_xs()
-                                        .child(format!("{} 个工具", provider_tools.len())),
+                                        .child(if provider_tool_len == 0 {
+                                            "加载中...".to_string()
+                                        } else {
+                                            format!("{} 个工具", provider_tool_len)
+                                        }),
                                 ),
                         )
                         .content(
                             v_flex()
                                 .gap_2()
                                 .p_2()
-                                .children(provider_tools.iter().enumerate().map(
-                                    |(tool_index, tool)| {
-                                        let tool_name_for_event = tool.name.clone();
-                                        let checkbox_id = SharedString::new(format!(
-                                            "chat-tool-{}-{}",
-                                            provider_index, tool_index
-                                        ));
-                                        let todo_edit_entity_for_event = todo_edit_entity.clone();
-
+                                .when(server_tools.is_empty(), |this| {
+                                    this.child(
                                         div()
-                                            .p_1()
-                                            .bg(gpui::rgb(0xFAFAFA))
-                                            .rounded_md()
-                                            .hover(|style| style.bg(gpui::rgb(0xF3F4F6)))
-                                            .child(
-                                                v_flex()
-                                                    .gap_1()
-                                                    .child(
-                                                        h_flex()
-                                                            .items_center()
-                                                            .justify_between()
-                                                            .child(
-                                                                h_flex()
-                                                                    .items_center()
-                                                                    .gap_3()
-                                                                    .child(
-                                                                        Checkbox::new(checkbox_id)
-                                                                            .checked(todoitem.selected_tools.iter().any(|selected|
-                                                                            selected.tool_name == tool.name && selected.provider_id == provider.id
-                                                                        ))
-                                                                            .label(tool.name.clone().to_string())
-                                                                            .on_click({
-                                                                                let tool_clone = tool.clone();
-                                                                                let provider_clone = provider.clone();
-                                                                                move |checked, window, cx| {
-                                                                                    let tool_name_to_toggle =
-                                                                                        tool_name_for_event.clone();
+                                            .p_4()
+                                            .text_center()
+                                            .text_sm()
+                                            .text_color(gpui::rgb(0x9CA3AF))
+                                            .child("正在加载工具列表..."),
+                                    )
+                                })
+                                .when(!server_tools.is_empty(), |this| {
+                                    this.children(server_tools.iter().enumerate().map(
+                                        |(tool_index, tool)| {
+                                            let tool_name_for_event = tool.name.clone();
+                                            let checkbox_id = SharedString::new(format!(
+                                                "chat-tool-{}-{}",
+                                                provider_index, tool_index
+                                            ));
+                                            let todo_edit_entity_for_event = todo_edit_entity.clone();
 
-                                                                                    // 更新原始数据
-                                                                                    todo_edit_entity_for_event.update(cx, |todo_edit, todo_cx| {
-                                                                                        todo_edit.toggle_tool_selection(*checked,&tool_clone, &provider_clone, todo_cx);
-                                                                                        todo_edit.save( window, todo_cx);
-                                                                                        todo_cx.notify();
-                                                                                    });
-                                                                                    println!(
-                                                                                        "切换工具选择: {}",
-                                                                                        tool_name_to_toggle
-                                                                                    );
+                                            div()
+                                                .p_1()
+                                                .bg(gpui::rgb(0xFAFAFA))
+                                                .rounded_md()
+                                                .hover(|style| style.bg(gpui::rgb(0xF3F4F6)))
+                                                .child(
+                                                    v_flex()
+                                                        .gap_1()
+                                                        .child(
+                                                            h_flex()
+                                                                .items_center()
+                                                                .justify_between()
+                                                                .child(
+                                                                    h_flex()
+                                                                        .items_center()
+                                                                        .gap_3()
+                                                                        .child(
+                                                                            Checkbox::new(checkbox_id)
+                                                                                .checked(todoitem.selected_tools.iter().any(|selected|
+                                                                                selected.tool_name == tool.name && selected.provider_id == server.id
+                                                                            ))
+                                                                                .label(tool.name.to_string())
+                                                                                .on_click({
+                                                                                    let tool_clone = tool.clone();
+                                                                                    let server_clone = server.clone();
+                                                                                    move |checked, window, cx| {
+                                                                                        let tool_name_to_toggle =
+                                                                                            tool_name_for_event.clone();
+
+                                                                                        // 更新原始数据
+                                                                                        todo_edit_entity_for_event.update(cx, |todo_edit, todo_cx| {
+                                                                                            todo_edit.toggle_tool_selection(*checked,&tool_clone, &server_clone, todo_cx);
+                                                                                            todo_edit.save( window, todo_cx);
+                                                                                            todo_cx.notify();
+                                                                                        });
+                                                                                        println!(
+                                                                                            "切换工具选择: {}",
+                                                                                            tool_name_to_toggle
+                                                                                        );
+                                                                                    }
                                                                                 }
-                                                                            }
-                                                                            ),
-                                                                    )
-                                                            ),
-                                                    )
-                                                    .child(
-                                                        div()
-                                                            .pl_6()
-                                                            .text_xs()
-                                                            .text_color(gpui::rgb(0x6B7280))
-                                                            .child(tool.description.clone().unwrap_or_default().to_string()),
-                                                    ),
-                                            )
-                                    },
-                                ))
+                                                                                ),
+                                                                        )
+                                                                ),
+                                                        )
+                                                        .child(
+                                                            div()
+                                                                .pl_6()
+                                                                .text_xs()
+                                                                .text_color(gpui::rgb(0x6B7280))
+                                                                .child(tool.description.as_ref().map(|desc|desc.to_string()).unwrap_or_default()),
+                                                        ),
+                                                )
+                                        },
+                                    ))
+                                }),
                         )
                 });
             }
@@ -448,8 +503,6 @@ impl TodoThreadChat {
                                         todo_edit.save( window, todo_cx);
                                         todo_cx.notify();
                                     });
-                                    // println!("清空所有工具选择");
-                                    // window.close_drawer(cx);
                                 }),
                         ),
                 )
@@ -478,8 +531,6 @@ impl Render for TodoThreadChat {
                         .size_full()
                         .child(
                             v_flex()
-                                // .border_1()
-                                // .border_color(gpui::rgb(0xE5E7EB))
                                 .relative()
                                 .size_full()
                                 .child(
@@ -556,7 +607,6 @@ impl Render for TodoThreadChat {
                             .items_center()
                             .justify_start()
                             .gap_1()
-                            // .p_1()
                             .bg(gpui::rgb(0xF9FAFB))
                             .child(
                                 h_flex().justify_start().items_center().gap_2().child(
@@ -608,7 +658,6 @@ impl Render for TodoThreadChat {
                     .child(
                         h_flex()
                             .gap_1()
-                            // .p_1()
                             .child(
                                 // 多行输入框
                                 div()
@@ -621,10 +670,8 @@ impl Render for TodoThreadChat {
                                     Button::new("send-message")
                                         .with_variant(ButtonVariant::Primary)
                                         .icon(IconName::Send)
-                                        // .label("发送")
                                         .disabled(self.is_loading)
                                         .on_click(cx.listener(|this, _, window, cx| {
-                                            // window.dispatch_action(Box::new(SendMessage), cx);
                                             this.send_message(&SendMessage, window, cx);
                                         })),
                                 ),
