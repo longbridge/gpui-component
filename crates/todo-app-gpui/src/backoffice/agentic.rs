@@ -1,6 +1,5 @@
 mod feedback;
 mod llm;
-mod mcp;
 mod prompts;
 mod regulator;
 
@@ -8,14 +7,12 @@ use actix::prelude::*;
 
 pub struct AgenticAwareness {
     pub llm: llm::LlmRegistry,
-    pub mcp: mcp::McpRegistry,
 }
 
 impl AgenticAwareness {
     pub fn new() -> Self {
         Self {
             llm: llm::LlmRegistry::new(),
-            mcp: mcp::McpRegistry::new(),
         }
     }
 }
