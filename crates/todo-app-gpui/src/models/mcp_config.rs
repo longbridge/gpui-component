@@ -1,5 +1,8 @@
 use crate::models::mcp_config_path;
 use gpui::SharedString;
+pub use rmcp::model::Prompt as McpPrompt;
+pub use rmcp::model::Tool as McpTool;
+pub use rmcp::model::{Resource as McpResource, ResourceTemplate as McpResourceTemplate};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -26,7 +29,7 @@ impl McpTransport {
 }
 
 // 纯配置信息
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct McpServerConfig {
     pub id: String,
     pub name: String,
