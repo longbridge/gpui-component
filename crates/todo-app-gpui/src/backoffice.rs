@@ -1,5 +1,6 @@
 mod agentic;
 mod builtin;
+pub mod crb;
 pub mod mcp;
 mod meta;
 mod todo;

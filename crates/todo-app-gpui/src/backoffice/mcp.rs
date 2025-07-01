@@ -1,6 +1,6 @@
 mod adaptor;
 mod client;
-mod server;
+pub(crate) mod server;
 use crate::backoffice::mcp::server::McpServerInstance;
 use crate::models::mcp_config::*;
 use crate::{
@@ -29,16 +29,17 @@ pub struct RegisterFnForAgent(
 #[derive(Message)]
 #[rtype(result = "McpCallToolResult")]
 pub struct McpCallToolRequest {
-    id: String,
-    name: String,
-    arguments: String,
+    pub id: String,
+    pub name: String,
+    pub arguments: String,
 }
 
+#[derive(Debug, Clone)]
 pub struct McpCallToolResult {
-    id: String,
-    name: String,
-    result: Vec<Content>,
-    is_error: bool,
+    pub id: String,
+    pub name: String,
+    pub result: Vec<Content>,
+    pub is_error: bool,
 }
 
 pub struct McpServerActor {
