@@ -124,6 +124,7 @@ pub struct McpRegistry {
     servers: HashMap<String, Addr<McpServerActor>>,
     instances: Arc<RwLock<HashMap<String, McpServerInstance>>>, // 添加实例管理
     file: YamlFile,
+    handle: Option<SpawnHandle>,
 }
 
 impl McpRegistry {
@@ -158,7 +159,7 @@ impl McpRegistry {
                 server_id: server_id.to_string(),
             })
             .await?;
-
+        println!("获取到实例: {:?}", result);
         Ok(result)
     }
 
@@ -224,26 +225,26 @@ impl Default for McpRegistry {
             servers: HashMap::new(),
             instances: Arc::new(RwLock::new(HashMap::new())),
             file,
+            handle: None,
         }
     }
 }
 
-impl Supervised for McpRegistry {}
-impl SystemService for McpRegistry {
-    fn service_started(&mut self, ctx: &mut Context<Self>) {
-        println!("McpRegistry service started");
+impl Supervised for McpRegistry {
+    fn restarting(&mut self, _ctx: &mut Self::Context) {
+        log::info!("McpRegistry is restarting");
     }
 }
+impl SystemService for McpRegistry {}
 
 impl McpRegistry {
     fn tick(&mut self, ctx: &mut Context<Self>) {
-        println!("McpRegistry tick");
         if let Ok(false) = &self.file.exist() {
             self.servers.clear();
             return;
         }
         if let Err(err) = self.check_and_update(ctx) {
-            log::error!("{} {err}", self.file.path.display());
+            println!("{} {err}", self.file.path.display());
         }
     }
 }
@@ -252,8 +253,29 @@ impl Actor for McpRegistry {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Self::Context) {
-        ctx.run_interval(Duration::from_secs(1), Self::tick);
+        let handle = ctx.run_interval(Duration::from_secs(1), Self::tick);
+        self.handle = Some(handle);
         println!("McpRegistry started");
+    }
+
+    fn stopped(&mut self, ctx: &mut Self::Context) {
+        log::info!("McpRegistry stopped");
+        // if let Some(handle) = self.handle.take() {
+        //     ctx.cancel_future(handle);
+        // }
+        // // 停止所有服务器实例
+        // for addr in self.servers.values() {
+        //     addr.do_send(ExitFromRegistry);
+        // }
+        // self.servers.clear();
+        // // 清空实例缓存
+        // let instances = self.instances.clone();
+        // async move {
+        //     let mut instances = instances.write().await;
+        //     instances.clear();
+        // }
+        // .into_actor(self)
+        // .wait(ctx);
     }
 }
 
@@ -341,11 +363,13 @@ impl Handler<GetServerInstance> for McpRegistry {
     type Result = ResponseActFuture<Self, Option<McpServerInstance>>;
 
     fn handle(&mut self, msg: GetServerInstance, _ctx: &mut Self::Context) -> Self::Result {
+        println!("Getting instance for server_id: {}", msg.server_id);
         let instances = self.instances.clone();
         let server_id = msg.server_id;
 
         async move {
             let instances = instances.read().await;
+            println!("Instances: {:?}", instances.keys());
             instances.get(&server_id).cloned()
         }
         .into_actor(self)

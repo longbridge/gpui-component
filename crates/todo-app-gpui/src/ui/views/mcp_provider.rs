@@ -296,7 +296,9 @@ impl McpProvider {
     fn refresh_provider_capabilities(&mut self, provider_id: String, cx: &mut Context<Self>) {
         cx.spawn(async move |this, cx| {
             // 通过 McpRegistry 获取实例
+            println!("正在获取MCP服务 '{}' 的能力信息...", provider_id);
             if let Ok(Some(instance)) = McpRegistry::get_instance(&provider_id).await {
+                println!("获取到实例: {:?}", instance);
                 // 获取能力信息
                 let tools = instance.list_tools().await.unwrap_or_default();
                 let prompts = instance.list_prompts().await.unwrap_or_default();

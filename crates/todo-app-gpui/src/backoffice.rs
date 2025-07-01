@@ -5,11 +5,15 @@ mod meta;
 mod todo;
 
 use actix::prelude::*;
+use anyhow::Ok;
 use gpui_component::notification::Notification;
 use rmcp::model::{Prompt, ReadResourceResult, Resource, ResourceContents, Tool};
 use std::fs::File;
 
-use crate::{backoffice::mcp::McpRegistry, models::mcp_config::McpServerConfig};
+use crate::{
+    backoffice::mcp::{GetServerInstance, McpRegistry},
+    models::mcp_config::McpServerConfig,
+};
 
 ///后台事件
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
@@ -133,9 +137,30 @@ fn mtime<P: AsRef<std::path::Path>>(path: P) -> anyhow::Result<u64> {
     Ok(mtime)
 }
 
-pub fn start() {
-    let addr = McpRegistry::from_registry();
-    println!("McpRegistry started at {:?}", addr);
+pub fn start() -> anyhow::Result<()> {
+    let threads = std::thread::available_parallelism()?.get();
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(threads)
+        .enable_all()
+        .build()?;
+    std::thread::spawn(move || {
+        log::debug!("Startup backoffice service");
+        let sys = System::with_tokio_rt(|| rt);
+        sys.block_on(async {
+            McpRegistry::from_registry();
+        });
+        sys.run().unwrap();
+        log::debug!("Startup backoffice ...............");
+    });
+    // let addr = McpRegistry::from_registry();
+    // println!("McpRegistry started at {:?}", addr);
+    // let info = addr
+    //     .send(GetServerInstance {
+    //         server_id: "2c00bb46-6c4e-4f91-92b4-47b69e8ba62b".to_string(),
+    //     })
+    //     .await?;
+    // println!("McpRegistry GetServerInstance at {:?}", info);
+    Ok(())
 }
 
 // #[derive(Default)]

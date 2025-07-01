@@ -1,3 +1,4 @@
+use crate::backoffice::mcp::{GetServerInstance, McpRegistry};
 use crate::models::mcp_config::McpConfigManager;
 use crate::models::profile_config::ProfileManager;
 use crate::models::provider_config::LlmProviders;
