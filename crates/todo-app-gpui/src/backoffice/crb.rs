@@ -30,6 +30,7 @@ use crate::backoffice::mcp::{
     GetAllInstances, GetServerInstance, McpCallToolRequest, McpCallToolResult, McpRegistry,
 };
 use std::{collections::HashMap, sync::Arc};
+use actix::Arbiter;
 use tokio::sync::{mpsc, oneshot};
 
 /// 跨运行时通信消息定义
@@ -134,8 +135,9 @@ impl CrossRuntimeBridge {
     /// }
     /// ```
     pub async fn get_instance(&self, server_id: String) -> Option<McpServerInstance> {
-        let (response_tx, response_rx) = oneshot::channel();
 
+        let (response_tx, response_rx) = oneshot::channel();
+        println!("请求获取服务器实例 in GUI: {}", server_id);
         // 发送请求到 Actix 运行时
         if self
             .sender
@@ -277,16 +279,15 @@ impl McpRegistry {
     /// - 如果 Actor 调用失败，会返回默认值或错误信息
     /// - 如果响应通道发送失败（接收端已关闭），会忽略错误继续处理
     /// - 整个处理循环是容错的，单个消息处理失败不会影响其他消息
-    pub fn init_cross_runtime_bridge() {
+    pub fn init_crb() {
         let (bridge, mut receiver) = CrossRuntimeBridge::new();
         let bridge = Arc::new(bridge);
 
         // 设置全局桥接实例，如果已经设置过则忽略
         CROSS_RUNTIME_BRIDGE.set(bridge.clone()).ok();
-
         // 启动桥接消息处理器
         // 这个任务会一直运行，直到应用程序结束
-        tokio::spawn(async move {
+      Arbiter::new().spawn(async move {
             while let Some(message) = receiver.recv().await {
                 match message {
                     // 处理获取服务器实例请求
@@ -294,11 +295,15 @@ impl McpRegistry {
                         server_id,
                         response,
                     } => {
+                        println!("请求获取服务器实例 in Actix({}): {}",actix::System::current().id(), server_id);
                         let registry = McpRegistry::global();
                         let result = registry.send(GetServerInstance { server_id }).await;
                         let instance = result.unwrap_or(None);
+                        println!("获取服务器实例结果: {:?}", instance);
                         // 忽略发送错误，因为接收端可能已经超时或取消
-                        let _ = response.send(instance);
+                        if let Err(err)= response.send(instance) {
+                            eprintln!("Failed to send response for GetInstance: {:?}", err);
+                        }
                     }
 
                     // 处理工具调用请求
@@ -364,7 +369,7 @@ impl McpRegistry {
     /// - `Ok(Some(McpServerInstance))`: 服务器存在且运行正常
     /// - `Ok(None)`: 服务器不存在
     /// - `Err(anyhow::Error)`: 桥接器未初始化或通信失败
-    pub async fn get_instance_static(server_id: &str) -> anyhow::Result<Option<McpServerInstance>> {
+    pub async fn get_instance(server_id: &str) -> anyhow::Result<Option<McpServerInstance>> {
         if let Some(bridge) = Self::get_bridge() {
             Ok(bridge.get_instance(server_id.to_string()).await)
         } else {

@@ -1,58 +1,17 @@
-use crate::backoffice::BoEvent;
-use crate::models::{config_path, mcp_config_path};
-use crate::xbus;
-use gpui::SharedString;
-use gpui_component::IconName;
-use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ACCEPT, AUTHORIZATION};
-use rig::extractor::ExtractorBuilder;
-use rig::providers::cohere::completion::Tool;
-use rig::providers::together::TOPPY_M_7B;
-use rig::streaming::{
-    stream_to_stdout, StreamingChat, StreamingCompletionModel, StreamingCompletionResponse,
-    StreamingPrompt,
-};
+
 use rig::tool::{ToolDyn as RigTool, ToolSet};
-use rig::{completion::Prompt, providers::openai::Client};
-use rmcp::model::{
-    CreateMessageRequestMethod, CreateMessageRequestParam, CreateMessageResult, ListRootsResult,
-    LoggingLevel, ProtocolVersion, ReadResourceRequestParam, ResourceUpdatedNotificationParam,
-};
-use rmcp::service::{NotificationContext, RequestContext};
-use rmcp::transport::sse_client::SseClientConfig;
-use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
-use rmcp::transport::{ConfigureCommandExt, StreamableHttpClientTransport, TokioChildProcess};
 use rmcp::{
-    model::{CallToolRequestParam, CallToolResult, Content},
-    service::{RunningService, ServerSink},
-    transport::{auth::AuthClient, auth::OAuthState, SseClientTransport},
-    ClientHandler, Peer, RoleClient,
+    model::{CallToolRequestParam, CallToolResult},
+    service::{ ServerSink}
 };
 pub use rmcp::{
     model::{
-        ClientCapabilities, ClientInfo, Implementation, Prompt as McpPrompt,
-        Resource as McpResource, ResourceTemplate as McpResourceTemplate, Root, Tool as McpTool,
+        Tool as McpTool,
     },
-    Error as McpError, ServiceExt,
 };
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::time::Duration;
-use std::{collections::HashMap, env::home_dir};
-use tokio::process::Command;
-
-use anyhow::Result;
-use futures::{stream, StreamExt};
-use rig::agent::Agent;
-use rig::completion::Message;
-use rig::completion::ToolDefinition;
-use rig::completion::{CompletionError, CompletionModel};
-use rig::message::{AssistantContent, UserContent};
-use rig::tool::ToolSetError;
-use rig::OneOrMany;
 use std::boxed::Box;
 use std::future::Future;
-use tokio::sync::RwLock;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ToolCall {

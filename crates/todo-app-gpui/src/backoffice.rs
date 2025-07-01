@@ -12,7 +12,7 @@ use rmcp::model::{Prompt, ReadResourceResult, Resource, ResourceContents, Tool};
 use std::fs::File;
 
 use crate::{
-    backoffice::mcp::{GetServerInstance, McpRegistry},
+    backoffice::mcp::{server::ResourceDefinition, GetServerInstance, McpRegistry},
     models::mcp_config::McpServerConfig,
 };
 
@@ -23,7 +23,7 @@ pub enum BoEvent {
     LlmConfigUpdated,
     McpServerStarted(McpServerConfig),
     McpToolListUpdated(String, Vec<Tool>),
-    McpResourceListUpdated(String, Vec<Resource>),
+    McpResourceListUpdated(String, Vec<ResourceDefinition>),
     McpPromptListUpdated(String, Vec<Prompt>),
     McpResourceResult(String, ReadResourceResult),
     McpSamplingRequest(String, String, String),
@@ -139,6 +139,7 @@ fn mtime<P: AsRef<std::path::Path>>(path: P) -> anyhow::Result<u64> {
 }
 
 pub fn start() -> anyhow::Result<()> {
+    
     let threads = std::thread::available_parallelism()?.get();
     let rt = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(threads)
@@ -148,6 +149,7 @@ pub fn start() -> anyhow::Result<()> {
         let sys = System::with_tokio_rt(|| rt);
         sys.block_on(async {
             McpRegistry::from_registry();
+            McpRegistry::init_crb();
         });
         sys.run().ok();
     });

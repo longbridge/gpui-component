@@ -1,58 +1,20 @@
 use crate::backoffice::BoEvent;
-use crate::models::{config_path, mcp_config_path};
 use crate::xbus;
-use gpui::SharedString;
-use gpui_component::IconName;
-use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ACCEPT, AUTHORIZATION};
-use rig::extractor::ExtractorBuilder;
-use rig::providers::cohere::completion::Tool;
-use rig::providers::together::TOPPY_M_7B;
-use rig::streaming::{
-    stream_to_stdout, StreamingChat, StreamingCompletionModel, StreamingCompletionResponse,
-    StreamingPrompt,
-};
-use rig::tool::{ToolDyn as RigTool, ToolSet};
-use rig::{completion::Prompt, providers::openai::Client};
 use rmcp::model::{
     CreateMessageRequestMethod, CreateMessageRequestParam, CreateMessageResult, ListRootsResult,
     LoggingLevel, ProtocolVersion, ReadResourceRequestParam, ResourceUpdatedNotificationParam,
 };
 use rmcp::service::{NotificationContext, RequestContext};
-use rmcp::transport::sse_client::SseClientConfig;
-use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
-use rmcp::transport::{ConfigureCommandExt, StreamableHttpClientTransport, TokioChildProcess};
 use rmcp::{
-    model::{CallToolRequestParam, CallToolResult, Content},
-    service::{RunningService, ServerSink},
-    transport::{auth::AuthClient, auth::OAuthState, SseClientTransport},
-    ClientHandler, Peer, RoleClient,
+    ClientHandler, RoleClient,
 };
 pub use rmcp::{
-    model::{
-        ClientCapabilities, ClientInfo, Implementation, Prompt as McpPrompt,
-        Resource as McpResource, ResourceTemplate as McpResourceTemplate, Root, Tool as McpTool,
+    model::{Root,
+        ClientCapabilities, Implementation, 
     },
-    Error as McpError, ServiceExt,
+    Error as McpError
 };
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::time::Duration;
-use std::{collections::HashMap, env::home_dir};
-use tokio::process::Command;
-
-use anyhow::Result;
-use futures::{stream, StreamExt};
-use rig::agent::Agent;
-use rig::completion::Message;
-use rig::completion::ToolDefinition;
-use rig::completion::{CompletionError, CompletionModel};
-use rig::message::{AssistantContent, UserContent};
-use rig::tool::ToolSetError;
-use rig::OneOrMany;
-use std::boxed::Box;
-use std::future::Future;
-use tokio::sync::RwLock;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct McpClientHandler {
@@ -119,9 +81,6 @@ impl ClientHandler for McpClientHandler {
                     server_id: self.id.clone(),
                     tools: tools.tools.clone(),
                 });
-
-                // 发送事件通知
-                xbus::post(BoEvent::McpToolListUpdated(self.id.clone(), tools.tools));
             }
             Err(err) => {
                 log::error!("Failed to list tools: {err}");
@@ -146,11 +105,6 @@ impl ClientHandler for McpClientHandler {
                     server_id: self.id.clone(),
                     prompts: prompts.prompts.clone(),
                 });
-
-                xbus::post(BoEvent::McpPromptListUpdated(
-                    self.id.clone(),
-                    prompts.prompts,
-                ));
             }
             Err(err) => {
                 log::error!("Failed to list prompts: {err}");
@@ -180,8 +134,6 @@ impl ClientHandler for McpClientHandler {
                     server_id: self.id.clone(),
                     resources: resources.clone(),
                 });
-
-                xbus::post(BoEvent::McpResourceListUpdated(self.id.clone(), resources));
             },
         );
     }
@@ -227,8 +179,8 @@ impl ClientHandler for McpClientHandler {
 
     async fn on_progress(
         &self,
-        params: rmcp::model::ProgressNotificationParam,
-        context: NotificationContext<RoleClient>,
+        _params: rmcp::model::ProgressNotificationParam,
+        _context: NotificationContext<RoleClient>,
     ) {
     }
     async fn on_resource_updated(
@@ -252,13 +204,6 @@ impl ClientHandler for McpClientHandler {
                     server_id: self.id.clone(),
                     uri: params.uri.clone(),
                     contents: result.contents.clone(),
-                });
-                
-                // 发送事件通知
-                xbus::post(BoEvent::McpResourceUpdated {
-                    server_id: self.id.clone(),
-                    uri: params.uri,
-                    contents: result.contents,
                 });
             }
             Err(err) => {

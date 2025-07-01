@@ -151,27 +151,27 @@ impl McpRegistry {
         Ok(result)
     }
 
-    /// 静态方法：获取服务器实例
-    pub async fn get_instance(server_id: &str) -> anyhow::Result<Option<McpServerInstance>> {
-        let registry = Self::global();
+    // /// 静态方法：获取服务器实例
+    // pub async fn get_instance(server_id: &str) -> anyhow::Result<Option<McpServerInstance>> {
+    //     let registry = Self::global();
 
-        let result = registry
-            .send(GetServerInstance {
-                server_id: server_id.to_string(),
-            })
-            .await?;
-        println!("获取到实例: {:?}", result);
-        Ok(result)
-    }
+    //     let result = registry
+    //         .send(GetServerInstance {
+    //             server_id: server_id.to_string(),
+    //         })
+    //         .await?;
+    //     println!("获取到实例: {:?}", result);
+    //     Ok(result)
+    // }
 
-    /// 静态方法：获取所有实例
-    pub async fn get_all_instances() -> anyhow::Result<HashMap<String, McpServerInstance>> {
-        let registry = Self::global();
+    // /// 静态方法：获取所有实例
+    // pub async fn get_all_instances() -> anyhow::Result<HashMap<String, McpServerInstance>> {
+    //     let registry = Self::global();
 
-        let result = registry.send(GetAllInstances).await?;
+    //     let result = registry.send(GetAllInstances).await?;
 
-        Ok(result)
-    }
+    //     Ok(result)
+    // }
 
     fn check_and_update(&mut self, ctx: &mut Context<Self>) -> anyhow::Result<()> {
         if self.file.modified()? {
@@ -430,8 +430,11 @@ impl Handler<UpdateInstanceTools> for McpRegistry {
         async move {
             let mut instances = instances.write().await;
             if let Some(instance) = instances.get_mut(&msg.server_id) {
-                instance.tools = msg.tools;
-                log::info!("Updated tools for server: {}", msg.server_id);
+                instance.tools = msg.tools.clone();
+                  log::info!("Updated tools for server: {}", msg.server_id);
+                 // 发送事件通知
+                xbus::post(BoEvent::McpToolListUpdated(msg.server_id.clone(), msg.tools));
+              
             }
         }
         .into_actor(self)
@@ -442,14 +445,18 @@ impl Handler<UpdateInstanceTools> for McpRegistry {
 impl Handler<UpdateInstancePrompts> for McpRegistry {
     type Result = ResponseActFuture<Self, ()>;
 
-    fn handle(&mut self, msg: UpdateInstancePrompts, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, UpdateInstancePrompts{ server_id,prompts}: UpdateInstancePrompts, _ctx: &mut Self::Context) -> Self::Result {
         let instances = self.instances.clone();
 
         async move {
             let mut instances = instances.write().await;
-            if let Some(instance) = instances.get_mut(&msg.server_id) {
-                instance.prompts = msg.prompts;
-                log::info!("Updated prompts for server: {}", msg.server_id);
+            if let Some(instance) = instances.get_mut(&server_id) {
+                instance.prompts = prompts.clone();
+                log::info!("Updated prompts for server: {}",server_id);
+                 xbus::post(BoEvent::McpPromptListUpdated(
+                   server_id,
+                    prompts,
+                ));
             }
         }
         .into_actor(self)
@@ -460,12 +467,12 @@ impl Handler<UpdateInstancePrompts> for McpRegistry {
 impl Handler<UpdateInstanceResources> for McpRegistry {
     type Result = ResponseActFuture<Self, ()>;
 
-    fn handle(&mut self, msg: UpdateInstanceResources, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, UpdateInstanceResources{server_id,resources}: UpdateInstanceResources, _ctx: &mut Self::Context) -> Self::Result {
         let instances = self.instances.clone();
 
         async move {
             let mut instances = instances.write().await;
-            if let Some(instance) = instances.get_mut(&msg.server_id) {
+            if let Some(instance) = instances.get_mut(&server_id) {
                 // 更新资源定义
                 let subscribable = instance
                     .resources
@@ -473,8 +480,7 @@ impl Handler<UpdateInstanceResources> for McpRegistry {
                     .map(|r| r.subscribable)
                     .unwrap_or(false);
 
-                instance.resources = msg
-                    .resources
+                instance.resources = resources
                     .iter()
                     .map(|r| crate::backoffice::mcp::server::ResourceDefinition {
                         resource: r.clone(),
@@ -485,7 +491,8 @@ impl Handler<UpdateInstanceResources> for McpRegistry {
                     })
                     .collect();
 
-                log::info!("Updated resources for server: {}", msg.server_id);
+                log::info!("Updated resources for server: {}", server_id);
+                xbus::post(BoEvent::McpResourceListUpdated(server_id, instance.resources.clone()));
             }
         }
         .into_actor(self)
@@ -517,12 +524,18 @@ impl Handler<UpdateInstanceResourceContent> for McpRegistry {
                 // 查找并更新对应的资源
                 for resource_def in &mut instance.resources {
                     if resource_def.resource.uri == msg.uri {
-                        resource_def.update_contents(msg.contents);
+                        resource_def.update_contents(msg.contents.clone());
                         log::info!(
                             "Updated cached content for resource {} in server {}",
                             msg.uri,
                             msg.server_id
                         );
+                         // 发送事件通知
+                xbus::post(BoEvent::McpResourceUpdated {
+                    server_id: msg.server_id.clone(),
+                    uri: msg.uri,
+                    contents: msg.contents,
+                });
                         break;
                     }
                 }

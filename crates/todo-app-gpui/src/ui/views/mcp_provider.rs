@@ -1,4 +1,5 @@
 use crate::app::{AppState, FoEvent};
+use crate::backoffice::mcp::server::ResourceDefinition;
 use crate::backoffice::mcp::McpRegistry; // 新增导入
 use crate::models::mcp_config::{
     McpConfigManager,
@@ -55,7 +56,7 @@ pub struct McpProvider {
     provider_inputs: std::collections::HashMap<usize, ProviderInputs>,
     // 缓存从 Registry 获取的能力数据
     cached_capabilities:
-        std::collections::HashMap<String, (Vec<McpTool>, Vec<McpPrompt>, Vec<McpResource>)>,
+        std::collections::HashMap<String, (Vec<McpTool>, Vec<McpPrompt>, Vec<ResourceDefinition>)>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -282,28 +283,23 @@ impl McpProvider {
         }
     }
 
-    // 更新获取能力信息的方法，改为异步从 Registry 获取
-    fn get_provider_capabilities_async(
-        &self,
-        provider_id: &str,
-        cx: &mut Context<Self>,
-    ) -> (Vec<McpTool>, Vec<McpPrompt>, Vec<McpResource>) {
-        // 返回空数据，实际数据通过异步更新
-        (vec![], vec![], vec![])
-    }
-
     // 异步获取提供商能力
-    fn refresh_provider_capabilities(&mut self, provider_id: String, cx: &mut Context<Self>) {
+    fn refresh_provider_capabilities(&mut self,cx: &mut Context<Self>) {
         cx.spawn(async move |this, cx| {
             // 通过 McpRegistry 获取实例
-            println!("正在获取MCP服务 '{}' 的能力信息...", provider_id);
-            if let Ok(Some(instance)) = McpRegistry::get_instance(&provider_id).await {
-                println!("获取到实例: {:?}", instance);
+            println!("正在获取MCP服务的能力信息...");
+            if let Ok(instances) = McpRegistry::get_all_instances_static().await {
+               for (provider_id,instance) in instances {
                 // 获取能力信息
-                let tools = instance.list_tools().await.unwrap_or_default();
-                let prompts = instance.list_prompts().await.unwrap_or_default();
-                let resources = instance.list_resources().await.unwrap_or_default();
-
+                let tools = instance.tools.clone();
+                let prompts = instance.prompts.clone();
+                let resources = instance.resources.clone();
+                println!(
+                    "获取到 {} 个工具, {} 个提示, {} 个资源",
+                    tools.len(),
+                    prompts.len(),
+                    resources.len()
+                );
                 // 更新缓存和UI
                 this.update(cx, |this, cx| {
                     this.cached_capabilities
@@ -311,6 +307,7 @@ impl McpProvider {
                     cx.notify();
                 })
                 .ok();
+               }
             }
         })
         .detach();
@@ -333,7 +330,7 @@ impl McpProvider {
 
             if enabled {
                 // 异步刷新能力信息
-                self.refresh_provider_capabilities(provider_id.clone(), cx);
+                self.refresh_provider_capabilities( cx);
                 window.push_notification(
                     format!("MCP服务 '{}' 已启用，正在启动...", provider_name),
                     cx,
@@ -343,7 +340,6 @@ impl McpProvider {
                 self.cached_capabilities.remove(&provider_id);
                 window.push_notification(format!("MCP服务 '{}' 已禁用", provider_name), cx);
             }
-
             cx.notify();
         }
     }
@@ -362,7 +358,7 @@ impl McpProvider {
     fn get_provider_capabilities(
         &self,
         provider_id: &str,
-    ) -> (Vec<McpTool>, Vec<McpPrompt>, Vec<McpResource>) {
+    ) -> (Vec<McpTool>, Vec<McpPrompt>, Vec<ResourceDefinition>) {
         // 从缓存中获取数据
         self.cached_capabilities
             .get(provider_id)
@@ -432,6 +428,7 @@ impl McpProvider {
 
     fn toggle_accordion(&mut self, open_ixs: &[usize], _: &mut Window, cx: &mut Context<Self>) {
         self.expanded_providers = open_ixs.to_vec();
+         self.refresh_provider_capabilities( cx);
         cx.notify();
     }
 
@@ -960,7 +957,7 @@ impl McpProvider {
     }
 
     // 渲染资源的静态方法
-    fn render_resources_content_static(resources: &[McpResource]) -> impl IntoElement {
+    fn render_resources_content_static(resources: &[ResourceDefinition]) -> impl IntoElement {
         v_flex()
             .gap_2()
             .children(resources.iter().map(|resource| {
@@ -984,9 +981,9 @@ impl McpProvider {
                                 div()
                                     .font_medium()
                                     .text_color(gpui::rgb(0x111827))
-                                    .child(SharedString::new(resource.name.clone())),
+                                    .child(SharedString::new(resource.resource.name.clone())),
                             )
-                            .when_some(resource.mime_type.clone(), |this, mime_type| {
+                            .when_some(resource.resource.mime_type.clone(), |this, mime_type| {
                                 this.child(
                                     div()
                                         .px_2()
@@ -999,7 +996,7 @@ impl McpProvider {
                                 )
                             }),
                     )
-                    .when_some(resource.description.clone(), |this, description| {
+                    .when_some(resource.resource.description.clone(), |this, description| {
                         this.child(
                             div()
                                 .text_sm()
@@ -1011,7 +1008,7 @@ impl McpProvider {
                         div()
                             .text_xs()
                             .text_color(gpui::rgb(0x9CA3AF))
-                            .child(resource.uri.clone()),
+                            .child(resource.resource.uri.clone()),
                     )
             }))
             .when(resources.is_empty(), |this| {
