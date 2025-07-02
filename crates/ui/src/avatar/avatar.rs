@@ -6,7 +6,10 @@ use gpui::{
     Styled, Window,
 };
 
-use crate::{avatar::AvatarSized as _, ActiveTheme, Icon, IconName, Sizable, Size, StyledExt};
+use crate::{
+    avatar::{avatar_size, AvatarSized as _},
+    ActiveTheme, Icon, IconName, Sizable, Size, StyledExt,
+};
 
 static AVATAR_COLORS: LazyLock<[Hsla; 17]> = LazyLock::new(|| {
     [
@@ -30,29 +33,13 @@ static AVATAR_COLORS: LazyLock<[Hsla; 17]> = LazyLock::new(|| {
     ]
 });
 
-enum AvatarContent {
-    Image(ImageSource),
-    Text {
-        short: SharedString,
-        #[allow(unused)]
-        full: SharedString,
-    },
-}
-
-impl Default for AvatarContent {
-    fn default() -> Self {
-        AvatarContent::Text {
-            short: SharedString::new(""),
-            full: SharedString::new(""),
-        }
-    }
-}
-
 #[derive(IntoElement)]
 pub struct Avatar {
     base: Div,
     style: StyleRefinement,
-    content: Option<AvatarContent>,
+    src: Option<ImageSource>,
+    name: Option<SharedString>,
+    short_name: SharedString,
     placeholder: Icon,
     size: Size,
 }
@@ -62,7 +49,9 @@ impl Avatar {
         Self {
             base: div(),
             style: StyleRefinement::default(),
-            content: None,
+            src: None,
+            name: None,
+            short_name: SharedString::default(),
             placeholder: Icon::new(IconName::User),
             size: Size::Medium,
         }
@@ -70,16 +59,17 @@ impl Avatar {
 
     /// Set to use image source for the avatar.
     pub fn src(mut self, source: impl Into<ImageSource>) -> Self {
-        self.content = Some(AvatarContent::Image(source.into()));
+        self.src = Some(source.into());
         self
     }
 
-    /// Set to use text for the avatar, if this is set, the image will be hidden.
-    pub fn text(mut self, text: impl Into<SharedString>) -> Self {
-        let full: SharedString = text.into();
-        let short: SharedString = extract_text_initials(&full).into();
+    /// Set name of the avatar user, if `src` is none, will use this name as placeholder.
+    pub fn name(mut self, name: impl Into<SharedString>) -> Self {
+        let name: SharedString = name.into();
+        let short: SharedString = extract_text_initials(&name).into();
 
-        self.content = Some(AvatarContent::Text { full, short });
+        self.name = Some(name);
+        self.short_name = short;
         self
     }
 
@@ -110,7 +100,6 @@ impl InteractiveElement for Avatar {
 impl RenderOnce for Avatar {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let corner_radii = self.style.corner_radii.clone();
-
         let mut inner_style = StyleRefinement::default();
         inner_style.corner_radii = corner_radii;
 
@@ -125,27 +114,28 @@ impl RenderOnce for Avatar {
             .rounded_full()
             .overflow_hidden()
             .bg(cx.theme().secondary)
-            .text_color(cx.theme().muted_foreground)
+            .text_color(cx.theme().background)
             .border_1()
             .border_color(cx.theme().background)
-            .when(self.content.is_none(), |this| {
-                this.avatar_text_size(self.size).child(self.placeholder)
+            .when(self.name.is_none() && self.src.is_none(), |this| {
+                this.text_size(avatar_size(self.size) * 0.6)
+                    .child(self.placeholder)
             })
-            .when_some(self.content, |this, content| match content {
-                AvatarContent::Image(source) => this.child(
-                    img(source)
-                        .avatar_size(self.size)
-                        .rounded_full()
-                        .refine_style(&inner_style),
-                ),
-                AvatarContent::Text { short, .. } => {
-                    let color_ix = gpui::hash(&short) % AVATAR_COLORS.len() as u64;
+            .map(|this| match self.src {
+                None => this.when(self.name.is_some(), |this| {
+                    let color_ix = gpui::hash(&self.short_name) % AVATAR_COLORS.len() as u64;
                     let color = AVATAR_COLORS[color_ix as usize];
 
                     this.bg(color.opacity(BG_OPACITY))
                         .text_color(color)
-                        .child(div().avatar_text_size(self.size).child(short))
-                }
+                        .child(div().avatar_text_size(self.size).child(self.short_name))
+                }),
+                Some(src) => this.child(
+                    img(src)
+                        .avatar_size(self.size)
+                        .rounded_full()
+                        .refine_style(&inner_style),
+                ),
             })
             .refine_style(&self.style)
     }

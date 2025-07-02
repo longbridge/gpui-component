@@ -5,14 +5,14 @@ pub use avatar::*;
 pub use avatar_group::*;
 
 use crate::{Icon, Size, StyledExt as _};
-use gpui::{px, Div, Img, IntoElement, Pixels, Styled};
+use gpui::{px, rems, Div, Img, IntoElement, Pixels, Styled};
 
 pub(super) fn avatar_size(size: Size) -> Pixels {
     match size {
         Size::Large => px(80.),
-        Size::Medium => px(32.),
-        Size::Small => px(24.),
-        Size::XSmall => px(16.),
+        Size::Medium => px(48.),
+        Size::Small => px(32.),
+        Size::XSmall => px(20.),
         Size::Size(size) => size,
     }
 }
@@ -28,7 +28,7 @@ pub(super) trait AvatarSized: IntoElement + Styled {
             Size::Large => self.text_3xl().font_semibold(),
             Size::Medium => self.text_sm(),
             Size::Small => self.text_xs(),
-            Size::XSmall => self.text_xs(),
+            Size::XSmall => self.text_size(rems(0.65)),
             Size::Size(size) => self.size(size * 0.5),
         }
     }

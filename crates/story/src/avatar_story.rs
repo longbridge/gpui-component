@@ -59,6 +59,7 @@ impl Render for AvatarStory {
                     .max_w_md()
                     .child(
                         Avatar::new()
+                            .name("Jason lee")
                             .src("https://i.pravatar.cc/200?u=a")
                             .with_size(px(100.)),
                     )
@@ -70,15 +71,18 @@ impl Render for AvatarStory {
             .child(
                 section("Avatar with text")
                     .max_w_md()
-                    .child(Avatar::new().text("Jason Lee").large())
-                    .child(Avatar::new().text("Floyd Wang"))
-                    .child(Avatar::new().text("xda").small())
-                    .child(Avatar::new().text("ihavecoke").xsmall()),
+                    .child(Avatar::new().name("Jason Lee").large())
+                    .child(Avatar::new().name("Floyd Wang"))
+                    .child(Avatar::new().name("xda").small())
+                    .child(Avatar::new().name("ihavecoke").xsmall()),
             )
             .child(
                 section("Placeholder")
                     .max_w_md()
+                    .child(Avatar::new().large())
                     .child(Avatar::new())
+                    .child(Avatar::new().small())
+                    .child(Avatar::new().xsmall())
                     .child(Avatar::new().placeholder(IconName::Building2)),
             )
             .child(
@@ -112,7 +116,7 @@ impl Render for AvatarStory {
                     )
                     .child(
                         AvatarGroup::new()
-                            .small()
+                            .xsmall()
                             .limit(6)
                             .ellipsis()
                             .child(Avatar::new().src("https://i.pravatar.cc/200?u=a"))

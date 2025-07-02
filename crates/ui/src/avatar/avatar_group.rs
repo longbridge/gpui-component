@@ -81,7 +81,7 @@ impl RenderOnce for AvatarGroup {
             .children(if self.ellipsis && avatars_len > self.limit {
                 Some(
                     Avatar::new()
-                        .text("⋯")
+                        .name("⋯")
                         .bg(cx.theme().secondary)
                         .text_color(cx.theme().muted_foreground)
                         .with_size(self.size)
