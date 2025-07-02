@@ -430,17 +430,20 @@ impl Node {
                                 // merge content into last item.
                                 if last_not_list {
                                     if let Some(item_item) = items.last_mut() {
-                                        item_item.extend(vec![text.into_any_element()]);
+                                        item_item.extend(vec![div()
+                                            .overflow_hidden()
+                                            .child(text)
+                                            .into_any_element()]);
                                         continue;
                                     }
                                 }
 
                                 items.push(
                                     h_flex()
+                                        .flex_1()
                                         .relative()
                                         .items_start()
                                         .content_start()
-                                        .flex_1()
                                         .when(!state.todo && checked.is_none(), |this| {
                                             this.child(list_item_prefix(
                                                 ix,
@@ -471,7 +474,7 @@ impl Node {
                                                     }),
                                             )
                                         })
-                                        .child(text),
+                                        .child(div().overflow_hidden().child(text)),
                                 );
                             }
                             Node::List { .. } => {
