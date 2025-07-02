@@ -2,7 +2,11 @@ use gpui::{
     px, App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement,
     Render, Styled, Window,
 };
-use gpui_component::{avatar::Avatar, dock::PanelControl, v_flex, IconName, Sizable as _};
+use gpui_component::{
+    avatar::{Avatar, AvatarGroup},
+    dock::PanelControl,
+    v_flex, IconName, Sizable as _, StyledExt,
+};
 
 use crate::section;
 
@@ -76,6 +80,53 @@ impl Render for AvatarStory {
                     .max_w_md()
                     .child(Avatar::new())
                     .child(Avatar::new().placeholder(IconName::Building2)),
+            )
+            .child(
+                section("Avatar Group")
+                    .v_flex()
+                    .max_w_md()
+                    .child(
+                        AvatarGroup::new()
+                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=a"))
+                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=b"))
+                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=c"))
+                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=d"))
+                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=e"))
+                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=f")),
+                    )
+                    .child(
+                        AvatarGroup::new()
+                            .small()
+                            .limit(5)
+                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=a"))
+                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=b"))
+                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=c"))
+                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=d"))
+                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=e"))
+                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=f"))
+                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=g"))
+                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=h"))
+                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=i"))
+                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=j"))
+                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=k")),
+                    )
+                    .child(
+                        AvatarGroup::new()
+                            .small()
+                            .limit(6)
+                            .ellipsis()
+                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=a"))
+                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=b"))
+                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=c"))
+                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=d"))
+                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=e"))
+                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=f"))
+                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=g"))
+                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=h"))
+                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=i"))
+                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=j"))
+                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=k")),
+                    ),
             )
             .child(
                 section("Custom rounded").child(

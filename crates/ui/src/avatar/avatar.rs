@@ -1,11 +1,12 @@
 use std::sync::LazyLock;
 
 use gpui::{
-    div, img, prelude::FluentBuilder, App, Div, Hsla, ImageSource, Img, IntoElement,
-    ParentElement as _, RenderOnce, SharedString, StyleRefinement, Styled, Window,
+    div, img, prelude::FluentBuilder, App, Div, Hsla, ImageSource, InteractiveElement,
+    Interactivity, IntoElement, ParentElement as _, RenderOnce, SharedString, StyleRefinement,
+    Styled, Window,
 };
 
-use crate::{ActiveTheme, Icon, IconName, Sizable, Size, StyledExt};
+use crate::{avatar::AvatarSized as _, ActiveTheme, Icon, IconName, Sizable, Size, StyledExt};
 
 static AVATAR_COLORS: LazyLock<[Hsla; 17]> = LazyLock::new(|| {
     [
@@ -47,33 +48,19 @@ impl Default for AvatarContent {
     }
 }
 
-#[derive(IntoElement, Default)]
+#[derive(IntoElement)]
 pub struct Avatar {
+    base: Div,
     style: StyleRefinement,
     content: Option<AvatarContent>,
     placeholder: Icon,
     size: Size,
 }
 
-fn extract_text_initials(text: &str) -> String {
-    let mut result = text
-        .split(" ")
-        .map(|word| word.chars().next().map(|c| c.to_string()))
-        .flatten()
-        .take(2)
-        .collect::<Vec<String>>()
-        .join("");
-
-    if result.len() == 1 {
-        result = text.chars().take(2).collect::<String>();
-    }
-
-    result.to_uppercase()
-}
-
 impl Avatar {
     pub fn new() -> Self {
         Self {
+            base: div(),
             style: StyleRefinement::default(),
             content: None,
             placeholder: Icon::new(IconName::User),
@@ -114,31 +101,11 @@ impl Styled for Avatar {
     }
 }
 
-/// Extension for add `avatar_size` method to `IntoElement` to apply avatar size to element.
-trait AvatarSized: IntoElement + Styled {
-    fn avatar_size(self, size: Size) -> Self {
-        match size {
-            Size::Large => self.size_20(),
-            Size::Medium => self.size_8(),
-            Size::Small => self.size_6(),
-            Size::XSmall => self.size_5(),
-            Size::Size(size) => self.size(size),
-        }
-    }
-
-    fn avatar_text_size(self, size: Size) -> Self {
-        match size {
-            Size::Large => self.text_3xl().font_semibold(),
-            Size::Medium => self.text_sm(),
-            Size::Small => self.text_xs(),
-            Size::XSmall => self.text_xs(),
-            Size::Size(size) => self.size(size * 0.5),
-        }
+impl InteractiveElement for Avatar {
+    fn interactivity(&mut self) -> &mut Interactivity {
+        self.base.interactivity()
     }
 }
-impl AvatarSized for Div {}
-impl AvatarSized for Icon {}
-impl AvatarSized for Img {}
 
 impl RenderOnce for Avatar {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
@@ -149,7 +116,7 @@ impl RenderOnce for Avatar {
 
         const BG_OPACITY: f32 = 0.2;
 
-        div()
+        self.base
             .avatar_size(self.size)
             .flex()
             .items_center()
@@ -159,7 +126,8 @@ impl RenderOnce for Avatar {
             .overflow_hidden()
             .bg(cx.theme().secondary)
             .text_color(cx.theme().muted_foreground)
-            .refine_style(&self.style)
+            .border_1()
+            .border_color(cx.theme().background)
             .when(self.content.is_none(), |this| {
                 this.avatar_text_size(self.size).child(self.placeholder)
             })
@@ -179,7 +147,24 @@ impl RenderOnce for Avatar {
                         .child(div().avatar_text_size(self.size).child(short))
                 }
             })
+            .refine_style(&self.style)
     }
+}
+
+fn extract_text_initials(text: &str) -> String {
+    let mut result = text
+        .split(" ")
+        .map(|word| word.chars().next().map(|c| c.to_string()))
+        .flatten()
+        .take(2)
+        .collect::<Vec<String>>()
+        .join("");
+
+    if result.len() == 1 {
+        result = text.chars().take(2).collect::<String>();
+    }
+
+    result.to_uppercase()
 }
 
 #[cfg(test)]
