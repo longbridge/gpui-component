@@ -129,8 +129,8 @@ impl AppState {
 // actions!(input_story, [Tab, TabPrev]);
 
 pub fn run() {
-    const WIDTH: f32 = 400.0;
-    const HEIGHT: f32 = WIDTH * 2.2;
+    const WIDTH: f32 = 480.;
+    const HEIGHT: f32 = 880.;
 
     let app = Application::new().with_assets(Assets);
     app.run(move |cx| {

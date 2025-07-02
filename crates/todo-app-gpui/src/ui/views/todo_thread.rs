@@ -27,6 +27,19 @@ pub struct ChatMessage {
     pub timestamp: chrono::DateTime<chrono::Utc>,
     pub model: Option<String>,
     pub tools_used: Vec<String>,
+    pub source: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct StreamMessage {
+    source: String,
+    message: rig::message::Message,
+}
+
+impl StreamMessage {
+    pub fn new(source: String, message: rig::message::Message) -> Self {
+        Self { source, message }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -50,6 +63,14 @@ impl MessageRole {
             MessageRole::User => gpui::rgb(0x3B82F6),
             MessageRole::Assistant => gpui::rgb(0x10B981),
             MessageRole::System => gpui::rgb(0x6B7280),
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            MessageRole::User => "user",
+            MessageRole::Assistant => "assistant",
+            MessageRole::System => "system",
         }
     }
 }
@@ -119,10 +140,13 @@ impl TodoThreadChat {
         });
 
         let (tx, mut rx) = tokio::sync::mpsc::channel(1000);
-        let _sub = xbus::subscribe(move |msg: &rig::message::Message| {
-            tx.try_send(msg.clone()).unwrap_or_else(|e| {
-                tracing::error!("Failed to send message to channel: {}", e);
-            });
+        let todo_id = todoitem.id.clone();
+        let _sub = xbus::subscribe(move |StreamMessage { source, message }: &StreamMessage| {
+            if &todo_id == source {
+                tx.try_send(message.clone()).unwrap_or_else(|e| {
+                    tracing::error!("Failed to send message to channel: {}", e);
+                });
+            }
         });
         cx.spawn(async move |this, app| {
             //println!("开始接收AI助手响应");
@@ -176,6 +200,7 @@ impl TodoThreadChat {
             timestamp: chrono::Utc::now(),
             model: None,
             tools_used: vec![],
+            source: todoitem.id.clone(),
         }];
 
         Self {

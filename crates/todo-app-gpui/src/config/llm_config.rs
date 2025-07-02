@@ -1,4 +1,8 @@
-use crate::{config::provider_config_path, xbus};
+use crate::{
+    config::provider_config_path,
+    ui::views::todo_thread::{ChatMessage, StreamMessage},
+    xbus,
+};
 use futures::StreamExt;
 use gpui::SharedString;
 use gpui_component::IconName;
@@ -383,31 +387,54 @@ impl LlmProviderConfig {
         Ok(models)
     }
 
-    pub async fn stream_chat(&self, model_id: &str, prompt: &str) -> anyhow::Result<String> {
+    pub async fn stream_chat(
+        &self,
+        source: &str,
+        model_id: &str,
+        prompt: &str,
+        chat_history: Vec<ChatMessage>,
+    ) -> anyhow::Result<String> {
         let client = rig::providers::openai::Client::from_url(&self.api_key, &self.api_url);
-
         let agent = client
             .agent(model_id)
             .max_tokens(4096)
             .temperature(0.7)
             .build();
-
-        let mut stream = agent.stream_prompt(prompt).await?; //agent.stream_chat(prompt, chat_history.clone()).await?;
-
-        let (assistant, _tools) = stream_to_stdout1(&agent, &mut stream).await?;
+        // Convert ChatMessage to Message for rig
+        let messages = chat_history
+            .into_iter()
+            .map(|chat_msg| match chat_msg.role.as_str() {
+                "user" => Message::user(chat_msg.content),
+                "assistant" => Message::assistant(chat_msg.content),
+                // "system" => Message::user(chat_msg.content),
+                _ => Message::user(chat_msg.content), // Default to user if role is unknown
+            })
+            .collect::<Vec<Message>>();
+        let mut stream = agent.stream_chat(prompt, messages).await?; //agent.stream_chat(prompt, chat_history.clone()).await?;
+        println!("Streaming chat with model: {}", model_id);
+        let (assistant, _tools) = stream_to_stdout1(source, &agent, &mut stream).await?;
         Ok(assistant)
     }
 
     pub async fn stream_chat_with_available_tools(
         &self,
+        source: &str,
         model_id: &str,
         prompt: &str,
         tools: Vec<Tool>,
-        chat_history: Vec<Message>,
+        chat_history: Vec<ChatMessage>,
     ) -> anyhow::Result<()> {
         let system_prompt = super::prompts::prompt(tools);
         let client = rig::providers::openai::Client::from_url(&self.api_key, &self.api_url);
-        let mut chat_history = vec![];
+        let mut chat_history = chat_history
+            .into_iter()
+            .map(|chat_msg| match chat_msg.role.as_str() {
+                "user" => Message::user(chat_msg.content),
+                "assistant" => Message::assistant(chat_msg.content),
+                // "system" => Message::user(chat_msg.content),
+                _ => Message::user(chat_msg.content), // Default to user if role is unknown
+            })
+            .collect::<Vec<Message>>();
         loop {
             let agent = client
                 .agent(model_id)
@@ -421,7 +448,7 @@ impl LlmProviderConfig {
                 .stream()
                 .await?; //agent.stream_chat(prompt, chat_history.clone()).await?;
             chat_history.push(Message::user(prompt));
-            let (assistant, tools) = stream_to_stdout1(&agent, &mut stream).await?;
+            let (assistant, tools) = stream_to_stdout1(source, &agent, &mut stream).await?;
             if tools.is_empty() {
                 break;
             }
@@ -589,7 +616,8 @@ impl LlmProviderManager {
 
 /// helper function to stream a completion request to stdout
 pub async fn stream_to_stdout1<M: StreamingCompletionModel>(
-    agent: &Agent<M>,
+    source: &str,
+    _agent: &Agent<M>,
     stream: &mut StreamingCompletionResponse<M::StreamingResponse>,
 ) -> Result<(String, Vec<ToolCall>), std::io::Error> {
     // 使用字符状态机解析XML
@@ -630,7 +658,10 @@ pub async fn stream_to_stdout1<M: StreamingCompletionModel>(
                                 // 普通字符直接输出
                                 print!("{}", c);
                                 //tx.send(Message::assistant(c.to_string())).await;
-                                xbus::post(Message::assistant(c.to_string()));
+                                xbus::post(StreamMessage::new(
+                                    source.to_string(),
+                                    Message::assistant(c.to_string()),
+                                ));
                                 assistant.push(c);
                                 std::io::Write::flush(&mut std::io::stdout())?;
                             }
@@ -649,7 +680,10 @@ pub async fn stream_to_stdout1<M: StreamingCompletionModel>(
                                     // 不是工具调用标签，输出
                                     print!("{}", buffer);
                                     //tx.send(Message::assistant(buffer.to_string())).await;
-                                    xbus::post(Message::assistant(buffer.clone()));
+                                    xbus::post(StreamMessage::new(
+                                        source.to_string(),
+                                        Message::assistant(buffer.clone()),
+                                    ));
                                     assistant.push_str(buffer.as_str());
                                     std::io::Write::flush(&mut std::io::stdout())?;
                                     state = State::Normal;

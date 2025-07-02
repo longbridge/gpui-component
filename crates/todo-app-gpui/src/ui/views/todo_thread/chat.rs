@@ -1,10 +1,6 @@
-use std::time::Duration;
-
 use super::*;
-use crate::{app::AppState, config::llm_config::LlmProviderManager};
-use futures::channel;
+use crate::config::llm_config::LlmProviderManager;
 use gpui::*;
-use rig::message::*;
 
 impl TodoThreadChat {
     pub(crate) fn send_message(
@@ -27,10 +23,11 @@ impl TodoThreadChat {
             timestamp: chrono::Utc::now(),
             model: None,
             tools_used: vec![],
+            source: todo.id.clone(),
         };
 
         self.chat_messages.push(user_message);
-
+        let source = todo.id.clone();
         self.chat_input
             .update(cx, |input, cx| input.set_value("", window, cx));
 
@@ -48,6 +45,7 @@ impl TodoThreadChat {
                 .find(|provider| provider.id == selected_model.provider_id)
                 .cloned();
             let model_id = selected_model.model_id.clone();
+            let history_message = self.chat_messages.clone();
             self.chat_messages.push(ChatMessage {
                 id: format!("assistant_{}", chrono::Utc::now().timestamp()),
                 role: MessageRole::Assistant,
@@ -55,6 +53,7 @@ impl TodoThreadChat {
                 timestamp: chrono::Utc::now(),
                 model: Some(selected_model.model_name.clone()),
                 tools_used: vec![],
+                source: todo.id.clone(),
             });
             if let Some(provider) = provider_info {
                 // let (tx, mut rx) = tokio::sync::mpsc::channel(1000);
@@ -64,7 +63,10 @@ impl TodoThreadChat {
                 //     });
                 // });
                 tokio::spawn(async move {
-                    if let Err(err) = provider.stream_chat(&model_id, &message_content).await {
+                    if let Err(err) = provider
+                        .stream_chat(&source, &model_id, &message_content, history_message)
+                        .await
+                    {
                         tracing::error!("Error streaming chat: {}", err);
                     }
                 });

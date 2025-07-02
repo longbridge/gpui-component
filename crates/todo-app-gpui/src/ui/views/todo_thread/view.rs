@@ -1,14 +1,12 @@
 use super::*;
 use crate::backoffice::mcp::McpRegistry; // 新增导入
-use crate::{app::AppState, config::{mcp_config::McpConfigManager, llm_config::LlmProviderManager}};
+use crate::{config::{mcp_config::McpConfigManager, llm_config::LlmProviderManager}};
+use chrono::Local;
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::{
     accordion::Accordion, button::{Button, ButtonVariant, ButtonVariants as _}, checkbox::Checkbox, h_flex, input::TextInput, tooltip::Tooltip, scroll::Scrollbar, text::TextView, *
 };
-
-// 从 rmcp 导入 MCP 类型
-use rmcp::model::{Tool as McpTool};
 
 impl FocusableCycle for TodoThreadChat {
     fn cycle_focus_handles(&self, _: &mut Window, cx: &mut App) -> Vec<FocusHandle> {
@@ -25,7 +23,7 @@ impl Focusable for TodoThreadChat {
 impl TodoThreadChat {
     fn render_chat_message(&self, message: &ChatMessage) -> impl IntoElement {
         let is_user = matches!(message.role, MessageRole::User);
-
+       
         h_flex()
             .w_full()
             .py_2()
@@ -53,7 +51,7 @@ impl TodoThreadChat {
                                     div()
                                         .text_xs()
                                         .text_color(gpui::rgb(0x9CA3AF))
-                                        .child(message.timestamp.format("%H:%M").to_string()),
+                                        .child(message.timestamp.with_timezone(&Local).format("%H:%M").to_string()),
                                 )
                                 .when_some(message.model.as_ref(), |this, model| {
                                     this.child(
@@ -333,17 +331,11 @@ impl TodoThreadChat {
                     
                     drawer_cx.spawn(async move | cx| {
                         if let Ok(Some(instance)) = McpRegistry::get_instance(&server_id_for_load).await {
-                            match instance.list_tools().await {
-                                Ok(tools) => {
-                                    todo_edit_entity_for_load.update(cx, |todo_edit, todo_cx| {
+                            let tools=instance.tools;
+                            todo_edit_entity_for_load.update(cx, |todo_edit, todo_cx| {
                                         todo_edit.cached_server_tools.insert(server_id_for_load.clone(), tools);
                                         todo_cx.notify();
                                     }).ok();
-                                }
-                                Err(err) => {
-                                    log::error!("Failed to load tools for server {}: {}", server_id_for_load, err);
-                                }
-                            }
                         }
                     }).detach();
                 }

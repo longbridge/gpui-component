@@ -136,7 +136,7 @@ impl CrossRuntimeBridge {
     /// ```
     pub async fn get_instance(&self, server_id: String) -> Option<McpServerInstance> {
         let (response_tx, response_rx) = oneshot::channel();
-        println!("请求获取服务器实例 in GUI: {}", server_id);
+        // println!("请求获取服务器实例 in GUI: {}", server_id);
         // 发送请求到 Actix 运行时
         if self
             .sender
@@ -294,15 +294,15 @@ impl McpRegistry {
                         server_id,
                         response,
                     } => {
-                        println!(
-                            "请求获取服务器实例 in Actix({}): {}",
-                            actix::System::current().id(),
-                            server_id
-                        );
+                        // println!(
+                        //     "请求获取服务器实例 in Actix({}): {}",
+                        //     actix::System::current().id(),
+                        //     server_id
+                        // );
                         let registry = McpRegistry::global();
                         let result = registry.send(GetServerInstance { server_id }).await;
                         let instance = result.unwrap_or(None);
-                        println!("获取服务器实例结果: {:?}", instance);
+                        //println!("获取服务器实例结果: {:?}", instance);
                         // 忽略发送错误，因为接收端可能已经超时或取消
                         if let Err(err) = response.send(instance) {
                             eprintln!("Failed to send response for GetInstance: {:?}", err);
