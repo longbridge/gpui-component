@@ -1,6 +1,6 @@
 mod chat;
 mod view;
-use crate::models::todo_item::*;
+use crate::config::todo_item::*;
 use crate::{app::AppExt, xbus};
 use gpui::prelude::*;
 use gpui::*;
@@ -252,12 +252,12 @@ impl TodoThreadChat {
     fn toggle_model_selection(
         &mut self,
         checked: bool,
-        model: &crate::models::provider_config::ModelInfo,
-        provider: &crate::models::provider_config::LlmProviderInfo,
+        model: &crate::config::llm_config::ModelInfo,
+        provider: &crate::config::llm_config::LlmProviderConfig,
         cx: &mut Context<Self>,
     ) {
         if checked {
-            self.todoitem.selected_model = Some(crate::models::todo_item::SelectedModel {
+            self.todoitem.selected_model = Some(crate::config::todo_item::SelectedModel {
                 provider_id: provider.id.clone(),
                 provider_name: provider.name.clone(),
                 model_id: model.id.clone(),
@@ -274,13 +274,13 @@ impl TodoThreadChat {
         &mut self,
         checked: bool,
         tool: &McpTool,
-        server: &crate::models::mcp_config::McpServerConfig,
+        server: &crate::config::mcp_config::McpServerConfig,
         cx: &mut Context<Self>,
     ) {
         if checked {
             self.todoitem
                 .selected_tools
-                .push(crate::models::todo_item::SelectedTool {
+                .push(crate::config::todo_item::SelectedTool {
                     provider_id: server.id.clone(),
                     provider_name: server.name.clone(),
                     description: tool
@@ -302,7 +302,7 @@ impl TodoThreadChat {
     fn save(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         // 这里可以保存 todoitem 的状态
         // 根据需要实现具体的保存逻辑
-        match crate::models::todo_item::TodoManager::update_todo(self.todoitem.clone()) {
+        match crate::config::todo_item::TodoManager::update_todo(self.todoitem.clone()) {
             Ok(_) => {
                 // 保存成功，可以显示通知
                 log::info!("Todo item saved successfully");

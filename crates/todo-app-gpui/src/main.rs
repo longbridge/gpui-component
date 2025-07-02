@@ -5,8 +5,8 @@
 
 mod app;
 mod backoffice;
+mod config;
 pub mod ebus;
-mod models;
 mod ui;
 pub mod xbus;
 

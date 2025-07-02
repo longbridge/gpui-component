@@ -1,4 +1,4 @@
-use crate::{models::provider_config_path, xbus};
+use crate::{config::provider_config_path, xbus};
 use futures::StreamExt;
 use gpui::SharedString;
 use gpui_component::IconName;
@@ -297,7 +297,7 @@ impl Default for RetryConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LlmProviderInfo {
+pub struct LlmProviderConfig {
     pub id: String,
     pub name: String,
     #[serde(default)]
@@ -314,7 +314,7 @@ pub struct LlmProviderInfo {
     pub retry_config: RetryConfig,
 }
 
-impl Default for LlmProviderInfo {
+impl Default for LlmProviderConfig {
     fn default() -> Self {
         Self {
             id: uuid::Uuid::new_v4().to_string(),
@@ -348,7 +348,7 @@ impl Default for LlmProviderInfo {
     }
 }
 
-impl LlmProviderInfo {
+impl LlmProviderConfig {
     /// 刷新提供商的模型列表
     pub async fn load_models(&self) -> anyhow::Result<Vec<ModelInfo>> {
         let client = rig::providers::mira::Client::new_with_base_url(
@@ -456,14 +456,14 @@ pub struct LlmProviders;
 
 impl LlmProviders {
     /// 从文件加载所有提供商
-    fn load_providers() -> Vec<LlmProviderInfo> {
+    fn load_providers() -> Vec<LlmProviderConfig> {
         let config_path = provider_config_path();
         if !config_path.exists() {
             return Vec::new();
         }
 
         match std::fs::read_to_string(config_path) {
-            Ok(content) => match serde_yaml::from_str::<Vec<LlmProviderInfo>>(&content) {
+            Ok(content) => match serde_yaml::from_str::<Vec<LlmProviderConfig>>(&content) {
                 Ok(providers) => providers,
                 Err(e) => {
                     eprintln!("Failed to parse LLM provider config: {}", e);
@@ -478,7 +478,7 @@ impl LlmProviders {
     }
 
     /// 保存所有提供商到文件
-    pub fn save_providers(providers: &[LlmProviderInfo]) -> anyhow::Result<()> {
+    pub fn save_providers(providers: &[LlmProviderConfig]) -> anyhow::Result<()> {
         let config_path = provider_config_path();
 
         if let Some(parent) = config_path.parent() {
@@ -491,17 +491,17 @@ impl LlmProviders {
     }
 
     /// 获取所有提供商列表
-    pub fn list_providers() -> Vec<LlmProviderInfo> {
+    pub fn list_providers() -> Vec<LlmProviderConfig> {
         Self::load_providers()
     }
 
     /// 根据ID查询提供商
-    pub fn get_provider(id: &str) -> Option<LlmProviderInfo> {
+    pub fn get_provider(id: &str) -> Option<LlmProviderConfig> {
         Self::load_providers().into_iter().find(|p| p.id == id)
     }
 
     /// 根据索引获取提供商
-    pub fn get_provider_by_index(index: usize) -> Option<LlmProviderInfo> {
+    pub fn get_provider_by_index(index: usize) -> Option<LlmProviderConfig> {
         Self::load_providers().get(index).cloned()
     }
 
@@ -511,7 +511,7 @@ impl LlmProviders {
     }
 
     /// 添加新的提供商
-    pub fn add_provider(provider: LlmProviderInfo) -> anyhow::Result<String> {
+    pub fn add_provider(provider: LlmProviderConfig) -> anyhow::Result<String> {
         let mut providers = Self::load_providers();
 
         if providers.iter().any(|p| p.name == provider.name) {
@@ -528,7 +528,7 @@ impl LlmProviders {
     }
 
     /// 更新提供商
-    pub fn update_provider(id: &str, provider: LlmProviderInfo) -> anyhow::Result<()> {
+    pub fn update_provider(id: &str, provider: LlmProviderConfig) -> anyhow::Result<()> {
         let mut providers = Self::load_providers();
         let index = providers
             .iter()
@@ -551,7 +551,7 @@ impl LlmProviders {
     }
 
     /// 删除提供商
-    pub fn delete_provider(id: &str) -> anyhow::Result<LlmProviderInfo> {
+    pub fn delete_provider(id: &str) -> anyhow::Result<LlmProviderConfig> {
         let mut providers = Self::load_providers();
         let index = providers
             .iter()
@@ -577,7 +577,7 @@ impl LlmProviders {
     }
 
     /// 获取启用的提供商
-    pub fn get_enabled_providers() -> Vec<LlmProviderInfo> {
+    pub fn get_enabled_providers() -> Vec<LlmProviderConfig> {
         Self::load_providers()
             .into_iter()
             .filter(|provider| provider.enabled)

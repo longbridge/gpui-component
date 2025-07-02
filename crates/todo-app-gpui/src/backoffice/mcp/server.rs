@@ -1,30 +1,30 @@
 use crate::backoffice::mcp::client::McpClientHandler;
-use crate::models::mcp_config::{McpServerConfig, McpTransport};
+use crate::config::mcp_config::{McpServerConfig, McpTransport};
 use gpui_component::IconName;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ACCEPT, AUTHORIZATION};
-use rig::tool::{ ToolSet};
-use rmcp::model::{ ReadResourceRequestParam, ResourceContents,
-};
+use rig::tool::ToolSet;
+use rmcp::model::{ReadResourceRequestParam, ResourceContents};
 use rmcp::transport::sse_client::SseClientConfig;
 use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
 use rmcp::transport::{ConfigureCommandExt, StreamableHttpClientTransport, TokioChildProcess};
 use rmcp::{
     model::{CallToolRequestParam, CallToolResult},
-    service::{RunningService},
-    transport::{ SseClientTransport}, RoleClient,
+    service::RunningService,
+    transport::SseClientTransport,
+    RoleClient,
 };
 pub use rmcp::{
     model::{
-        Prompt as McpPrompt,
-        Resource as McpResource, ResourceTemplate as McpResourceTemplate, Tool as McpTool,
+        Prompt as McpPrompt, Resource as McpResource, ResourceTemplate as McpResourceTemplate,
+        Tool as McpTool,
     },
     ServiceExt,
 };
 use serde::{Deserialize, Serialize};
+use std::boxed::Box;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::process::Command;
-use std::boxed::Box;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum McpCapability {
@@ -52,7 +52,7 @@ impl McpCapability {
 }
 
 // 如果需要在实例中缓存资源内容，可以添加这个字段
-#[derive(Debug, Clone,serde::Serialize,serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ResourceDefinition {
     pub resource: McpResource,
     pub subscribed: bool,

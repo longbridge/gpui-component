@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use super::*;
-use crate::{app::AppState, models::provider_config::LlmProviders};
+use crate::{app::AppState, config::llm_config::LlmProviders};
 use futures::channel;
 use gpui::*;
 use rig::message::*;

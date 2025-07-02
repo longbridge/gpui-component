@@ -1,6 +1,6 @@
 use super::*;
 use crate::backoffice::mcp::McpRegistry; // 新增导入
-use crate::{app::AppState, models::{mcp_config::McpConfigManager, provider_config::LlmProviders}};
+use crate::{app::AppState, config::{mcp_config::McpConfigManager, llm_config::LlmProviders}};
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::{

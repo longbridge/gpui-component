@@ -1,8 +1,8 @@
 use crate::backoffice::mcp::{GetServerInstance, McpRegistry};
-use crate::models::mcp_config::McpConfigManager;
-use crate::models::profile_config::ProfileManager;
-use crate::models::provider_config::LlmProviders;
-use crate::models::todo_item::TodoManager;
+use crate::config::llm_config::LlmProviders;
+use crate::config::mcp_config::McpConfigManager;
+use crate::config::profile_config::ProfileManager;
+use crate::config::todo_item::TodoManager;
 use crate::ui::assets::Assets;
 
 use crate::ui::components::container::Container;

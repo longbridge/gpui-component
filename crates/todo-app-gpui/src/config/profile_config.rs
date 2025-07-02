@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-use crate::models::profile_config_path;
+use crate::config::profile_config_path;
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default, PartialEq)]
 pub struct ProfileData {

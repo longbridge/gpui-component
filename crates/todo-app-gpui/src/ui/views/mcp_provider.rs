@@ -1,7 +1,7 @@
 use crate::app::{AppState, FoEvent};
 use crate::backoffice::mcp::server::ResourceDefinition;
 use crate::backoffice::mcp::McpRegistry; // 新增导入
-use crate::models::mcp_config::{
+use crate::config::mcp_config::{
     McpConfigManager,
     McpServerConfig,
     McpTransport, // 移除 McpPrompt, McpTool - 这些现在从 rmcp 导入
@@ -284,30 +284,30 @@ impl McpProvider {
     }
 
     // 异步获取提供商能力
-    fn refresh_provider_capabilities(&mut self,cx: &mut Context<Self>) {
+    fn refresh_provider_capabilities(&mut self, cx: &mut Context<Self>) {
         cx.spawn(async move |this, cx| {
             // 通过 McpRegistry 获取实例
             println!("正在获取MCP服务的能力信息...");
             if let Ok(instances) = McpRegistry::get_all_instances_static().await {
-               for (provider_id,instance) in instances {
-                // 获取能力信息
-                let tools = instance.tools.clone();
-                let prompts = instance.prompts.clone();
-                let resources = instance.resources.clone();
-                println!(
-                    "获取到 {} 个工具, {} 个提示, {} 个资源",
-                    tools.len(),
-                    prompts.len(),
-                    resources.len()
-                );
-                // 更新缓存和UI
-                this.update(cx, |this, cx| {
-                    this.cached_capabilities
-                        .insert(provider_id.clone(), (tools, prompts, resources));
-                    cx.notify();
-                })
-                .ok();
-               }
+                for (provider_id, instance) in instances {
+                    // 获取能力信息
+                    let tools = instance.tools.clone();
+                    let prompts = instance.prompts.clone();
+                    let resources = instance.resources.clone();
+                    println!(
+                        "获取到 {} 个工具, {} 个提示, {} 个资源",
+                        tools.len(),
+                        prompts.len(),
+                        resources.len()
+                    );
+                    // 更新缓存和UI
+                    this.update(cx, |this, cx| {
+                        this.cached_capabilities
+                            .insert(provider_id.clone(), (tools, prompts, resources));
+                        cx.notify();
+                    })
+                    .ok();
+                }
             }
         })
         .detach();
@@ -330,7 +330,7 @@ impl McpProvider {
 
             if enabled {
                 // 异步刷新能力信息
-                self.refresh_provider_capabilities( cx);
+                self.refresh_provider_capabilities(cx);
                 window.push_notification(
                     format!("MCP服务 '{}' 已启用，正在启动...", provider_name),
                     cx,
@@ -428,7 +428,7 @@ impl McpProvider {
 
     fn toggle_accordion(&mut self, open_ixs: &[usize], _: &mut Window, cx: &mut Context<Self>) {
         self.expanded_providers = open_ixs.to_vec();
-         self.refresh_provider_capabilities( cx);
+        self.refresh_provider_capabilities(cx);
         cx.notify();
     }
 
@@ -996,14 +996,17 @@ impl McpProvider {
                                 )
                             }),
                     )
-                    .when_some(resource.resource.description.clone(), |this, description| {
-                        this.child(
-                            div()
-                                .text_sm()
-                                .text_color(gpui::rgb(0x6B7280))
-                                .child(description),
-                        )
-                    })
+                    .when_some(
+                        resource.resource.description.clone(),
+                        |this, description| {
+                            this.child(
+                                div()
+                                    .text_sm()
+                                    .text_color(gpui::rgb(0x6B7280))
+                                    .child(description),
+                            )
+                        },
+                    )
                     .child(
                         div()
                             .text_xs()

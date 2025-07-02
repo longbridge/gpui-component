@@ -2,7 +2,7 @@ mod adaptor;
 mod client;
 pub(crate) mod server;
 use crate::backoffice::mcp::server::McpServerInstance;
-use crate::models::mcp_config::*;
+use crate::config::mcp_config::*;
 use crate::{
     backoffice::{BoEvent, YamlFile},
     xbus,
@@ -431,10 +431,12 @@ impl Handler<UpdateInstanceTools> for McpRegistry {
             let mut instances = instances.write().await;
             if let Some(instance) = instances.get_mut(&msg.server_id) {
                 instance.tools = msg.tools.clone();
-                  log::info!("Updated tools for server: {}", msg.server_id);
-                 // 发送事件通知
-                xbus::post(BoEvent::McpToolListUpdated(msg.server_id.clone(), msg.tools));
-              
+                log::info!("Updated tools for server: {}", msg.server_id);
+                // 发送事件通知
+                xbus::post(BoEvent::McpToolListUpdated(
+                    msg.server_id.clone(),
+                    msg.tools,
+                ));
             }
         }
         .into_actor(self)
@@ -445,18 +447,19 @@ impl Handler<UpdateInstanceTools> for McpRegistry {
 impl Handler<UpdateInstancePrompts> for McpRegistry {
     type Result = ResponseActFuture<Self, ()>;
 
-    fn handle(&mut self, UpdateInstancePrompts{ server_id,prompts}: UpdateInstancePrompts, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(
+        &mut self,
+        UpdateInstancePrompts { server_id, prompts }: UpdateInstancePrompts,
+        _ctx: &mut Self::Context,
+    ) -> Self::Result {
         let instances = self.instances.clone();
 
         async move {
             let mut instances = instances.write().await;
             if let Some(instance) = instances.get_mut(&server_id) {
                 instance.prompts = prompts.clone();
-                log::info!("Updated prompts for server: {}",server_id);
-                 xbus::post(BoEvent::McpPromptListUpdated(
-                   server_id,
-                    prompts,
-                ));
+                log::info!("Updated prompts for server: {}", server_id);
+                xbus::post(BoEvent::McpPromptListUpdated(server_id, prompts));
             }
         }
         .into_actor(self)
@@ -467,7 +470,14 @@ impl Handler<UpdateInstancePrompts> for McpRegistry {
 impl Handler<UpdateInstanceResources> for McpRegistry {
     type Result = ResponseActFuture<Self, ()>;
 
-    fn handle(&mut self, UpdateInstanceResources{server_id,resources}: UpdateInstanceResources, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(
+        &mut self,
+        UpdateInstanceResources {
+            server_id,
+            resources,
+        }: UpdateInstanceResources,
+        _ctx: &mut Self::Context,
+    ) -> Self::Result {
         let instances = self.instances.clone();
 
         async move {
@@ -492,7 +502,10 @@ impl Handler<UpdateInstanceResources> for McpRegistry {
                     .collect();
 
                 log::info!("Updated resources for server: {}", server_id);
-                xbus::post(BoEvent::McpResourceListUpdated(server_id, instance.resources.clone()));
+                xbus::post(BoEvent::McpResourceListUpdated(
+                    server_id,
+                    instance.resources.clone(),
+                ));
             }
         }
         .into_actor(self)
@@ -530,12 +543,12 @@ impl Handler<UpdateInstanceResourceContent> for McpRegistry {
                             msg.uri,
                             msg.server_id
                         );
-                         // 发送事件通知
-                xbus::post(BoEvent::McpResourceUpdated {
-                    server_id: msg.server_id.clone(),
-                    uri: msg.uri,
-                    contents: msg.contents,
-                });
+                        // 发送事件通知
+                        xbus::post(BoEvent::McpResourceUpdated {
+                            server_id: msg.server_id.clone(),
+                            uri: msg.uri,
+                            contents: msg.contents,
+                        });
                         break;
                     }
                 }

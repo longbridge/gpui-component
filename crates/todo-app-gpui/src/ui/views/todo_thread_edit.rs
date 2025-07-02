@@ -2,12 +2,12 @@ use crate::app::AppExt;
 #[cfg(target_os = "windows")]
 use crate::app::WindowExt;
 use crate::backoffice::mcp::McpRegistry; // 新增导入
-use crate::models::mcp_config::McpConfigManager;
-use crate::models::provider_config::LlmProviders;
-use crate::models::todo_item::*;
-use crate::models::provider_config::ModelInfo;
+use crate::config::mcp_config::McpConfigManager;
+use crate::config::llm_config::LlmProviders;
+use crate::config::todo_item::*;
+use crate::config::llm_config::ModelInfo;
 use crate::ui::views::todo_thread::{Tab, TabPrev};
-use crate::{app::AppState, models::provider_config::LlmProviderInfo};
+use crate::{app::AppState, config::llm_config::LlmProviderConfig};
 
 // 从 rmcp 导入 MCP 类型
 use rmcp::model::{Tool as McpTool};
@@ -166,13 +166,13 @@ impl TodoThreadEdit {
         &mut self,
         checked: bool,
         model: &ModelInfo,
-        provider: &LlmProviderInfo,
+        provider: &LlmProviderConfig,
         cx: &mut Context<Self>,
     ) {
         if checked {
             // 如果选中，则添加
             self.todoitem
-                .selected_model=Some(crate::models::todo_item::SelectedModel {
+                .selected_model=Some(crate::config::todo_item::SelectedModel {
                     provider_id: provider.id.clone(),
                     provider_name: provider.name.clone(),
                     model_id: model.id.clone(),
@@ -190,14 +190,14 @@ impl TodoThreadEdit {
         &mut self,
         checked: bool,
         tool: &McpTool,
-        server: &crate::models::mcp_config::McpServerConfig, // 更新参数类型
+        server: &crate::config::mcp_config::McpServerConfig, // 更新参数类型
         cx: &mut Context<Self>,
     ) {
         if checked {
             // 如果选中，则添加
             self.todoitem
                 .selected_tools
-                .push(crate::models::todo_item::SelectedTool {
+                .push(crate::config::todo_item::SelectedTool {
                     provider_id: server.id.clone(),
                     provider_name: server.name.clone(),
                     description: tool.description.as_ref().map(|s| s.to_string()).unwrap_or_default(),

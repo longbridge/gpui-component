@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use super::todo_thread_edit::TodoThreadEdit;
 use crate::app::{AppState, Quit};
 use crate::ui::views::todo_thread::TodoThreadChat;
-use crate::{models::todo_item::*, ui::views::todo_thread_edit::Save as TodoSaved};
+use crate::{config::todo_item::*, ui::views::todo_thread_edit::Save as TodoSaved};
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::{

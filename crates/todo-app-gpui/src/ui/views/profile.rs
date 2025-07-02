@@ -13,7 +13,7 @@ use gpui_component::{
     *,
 };
 
-use crate::{app::AppState, models::profile_config::ProfileData, ui::components::ViewKit};
+use crate::{app::AppState, config::profile_config::ProfileData, ui::components::ViewKit};
 
 actions!(
     profile,

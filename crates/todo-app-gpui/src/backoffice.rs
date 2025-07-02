@@ -13,7 +13,7 @@ use std::fs::File;
 
 use crate::{
     backoffice::mcp::{server::ResourceDefinition, GetServerInstance, McpRegistry},
-    models::mcp_config::McpServerConfig,
+    config::mcp_config::McpServerConfig,
 };
 
 ///后台事件
@@ -139,7 +139,6 @@ fn mtime<P: AsRef<std::path::Path>>(path: P) -> anyhow::Result<u64> {
 }
 
 pub fn start() -> anyhow::Result<()> {
-    
     let threads = std::thread::available_parallelism()?.get();
     let rt = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(threads)

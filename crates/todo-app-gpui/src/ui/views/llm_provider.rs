@@ -1,5 +1,5 @@
 use crate::app::{AppState, FoEvent};
-use crate::models::provider_config::{ApiType, LlmProviderInfo, LlmProviders, ModelInfo};
+use crate::config::llm_config::{ApiType, LlmProviderConfig, LlmProviders, ModelInfo};
 use crate::ui::components::ViewKit;
 use crate::xbus;
 use gpui::prelude::*;
@@ -41,7 +41,7 @@ struct ProviderInputs {
 
 pub struct LlmProvider {
     focus_handle: FocusHandle,
-    providers: Vec<LlmProviderInfo>,
+    providers: Vec<LlmProviderConfig>,
     expanded_providers: Vec<usize>,
     active_provider_tabs: std::collections::HashMap<usize, usize>,
     editing_provider: Option<usize>,
@@ -99,7 +99,7 @@ impl LlmProvider {
 
     // 刷新提供商列表
     fn refresh_providers(&mut self, cx: &mut Context<Self>) {
-        self.providers =  LlmProviders::list_providers();
+        self.providers = LlmProviders::list_providers();
         cx.notify();
     }
 
@@ -121,7 +121,7 @@ impl LlmProvider {
     }
 
     fn add_provider(&mut self, _: &AddProvider, window: &mut Window, cx: &mut Context<Self>) {
-        let new_provider = LlmProviderInfo::default();
+        let new_provider = LlmProviderConfig::default();
         let new_index = self.providers.len();
         self.providers.push(new_provider);
         self.expanded_providers.push(new_index);
@@ -174,15 +174,13 @@ impl LlmProvider {
                 }
 
                 // 检查是否为新创建的提供商
-                let is_new_provider = provider.id.is_empty()
-                    ||  LlmProviders::get_provider(&provider.id)
-                        .is_none();
+                let is_new_provider =
+                    provider.id.is_empty() || LlmProviders::get_provider(&provider.id).is_none();
 
                 if is_new_provider {
                     // 新建提供商 - 使用 add_provider
                     provider.id = uuid::Uuid::new_v4().to_string();
-                    match  LlmProviders::add_provider(provider.clone())
-                    {
+                    match LlmProviders::add_provider(provider.clone()) {
                         Ok(id) => {
                             provider.id = id;
                             window.push_notification(
@@ -199,8 +197,7 @@ impl LlmProvider {
                     }
                 } else {
                     // 更新现有提供商 - 使用 update_provider
-                    match  LlmProviders::update_provider(&provider.id, provider.clone())
-                    {
+                    match LlmProviders::update_provider(&provider.id, provider.clone()) {
                         Ok(_) => {
                             window.push_notification(
                                 format!("成功更新服务提供商 \"{}\"", provider.name),
@@ -277,8 +274,7 @@ impl LlmProvider {
             let provider_id = provider.id.clone();
 
             // 使用 LlmProviderManager 删除提供商
-            match  LlmProviders::delete_provider(&provider_id)
-            {
+            match LlmProviders::delete_provider(&provider_id) {
                 Ok(_) => {
                     // 从本地列表中删除
                     self.providers.remove(index);
@@ -326,8 +322,7 @@ impl LlmProvider {
             let provider_id = provider.id.clone();
 
             // 使用 LlmProviderManager 切换启用状态
-            match  LlmProviders::toggle_provider(&provider_id, enabled)
-            {
+            match LlmProviders::toggle_provider(&provider_id, enabled) {
                 Ok(_) => {
                     provider.enabled = enabled;
 
@@ -370,8 +365,7 @@ impl LlmProvider {
                 }
 
                 // 同步到 LlmProviderManager 并保存
-                match LlmProviders::update_provider(&provider_id, provider_clone)
-                {
+                match LlmProviders::update_provider(&provider_id, provider_clone) {
                     Ok(_) => {
                         self.save_config(cx);
                         cx.notify();
@@ -494,7 +488,7 @@ impl LlmProvider {
         };
     }
 
-    fn render_config_content_static(provider: &LlmProviderInfo) -> impl IntoElement {
+    fn render_config_content_static(provider: &LlmProviderConfig) -> impl IntoElement {
         v_flex().gap_4().child(
             v_flex()
                 .gap_2()

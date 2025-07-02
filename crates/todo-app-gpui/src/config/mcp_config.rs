@@ -1,4 +1,4 @@
-use crate::models::mcp_config_path;
+use crate::config::mcp_config_path;
 use gpui::SharedString;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
