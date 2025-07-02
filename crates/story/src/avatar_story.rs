@@ -5,7 +5,7 @@ use gpui::{
 use gpui_component::{
     avatar::{Avatar, AvatarGroup},
     dock::PanelControl,
-    v_flex, IconName, Sizable as _, StyledExt,
+    v_flex, ActiveTheme, IconName, Sizable as _, StyledExt,
 };
 
 use crate::section;
@@ -51,7 +51,7 @@ impl Focusable for AvatarStory {
 }
 
 impl Render for AvatarStory {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .gap_4()
             .child(
@@ -138,6 +138,16 @@ impl Render for AvatarStory {
                         .src("https://i.pravatar.cc/200?u=a")
                         .with_size(px(100.))
                         .rounded(px(20.)),
+                ),
+            )
+            .child(
+                section("Custom Style").child(
+                    Avatar::new()
+                        .src("https://i.pravatar.cc/200?u=c")
+                        .with_size(px(100.))
+                        .border_3()
+                        .border_color(cx.theme().foreground)
+                        .shadow_sm(),
                 ),
             )
     }
