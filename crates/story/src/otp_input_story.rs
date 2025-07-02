@@ -10,8 +10,10 @@ use gpui_component::{
     v_flex, FocusableCycle, Sizable, StyledExt,
 };
 
-use crate::section;
-actions!(story, [Tab, TabPrev]);
+use crate::{
+    input_story::{Tab, TabPrev},
+    section,
+};
 
 const CONTEXT: &str = "OtpInputStory";
 

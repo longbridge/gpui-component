@@ -8,7 +8,7 @@ use gpui_component::{
     h_flex, v_flex, IconName, Sizable,
 };
 
-actions!(story, [Disabled, Loading, Selected, Compact]);
+actions!(story1, [Disabled, Loading, Selected, Compact]);
 
 pub struct ToggleStory {
     focus_handle: gpui::FocusHandle,

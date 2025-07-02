@@ -10,9 +10,7 @@ use gpui_component::{
 };
 use serde::{Deserialize, Serialize};
 use std::{sync::Arc, time::Duration};
-use story::{Assets, ButtonStory, IconStory, StoryContainer};
-
-actions!(story, [Quit]);
+use story::{Assets, ButtonStory, IconStory, Quit, StoryContainer};
 
 const TILES_DOCK_AREA: DockAreaTab = DockAreaTab {
     id: "story-tiles",

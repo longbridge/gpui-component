@@ -4,14 +4,16 @@ use gpui::{
 };
 use regex::Regex;
 
-use crate::section;
 use gpui_component::{
     button::{Button, ButtonVariants},
     input::{InputEvent, InputState, MaskPattern, NumberInput, NumberInputEvent, StepAction},
     v_flex, FocusableCycle, IconName, Sizable,
 };
 
-actions!(story, [Tab, TabPrev]);
+use crate::{
+    input_story::{Tab, TabPrev},
+    section,
+};
 
 const CONTEXT: &str = "NumberInputStory";
 

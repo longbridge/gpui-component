@@ -564,8 +564,8 @@ impl Render for TodoThreadChat {
                                 ),
                         ),
                 ),
-            )
-            .child(
+            ).when(self.todoitem.status==TodoStatus::Alert||self.todoitem.status==TodoStatus::InProgress||self.todoitem.status==TodoStatus::Suspended||self.todoitem.status==TodoStatus::Todo, |this|
+            this.child(
                 // 聊天输入区域 - 固定在底部
                 v_flex()
                     .p_1()
@@ -670,5 +670,7 @@ impl Render for TodoThreadChat {
                             ),
                     ),
             )
+            )
+            
     }
 }

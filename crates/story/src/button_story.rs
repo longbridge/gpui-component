@@ -12,7 +12,7 @@ use gpui_component::{
 
 use crate::section;
 
-actions!(story, [Disabled, Loading, Selected, Compact]);
+actions!(story2, [Disabled, Loading, Selected, Compact]);
 
 pub struct ButtonStory {
     focus_handle: gpui::FocusHandle,

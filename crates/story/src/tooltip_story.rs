@@ -16,10 +16,10 @@ use gpui_component::{
 
 use crate::{section, Story};
 
-actions!(story, [Info]);
+actions!(story, [Info1]);
 
 pub fn init(cx: &mut App) {
-    cx.bind_keys([KeyBinding::new("ctrl-shift-delete", Info, Some("Tooltip"))]);
+    cx.bind_keys([KeyBinding::new("ctrl-shift-delete", Info1, Some("Tooltip"))]);
 }
 
 pub struct TooltipStory {
@@ -77,7 +77,7 @@ impl Render for TooltipStory {
                     )
                     .child(Button::new("btn1").label("Info").tooltip_with_action(
                         "This is a tooltip with Action for display keybinding.",
-                        &Info,
+                        &Info1,
                         Some("Tooltip"),
                     ))
                     .child(
@@ -105,7 +105,7 @@ impl Render for TooltipStory {
                 section("Label Tooltip").child(div().child("Hover me").id("tooltip-2").tooltip(
                     |window, cx| {
                         Tooltip::new("This is a Label")
-                            .action(&Info, Some("Tooltip"))
+                            .action(&Info1, Some("Tooltip"))
                             .build(window, cx)
                     },
                 )),

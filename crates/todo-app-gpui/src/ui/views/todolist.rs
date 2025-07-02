@@ -512,7 +512,7 @@ impl TodoList {
         println!("Follow action triggered");
         if let Some(mut todo) = self.selected_todo.clone() {
             todo.follow = !todo.follow;
-            TodoManager::update_todo(todo);
+            TodoManager::update_todo(todo).ok();
             self.set_active_tab(self.active_tab_ix, window, cx);
         }
     }
@@ -520,7 +520,7 @@ impl TodoList {
         println!("Redo action triggered");
         if let Some(mut todo) = self.selected_todo.clone() {
             todo.status = TodoStatus::Todo;
-            TodoManager::update_todo(todo);
+            TodoManager::update_todo(todo).ok();
             self.set_active_tab(self.active_tab_ix, window, cx);
         }
     }
@@ -528,7 +528,7 @@ impl TodoList {
         println!("Completed action triggered");
         if let Some(mut todo) = self.selected_todo.clone() {
             todo.status = TodoStatus::Done;
-            TodoManager::update_todo(todo);
+            TodoManager::update_todo(todo).ok();
             self.set_active_tab(self.active_tab_ix, window, cx);
         }
     }
@@ -541,21 +541,21 @@ impl TodoList {
                 todo.status = TodoStatus::Suspended;
             }
 
-            TodoManager::update_todo(todo);
+            TodoManager::update_todo(todo).ok();
             self.set_active_tab(self.active_tab_ix, window, cx);
         }
     }
     fn clone_todo(&mut self, _: &Clone, window: &mut Window, cx: &mut Context<Self>) {
         println!("Clone action triggered");
         if let Some(todo) = self.selected_todo.clone() {
-            TodoManager::copy_todo(&todo.id);
+            TodoManager::copy_todo(&todo.id).ok();
             self.set_active_tab(self.active_tab_ix, window, cx);
         }
     }
 
     fn delete_todo(&mut self, _: &Delete, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(todo) = self.selected_todo.clone() {
-            TodoManager::delete_todo(&todo.id);
+            TodoManager::delete_todo(&todo.id).ok();
             self.set_active_tab(self.active_tab_ix, window, cx);
         }
     }

@@ -9,9 +9,10 @@ use gpui_component::{
     h_flex, v_flex, ActiveTheme, FocusableCycle, IconName, Sizable,
 };
 
-use crate::section;
-
-actions!(story, [Tab, TabPrev]);
+use crate::{
+    input_story::{Tab, TabPrev},
+    section,
+};
 
 const CONTEXT: &str = "DropdownStory";
 pub fn init(cx: &mut App) {

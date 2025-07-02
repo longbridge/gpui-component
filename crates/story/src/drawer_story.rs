@@ -20,9 +20,7 @@ use gpui_component::{
     wry, ActiveTheme as _, ContextModal as _, Icon, IconName, Placement,
 };
 
-use crate::section;
-
-actions!(story, [TestAction]);
+use crate::{modal_story::TestAction, section};
 
 pub struct ListItemDeletegate {
     story: WeakEntity<DrawerStory>,

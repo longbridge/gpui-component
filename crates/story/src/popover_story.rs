@@ -1,23 +1,19 @@
 use gpui::{
-    actions, div, px, Action, App, AppContext, Context, Corner, DismissEvent, Element, Entity,
-    EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding, MouseButton,
+    div, px, App, AppContext, Context, Corner, DismissEvent, Element, Entity, EventEmitter,
+    FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding, MouseButton,
     ParentElement as _, Render, Styled as _, Window,
 };
 use gpui_component::{
     button::{Button, ButtonVariants as _},
     divider::Divider,
     h_flex,
-    input::{InputState, TextInput},
+    input::{InputState, Paste, TextInput},
     popover::{Popover, PopoverContent},
     v_flex, ContextModal, Sizable,
 };
 use serde::Deserialize;
 
-#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
-#[action(namespace = story, no_json)]
-struct Info(usize);
-
-actions!(story, [Copy, Paste, Cut, SearchAll, ToggleCheck]);
+use crate::menu_story::{Copy, Cut, Info, SearchAll, ToggleCheck};
 
 pub fn init(cx: &mut App) {
     cx.bind_keys([

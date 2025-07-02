@@ -3,7 +3,6 @@ use gpui::{
     InteractiveElement, IntoElement, KeyBinding, ParentElement as _, Render, Styled, Window,
 };
 
-use crate::section;
 use gpui_component::{
     button::Button,
     h_flex,
@@ -11,7 +10,10 @@ use gpui_component::{
     v_flex, FocusableCycle, Sizable,
 };
 
-actions!(story, [Tab, TabPrev]);
+use crate::{
+    input_story::{Tab, TabPrev},
+    section,
+};
 
 const CONTEXT: &str = "TextareaStory";
 
@@ -171,7 +173,8 @@ impl Render for TextareaStory {
             .child(
                 section("Textarea Auto Grow").child(
                     v_flex()
-                        .w_full().debug_selector(|| "textarea-auto-grow".to_string())
+                        .w_full()
+                        .debug_selector(|| "textarea-auto-grow".to_string())
                         .child(TextInput::new(&self.textarea_auto_grow)),
                 ),
             )

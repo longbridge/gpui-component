@@ -13,7 +13,7 @@ use crate::section;
 
 #[derive(Action, Clone, PartialEq, Deserialize)]
 #[action(namespace = story, no_json)]
-struct Info(usize);
+pub struct Info(pub usize);
 
 actions!(story, [Copy, Paste, Cut, SearchAll, ToggleCheck]);
 
