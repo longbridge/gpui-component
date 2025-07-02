@@ -144,8 +144,7 @@ impl RenderOnce for Avatar {
 fn extract_text_initials(text: &str) -> String {
     let mut result = text
         .split(" ")
-        .map(|word| word.chars().next().map(|c| c.to_string()))
-        .flatten()
+        .flat_map(|word| word.chars().next().map(|c| c.to_string()))
         .take(2)
         .collect::<Vec<String>>()
         .join("");
