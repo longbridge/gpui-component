@@ -39,6 +39,7 @@ impl Gallery {
                 vec![
                     StoryContainer::panel::<AccordionStory>(window, cx),
                     StoryContainer::panel::<AlertStory>(window, cx),
+                    StoryContainer::panel::<AvatarStory>(window, cx),
                     StoryContainer::panel::<BadgeStory>(window, cx),
                     StoryContainer::panel::<ButtonStory>(window, cx),
                     StoryContainer::panel::<CalendarStory>(window, cx),
