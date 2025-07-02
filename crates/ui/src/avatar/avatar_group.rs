@@ -5,6 +5,7 @@ use gpui::{
 
 use crate::{avatar::Avatar, ActiveTheme, Sizable, Size, StyledExt as _};
 
+/// A grouped avatars to display in a compact layout.
 #[derive(IntoElement)]
 pub struct AvatarGroup {
     base: Div,
@@ -27,11 +28,13 @@ impl AvatarGroup {
         }
     }
 
+    /// Add a child avatar to the group.
     pub fn child(mut self, avatar: Avatar) -> Self {
         self.avatars.push(avatar);
         self
     }
 
+    /// Add multiple child avatars to the group.
     pub fn children(mut self, avatars: impl IntoIterator<Item = Avatar>) -> Self {
         self.avatars.extend(avatars);
         self

@@ -33,6 +33,9 @@ static AVATAR_COLORS: LazyLock<[Hsla; 17]> = LazyLock::new(|| {
     ]
 });
 
+/// User avatar element.
+///
+/// We can use [`Sizable`] trait to set the size of the avatar (see also: [`avatar_size`] about the size in pixels).
 #[derive(IntoElement)]
 pub struct Avatar {
     base: Div,

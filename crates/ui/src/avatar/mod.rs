@@ -7,11 +7,12 @@ pub use avatar_group::*;
 use crate::{Icon, Size, StyledExt as _};
 use gpui::{px, rems, Div, Img, IntoElement, Pixels, Styled};
 
+/// Returns the size of the avatar based on the given [`Size`].
 pub(super) fn avatar_size(size: Size) -> Pixels {
     match size {
         Size::Large => px(80.),
         Size::Medium => px(48.),
-        Size::Small => px(32.),
+        Size::Small => px(24.),
         Size::XSmall => px(20.),
         Size::Size(size) => size,
     }
