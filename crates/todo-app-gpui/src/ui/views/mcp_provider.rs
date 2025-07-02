@@ -1,5 +1,5 @@
-use crate::app::{AppState, FoEvent};
-use crate::backoffice::mcp::server::ResourceDefinition;
+use crate::app::FoEvent;
+use crate::backoffice::mcp::server::{ResourceDefinition, ResourceTemplateDefinition};
 use crate::backoffice::mcp::McpRegistry; // 新增导入
 use crate::config::mcp_config::{
     McpConfigManager,
@@ -20,7 +20,7 @@ use gpui_component::{
     *,
 };
 // 从 rmcp 导入需要的类型
-use rmcp::model::{Prompt as McpPrompt, Resource as McpResource, Tool as McpTool};
+use rmcp::model::{Prompt as McpPrompt, Tool as McpTool};
 
 actions!(
     mcp_provider,
@@ -55,8 +55,15 @@ pub struct McpProvider {
     editing_provider: Option<usize>,
     provider_inputs: std::collections::HashMap<usize, ProviderInputs>,
     // 缓存从 Registry 获取的能力数据
-    cached_capabilities:
-        std::collections::HashMap<String, (Vec<McpTool>, Vec<McpPrompt>, Vec<ResourceDefinition>)>,
+    cached_capabilities: std::collections::HashMap<
+        String,
+        (
+            Vec<McpTool>,
+            Vec<McpPrompt>,
+            Vec<ResourceDefinition>,
+            Vec<ResourceTemplateDefinition>,
+        ),
+    >,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -289,11 +296,20 @@ impl McpProvider {
             // 通过 McpRegistry 获取实例
             println!("正在获取MCP服务的能力信息...");
             if let Ok(instances) = McpRegistry::get_all_instances_static().await {
-                for (provider_id, instance) in instances {
+                for instance in instances {
                     // 获取能力信息
-                    let tools = instance.tools.clone();
-                    let prompts = instance.prompts.clone();
-                    let resources = instance.resources.clone();
+                    let mut tools = instance.tools.clone();
+                    tools.sort_by(|a, b| a.name.cmp(&b.name));
+                    let mut prompts = instance.prompts.clone();
+                    prompts.sort_by(|a, b| a.name.cmp(&b.name));
+                    let mut resources = instance.resources.clone();
+                    resources.sort_by(|a, b| a.resource.uri.cmp(&b.resource.uri));
+                    let mut resource_templates = instance.resource_templates.clone();
+                    resource_templates.sort_by(|a, b| {
+                        a.resource_template
+                            .uri_template
+                            .cmp(&b.resource_template.uri_template)
+                    });
                     println!(
                         "获取到 {} 个工具, {} 个提示, {} 个资源",
                         tools.len(),
@@ -302,8 +318,10 @@ impl McpProvider {
                     );
                     // 更新缓存和UI
                     this.update(cx, |this, cx| {
-                        this.cached_capabilities
-                            .insert(provider_id.clone(), (tools, prompts, resources));
+                        this.cached_capabilities.insert(
+                            instance.config.id.clone(),
+                            (tools, prompts, resources, resource_templates),
+                        );
                         cx.notify();
                     })
                     .ok();
@@ -358,7 +376,12 @@ impl McpProvider {
     fn get_provider_capabilities(
         &self,
         provider_id: &str,
-    ) -> (Vec<McpTool>, Vec<McpPrompt>, Vec<ResourceDefinition>) {
+    ) -> (
+        Vec<McpTool>,
+        Vec<McpPrompt>,
+        Vec<ResourceDefinition>,
+        Vec<ResourceTemplateDefinition>,
+    ) {
         // 从缓存中获取数据
         self.cached_capabilities
             .get(provider_id)
@@ -436,7 +459,7 @@ impl McpProvider {
         &mut self,
         _: &Entity<InputState>,
         event: &InputEvent,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         match event {
@@ -832,34 +855,30 @@ impl McpProvider {
     fn render_capability_content_interactive(
         &mut self,
         provider: &McpServerConfig,
-        provider_index: usize,
+        _provider_index: usize,
         tab_index: usize,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
+        let (tools, prompts, resources, resource_templates) =
+            self.get_provider_capabilities(&provider.id);
         div().child(match tab_index {
             0 => div().child(Self::render_config_content_static(provider)),
             1 => {
                 // 从缓存获取资源信息 - 使用静态方法
-                let (_, _, resources) = self.get_provider_capabilities(&provider.id);
                 div().child(Self::render_resources_content_static(&resources))
             }
             2 => {
                 // 资源模板 - 暂时显示空内容
-                div().child(
-                    div()
-                        .text_sm()
-                        .text_color(gpui::rgb(0x9CA3AF))
-                        .child("暂无可用资源模板"),
-                )
+                div().child(Self::render_resource_templates_content_static(
+                    &resource_templates,
+                ))
             }
             3 => {
                 // 从缓存获取工具信息
-                let (tools, _, _) = self.get_provider_capabilities(&provider.id);
                 div().child(Self::render_tools_content_static(&tools))
             }
             4 => {
                 // 从缓存获取提示信息
-                let (_, prompts, _) = self.get_provider_capabilities(&provider.id);
                 div().child(Self::render_prompts_content_static(&prompts))
             }
             _ => div().child("未知能力"),
@@ -1012,6 +1031,78 @@ impl McpProvider {
                             .text_xs()
                             .text_color(gpui::rgb(0x9CA3AF))
                             .child(resource.resource.uri.clone()),
+                    )
+            }))
+            .when(resources.is_empty(), |this| {
+                this.child(
+                    div()
+                        .text_sm()
+                        .text_color(gpui::rgb(0x9CA3AF))
+                        .child("暂无可用资源"),
+                )
+            })
+    }
+
+    // 渲染资源的静态方法
+    fn render_resource_templates_content_static(
+        resources: &[ResourceTemplateDefinition],
+    ) -> impl IntoElement {
+        v_flex()
+            .gap_2()
+            .children(resources.iter().map(|resource| {
+                v_flex()
+                    .gap_2()
+                    .p_3()
+                    .bg(gpui::rgb(0xFAFAFA))
+                    .rounded_md()
+                    .border_1()
+                    .border_color(gpui::rgb(0xE5E7EB))
+                    .child(
+                        h_flex()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                Icon::new(IconName::Database)
+                                    .small()
+                                    .text_color(gpui::rgb(0x059669)),
+                            )
+                            .child(
+                                div().font_medium().text_color(gpui::rgb(0x111827)).child(
+                                    SharedString::new(resource.resource_template.name.clone()),
+                                ),
+                            )
+                            .when_some(
+                                resource.resource_template.mime_type.clone(),
+                                |this, mime_type| {
+                                    this.child(
+                                        div()
+                                            .px_2()
+                                            .py_1()
+                                            .bg(gpui::rgb(0xE0F2FE))
+                                            .text_color(gpui::rgb(0x0369A1))
+                                            .rounded_md()
+                                            .text_xs()
+                                            .child(mime_type),
+                                    )
+                                },
+                            ),
+                    )
+                    .when_some(
+                        resource.resource_template.description.clone(),
+                        |this, description| {
+                            this.child(
+                                div()
+                                    .text_sm()
+                                    .text_color(gpui::rgb(0x6B7280))
+                                    .child(description),
+                            )
+                        },
+                    )
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(gpui::rgb(0x9CA3AF))
+                            .child(resource.resource_template.uri_template.clone()),
                     )
             }))
             .when(resources.is_empty(), |this| {

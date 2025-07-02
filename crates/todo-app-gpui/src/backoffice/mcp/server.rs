@@ -26,7 +26,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::process::Command;
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub enum McpCapability {
     Resources,
     Tools,
@@ -80,7 +80,7 @@ impl ResourceDefinition {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ResourceTemplateDefinition {
-    pub resource_templates: McpResourceTemplate,
+    pub resource_template: McpResourceTemplate,
     pub subscribed: bool,
     pub subscribable: bool,
 }
@@ -89,13 +89,13 @@ impl std::ops::Deref for ResourceTemplateDefinition {
     type Target = McpResourceTemplate;
 
     fn deref(&self) -> &Self::Target {
-        &self.resource_templates
+        &self.resource_template
     }
 }
 
 impl std::ops::DerefMut for ResourceTemplateDefinition {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.resource_templates
+        &mut self.resource_template
     }
 }
 
@@ -251,7 +251,7 @@ impl McpServerInstance {
             self.resource_templates = resource_templates
                 .into_iter()
                 .map(|r| ResourceTemplateDefinition {
-                    resource_templates: r,
+                    resource_template: r,
                     subscribed: false,
                     subscribable,
                 })

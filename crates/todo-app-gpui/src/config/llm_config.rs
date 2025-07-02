@@ -356,7 +356,7 @@ impl LlmProviderConfig {
             &self.api_url.replace("/v1", ""),
         )?;
         // 异步获取模型列表
-        let models = client
+        let mut models = client
             .list_models()
             .await?
             .into_iter()
@@ -377,7 +377,9 @@ impl LlmProviderConfig {
                     limits,
                 }
             })
-            .collect();
+            .collect::<Vec<ModelInfo>>();
+        // Sort models by id before returning
+        models.sort_by(|a, b| a.display_name.cmp(&b.display_name));
         Ok(models)
     }
 
@@ -452,9 +454,9 @@ impl LlmProviderConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct LlmProviders;
+pub struct LlmProviderManager;
 
-impl LlmProviders {
+impl LlmProviderManager {
     /// 从文件加载所有提供商
     fn load_providers() -> Vec<LlmProviderConfig> {
         let config_path = provider_config_path();

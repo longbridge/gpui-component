@@ -99,9 +99,7 @@ impl Handler<ExitFromRegistry> for McpServerActor {
 
     fn handle(&mut self, _msg: ExitFromRegistry, _ctx: &mut Self::Context) -> Self::Result {
         log::info!("MCP Server {} exiting", self.config.id);
-
         let server_id = self.config.id.clone();
-
         // 异步停止实例
         async move {
             // 通知 Registry 移除实例缓存
@@ -181,7 +179,6 @@ impl McpRegistry {
                 .filter(|config| config.enabled)
                 .map(|config| config.id.as_str())
                 .collect();
-
             // 移除不再启用的服务器
             let servers_to_remove: Vec<String> = self
                 .servers
@@ -205,7 +202,6 @@ impl McpRegistry {
                     );
                 }
             }
-
             // 添加新启用的服务器
             for config in configs.iter().filter(|c| c.enabled) {
                 if !self.servers.contains_key(&config.id) {
@@ -380,18 +376,20 @@ impl Handler<GetServerInstance> for McpRegistry {
 
 // 定义获取所有实例的消息
 #[derive(Message)]
-#[rtype(result = "HashMap<String, McpServerInstance>")]
+#[rtype(result = "Vec<McpServerInstance>")]
 pub struct GetAllInstances;
 
 impl Handler<GetAllInstances> for McpRegistry {
-    type Result = ResponseActFuture<Self, HashMap<String, McpServerInstance>>;
+    type Result = ResponseActFuture<Self, Vec<McpServerInstance>>;
 
     fn handle(&mut self, _msg: GetAllInstances, _ctx: &mut Self::Context) -> Self::Result {
         let instances = self.instances.clone();
 
         async move {
             let instances = instances.read().await;
-            instances.clone()
+            let mut instances_vec: Vec<_> = instances.values().cloned().collect();
+            instances_vec.sort_by(|a, b| a.config.name.cmp(&b.config.name));
+            instances_vec
         }
         .into_actor(self)
         .boxed_local()

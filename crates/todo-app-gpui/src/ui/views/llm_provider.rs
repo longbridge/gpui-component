@@ -1,5 +1,5 @@
 use crate::app::{AppState, FoEvent};
-use crate::config::llm_config::{ApiType, LlmProviderConfig, LlmProviders, ModelInfo};
+use crate::config::llm_config::{ApiType, LlmProviderConfig, LlmProviderManager, ModelInfo};
 use crate::ui::components::ViewKit;
 use crate::xbus;
 use gpui::prelude::*;
@@ -87,7 +87,7 @@ impl LlmProvider {
         // let llm_provider_manager = LlmProviderManager::load();
         Self {
             focus_handle: cx.focus_handle(),
-            providers: LlmProviders::list_providers(),
+            providers: LlmProviderManager::list_providers(),
             expanded_providers: vec![],
             active_provider_tabs: std::collections::HashMap::new(),
             editing_provider: None,
@@ -99,14 +99,14 @@ impl LlmProvider {
 
     // 刷新提供商列表
     fn refresh_providers(&mut self, cx: &mut Context<Self>) {
-        self.providers = LlmProviders::list_providers();
+        self.providers = LlmProviderManager::list_providers();
         cx.notify();
     }
 
     // 保存配置到文件
     fn save_config(&mut self, cx: &mut Context<Self>) {
         println!("正在保存配置...");
-        if let Err(e) = LlmProviders::save_providers(&self.providers[..]) {
+        if let Err(e) = LlmProviderManager::save_providers(&self.providers[..]) {
             eprintln!("保存配置失败: {}", e);
         }
         xbus::post(&FoEvent::LlmConfigUpdated);
@@ -174,13 +174,13 @@ impl LlmProvider {
                 }
 
                 // 检查是否为新创建的提供商
-                let is_new_provider =
-                    provider.id.is_empty() || LlmProviders::get_provider(&provider.id).is_none();
+                let is_new_provider = provider.id.is_empty()
+                    || LlmProviderManager::get_provider(&provider.id).is_none();
 
                 if is_new_provider {
                     // 新建提供商 - 使用 add_provider
                     provider.id = uuid::Uuid::new_v4().to_string();
-                    match LlmProviders::add_provider(provider.clone()) {
+                    match LlmProviderManager::add_provider(provider.clone()) {
                         Ok(id) => {
                             provider.id = id;
                             window.push_notification(
@@ -197,7 +197,7 @@ impl LlmProvider {
                     }
                 } else {
                     // 更新现有提供商 - 使用 update_provider
-                    match LlmProviders::update_provider(&provider.id, provider.clone()) {
+                    match LlmProviderManager::update_provider(&provider.id, provider.clone()) {
                         Ok(_) => {
                             window.push_notification(
                                 format!("成功更新服务提供商 \"{}\"", provider.name),
@@ -274,7 +274,7 @@ impl LlmProvider {
             let provider_id = provider.id.clone();
 
             // 使用 LlmProviderManager 删除提供商
-            match LlmProviders::delete_provider(&provider_id) {
+            match LlmProviderManager::delete_provider(&provider_id) {
                 Ok(_) => {
                     // 从本地列表中删除
                     self.providers.remove(index);
@@ -322,7 +322,7 @@ impl LlmProvider {
             let provider_id = provider.id.clone();
 
             // 使用 LlmProviderManager 切换启用状态
-            match LlmProviders::toggle_provider(&provider_id, enabled) {
+            match LlmProviderManager::toggle_provider(&provider_id, enabled) {
                 Ok(_) => {
                     provider.enabled = enabled;
 
@@ -365,7 +365,7 @@ impl LlmProvider {
                 }
 
                 // 同步到 LlmProviderManager 并保存
-                match LlmProviders::update_provider(&provider_id, provider_clone) {
+                match LlmProviderManager::update_provider(&provider_id, provider_clone) {
                     Ok(_) => {
                         self.save_config(cx);
                         cx.notify();
@@ -445,23 +445,35 @@ impl LlmProvider {
         provider.map(|provider| {
             if tab_index == 1 {
                 cx.spawn(async move |this, cx| {
-                    let models = provider.load_models().await;
-                    match models {
-                        Ok(models) => {
-                            this.update(cx, |this, cx| {
-                                if let Some(provider) = this.providers.get_mut(provider_index) {
-                                    provider.models = models;
-                                    LlmProviders::update_provider(&provider.id, provider.clone())
-                                        .unwrap_or_else(|e| {
-                                            eprintln!("更新模型列表失败: {}", e);
-                                        });
+                    let timeout_duration = std::time::Duration::from_secs(5); // 30秒超时
+                    let models_future = provider.load_models();
+                    let this = this.clone();
+                    match tokio::time::timeout(timeout_duration, models_future).await {
+                        Ok(models_result) => {
+                            this.update(cx, |this, cx| match models_result {
+                                Ok(models) => {
+                                    if let Some(provider) = this.providers.get_mut(provider_index) {
+                                        provider.models = models;
+                                        LlmProviderManager::update_provider(
+                                            &provider.id,
+                                            provider.clone(),
+                                        )
+                                        .unwrap_or_else(
+                                            |e| {
+                                                eprintln!("更新模型列表失败: {}", e);
+                                            },
+                                        );
+                                    }
+                                    cx.notify();
                                 }
-                                cx.notify();
+                                Err(e) => {
+                                    eprintln!("加载模型列表失败: {}", e);
+                                }
                             })
                             .ok();
                         }
-                        Err(e) => {
-                            eprintln!("加载模型列表失败: {}", e);
+                        Err(_) => {
+                            eprintln!("加载模型列表超时（5秒）");
                         }
                     }
                 })

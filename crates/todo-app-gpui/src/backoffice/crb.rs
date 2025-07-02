@@ -29,8 +29,8 @@ use crate::backoffice::mcp::server::McpServerInstance;
 use crate::backoffice::mcp::{
     GetAllInstances, GetServerInstance, McpCallToolRequest, McpCallToolResult, McpRegistry,
 };
-use std::{collections::HashMap, sync::Arc};
 use actix::Arbiter;
+use std::{collections::HashMap, sync::Arc};
 use tokio::sync::{mpsc, oneshot};
 
 /// 跨运行时通信消息定义
@@ -71,7 +71,7 @@ pub enum CrossRuntimeMessage {
     /// 用于从 GPUI 获取当前所有 MCP 服务器的状态列表
     GetAllInstances {
         /// 响应通道，返回服务器 ID 到实例的映射
-        response: oneshot::Sender<HashMap<String, McpServerInstance>>,
+        response: oneshot::Sender<Vec<McpServerInstance>>,
     },
 }
 
@@ -135,7 +135,6 @@ impl CrossRuntimeBridge {
     /// }
     /// ```
     pub async fn get_instance(&self, server_id: String) -> Option<McpServerInstance> {
-
         let (response_tx, response_rx) = oneshot::channel();
         println!("请求获取服务器实例 in GUI: {}", server_id);
         // 发送请求到 Actix 运行时
@@ -231,7 +230,7 @@ impl CrossRuntimeBridge {
     ///     println!("服务器 {}: {:?}", id, instance.status);
     /// }
     /// ```
-    pub async fn get_all_instances(&self) -> HashMap<String, McpServerInstance> {
+    pub async fn get_all_instances(&self) -> Vec<McpServerInstance> {
         let (response_tx, response_rx) = oneshot::channel();
 
         if self
@@ -241,7 +240,7 @@ impl CrossRuntimeBridge {
             })
             .is_err()
         {
-            return HashMap::new();
+            return Vec::new();
         }
 
         response_rx.await.unwrap_or_default()
@@ -287,7 +286,7 @@ impl McpRegistry {
         CROSS_RUNTIME_BRIDGE.set(bridge.clone()).ok();
         // 启动桥接消息处理器
         // 这个任务会一直运行，直到应用程序结束
-      Arbiter::new().spawn(async move {
+        Arbiter::new().spawn(async move {
             while let Some(message) = receiver.recv().await {
                 match message {
                     // 处理获取服务器实例请求
@@ -295,13 +294,17 @@ impl McpRegistry {
                         server_id,
                         response,
                     } => {
-                        println!("请求获取服务器实例 in Actix({}): {}",actix::System::current().id(), server_id);
+                        println!(
+                            "请求获取服务器实例 in Actix({}): {}",
+                            actix::System::current().id(),
+                            server_id
+                        );
                         let registry = McpRegistry::global();
                         let result = registry.send(GetServerInstance { server_id }).await;
                         let instance = result.unwrap_or(None);
                         println!("获取服务器实例结果: {:?}", instance);
                         // 忽略发送错误，因为接收端可能已经超时或取消
-                        if let Err(err)= response.send(instance) {
+                        if let Err(err) = response.send(instance) {
                             eprintln!("Failed to send response for GetInstance: {:?}", err);
                         }
                     }
@@ -420,7 +423,7 @@ impl McpRegistry {
     ///
     /// - `Ok(HashMap<String, McpServerInstance>)`: 所有服务器实例
     /// - `Err(anyhow::Error)`: 桥接器未初始化或通信失败
-    pub async fn get_all_instances_static() -> anyhow::Result<HashMap<String, McpServerInstance>> {
+    pub async fn get_all_instances_static() -> anyhow::Result<Vec<McpServerInstance>> {
         if let Some(bridge) = Self::get_bridge() {
             Ok(bridge.get_all_instances().await)
         } else {

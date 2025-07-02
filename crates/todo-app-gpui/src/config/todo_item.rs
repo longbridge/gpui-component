@@ -1,4 +1,6 @@
-use crate::config::{llm_config::LlmProviders, mcp_config::McpConfigManager, todo_config_path};
+use crate::config::{
+    llm_config::LlmProviderManager, mcp_config::McpConfigManager, todo_config_path,
+};
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -217,7 +219,7 @@ impl Todo {
 
     /// 添加选中的模型
     pub fn add_selected_model(&mut self, provider_id: &str, model_id: &str) -> anyhow::Result<()> {
-        if let Some(provider) = LlmProviders::get_provider(provider_id) {
+        if let Some(provider) = LlmProviderManager::get_provider(provider_id) {
             if let Some(model) = provider.models.iter().find(|m| m.id == model_id) {
                 let selected_model = SelectedModel {
                     provider_id: provider_id.to_string(),
@@ -362,7 +364,7 @@ impl Todo {
     pub fn get_model_capabilities_summary(&self) -> Vec<String> {
         let mut capabilities = Vec::new();
         for selected_model in &self.selected_model {
-            if let Some(provider) = LlmProviders::get_provider(&selected_model.provider_id) {
+            if let Some(provider) = LlmProviderManager::get_provider(&selected_model.provider_id) {
                 if let Some(model) = provider
                     .models
                     .iter()

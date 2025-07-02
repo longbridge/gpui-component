@@ -1,6 +1,6 @@
 use super::*;
 use crate::backoffice::mcp::McpRegistry; // 新增导入
-use crate::{app::AppState, config::{mcp_config::McpConfigManager, llm_config::LlmProviders}};
+use crate::{app::AppState, config::{mcp_config::McpConfigManager, llm_config::LlmProviderManager}};
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::{
@@ -102,7 +102,7 @@ impl TodoThreadChat {
         let todo_edit_entity = cx.entity().clone();
 
         window.open_drawer_at(placement, cx, move |drawer, _window, drawer_cx| {
-            let providers =  LlmProviders::get_enabled_providers().clone();
+            let providers =  LlmProviderManager::get_enabled_providers().clone();
             let expanded_providers = todo_edit_entity.read(drawer_cx).expanded_providers.clone();
             let todoitem = todo_edit_entity.read(drawer_cx).todoitem.clone();
             let mut accordion = Accordion::new("chat-model-providers")

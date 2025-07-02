@@ -1,5 +1,5 @@
 use crate::backoffice::mcp::{GetServerInstance, McpRegistry};
-use crate::config::llm_config::LlmProviders;
+use crate::config::llm_config::LlmProviderManager;
 use crate::config::mcp_config::McpConfigManager;
 use crate::config::profile_config::ProfileManager;
 use crate::config::todo_item::TodoManager;

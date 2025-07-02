@@ -3,7 +3,7 @@ use crate::app::AppExt;
 use crate::app::WindowExt;
 use crate::backoffice::mcp::McpRegistry; // 新增导入
 use crate::config::mcp_config::McpConfigManager;
-use crate::config::llm_config::LlmProviders;
+use crate::config::llm_config::LlmProviderManager;
 use crate::config::todo_item::*;
 use crate::config::llm_config::ModelInfo;
 use crate::ui::views::todo_thread::{Tab, TabPrev};
@@ -385,7 +385,7 @@ impl TodoThreadEdit {
         let todo_edit_entity = cx.entity().clone();
         window.open_drawer_at(placement, cx, move |drawer, _window, drawer_cx| {
             // 从 entity 中读取当前的模型数据
-            let providers =  LlmProviders::get_enabled_providers().clone();
+            let providers =  LlmProviderManager::get_enabled_providers().clone();
             let expanded_providers = todo_edit_entity.read(drawer_cx).expanded_providers.clone();
             let todoitem = todo_edit_entity.read(drawer_cx).todoitem.clone();
 
