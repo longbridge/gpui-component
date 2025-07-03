@@ -37,7 +37,7 @@ pub struct Drawer {
 }
 
 impl Drawer {
-    pub fn new(_: &mut Window, cx: &mut App) -> Self {
+    pub fn new(_window: &mut Window, cx: &mut App) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
             placement: Placement::Right,

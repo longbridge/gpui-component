@@ -180,7 +180,7 @@ pub struct DragDrop(pub AnyDrag);
 impl EventEmitter<DragDrop> for Tiles {}
 
 impl Tiles {
-    pub fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(_window: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
             panels: vec![],

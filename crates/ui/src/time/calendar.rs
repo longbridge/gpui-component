@@ -271,7 +271,7 @@ pub struct CalendarState {
 }
 
 impl CalendarState {
-    pub fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(_window: &mut Window, cx: &mut Context<Self>) -> Self {
         let today = Local::now().naive_local().date();
         Self {
             focus_handle: cx.focus_handle(),
