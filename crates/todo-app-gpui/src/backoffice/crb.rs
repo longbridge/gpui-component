@@ -288,22 +288,26 @@ impl McpRegistry {
         // 这个任务会一直运行，直到应用程序结束
         Arbiter::new().spawn(async move {
             while let Some(message) = receiver.recv().await {
+                println!(
+                    "Received message in Actix({}): {:?}",
+                    actix::System::current().id(),
+                    message
+                );
                 match message {
                     // 处理获取服务器实例请求
                     CrossRuntimeMessage::GetInstance {
                         server_id,
                         response,
                     } => {
-                        // println!(
-                        //     "请求获取服务器实例 in Actix({}): {}",
-                        //     actix::System::current().id(),
-                        //     server_id
-                        // );
                         let registry = McpRegistry::global();
                         let result = registry.send(GetServerInstance { server_id }).await;
-                        let instance = result.unwrap_or(None);
-                        //println!("获取服务器实例结果: {:?}", instance);
-                        // 忽略发送错误，因为接收端可能已经超时或取消
+                        let instance = match result {
+                            Ok(instance) => instance,
+                            Err(e) => {
+                                eprintln!("Failed to get server instance: {}", e);
+                                None
+                            }
+                        };
                         if let Err(err) = response.send(instance) {
                             eprintln!("Failed to send response for GetInstance: {:?}", err);
                         }
