@@ -437,6 +437,7 @@ impl Node {
                                         ordered: state.ordered,
                                         todo: checked.is_some(),
                                     }),
+                                    false,
                                     true,
                                     text_view_style,
                                     window,
@@ -500,6 +501,7 @@ impl Node {
                                         ordered: state.ordered,
                                         todo: checked.is_some(),
                                     }),
+                                    true,
                                     true,
                                     text_view_style,
                                     window,
@@ -623,6 +625,7 @@ impl Node {
     pub(crate) fn render(
         self,
         list_state: Option<ListState>,
+        is_root: bool,
         is_last_child: bool,
         style: &TextViewStyle,
         window: &mut Window,
@@ -640,8 +643,8 @@ impl Node {
                 .children({
                     let children_len = children.len();
                     children.into_iter().enumerate().map(move |(index, c)| {
-                        let is_last_child = index == children_len - 1;
-                        c.render(None, is_last_child, style, window, cx)
+                        let is_last_child = is_root && index == children_len - 1;
+                        c.render(None, false, is_last_child, style, window, cx)
                     })
                 })
                 .into_any_element(),

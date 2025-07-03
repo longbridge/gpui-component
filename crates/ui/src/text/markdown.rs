@@ -124,7 +124,7 @@ impl Element for MarkdownElement {
 
             let mut el = div()
                 .map(|this| match root {
-                    Ok(node) => this.child(node.render(None, true, &self.style, window, cx)),
+                    Ok(node) => this.child(node.render(None, true, true, &self.style, window, cx)),
                     Err(err) => this.child(
                         v_flex()
                             .gap_1()
