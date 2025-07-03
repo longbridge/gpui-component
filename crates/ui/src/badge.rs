@@ -10,7 +10,6 @@ enum BadgeVariant {
     #[default]
     Number,
     Dot,
-
     Icon(Box<Icon>),
 }
 
