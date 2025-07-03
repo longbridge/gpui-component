@@ -38,7 +38,7 @@ pub struct McpCallToolRequest {
 pub struct McpCallToolResult {
     pub id: String,
     pub name: String,
-    pub result: Vec<Content>,
+    pub content: Vec<Content>,
     pub is_error: bool,
 }
 
@@ -132,22 +132,22 @@ impl McpRegistry {
         McpRegistry::from_registry()
     }
 
-    /// 静态方法：调用工具
-    pub async fn call_tool(
-        server_id: &str,
-        tool_name: &str,
-        args: &str,
-    ) -> anyhow::Result<McpCallToolResult> {
-        let registry = Self::global();
-        let result = registry
-            .send(McpCallToolRequest {
-                id: server_id.to_string(),
-                name: tool_name.to_string(),
-                arguments: args.to_string(),
-            })
-            .await?;
-        Ok(result)
-    }
+    // /// 静态方法：调用工具
+    // pub async fn call_tool(
+    //     server_id: &str,
+    //     tool_name: &str,
+    //     args: &str,
+    // ) -> anyhow::Result<McpCallToolResult> {
+    //     let registry = Self::global();
+    //     let result = registry
+    //         .send(McpCallToolRequest {
+    //             id: server_id.to_string(),
+    //             name: tool_name.to_string(),
+    //             arguments: args.to_string(),
+    //         })
+    //         .await?;
+    //     Ok(result)
+    // }
 
     // /// 静态方法：获取服务器实例
     // pub async fn get_instance(server_id: &str) -> anyhow::Result<Option<McpServerInstance>> {
@@ -290,17 +290,21 @@ impl Handler<McpCallToolRequest> for McpRegistry {
             let instances = instances.read().await;
             if let Some(instance) = instances.get(&server_id) {
                 // 调用工具
+                println!(
+                    "Calling tool '{}' on server instance '{}'",
+                    tool_name, server_id
+                );
                 match instance.call_tool(&tool_name, &arguments).await {
                     Ok(result) => McpCallToolResult {
                         id: server_id.clone(),
                         name: tool_name,
-                        result: result.content,
+                        content: result.content,
                         is_error: false,
                     },
                     Err(err) => McpCallToolResult {
                         id: server_id.clone(),
                         name: tool_name,
-                        result: vec![Content::text(format!("Tool execution error: {}", err))],
+                        content: vec![Content::text(format!("Tool execution error: {}", err))],
                         is_error: true,
                     },
                 }
@@ -309,7 +313,7 @@ impl Handler<McpCallToolRequest> for McpRegistry {
                 McpCallToolResult {
                     id: server_id.clone(),
                     name: tool_name,
-                    result: vec![Content::text(format!(
+                    content: vec![Content::text(format!(
                         "MCP Server instance '{}' not found",
                         server_id
                     ))],

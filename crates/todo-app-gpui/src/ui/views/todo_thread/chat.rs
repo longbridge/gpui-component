@@ -44,44 +44,50 @@ impl TodoThreadChat {
                 .iter()
                 .find(|provider| provider.id == selected_model.provider_id)
                 .cloned();
-            let model_id = selected_model.model_id.clone();
-            let history_message = self.chat_messages.clone();
-            self.chat_messages.push(ChatMessage {
-                id: format!("assistant_{}", chrono::Utc::now().timestamp()),
-                role: MessageRole::Assistant,
-                content: "".to_string(),
-                timestamp: chrono::Utc::now(),
-                model: Some(selected_model.model_name.clone()),
-                tools_used: vec![],
-                source: todo.id.clone(),
-            });
+
             if let Some(provider) = provider_info {
-                // let (tx, mut rx) = tokio::sync::mpsc::channel(1000);
-                // let _sub = xbus::subscribe(move |msg: &Message| {
-                //     tx.try_send(msg.clone()).unwrap_or_else(|e| {
-                //         tracing::error!("Failed to send message to channel: {}", e);
-                //     });
-                // });
-                tokio::spawn(async move {
-                    if let Err(err) = provider
-                        .stream_chat(&source, &model_id, &message_content, history_message)
-                        .await
-                    {
-                        tracing::error!("Error streaming chat: {}", err);
-                    }
+                let model_id = selected_model.model_id.clone();
+                let history_message = self.chat_messages.clone();
+                self.chat_messages.push(ChatMessage {
+                    id: format!("assistant_{}", chrono::Utc::now().timestamp()),
+                    role: MessageRole::Assistant,
+                    content: "".to_string(),
+                    timestamp: chrono::Utc::now(),
+                    model: Some(selected_model.model_name.clone()),
+                    tools_used: vec![],
+                    source: todo.id.clone(),
                 });
+
+                if !self.todoitem.selected_tools.is_empty() {
+                    let tools = self.todoitem.selected_tools.clone();
+                    tokio::spawn(async move {
+                        if let Err(err) = provider
+                            .stream_chat_with_tools(
+                                &source,
+                                &model_id,
+                                &message_content,
+                                tools,
+                                history_message,
+                            )
+                            .await
+                        {
+                            tracing::error!("Error streaming chat: {}", err);
+                        }
+                    });
+                } else {
+                    tokio::spawn(async move {
+                        if let Err(err) = provider
+                            .stream_chat(&source, &model_id, &message_content, history_message)
+                            .await
+                        {
+                            tracing::error!("Error streaming chat: {}", err);
+                        }
+                    });
+                }
             }
         }
         // 从选择的工具中获取所有工具信息
-        if !self.todoitem.selected_tools.is_empty() {
-            let tool_names: Vec<String> = self
-                .todoitem
-                .selected_tools
-                .iter()
-                .map(|tool| format!("{} ({})", tool.tool_name, tool.provider_name))
-                .collect();
-            println!("使用工具: {}", tool_names.join(", "));
-        }
+
         // cx.notify();
     }
 }

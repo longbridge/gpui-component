@@ -3,7 +3,7 @@ use crate::config::mcp_config::{McpServerConfig, McpTransport};
 use gpui_component::IconName;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ACCEPT, AUTHORIZATION};
 use rig::tool::ToolSet;
-use rmcp::model::{ReadResourceRequestParam, ResourceContents};
+use rmcp::model::{ClientRequest, PingRequestMethod, ReadResourceRequestParam, ResourceContents};
 use rmcp::transport::sse_client::SseClientConfig;
 use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
 use rmcp::transport::{ConfigureCommandExt, StreamableHttpClientTransport, TokioChildProcess};
@@ -211,11 +211,13 @@ impl McpServerInstance {
     ) -> anyhow::Result<Self> {
         let server_info = client.peer_info().cloned().unwrap_or_default();
         println!("Server info: {:#?}", server_info);
+        let mut keepalive = false;
         if let Some(capability) = server_info.capabilities.tools {
             let tools = client.list_all_tools().await?;
             self.tools = tools;
             if let Some(list_changed) = capability.list_changed {
                 if list_changed {
+                    keepalive = true;
                     println!("Server supports tool list changes.");
                 } else {
                     println!("Server does not support tool list changes.");
@@ -228,6 +230,7 @@ impl McpServerInstance {
             self.prompts = prompts;
             if let Some(list_changed) = capability.list_changed {
                 if list_changed {
+                    keepalive = true;
                     println!("Server supports prompt list changes.");
                 } else {
                     println!("Server does not support prompt list changes.");
@@ -258,6 +261,7 @@ impl McpServerInstance {
                 .collect();
             if let Some(list_changed) = capability.list_changed {
                 if list_changed {
+                    keepalive = true;
                     println!("Server supports resource list changes.");
                 } else {
                     println!("Server does not support resource list changes.");
@@ -265,6 +269,7 @@ impl McpServerInstance {
             }
             if let Some(subscribe) = capability.subscribe {
                 if subscribe {
+                    keepalive = true;
                     println!("Server supports resource subscription.");
                 } else {
                     println!("Server does not support resource subscription.");
@@ -280,6 +285,26 @@ impl McpServerInstance {
         }
         if !self.resources.is_empty() || !self.resource_templates.is_empty() {
             self.capabilities.push(McpCapability::Resources);
+        }
+        if keepalive {
+            // 启动一个后台任务来保持连接
+            let client_clone = self.client.clone().unwrap();
+
+            actix_rt::spawn(async move {
+                loop {
+                    let req = ClientRequest::PingRequest(rmcp::model::PingRequest {
+                        method: PingRequestMethod,
+                        extensions: Default::default(),
+                    });
+                    if let Err(err) = client_clone.send_request(req).await {
+                        println!("Ping error: {err:?}");
+                        break;
+                    } else {
+                        println!("Ping success");
+                    }
+                    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                }
+            });
         }
         Ok(self)
     }

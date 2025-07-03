@@ -86,9 +86,23 @@ impl RenderOnce for TodoItem {
                             .overflow_x_hidden()
                             .child(
                                 div().text_ellipsis().child(
-                                    Label::new(self.item.description.clone())
-                                        .text_color(description_color)
-                                        .when(is_completed, |mut this| {
+                                    Label::new(if self.item.description.chars().count() > 10 {
+                                        format!(
+                                            "{}...",
+                                            &self
+                                                .item
+                                                .description
+                                                .chars()
+                                                .take(10)
+                                                .collect::<String>()
+                                        )
+                                    } else {
+                                        self.item.description.clone()
+                                    })
+                                    .text_color(description_color)
+                                    .when(
+                                        is_completed,
+                                        |mut this| {
                                             let style = this
                                                 .text_style()
                                                 .get_or_insert_with(Default::default);
@@ -97,7 +111,8 @@ impl RenderOnce for TodoItem {
                                                 color: Some(Hsla::black()),
                                             });
                                             this.italic()
-                                        }),
+                                        },
+                                    ),
                                 ),
                             )
                             .child(

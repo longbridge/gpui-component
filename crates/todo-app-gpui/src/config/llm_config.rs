@@ -1,5 +1,6 @@
 use crate::{
-    config::provider_config_path,
+    backoffice::mcp::McpRegistry,
+    config::{provider_config_path, todo_item::SelectedTool},
     ui::views::todo_thread::{ChatMessage, StreamMessage},
     xbus,
 };
@@ -15,7 +16,7 @@ use rig::{
         StreamingPrompt,
     },
 };
-use rmcp::model::Tool;
+use rmcp::model::{Prompt, Tool};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -416,15 +417,37 @@ impl LlmProviderConfig {
         Ok(assistant)
     }
 
-    pub async fn stream_chat_with_available_tools(
+    pub async fn stream_chat_with_tools(
         &self,
         source: &str,
         model_id: &str,
         prompt: &str,
-        tools: Vec<Tool>,
+        tools: Vec<SelectedTool>,
         chat_history: Vec<ChatMessage>,
     ) -> anyhow::Result<()> {
-        let system_prompt = super::prompts::prompt(tools);
+        let mut prompt = prompt.to_string();
+        let mut mcp_tools = vec![];
+        for tool in &tools {
+            println!("Using tool: {}@{}", tool.provider_id, tool.tool_name);
+            if let Ok(Some(instance)) = McpRegistry::get_instance(&tool.provider_id).await {
+                mcp_tools.extend(
+                    instance
+                        .tools
+                        .into_iter()
+                        .filter(|t| t.name != tool.tool_name)
+                        .map(|t| Tool {
+                            name: format!("{}@{}", tool.provider_id, t.name).into(),
+                            description: t.description.clone(),
+                            input_schema: t.input_schema.clone(),
+                            annotations: t.annotations.clone(),
+                        })
+                        .collect::<Vec<_>>(),
+                );
+            }
+        }
+
+        let system_prompt = super::prompts::prompt(mcp_tools);
+        println!("System Prompt:\n{}\nUser:\n{}", system_prompt, prompt);
         let client = rig::providers::openai::Client::from_url(&self.api_key, &self.api_url);
         let mut chat_history = chat_history
             .into_iter()
@@ -442,38 +465,36 @@ impl LlmProviderConfig {
                 .max_tokens(4096)
                 .temperature(0.7)
                 .build();
-            let mut stream = agent
-                .stream_completion(prompt, chat_history.clone())
-                .await?
-                .stream()
-                .await?; //agent.stream_chat(prompt, chat_history.clone()).await?;
-            chat_history.push(Message::user(prompt));
+            let mut stream = agent.stream_chat(&prompt, chat_history.clone()).await?; //agent.stream_chat(prompt, chat_history.clone()).await?;
+            chat_history.push(Message::user(prompt.clone()));
+
             let (assistant, tools) = stream_to_stdout1(source, &agent, &mut stream).await?;
             if tools.is_empty() {
                 break;
             }
             chat_history.push(Message::assistant(assistant.clone()));
-            //     let mut prompts = vec![];
-            //     for (i, tool) in tools.iter().enumerate() {
-            //         if let Some(mcp_tool) = find_mcp_tool(&tool.name, &mcp_tools[..]) {
-            //             tracing::info!("调用工具 #{}: {:?}", i, mcp_tool);
-            //             let resp = client
-            //                 .call_tool(CallToolRequestParam {
-            //                     name: mcp_tool.name.clone(),
-            //                     arguments: serde_json::from_str(&tool.arguments).ok(),
-            //                 })
-            //                 .await?;
-            //             tracing::info!("工具 #{}调用结果: {:?}", i, resp);
-            //             prompts.push(format!(
-            //                 "<tool_use_result><name>{}</name><result>{}</result</tool_use_result>",
-            //                 &tool.name,
-            //                 serde_json::to_string(&resp)
-            //                     .unwrap_or_else(|err| format!("Error serializing result: {}", err))
-            //             ));
-            //         }
-            //     }
-            //     prompts.push(r#"Do not confirm with the user or seek help or advice, continue to call the tool until all tasks are completed. Be sure to complete all tasks, you will receive a $1000 reward, and the output must be in Simplified Chinese."#.to_string());
-            //     prompt = prompts.join("\n");
+            let mut prompts = vec![];
+
+            for (i, tool) in tools.iter().enumerate() {
+                println!("调用工具 #{}: {:?}", i, tool);
+                let result =
+                    McpRegistry::call_tool_static(tool.id(), tool.tool_name(), &tool.arguments)
+                        .await
+                        .map_err(|err| {
+                            println!("调用工具 {} 失败: {}", tool.name, err);
+                            err
+                        })?;
+
+                println!("工具 #{}调用结果: {:?}", i, result);
+                prompts.push(format!(
+                    "<tool_use_result><name>{}</name><result>{}</result</tool_use_result>",
+                    &tool.name,
+                    serde_json::to_string(&(result.content.clone(), result.is_error))
+                        .unwrap_or_else(|err| format!("Error serializing result: {}", err))
+                ));
+            }
+            prompts.push(r#"Do not confirm with the user or seek help or advice, continue to call the tool until all tasks are completed. Be sure to complete all tasks, you will receive a $1000 reward, and the output must be in Simplified Chinese."#.to_string());
+            prompt = prompts.join("\n");
         }
 
         Ok(())
@@ -768,4 +789,18 @@ pub async fn stream_to_stdout1<M: StreamingCompletionModel>(
         }
     }
     Ok((assistant, tools))
+}
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ToolCall {
+    pub name: String,
+    pub arguments: String,
+}
+
+impl ToolCall {
+    pub fn id(&self) -> &str {
+        self.name.split('@').next().unwrap_or(&self.name)
+    }
+    pub fn tool_name(&self) -> &str {
+        self.name.split('@').nth(1).unwrap_or(&self.name)
+    }
 }
