@@ -58,7 +58,7 @@ impl TodoThreadEdit {
         self.cycle_focus(false, window, cx);
     }
 
-    fn save(&mut self, save: &Save, _window: &mut Window, cx: &mut Context<Self>) {
+    fn save(&mut self, save: &Save, window: &mut Window, cx: &mut Context<Self>) {
         self.todoitem.description = self.description_input.read(cx).value().to_string();
        
         match TodoManager::update_todo(self.todoitem.clone()) {
@@ -69,7 +69,7 @@ impl TodoThreadEdit {
             }
             Err(err) => {
                 // TODO: 处理保存失败的情况
-                _window.push_notification(
+                window.push_notification(
                     (
                         NotificationType::Error,
                         SharedString::new(format!("Todo保存失败-{}", err)),
@@ -219,18 +219,11 @@ impl TodoThreadEdit {
         cx.spawn(async move |_this, cx| {
             // 通过 McpRegistry 获取工具列表
             if let Ok(Some(instance)) = McpRegistry::get_instance(&server_id).await {
-                match instance.list_tools().await {
-                    Ok(tools) => {
-                        // 更新缓存并刷新UI
-                        todo_edit_entity.update(cx, |todo_edit, todo_cx| {
+                  let tools=instance.tools;
+                todo_edit_entity.update(cx, |todo_edit, todo_cx| {
                             todo_edit.cached_server_tools.insert(server_id.clone(), tools);
                             todo_cx.notify();
                         }).ok();
-                    }
-                    Err(err) => {
-                        log::error!("Failed to load tools for server {}: {}", server_id, err);
-                    }
-                }
             }
         }).detach();
     }
@@ -241,7 +234,7 @@ impl TodoThreadEdit {
     }
 }
 
-const WIDTH: Pixels = px(500.0);
+const WIDTH: Pixels = px(700.0);
 const HEIGHT: Pixels = px(650.0);
 const SIZE: gpui::Size<Pixels> = size(WIDTH, HEIGHT);
 
@@ -633,17 +626,11 @@ impl TodoThreadEdit {
                     
                     drawer_cx.spawn(async move | cx| {
                         if let Ok(Some(instance)) = McpRegistry::get_instance(&server_id_for_load).await {
-                            match instance.list_tools().await {
-                                Ok(tools) => {
-                                    todo_edit_entity_for_load.update(cx, |todo_edit, todo_cx| {
-                                        todo_edit.cached_server_tools.insert(server_id_for_load.clone(), tools);
-                                        todo_cx.notify();
-                                    }).ok();
-                                }
-                                Err(err) => {
-                                    log::error!("Failed to load tools for server {}: {}", server_id_for_load, err);
-                                }
-                            }
+                            let tools= instance.tools.clone();
+                            todo_edit_entity_for_load.update(cx, |todo_edit, todo_cx| {
+                                todo_edit.cached_server_tools.insert(server_id_for_load.clone(), tools);
+                                todo_cx.notify();
+                            }).ok();
                         }
                     }).detach();
                 }
@@ -1136,7 +1123,7 @@ impl Render for TodoThreadEdit {
                             ).child(
                                 h_flex()
                                     .gap_2()
-                                    .items_center()
+                                    .items_center().justify_between()
                                     .child(
 
                                         h_flex()
@@ -1168,7 +1155,14 @@ impl Render for TodoThreadEdit {
                                                        this.toggle_screen_recording( win, cx);
                                                         cx.notify();
                                                     }))
+                                    )
+                                    
                                     ).child(
+
+                                        h_flex()
+                                    .gap_2()
+                                    .items_center().justify_end()
+                                    .child(
                                         DatePicker::new(&self.due_date_picker).number_of_months(1)
                                         .placeholder("截止日期")
                                         .cleanable()
@@ -1186,10 +1180,13 @@ impl Render for TodoThreadEdit {
                     h_flex().gap_1().child(
                         Button::new("save-btn")
                             .with_variant(ButtonVariant::Primary)
-                            .label("保存")
+                            .label("保存&关闭")
                             .icon(IconName::Check)
                             .on_click(
-                                cx.listener(|this,ev, window, cx| this.save(&Save, window, cx),
+                                cx.listener(|this,ev, window, cx| {
+                                    this.save(&Save, window, cx);
+                                    window.remove_window();
+                                }
                             )),
                     ),
                 ),

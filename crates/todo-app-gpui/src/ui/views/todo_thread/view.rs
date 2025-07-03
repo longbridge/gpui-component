@@ -43,9 +43,21 @@ impl TodoThreadChat {
                                 .child(
                                     div()
                                         .text_xs()
-                                        .text_color(message.role.color())
+                                        .text_color(
+                                            if message.source.as_str()== VPA&& message.role == MessageRole::Assistant {
+                                               gpui::red().to_rgb()
+                                            } else {
+                                               message.role.color()
+                                            }
+                                        )
                                         .font_medium()
-                                        .child(message.role.display_name()),
+                                        .child(
+                                            if message.source.as_str()== VPA&& message.role == MessageRole::Assistant {
+                                                "AI助理"
+                                            } else {
+                                                message.role.display_name()
+                                            }
+                                        ),
                                 )
                                 .child(
                                     div()
@@ -535,6 +547,7 @@ impl Render for TodoThreadChat {
                                         .children(
                                             self.chat_messages
                                                 .iter()
+                                                .filter(|msg| !msg.content.trim().is_empty())
                                                 .map(|msg| self.render_chat_message(msg)),
                                         )
                                         .when(self.is_loading, |this| {

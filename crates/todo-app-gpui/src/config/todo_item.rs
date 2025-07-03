@@ -140,6 +140,16 @@ pub struct Todo {
     pub completed_at: Option<DateTime<Utc>>,
 }
 
+pub const VPA: &str = "agentic-assistant";
+impl Todo {
+    pub fn new_vpa() -> Self {
+        Self {
+            id: VPA.to_string(),
+            ..Default::default()
+        }
+    }
+}
+
 impl Default for Todo {
     fn default() -> Self {
         let now = Utc::now();

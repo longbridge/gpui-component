@@ -7,6 +7,7 @@ use gpui_component::{
     dock::PanelControl,
     dropdown::{Dropdown, DropdownState},
     input::{InputEvent, InputState, TextInput},
+    modal::ModalButtonProps,
     notification::NotificationType,
     text::TextView,
     tooltip::Tooltip,
@@ -562,18 +563,59 @@ impl Render for Profile {
                                         Button::new("input-my-data")
                                             .small()
                                             // .text_sm()
-                                            .label("导入数据")
+                                            .label("导入记忆")
                                             .icon(IconName::Brain)
-                                            .with_variant(ButtonVariant::Secondary)
+                                            .with_variant(ButtonVariant::Info)
                                             .on_click(cx.listener(|this, _, window, cx| {})),
                                     )
                                     .child(
                                         Button::new("export-my-data")
                                             .small()
-                                            .label("导出数据")
+                                            .label("导出记忆")
                                             .icon(IconName::Brain)
-                                            .with_variant(ButtonVariant::Secondary)
+                                            .with_variant(ButtonVariant::Info)
                                             .on_click(cx.listener(|this, _, window, cx| {})),
+                                    )
+                                    .child(
+                                        Button::new("clear-my-data")
+                                            .small()
+                                            .label("清空记忆")
+                                            .icon(IconName::Brain)
+                                            .with_variant(ButtonVariant::Warning)
+                                            .on_click(cx.listener(move |_, _, window, cx| {
+                                                window.open_modal(cx, move |modal, _, _| {
+                                                    modal
+                                                        .rounded_lg()
+                                                        .p_3()
+                                                        .confirm()
+                                                        // .overlay(modal_overlay)
+                                                        // .overlay_closable(overlay_closable)
+                                                        .child("确定清除所有记忆吗？")
+                                                        .button_props(
+                                                            ModalButtonProps::default()
+                                                                .cancel_text("否")
+                                                                .cancel_variant(
+                                                                    ButtonVariant::Secondary,
+                                                                )
+                                                                .ok_text("是")
+                                                                .ok_variant(ButtonVariant::Danger),
+                                                        )
+                                                        .on_ok(|_, window, cx| {
+                                                            window.push_notification(
+                                                                "已清除所有记忆。",
+                                                                cx,
+                                                            );
+                                                            true
+                                                        })
+                                                        .on_cancel(|_, window, cx| {
+                                                            // window.push_notification(
+                                                            //     "You have pressed abort.",
+                                                            //     cx,
+                                                            // );
+                                                            true
+                                                        })
+                                                });
+                                            })),
                                     ),
                             ),
                     ),

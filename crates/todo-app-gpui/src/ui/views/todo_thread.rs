@@ -42,7 +42,7 @@ impl StreamMessage {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MessageRole {
     User,
     Assistant,
@@ -96,7 +96,7 @@ pub struct TodoThreadChat {
     todoitem: Todo,
 }
 
-const WIDTH: Pixels = px(500.0);
+const WIDTH: Pixels = px(700.0);
 const HEIGHT: Pixels = px(650.0);
 const SIZE: gpui::Size<Pixels> = size(WIDTH, HEIGHT);
 
@@ -232,7 +232,7 @@ impl TodoThreadChat {
         if let Some(selected_model) = &self.todoitem.selected_model {
             selected_model.model_name.clone()
         } else {
-            "选择模型".to_string()
+            "".to_string()
         }
     }
 
@@ -241,7 +241,7 @@ impl TodoThreadChat {
         let selected_count = self.todoitem.selected_tools.len();
 
         if selected_count == 0 {
-            "选择工具".to_string()
+            "".to_string()
         } else if selected_count <= 2 {
             self.todoitem
                 .selected_tools

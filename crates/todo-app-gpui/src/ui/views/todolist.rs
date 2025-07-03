@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
 use super::todo_thread_edit::TodoThreadEdit;
-use crate::app::{AppState, Quit};
 use crate::ui::views::todo_thread::TodoThreadChat;
 use crate::{config::todo_item::*, ui::views::todo_thread_edit::Save as TodoSaved};
 use gpui::prelude::*;
@@ -17,19 +16,8 @@ use gpui_component::{
 };
 
 actions!(
-    list_story,
-    [
-        SelectedCompany,
-        New,
-        Open,
-        Edit,
-        Completed,
-        Redo,
-        Pause,
-        Clone,
-        Follow,
-        Delete
-    ]
+    todolist,
+    [New, Open, Edit, Completed, Redo, Pause, Clone, Follow, Delete]
 );
 
 #[derive(IntoElement)]
@@ -310,6 +298,7 @@ impl ListDelegate for TodoListDelegate {
         self.query = query.to_string();
         self.matched_todos = TodoManager::list_todos()
             .iter()
+            .filter(|todo| todo.id != VPA)
             .filter(|todo| {
                 todo.description
                     .to_lowercase()
@@ -460,7 +449,10 @@ impl TodoList {
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let delegate = TodoListDelegate {
-            matched_todos: TodoManager::list_todos(),
+            matched_todos: TodoManager::list_todos()
+                .into_iter()
+                .filter(|todo| todo.id != VPA)
+                .collect(),
             selected_index: None,
             confirmed_index: None,
             query: "".to_string(),
@@ -586,6 +578,18 @@ impl TodoList {
         }
     }
 
+    fn open_vpa(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(todo) = TodoManager::list_todos().iter().find(|todo| todo.id == VPA) {
+            self.selected_todo = Some(todo.clone());
+        } else {
+            // 如果没有找到VPA任务，创建一个新的
+            let new_todo = Todo::new_vpa();
+            self.selected_todo = Some(new_todo.clone());
+            TodoManager::update_todo(new_todo).ok();
+        }
+        self.open_todo(&Open, window, cx);
+    }
+
     fn edit_todo(&mut self, _: &Edit, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(todo) = self.selected_todo.clone() {
             let todo_id = todo.id.clone();
@@ -617,7 +621,10 @@ impl TodoList {
     fn set_todo_filter(&mut self, filter: TodoFilter, _: &mut Window, cx: &mut Context<Self>) {
         self.todo_filter = filter;
         self.todo_list.update(cx, |list, _cx| {
-            let todos = TodoManager::list_todos();
+            let todos: Vec<Todo> = TodoManager::list_todos()
+                .into_iter()
+                .filter(|todo| todo.id != VPA)
+                .collect();
             list.delegate_mut().matched_todos = match filter {
                 TodoFilter::All => todos,
                 TodoFilter::Planned => todos
@@ -640,6 +647,7 @@ impl TodoList {
     }
 
     fn set_active_tab(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
+        println!("Set active tab: {}", ix);
         self.active_tab_ix = ix;
         match ix {
             0 => self.set_todo_filter(TodoFilter::All, window, cx),
@@ -689,7 +697,6 @@ impl Render for TodoList {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .track_focus(&self.focus_handle)
-            //  .on_action(cx.listener(Self::selected_company))
             .on_action(cx.listener(Self::done_todo))
             .on_action(cx.listener(Self::follow_todo))
             .on_action(cx.listener(Self::redo_todo))
@@ -715,12 +722,41 @@ impl Render for TodoList {
                             .on_click(cx.listener(|this, ix: &usize, window, cx| {
                                 this.set_active_tab(*ix, window, cx);
                             }))
-                            .children(vec!["全部", "计划中", "已完成"]), // .suffix(
-                                                                         //     h_flex()
-                                                                         //         .mx_1()
-                                                                         //         .child(Button::new("ear").ghost().xsmall().icon(IconName::Ear))
-                                                                         //         .child(Button::new("eye").ghost().xsmall().icon(IconName::Eye)),
-                                                                         // ),
+                            .children(vec!["全部", "计划中", "已完成"])
+                            .suffix(
+                                h_flex()
+                                    .mx_1()
+                                    .child(
+                                        Button::new("bot-message-square-button")
+                                            .ghost()
+                                            .small()
+                                            .icon(IconName::BotMessageSquare)
+                                            .tooltip("助理")
+                                            .on_click(cx.listener(|this, _ev, window, cx| {
+                                                this.open_vpa(window, cx);
+                                            })),
+                                    )
+                                    // .child(
+                                    //     Button::new("bot-off-button")
+                                    //         .ghost()
+                                    //         .small()
+                                    //         .icon(IconName::BotOff)
+                                    //         .tooltip("休息"), // .on_click(cx.listener(|_this, _ev, window, cx| {
+                                    //                           //     //window.dispatch_action(Box::new(New), cx);
+                                    //                           // })),
+                                    // )
+                                    .child(
+                                        Button::new("plus-button")
+                                            .ghost()
+                                            .small()
+                                            .icon(IconName::Plus)
+                                            .tooltip("新建待办")
+                                            .on_click(cx.listener(|this, _, window, cx| {
+                                                println!("New Todo clicked");
+                                                this.new_todo(&New, window, cx);
+                                            })),
+                                    ),
+                            ),
                     )
                     .child(
                         ButtonGroup::new("button-group")
