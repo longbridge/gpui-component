@@ -93,7 +93,7 @@ impl McpServerWorker {
     fn tick(&mut self, ctx: &mut Context<Self>) {
         if let Some(instance) = self.instance.clone() {
             // 检查实例是否需要保持连接
-            let id = instance.config.id.clone();
+            let name = instance.config.name.clone();
             if instance.keepalive {
                 async move { instance.ping().await }
                     .into_actor(self)
@@ -101,7 +101,7 @@ impl McpServerWorker {
                         if _res.is_err() {
                             this.connect(ctx);
                         } else {
-                            println!("MCP Server {} is keeping alive", id);
+                            println!("MCP Server {} is keeping alive", name);
                         }
                         fut::ready(())
                     })
@@ -115,7 +115,7 @@ impl Actor for McpServerWorker {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Self::Context) {
-        let tick_handle = ctx.run_interval(Duration::from_secs(1), Self::tick);
+        let tick_handle = ctx.run_interval(Duration::from_secs(15), Self::tick);
         self.tick_handle = Some(tick_handle);
         self.connect(ctx);
     }

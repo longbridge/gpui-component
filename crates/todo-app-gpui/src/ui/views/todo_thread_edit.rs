@@ -752,13 +752,13 @@ impl TodoThreadEdit {
                                                                         )
                                                                 ),
                                                         )
-                                                        .child(
-                                                            div()
-                                                                .pl_6()
-                                                                .text_xs()
-                                                                .text_color(gpui::rgb(0x6B7280))
-                                                                .child(tool.description.as_ref().map(|desc|desc.to_string()).unwrap_or_default()),
-                                                        ),
+                                                        // .child(
+                                                        //     div()
+                                                        //         .pl_6()
+                                                        //         .text_xs()
+                                                        //         .text_color(gpui::rgb(0x6B7280))
+                                                        //         .child(tool.description.as_ref().map(|desc|desc.to_string()).unwrap_or_default()),
+                                                        // ),
                                                 )
                                         },
                                     ))
