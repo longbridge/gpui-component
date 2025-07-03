@@ -176,7 +176,7 @@ impl Render for PopoverStory {
                     .child(
                         v_flex().gap_4().child(
                             Popover::new("info-top-left")
-                                .trigger(Button::new("info-top-left").label("Top Left"))
+                                .trigger(Button::new("info-top-left").outline().label("Top Left"))
                                 .content(|window, cx| {
                                     cx.new(|cx| {
                                         PopoverContent::new(window, cx, |_, _| {
@@ -203,7 +203,7 @@ impl Render for PopoverStory {
                     .child(
                         Popover::new("info-top-right")
                             .anchor(Corner::TopRight)
-                            .trigger(Button::new("info-top-right").label("Top Right"))
+                            .trigger(Button::new("info-top-right").outline().label("Top Right"))
                             .content(|window, cx| {
                                 cx.new(|cx| {
                                     PopoverContent::new(window, cx, |_, _| {
@@ -234,14 +234,24 @@ impl Render for PopoverStory {
                         .child(
                             Popover::new("info-bottom-left")
                                 .anchor(Corner::BottomLeft)
-                                .trigger(Button::new("pop").label("Popup with Form").w(px(300.)))
+                                .trigger(
+                                    Button::new("pop")
+                                        .outline()
+                                        .label("Popup with Form")
+                                        .w(px(300.)),
+                                )
                                 .content(move |_, _| form.clone()),
                         )
                         .child(
                             Popover::new("info-bottom-right")
                                 .anchor(Corner::BottomRight)
                                 .mouse_button(MouseButton::Right)
-                                .trigger(Button::new("pop").label("Mouse Right Click").w(px(300.)))
+                                .trigger(
+                                    Button::new("pop")
+                                        .outline()
+                                        .label("Mouse Right Click")
+                                        .w(px(300.)),
+                                )
                                 .content(|window, cx| {
                                     cx.new(|cx| {
                                         PopoverContent::new(window, cx, |_, cx| {

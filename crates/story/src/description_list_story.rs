@@ -19,7 +19,7 @@ use serde::Deserialize;
 struct ChangeSize(Size);
 
 pub struct DescriptionListStory {
-    focus_handle: gpui::FocusHandle,
+    focus_handle: FocusHandle,
     layout: Axis,
     bordered: bool,
     size: Size,
@@ -149,6 +149,7 @@ impl Render for DescriptionListStory {
                     .child(
                         Button::new("size")
                             .small()
+                            .outline()
                             .label(format!("size: {:?}", self.size))
                             .popup_menu({
                                 let size = self.size;

@@ -64,6 +64,7 @@ impl Render for NotificationStory {
             .child(
                 section("Simple Notification").child(
                     Button::new("show-notify-0")
+                        .outline()
                         .label("Show Notification")
                         .on_click(cx.listener(|_, _, window, cx| {
                             window.push_notification("This is a notification.", cx)
@@ -88,7 +89,7 @@ impl Render for NotificationStory {
                     )
                     .child(
                         Button::new("show-notify-error")
-                            .danger()
+                            .outline()
                             .label("Error")
                             .on_click(cx.listener(|_, _, window, cx| {
                                 window.push_notification(
@@ -133,6 +134,7 @@ impl Render for NotificationStory {
             .child(
                 section("With title and action").child(
                     Button::new("show-notify-with-title")
+                        .outline()
                         .label("Notification with Title")
                         .on_click(cx.listener(|_, _, window, cx| {
                             struct TestNotification;
@@ -144,7 +146,7 @@ impl Render for NotificationStory {
                                     .message("There was a problem with your request.")
                                     .autohide(false)
                                     .action(|_, cx| {
-                                        Button::new("try-again").label("Try again").on_click(
+                                        Button::new("try-again").primary().label("Retry").on_click(
                                             cx.listener(|this, _, window, cx| {
                                                 println!("You have clicked the try again action.");
                                                 this.dismiss(window, cx);
@@ -163,6 +165,7 @@ impl Render for NotificationStory {
             .child(
                 section("Custom Notification").child(
                     Button::new("show-notify-custom")
+                        .outline()
                         .label("Show Custom Notification")
                         .on_click(cx.listener(|_, _, window, cx| {
                             window.push_notification(
@@ -184,12 +187,16 @@ impl Render for NotificationStory {
                 section("Manual Close Notification")
                     .child(
                         Button::new("manual-open-notify")
+                            .outline()
                             .label("Show")
                             .on_click(cx.listener(|_, _, window, cx| {
                                 window.push_notification(
                                     Notification::new()
                                         .id::<ManualOpenNotification>()
-                                        .message("You can close this notification by clicking the Close button.")
+                                        .message(
+                                            "You can close this notification by \
+                                            clicking the Close button.",
+                                        )
                                         .autohide(false),
                                     cx,
                                 );
@@ -197,8 +204,8 @@ impl Render for NotificationStory {
                     )
                     .child(
                         Button::new("manual-close-notify")
-                            .danger()
-                            .label("Close")
+                            .outline()
+                            .label("Dismiss All")
                             .on_click(cx.listener(|_, _, window, cx| {
                                 window.remove_notification::<ManualOpenNotification>(cx);
                             })),

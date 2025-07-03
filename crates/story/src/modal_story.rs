@@ -244,17 +244,23 @@ impl Render for ModalStory {
                                     })),
                             ),
                     )
-                    .child(section("Normal Modal").child(
-                        Button::new("show-modal").label("Open Modal...").on_click(
-                            cx.listener(|this, _, window, cx| this.show_modal(window, cx)),
+                    .child(
+                        section("Normal Modal").child(
+                            Button::new("show-modal")
+                                .outline()
+                                .label("Open Modal")
+                                .on_click(
+                                    cx.listener(|this, _, window, cx| this.show_modal(window, cx)),
+                                ),
                         ),
-                    ))
+                    )
                     .child(
                         section("Focus back test")
                             .max_w_md()
                             .child(TextInput::new(&self.input2))
                             .child(
                                 Button::new("test-action")
+                                    .outline()
                                     .label("Test Action")
                                     .flex_shrink_0()
                                     .on_click(|_, window, cx| {
@@ -270,8 +276,8 @@ impl Render for ModalStory {
                     .child(
                         section("Confirm Modal").child(
                             Button::new("confirm-modal0")
-                                .primary()
-                                .label("Submit")
+                                .outline()
+                                .label("Open Confirm Modal")
                                 .on_click(cx.listener(move |_, _, window, cx| {
                                     window.open_modal(cx, move |modal, _, _| {
                                         modal
@@ -298,8 +304,8 @@ impl Render for ModalStory {
                     .child(
                         section("Confirm Modal with custom buttons").child(
                             Button::new("confirm-modal1")
-                                .danger()
-                                .label("Delete Item")
+                                .outline()
+                                .label("Custom Buttons")
                                 .on_click(cx.listener(move |_, _, window, cx| {
                                     window.open_modal(cx, move |modal, _, _| {
                                         modal
@@ -337,6 +343,7 @@ impl Render for ModalStory {
                     .child(
                         section("Alert Modal").child(
                             Button::new("alert-modal")
+                                .outline()
                                 .label("Alert")
                                 .on_click(cx.listener(move |_, _, window, cx| {
                                     window.open_modal(cx, move |modal, _, _| {
@@ -357,6 +364,7 @@ impl Render for ModalStory {
                     .child(
                         section("Scrollable Modal").child(
                             Button::new("scrollable-modal")
+                                .outline()
                                 .label("Scrollable Modal")
                                 .on_click(cx.listener(move |_, _, window, cx| {
                                     window.open_modal(cx, move |modal, _, _| {
@@ -376,6 +384,7 @@ impl Render for ModalStory {
                     .child(
                         section("Custom Modal style").child(
                             Button::new("custom-modal-style")
+                                .outline()
                                 .label("Custom Modal Style")
                                 .on_click(cx.listener(move |_, _, window, cx| {
                                     window.open_modal(cx, move |modal, _, cx| {

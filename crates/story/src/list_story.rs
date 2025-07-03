@@ -371,6 +371,7 @@ impl Render for ListStory {
                     .flex_wrap()
                     .child(
                         Button::new("scroll-top")
+                            .outline()
                             .child("Scroll to Top")
                             .small()
                             .on_click(cx.listener(|this, _, window, cx| {
@@ -381,6 +382,7 @@ impl Render for ListStory {
                     )
                     .child(
                         Button::new("scroll-bottom")
+                            .outline()
                             .child("Scroll to Bottom")
                             .small()
                             .on_click(cx.listener(|this, _, window, cx| {
@@ -395,6 +397,7 @@ impl Render for ListStory {
                     )
                     .child(
                         Button::new("scroll-to-selected")
+                            .outline()
                             .child("Scroll to Selected")
                             .small()
                             .on_click(cx.listener(|this, _, window, cx| {

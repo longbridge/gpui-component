@@ -626,7 +626,7 @@ impl Render for ButtonStory {
             .child(
                 section("Button Group").child(
                     ButtonGroup::new("button-group")
-                        .small()
+                        .outline()
                         .disabled(disabled)
                         .child(
                             Button::new("button-one")

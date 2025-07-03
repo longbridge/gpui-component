@@ -158,6 +158,7 @@ impl Render for TextareaStory {
                                         .gap_2()
                                         .child(
                                             Button::new("btn-insert-text")
+                                                .outline()
                                                 .xsmall()
                                                 .label("Insert Text")
                                                 .on_click(
@@ -166,6 +167,7 @@ impl Render for TextareaStory {
                                         )
                                         .child(
                                             Button::new("btn-replace-text")
+                                                .outline()
                                                 .xsmall()
                                                 .label("Replace Text")
                                                 .on_click(

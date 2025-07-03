@@ -4,7 +4,6 @@ use gpui::{
 };
 
 use gpui_component::{
-    h_flex,
     radio::{Radio, RadioGroup},
     v_flex, ActiveTheme,
 };
@@ -58,25 +57,23 @@ impl Render for RadioStory {
         v_flex()
             .gap_6()
             .child(
-                section("Radio").max_w_md().child(
-                    h_flex()
-                        .w_full()
-                        .gap_4()
-                        .items_start()
-                        .child(Radio::new("radio1").checked(self.radio_check1).on_click(
-                            cx.listener(|this, v, _, _| {
+                section("Radio")
+                    .max_w_md()
+                    .child(
+                        Radio::new("radio1")
+                            .checked(self.radio_check1)
+                            .on_click(cx.listener(|this, v, _, _| {
                                 this.radio_check1 = *v;
-                            }),
-                        ))
-                        .child(
-                            Radio::new("radio2")
-                                .label("Radio")
-                                .checked(self.radio_check2)
-                                .on_click(cx.listener(|this, v, _, _| {
-                                    this.radio_check2 = *v;
-                                })),
-                        ),
-                ),
+                            })),
+                    )
+                    .child(
+                        Radio::new("radio2")
+                            .label("Radio")
+                            .checked(self.radio_check2)
+                            .on_click(cx.listener(|this, v, _, _| {
+                                this.radio_check2 = *v;
+                            })),
+                    ),
             )
             .child(
                 section("Disabled")
@@ -117,17 +114,19 @@ impl Render for RadioStory {
                 section("Radio Group Vertical (With container style)")
                     .max_w_md()
                     .child(
-                        RadioGroup::vertical("radio_group_2")
-                            .w(px(220.))
-                            .p_2()
-                            .border_1()
-                            .border_color(cx.theme().border)
-                            .rounded_md()
-                            .disabled(true)
-                            .child(Radio::new("one1").label("United States"))
-                            .child(Radio::new("one2").label("Canada"))
-                            .child(Radio::new("one3").label("Mexico"))
-                            .selected_index(Some(1)),
+                        v_flex().items_center().content_center().child(
+                            RadioGroup::vertical("radio_group_2")
+                                .w(px(220.))
+                                .p_2()
+                                .border_1()
+                                .border_color(cx.theme().border)
+                                .rounded_md()
+                                .disabled(true)
+                                .child(Radio::new("one1").label("United States"))
+                                .child(Radio::new("one2").label("Canada"))
+                                .child(Radio::new("one3").label("Mexico"))
+                                .selected_index(Some(1)),
+                        ),
                     ),
             )
     }

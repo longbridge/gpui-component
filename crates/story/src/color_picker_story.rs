@@ -5,7 +5,7 @@ use gpui::{
 use gpui_component::{
     blue_500,
     color_picker::{ColorPicker, ColorPickerEvent, ColorPickerState},
-    green_500, red_500, v_flex, yellow_500, Colorize,
+    green_500, red_500, v_flex, yellow_500, Colorize, Sizable,
 };
 
 use crate::section;
@@ -64,7 +64,7 @@ impl Render for ColorPickerStory {
         v_flex().gap_3().child(
             section("Normal")
                 .max_w_md()
-                .child(ColorPicker::new(&self.color).featured_colors(vec![
+                .child(ColorPicker::new(&self.color).small().featured_colors(vec![
                     red_500(),
                     blue_500(),
                     green_500(),

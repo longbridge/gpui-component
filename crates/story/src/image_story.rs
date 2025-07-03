@@ -68,6 +68,7 @@ impl Render for ImageStory {
             .size_full()
             .child(
                 Button::new("switch")
+                    .outline()
                     .label("Switch SVG")
                     .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
                         this.svg_index += 1;

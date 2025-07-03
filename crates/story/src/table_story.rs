@@ -860,6 +860,7 @@ impl Render for TableStory {
                     .gap_2()
                     .child(
                         Button::new("size")
+                            .outline()
                             .small()
                             .label(format!("size: {:?}", self.size))
                             .popup_menu(move |menu, _, _| {
@@ -887,8 +888,9 @@ impl Render for TableStory {
                     )
                     .child(
                         Button::new("scroll-top")
-                            .child("Scroll to Top")
+                            .outline()
                             .small()
+                            .child("Scroll to Top")
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.table.update(cx, |table, cx| {
                                     table.scroll_to_row(0, cx);
@@ -897,8 +899,9 @@ impl Render for TableStory {
                     )
                     .child(
                         Button::new("scroll-bottom")
-                            .child("Scroll to Bottom")
+                            .outline()
                             .small()
+                            .child("Scroll to Bottom")
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.table.update(cx, |table, cx| {
                                     table.scroll_to_row(table.delegate().rows_count(cx) - 1, cx);

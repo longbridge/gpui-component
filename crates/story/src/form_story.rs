@@ -123,6 +123,7 @@ impl Render for FormStory {
                     )
                     .child(
                         ButtonGroup::new("size")
+                            .outline()
                             .small()
                             .child(
                                 Button::new("large")

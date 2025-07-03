@@ -302,7 +302,7 @@ impl Render for Notification {
                     }),
             )
             .when_some(self.action_builder.clone(), |this, action_builder| {
-                this.child(action_builder(window, cx).small().outline().mr_3p5())
+                this.child(action_builder(window, cx).small().mr_3p5())
             })
             .when_some(self.on_click.clone(), |this, on_click| {
                 this.on_click(cx.listener(move |view, event, window, cx| {
