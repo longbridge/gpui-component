@@ -104,5 +104,41 @@ impl Render for BadgeStory {
                         Avatar::new().src("https://avatars.githubusercontent.com/u/5518?v=4"),
                     )),
             )
+            .child(
+                section("Complex use")
+                    .max_w_md()
+                    .child(
+                        Badge::new().count(2).child(
+                            Badge::new()
+                                .icon(IconName::Check)
+                                .large()
+                                .color(sky_500())
+                                .child(
+                                    Avatar::new()
+                                        .large()
+                                        .src("https://avatars.githubusercontent.com/u/5518?v=4"),
+                                ),
+                        ),
+                    )
+                    .child(
+                        Badge::new().dot().color(green_500()).child(
+                            Badge::new().icon(IconName::Star).color(yellow_500()).child(
+                                Avatar::new()
+                                    .src("https://avatars.githubusercontent.com/u/20092316?v=4"),
+                            ),
+                        ),
+                    )
+                    .child(
+                        Badge::new().dot().color(sky_500()).child(
+                            Badge::new()
+                                .icon(IconName::Asterisk)
+                                .small()
+                                .color(green_500())
+                                .child(Avatar::new().small().src(
+                                    "https://avatars.githubusercontent.com/u/22312482?s=64&v=4",
+                                )),
+                        ),
+                    ),
+            )
     }
 }

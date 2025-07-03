@@ -3,7 +3,7 @@ use gpui::{
     RenderOnce, StyleRefinement, Styled, Window,
 };
 
-use crate::{h_flex, red_500, white, ActiveTheme, Icon, StyledExt};
+use crate::{h_flex, red_500, white, ActiveTheme, Icon, Sizable, Size, StyledExt};
 
 #[derive(Default)]
 enum BadgeVariant {
@@ -22,6 +22,7 @@ pub struct Badge {
     variant: BadgeVariant,
     children: Vec<AnyElement>,
     color: Hsla,
+    size: Size,
 }
 
 impl Badge {
@@ -34,6 +35,7 @@ impl Badge {
             variant: Default::default(),
             color: red_500(),
             children: Vec::new(),
+            size: Size::default(),
         }
     }
 
@@ -76,11 +78,24 @@ impl ParentElement for Badge {
     }
 }
 
+impl Sizable for Badge {
+    fn with_size(mut self, size: impl Into<Size>) -> Self {
+        self.size = size.into();
+        self
+    }
+}
+
 impl RenderOnce for Badge {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let visible = match self.variant {
             BadgeVariant::Number => self.count > 0,
             BadgeVariant::Dot | BadgeVariant::Icon(_) => true,
+        };
+
+        let (size, text_size) = match self.size {
+            Size::Large => (px(24.), px(14.)),
+            Size::Medium | Size::Size(_) => (px(16.), px(10.)),
+            Size::Small | Size::XSmall => (px(10.), px(8.)),
         };
 
         div()
@@ -94,9 +109,9 @@ impl RenderOnce for Badge {
                         .justify_center()
                         .items_center()
                         .rounded_full()
-                        .text_color(white())
-                        .text_size(px(10.))
                         .bg(self.color)
+                        .text_color(white())
+                        .text_size(text_size)
                         .map(|this| match self.variant {
                             BadgeVariant::Dot => this.top_0().right_0().size(px(6.)),
                             BadgeVariant::Number => {
@@ -117,8 +132,7 @@ impl RenderOnce for Badge {
                             BadgeVariant::Icon(icon) => this
                                 .right_0()
                                 .bottom_0()
-                                .p(px(1.))
-                                .size_4()
+                                .size(size)
                                 .border_1()
                                 .border_color(cx.theme().background)
                                 .child(icon),
