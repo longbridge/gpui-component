@@ -13,6 +13,19 @@ enum BadgeVariant {
     Icon(Icon),
 }
 
+#[allow(unused)]
+impl BadgeVariant {
+    #[inline]
+    fn is_icon(&self) -> bool {
+        matches!(self, BadgeVariant::Icon(_))
+    }
+
+    #[inline]
+    fn is_number(&self) -> bool {
+        matches!(self, BadgeVariant::Number)
+    }
+}
+
 /// A badge for displaying a count, dot, or icon on an element.
 #[derive(IntoElement)]
 pub struct Badge {
@@ -121,11 +134,20 @@ impl RenderOnce for Badge {
                                     self.count.to_string()
                                 };
 
-                                this.top(px(-3.))
-                                    .right(-px(3. * count.len() as f32))
+                                let (top, left) = match self.size {
+                                    Size::Large => (px(2.), -px(count.len() as f32)),
+                                    Size::Medium | Size::Size(_) => {
+                                        (-px(3.), -px(3.) * count.len())
+                                    }
+                                    Size::Small | Size::XSmall => (-px(4.), -px(4.) * count.len()),
+                                };
+
+                                this.top(top)
+                                    .right(left)
                                     .py_0p5()
                                     .px_0p5()
                                     .min_w_3p5()
+                                    .text_size(px(10.))
                                     .line_height(relative(1.))
                                     .child(count)
                             }

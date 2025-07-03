@@ -3,8 +3,8 @@ use gpui::{
     Styled, Window,
 };
 use gpui_component::{
-    avatar::Avatar, badge::Badge, blue_500, dock::PanelControl, green_500, sky_500, v_flex,
-    yellow_500, Icon, IconName, Sizable as _,
+    avatar::Avatar, badge::Badge, blue_500, dock::PanelControl, green_500, red_500, sky_500,
+    v_flex, yellow_500, Icon, IconName, Sizable as _,
 };
 
 use crate::section;
@@ -108,7 +108,7 @@ impl Render for BadgeStory {
                 section("Complex use")
                     .max_w_md()
                     .child(
-                        Badge::new().count(2).child(
+                        Badge::new().count(212).large().child(
                             Badge::new()
                                 .icon(IconName::Check)
                                 .large()
@@ -121,22 +121,41 @@ impl Render for BadgeStory {
                         ),
                     )
                     .child(
-                        Badge::new().dot().color(green_500()).child(
-                            Badge::new().icon(IconName::Star).color(yellow_500()).child(
-                                Avatar::new()
-                                    .src("https://avatars.githubusercontent.com/u/20092316?v=4"),
-                            ),
+                        Badge::new().count(2).color(green_500()).large().child(
+                            Badge::new()
+                                .icon(IconName::Star)
+                                .large()
+                                .color(yellow_500())
+                                .child(
+                                    Avatar::new().large().src(
+                                        "https://avatars.githubusercontent.com/u/20092316?v=4",
+                                    ),
+                                ),
                         ),
                     )
                     .child(
-                        Badge::new().dot().color(sky_500()).child(
+                        Badge::new().count(3).color(green_500()).child(
                             Badge::new()
                                 .icon(IconName::Asterisk)
-                                .small()
                                 .color(green_500())
-                                .child(Avatar::new().small().src(
-                                    "https://avatars.githubusercontent.com/u/22312482?s=64&v=4",
-                                )),
+                                .child(
+                                    Avatar::new().src(
+                                        "https://avatars.githubusercontent.com/u/22312482?v=4",
+                                    ),
+                                ),
+                        ),
+                    )
+                    .child(
+                        Badge::new().dot().child(
+                            Badge::new()
+                                .icon(IconName::Sun)
+                                .small()
+                                .color(red_500())
+                                .child(
+                                    Avatar::new().small().src(
+                                        "https://avatars.githubusercontent.com/u/150917089?v=4",
+                                    ),
+                                ),
                         ),
                     ),
             )
