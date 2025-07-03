@@ -341,13 +341,13 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node) -> String {
                     });
                 } else {
                     if cfg!(debug_assertions) {
-                        eprintln!("[markdown] unsupported inline html tag: {:#?}", el);
+                        tracing::warn!("unsupported inline html tag: {:#?}", el);
                     }
                 }
             }
             Err(err) => {
                 if cfg!(debug_assertions) {
-                    eprintln!("[markdown] error parsing html: {:#?}", err);
+                    tracing::warn!("failed parsing html: {:#?}", err);
                 }
 
                 text.push_str(&val.value);
@@ -355,7 +355,7 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node) -> String {
         },
         _ => {
             if cfg!(debug_assertions) {
-                eprintln!("[markdown] unsupported inline node: {:#?}", node);
+                tracing::warn!("unsupported inline node: {:#?}", node);
             }
         }
     }
@@ -437,7 +437,7 @@ fn ast_to_node(value: mdast::Node, style: &TextViewStyle, cx: &mut App) -> eleme
             Ok(el) => el,
             Err(err) => {
                 if cfg!(debug_assertions) {
-                    eprintln!("[markdown] error parsing html: {:#?}", err);
+                    tracing::warn!("error parsing html: {:#?}", err);
                 }
 
                 element::Node::Paragraph(val.value.into())
@@ -494,7 +494,7 @@ fn ast_to_node(value: mdast::Node, style: &TextViewStyle, cx: &mut App) -> eleme
         }
         _ => {
             if cfg!(debug_assertions) {
-                eprintln!("[markdown] unsupported node: {:#?}", value);
+                tracing::warn!("unsupported node: {:#?}", value);
             }
             element::Node::Unknown
         }

@@ -201,6 +201,25 @@ impl Paragraph {
             Self::Image { .. } => 1,
         }
     }
+
+    /// Try to merge two paragraphs, if they are both text elements.
+    ///
+    /// - Returns `true` if other have merge into self.
+    /// - Returns `false` if not able to merge.
+    pub fn try_merge(&mut self, other: &Self) -> bool {
+        if let Self::Texts { children, .. } = self {
+            if let Self::Texts {
+                children: other_children,
+                ..
+            } = other
+            {
+                children.extend(other_children.clone());
+                return true;
+            }
+        }
+
+        false
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -262,15 +281,10 @@ pub enum Node {
         html: bool,
     },
     Divider,
-    Ignore,
     Unknown,
 }
 
 impl Node {
-    pub(super) fn is_ignore(&self) -> bool {
-        matches!(self, Self::Ignore)
-    }
-
     pub(super) fn is_list_item(&self) -> bool {
         matches!(self, Self::ListItem { .. })
     }
@@ -283,11 +297,7 @@ impl Node {
     pub(super) fn compact(&self) -> Node {
         match self {
             Self::Root { children } => {
-                let children = children
-                    .iter()
-                    .map(|c| c.compact())
-                    .filter(|c| !c.is_ignore())
-                    .collect::<Vec<_>>();
+                let children = children.iter().map(|c| c.compact()).collect::<Vec<_>>();
                 if children.len() == 1 {
                     children.first().unwrap().compact()
                 } else {
@@ -310,7 +320,13 @@ impl RenderOnce for Paragraph {
 
                 for text_node in children.into_iter() {
                     let text_len = text_node.text.len();
-                    text.push_str(&text_node.text);
+                    let part = if text.len() == 0 {
+                        // trim start for first text
+                        text_node.text.trim_start()
+                    } else {
+                        text_node.text.as_str()
+                    };
+                    text.push_str(&part);
 
                     let mut node_highlights = vec![];
                     for (range, style) in text_node.marks {
@@ -699,10 +715,9 @@ impl Node {
                 .mb(mb)
                 .into_any_element(),
             Node::Break { .. } => div().into_any_element(),
-            Node::Ignore => div().into_any_element(),
             _ => {
                 if cfg!(debug_assertions) {
-                    eprintln!("Unknown implementation: {:?}", self);
+                    tracing::warn!("unknown implementation: {:?}", self);
                 }
 
                 div().into_any_element()
@@ -869,7 +884,6 @@ impl Node {
                 }
             }
             Node::Divider => "---".to_string(),
-            Node::Ignore => "".to_string(),
             Node::Unknown => "".to_string(),
         }
         .trim()
