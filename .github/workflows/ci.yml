@@ -12,7 +12,7 @@ env:
 jobs:
   test:
     name: Test
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
+    # if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
     strategy:
       fail-fast: false
       matrix:
@@ -43,16 +43,6 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: test-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
-      - name: Cache CEF
-        id: cache-cef
-        uses: actions/cache@v4
-        with:
-          path: $HOME/.cef
-          key: cef-${{ env.CEF_VERSION }}-${{ matrix.target }}
-      - name: Init CEF
-        if: ${{ !steps.cache-cef.outputs.cache-hit }}
-        run: |
-          cargo run -p cargo-wef -- wef init
       - name: Typo check
         if: ${{ matrix.run_on == 'macos-latest' }}
         run: |
@@ -62,18 +52,10 @@ jobs:
         if: ${{ matrix.run_on == 'macos-latest' }}
         run: |
           cargo clippy -- --deny warnings
-      - name: Test Linux
-        if: ${{ matrix.run_on == 'ubuntu-latest' }}
+      - name: Test
         run: |
           cargo test --workspace --exclude wef --exclude gpui-webview
-      - name: Test Windows
-        if: ${{ matrix.run_on == 'windows-latest' }}
-        run: |
-          cargo test --workspace --exclude wef --exclude gpui-webview
-      - name: Test MacOS
-        if: ${{ matrix.run_on == 'macos-latest' }}
-        run: |
-          cargo test --workspace --exclude wef --exclude gpui-webview
+
 
   test-wef:
     name: Test Wef
