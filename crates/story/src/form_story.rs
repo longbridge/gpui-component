@@ -183,7 +183,7 @@ impl Render for FormStory {
                     )
                     .child(
                         form_field()
-                            .label("Birthday")
+                            .label("Please select your birthday")
                             .child(DatePicker::new(&self.date))
                             .description("Select your birthday, we will send you a gift."),
                     )

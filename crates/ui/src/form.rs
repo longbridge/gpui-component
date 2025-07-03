@@ -378,14 +378,18 @@ impl RenderOnce for FormField {
                                 .items_center()
                                 .when_some(self.label, |this, builder| {
                                     this.child(
-                                        h_flex().gap_1().child(builder.render(window, cx)).when(
-                                            self.required,
-                                            |this| {
+                                        h_flex()
+                                            .gap_1()
+                                            .child(
+                                                div()
+                                                    .overflow_x_hidden()
+                                                    .child(builder.render(window, cx)),
+                                            )
+                                            .when(self.required, |this| {
                                                 this.child(
                                                     div().text_color(cx.theme().danger).child("*"),
                                                 )
-                                            },
-                                        ),
+                                            }),
                                     )
                                 }),
                         )
