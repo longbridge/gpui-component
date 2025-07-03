@@ -1,7 +1,6 @@
 pub mod llm_config;
 pub mod mcp_config;
 pub mod profile_config;
-pub mod prompts;
 pub mod todo_item;
 
 use std::{env::home_dir, path::PathBuf};

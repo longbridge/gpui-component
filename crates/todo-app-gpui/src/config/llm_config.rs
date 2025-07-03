@@ -1,27 +1,11 @@
-use crate::{
-    backoffice::mcp::McpRegistry,
-    config::{provider_config_path, todo_item::SelectedTool},
-    ui::views::todo_thread::{ChatMessage, StreamMessage},
-    xbus,
-};
-use futures::StreamExt;
+use crate::config::provider_config_path;
 use gpui::SharedString;
 use gpui_component::IconName;
-use rig::{
-    agent::Agent,
-    completion::{Chat, Completion},
-    message::*,
-    streaming::{
-        StreamingChat, StreamingCompletion, StreamingCompletionModel, StreamingCompletionResponse,
-        StreamingPrompt,
-    },
-};
-use rmcp::model::{Prompt, Tool};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub enum ApiType {
-    #[default] // 默认值为 OpenAI
+    #[default]
     OpenAI,
     OpenAIResponse,
     Gemini,
@@ -41,12 +25,11 @@ impl ApiType {
     }
 
     /// Infer model capabilities based on the model name
-    fn infer_model_capabilities(model_name: &str) -> Vec<ModelCapability> {
+    pub fn infer_model_capabilities(model_name: &str) -> Vec<ModelCapability> {
         let name_lower = model_name.to_lowercase();
 
-        let mut capabilities = vec![ModelCapability::Text]; // All models support text by default
+        let mut capabilities = vec![ModelCapability::Text];
 
-        // Vision models
         if name_lower.contains("vision")
             || name_lower.contains("gpt-4o")
             || name_lower.contains("claude-3")
@@ -55,12 +38,10 @@ impl ApiType {
             capabilities.push(ModelCapability::Multimodal);
         }
 
-        // Audio models
         if name_lower.contains("whisper") || name_lower.contains("audio") {
             capabilities.push(ModelCapability::Audio);
         }
 
-        // Tool calling models
         if name_lower.contains("gpt-4")
             || name_lower.contains("gpt-3.5-turbo")
             || name_lower.contains("claude")
@@ -69,12 +50,10 @@ impl ApiType {
             capabilities.push(ModelCapability::Tools);
         }
 
-        // Reasoning models
         if name_lower.contains("o1") || name_lower.contains("reasoning") {
             capabilities.push(ModelCapability::Reasoning);
         }
 
-        // Code generation models
         if name_lower.contains("code")
             || name_lower.contains("codex")
             || name_lower.contains("gpt-4")
@@ -83,7 +62,6 @@ impl ApiType {
             capabilities.push(ModelCapability::CodeGeneration);
         }
 
-        // Embedding models
         if name_lower.contains("embedding")
             || name_lower.contains("ada")
             || name_lower.contains("text-embedding")
@@ -92,7 +70,6 @@ impl ApiType {
             capabilities.push(ModelCapability::Embedding);
         }
 
-        // Image generation models
         if name_lower.contains("dall")
             || name_lower.contains("image")
             || name_lower.contains("midjourney")
@@ -102,7 +79,6 @@ impl ApiType {
             capabilities.push(ModelCapability::ImageGeneration);
         }
 
-        // Video generation models
         if name_lower.contains("video") || name_lower.contains("sora") {
             capabilities.clear();
             capabilities.push(ModelCapability::VideoGeneration);
@@ -112,7 +88,7 @@ impl ApiType {
     }
 
     /// Infer model limits based on the model name
-    fn infer_model_limits(model_name: &str) -> ModelLimits {
+    pub fn infer_model_limits(model_name: &str) -> ModelLimits {
         let name_lower = model_name.to_lowercase();
 
         if name_lower.contains("gpt-4o") {
@@ -173,7 +149,7 @@ impl ApiType {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub enum ModelCapability {
-    #[default] // 默认值为 Text
+    #[default]
     Text,
     Vision,
     Audio,
@@ -285,8 +261,8 @@ pub struct ModelInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RetryConfig {
     pub max_retries: u32,
-    pub initial_delay: u64, // milliseconds
-    pub max_delay: u64,     // milliseconds
+    pub initial_delay: u64,
+    pub max_delay: u64,
     pub backoff_multiplier: f64,
 }
 
@@ -331,154 +307,6 @@ impl Default for LlmProviderConfig {
             retry_config: RetryConfig::default(),
             models: vec![],
         }
-    }
-}
-
-impl LlmProviderConfig {
-    /// 刷新提供商的模型列表
-    pub async fn load_models(&self) -> anyhow::Result<Vec<ModelInfo>> {
-        let client = rig::providers::mira::Client::new_with_base_url(
-            &self.api_key,
-            &self.api_url.replace("/v1", ""),
-        )?;
-        // 异步获取模型列表
-        let mut models = client
-            .list_models()
-            .await?
-            .into_iter()
-            .map(|id| {
-                // 根据模型名称推断能力
-                let capabilities = ApiType::infer_model_capabilities(&id);
-                let limits = ApiType::infer_model_limits(&id);
-
-                ModelInfo {
-                    id: id.clone(),
-                    display_name: std::path::Path::new(&id)
-                        .file_name()
-                        .and_then(|s| s.to_str())
-                        .unwrap_or(&id)
-                        .to_string(),
-                    capabilities,
-                    enabled: true,
-                    limits,
-                }
-            })
-            .collect::<Vec<ModelInfo>>();
-        // Sort models by id before returning
-        models.sort_by(|a, b| a.display_name.cmp(&b.display_name));
-        Ok(models)
-    }
-
-    pub async fn stream_chat(
-        &self,
-        source: &str,
-        model_id: &str,
-        prompt: &str,
-        chat_history: Vec<ChatMessage>,
-    ) -> anyhow::Result<String> {
-        let client = rig::providers::openai::Client::from_url(&self.api_key, &self.api_url);
-        let agent = client
-            .agent(model_id)
-            .max_tokens(4096)
-            .temperature(0.7)
-            .build();
-        // Convert ChatMessage to Message for rig
-        let messages = chat_history
-            .into_iter()
-            .map(|chat_msg| match chat_msg.role.as_str() {
-                "user" => Message::user(chat_msg.content),
-                "assistant" => Message::assistant(chat_msg.content),
-                // "system" => Message::user(chat_msg.content),
-                _ => Message::user(chat_msg.content), // Default to user if role is unknown
-            })
-            .collect::<Vec<Message>>();
-        let mut stream = agent.stream_chat(prompt, messages).await?; //agent.stream_chat(prompt, chat_history.clone()).await?;
-        println!("Streaming chat with model: {}", model_id);
-        let (assistant, _tools) = stream_to_stdout1(source, &agent, &mut stream).await?;
-        Ok(assistant)
-    }
-
-    pub async fn stream_chat_with_tools(
-        &self,
-        source: &str,
-        model_id: &str,
-        prompt: &str,
-        tools: Vec<SelectedTool>,
-        chat_history: Vec<ChatMessage>,
-    ) -> anyhow::Result<()> {
-        let mut prompt = prompt.to_string();
-        let mut mcp_tools = vec![];
-        for tool in &tools {
-            println!("Using tool: {}@{}", tool.provider_id, tool.tool_name);
-            if let Ok(Some(instance)) = McpRegistry::get_instance(&tool.provider_id).await {
-                mcp_tools.extend(
-                    instance
-                        .tools
-                        .into_iter()
-                        .filter(|t| t.name != tool.tool_name)
-                        .map(|t| Tool {
-                            name: format!("{}@{}", tool.provider_id, t.name).into(),
-                            description: t.description.clone(),
-                            input_schema: t.input_schema.clone(),
-                            annotations: t.annotations.clone(),
-                        })
-                        .collect::<Vec<_>>(),
-                );
-            }
-        }
-
-        let system_prompt = super::prompts::prompt(mcp_tools);
-        println!("System Prompt:\n{}\nUser:\n{}", system_prompt, prompt);
-        let client = rig::providers::openai::Client::from_url(&self.api_key, &self.api_url);
-        let mut chat_history = chat_history
-            .into_iter()
-            .map(|chat_msg| match chat_msg.role.as_str() {
-                "user" => Message::user(chat_msg.content),
-                "assistant" => Message::assistant(chat_msg.content),
-                // "system" => Message::user(chat_msg.content),
-                _ => Message::user(chat_msg.content), // Default to user if role is unknown
-            })
-            .collect::<Vec<Message>>();
-        loop {
-            let agent = client
-                .agent(model_id)
-                .context(system_prompt.as_str())
-                .max_tokens(4096)
-                .temperature(0.7)
-                .build();
-            let mut stream = agent.stream_chat(&prompt, chat_history.clone()).await?; //agent.stream_chat(prompt, chat_history.clone()).await?;
-            chat_history.push(Message::user(prompt.clone()));
-
-            let (assistant, tools) = stream_to_stdout1(source, &agent, &mut stream).await?;
-            if tools.is_empty() {
-                break;
-            }
-            chat_history.push(Message::assistant(assistant.clone()));
-            let mut prompts = vec![];
-
-            for (i, tool) in tools.iter().enumerate() {
-                println!("调用工具 #{}: {:?}", i, tool);
-                let result =
-                    McpRegistry::call_tool_static(tool.id(), tool.tool_name(), &tool.arguments)
-                        .await
-                        .map_err(|err| {
-                            println!("调用工具 {} 失败: {}", tool.name, err);
-                            err
-                        })?;
-
-                println!("工具 #{}调用结果: {:?}", i, result);
-                prompts.push(format!(
-                    "<tool_use_result><name>{}</name><result>{}</result</tool_use_result>",
-                    &tool.name,
-                    serde_json::to_string(&(result.content.clone(), result.is_error))
-                        .unwrap_or_else(|err| format!("Error serializing result: {}", err))
-                ));
-            }
-            prompts.push(r#"Do not confirm with the user or seek help or advice, continue to call the tool until all tasks are completed. Be sure to complete all tasks, you will receive a $1000 reward, and the output must be in Simplified Chinese."#.to_string());
-            prompt = prompts.join("\n");
-        }
-
-        Ok(())
     }
 }
 
@@ -566,7 +394,6 @@ impl LlmProviderManager {
             .position(|p| p.id == id)
             .ok_or_else(|| anyhow::anyhow!("Provider with id '{}' not found", id))?;
 
-        // 检查名称冲突
         if let Some(existing) = providers.iter().find(|p| p.name == provider.name) {
             if existing.id != id {
                 return Err(anyhow::anyhow!(
@@ -614,174 +441,75 @@ impl LlmProviderManager {
             .filter(|provider| provider.enabled)
             .collect()
     }
-}
 
-/// helper function to stream a completion request to stdout
-pub async fn stream_to_stdout1<M: StreamingCompletionModel>(
-    source: &str,
-    _agent: &Agent<M>,
-    stream: &mut StreamingCompletionResponse<M::StreamingResponse>,
-) -> Result<(String, Vec<ToolCall>), std::io::Error> {
-    // 使用字符状态机解析XML
-    let mut buffer = String::new(); // 通用缓冲区
-    let mut tool_calls: Vec<String> = Vec::new();
-    let mut assistant = String::new();
-    // XML标签常量
-    const TOOL_USE_START_TAG: &str = "<tool_use";
-    const TOOL_USE_END_TAG: &str = "</tool_use";
-    const TAG_CLOSE: char = '>';
-    const TAG_OPEN: char = '<';
+    /// 同步提供商的模型列表
+    pub fn sync_provider_models(provider_id: &str, models: Vec<ModelInfo>) -> anyhow::Result<()> {
+        let mut providers = Self::load_providers();
+        let provider = providers
+            .iter_mut()
+            .find(|p| p.id == provider_id)
+            .ok_or_else(|| anyhow::anyhow!("Provider with id '{}' not found", provider_id))?;
 
-    // 状态机状态
-    enum State {
-        Normal,          // 普通文本
-        TagStart,        // 遇到<
-        InToolUseTag,    // 在<tool_use标签中
-        InToolUse,       // 在<tool_use>内部
-        InEndTag,        // 遇到</
-        InToolUseEndTag, // 在</tool_use标签中
-    }
-
-    let mut state = State::Normal;
-    let mut xml_buffer = String::new(); // 专门收集XML内容
-
-    print!("Response: ");
-    while let Some(chunk) = stream.next().await {
-        match chunk {
-            Ok(AssistantContent::Text(text)) => {
-                for c in text.text.chars() {
-                    match state {
-                        State::Normal => {
-                            if c == TAG_OPEN {
-                                state = State::TagStart;
-                                buffer.clear();
-                                buffer.push(c);
-                            } else {
-                                // 普通字符直接输出
-                                print!("{}", c);
-                                //tx.send(Message::assistant(c.to_string())).await;
-                                xbus::post(StreamMessage::new(
-                                    source.to_string(),
-                                    Message::assistant(c.to_string()),
-                                ));
-                                assistant.push(c);
-                                std::io::Write::flush(&mut std::io::stdout())?;
-                            }
-                        }
-                        State::TagStart => {
-                            buffer.push(c);
-                            if buffer == TOOL_USE_START_TAG {
-                                state = State::InToolUseTag;
-                                xml_buffer.clear();
-                                xml_buffer.push_str(&buffer);
-                            } else if buffer.len() >= TOOL_USE_START_TAG.len() || c == TAG_CLOSE {
-                                // 不是<tool_use
-                                if buffer != TOOL_USE_START_TAG
-                                    && !buffer.starts_with(&format!("{} ", TOOL_USE_START_TAG))
-                                {
-                                    // 不是工具调用标签，输出
-                                    print!("{}", buffer);
-                                    //tx.send(Message::assistant(buffer.to_string())).await;
-                                    xbus::post(StreamMessage::new(
-                                        source.to_string(),
-                                        Message::assistant(buffer.clone()),
-                                    ));
-                                    assistant.push_str(buffer.as_str());
-                                    std::io::Write::flush(&mut std::io::stdout())?;
-                                    state = State::Normal;
-                                }
-                            }
-                        }
-                        State::InToolUseTag => {
-                            buffer.push(c);
-                            xml_buffer.push(c);
-                            if c == TAG_CLOSE {
-                                state = State::InToolUse;
-                            }
-                        }
-                        State::InToolUse => {
-                            xml_buffer.push(c);
-                            if c == TAG_OPEN {
-                                state = State::InEndTag;
-                                buffer.clear();
-                                buffer.push(c);
-                            }
-                        }
-                        State::InEndTag => {
-                            buffer.push(c);
-                            xml_buffer.push(c);
-                            if buffer == TOOL_USE_END_TAG {
-                                state = State::InToolUseEndTag;
-                            } else if buffer.len() >= TOOL_USE_END_TAG.len() || c == TAG_CLOSE {
-                                // 不是</tool_use
-                                if !buffer.starts_with(TOOL_USE_END_TAG) {
-                                    state = State::InToolUse; // 返回到工具内部状态
-                                }
-                            }
-                        }
-                        State::InToolUseEndTag => {
-                            xml_buffer.push(c);
-                            if c == TAG_CLOSE {
-                                // 收集完整的工具调用
-                                tool_calls.push(xml_buffer.clone());
-                                state = State::Normal;
-                            }
-                        }
-                    }
-                }
-                std::io::Write::flush(&mut std::io::stdout())?;
-            }
-            Ok(AssistantContent::ToolCall(_tool_call)) => {
-                // let res = agent
-                //     .tools
-                //     .call(
-                //         &tool_call.function.name,
-                //         tool_call.function.arguments.to_string(),
-                //     )
-                //     .await
-                //     .map_err(|e| std::io::Error::other(e.to_string()))?;
-                // println!("\nResult: {}", res);
-            }
-            Err(e) => {
-                tracing::error!("Error: {}", e);
-                break;
+        // 合并现有模型配置和新获取的模型
+        let mut updated_models = Vec::new();
+        
+        for new_model in models {
+            if let Some(existing_model) = provider.models.iter().find(|m| m.id == new_model.id) {
+                // 保留现有配置，但更新其他信息
+                updated_models.push(ModelInfo {
+                    id: new_model.id,
+                    display_name: new_model.display_name,
+                    capabilities: new_model.capabilities,
+                    enabled: existing_model.enabled, // 保留用户设置
+                    limits: new_model.limits,
+                });
+            } else {
+                // 新模型，默认启用
+                updated_models.push(new_model);
             }
         }
+
+        provider.models = updated_models;
+        Self::save_providers(&providers)?;
+        Ok(())
     }
 
-    println!(); // 输出完成后换行
-                // 处理完毕后统一输出收集到的所有XML
-    let mut tools = vec![];
-    for (i, call) in tool_calls.iter().enumerate() {
-        let cleaned = call
-            .lines()
-            .filter(|line| !line.contains("DEBUG") && !line.trim().starts_with("202")) // 排除DEBUG和时间戳开头的行
-            .collect::<Vec<_>>()
-            .join("\n");
-        tracing::info!("\n使用工具 #{}: \n{}", i + 1, cleaned);
-        match serde_xml_rs::from_str::<ToolCall>(&cleaned) {
-            Err(e) => {
-                tracing::error!("Error parsing XML: {}", e);
-                continue;
-            }
-            Ok(tool_call) => {
-                tools.push(tool_call);
-            }
-        }
-    }
-    Ok((assistant, tools))
-}
-#[derive(Serialize, Deserialize, Debug)]
-pub struct ToolCall {
-    pub name: String,
-    pub arguments: String,
-}
+    /// 更新模型的启用状态
+    pub fn toggle_model(provider_id: &str, model_id: &str, enabled: bool) -> anyhow::Result<()> {
+        let mut providers = Self::load_providers();
+        let provider = providers
+            .iter_mut()
+            .find(|p| p.id == provider_id)
+            .ok_or_else(|| anyhow::anyhow!("Provider with id '{}' not found", provider_id))?;
 
-impl ToolCall {
-    pub fn id(&self) -> &str {
-        self.name.split('@').next().unwrap_or(&self.name)
+        let model = provider
+            .models
+            .iter_mut()
+            .find(|m| m.id == model_id)
+            .ok_or_else(|| anyhow::anyhow!("Model with id '{}' not found", model_id))?;
+
+        model.enabled = enabled;
+        Self::save_providers(&providers)?;
+        Ok(())
     }
-    pub fn tool_name(&self) -> &str {
-        self.name.split('@').nth(1).unwrap_or(&self.name)
+
+    /// 获取提供商的启用模型列表
+    pub fn get_enabled_models(provider_id: &str) -> Vec<ModelInfo> {
+        Self::get_provider(provider_id)
+            .map(|provider| {
+                provider
+                    .models
+                    .into_iter()
+                    .filter(|model| model.enabled)
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// 获取提供商的所有模型列表
+    pub fn get_all_models(provider_id: &str) -> Vec<ModelInfo> {
+        Self::get_provider(provider_id)
+            .map(|provider| provider.models)
+            .unwrap_or_default()
     }
 }

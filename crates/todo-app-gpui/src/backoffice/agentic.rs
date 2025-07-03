@@ -6,13 +6,13 @@ mod regulator;
 use actix::prelude::*;
 
 pub struct AgenticAwareness {
-    pub llm: llm::LlmRegistry,
+    // pub llm: llm::LlmRegistry,
 }
 
 impl AgenticAwareness {
     pub fn new() -> Self {
         Self {
-            llm: llm::LlmRegistry::new(),
+            // llm: llm::LlmRegistry::from_registry(),
         }
     }
 }
