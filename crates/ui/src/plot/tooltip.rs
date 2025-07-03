@@ -125,7 +125,7 @@ pub enum TooltipPosition {
 pub struct TooltipState {
     pub index: usize,
     pub cross_line: Point<Pixels>,
-    pub dot: Point<Pixels>,
+    pub dots: Vec<Point<Pixels>>,
     pub position: TooltipPosition,
 }
 
@@ -133,13 +133,13 @@ impl TooltipState {
     pub fn new(
         index: usize,
         cross_line: Point<Pixels>,
-        dot: Point<Pixels>,
+        dots: Vec<Point<Pixels>>,
         position: TooltipPosition,
     ) -> Self {
         Self {
             index,
             cross_line,
-            dot,
+            dots,
             position,
         }
     }
@@ -151,7 +151,7 @@ pub struct Tooltip {
     position: Option<TooltipPosition>,
     gap: Pixels,
     cross_line: Option<CrossLine>,
-    dot: Option<Dot>,
+    dots: Option<Vec<Dot>>,
 }
 
 impl Tooltip {
@@ -162,7 +162,7 @@ impl Tooltip {
             position: Default::default(),
             gap: px(0.),
             cross_line: None,
-            dot: None,
+            dots: None,
         }
     }
 
@@ -181,8 +181,8 @@ impl Tooltip {
         self
     }
 
-    pub fn dot(mut self, dot: Dot) -> Self {
-        self.dot = Some(dot);
+    pub fn dots(mut self, dots: impl IntoIterator<Item = Dot>) -> Self {
+        self.dots = Some(dots.into_iter().collect());
         self
     }
 }
@@ -224,6 +224,6 @@ impl RenderOnce for Tooltip {
                         }
                     }),
             )
-            .when_some(self.dot, |this, dot| this.child(dot))
+            .when_some(self.dots, |this, dots| this.children(dots))
     }
 }
