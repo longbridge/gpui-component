@@ -9,6 +9,10 @@ mod config;
 pub mod ebus;
 mod ui;
 pub mod xbus;
+use mimalloc::MiMalloc;
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
