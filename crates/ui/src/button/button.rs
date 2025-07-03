@@ -75,7 +75,7 @@ pub trait ButtonVariants: Sized {
         self.with_variant(ButtonVariant::Link)
     }
 
-    /// With the text style for the Button, it will no padding look like a normal text.
+    /// With the text style for the Button. It will have no padding and look like normal text.
     fn text(self) -> Self {
         self.with_variant(ButtonVariant::Text)
     }

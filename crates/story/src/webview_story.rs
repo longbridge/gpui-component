@@ -55,7 +55,7 @@ impl WebViewStory {
                 use wry::WebViewBuilderExtUnix;
                 // borrowed from https://github.com/tauri-apps/wry/blob/dev/examples/gtk_multiwebview.rs
                 // doesn't work yet
-                // TODO: How to initialize this fixed?
+                // TODO: How to initialize this properly?
                 let fixed = gtk::Fixed::builder().build();
                 fixed.show_all();
                 builder.build_gtk(&fixed).unwrap()

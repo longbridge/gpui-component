@@ -478,7 +478,7 @@ fn print_points_as_svg_path(
         );
     }
 
-    if points.len() > 0 {
+    if !points.is_empty() {
         println!("M{},{}", points[0].x.0 as i32, points[0].y.0 as i32);
         for p in points.iter().skip(1) {
             println!("L{},{}", p.x.0 as i32, p.y.0 as i32);

@@ -197,8 +197,8 @@ impl Element for VirtualList {
         }
         .to_pixels(font_size.into(), window.rem_size());
 
-        // TODO: To cache the item_sizes, item_origins
-        // If there have 500,000 items, this method will speed about 500~600µs
+        // TODO: Cache the item_sizes and item_origins
+        // If there are 500,000 items, this method will take about 500~600µs
         // let start = std::time::Instant::now();
         // Prepare each item's size by axis
         let item_sizes = match self.axis {

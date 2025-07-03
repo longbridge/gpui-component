@@ -296,7 +296,7 @@ impl SyntaxHighlighter {
 
             // let measure = Measure::new("update cache to change range offset");
 
-            // FIXME: If we delete 1 char in a node, that node will not highlighted.
+            // FIXME: If we delete 1 char in a node, that node will not be highlighted.
 
             // Remove the cache entries that are range is intersecting with the byte_range.
             self.cache.retain(|_, (range, _)| {

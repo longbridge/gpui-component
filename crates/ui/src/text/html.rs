@@ -543,7 +543,7 @@ fn parse_node(node: &Rc<Node>, paragraph: &mut Paragraph) -> element::Node {
     match node.data {
         NodeData::Text { ref contents } => {
             let text = contents.borrow().to_string();
-            if text.len() > 0 {
+            if !text.is_empty() {
                 paragraph.push_str(&text);
             }
 
@@ -584,7 +584,7 @@ fn parse_node(node: &Rc<Node>, paragraph: &mut Paragraph) -> element::Node {
                     level,
                     children: paragraph,
                 };
-                if children.len() > 0 {
+                if !children.is_empty() {
                     children.push(heading);
 
                     element::Node::Root { children }
@@ -621,7 +621,7 @@ fn parse_node(node: &Rc<Node>, paragraph: &mut Paragraph) -> element::Node {
                     },
                 };
 
-                if children.len() > 0 {
+                if !children.is_empty() {
                     children.push(element::Node::Paragraph(image));
                     element::Node::Root { children }
                 } else {
@@ -648,7 +648,7 @@ fn parse_node(node: &Rc<Node>, paragraph: &mut Paragraph) -> element::Node {
                     children: list_children,
                     ordered,
                 };
-                if children.len() > 0 {
+                if !children.is_empty() {
                     children.push(list);
                     element::Node::Root { children }
                 } else {
@@ -702,7 +702,7 @@ fn parse_node(node: &Rc<Node>, paragraph: &mut Paragraph) -> element::Node {
                 }
 
                 let table = element::Node::Table(table);
-                if children.len() > 0 {
+                if !children.is_empty() {
                     children.push(table);
                     element::Node::Root { children }
                 } else {

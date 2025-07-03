@@ -127,7 +127,7 @@ impl SidebarMenuItem {
     }
 
     fn is_submenu(&self) -> bool {
-        self.children.len() > 0
+        !self.children.is_empty()
     }
 
     fn is_open(&self) -> bool {

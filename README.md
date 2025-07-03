@@ -12,7 +12,7 @@ UI components for building fantastic desktop applications using [GPUI](https://g
 - **Flexible Layout**: Dock layout for panel arrangements, resizing, and freeform (Tiles) layouts.
 - **High Performance**: Virtualized Table and List components for smooth large-data rendering.
 - **Content Rendering**: Native support for Markdown and simple HTML.
-- **Charting**: Built-in charts for visualization your data.
+- **Charting**: Built-in charts for visualizing your data.
 - **Code Highlighting**: Code Editor and Syntax highlighting.
 - **Wef**: (Experimental) Offscreen rendering webview based on [CEF](https://github.com/chromiumembedded/cef).
 
