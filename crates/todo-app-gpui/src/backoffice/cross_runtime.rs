@@ -255,12 +255,10 @@ impl McpRegistry {
     /// - 如果 Actor 调用失败，会返回默认值或错误信息
     /// - 如果响应通道发送失败（接收端已关闭），会忽略错误继续处理
     /// - 整个处理循环是容错的，单个消息处理失败不会影响其他消息
-    pub fn init_crb() {
-        let bridge = CrossRuntimeBridge::new();
-
-        // 设置全局桥接实例，如果已经设置过则忽略
-        CROSS_RUNTIME_BRIDGE.set(bridge).ok();
-    }
+    // pub fn init_runtime() {
+    //     // 确保桥接器只初始化一次
+    //     CROSS_RUNTIME_BRIDGE.get_or_init(|| CrossRuntimeBridge::new());
+    // }
 
     /// 获取全局桥接器实例
     ///
@@ -271,8 +269,8 @@ impl McpRegistry {
     ///
     /// - `Some(Arc<CrossRuntimeBridge>)`: 桥接器实例
     /// - `None`: 桥接器未初始化
-    pub fn get_bridge() -> Option<&'static CrossRuntimeBridge> {
-        CROSS_RUNTIME_BRIDGE.get()
+    pub fn get_bridge() -> &'static CrossRuntimeBridge {
+        CROSS_RUNTIME_BRIDGE.get_or_init(|| CrossRuntimeBridge::new())
     }
 
     /// GUI 安全的静态获取实例方法
@@ -290,11 +288,7 @@ impl McpRegistry {
     /// - `Ok(None)`: 服务器不存在
     /// - `Err(anyhow::Error)`: 桥接器未初始化或通信失败
     pub async fn get_instance(server_id: &str) -> anyhow::Result<Option<McpServerInstance>> {
-        if let Some(bridge) = Self::get_bridge() {
-            Ok(bridge.get_instance(server_id.to_string()).await)
-        } else {
-            Err(anyhow::anyhow!("Cross-runtime bridge not initialized"))
-        }
+         Ok( Self::get_bridge().get_instance(server_id.to_string()).await)
     }
 
     /// GUI 安全的静态工具调用方法
@@ -317,8 +311,7 @@ impl McpRegistry {
         tool_name: &str,
         arguments: &str,
     ) -> anyhow::Result<McpCallToolResult> {
-        if let Some(bridge) = Self::get_bridge() {
-            bridge
+       Self::get_bridge()
                 .call_tool(
                     server_id.to_string(),
                     tool_name.to_string(),
@@ -326,9 +319,6 @@ impl McpRegistry {
                 )
                 .await
                 .map_err(|e| anyhow::anyhow!(e))
-        } else {
-            Err(anyhow::anyhow!("Cross-runtime bridge not initialized"))
-        }
     }
 
     /// GUI 安全的静态获取所有实例方法
@@ -341,10 +331,6 @@ impl McpRegistry {
     /// - `Ok(HashMap<String, McpServerInstance>)`: 所有服务器实例
     /// - `Err(anyhow::Error)`: 桥接器未初始化或通信失败
     pub async fn get_all_instances_static() -> anyhow::Result<Vec<McpServerInstance>> {
-        if let Some(bridge) = Self::get_bridge() {
-            Ok(bridge.get_all_instances().await)
-        } else {
-            Err(anyhow::anyhow!("Cross-runtime bridge not initialized"))
-        }
+         Ok(Self::get_bridge().get_all_instances().await)
     }
 }
