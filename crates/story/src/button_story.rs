@@ -669,7 +669,7 @@ impl Render for ButtonStory {
                 )
                 .child(
                     ButtonGroup::new("toggle-button-group")
-                        .primary()
+                        .outline()
                         .compact()
                         .multiple(toggle_multiple)
                         .child(
