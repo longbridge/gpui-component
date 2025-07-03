@@ -109,14 +109,9 @@ jobs:
         run: echo "No changes in wef or gpui-webview crates, skipping tests"
 
       - uses: actions-rust-lang/setup-rust-toolchain@v1
-        if: steps.crates-changes.outputs.wef == 'true' || steps.crates-changes.outputs.webview == 'true'
-
       - name: Install system dependencies
-        if: (steps.crates-changes.outputs.wef == 'true' || steps.crates-changes.outputs.webview == 'true') && matrix.run_on != 'windows-latest'
         run: script/bootstrap
-
       - name: Setup | Cache Cargo
-        if: steps.crates-changes.outputs.wef == 'true' || steps.crates-changes.outputs.webview == 'true'
         uses: actions/cache@v4
         with:
           path: |
@@ -125,53 +120,33 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: test-crates-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
-
+          key: test-crates-cargo-${{ matrix.target }}-wef-${{ hashFiles('**/Cargo.lock') }}
       - name: Cache CEF
-        if: steps.crates-changes.outputs.wef == 'true' || steps.crates-changes.outputs.webview == 'true'
         id: cache-cef
         uses: actions/cache@v4
         with:
           path: $HOME/.cef
           key: cef-${{ env.CEF_VERSION }}-${{ matrix.target }}
-
       - name: Init CEF
-        if: (steps.crates-changes.outputs.wef == 'true' || steps.crates-changes.outputs.webview == 'true') && !steps.cache-cef.outputs.cache-hit
         run: |
           cargo run -p cargo-wef -- wef init
 
-      # Wef-specific tests
       - name: Test Wef Linux
-        if: steps.crates-changes.outputs.wef == 'true' && matrix.run_on == 'ubuntu-latest'
+        if: matrix.run_on == 'ubuntu-latest'
         run: |
           cargo run -p cargo-wef wef add-framework target/debug
           cargo test -p wef
+          cargo test -p gpui-webview
 
       - name: Test Wef Windows
-        if: steps.crates-changes.outputs.wef == 'true' && matrix.run_on == 'windows-latest'
+        if: matrix.run_on == 'windows-latest'
         run: |
           cargo run -p cargo-wef wef add-framework target/debug
           cargo test -p wef
+          cargo test -p gpui-webview
 
       - name: Test Wef MacOS
-        if: steps.crates-changes.outputs.wef == 'true' && matrix.run_on == 'macos-latest'
+        if: matrix.run_on == 'macos-latest'
         run: |
           cargo test -p wef
-
-      # gpui-webview-specific tests
-      - name: Test Webview Linux
-        if: steps.crates-changes.outputs.webview == 'true' && matrix.run_on == 'ubuntu-latest'
-        run: |
-          cargo run -p cargo-wef wef add-framework target/debug
-          cargo test -p gpui-webview
-
-      - name: Test Webview Windows
-        if: steps.crates-changes.outputs.webview == 'true' && matrix.run_on == 'windows-latest'
-        run: |
-          cargo run -p cargo-wef wef add-framework target/debug
-          cargo test -p gpui-webview
-
-      - name: Test Webview MacOS
-        if: steps.crates-changes.outputs.webview == 'true' && matrix.run_on == 'macos-latest'
-        run: |
           cargo test -p gpui-webview
