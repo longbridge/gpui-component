@@ -3,15 +3,17 @@ use gpui::{
     RenderOnce, StyleRefinement, Styled, Window,
 };
 
-use crate::{h_flex, red_500, white, StyledExt};
+use crate::{h_flex, red_500, white, ActiveTheme, Icon, StyledExt};
 
 #[derive(Default)]
 enum BadgeVariant {
     Dot,
     #[default]
     Number,
+    Icon(Icon),
 }
 
+/// A badge for displaying a count, dot, or icon on an element.
 #[derive(IntoElement)]
 pub struct Badge {
     style: StyleRefinement,
@@ -23,6 +25,7 @@ pub struct Badge {
 }
 
 impl Badge {
+    /// Create a new badge.
     pub fn new() -> Self {
         Self {
             style: StyleRefinement::default(),
@@ -34,21 +37,33 @@ impl Badge {
         }
     }
 
+    /// Set to use [`BadgeVariant::Dot`] to show a dot.
     pub fn dot(mut self) -> Self {
         self.variant = BadgeVariant::Dot;
         self
     }
 
+    /// Set to use [`BadgeVariant::Number`] to show a count.
+    ///
+    /// If count is 0, the badge will be hidden.
     pub fn count(mut self, count: usize) -> Self {
         self.count = count;
         self
     }
 
+    /// Set to use [`BadgeVariant::Icon`] to show an icon.
+    pub fn icon(mut self, icon: impl Into<Icon>) -> Self {
+        self.variant = BadgeVariant::Icon(icon.into());
+        self
+    }
+
+    /// Set the maximum count to show (Only if [`BadgeVariant::Number`] is used).
     pub fn max(mut self, max: usize) -> Self {
         self.max = max;
         self
     }
 
+    /// Set the color (background) of the badge.
     pub fn color(mut self, color: impl Into<Hsla>) -> Self {
         self.color = color.into();
         self
@@ -62,17 +77,25 @@ impl ParentElement for Badge {
 }
 
 impl RenderOnce for Badge {
-    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
+    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let visible = match self.variant {
+            BadgeVariant::Number => self.count > 0,
+            BadgeVariant::Dot | BadgeVariant::Icon(_) => true,
+        };
+
         div()
             .relative()
             .refine_style(&self.style)
             .children(self.children)
-            .when(self.count > 0, |this| {
+            .when(visible, |this| {
                 this.child(
                     h_flex()
                         .absolute()
                         .justify_center()
+                        .items_center()
                         .rounded_full()
+                        .text_color(white())
+                        .text_size(px(10.))
                         .bg(self.color)
                         .map(|this| match self.variant {
                             BadgeVariant::Dot => this.top_0().right_0().size(px(6.)),
@@ -88,11 +111,17 @@ impl RenderOnce for Badge {
                                     .py_0p5()
                                     .px_0p5()
                                     .min_w_3p5()
-                                    .text_color(white())
-                                    .text_size(px(10.))
                                     .line_height(relative(1.))
                                     .child(count)
                             }
+                            BadgeVariant::Icon(icon) => this
+                                .right_0()
+                                .bottom_0()
+                                .p(px(1.))
+                                .size_4()
+                                .border_1()
+                                .border_color(cx.theme().background)
+                                .child(icon),
                         }),
                 )
             })

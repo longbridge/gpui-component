@@ -1,10 +1,10 @@
 use gpui::{
-    img, App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement,
-    Render, Styled, Window,
+    App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement, Render,
+    Styled, Window,
 };
 use gpui_component::{
-    badge::Badge, blue_500, dock::PanelControl, v_flex, yellow_500, ActiveTheme, Icon, IconName,
-    Sizable as _,
+    avatar::Avatar, badge::Badge, blue_500, dock::PanelControl, green_500, sky_500, v_flex,
+    yellow_500, Icon, IconName, Sizable as _,
 };
 
 use crate::section;
@@ -50,11 +50,11 @@ impl Focusable for BadgeStory {
 }
 
 impl Render for BadgeStory {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .gap_4()
             .child(
-                section("Badge on Icon")
+                section("Badge on icon")
                     .max_w_md()
                     .child(
                         Badge::new()
@@ -68,59 +68,41 @@ impl Render for BadgeStory {
                     ),
             )
             .child(
-                section("Badge on Avatar")
+                section("Badge with count")
                     .max_w_md()
-                    .child(
-                        Badge::new().count(3).child(
-                            img("https://avatars.githubusercontent.com/u/5518?v=4")
-                                .size_10()
-                                .border_1()
-                                .border_color(cx.theme().border)
-                                .rounded_full(),
-                        ),
-                    )
-                    .child(
-                        Badge::new().count(103).child(
-                            img("https://avatars.githubusercontent.com/u/28998859?v=4")
-                                .size_10()
-                                .border_1()
-                                .border_color(cx.theme().border)
-                                .rounded_full(),
-                        ),
-                    ),
+                    .child(Badge::new().count(3).child(
+                        Avatar::new().src("https://avatars.githubusercontent.com/u/5518?v=4"),
+                    ))
+                    .child(Badge::new().count(103).child(
+                        Avatar::new().src("https://avatars.githubusercontent.com/u/28998859?v=4"),
+                    )),
+            )
+            .child(
+                section("Badge with icon")
+                    .max_w_md()
+                    .child(Badge::new().icon(IconName::Check).color(sky_500()).child(
+                        Avatar::new().src("https://avatars.githubusercontent.com/u/5518?v=4"),
+                    ))
+                    .child(Badge::new().icon(IconName::Star).color(yellow_500()).child(
+                        Avatar::new().src("https://avatars.githubusercontent.com/u/20092316?v=4"),
+                    )),
             )
             .child(
                 section("Badge with dot").max_w_md().child(
                     Badge::new().dot().count(1).child(
-                        img("https://avatars.githubusercontent.com/u/5518?v=4")
-                            .size_10()
-                            .border_1()
-                            .border_color(cx.theme().border)
-                            .rounded_full(),
+                        Avatar::new().src("https://avatars.githubusercontent.com/u/5518?v=4"),
                     ),
                 ),
             )
             .child(
-                section("Badge with Color")
+                section("Badge with color")
                     .max_w_md()
-                    .child(
-                        Badge::new().count(3).color(blue_500()).child(
-                            img("https://avatars.githubusercontent.com/u/5518?v=4")
-                                .size_10()
-                                .border_1()
-                                .border_color(cx.theme().border)
-                                .rounded_full(),
-                        ),
-                    )
-                    .child(
-                        Badge::new().dot().color(yellow_500()).count(1).child(
-                            img("https://avatars.githubusercontent.com/u/5518?v=4")
-                                .size_10()
-                                .border_1()
-                                .border_color(cx.theme().border)
-                                .rounded_full(),
-                        ),
-                    ),
+                    .child(Badge::new().count(3).color(blue_500()).child(
+                        Avatar::new().src("https://avatars.githubusercontent.com/u/5518?v=4"),
+                    ))
+                    .child(Badge::new().dot().color(green_500()).count(1).child(
+                        Avatar::new().src("https://avatars.githubusercontent.com/u/5518?v=4"),
+                    )),
             )
     }
 }
