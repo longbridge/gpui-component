@@ -1,4 +1,4 @@
-mod agentic;
+pub mod agentic;
 mod builtin;
 // pub mod crb;
 pub mod cross_runtime;
@@ -13,7 +13,7 @@ use rmcp::model::{Prompt, ReadResourceResult, Resource, ResourceContents, Tool};
 use std::fs::File;
 
 use crate::{
-    backoffice::mcp::{server::ResourceDefinition, GetServerInstance, McpRegistry},
+    backoffice::{agentic::llm::LlmRegistry, mcp::{server::ResourceDefinition, GetServerInstance, McpRegistry}},
     config::mcp_config::McpServerConfig,
 };
 
@@ -150,6 +150,7 @@ pub fn start() -> anyhow::Result<()> {
         sys.block_on(async {
             McpRegistry::from_registry();
             McpRegistry::init_runtime();
+            LlmRegistry::from_registry();
         });
         sys.run().ok();
     });

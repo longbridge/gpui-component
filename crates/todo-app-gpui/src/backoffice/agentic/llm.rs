@@ -119,14 +119,14 @@ impl LlmService {
 
     /// 同步模型到配置文件
     pub async fn sync_models(&self) -> anyhow::Result<()> {
-        // log::info!("Syncing models for provider: {}", self.config.id);
+        log::info!("Syncing models for provider: {}", self.config.id);
         
-        // let models = self.load_models().await?;
-        // LlmProviderManager::sync_provider_models(&self.config.id, models)?;
+        let models = self.load_models().await?;
+        LlmProviderManager::sync_provider_models(&self.config.id, models)?;
         
-        // log::info!("Successfully synced {} models for provider: {}", 
-        //           LlmProviderManager::get_all_models(&self.config.id).len(), 
-        //           self.config.id);
+        log::info!("Successfully synced {} models for provider: {}", 
+                  LlmProviderManager::get_all_models(&self.config.id).len(), 
+                  self.config.id);
         
         Ok(())
     }
@@ -183,13 +183,12 @@ impl LlmService {
         let mut mcp_tools = vec![];
         
         for tool in &tools {
-            println!("Using tool: {}@{}", tool.provider_id, tool.tool_name);
             if let Ok(Some(instance)) = McpRegistry::get_instance(&tool.provider_id).await {
                 mcp_tools.extend(
                     instance
                         .tools
                         .into_iter()
-                        .filter(|t| t.name != tool.tool_name)
+                        .filter(|t| t.name == tool.tool_name)
                         .map(|t| Tool {
                             name: format!("{}@{}", tool.provider_id, t.name).into(),
                             description: t.description.clone(),
@@ -200,9 +199,9 @@ impl LlmService {
                 );
             }
         }
-
+        println!("Using tools: {:?}", mcp_tools);
         let system_prompt = crate::backoffice::agentic::prompts::prompt(mcp_tools);
-        println!("System Prompt:\n{}\nUser:\n{}", system_prompt, prompt);
+       println!("System Prompt:\n{}\nUser:\n{}", system_prompt, prompt);
         
         let client = rig::providers::openai::Client::from_url(&self.config.api_key, &self.config.api_url);
         let mut chat_history = chat_history
@@ -236,7 +235,7 @@ impl LlmService {
             for (i, tool) in tools.iter().enumerate() {
                 println!("调用工具 #{}: {:?}", i, tool);
                 let result =
-                    McpRegistry::call_tool_static(tool.id(), tool.tool_name(), &tool.arguments)
+                    McpRegistry::call_tool(tool.id(), tool.tool_name(), &tool.arguments)
                         .await
                         .map_err(|err| {
                             println!("调用工具 {} 失败: {}", tool.name, err);
@@ -475,8 +474,7 @@ impl LlmRegistry {
             // 添加新启用的提供商
             for config in configs.iter().filter(|c| c.enabled) {
                 if !self.providers.contains_key(&config.id) {
-                    let provider_service = LlmProviderService::new(config.clone());
-                    let addr = provider_service.start();
+                    let addr = LlmProviderService::new(config.clone()).start();
                     self.providers.insert(config.id.clone(), addr);
                     self.configs.insert(config.id.clone(), config.clone());
                 }
@@ -606,28 +604,6 @@ impl Handler<LlmChatWithToolsRequest> for LlmRegistry {
     }
 }
 
-impl Handler<LoadModelsRequest> for LlmRegistry {
-    type Result = ResponseActFuture<Self, anyhow::Result<Vec<ModelInfo>>>;
-
-    fn handle(&mut self, msg: LoadModelsRequest, _ctx: &mut Self::Context) -> Self::Result {
-        if let Some(worker) = self.providers.get(&msg.provider_id) {
-            worker
-                .send(msg)
-                .into_actor(self)
-                .map(|res, _act, _ctx| match res {
-                    Ok(result) => result,
-                    Err(err) => Err(anyhow::anyhow!("Actor error: {}", err)),
-                })
-                .boxed_local()
-        } else {
-            async move {
-                Err(anyhow::anyhow!("Provider not found"))
-            }
-            .into_actor(self)
-            .boxed_local()
-        }
-    }
-}
 
 // 添加更新提供商缓存的消息
 #[derive(Message)]
@@ -649,48 +625,11 @@ impl Handler<UpdateProviderCache> for LlmRegistry {
     }
 }
 
-// 定义获取提供商配置的消息
-#[derive(Message)]
-#[rtype(result = "Option<LlmProviderConfig>")]
-pub struct GetProviderConfig {
-    pub provider_id: String,
-}
-
-impl Handler<GetProviderConfig> for LlmRegistry {
-    type Result = Option<LlmProviderConfig>;
-
-    fn handle(&mut self, msg: GetProviderConfig, _ctx: &mut Self::Context) -> Self::Result {
-        self.configs.get(&msg.provider_id).cloned()
-    }
-}
-
-// 定义获取所有提供商配置的消息
-#[derive(Message)]
-#[rtype(result = "Vec<LlmProviderConfig>")]
-pub struct GetAllProviderConfigs;
-
-impl Handler<GetAllProviderConfigs> for LlmRegistry {
-    type Result = Vec<LlmProviderConfig>;
-
-    fn handle(&mut self, _msg: GetAllProviderConfigs, _ctx: &mut Self::Context) -> Self::Result {
-        let mut configs: Vec<_> = self.configs.values().cloned().collect();
-        configs.sort_by(|a, b| a.name.cmp(&b.name));
-        configs
-    }
-}
 
 impl LlmRegistry {
-    /// 静态方法：获取提供商配置
-    pub async fn get_provider_static(provider_id: &str) -> anyhow::Result<Option<LlmProviderConfig>> {
-        let registry = Self::global();
-        let result = registry.send(GetProviderConfig {
-            provider_id: provider_id.to_string(),
-        }).await?;
-        Ok(result)
-    }
 
     /// 静态方法：进行聊天
-    pub async fn chat_static(
+    pub async fn chat(
         provider_id: &str,
         model_id: &str,
         source: &str,
@@ -709,7 +648,7 @@ impl LlmRegistry {
     }
 
     /// 静态方法：使用工具进行聊天
-    pub async fn chat_with_tools_static(
+    pub async fn chat_with_tools(
         provider_id: &str,
         model_id: &str,
         source: &str,
@@ -729,14 +668,14 @@ impl LlmRegistry {
         Ok(result)
     }
 
-    /// 静态方法：加载模型列表
-    pub async fn load_models_static(provider_id: &str) -> anyhow::Result<Vec<ModelInfo>> {
-        let registry = Self::global();
-        let result = registry.send(LoadModelsRequest {
-            provider_id: provider_id.to_string(),
-        }).await??;
-        Ok(result)
-    }
+    // /// 静态方法：加载模型列表
+    // pub async fn load_models_static(provider_id: &str) -> anyhow::Result<Vec<ModelInfo>> {
+    //     let registry = Self::global();
+    //     let result = registry.send(LoadModelsRequest {
+    //         provider_id: provider_id.to_string(),
+    //     }).await??;
+    //     Ok(result)
+    // }
 }
 
 /// helper function to stream a completion request to stdout

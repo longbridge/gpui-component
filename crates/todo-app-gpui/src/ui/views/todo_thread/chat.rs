@@ -1,4 +1,5 @@
 use super::*;
+use crate::backoffice::agentic::llm::LlmRegistry;
 use crate::config::llm_config::LlmProviderManager;
 use gpui::*;
 
@@ -57,32 +58,42 @@ impl TodoThreadChat {
                     tools_used: vec![],
                     source: todo.id.clone(),
                 });
-
+                    let provider_id = provider.id.clone();
+                    let model_id = model_id.clone();
+                    let prompt = message_content.clone();
+                    let source =self.todoitem.id.clone();
+                     let chat_history = self.chat_messages.clone();
                 if !self.todoitem.selected_tools.is_empty() {
                     let tools = self.todoitem.selected_tools.clone();
-                    tokio::spawn(async move {
-                        if let Err(err) = provider
-                            .stream_chat_with_tools(
-                                &source,
-                                &model_id,
-                                &message_content,
-                                tools,
-                                history_message,
-                            )
-                            .await
-                        {
-                            tracing::error!("Error streaming chat: {}", err);
-                        }
-                    });
+                    cx.spawn(async move |this,cx|{
+                        LlmRegistry::chat_with_tools_static(&provider_id, &model_id, &source, &prompt, tools, chat_history).await.ok();
+                    }).detach();
+                    // tokio::spawn(async move {
+                    //     if let Err(err) = provider
+                    //         .stream_chat_with_tools(
+                    //             &source,
+                    //             &model_id,
+                    //             &message_content,
+                    //             tools,
+                    //             history_message,
+                    //         )
+                    //         .await
+                    //     {
+                    //         tracing::error!("Error streaming chat: {}", err);
+                    //     }
+                    // });
                 } else {
-                    tokio::spawn(async move {
-                        if let Err(err) = provider
-                            .stream_chat(&source, &model_id, &message_content, history_message)
-                            .await
-                        {
-                            tracing::error!("Error streaming chat: {}", err);
-                        }
-                    });
+                      cx.spawn(async move |this,cx|{
+                        LlmRegistry::chat_static(&provider_id, &model_id, &source, &prompt, chat_history).await.ok();
+                    }).detach();
+                    // tokio::spawn(async move {
+                    //     if let Err(err) = provider
+                    //         .stream_chat(&source, &model_id, &message_content, history_message)
+                    //         .await
+                    //     {
+                    //         tracing::error!("Error streaming chat: {}", err);
+                    //     }
+                    // });
                 }
             }
         }

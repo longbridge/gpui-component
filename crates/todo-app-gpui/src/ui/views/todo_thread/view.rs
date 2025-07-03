@@ -342,7 +342,7 @@ impl TodoThreadChat {
                     let todo_edit_entity_for_load = todo_edit_entity.clone();
                     
                     drawer_cx.spawn(async move | cx| {
-                        if let Ok(Some(instance)) = McpRegistry::get_instance(&server_id_for_load).await {
+                        if let Ok(Some(instance)) = McpRegistry::get_instance_static(&server_id_for_load).await {
                             let tools=instance.tools;
                             todo_edit_entity_for_load.update(cx, |todo_edit, todo_cx| {
                                         todo_edit.cached_server_tools.insert(server_id_for_load.clone(), tools);

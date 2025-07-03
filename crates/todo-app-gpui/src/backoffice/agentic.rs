@@ -1,5 +1,5 @@
 mod feedback;
-mod llm;
+pub mod llm;
 mod prompts;
 mod regulator;
 

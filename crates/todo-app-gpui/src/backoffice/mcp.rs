@@ -190,8 +190,73 @@ impl McpRegistry {
     pub fn global() -> Addr<Self> {
         McpRegistry::from_registry()
     }
+pub async fn call_tool(
+        server_id: &str,
+        tool_name: &str,
+        arguments: &str,
+    ) -> anyhow::Result<McpCallToolResult> {
+        let result = McpRegistry::global()
+            .send(McpCallToolRequest {
+                id: server_id.to_string(),
+                name: tool_name.to_string(),
+                arguments: arguments.to_string(),
+            })
+            .await?;
 
-    fn check_and_update(&mut self, _ctx: &mut Context<Self>) -> anyhow::Result<()> {
+        Ok(result)
+    }
+
+    pub async fn get_instance(server_id: &str) -> anyhow::Result<Option<McpServerInstance>> {
+            let result =  McpRegistry::global()
+                .send(GetServerInstance {
+                    server_id: server_id.to_string(),
+                })
+                .await?;
+
+            Ok(result)
+    }
+
+    pub async fn get_all_instances() -> anyhow::Result<Vec<McpServerInstance>> {
+        let result = McpRegistry::global()
+            .send(GetAllInstances)
+            .await?;
+
+        Ok(result)
+    }
+}
+
+impl Default for McpRegistry {
+    fn default() -> Self {
+        let file = YamlFile::new(McpConfigManager::config_path());
+        Self {
+            servers: HashMap::new(),
+            instances: HashMap::new(),
+            file,
+            handle: None,
+        }
+    }
+}
+
+impl Supervised for McpRegistry {
+    fn restarting(&mut self, _ctx: &mut Self::Context) {
+        log::info!("McpRegistry is restarting");
+    }
+}
+impl SystemService for McpRegistry {}
+
+impl McpRegistry {
+
+    fn tick(&mut self, ctx: &mut Context<Self>) {
+        if let Ok(false) = &self.file.exist() {
+            self.servers.clear();
+            return;
+        }
+        if let Err(err) = self.check_and_update(ctx) {
+            println!("{} {err}", self.file.path.display());
+        }
+    }
+
+     fn check_and_update(&mut self, _ctx: &mut Context<Self>) -> anyhow::Result<()> {
         if self.file.modified()? {
             let configs = McpConfigManager::load_servers()?;
             let enabled_ids: Vec<_> = configs
@@ -224,37 +289,8 @@ impl McpRegistry {
         }
         Ok(())
     }
-}
 
-impl Default for McpRegistry {
-    fn default() -> Self {
-        let file = YamlFile::new(McpConfigManager::config_path());
-        Self {
-            servers: HashMap::new(),
-            instances: HashMap::new(),
-            file,
-            handle: None,
-        }
-    }
-}
-
-impl Supervised for McpRegistry {
-    fn restarting(&mut self, _ctx: &mut Self::Context) {
-        log::info!("McpRegistry is restarting");
-    }
-}
-impl SystemService for McpRegistry {}
-
-impl McpRegistry {
-    fn tick(&mut self, ctx: &mut Context<Self>) {
-        if let Ok(false) = &self.file.exist() {
-            self.servers.clear();
-            return;
-        }
-        if let Err(err) = self.check_and_update(ctx) {
-            println!("{} {err}", self.file.path.display());
-        }
-    }
+    
 }
 
 impl Actor for McpRegistry {

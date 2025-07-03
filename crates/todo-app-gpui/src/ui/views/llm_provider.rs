@@ -441,45 +441,45 @@ impl LlmProvider {
         cx: &mut Context<Self>,
     ) {
         self.active_provider_tabs.insert(provider_index, tab_index);
-        let provider = self.providers.get(provider_index).cloned();
-        provider.map(|provider| {
-            if tab_index == 1 {
-                cx.spawn(async move |this, cx| {
-                    let timeout_duration = std::time::Duration::from_secs(5); // 30秒超时
-                    let models_future = provider.load_models();
-                    let this = this.clone();
-                    match tokio::time::timeout(timeout_duration, models_future).await {
-                        Ok(models_result) => {
-                            this.update(cx, |this, cx| match models_result {
-                                Ok(models) => {
-                                    if let Some(provider) = this.providers.get_mut(provider_index) {
-                                        provider.models = models;
-                                        LlmProviderManager::update_provider(
-                                            &provider.id,
-                                            provider.clone(),
-                                        )
-                                        .unwrap_or_else(
-                                            |e| {
-                                                eprintln!("更新模型列表失败: {}", e);
-                                            },
-                                        );
-                                    }
-                                    cx.notify();
-                                }
-                                Err(e) => {
-                                    eprintln!("加载模型列表失败: {}", e);
-                                }
-                            })
-                            .ok();
-                        }
-                        Err(_) => {
-                            eprintln!("加载模型列表超时（5秒）");
-                        }
-                    }
-                })
-                .detach();
-            }
-        });
+        // let provider = self.providers.get(provider_index).cloned();
+        // provider.map(|provider| {
+        //     if tab_index == 1 {
+        //         cx.spawn(async move |this, cx| {
+        //             let timeout_duration = std::time::Duration::from_secs(5); // 30秒超时
+        //             let models_future = provider.models
+        //             let this = this.clone();
+        //             match tokio::time::timeout(timeout_duration, models_future).await {
+        //                 Ok(models_result) => {
+        //                     this.update(cx, |this, cx| match models_result {
+        //                         Ok(models) => {
+        //                             if let Some(provider) = this.providers.get_mut(provider_index) {
+        //                                 provider.models = models;
+        //                                 LlmProviderManager::update_provider(
+        //                                     &provider.id,
+        //                                     provider.clone(),
+        //                                 )
+        //                                 .unwrap_or_else(
+        //                                     |e| {
+        //                                         eprintln!("更新模型列表失败: {}", e);
+        //                                     },
+        //                                 );
+        //                             }
+        //                             cx.notify();
+        //                         }
+        //                         Err(e) => {
+        //                             eprintln!("加载模型列表失败: {}", e);
+        //                         }
+        //                     })
+        //                     .ok();
+        //                 }
+        //                 Err(_) => {
+        //                     eprintln!("加载模型列表超时（5秒）");
+        //                 }
+        //             }
+        //         })
+        //         .detach();
+        //     }
+        // });
         cx.notify();
     }
 

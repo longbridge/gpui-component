@@ -218,7 +218,7 @@ impl TodoThreadEdit {
         
         cx.spawn(async move |_this, cx| {
             // 通过 McpRegistry 获取工具列表
-            if let Ok(Some(instance)) = McpRegistry::get_instance(&server_id).await {
+            if let Ok(Some(instance)) = McpRegistry::get_instance_static(&server_id).await {
                   let tools=instance.tools;
                 todo_edit_entity.update(cx, |todo_edit, todo_cx| {
                             todo_edit.cached_server_tools.insert(server_id.clone(), tools);
@@ -625,7 +625,7 @@ impl TodoThreadEdit {
                     let todo_edit_entity_for_load = todo_edit_entity.clone();
                     
                     drawer_cx.spawn(async move | cx| {
-                        if let Ok(Some(instance)) = McpRegistry::get_instance(&server_id_for_load).await {
+                        if let Ok(Some(instance)) = McpRegistry::get_instance_static(&server_id_for_load).await {
                             let tools= instance.tools.clone();
                             todo_edit_entity_for_load.update(cx, |todo_edit, todo_cx| {
                                 todo_edit.cached_server_tools.insert(server_id_for_load.clone(), tools);
