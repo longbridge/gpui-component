@@ -10,21 +10,12 @@ use crate::{
 use actix::prelude::*;
 use rmcp::model::{Content, ResourceContents};
 use rmcp::model::{Prompt as McpPrompt, Resource as McpResource, Tool as McpTool};
-use std::any::Any;
-use std::{collections::HashMap, sync::Arc, time::Duration};
-use tokio::sync::RwLock;
+use std::{collections::HashMap, time::Duration};
 
 #[derive(Message, Debug)]
 #[rtype(result = "()")]
 pub struct ExitFromRegistry;
 
-///登记
-#[derive(Message)]
-#[rtype(result = "()")]
-pub struct RegisterFnForAgent(
-    pub String,
-    pub dyn Fn(dyn Any) -> anyhow::Result<Box<dyn Any>> + Send + 'static,
-);
 
 #[derive(Message)]
 #[rtype(result = "McpCallToolResult")]

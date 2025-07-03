@@ -149,6 +149,7 @@ pub fn start() -> anyhow::Result<()> {
         let sys = System::with_tokio_rt(|| rt);
         sys.block_on(async {
             McpRegistry::from_registry();
+            McpRegistry::init_runtime();
         });
         sys.run().ok();
     });

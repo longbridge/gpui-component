@@ -329,26 +329,7 @@ impl Default for LlmProviderConfig {
             api_type: ApiType::OpenAI,
             enabled: true,
             retry_config: RetryConfig::default(),
-            models: vec![
-                // ModelInfo {
-                //     id: uuid::Uuid::new_v4().to_string(),
-                //     display_name: "gpt-4o".to_string(),
-                //     capabilities: vec![
-                //         ModelCapability::Text,
-                //         ModelCapability::Vision,
-                //         ModelCapability::Tools,
-                //     ],
-                //     enabled: true,
-                //     limits: ModelLimits::default(),
-                // },
-                // ModelInfo {
-                //     id: uuid::Uuid::new_v4().to_string(),
-                //     display_name: "gpt-4o-mini".to_string(),
-                //     capabilities: vec![ModelCapability::Text, ModelCapability::Tools],
-                //     enabled: true,
-                //     limits: ModelLimits::default(),
-                // },
-            ],
+            models: vec![],
         }
     }
 }

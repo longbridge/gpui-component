@@ -1,8 +1,7 @@
-use std::fmt::Debug;
-
 /// 这个模型是为了提供一个通用的接口，用于处理记忆、工具调用和LLM交互。
-use anyhow::Context;
-
+/// 
+/// 
+use std::fmt::Debug;
 mod insight;
 mod knowledge;
 mod memex;
@@ -247,14 +246,14 @@ pub trait Agent {
             .llm()
             .extract_knowledge(information)
             .await
-            .context("Failed to extract knowledge from information")?;
+           ?;
 
         // 生成摘要
         let summary = self
             .llm()
             .summarize(information)
             .await
-            .context("Failed to generate summary")?;
+            ?;
 
         // 存储到长期记忆
         let key = format!("knowledge_{}", chrono::Utc::now().timestamp());
@@ -263,7 +262,7 @@ pub trait Agent {
         self.memory_mut()
             .store(&key, &stored_content, MemoryType::LongTerm)
             .await
-            .context("Failed to store knowledge in long-term memory")?;
+           ?;
 
         Ok(())
     }
@@ -275,14 +274,14 @@ pub trait Agent {
             .memory()
             .search("input", Some(MemoryType::ShortTerm))
             .await
-            .context("Failed to search recent interactions")?;
+            ?;
 
         // 获取长期知识作为上下文
         let knowledge_context = self
             .memory()
             .search("knowledge", Some(MemoryType::LongTerm))
             .await
-            .context("Failed to search knowledge context")?;
+            ?;
 
         // 构建反思提示
         let reflection_prompt = format!(
@@ -307,7 +306,7 @@ pub trait Agent {
         self.llm()
             .analyze(&reflection_prompt)
             .await
-            .context("Failed to analyze reflection prompt")
+            
             .map(|result| format!("{:?}", result))
     }
 }

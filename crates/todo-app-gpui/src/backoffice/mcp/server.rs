@@ -362,16 +362,6 @@ impl McpServerInstance {
             .inspect(|result| println!("{:?}", result))
             .inspect_err(|error| println!("{:?}", error))
             .map_err(|e| rig::tool::ToolError::ToolCallError(Box::new(e)))?;
-            // let call_mcp_tool_result = server
-            //     .call_tool(CallToolRequestParam {
-            //         name: name.to_string().into(),
-            //         arguments: serde_json::from_str(args)
-            //             .map_err(rig::tool::ToolError::JsonError)?,
-            //     })
-            //     .await
-            //     .inspect(|result| println!(?result))
-            //     .inspect_err(|error| println!(%error))
-            //     .map_err(|e| rig::tool::ToolError::ToolCallError(Box::new(e)))?;
             Ok(call_mcp_tool_result)
         } else {
             Err(anyhow::anyhow!("Server instance not connected"))

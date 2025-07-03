@@ -255,10 +255,10 @@ impl McpRegistry {
     /// - 如果 Actor 调用失败，会返回默认值或错误信息
     /// - 如果响应通道发送失败（接收端已关闭），会忽略错误继续处理
     /// - 整个处理循环是容错的，单个消息处理失败不会影响其他消息
-    // pub fn init_runtime() {
-    //     // 确保桥接器只初始化一次
-    //     CROSS_RUNTIME_BRIDGE.get_or_init(|| CrossRuntimeBridge::new());
-    // }
+    pub fn init_runtime() {
+        // 确保桥接器只初始化一次
+        CROSS_RUNTIME_BRIDGE.get_or_init(|| CrossRuntimeBridge::new());
+    }
 
     /// 获取全局桥接器实例
     ///
@@ -269,7 +269,7 @@ impl McpRegistry {
     ///
     /// - `Some(Arc<CrossRuntimeBridge>)`: 桥接器实例
     /// - `None`: 桥接器未初始化
-    pub fn get_bridge() -> &'static CrossRuntimeBridge {
+    fn get_bridge() -> &'static CrossRuntimeBridge {
         CROSS_RUNTIME_BRIDGE.get_or_init(|| CrossRuntimeBridge::new())
     }
 
