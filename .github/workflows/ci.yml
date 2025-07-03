@@ -43,6 +43,12 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: test-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+      - name: Cache CEF
+        id: cache-cef
+        uses: actions/cache@v4
+        with:
+          path: $HOME/.cef
+          key: cef-${{ env.CEF_VERSION }}-${{ matrix.target }}
       - name: Typo check
         if: ${{ matrix.run_on == 'macos-latest' }}
         run: |
