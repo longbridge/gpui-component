@@ -1,29 +1,33 @@
 use gpui::*;
+use gpui::{
+    Action, App, AppContext, Axis, Context, Entity, FocusHandle, Focusable, IntoElement,
+    ParentElement, Render, Styled, Window,
+};
 use gpui_component::{
     button::Button,
     checkbox::Checkbox,
     description_list::{DescriptionItem, DescriptionList},
-    h_flex,
-    popup_menu::PopupMenuExt as _,
+    dock::PanelControl,
     text::TextView,
-    v_flex, AxisExt, Sizable as _, Size,
+    v_flex, Sizable as _, Size,
 };
+use gpui_component::{h_flex, popup_menu::PopupMenuExt as _, AxisExt};
 use serde::Deserialize;
-use story::Assets;
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
-#[action(namespace = example, no_json)]
+#[action(namespace = description_list_story, no_json)]
 struct ChangeSize(Size);
 
-pub struct Example {
+pub struct DescriptionListStory {
+    focus_handle: gpui::FocusHandle,
     layout: Axis,
     bordered: bool,
     size: Size,
     items: Vec<(&'static str, &'static str, usize)>,
 }
 
-impl Example {
-    pub fn new(_: &mut Window, _: &mut Context<Self>) -> Self {
+impl DescriptionListStory {
+    fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
         let items = vec![
             ("Name", "GPUI Component", 1),
             (
@@ -62,10 +66,11 @@ impl Example {
             bordered: true,
             size: Size::default(),
             layout: Axis::Horizontal,
+            focus_handle: cx.focus_handle(),
         }
     }
 
-    fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
+    pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| Self::new(window, cx))
     }
 
@@ -85,8 +90,32 @@ impl Example {
     }
 }
 
-impl Render for Example {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+impl super::Story for DescriptionListStory {
+    fn title() -> &'static str {
+        "DescriptionList"
+    }
+
+    fn description() -> &'static str {
+        "Use to display details with a tidy layout."
+    }
+
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+        Self::view(window, cx)
+    }
+
+    fn zoomable() -> Option<PanelControl> {
+        None
+    }
+}
+
+impl Focusable for DescriptionListStory {
+    fn focus_handle(&self, _: &App) -> FocusHandle {
+        self.focus_handle.clone()
+    }
+}
+
+impl Render for DescriptionListStory {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .id("example")
             .on_action(cx.listener(Self::on_change_size))
@@ -162,15 +191,4 @@ impl Render for Example {
                     )),
             )
     }
-}
-
-fn main() {
-    let app = Application::new().with_assets(Assets);
-
-    app.run(move |cx| {
-        story::init(cx);
-        cx.activate(true);
-
-        story::create_new_window("Description List Example", Example::view, cx);
-    });
 }
