@@ -319,7 +319,7 @@ impl ThemeColor {
             sidebar_foreground: neutral_900(),
             sidebar_primary: neutral_900(),
             sidebar_primary_foreground: neutral_50(),
-            skeleton: neutral_50().opacity(0.1),
+            skeleton: neutral_100(),
             slider_bar: neutral_900(),
             slider_thumb: white(),
             success: green_500(),
