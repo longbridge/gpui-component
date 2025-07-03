@@ -1,5 +1,7 @@
 # GPUI Component
 
+[![Build Status](https://github.com/longbridge/gpui-component/actions/workflows/ci.yml/badge.svg)](https://github.com/longbridge/gpui-component/actions/workflows/ci.yml)
+
 UI components for building fantastic desktop applications using [GPUI](https://gpui.rs).
 
 ## Features
