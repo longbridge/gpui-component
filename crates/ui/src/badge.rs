@@ -5,12 +5,13 @@ use gpui::{
 
 use crate::{h_flex, red_500, white, ActiveTheme, Icon, Sizable, Size, StyledExt};
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 enum BadgeVariant {
-    Dot,
     #[default]
     Number,
-    Icon(Icon),
+    Dot,
+
+    Icon(Box<Icon>),
 }
 
 #[allow(unused)]
@@ -68,7 +69,7 @@ impl Badge {
 
     /// Set to use [`BadgeVariant::Icon`] to show an icon.
     pub fn icon(mut self, icon: impl Into<Icon>) -> Self {
-        self.variant = BadgeVariant::Icon(icon.into());
+        self.variant = BadgeVariant::Icon(Box::new(icon.into()));
         self
     }
 
@@ -157,7 +158,7 @@ impl RenderOnce for Badge {
                                 .size(size)
                                 .border_1()
                                 .border_color(cx.theme().background)
-                                .child(icon),
+                                .child(*icon),
                         }),
                 )
             })
