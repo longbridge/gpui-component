@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use gpui::{
-    div, px, size, App, AppContext, Axis, Context, Entity, Focusable, InteractiveElement,
+    div, px, size, App, AppContext, StatefulInteractiveElement, Context, Entity, Focusable, InteractiveElement,
     IntoElement, ParentElement, Pixels, Render, ScrollHandle, SharedString, Size, Styled, Window,
 };
 use gpui_component::{
@@ -19,6 +19,10 @@ pub struct ScrollableStory {
     scroll_handle: ScrollHandle,
     scroll_size: gpui::Size<Pixels>,
     scroll_state: ScrollbarState,
+    // handle the scrollable in the bottom list part, vertical scrollable only
+    scroll_handle_list: ScrollHandle,
+    scroll_state_list: ScrollbarState,
+
     items: Vec<String>,
     item_sizes: Rc<Vec<Size<Pixels>>>,
     test_width: Pixels,
@@ -43,6 +47,8 @@ impl ScrollableStory {
             scroll_handle: ScrollHandle::new(),
             scroll_state: ScrollbarState::default(),
             scroll_size: gpui::Size::default(),
+            scroll_handle_list: ScrollHandle::new(),
+            scroll_state_list: ScrollbarState::default(),
             items,
             item_sizes: Rc::new(item_sizes),
             test_width,
@@ -285,14 +291,17 @@ impl Render for ScrollableStory {
                     .border_1()
                     .border_color(cx.theme().border)
                     .w_full()
-                    .max_h(px(400.))
+                    // .max_h(px(400.)) // move the max_h to the next level
                     .min_h(px(200.))
                     .child(
                         v_flex()
                             .p_3()
                             .w(self.test_width)
                             .id("test-1")
-                            .scrollable(Axis::Vertical)
+                            // .scrollable(Axis::Vertical)
+                            .max_h(px(400.))
+                            .overflow_y_scroll()
+                            .track_scroll(&self.scroll_handle_list)
                             .gap_1()
                             .child("Scrollable Example")
                             .children(self.items.iter().take(500).map(|item| {
@@ -305,6 +314,18 @@ impl Render for ScrollableStory {
                                     .child(item.to_string())
                             })),
                     )
+                    .child({
+                        div()
+                            .absolute()
+                            .top_0()
+                            .left_0()
+                            .right_0()
+                            .bottom_0()
+                            .child(
+                                Scrollbar::both(&self.scroll_state_list, &self.scroll_handle_list)
+                                    .axis(ScrollbarAxis::Vertical),
+                            )
+                    })
             })
     }
 }
