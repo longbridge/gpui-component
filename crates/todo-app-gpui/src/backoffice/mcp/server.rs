@@ -141,6 +141,7 @@ impl McpServerInstance {
         let mut command = self.config.command.split(" ");
         let command = Command::new(command.nth(0).unwrap_or_default()).configure(|cmd| {
             let args = command.skip(0).collect::<Vec<_>>();
+            cmd.kill_on_drop(true);
             cmd.args(args).envs(&self.config.env_vars);
             #[cfg(target_os = "windows")]
             cmd.creation_flags(0x08000000);
