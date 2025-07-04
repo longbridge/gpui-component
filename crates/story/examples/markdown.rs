@@ -15,7 +15,7 @@ pub struct Example {
     resizable_state: Entity<ResizableState>,
 }
 
-const EXAMPLE: &str = include_str!("./markdown.md");
+const EXAMPLE: &str = include_str!("./fixtures/test.md");
 
 impl Example {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {

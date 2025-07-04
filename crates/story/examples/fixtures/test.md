@@ -2,16 +2,48 @@
 
 This is first paragraph, there have **BOLD**, _italic_, and ~strikethrough~, `code` text.
 
-> Blockquote: More complex nested inline style like **bold: _italic_**.
-> This is second paragraph, it includes a block quote.
-
 This is an additional demonstration paragraph in English demonstrating more content for [Markdown GFM](https://github.github.com/gfm/). It includes various stylistic elements and plain text.
 
 ![Img](https://miro.medium.com/v2/resize:fit:1400/format:webp/1*WgEz5f3n3lD7MfC7NeQGOA.jpeg)
 
 这是一个中文演示段落，用于展示更多的 [Markdown GFM](https://github.github.com/gfm/) 内容。您可以在此尝试使用使用**粗体**、*斜体*和`代码`等样式。これは日本語のデモ段落です。Markdown の多言語サポートを示すためのテキストが含まれています。例えば、、**ボールド**、_イタリック_、および`コード`のスタイルなどを試すことができます。
 
-### Code block
+## Basic formatting
+
+### **Bold** text
+
+You can mark some text as bold with **two asterisks**
+or **two underscores**.
+
+### **Italic** text
+
+You can mark some text as italic with _asterisks_
+or _underscores_.
+
+### **_Bold and italic_**
+
+Three stars gives **_bold and italic_**
+
+### ~~Strikethrough~~
+
+Using `~~two tildes~~` will strikethrough: ~~two tildes~~
+
+## Blockquotes
+
+> Blockquote: More complex nested inline style like **bold: _italic_**.
+> This is second paragraph, it includes a block quote.
+
+And this is next blockquote
+
+> Hello, world!
+
+### Nested blockquotes
+
+> First level
+>
+> > Second level
+
+## Code block
 
 ```rust
 struct Repository {
@@ -34,15 +66,15 @@ fn main() {
 
 Here is a link to [Google](https://www.google.com), and another to [Rust](https://www.rust-lang.org).
 
-### Images
+## Image
 
-![](https://miro.medium.com/v2/resize:fit:1400/format:webp/0*fCBw3AjH4o9SO03D)
+![](https://miro.medium.com/v2/resize:fit:1400/format:webp/1*sOTh1aAl32jxKNuGO0TOcA.png)
 
-#### SVG
+### SVG
 
 ![Rust](https://www.rust-lang.org/logos/rust-logo-blk.svg)
 
-### Table
+## Table
 
 | Header 1 | Centered | Header 3                             | Align Right |
 | -------- | :------: | ------------------------------------ | ----------: |
@@ -50,9 +82,16 @@ Here is a link to [Google](https://www.google.com), and another to [Rust](https:
 | Row 2    |  Row 2   | Row 2<br>[Link](https://github.com)  |       Row 2 |
 | Row 3    | **Bold** | Row 3                                |       Row 3 |
 
-#### Lists
+See the way the text is aligned, depending on the position of `':'`
 
-##### Bulleted List
+| Syntax    | Description |   Test Text |
+| :-------- | :---------: | ----------: |
+| Header    |    Title    | Here's this |
+| Paragraph |    Text     |    And more |
+
+## Lists
+
+### Bulleted List
 
 - Bullet 1, this is very long and needs to be wrapped to the next line, display should be wrapped to the next line as well.
 - Bullet 2, the second bullet item is also long and needs to be wrapped to the next line.
@@ -63,7 +102,7 @@ Here is a link to [Google](https://www.google.com), and another to [Rust](https:
   - Bullet 2.2
 - Bullet 3
 
-##### Numbered List
+### Numbered List
 
 1. Numbered item 1
    1. Numbered item 1.1
@@ -72,15 +111,40 @@ Here is a link to [Google](https://www.google.com), and another to [Rust](https:
 2. Numbered item 2
 3. Numbered item 3
 
-##### To-Do List
+### To-Do List
 
 - [x] Task 1, a long long text task, this line is very long and needs to be wrapped to the next line, display should be wrapped to the next line as well.
 - [ ] Task 2, going to do something if there is a long text that needs to be wrapped to the next line.
 - [ ] Task 3
 
-### HTML
+## Heading
 
-#### Paragraph and Text
+Add `##` at the beginning of a line to set as Heading.
+You can use up to 6 `#` symbols for the corresponding Heading levels
+
+## Heading 2
+
+This is paragraph of the heading 2.
+
+### Heading 3
+
+This is paragraph of the heading 3.
+
+#### Heading 4
+
+This is paragraph of the heading 4.
+
+##### Heading 5
+
+This is paragraph of the heading 5.
+
+###### Heading 6
+
+This is paragraph of the heading 6.
+
+## HTML
+
+### Paragraph and Text
 
 <div>
     Here is a test in div.
@@ -91,7 +155,7 @@ Here is a link to [Google](https://www.google.com), and another to [Rust](https:
     A text after div.
 </div>
 
-#### List
+### List
 
 <ol>
 <li>Numbered item 1</li>
@@ -103,7 +167,7 @@ Here is a link to [Google](https://www.google.com), and another to [Rust](https:
 <li>Bullet 2</li>
 </ul>
 
-#### Table
+### Table
 
 <table>
 <thead>
@@ -124,11 +188,9 @@ Here is a link to [Google](https://www.google.com), and another to [Rust](https:
 </tbody>
 </table>
 
-#### Image
+### Image
 
-<img src="https://www.rust-lang.org/logos/rust-logo-blk.svg" alt="Rust" width="100" height="100" />
-<img src="https://www.rust-lang.org/logos/rust-logo-blk.svg" alt="Rust" width="100%" />
-<img src="https://www.rust-lang.org/logos/rust-logo-blk.svg" alt="Rust" style="width:100%" />
+<img src="https://miro.medium.com/v2/resize:fit:1400/format:webp/1*QY36p64kSGfBQsIFci8WBw.png" alt="The Best Programming Languages to Learn in 2025" width="100%" />
 
 ## Unsupported
 
