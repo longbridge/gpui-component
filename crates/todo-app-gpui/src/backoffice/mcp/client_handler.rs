@@ -1,4 +1,5 @@
 use crate::backoffice::cross_runtime::CrossRuntimeBridge;
+use crate::backoffice::mcp::McpRegistry;
 use crate::backoffice::BoEvent;
 use rmcp::model::{
     CreateMessageRequestMethod, CreateMessageRequestParam, CreateMessageResult, ListRootsResult,
@@ -186,13 +187,19 @@ impl ClientHandler for McpClientHandler {
         {
             Ok(result) => {
                 println!("Resource content read successfully for: {}", params.uri);
-                CrossRuntimeBridge::global().post(
-                    crate::backoffice::mcp::UpdateInstanceResourceContent {
+                //
+                McpRegistry::global().send(crate::backoffice::mcp::UpdateInstanceResourceContent {
                         server_id: self.id.clone(),
                         uri: params.uri.clone(),
                         contents: result.contents.clone(),
-                    },
-                );
+                    }).await.unwrap();
+                // CrossRuntimeBridge::global().post(
+                    // crate::backoffice::mcp::UpdateInstanceResourceContent {
+                    //     server_id: self.id.clone(),
+                    //     uri: params.uri.clone(),
+                    //     contents: result.contents.clone(),
+                    // },
+                // );
             }
             Err(err) => {
                 log::error!("Failed to read updated resource {}: {}", params.uri, err);
