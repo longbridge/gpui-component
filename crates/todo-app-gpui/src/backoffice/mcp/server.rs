@@ -141,14 +141,45 @@ impl McpServerInstance {
         let mut command = self.config.command.split(" ");
         let command = Command::new(command.nth(0).unwrap_or_default()).configure(|cmd| {
             let args = command.skip(0).collect::<Vec<_>>();
-            cmd.kill_on_drop(true);
-            cmd.args(args).envs(&self.config.env_vars);
+            cmd.kill_on_drop(true)
+                .args(args)
+                .envs(&self.config.env_vars);
             #[cfg(target_os = "windows")]
             cmd.creation_flags(0x08000000);
         });
-
         println!("Starting MCP provider with command: {:?}", command);
         let transport = TokioChildProcess::new(command)?;
+        #[cfg(target_family = "windows")]
+        {
+            use windows::Win32::System::JobObjects::{
+                AssignProcessToJobObject, CreateJobObjectA, JobObjectExtendedLimitInformation,
+                SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+                JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+            };
+            use windows::Win32::System::Threading::{OpenProcess, PROCESS_ALL_ACCESS};
+            transport
+                .id()
+                .and_then(|pid: u32| unsafe { OpenProcess(PROCESS_ALL_ACCESS, true, pid).ok() })
+                .and_then(|hprocess| unsafe {
+                    CreateJobObjectA(None, windows::core::s!("x-todo-mcp-job"))
+                        .ok()
+                        .and_then(|hjob| {
+                            let mut jobobjectinformation =
+                                JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+                            jobobjectinformation.BasicLimitInformation.LimitFlags =
+                                JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+                            SetInformationJobObject(
+                                hjob,
+                                JobObjectExtendedLimitInformation,
+                                &jobobjectinformation as *const _ as *const std::ffi::c_void,
+                                std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+                            )
+                            .ok()
+                            .and_then(|_| AssignProcessToJobObject(hjob, hprocess).ok())
+                        })
+                });
+        }
+
         let client = McpClientHandler::new(self.config.id.clone())
             .serve(transport)
             .await?;
