@@ -6,6 +6,7 @@ use gpui_component::{
     alert::Alert,
     button::{Button, ButtonGroup},
     dock::PanelControl,
+    text::TextView,
     v_flex, IconName, Selectable as _, Sizable as _, Size,
 };
 
@@ -65,20 +66,6 @@ impl Render for AlertStory {
         v_flex()
             .gap_4()
             .child(
-                Alert::warning(
-                    "banner-1",
-                    "This is a banner alert, it will take the full width of the container.",
-                )
-                .banner()
-                .on_close(cx.listener(|this, _, _, cx| {
-                    this.banner_visible = !this.banner_visible;
-                    cx.notify();
-                }))
-                .visible(self.banner_visible)
-                .with_size(self.size)
-                .icon(IconName::Bell),
-            )
-            .child(
                 ButtonGroup::new("toggle-size")
                     .outline()
                     .compact()
@@ -114,56 +101,135 @@ impl Render for AlertStory {
                     })),
             )
             .child(
-                section("Info").w_2_3().child(
-                    Alert::info("info1", "This is an info alert.")
-                        .with_size(self.size)
-                        .title("Info message")
-                        .on_close(cx.listener(|_, _, _, _| {
-                            println!("Info alert closed");
-                        })),
-                ),
-            )
-            .child(
-                section("Success with Title").w_2_3().child(
-                    Alert::success(
-                        "success-1",
-                        "You have successfully submitted your form.\n\
-                    Thank you for your submission!",
+                section("Default").w_2_3().child(
+                    Alert::new(
+                        "alert-default",
+                        TextView::markdown(
+                            "md",
+                            "This is an alert with icon, title and description (in Markdown).\n\
+                            - This is a **list** item.\n\
+                            - This is another list item.",
+                        ),
                     )
                     .with_size(self.size)
-                    .title("Submit Successful"),
+                    .title("Success! Your changes have been saved"),
                 ),
             )
             .child(
-                section("Warning").w_2_3().child(
-                    Alert::warning(
-                        "warning-1",
-                        "This is a warning alert with icon and title.\n\
-                    This is second line of text to test is the line-height is correct.",
-                    )
-                    .with_size(self.size),
+                section("With variant").w_2_3().child(
+                    v_flex()
+                        .w_full()
+                        .gap_3()
+                        .child(
+                            Alert::info("info1", "This is an info alert.")
+                                .with_size(self.size)
+                                .title("Info message")
+                                .on_close(cx.listener(|_, _, _, _| {
+                                    println!("Info alert closed");
+                                })),
+                        )
+                        .child(
+                            Alert::success(
+                                "success-1",
+                                "You have successfully submitted your form.\n\
+                        Thank you for your submission!",
+                            )
+                            .with_size(self.size)
+                            .title("Submit Successful"),
+                        )
+                        .child(
+                            Alert::warning(
+                                "warning-1",
+                                "This is a warning alert with icon and title.\n\
+                            This is second line of text to test is the line-height is correct.",
+                            )
+                            .with_size(self.size),
+                        )
+                        .child(
+                            Alert::error(
+                                "error-1",
+                                TextView::markdown(
+                                    "error-message",
+                                    "Please verify your billing information and try again.\n\
+                            - Check your card details\n\
+                            - Ensure sufficient funds\n\
+                            - Verify billing address",
+                                ),
+                            )
+                            .with_size(self.size)
+                            .title("Unable to process your payment."),
+                        ),
                 ),
             )
             .child(
-                section("Error").w_2_3().child(
-                    Alert::error(
-                        "error-1",
-                        "There was an error submitting your form.\n\
-                    Please try again later, if you still have issues, please contact support.",
-                    )
-                    .with_size(self.size)
-                    .title("Error!"),
+                section("Banner").w_2_3().child(
+                    v_flex()
+                        .w_full()
+                        .gap_2()
+                        .child(
+                            Alert::new(
+                                "banner-1",
+                                "This is a banner alert, it will take \
+                       the full width of the container.",
+                            )
+                            .banner()
+                            .on_close(cx.listener(|this, _, _, cx| {
+                                this.banner_visible = !this.banner_visible;
+                                cx.notify();
+                            }))
+                            .visible(self.banner_visible)
+                            .with_size(self.size),
+                        )
+                        .child(
+                            Alert::info(
+                                "banner-info",
+                                "This is a banner alert, it will take the full width of the\
+                    container.",
+                            )
+                            .banner()
+                            .with_size(self.size),
+                        )
+                        .child(
+                            Alert::success(
+                                "banner-success",
+                                "This is a banner alert, it will take the full width of the\
+                    container.",
+                            )
+                            .banner()
+                            .with_size(self.size),
+                        )
+                        .child(
+                            Alert::warning(
+                                "banner-warning",
+                                "This is a banner alert, it will take the full width of the\
+                    container.",
+                            )
+                            .banner()
+                            .with_size(self.size),
+                        )
+                        .child(
+                            Alert::error(
+                                "banner-error",
+                                "This is a banner alert, it will take the full width of the\
+                    container.",
+                            )
+                            .banner()
+                            .with_size(self.size),
+                        ),
                 ),
             )
             .child(
                 section("Custom Icon").w_2_3().child(
-                    Alert::info(
+                    Alert::new(
                         "other-1",
-                        "Custom icon with info alert with long long long long long long long long long long long long long long long long long long long long messageeeeeeeee.",
+                        "Custom icon with info alert with long \
+                    long long long long long long long long \
+                    long long long long long long long long long \
+                    long long messageeeeeeeee.",
                     )
                     .title("Custom Icon")
                     .with_size(self.size)
-                    .icon(IconName::Bell),
+                    .icon(IconName::Calendar),
                 ),
             )
     }

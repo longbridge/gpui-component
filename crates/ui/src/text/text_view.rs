@@ -59,6 +59,18 @@ impl From<TextView> for Text {
     }
 }
 
+impl Text {
+    /// Set the style for [`TextView`].
+    ///
+    /// Do nothing if this is `String`.
+    pub fn style(self, style: TextViewStyle) -> Self {
+        match self {
+            Self::String(s) => Self::String(s),
+            Self::TextView(e) => Self::TextView(e.style(style)),
+        }
+    }
+}
+
 impl RenderOnce for Text {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         match self {

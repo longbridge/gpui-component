@@ -1,16 +1,21 @@
 use std::rc::Rc;
 
 use gpui::{
-    div, prelude::FluentBuilder as _, px, relative, App, ClickEvent, ElementId, Empty, Hsla,
+    div, prelude::FluentBuilder as _, px, relative, rems, App, ClickEvent, ElementId, Empty, Hsla,
     InteractiveElement, IntoElement, ParentElement as _, RenderOnce, SharedString,
     StatefulInteractiveElement, StyleRefinement, Styled, Window,
 };
 
-use crate::{h_flex, text::Text, ActiveTheme as _, Icon, IconName, Sizable, Size, StyledExt};
+use crate::{
+    h_flex,
+    text::{Text, TextViewStyle},
+    ActiveTheme as _, Icon, IconName, Sizable, Size, StyleSized, StyledExt,
+};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum AlertVariant {
     #[default]
+    Secondary,
     Info,
     Success,
     Warning,
@@ -20,6 +25,7 @@ pub enum AlertVariant {
 impl AlertVariant {
     fn fg(&self, cx: &App) -> Hsla {
         match self {
+            AlertVariant::Secondary => cx.theme().secondary_foreground,
             AlertVariant::Info => cx.theme().info,
             AlertVariant::Success => cx.theme().success,
             AlertVariant::Warning => cx.theme().warning,
@@ -29,6 +35,17 @@ impl AlertVariant {
 
     fn color(&self, cx: &App) -> Hsla {
         match self {
+            AlertVariant::Secondary => cx.theme().secondary,
+            AlertVariant::Info => cx.theme().info,
+            AlertVariant::Success => cx.theme().success,
+            AlertVariant::Warning => cx.theme().warning,
+            AlertVariant::Error => cx.theme().danger,
+        }
+    }
+
+    fn border_color(&self, cx: &App) -> Hsla {
+        match self {
+            AlertVariant::Secondary => cx.theme().border,
             AlertVariant::Info => cx.theme().info,
             AlertVariant::Success => cx.theme().success,
             AlertVariant::Warning => cx.theme().warning,
@@ -43,7 +60,7 @@ pub struct Alert {
     id: ElementId,
     style: StyleRefinement,
     variant: AlertVariant,
-    icon: Option<Icon>,
+    icon: Icon,
     title: Option<SharedString>,
     message: Text,
     size: Size,
@@ -54,12 +71,12 @@ pub struct Alert {
 
 impl Alert {
     /// Create a new alert with the given message.
-    fn new(id: impl Into<ElementId>, message: impl Into<Text>) -> Self {
+    pub fn new(id: impl Into<ElementId>, message: impl Into<Text>) -> Self {
         Self {
             id: id.into(),
             style: StyleRefinement::default(),
             variant: AlertVariant::default(),
-            icon: None,
+            icon: Icon::new(IconName::Info),
             title: None,
             message: message.into(),
             size: Size::default(),
@@ -105,7 +122,7 @@ impl Alert {
 
     /// Set the icon for the alert.
     pub fn icon(mut self, icon: impl Into<Icon>) -> Self {
-        self.icon = Some(icon.into());
+        self.icon = icon.into();
         self
     }
 
@@ -159,65 +176,40 @@ impl RenderOnce for Alert {
             return Empty.into_any_element();
         }
 
-        let (radius, padding_x, padding_y, gap, line_height, icon_mt) = match self.size {
-            Size::XSmall => (cx.theme().radius, px(12.), px(6.), px(6.), 1.2, px(2.5)),
-            Size::Small => (cx.theme().radius, px(12.), px(8.), px(6.), 1.2, px(1.5)),
-            Size::Large => (
-                cx.theme().radius * 3.,
-                px(20.),
-                px(16.),
-                px(12.),
-                1.4,
-                px(0.),
-            ),
-            _ => (
-                cx.theme().radius * 2.,
-                px(16.),
-                px(12.),
-                px(8.),
-                1.3,
-                px(1.),
-            ),
+        let (radius, padding_x, padding_y, gap) = match self.size {
+            Size::XSmall => (cx.theme().radius, px(12.), px(6.), px(6.)),
+            Size::Small => (cx.theme().radius, px(12.), px(8.), px(6.)),
+            Size::Large => (cx.theme().radius_lg, px(20.), px(16.), px(12.)),
+            _ => (cx.theme().radius_lg, px(16.), px(12.), px(12.)),
         };
 
         let color = self.variant.color(cx);
+        let fg = self.variant.fg(cx);
+        let border_color = self.variant.border_color(cx);
 
         h_flex()
             .id(self.id)
             .w_full()
-            .bg(color.opacity(0.06))
-            .text_color(self.variant.fg(cx))
+            .text_color(fg)
+            .bg(color.opacity(0.08))
             .px(padding_x)
             .py(padding_y)
             .gap(gap)
             .justify_between()
-            .line_height(relative(line_height))
-            .map(|this| match self.size {
-                Size::Large => this.text_base(),
-                _ => this.text_sm(),
-            })
-            .when(!self.banner, |this| {
-                this.rounded(radius)
-                    .border_1()
-                    .border_color(color)
-                    .items_start()
-            })
+            .input_text_size(self.size.smaller())
+            .border_1()
+            .border_color(border_color)
+            .when(!self.banner, |this| this.rounded(radius).items_start())
             .refine_style(&self.style)
             .child(
                 div()
                     .flex()
                     .flex_1()
                     .items_start()
+                    .when(self.banner, |this| this.items_center())
                     .overflow_hidden()
                     .gap(gap)
-                    .child(
-                        div().mt(icon_mt).child(
-                            self.icon
-                                .unwrap_or(IconName::Info.into())
-                                .with_size(self.size)
-                                .flex_shrink_0(),
-                        ),
-                    )
+                    .child(self.icon)
                     .child(
                         div()
                             .flex_1()
@@ -228,13 +220,17 @@ impl RenderOnce for Alert {
                                         div()
                                             .w_full()
                                             .truncate()
-                                            .mb_1()
                                             .font_semibold()
+                                            .line_height(relative(1.))
+                                            .mb(rems(0.3))
                                             .child(title),
                                     )
                                 })
                             })
-                            .child(self.message),
+                            .child(
+                                self.message
+                                    .style(TextViewStyle::default().paragraph_gap(rems(0.2))),
+                            ),
                     ),
             )
             .when_some(self.on_close, |this, on_close| {
@@ -250,7 +246,6 @@ impl RenderOnce for Alert {
                         })
                         .child(
                             Icon::new(IconName::Close)
-                                .text_color(cx.theme().foreground)
                                 .with_size(self.size.max(Size::Medium))
                                 .flex_shrink_0(),
                         ),
