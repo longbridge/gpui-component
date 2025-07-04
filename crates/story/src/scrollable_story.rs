@@ -323,7 +323,7 @@ impl Render for ScrollableStory {
                             .bottom_0()
                             .child(
                                 Scrollbar::both(&self.scroll_state_list, &self.scroll_handle_list)
-                                    .axis(ScrollbarAxis::Vertical),
+                                    .axis(self.axis),
                             )
                     })
             })
