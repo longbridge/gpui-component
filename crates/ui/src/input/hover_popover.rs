@@ -9,7 +9,7 @@ use crate::{
     highlighter::LanguageRegistry,
     input::{InputState, Marker},
     text::TextView,
-    ActiveTheme as _, StyledExt as _,
+    ActiveTheme as _,
 };
 
 pub struct DiagnosticPopover {

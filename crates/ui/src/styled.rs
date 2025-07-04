@@ -5,8 +5,8 @@ use crate::{
     ActiveTheme,
 };
 use gpui::{
-    div, hsla, point, px, App, Axis, BoxShadow, DefiniteLength, Div, Edges, Element, ElementId,
-    FocusHandle, Pixels, Refineable, StyleRefinement, Styled, Window,
+    div, px, App, Axis, DefiniteLength, Div, Edges, Element, ElementId, FocusHandle, Pixels,
+    Refineable, StyleRefinement, Styled, Window,
 };
 use serde::{Deserialize, Serialize};
 
@@ -169,17 +169,6 @@ pub trait StyledExt: Styled + Sized {
             .border_color(cx.theme().border)
             .shadow_lg()
             .rounded(cx.theme().radius)
-    }
-
-    /// TODO: Remove this after PR is merged
-    /// https://github.com/zed-industries/zed/pull/33361
-    fn shadow_xs(self) -> Self {
-        self.shadow(vec![BoxShadow {
-            color: hsla(0., 0., 0., 0.05),
-            offset: point(px(0.), px(1.)),
-            blur_radius: px(2.),
-            spread_radius: px(0.),
-        }])
     }
 }
 
