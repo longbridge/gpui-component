@@ -1,6 +1,12 @@
-use std::rc::Rc;
 use gpui::*;
-use gpui_component::{dock::PanelControl, highlighter::HighlightTheme, resizable::resizable_panel, text::{TextView, TextViewStyle}, *};
+use gpui_component::{
+    dock::PanelControl,
+    highlighter::HighlightTheme,
+    resizable::resizable_panel,
+    text::{TextView, TextViewStyle},
+    *,
+};
+use std::rc::Rc;
 
 use crate::ui::components::ViewKit;
 
@@ -26,7 +32,7 @@ impl ViewKit for UserGuide {
     }
 
     fn description() -> &'static str {
-        "一款基于LLM待办事项实用工具的使用指南"
+        "一款基于LLM待办事项实用工具"
     }
 
     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
