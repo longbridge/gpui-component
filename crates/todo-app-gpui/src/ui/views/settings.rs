@@ -41,7 +41,7 @@ impl Settings {
 }
 
 impl Settings {
-    pub fn open(init_view: Option<&str>, parent: &mut Window, cx: &mut App) {
+    pub fn open(init_view: Option<&str>, parent: &mut Window, cx: &mut App) -> WindowHandle<Root> {
         cx.activate(true);
         let window_size = size(px(1024.0), px(920.0));
         let window_bounds = Bounds::centered(None, window_size, cx);
@@ -65,9 +65,7 @@ impl Settings {
         let parent_handle = parent.window_handle();
         cx.create_normal_window("xTo-Do 设置", options, move |window, cx| {
             cx.new(|cx| Self::new(&init_view, parent_handle, window, cx))
-        });
-        // #[cfg(target_os = "windows")]
-        // parent.enable_window(false);
+        })
     }
 
     fn new(

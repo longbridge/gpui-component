@@ -301,7 +301,7 @@ impl AppExt for App {
         window
             .update(self, |_, window, _| {
                 window.activate_window();
-                window.set_window_title("X-Todo Utility");
+                window.set_window_title("xTo-Do Utility");
             })
             .expect("failed to update window");
         window
@@ -341,7 +341,7 @@ impl AppExt for App {
             window
                 .update(self, |_, window, _| {
                     window.activate_window();
-                    window.set_window_title("x-Todo Utility");
+                    window.set_window_title("xTo-Do Utility");
                 })
                 .expect("failed to update window");
         }

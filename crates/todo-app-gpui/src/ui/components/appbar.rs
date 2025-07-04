@@ -16,6 +16,7 @@ pub struct AppTitleBar {
     locale_selector: Entity<LocaleSelector>,
     child: Rc<dyn Fn(&mut Window, &mut App) -> AnyElement>,
     _subscriptions: Vec<Subscription>,
+    setting_window: Option<WindowHandle<Root>>,
 }
 
 impl AppTitleBar {
@@ -33,6 +34,7 @@ impl AppTitleBar {
             locale_selector,
             child: Rc::new(|_, _| div().into_any_element()),
             _subscriptions,
+            setting_window: None,
         }
     }
 
@@ -80,9 +82,24 @@ impl Render for AppTitleBar {
                             .icon(IconName::Settings)
                             .small()
                             .ghost()
-                            .on_click(|_, window, cx| {
-                                Settings::open(Some("服务提供商"), window, cx)
-                            }),
+                            .on_click(cx.listener(|this,_ev, window, cx| {
+                                if let Some(handle) = this.setting_window.as_ref() {
+                                     if handle.is_active(cx).is_some(){
+                                        handle
+                                            .update(cx, |_, window, cx| {
+                                            window.activate_window();
+                                            cx.notify();
+                        })
+                        .ok();
+                                     }else{
+                                         let handle = Settings::open(Some("服务提供商"), window, cx);
+                                this.setting_window = Some(handle);
+                                     }
+                                }else{
+                                let handle = Settings::open(Some("服务提供商"), window, cx);
+                                this.setting_window = Some(handle);
+                                }
+                            })),
                     )
                     .child(
                         div().relative().child(
