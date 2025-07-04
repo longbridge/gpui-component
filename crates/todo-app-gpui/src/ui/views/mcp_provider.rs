@@ -65,6 +65,10 @@ pub struct McpProvider {
             Vec<ResourceTemplateDefinition>,
         ),
     >,
+    // 新增：订阅状态管理
+    resource_subscriptions: std::collections::HashMap<String, std::collections::HashSet<String>>, // provider_id -> Set<resource_uri>
+    resource_template_subscriptions:
+        std::collections::HashMap<String, std::collections::HashSet<String>>, // provider_id -> Set<uri_template>
     _subscriptions: Vec<Subscription>,
 }
 
@@ -109,6 +113,9 @@ impl McpProvider {
             editing_provider: None,
             provider_inputs: std::collections::HashMap::new(),
             cached_capabilities: std::collections::HashMap::new(),
+            // 初始化订阅状态
+            resource_subscriptions: std::collections::HashMap::new(),
+            resource_template_subscriptions: std::collections::HashMap::new(),
             _subscriptions: vec![],
         }
     }
@@ -480,6 +487,197 @@ impl McpProvider {
         self.active_capability_tabs
             .insert(provider_index, tab_index);
         cx.notify();
+    }
+
+    // 切换资源订阅状态
+    fn toggle_resource_subscription(
+        &mut self,
+        provider_id: &str,
+        resource_uri: &str,
+        subscribe: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let provider_id = provider_id.to_string();
+        let resource_uri = resource_uri.to_string();
+
+        if subscribe {
+            // 添加订阅
+            self.resource_subscriptions
+                .entry(provider_id.clone())
+                .or_insert_with(std::collections::HashSet::new)
+                .insert(resource_uri.clone());
+
+            // 异步调用订阅方法
+            cx.spawn(async move |this, cx| {
+                let provider_id = provider_id.clone();
+                let resource_uri = resource_uri.clone();
+                match CrossRuntimeBridge::global()
+                    .subscribe_to_resource(provider_id.clone(), resource_uri.clone())
+                    .await
+                {
+                    Ok(_) => {
+                        this.update(cx, |this, cx| {
+                            // window.push_notification(format!("已订阅资源: {}", resource_uri), cx);
+                            cx.notify();
+                        })
+                        .ok();
+                    }
+                    Err(e) => {
+                        this.update(cx, |this, cx| {
+                            // 订阅失败，移除本地状态
+                            if let Some(subscriptions) =
+                                this.resource_subscriptions.get_mut(&provider_id)
+                            {
+                                subscriptions.remove(&resource_uri);
+                            }
+                            //window.push_notification(format!("订阅资源失败: {}", e), cx);
+                            cx.notify();
+                        })
+                        .ok();
+                    }
+                }
+            })
+            .detach();
+        } else {
+            // 取消订阅
+            if let Some(subscriptions) = self.resource_subscriptions.get_mut(&provider_id) {
+                subscriptions.remove(&resource_uri);
+            }
+
+            // 异步调用取消订阅方法
+            cx.spawn(async move |this, cx| {
+                let provider_id = provider_id.clone();
+                let resource_uri = resource_uri.clone();
+                match CrossRuntimeBridge::global()
+                    .unsubscribe_from_resource(provider_id, resource_uri.clone())
+                    .await
+                {
+                    Ok(_) => {
+                        this.update(cx, |this, cx| {
+                            // window
+                            //     .push_notification(format!("已取消订阅资源: {}", resource_uri), cx);
+                            cx.notify();
+                        })
+                        .ok();
+                    }
+                    Err(e) => {
+                        this.update(cx, |this, cx| {
+                            // window.push_notification(format!("取消订阅资源失败: {}", e), cx);
+                            cx.notify();
+                        })
+                        .ok();
+                    }
+                }
+            })
+            .detach();
+        }
+    }
+
+    // 切换资源模板订阅状态
+    fn toggle_resource_template_subscription(
+        &mut self,
+        provider_id: &str,
+        uri_template: &str,
+        subscribe: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let provider_id = provider_id.to_string();
+        let uri_template = uri_template.to_string();
+
+        if subscribe {
+            // 添加订阅
+            self.resource_template_subscriptions
+                .entry(provider_id.clone())
+                .or_insert_with(std::collections::HashSet::new)
+                .insert(uri_template.clone());
+
+            // 异步调用订阅方法
+            cx.spawn(async move |this, cx| {
+                let provider_id = provider_id.clone();
+                let uri_template = uri_template.clone();
+                match CrossRuntimeBridge::global()
+                    .subscribe_to_resource_template(provider_id.clone(), uri_template.clone())
+                    .await
+                {
+                    Ok(_) => {
+                        this.update(cx, |this, cx| {
+                            // window
+                            //     .push_notification(format!("已订阅资源模板: {}", uri_template), cx);
+                            cx.notify();
+                        })
+                        .ok();
+                    }
+                    Err(e) => {
+                        this.update(cx, |this, cx| {
+                            // 订阅失败，移除本地状态
+                            if let Some(subscriptions) =
+                                this.resource_template_subscriptions.get_mut(&provider_id)
+                            {
+                                subscriptions.remove(&uri_template);
+                            }
+                            //window.push_notification(format!("订阅资源模板失败: {}", e), cx);
+                            cx.notify();
+                        })
+                        .ok();
+                    }
+                }
+            })
+            .detach();
+        } else {
+            // 取消订阅
+            if let Some(subscriptions) = self.resource_template_subscriptions.get_mut(&provider_id)
+            {
+                subscriptions.remove(&uri_template);
+            }
+
+            // 异步调用取消订阅方法
+            cx.spawn(async move |this, cx| {
+                let provider_id = provider_id.clone();
+                let uri_template = uri_template.clone();
+                match CrossRuntimeBridge::global()
+                    .unsubscribe_from_resource_template(provider_id, uri_template.clone())
+                    .await
+                {
+                    Ok(_) => {
+                        this.update(cx, |this, cx| {
+                            // window.push_notification(
+                            //     format!("已取消订阅资源模板: {}", uri_template),
+                            //     cx,
+                            // );
+                            cx.notify();
+                        })
+                        .ok();
+                    }
+                    Err(e) => {
+                        this.update(cx, |this, cx| {
+                            // window
+                            //     .push_notification(format!("取消订阅资源模板失败: {}", e), cx);
+                            cx.notify();
+                        })
+                        .ok();
+                    }
+                }
+            })
+            .detach();
+        }
+    }
+
+    // 检查资源是否已订阅
+    fn is_resource_subscribed(&self, provider_id: &str, resource_uri: &str) -> bool {
+        self.resource_subscriptions
+            .get(provider_id)
+            .map(|subscriptions| subscriptions.contains(resource_uri))
+            .unwrap_or(false)
+    }
+
+    // 检查资源模板是否已订阅
+    fn is_resource_template_subscribed(&self, provider_id: &str, uri_template: &str) -> bool {
+        self.resource_template_subscriptions
+            .get(provider_id)
+            .map(|subscriptions| subscriptions.contains(uri_template))
+            .unwrap_or(false)
     }
 }
 
@@ -862,23 +1060,17 @@ impl McpProvider {
         div().child(match tab_index {
             0 => div().child(Self::render_config_content_static(provider)),
             1 => {
-                // 从缓存获取资源信息 - 使用静态方法
+                // 传递 provider_id 和 cx 参数
                 div().child(Self::render_resources_content_static(&resources))
             }
             2 => {
-                // 资源模板 - 暂时显示空内容
+                // 传递 provider_id 和 cx 参数
                 div().child(Self::render_resource_templates_content_static(
                     &resource_templates,
                 ))
             }
-            3 => {
-                // 从缓存获取工具信息
-                div().child(Self::render_tools_content_static(&tools))
-            }
-            4 => {
-                // 从缓存获取提示信息
-                div().child(Self::render_prompts_content_static(&prompts))
-            }
+            3 => div().child(Self::render_tools_content_static(&tools)),
+            4 => div().child(Self::render_prompts_content_static(&prompts)),
             _ => div().child("未知能力"),
         })
     }
@@ -1226,5 +1418,3 @@ impl McpProvider {
     // 删除事件监听方法，因为还没有实现相应的事件系统
     // 删除 subscribe_to_mcp_events 方法
 }
-
-// 删除不需要的实现，保留核心的 ViewKit, Focusable, Render 等
