@@ -18,7 +18,7 @@ static GLOBAL: MiMalloc = MiMalloc;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    #[cfg(all(target_os = "windows", not(debug_assertions)))]
+    #[cfg(target_os = "windows")]
     {
         mutex::Mutex::try_lock("x-todo-app", true)?;
     }
