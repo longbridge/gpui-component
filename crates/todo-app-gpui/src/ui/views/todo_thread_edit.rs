@@ -1,6 +1,7 @@
 use crate::app::AppExt;
 #[cfg(target_os = "windows")]
 use crate::app::WindowExt;
+use crate::backoffice::cross_runtime::CrossRuntimeBridge;
 use crate::backoffice::mcp::McpRegistry; // 新增导入
 use crate::config::mcp_config::McpConfigManager;
 use crate::config::llm_config::LlmProviderManager;
@@ -217,8 +218,7 @@ impl TodoThreadEdit {
         let todo_edit_entity = cx.entity().clone();
         
         cx.spawn(async move |_this, cx| {
-            // 通过 McpRegistry 获取工具列表
-            if let Ok(Some(instance)) = McpRegistry::get_instance_static(&server_id).await {
+            if let Some(instance) = CrossRuntimeBridge::global().get_instance(&server_id).await {
                   let tools=instance.tools;
                 todo_edit_entity.update(cx, |todo_edit, todo_cx| {
                             todo_edit.cached_server_tools.insert(server_id.clone(), tools);
@@ -614,18 +614,15 @@ impl TodoThreadEdit {
                         selected.tool_name == tool.name && selected.provider_id == server.id
                     })
                 });
-                
                 let provider_tool_len = server_tools.len();
                 // 检查当前供应商是否应该展开
                 let is_expanded = has_selected_tools || expanded_providers.contains(&provider_index);
-
                 // 如果还没有加载工具数据，异步加载
                 if server_tools.is_empty() {
                     let server_id_for_load = server_id.clone();
                     let todo_edit_entity_for_load = todo_edit_entity.clone();
-                    
                     drawer_cx.spawn(async move | cx| {
-                        if let Ok(Some(instance)) = McpRegistry::get_instance_static(&server_id_for_load).await {
+                        if let Some(instance) = CrossRuntimeBridge::global().get_instance(&server_id_for_load).await {
                             let tools= instance.tools.clone();
                             todo_edit_entity_for_load.update(cx, |todo_edit, todo_cx| {
                                 todo_edit.cached_server_tools.insert(server_id_for_load.clone(), tools);

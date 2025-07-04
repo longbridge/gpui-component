@@ -9,14 +9,10 @@ use actix::prelude::*;
 use futures::StreamExt;
 use rig::{
     agent::Agent,
-    completion::{Chat, Completion},
-    message::{*, Message as RigMessage},
-    streaming::{
-        StreamingChat, StreamingCompletion, StreamingCompletionModel, StreamingCompletionResponse,
-        StreamingPrompt,
-    },
+    message::{Message as RigMessage, *},
+    streaming::{StreamingChat, StreamingCompletionModel, StreamingCompletionResponse},
 };
-use rmcp::model::{Prompt, Tool};
+use rmcp::model::Tool;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, time::Duration};
 
@@ -90,7 +86,7 @@ impl LlmService {
             &self.config.api_key,
             &self.config.api_url.replace("/v1", ""),
         )?;
-        
+
         let mut models = client
             .list_models()
             .await?
@@ -112,7 +108,7 @@ impl LlmService {
                 }
             })
             .collect::<Vec<ModelInfo>>();
-        
+
         models.sort_by(|a, b| a.display_name.cmp(&b.display_name));
         Ok(models)
     }
@@ -120,14 +116,16 @@ impl LlmService {
     /// 同步模型到配置文件
     pub async fn sync_models(&self) -> anyhow::Result<()> {
         log::info!("Syncing models for provider: {}", self.config.id);
-        
+
         let models = self.load_models().await?;
         LlmProviderManager::sync_provider_models(&self.config.id, models)?;
-        
-        log::info!("Successfully synced {} models for provider: {}", 
-                  LlmProviderManager::get_all_models(&self.config.id).len(), 
-                  self.config.id);
-        
+
+        log::info!(
+            "Successfully synced {} models for provider: {}",
+            LlmProviderManager::get_all_models(&self.config.id).len(),
+            self.config.id
+        );
+
         Ok(())
     }
 
@@ -148,13 +146,14 @@ impl LlmService {
         prompt: &str,
         chat_history: Vec<ChatMessage>,
     ) -> anyhow::Result<String> {
-        let client = rig::providers::openai::Client::from_url(&self.config.api_key, &self.config.api_url);
+        let client =
+            rig::providers::openai::Client::from_url(&self.config.api_key, &self.config.api_url);
         let agent = client
             .agent(model_id)
             .max_tokens(4096)
             .temperature(0.7)
             .build();
-        
+
         let messages = chat_history
             .into_iter()
             .map(|chat_msg| match chat_msg.role.as_str() {
@@ -163,7 +162,7 @@ impl LlmService {
                 _ => RigMessage::user(chat_msg.content),
             })
             .collect::<Vec<RigMessage>>();
-        
+
         let mut stream = agent.stream_chat(prompt, messages).await?;
         println!("Streaming chat with model: {}", model_id);
         let (assistant, _tools) = stream_to_stdout1(source, &agent, &mut stream).await?;
@@ -181,7 +180,7 @@ impl LlmService {
     ) -> anyhow::Result<()> {
         let mut prompt = prompt.to_string();
         let mut mcp_tools = vec![];
-        
+
         for tool in &tools {
             if let Ok(Some(instance)) = McpRegistry::get_instance(&tool.provider_id).await {
                 mcp_tools.extend(
@@ -201,9 +200,10 @@ impl LlmService {
         }
         println!("Using tools: {:?}", mcp_tools);
         let system_prompt = crate::backoffice::agentic::prompts::prompt(mcp_tools);
-       println!("System Prompt:\n{}\nUser:\n{}", system_prompt, prompt);
-        
-        let client = rig::providers::openai::Client::from_url(&self.config.api_key, &self.config.api_url);
+        println!("System Prompt:\n{}\nUser:\n{}", system_prompt, prompt);
+
+        let client =
+            rig::providers::openai::Client::from_url(&self.config.api_key, &self.config.api_url);
         let mut chat_history = chat_history
             .into_iter()
             .map(|chat_msg| match chat_msg.role.as_str() {
@@ -212,7 +212,7 @@ impl LlmService {
                 _ => RigMessage::user(chat_msg.content),
             })
             .collect::<Vec<RigMessage>>();
-        
+
         loop {
             let agent = client
                 .agent(model_id)
@@ -220,7 +220,7 @@ impl LlmService {
                 .max_tokens(4096)
                 .temperature(0.7)
                 .build();
-            
+
             let mut stream = agent.stream_chat(&prompt, chat_history.clone()).await?;
             chat_history.push(RigMessage::user(prompt.clone()));
 
@@ -228,19 +228,18 @@ impl LlmService {
             if tools.is_empty() {
                 break;
             }
-            
+
             chat_history.push(RigMessage::assistant(assistant.clone()));
             let mut prompts = vec![];
 
             for (i, tool) in tools.iter().enumerate() {
                 println!("调用工具 #{}: {:?}", i, tool);
-                let result =
-                    McpRegistry::call_tool(tool.id(), tool.tool_name(), &tool.arguments)
-                        .await
-                        .map_err(|err| {
-                            println!("调用工具 {} 失败: {}", tool.name, err);
-                            err
-                        })?;
+                let result = McpRegistry::call_tool(tool.id(), tool.tool_name(), &tool.arguments)
+                    .await
+                    .map_err(|err| {
+                        println!("调用工具 {} 失败: {}", tool.name, err);
+                        err
+                    })?;
 
                 println!("工具 #{}调用结果: {:?}", i, result);
                 prompts.push(format!(
@@ -276,12 +275,16 @@ impl Actor for LlmProviderService {
 
     fn started(&mut self, ctx: &mut Self::Context) {
         log::info!("LLM Provider service {} started", self.service.config.id);
-        
+
         // 异步同步模型列表
         let service = self.service.clone();
         async move {
             if let Err(e) = service.sync_models().await {
-                log::warn!("Failed to sync models for provider {}: {}", service.config.id, e);
+                log::warn!(
+                    "Failed to sync models for provider {}: {}",
+                    service.config.id,
+                    e
+                );
             }
         }
         .into_actor(self)
@@ -300,7 +303,7 @@ impl Handler<ExitFromLlmRegistry> for LlmProviderService {
     fn handle(&mut self, _msg: ExitFromLlmRegistry, _ctx: &mut Self::Context) -> Self::Result {
         log::info!("LLM Provider service {} exiting", self.service.config.id);
         let provider_id = self.service.config.id.clone();
-        
+
         async move {
             let registry = LlmRegistry::global();
             registry.do_send(UpdateProviderCache {
@@ -322,9 +325,12 @@ impl Handler<LlmChatRequest> for LlmProviderService {
 
     fn handle(&mut self, msg: LlmChatRequest, _ctx: &mut Self::Context) -> Self::Result {
         let service = self.service.clone();
-        
+
         async move {
-            match service.stream_chat(&msg.source, &msg.model_id, &msg.prompt, msg.chat_history).await {
+            match service
+                .stream_chat(&msg.source, &msg.model_id, &msg.prompt, msg.chat_history)
+                .await
+            {
                 Ok(response) => LlmChatResult {
                     provider_id: msg.provider_id,
                     model_id: msg.model_id,
@@ -351,15 +357,18 @@ impl Handler<LlmChatWithToolsRequest> for LlmProviderService {
 
     fn handle(&mut self, msg: LlmChatWithToolsRequest, _ctx: &mut Self::Context) -> Self::Result {
         let service = self.service.clone();
-        
+
         async move {
-            match service.stream_chat_with_tools(
-                &msg.source,
-                &msg.model_id,
-                &msg.prompt,
-                msg.tools,
-                msg.chat_history,
-            ).await {
+            match service
+                .stream_chat_with_tools(
+                    &msg.source,
+                    &msg.model_id,
+                    &msg.prompt,
+                    msg.tools,
+                    msg.chat_history,
+                )
+                .await
+            {
                 Ok(_) => LlmChatResult {
                     provider_id: msg.provider_id,
                     model_id: msg.model_id,
@@ -386,12 +395,10 @@ impl Handler<SyncModelsRequest> for LlmProviderService {
 
     fn handle(&mut self, _msg: SyncModelsRequest, _ctx: &mut Self::Context) -> Self::Result {
         let service = self.service.clone();
-        
-        async move {
-            service.sync_models().await
-        }
-        .into_actor(self)
-        .boxed_local()
+
+        async move { service.sync_models().await }
+            .into_actor(self)
+            .boxed_local()
     }
 }
 
@@ -409,7 +416,7 @@ impl Handler<LoadModelsRequest> for LlmProviderService {
     fn handle(&mut self, _msg: LoadModelsRequest, _ctx: &mut Self::Context) -> Self::Result {
         // 首先尝试从缓存获取
         let cached_models = self.service.get_cached_models(false);
-        
+
         if !cached_models.is_empty() {
             // 返回缓存的模型列表
             async move { Ok(cached_models) }
@@ -418,13 +425,13 @@ impl Handler<LoadModelsRequest> for LlmProviderService {
         } else {
             // 如果没有缓存，则从远程获取并同步
             let service = self.service.clone();
-            
+
             async move {
                 let models = service.load_models().await?;
-                
+
                 // 同步到配置
                 LlmProviderManager::sync_provider_models(&service.config.id, models.clone())?;
-                
+
                 Ok(models)
             }
             .into_actor(self)
@@ -455,7 +462,7 @@ impl LlmRegistry {
                 .filter(|config| config.enabled)
                 .map(|config| config.id.as_str())
                 .collect();
-            
+
             // 移除不再启用的提供商
             let providers_to_remove: Vec<String> = self
                 .providers
@@ -470,7 +477,7 @@ impl LlmRegistry {
                     self.configs.remove(&provider_id);
                 }
             }
-            
+
             // 添加新启用的提供商
             for config in configs.iter().filter(|c| c.enabled) {
                 if !self.providers.contains_key(&config.id) {
@@ -604,7 +611,6 @@ impl Handler<LlmChatWithToolsRequest> for LlmRegistry {
     }
 }
 
-
 // 添加更新提供商缓存的消息
 #[derive(Message)]
 #[rtype(result = "()")]
@@ -625,9 +631,7 @@ impl Handler<UpdateProviderCache> for LlmRegistry {
     }
 }
 
-
 impl LlmRegistry {
-
     /// 静态方法：进行聊天
     pub async fn chat(
         provider_id: &str,
@@ -637,13 +641,15 @@ impl LlmRegistry {
         chat_history: Vec<ChatMessage>,
     ) -> anyhow::Result<LlmChatResult> {
         let registry = Self::global();
-        let result = registry.send(LlmChatRequest {
-            provider_id: provider_id.to_string(),
-            model_id: model_id.to_string(),
-            source: source.to_string(),
-            prompt: prompt.to_string(),
-            chat_history,
-        }).await?;
+        let result = registry
+            .send(LlmChatRequest {
+                provider_id: provider_id.to_string(),
+                model_id: model_id.to_string(),
+                source: source.to_string(),
+                prompt: prompt.to_string(),
+                chat_history,
+            })
+            .await?;
         Ok(result)
     }
 
@@ -657,14 +663,16 @@ impl LlmRegistry {
         chat_history: Vec<ChatMessage>,
     ) -> anyhow::Result<LlmChatResult> {
         let registry = Self::global();
-        let result = registry.send(LlmChatWithToolsRequest {
-            provider_id: provider_id.to_string(),
-            model_id: model_id.to_string(),
-            source: source.to_string(),
-            prompt: prompt.to_string(),
-            tools,
-            chat_history,
-        }).await?;
+        let result = registry
+            .send(LlmChatWithToolsRequest {
+                provider_id: provider_id.to_string(),
+                model_id: model_id.to_string(),
+                source: source.to_string(),
+                prompt: prompt.to_string(),
+                tools,
+                chat_history,
+            })
+            .await?;
         Ok(result)
     }
 
@@ -687,7 +695,7 @@ pub async fn stream_to_stdout1<M: StreamingCompletionModel>(
     let mut buffer = String::new();
     let mut tool_calls: Vec<String> = Vec::new();
     let mut assistant = String::new();
-    
+
     const TOOL_USE_START_TAG: &str = "<tool_use";
     const TOOL_USE_END_TAG: &str = "</tool_use";
     const TAG_CLOSE: char = '>';

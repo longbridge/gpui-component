@@ -13,7 +13,11 @@ use rmcp::model::{Prompt, ReadResourceResult, Resource, ResourceContents, Tool};
 use std::fs::File;
 
 use crate::{
-    backoffice::{agentic::llm::LlmRegistry, mcp::{server::ResourceDefinition, GetServerInstance, McpRegistry}},
+    backoffice::{
+        agentic::llm::LlmRegistry,
+        cross_runtime::CrossRuntimeBridge,
+        mcp::{server::ResourceDefinition, GetServerInstance, McpRegistry},
+    },
     config::mcp_config::McpServerConfig,
 };
 
@@ -148,8 +152,8 @@ pub fn start() -> anyhow::Result<()> {
     std::thread::spawn(move || {
         let sys = System::with_tokio_rt(|| rt);
         sys.block_on(async {
+            CrossRuntimeBridge::init_runtime();
             McpRegistry::from_registry();
-            McpRegistry::init_runtime();
             LlmRegistry::from_registry();
         });
         sys.run().ok();

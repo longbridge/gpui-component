@@ -1,27 +1,36 @@
+use crate::backoffice::agentic::llm::{
+    LlmChatRequest, LlmChatResult, LlmChatWithToolsRequest, LlmRegistry,
+};
 use crate::backoffice::mcp::server::McpServerInstance;
 use crate::backoffice::mcp::{
     GetAllInstances, GetServerInstance, McpCallToolRequest, McpCallToolResult, McpRegistry,
 };
-use crate::backoffice::agentic::llm::{
-    LlmChatRequest, LlmChatWithToolsRequest, LlmChatResult, LlmRegistry
-};
-use crate::config::llm_config::{LlmProviderConfig, LlmProviderManager};
 use crate::config::todo_item::SelectedTool;
 use crate::ui::views::todo_thread::ChatMessage;
 use actix::Arbiter;
 use tokio::sync::{mpsc, oneshot};
 
 /// 跨运行时通信桥接器
-/// 
+///
 /// 这个结构体是连接 GPUI 界面线程和 Actix Actor 系统之间的关键桥梁。
 /// 主要处理需要与 Actor 系统交互的操作，如 MCP 工具调用和 LLM 聊天。
-/// 
+///
 /// 对于配置文件读取操作（如获取提供商列表、模型列表），GUI 直接通过
 /// LlmProviderManager 读取，无需跨运行时通信。
 pub struct CrossRuntimeBridge {
     dispatcher: mpsc::UnboundedSender<Box<dyn MessageHandler + Send>>,
 }
 
+impl CrossRuntimeBridge {
+    pub fn init_runtime() {
+        CROSS_RUNTIME_BRIDGE.get_or_init(|| CrossRuntimeBridge::new());
+    }
+
+    /// 获取全局桥接器实例
+    pub fn global() -> &'static Self {
+        CROSS_RUNTIME_BRIDGE.get_or_init(|| CrossRuntimeBridge::new())
+    }
+}
 /// 消息处理器特征
 trait MessageHandler {
     fn handle(self: Box<Self>);
@@ -103,9 +112,6 @@ impl MessageHandler for GetAllInstancesHandler {
         });
     }
 }
-
-// ===== LLM 相关处理器（仅保留聊天相关）=====
-
 /// LLM 聊天消息处理器
 struct LlmChatHandler {
     provider_id: String,
@@ -192,14 +198,12 @@ impl CrossRuntimeBridge {
         Self { dispatcher }
     }
 
-    // ===== MCP 方法（保持原有实现）=====
-
     /// 异步获取指定服务器实例
-    pub async fn get_instance(&self, server_id: String) -> Option<McpServerInstance> {
+    pub async fn get_instance<S: ToString>(&self, server_id: S) -> Option<McpServerInstance> {
         let (response_tx, response_rx) = oneshot::channel();
 
         let handler = Box::new(GetInstanceHandler {
-            server_id,
+            server_id: server_id.to_string(),
             response: response_tx,
         });
 
@@ -259,7 +263,7 @@ impl CrossRuntimeBridge {
         model_id: String,
         source: String,
         prompt: String,
-        chat_history: Vec<ChatMessage>,
+        chat_history: Vec<ChatMessage>, //TODO:放到Agent里维护，下游不需要维护
     ) -> Result<LlmChatResult, String> {
         let (response_tx, response_rx) = oneshot::channel();
 
@@ -314,94 +318,3 @@ impl CrossRuntimeBridge {
 }
 
 static CROSS_RUNTIME_BRIDGE: std::sync::OnceLock<CrossRuntimeBridge> = std::sync::OnceLock::new();
-
-impl McpRegistry {
-    /// 初始化跨运行时桥接器
-    pub fn init_runtime() {
-        CROSS_RUNTIME_BRIDGE.get_or_init(|| CrossRuntimeBridge::new());
-    }
-
-    /// 获取全局桥接器实例
-    fn get_bridge() -> &'static CrossRuntimeBridge {
-        CROSS_RUNTIME_BRIDGE.get_or_init(|| CrossRuntimeBridge::new())
-    }
-
-    // ===== MCP 静态方法（保持原有实现）=====
-
-    /// GUI 安全的静态获取实例方法
-    pub async fn get_instance_static(server_id: &str) -> anyhow::Result<Option<McpServerInstance>> {
-        Ok(Self::get_bridge().get_instance(server_id.to_string()).await)
-    }
-   
-    /// GUI 安全的静态工具调用方法
-    pub async fn call_tool_static(
-        server_id: &str,
-        tool_name: &str,
-        arguments: &str,
-    ) -> anyhow::Result<McpCallToolResult> {
-        Self::get_bridge()
-            .call_tool(
-                server_id.to_string(),
-                tool_name.to_string(),
-                arguments.to_string(),
-            )
-            .await
-            .map_err(|e| anyhow::anyhow!(e))
-    }
-
-    
-    /// GUI 安全的静态获取所有实例方法
-    pub async fn get_all_instances_static() -> anyhow::Result<Vec<McpServerInstance>> {
-        Ok(Self::get_bridge().get_all_instances().await)
-    }
-
-    
-}
-
-// ===== LLM Registry 跨运行时扩展（仅聊天相关）=====
-
-impl LlmRegistry {
-    /// GUI 安全的静态聊天方法
-    pub async fn chat_static(
-        provider_id: &str,
-        model_id: &str,
-        source: &str,
-        prompt: &str,
-        chat_history: Vec<ChatMessage>,
-    ) -> anyhow::Result<LlmChatResult> {
-        CROSS_RUNTIME_BRIDGE
-            .get_or_init(|| CrossRuntimeBridge::new())
-            .llm_chat(
-                provider_id.to_string(),
-                model_id.to_string(),
-                source.to_string(),
-                prompt.to_string(),
-                chat_history,
-            )
-            .await
-            .map_err(|e| anyhow::anyhow!(e))
-    }
-
-    /// GUI 安全的静态带工具聊天方法
-    pub async fn chat_with_tools_static(
-        provider_id: &str,
-        model_id: &str,
-        source: &str,
-        prompt: &str,
-        tools: Vec<SelectedTool>,
-        chat_history: Vec<ChatMessage>,
-    ) -> anyhow::Result<LlmChatResult> {
-        CROSS_RUNTIME_BRIDGE
-            .get_or_init(|| CrossRuntimeBridge::new())
-            .llm_chat_with_tools(
-                provider_id.to_string(),
-                model_id.to_string(),
-                source.to_string(),
-                prompt.to_string(),
-                tools,
-                chat_history,
-            )
-            .await
-            .map_err(|e| anyhow::anyhow!(e))
-    }
-}

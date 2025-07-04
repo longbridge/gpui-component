@@ -1,4 +1,5 @@
 use crate::app::FoEvent;
+use crate::backoffice::cross_runtime::CrossRuntimeBridge;
 use crate::backoffice::mcp::server::{ResourceDefinition, ResourceTemplateDefinition};
 use crate::backoffice::mcp::McpRegistry; // 新增导入
 use crate::config::mcp_config::{
@@ -293,39 +294,35 @@ impl McpProvider {
     // 异步获取提供商能力
     fn refresh_provider_capabilities(&mut self, cx: &mut Context<Self>) {
         cx.spawn(async move |this, cx| {
-            // 通过 McpRegistry 获取实例
-            println!("正在获取MCP服务的能力信息...");
-            if let Ok(instances) = McpRegistry::get_all_instances_static().await {
-                for instance in instances {
-                    // 获取能力信息
-                    let mut tools = instance.tools.clone();
-                    tools.sort_by(|a, b| a.name.cmp(&b.name));
-                    let mut prompts = instance.prompts.clone();
-                    prompts.sort_by(|a, b| a.name.cmp(&b.name));
-                    let mut resources = instance.resources.clone();
-                    resources.sort_by(|a, b| a.resource.uri.cmp(&b.resource.uri));
-                    let mut resource_templates = instance.resource_templates.clone();
-                    resource_templates.sort_by(|a, b| {
-                        a.resource_template
-                            .uri_template
-                            .cmp(&b.resource_template.uri_template)
-                    });
-                    println!(
-                        "获取到 {} 个工具, {} 个提示, {} 个资源",
-                        tools.len(),
-                        prompts.len(),
-                        resources.len()
+            for instance in CrossRuntimeBridge::global().get_all_instances().await {
+                // 获取能力信息
+                let mut tools = instance.tools.clone();
+                tools.sort_by(|a, b| a.name.cmp(&b.name));
+                let mut prompts = instance.prompts.clone();
+                prompts.sort_by(|a, b| a.name.cmp(&b.name));
+                let mut resources = instance.resources.clone();
+                resources.sort_by(|a, b| a.resource.uri.cmp(&b.resource.uri));
+                let mut resource_templates = instance.resource_templates.clone();
+                resource_templates.sort_by(|a, b| {
+                    a.resource_template
+                        .uri_template
+                        .cmp(&b.resource_template.uri_template)
+                });
+                println!(
+                    "获取到 {} 个工具, {} 个提示, {} 个资源",
+                    tools.len(),
+                    prompts.len(),
+                    resources.len()
+                );
+                // 更新缓存和UI
+                this.update(cx, |this, cx| {
+                    this.cached_capabilities.insert(
+                        instance.config.id.clone(),
+                        (tools, prompts, resources, resource_templates),
                     );
-                    // 更新缓存和UI
-                    this.update(cx, |this, cx| {
-                        this.cached_capabilities.insert(
-                            instance.config.id.clone(),
-                            (tools, prompts, resources, resource_templates),
-                        );
-                        cx.notify();
-                    })
-                    .ok();
-                }
+                    cx.notify();
+                })
+                .ok();
             }
         })
         .detach();
