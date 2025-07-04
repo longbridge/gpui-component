@@ -1,14 +1,12 @@
 use crate::app::FoEvent;
 use crate::backoffice::cross_runtime::CrossRuntimeBridge;
 use crate::backoffice::mcp::server::{ResourceDefinition, ResourceTemplateDefinition};
-use crate::backoffice::mcp::McpRegistry; // 新增导入
 use crate::config::mcp_config::{
     McpConfigManager,
     McpServerConfig,
     McpTransport, // 移除 McpPrompt, McpTool - 这些现在从 rmcp 导入
 };
 use crate::ui::components::ViewKit;
-use crate::xbus;
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::{
@@ -129,7 +127,7 @@ impl McpProvider {
         }
         self.refresh_providers(cx);
         cx.notify();
-        xbus::post(&FoEvent::McpConfigUpdated);
+        CrossRuntimeBridge::global().post(&FoEvent::McpConfigUpdated);
     }
 
     fn refresh_providers(&mut self, cx: &mut Context<Self>) {
@@ -1182,7 +1180,7 @@ impl McpProvider {
 
                 // 检查当前订阅状态
                 let is_subscribed =
-                    self.is_resource_subscribed(provider_id, &resource.resource.uri);
+                    self.is_resource_subscribed(provider_id, &resource.resource.name);
 
                 v_flex()
                     .gap_2()
@@ -1233,7 +1231,7 @@ impl McpProvider {
                                         )
                                         .child({
                                             let provider_id = provider_id.to_string();
-                                            let resource_uri = resource.resource.uri.clone();
+                                            let resource_name = resource.resource.name.clone();
                                             Switch::new(SharedString::new(format!(
                                                 "resource-subscribe-{}-{}",
                                                 provider_id, index
@@ -1244,7 +1242,7 @@ impl McpProvider {
                                                 move |this, checked, window, cx| {
                                                     this.toggle_resource_subscription(
                                                         &provider_id,
-                                                        &resource_uri,
+                                                        &resource_name,
                                                         *checked,
                                                         window,
                                                         cx,
@@ -1319,7 +1317,7 @@ impl McpProvider {
                         // 检查当前订阅状态
                         let is_subscribed = self.is_resource_template_subscribed(
                             provider_id,
-                            &template.resource_template.uri_template,
+                            &template.resource_template.name,
                         );
 
                         v_flex()
@@ -1376,10 +1374,8 @@ impl McpProvider {
                                                 )
                                                 .child({
                                                     let provider_id = provider_id.to_string();
-                                                    let uri_template = template
-                                                        .resource_template
-                                                        .uri_template
-                                                        .clone();
+                                                    let resource_name =
+                                                        template.resource_template.name.clone();
                                                     Switch::new(SharedString::new(format!(
                                                 "resource-template-subscribe-{}-{}",
                                                 provider_id,
@@ -1391,7 +1387,7 @@ impl McpProvider {
                                                 move |this, checked, window, cx| {
                                                     this.toggle_resource_template_subscription(
                                                         &provider_id,
-                                                        &uri_template,
+                                                        &resource_name,
                                                         *checked,
                                                         window,
                                                         cx,

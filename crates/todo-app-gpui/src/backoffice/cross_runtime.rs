@@ -1,3 +1,5 @@
+use std::any::{Any, TypeId};
+
 use crate::backoffice::agentic::llm::{
     LlmChatRequest, LlmChatResult, LlmChatWithToolsRequest, LlmRegistry,
 };
@@ -7,6 +9,7 @@ use crate::backoffice::mcp::{
 };
 use crate::config::todo_item::SelectedTool;
 use crate::ui::views::todo_thread::ChatMessage;
+use crate::xbus::{self, Subscription};
 use actix::Arbiter;
 use tokio::sync::{mpsc, oneshot};
 /// 跨运行时通信桥接器
@@ -339,6 +342,23 @@ impl CrossRuntimeBridge {
         Self { dispatcher }
     }
 
+    pub fn post<E: Any + 'static + Send + Sync>(&self, event: E) {
+        xbus::post(event);
+    }
+
+    pub fn subscribe<E: Any + 'static + Send + Sync, F: Fn(&E) + Send + Sync + 'static>(
+        &self,
+        f: F,
+    ) -> Subscription {
+        xbus::subscribe(f)
+    }
+
+    pub fn subscribe_any<F: Fn(TypeId, &dyn Any) + Send + Sync + 'static>(
+        &self,
+        f: F,
+    ) -> Subscription {
+        xbus::subscribe_any(f)
+    }
     /// 异步获取指定服务器实例
     ///
     /// **参数**: `server_id` - 支持任何可转换为字符串的类型

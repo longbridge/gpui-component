@@ -1,7 +1,7 @@
 mod chat;
 mod view;
 use crate::config::todo_item::*;
-use crate::{app::AppExt, xbus};
+use crate::{app::AppExt, backoffice::cross_runtime::CrossRuntimeBridge};
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::{
@@ -141,13 +141,15 @@ impl TodoThreadChat {
 
         let (tx, mut rx) = tokio::sync::mpsc::channel(1000);
         let todo_id = todoitem.id.clone();
-        let _sub = xbus::subscribe(move |StreamMessage { source, message }: &StreamMessage| {
-            if &todo_id == source {
-                tx.try_send(message.clone()).unwrap_or_else(|e| {
-                    tracing::error!("Failed to send message to channel: {}", e);
-                });
-            }
-        });
+        let _sub = CrossRuntimeBridge::global().subscribe(
+            move |StreamMessage { source, message }: &StreamMessage| {
+                if &todo_id == source {
+                    tx.try_send(message.clone()).unwrap_or_else(|e| {
+                        tracing::error!("Failed to send message to channel: {}", e);
+                    });
+                }
+            },
+        );
         cx.spawn(async move |this, app| {
             //println!("开始接收AI助手响应");
             let _sub = _sub;

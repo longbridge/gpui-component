@@ -1,7 +1,7 @@
 use crate::app::{AppState, FoEvent};
+use crate::backoffice::cross_runtime::CrossRuntimeBridge;
 use crate::config::llm_config::{ApiType, LlmProviderConfig, LlmProviderManager, ModelInfo};
 use crate::ui::components::ViewKit;
-use crate::xbus;
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::tooltip::Tooltip;
@@ -109,7 +109,7 @@ impl LlmProvider {
         if let Err(e) = LlmProviderManager::save_providers(&self.providers[..]) {
             eprintln!("保存配置失败: {}", e);
         }
-        xbus::post(&FoEvent::LlmConfigUpdated);
+        CrossRuntimeBridge::global().post(&FoEvent::LlmConfigUpdated);
     }
 
     fn tab(&mut self, _: &Tab1, window: &mut Window, cx: &mut Context<Self>) {

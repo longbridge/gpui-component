@@ -1,6 +1,5 @@
 use crate::backoffice::mcp::client_handler::McpClientHandler;
 use crate::config::mcp_config::{McpServerConfig, McpTransport};
-use crate::xbus;
 use gpui_component::IconName;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ACCEPT, AUTHORIZATION};
 use rig::tool::ToolSet;
@@ -218,7 +217,7 @@ impl McpServerInstance {
     ) -> anyhow::Result<Self> {
         let server_info = client.peer_info().cloned().unwrap_or_default();
         println!("Server info: {:#?}", server_info);
-
+        client.notify_initialized().await?;
         if let Some(capability) = server_info.capabilities.tools {
             let tools = client.list_all_tools().await?;
             self.tools = tools;
@@ -277,11 +276,14 @@ impl McpServerInstance {
             if let Some(subscribe) = capability.subscribe {
                 if subscribe {
                     self.keepalive = true;
-                    println!("Server supports resource subscription.");
                     for name in self.config.subscribed_resources.iter() {
                         if let Some(resource) =
                             self.resources.iter_mut().find(|r| r.resource.name == *name)
                         {
+                            println!(
+                                "Subscribing to resource: {} ({})",
+                                resource.resource.name, resource.resource.uri
+                            );
                             match client
                                 .subscribe(SubscribeRequestParam {
                                     uri: resource.resource.uri.clone(),
@@ -324,16 +326,6 @@ impl McpServerInstance {
                 extensions: Default::default(),
             });
             client.send_request(req).await?;
-        }
-        Ok(())
-    }
-
-    /// 停止服务器实例
-    pub async fn stop(&mut self) -> anyhow::Result<()> {
-        if let Some(client) = self.client.take() {
-            // 优雅关闭客户端连接
-            drop(client);
-            log::info!("McpServerInstance {} stopped", self.config.id);
         }
         Ok(())
     }

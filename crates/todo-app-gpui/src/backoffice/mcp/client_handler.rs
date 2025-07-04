@@ -1,6 +1,5 @@
-use crate::backoffice::mcp::McpRegistry;
+use crate::backoffice::cross_runtime::CrossRuntimeBridge;
 use crate::backoffice::BoEvent;
-use crate::xbus;
 use rmcp::model::{
     CreateMessageRequestMethod, CreateMessageRequestParam, CreateMessageResult, ListRootsResult,
     LoggingLevel, ProtocolVersion, ReadResourceRequestParam, ResourceUpdatedNotificationParam,
@@ -69,16 +68,14 @@ impl ClientHandler for McpClientHandler {
         match context.peer.list_tools(None).await {
             Ok(tools) => {
                 log::info!("Tool list: {tools:#?}");
-
-                // 更新 Registry 中的实例状态
-                McpRegistry::global().do_send(crate::backoffice::mcp::UpdateInstanceTools {
+                CrossRuntimeBridge::global().post(crate::backoffice::mcp::UpdateInstanceTools {
                     server_id: self.id.clone(),
                     tools: tools.tools.clone(),
                 });
             }
             Err(err) => {
                 log::error!("Failed to list tools: {err}");
-                xbus::post(BoEvent::Notification(
+                CrossRuntimeBridge::global().post(BoEvent::Notification(
                     crate::backoffice::NotificationKind::Error,
                     format!("Failed to list tools: {err}"),
                 ));
@@ -92,16 +89,14 @@ impl ClientHandler for McpClientHandler {
         match ctx.peer.list_prompts(None).await {
             Ok(prompts) => {
                 log::info!("Prompt list: {prompts:#?}");
-
-                // 更新 Registry 中的实例状态
-                McpRegistry::global().do_send(crate::backoffice::mcp::UpdateInstancePrompts {
+                CrossRuntimeBridge::global().post(crate::backoffice::mcp::UpdateInstancePrompts {
                     server_id: self.id.clone(),
                     prompts: prompts.prompts.clone(),
                 });
             }
             Err(err) => {
                 log::error!("Failed to list prompts: {err}");
-                xbus::post(BoEvent::Notification(
+                CrossRuntimeBridge::global().post(BoEvent::Notification(
                     crate::backoffice::NotificationKind::Error,
                     format!("Failed to list prompts: {err}"),
                 ));
@@ -113,19 +108,19 @@ impl ClientHandler for McpClientHandler {
         ctx.peer.list_all_resources().await.map_or_else(
             |err| {
                 log::error!("Failed to list resources: {err}");
-                xbus::post(BoEvent::Notification(
+                CrossRuntimeBridge::global().post(BoEvent::Notification(
                     crate::backoffice::NotificationKind::Error,
                     format!("Failed to list resources: {err}"),
                 ));
             },
             |resources| {
                 log::info!("Resource list changed: {resources:#?}");
-
-                // 更新 Registry 中的实例状态
-                McpRegistry::global().do_send(crate::backoffice::mcp::UpdateInstanceResources {
-                    server_id: self.id.clone(),
-                    resources: resources.clone(),
-                });
+                CrossRuntimeBridge::global().post(
+                    crate::backoffice::mcp::UpdateInstanceResources {
+                        server_id: self.id.clone(),
+                        resources: resources.clone(),
+                    },
+                );
             },
         );
     }
@@ -135,7 +130,7 @@ impl ClientHandler for McpClientHandler {
         _context: NotificationContext<RoleClient>,
     ) {
         log::info!("Cancelled: {params:#?}");
-        xbus::post(BoEvent::Notification(
+        CrossRuntimeBridge::global().post(BoEvent::Notification(
             crate::backoffice::NotificationKind::Info,
             format!("Cancelled: {:?}", params.reason),
         ));
@@ -148,22 +143,22 @@ impl ClientHandler for McpClientHandler {
     ) {
         log::info!("Logging message: {params:#?}");
         if params.level == LoggingLevel::Error {
-            xbus::post(BoEvent::Notification(
+            CrossRuntimeBridge::global().post(BoEvent::Notification(
                 crate::backoffice::NotificationKind::Error,
                 format!("Logging error: {}", params.data.to_string()),
             ));
         } else if params.level == LoggingLevel::Warning {
-            xbus::post(BoEvent::Notification(
+            CrossRuntimeBridge::global().post(BoEvent::Notification(
                 crate::backoffice::NotificationKind::Warning,
                 format!("Logging warning: {}", params.data.to_string()),
             ));
         } else {
-            xbus::post(BoEvent::Notification(
+            CrossRuntimeBridge::global().post(BoEvent::Notification(
                 crate::backoffice::NotificationKind::Info,
                 format!("Logging info: {}", params.data.to_string()),
             ));
         }
-        xbus::post(BoEvent::Notification(
+        CrossRuntimeBridge::global().post(BoEvent::Notification(
             crate::backoffice::NotificationKind::Info,
             format!("Logging message: {:?}", params.data.to_string()),
         ));
@@ -191,9 +186,7 @@ impl ClientHandler for McpClientHandler {
         {
             Ok(result) => {
                 println!("Resource content read successfully for: {}", params.uri);
-
-                // 更新 Registry 中的实例状态
-                McpRegistry::global().do_send(
+                CrossRuntimeBridge::global().post(
                     crate::backoffice::mcp::UpdateInstanceResourceContent {
                         server_id: self.id.clone(),
                         uri: params.uri.clone(),
@@ -203,7 +196,7 @@ impl ClientHandler for McpClientHandler {
             }
             Err(err) => {
                 log::error!("Failed to read updated resource {}: {}", params.uri, err);
-                xbus::post(BoEvent::Notification(
+                CrossRuntimeBridge::global().post(BoEvent::Notification(
                     crate::backoffice::NotificationKind::Error,
                     format!("Failed to read updated resource {}: {}", params.uri, err),
                 ));

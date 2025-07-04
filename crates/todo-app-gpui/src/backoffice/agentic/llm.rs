@@ -1,10 +1,10 @@
 use crate::backoffice::agentic::prompts;
+use crate::backoffice::cross_runtime::CrossRuntimeBridge;
 use crate::{
     backoffice::mcp::McpRegistry,
     backoffice::{BoEvent, YamlFile},
     config::{llm_config::*, provider_config_path, todo_item::SelectedTool},
     ui::views::todo_thread::{ChatMessage, StreamMessage},
-    xbus,
 };
 use actix::prelude::*;
 use futures::StreamExt;
@@ -291,8 +291,7 @@ impl Actor for LlmProviderService {
         }
         .into_actor(self)
         .spawn(ctx);
-
-        xbus::post(BoEvent::Notification(
+        CrossRuntimeBridge::global().post(BoEvent::Notification(
             crate::backoffice::NotificationKind::Info,
             format!("LLM Provider {} started", self.service.config.name),
         ));
@@ -635,7 +634,6 @@ impl Handler<UpdateProviderCache> for LlmRegistry {
 }
 
 impl LlmRegistry {
-    /// 静态方法：进行聊天
     pub async fn chat(
         provider_id: &str,
         model_id: &str,
@@ -678,15 +676,6 @@ impl LlmRegistry {
             .await?;
         Ok(result)
     }
-
-    // /// 静态方法：加载模型列表
-    // pub async fn load_models_static(provider_id: &str) -> anyhow::Result<Vec<ModelInfo>> {
-    //     let registry = Self::global();
-    //     let result = registry.send(LoadModelsRequest {
-    //         provider_id: provider_id.to_string(),
-    //     }).await??;
-    //     Ok(result)
-    // }
 }
 
 /// helper function to stream a completion request to stdout
@@ -729,7 +718,7 @@ pub async fn stream_to_stdout1<M: StreamingCompletionModel>(
                                 buffer.push(c);
                             } else {
                                 print!("{}", c);
-                                xbus::post(StreamMessage::new(
+                                CrossRuntimeBridge::global().post(StreamMessage::new(
                                     source.to_string(),
                                     RigMessage::assistant(c.to_string()),
                                 ));
@@ -748,7 +737,7 @@ pub async fn stream_to_stdout1<M: StreamingCompletionModel>(
                                     && !buffer.starts_with(&format!("{} ", TOOL_USE_START_TAG))
                                 {
                                     print!("{}", buffer);
-                                    xbus::post(StreamMessage::new(
+                                    CrossRuntimeBridge::global().post(StreamMessage::new(
                                         source.to_string(),
                                         RigMessage::assistant(buffer.clone()),
                                     ));

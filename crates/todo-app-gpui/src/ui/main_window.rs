@@ -1,6 +1,9 @@
 use std::time::Duration;
 
-use crate::{app::Open, backoffice::BoEvent, xbus};
+use crate::{
+    app::Open,
+    backoffice::{cross_runtime::CrossRuntimeBridge, BoEvent},
+};
 
 use super::views::todolist::TodoList;
 use gpui::*;
@@ -26,7 +29,7 @@ impl TodoMainWindow {
         let root = TodoList::view(window, cx);
         let win_handle = window.window_handle();
         let (tx, mut rx) = tokio::sync::mpsc::channel(100);
-        let subscription = xbus::subscribe(move |event: &BoEvent| {
+        let subscription = CrossRuntimeBridge::global().subscribe(move |event: &BoEvent| {
             if event.is_notification() {
                 tx.try_send(event.clone()).ok();
             }

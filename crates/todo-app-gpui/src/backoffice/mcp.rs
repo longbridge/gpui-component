@@ -1,12 +1,11 @@
 mod adaptor;
 mod client_handler;
 pub(crate) mod server;
+use crate::backoffice::cross_runtime::CrossRuntimeBridge;
 use crate::backoffice::mcp::server::McpServerInstance;
+use crate::backoffice::{BoEvent, YamlFile};
 use crate::config::mcp_config::*;
-use crate::{
-    backoffice::{BoEvent, YamlFile},
-    xbus,
-};
+use crate::xbus::Subscription;
 use actix::prelude::*;
 use rmcp::model::{Content, ResourceContents};
 use rmcp::model::{Prompt as McpPrompt, Resource as McpResource, Tool as McpTool};
@@ -55,7 +54,8 @@ impl McpServerWorker {
 impl McpServerWorker {
     fn connect(&mut self, ctx: &mut Context<Self>) {
         let config = self.config.clone();
-        async move { McpServerInstance::new(config).start().await }
+        McpServerInstance::new(config)
+            .start()
             .into_actor(self)
             .then(|res, act, _ctx| {
                 match res {
@@ -70,11 +70,12 @@ impl McpServerWorker {
                         });
 
                         act.instance = Some(instance);
-                        xbus::post(BoEvent::McpServerStarted(act.config.clone()));
+                        CrossRuntimeBridge::global()
+                            .post(BoEvent::McpServerStarted(act.config.clone()));
                     }
                     Err(err) => {
                         log::error!("Failed to start MCP Server {}: {}", act.config.id, err);
-                        xbus::post(BoEvent::Notification(
+                        CrossRuntimeBridge::global().post(BoEvent::Notification(
                             crate::backoffice::NotificationKind::Error,
                             format!("Failed to start MCP Server {}: {}", act.config.id, err),
                         ));
@@ -196,6 +197,7 @@ pub struct McpRegistry {
     instances: HashMap<String, McpServerInstance>, // 添加实例管理
     file: YamlFile,
     handle: Option<SpawnHandle>,
+    subscriptions: Vec<Subscription>,
 }
 
 impl McpRegistry {
@@ -244,6 +246,7 @@ impl Default for McpRegistry {
             instances: HashMap::new(),
             file,
             handle: None,
+            subscriptions: Vec::new(),
         }
     }
 }
@@ -310,6 +313,37 @@ impl Actor for McpRegistry {
     fn started(&mut self, ctx: &mut Self::Context) {
         let handle = ctx.run_interval(Duration::from_secs(1), Self::tick);
         self.handle = Some(handle);
+        let addr = ctx.address();
+        let addr_clone = addr.clone();
+
+        self.subscriptions
+            .push(
+                CrossRuntimeBridge::global().subscribe(move |msg: &UpdateInstanceResources| {
+                    addr_clone.do_send(msg.clone());
+                }),
+            );
+        let addr_clone = addr.clone();
+        self.subscriptions
+            .push(
+                CrossRuntimeBridge::global().subscribe(move |msg: &UpdateInstancePrompts| {
+                    addr_clone.do_send(msg.clone());
+                }),
+            );
+        let addr_clone = addr.clone();
+        self.subscriptions
+            .push(
+                CrossRuntimeBridge::global().subscribe(move |msg: &UpdateInstanceTools| {
+                    addr_clone.do_send(msg.clone());
+                }),
+            );
+        let addr_clone = addr.clone();
+        self.subscriptions
+            .push(CrossRuntimeBridge::global().subscribe(
+                move |msg: &UpdateInstanceResourceContent| {
+                    addr_clone.do_send(msg.clone());
+                },
+            ));
+
         println!("McpRegistry started");
     }
 
@@ -365,6 +399,7 @@ impl Handler<UpdateInstanceCache> for McpRegistry {
     type Result = ();
 
     fn handle(&mut self, msg: UpdateInstanceCache, _ctx: &mut Self::Context) -> Self::Result {
+        println!("Updating instance cache for server_id: {}", msg.server_id);
         if let Some(instance) = msg.instance {
             self.instances.insert(msg.server_id, instance);
         } else {
@@ -406,21 +441,21 @@ impl Handler<GetAllInstances> for McpRegistry {
 }
 
 // 添加更新工具列表的消息
-#[derive(Message)]
+#[derive(Message, Clone)]
 #[rtype(result = "()")]
 pub struct UpdateInstanceTools {
     pub server_id: String,
     pub tools: Vec<McpTool>,
 }
 
-#[derive(Message)]
+#[derive(Message, Clone)]
 #[rtype(result = "()")]
 pub struct UpdateInstancePrompts {
     pub server_id: String,
     pub prompts: Vec<McpPrompt>,
 }
 
-#[derive(Message)]
+#[derive(Message, Clone)]
 #[rtype(result = "()")]
 pub struct UpdateInstanceResources {
     pub server_id: String,
@@ -432,11 +467,12 @@ impl Handler<UpdateInstanceTools> for McpRegistry {
     type Result = ();
 
     fn handle(&mut self, msg: UpdateInstanceTools, _ctx: &mut Self::Context) -> Self::Result {
+        println!("Updating tools for server_id: {}", msg.server_id);
         if let Some(instance) = self.instances.get_mut(&msg.server_id) {
             instance.tools = msg.tools.clone();
             log::info!("Updated tools for server: {}", msg.server_id);
             // 发送事件通知
-            xbus::post(BoEvent::McpToolListUpdated(
+            CrossRuntimeBridge::global().post(BoEvent::McpToolListUpdated(
                 msg.server_id.clone(),
                 msg.tools,
             ));
@@ -452,10 +488,11 @@ impl Handler<UpdateInstancePrompts> for McpRegistry {
         UpdateInstancePrompts { server_id, prompts }: UpdateInstancePrompts,
         _ctx: &mut Self::Context,
     ) -> Self::Result {
+        println!("Updating prompts for server_id: {}", server_id);
         if let Some(instance) = self.instances.get_mut(&server_id) {
             instance.prompts = prompts.clone();
             log::info!("Updated prompts for server: {}", server_id);
-            xbus::post(BoEvent::McpPromptListUpdated(server_id, prompts));
+            CrossRuntimeBridge::global().post(BoEvent::McpPromptListUpdated(server_id, prompts));
         }
     }
 }
@@ -471,8 +508,7 @@ impl Handler<UpdateInstanceResources> for McpRegistry {
         }: UpdateInstanceResources,
         _ctx: &mut Self::Context,
     ) -> Self::Result {
-        let instances = self.instances.clone();
-
+        println!("Updating resources for server_id: {}", server_id);
         if let Some(instance) = self.instances.get_mut(&server_id) {
             // 更新资源定义
             let subscribable = instance
@@ -493,7 +529,7 @@ impl Handler<UpdateInstanceResources> for McpRegistry {
                 .collect();
 
             log::info!("Updated resources for server: {}", server_id);
-            xbus::post(BoEvent::McpResourceListUpdated(
+            CrossRuntimeBridge::global().post(BoEvent::McpResourceListUpdated(
                 server_id,
                 instance.resources.clone(),
             ));
@@ -502,7 +538,7 @@ impl Handler<UpdateInstanceResources> for McpRegistry {
 }
 
 // 添加资源更新的消息
-#[derive(Message)]
+#[derive(Message, Clone)]
 #[rtype(result = "()")]
 pub struct UpdateInstanceResourceContent {
     pub server_id: String,
@@ -518,29 +554,52 @@ impl Handler<UpdateInstanceResourceContent> for McpRegistry {
         msg: UpdateInstanceResourceContent,
         _ctx: &mut Self::Context,
     ) -> Self::Result {
-        if let Some(instance) = self.instances.get_mut(&msg.server_id) {
-            // 查找并更新对应的资源
-            for resource_def in &mut instance.resources {
-                if resource_def.resource.uri == msg.uri {
-                    resource_def.update_contents(msg.contents.clone());
-                    println!(
-                        "Updated cached content for resource {} in server {}",
-                        msg.uri, msg.server_id
-                    );
-                    // 发送事件通知
-                    xbus::post(BoEvent::McpResourceUpdated {
-                        server_id: msg.server_id.clone(),
-                        uri: msg.uri,
-                        contents: msg.contents,
-                    });
-                    break;
-                }
-            }
-        } else {
-            log::warn!(
-                "Server instance {} not found for resource update",
-                msg.server_id
-            );
-        }
+        println!(
+            "Handling resource update for server_id: {}, uri: {} {} {}",
+            msg.server_id,
+            msg.uri,
+            self.instances.len(),
+            self.instances.contains_key(&msg.server_id)
+        );
+        CrossRuntimeBridge::global().post(BoEvent::McpResourceUpdated {
+            server_id: msg.server_id.clone(),
+            uri: msg.uri.clone(),
+            contents: msg.contents.clone(),
+        });
+        CrossRuntimeBridge::global().post(BoEvent::Notification(
+            crate::backoffice::NotificationKind::Info,
+            serde_json::to_string_pretty(&BoEvent::McpResourceUpdated {
+                server_id: msg.server_id.clone(),
+                uri: msg.uri,
+                contents: msg.contents,
+            })
+            .map_err(|err| format!("Failed to serialize resource update: {}", err))
+            .unwrap_or_default(),
+        ));
+        // if let Some(instance) = self.instances.get_mut(&msg.server_id) {
+        //     // 查找并更新对应的资源
+        //     // for resource_def in &mut instance.resources {
+        //     //     if resource_def.resource.uri == msg.uri {
+        //     //         resource_def.update_contents(msg.contents.clone());
+        //     //         println!(
+        //     //             "Updated cached content for resource {} in server {}",
+        //     //             msg.uri, msg.server_id
+        //     //         );
+        //     //         // 发送事件通知
+
+        //     //         break;
+        //     //     }
+        //     // }
+        //     xbus::post(BoEvent::McpResourceUpdated {
+        //         server_id: msg.server_id.clone(),
+        //         uri: msg.uri,
+        //         contents: msg.contents,
+        //     });
+        // } else {
+        //     log::warn!(
+        //         "Server instance {} not found for resource update",
+        //         msg.server_id
+        //     );
+        // }
     }
 }
