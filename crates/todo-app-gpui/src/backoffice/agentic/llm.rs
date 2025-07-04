@@ -1,3 +1,4 @@
+use crate::backoffice::agentic::prompts;
 use crate::{
     backoffice::mcp::McpRegistry,
     backoffice::{BoEvent, YamlFile},
@@ -150,6 +151,7 @@ impl LlmService {
             rig::providers::openai::Client::from_url(&self.config.api_key, &self.config.api_url);
         let agent = client
             .agent(model_id)
+            .context(prompts::default_prompt().as_str())
             .max_tokens(4096)
             .temperature(0.7)
             .build();
@@ -199,7 +201,7 @@ impl LlmService {
             }
         }
         println!("Using tools: {:?}", mcp_tools);
-        let system_prompt = crate::backoffice::agentic::prompts::prompt(mcp_tools);
+        let system_prompt = prompts::prompt_with_tools(mcp_tools);
         println!("System Prompt:\n{}\nUser:\n{}", system_prompt, prompt);
 
         let client =

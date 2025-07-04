@@ -114,7 +114,23 @@ fn get_locate_zone() -> String {
     format!("Local Offset: {}", offset)
 }
 
-pub fn prompt(tools: Vec<Tool>) -> String {
+pub fn default_prompt() -> String {
+    let template = include_str!("default_prompt.md");
+    template
+        .replace("{{ OS_INFO }}", &get_os_info())
+        .replace("{{ HOST_NAME }}", &get_hostname())
+        .replace("{{ LOCATE_ZONE }}", &get_locate_zone())
+        .replace("{{ CURRENT_DATETIME }}", &get_current_datetime())
+        .replace("{{ PYTHON_VERSION }}", "N/A")
+        .replace("{{ NODE_VERSION }}", "N/A")
+        .replace("{{ AVAILABLE_MEMORY }}", &get_available_memory())
+        .replace("{{ WORKING_DIRECTORY }}", &get_working_directory())
+        .replace("{{ HOME_DIRECTORY }}", &get_home_directory())
+        .replace("{{ USER_LOCALE }}", &get_user_locale())
+        .replace("{{ APPLICATION_INFO }}", "xTo-Do | Agentic AI")
+}
+
+pub fn prompt_with_tools(tools: Vec<Tool>) -> String {
     const USER_SYSTEM_PROMPT: &str =
         "You are an assistant, using known tools to help him complete tasks.";
     prompt_with_user_system_prompt(tools, USER_SYSTEM_PROMPT)
@@ -153,7 +169,7 @@ pub fn prompt_with_user_system_prompt<S: AsRef<str>>(
         tools_str
     );
 
-    let system_prompt_template = include_str!("system_prompt.md");
+    let system_prompt_template = include_str!("system_prompt_with_tools.md");
     system_prompt_template
         .replace("{{ OS_INFO }}", &get_os_info())
         .replace("{{ HOST_NAME }}", &get_hostname())
@@ -165,7 +181,7 @@ pub fn prompt_with_user_system_prompt<S: AsRef<str>>(
         .replace("{{ WORKING_DIRECTORY }}", &get_working_directory())
         .replace("{{ HOME_DIRECTORY }}", &get_home_directory())
         .replace("{{ USER_LOCALE }}", &get_user_locale())
-        .replace("{{ APPLICATION_INFO }}", "Bp | Agentic AI")
+        .replace("{{ APPLICATION_INFO }}", "xTo-Do | Agentic AI")
         .replace(
             "{{ TOOL_USE_EXAMPLES }}",
             include_str!("tool_use_examples.md"),

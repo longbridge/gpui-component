@@ -152,7 +152,7 @@ pub fn start() -> anyhow::Result<()> {
     std::thread::spawn(move || {
         let sys = System::with_tokio_rt(|| rt);
         sys.block_on(async {
-            CrossRuntimeBridge::init_runtime();
+            CrossRuntimeBridge::global();
             McpRegistry::from_registry();
             LlmRegistry::from_registry();
         });

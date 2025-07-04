@@ -16,7 +16,6 @@ use std::{collections::HashMap, time::Duration};
 #[rtype(result = "()")]
 pub struct ExitFromRegistry;
 
-
 #[derive(Message)]
 #[rtype(result = "McpCallToolResult")]
 pub struct McpCallToolRequest {
@@ -85,8 +84,8 @@ impl McpServerWorker {
         if let Some(instance) = self.instance.clone() {
             // 检查实例是否需要保持连接
             let name = instance.config.name.clone();
-            if instance.keepalive {
-                async move { instance.ping().await }
+            if instance.keepalive || instance.config.transport == McpTransport::Sse {
+                async move { tokio::time::timeout(Duration::from_secs(3), instance.ping()).await }
                     .into_actor(self)
                     .then(move |_res, this, ctx| {
                         if _res.is_err() {
@@ -190,7 +189,7 @@ impl McpRegistry {
     pub fn global() -> Addr<Self> {
         McpRegistry::from_registry()
     }
-pub async fn call_tool(
+    pub async fn call_tool(
         server_id: &str,
         tool_name: &str,
         arguments: &str,
@@ -207,19 +206,17 @@ pub async fn call_tool(
     }
 
     pub async fn get_instance(server_id: &str) -> anyhow::Result<Option<McpServerInstance>> {
-            let result =  McpRegistry::global()
-                .send(GetServerInstance {
-                    server_id: server_id.to_string(),
-                })
-                .await?;
+        let result = McpRegistry::global()
+            .send(GetServerInstance {
+                server_id: server_id.to_string(),
+            })
+            .await?;
 
-            Ok(result)
+        Ok(result)
     }
 
     pub async fn get_all_instances() -> anyhow::Result<Vec<McpServerInstance>> {
-        let result = McpRegistry::global()
-            .send(GetAllInstances)
-            .await?;
+        let result = McpRegistry::global().send(GetAllInstances).await?;
 
         Ok(result)
     }
@@ -245,7 +242,6 @@ impl Supervised for McpRegistry {
 impl SystemService for McpRegistry {}
 
 impl McpRegistry {
-
     fn tick(&mut self, ctx: &mut Context<Self>) {
         if let Ok(false) = &self.file.exist() {
             self.servers.clear();
@@ -256,7 +252,7 @@ impl McpRegistry {
         }
     }
 
-     fn check_and_update(&mut self, _ctx: &mut Context<Self>) -> anyhow::Result<()> {
+    fn check_and_update(&mut self, _ctx: &mut Context<Self>) -> anyhow::Result<()> {
         if self.file.modified()? {
             let configs = McpConfigManager::load_servers()?;
             let enabled_ids: Vec<_> = configs
@@ -289,8 +285,6 @@ impl McpRegistry {
         }
         Ok(())
     }
-
-    
 }
 
 impl Actor for McpRegistry {

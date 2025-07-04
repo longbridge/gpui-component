@@ -317,13 +317,6 @@ impl McpServerInstance {
         self.client.is_some()
     }
 
-    /// 重启实例
-    pub async fn restart(mut self) -> anyhow::Result<Self> {
-        self.stop().await?;
-        tokio::time::sleep(Duration::from_millis(100)).await; // 短暂等待
-        self.start().await
-    }
-
     /// 获取实例状态
     pub fn status(&self) -> McpServerStatus {
         match &self.client {
@@ -346,10 +339,6 @@ impl McpServerInstance {
     pub async fn call_tool(&self, name: &str, args: &str) -> anyhow::Result<CallToolResult> {
         if let Some(client) = &self.client {
             let server = client.peer().clone();
-            println!(
-                "Calling tool '{}' on server instance '{}'",
-                name, self.config.id
-            );
             let call_mcp_tool_result = tokio::time::timeout(
                 std::time::Duration::from_secs(30),
                 server.call_tool(CallToolRequestParam {

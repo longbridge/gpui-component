@@ -3,7 +3,7 @@ use gpui::SharedString;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Default)]
 pub enum McpTransport {
     #[default]
     Stdio,
