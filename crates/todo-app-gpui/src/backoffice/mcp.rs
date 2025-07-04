@@ -54,7 +54,8 @@ impl McpServerWorker {
 impl McpServerWorker {
     fn connect(&mut self, ctx: &mut Context<Self>) {
         let config = self.config.clone();
-        McpServerInstance::new(config)
+        let addr = McpRegistry::global();
+        McpServerInstance::new(config,addr)
             .start()
             .into_actor(self)
             .then(|res, act, _ctx| {
@@ -117,38 +118,20 @@ impl Actor for McpServerWorker {
 }
 
 impl Handler<ExitFromRegistry> for McpServerWorker {
-    type Result = ResponseActFuture<Self, ()>;
+    type Result = ();
 
-    fn handle(&mut self, _msg: ExitFromRegistry, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, _msg: ExitFromRegistry, ctx: &mut Self::Context) -> Self::Result {
         log::info!("MCP Server {} exiting", self.config.id);
         let server_id = self.config.id.clone();
         // 异步停止实例
-        async move {
-            // 通知 Registry 移除实例缓存
-            let registry = McpRegistry::global();
-            registry.do_send(UpdateInstanceCache {
+         McpRegistry::global().do_send(UpdateInstanceCache {
                 server_id,
                 instance: None,
             });
-        }
-        .into_actor(self)
-        .then(|_res, _act, ctx| {
             ctx.stop();
-            fut::ready(())
-        })
-        .boxed_local()
     }
 }
 
-impl Handler<McpServerConfigUpdated> for McpServerWorker {
-    type Result = ResponseActFuture<Self, ()>;
-
-    fn handle(&mut self, _msg: McpServerConfigUpdated, _ctx: &mut Self::Context) -> Self::Result {
-        log::info!("MCP Server {} configuration updated", self.config.id);
-
-        fut::ready(()).into_actor(self).boxed_local()
-    }
-}
 
 impl Handler<McpCallToolRequest> for McpServerWorker {
     type Result = ResponseActFuture<Self, McpCallToolResult>;
@@ -197,7 +180,7 @@ pub struct McpRegistry {
     instances: HashMap<String, McpServerInstance>, // 添加实例管理
     file: YamlFile,
     handle: Option<SpawnHandle>,
-    subscriptions: Vec<Subscription>,
+   // subscriptions: Vec<Subscription>,
 }
 
 impl McpRegistry {
@@ -246,7 +229,7 @@ impl Default for McpRegistry {
             instances: HashMap::new(),
             file,
             handle: None,
-            subscriptions: Vec::new(),
+           // subscriptions: Vec::new(),
         }
     }
 }
@@ -313,36 +296,36 @@ impl Actor for McpRegistry {
     fn started(&mut self, ctx: &mut Self::Context) {
         let handle = ctx.run_interval(Duration::from_secs(1), Self::tick);
         self.handle = Some(handle);
-        let addr = ctx.address();
-        let addr_clone = addr.clone();
+        // let addr = ctx.address();
+        // let addr_clone = addr.clone();
 
-        self.subscriptions
-            .push(
-                CrossRuntimeBridge::global().subscribe(move |msg: &UpdateInstanceResources| {
-                    addr_clone.do_send(msg.clone());
-                }),
-            );
-        let addr_clone = addr.clone();
-        self.subscriptions
-            .push(
-                CrossRuntimeBridge::global().subscribe(move |msg: &UpdateInstancePrompts| {
-                    addr_clone.do_send(msg.clone());
-                }),
-            );
-        let addr_clone = addr.clone();
-        self.subscriptions
-            .push(
-                CrossRuntimeBridge::global().subscribe(move |msg: &UpdateInstanceTools| {
-                    addr_clone.do_send(msg.clone());
-                }),
-            );
-        let addr_clone = addr.clone();
-        self.subscriptions
-            .push(CrossRuntimeBridge::global().subscribe(
-                move |msg: &UpdateInstanceResourceContent| {
-                    addr_clone.do_send(msg.clone());
-                },
-            ));
+        // self.subscriptions
+        //     .push(
+        //         CrossRuntimeBridge::global().subscribe(move |msg: &UpdateInstanceResources| {
+        //             addr_clone.do_send(msg.clone());
+        //         }),
+        //     );
+        // let addr_clone = addr.clone();
+        // self.subscriptions
+        //     .push(
+        //         CrossRuntimeBridge::global().subscribe(move |msg: &UpdateInstancePrompts| {
+        //             addr_clone.do_send(msg.clone());
+        //         }),
+        //     );
+        // let addr_clone = addr.clone();
+        // self.subscriptions
+        //     .push(
+        //         CrossRuntimeBridge::global().subscribe(move |msg: &UpdateInstanceTools| {
+        //             addr_clone.do_send(msg.clone());
+        //         }),
+        //     );
+        // let addr_clone = addr.clone();
+        // self.subscriptions
+        //     .push(CrossRuntimeBridge::global().subscribe(
+        //         move |msg: &UpdateInstanceResourceContent| {
+        //             addr_clone.do_send(msg.clone());
+        //         },
+        //     ));
 
         println!("McpRegistry started");
     }

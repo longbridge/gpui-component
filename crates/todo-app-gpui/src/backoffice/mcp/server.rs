@@ -1,4 +1,5 @@
 use crate::backoffice::mcp::client_handler::McpClientHandler;
+use crate::backoffice::mcp::McpRegistry;
 use crate::config::mcp_config::{McpServerConfig, McpTransport};
 use gpui_component::IconName;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ACCEPT, AUTHORIZATION};
@@ -113,10 +114,11 @@ pub struct McpServerInstance {
     pub prompts: Vec<McpPrompt>,
     pub client: Option<Arc<RunningService<RoleClient, McpClientHandler>>>,
     pub keepalive: bool, // 是否保持连接
+    registry:actix::Addr<McpRegistry>,
 }
 
 impl McpServerInstance {
-    pub fn new(config: McpServerConfig) -> Self {
+    pub fn new(config: McpServerConfig,registry:actix::Addr<McpRegistry>) -> Self {
         Self {
             config,
             capabilities: vec![],
@@ -126,6 +128,7 @@ impl McpServerInstance {
             prompts: vec![],
             client: None,
             keepalive: false, // 默认不保持连接
+registry,
         }
     }
 
@@ -180,7 +183,7 @@ impl McpServerInstance {
                 });
         }
 
-        let client = McpClientHandler::new(self.config.id.clone())
+        let client = McpClientHandler::new(self.config.id.clone(),self.registry.clone())
             .serve(transport)
             .await?;
         self.start_serve(client).await
@@ -209,7 +212,7 @@ impl McpServerInstance {
             },
         )
         .await?;
-        let client = McpClientHandler::new(self.config.id.clone())
+        let client = McpClientHandler::new(self.config.id.clone(),self.registry.clone())
             .serve(transport)
             .await?;
         self.start_serve(client).await
@@ -237,7 +240,7 @@ impl McpServerInstance {
                 ..Default::default()
             },
         );
-        let client = McpClientHandler::new(self.config.id.clone())
+        let client = McpClientHandler::new(self.config.id.clone(),self.registry.clone())
             .serve(transport)
             .await?;
         self.start_serve(client).await

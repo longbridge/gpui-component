@@ -11,18 +11,19 @@ pub use rmcp::{
     Error as McpError,
 };
 use rmcp::{ClientHandler, RoleClient};
-use serde::{Deserialize, Serialize};
+use serde::{ Serialize};
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone)]
 pub struct McpClientHandler {
     pub protocol_version: ProtocolVersion,
     pub capabilities: ClientCapabilities,
     pub client_info: Implementation,
     pub id: String,
+    registry:actix::Addr<McpRegistry>,
 }
 
 impl McpClientHandler {
-    pub fn new(id: String) -> Self {
+    pub fn new(id: String,registry:actix::Addr<McpRegistry>) -> Self {
         Self {
             protocol_version: Default::default(),
             capabilities: ClientCapabilities::default(),
@@ -31,6 +32,7 @@ impl McpClientHandler {
                 version: "0.1.0".into(),
             },
             id,
+            registry,
         }
     }
 }
@@ -69,7 +71,7 @@ impl ClientHandler for McpClientHandler {
         match context.peer.list_tools(None).await {
             Ok(tools) => {
                 log::info!("Tool list: {tools:#?}");
-                CrossRuntimeBridge::global().post(crate::backoffice::mcp::UpdateInstanceTools {
+                self.registry.do_send(crate::backoffice::mcp::UpdateInstanceTools {
                     server_id: self.id.clone(),
                     tools: tools.tools.clone(),
                 });
@@ -90,7 +92,7 @@ impl ClientHandler for McpClientHandler {
         match ctx.peer.list_prompts(None).await {
             Ok(prompts) => {
                 log::info!("Prompt list: {prompts:#?}");
-                CrossRuntimeBridge::global().post(crate::backoffice::mcp::UpdateInstancePrompts {
+                 self.registry.do_send(crate::backoffice::mcp::UpdateInstancePrompts {
                     server_id: self.id.clone(),
                     prompts: prompts.prompts.clone(),
                 });
@@ -116,7 +118,7 @@ impl ClientHandler for McpClientHandler {
             },
             |resources| {
                 log::info!("Resource list changed: {resources:#?}");
-                CrossRuntimeBridge::global().post(
+                self.registry.do_send(
                     crate::backoffice::mcp::UpdateInstanceResources {
                         server_id: self.id.clone(),
                         resources: resources.clone(),
@@ -188,11 +190,11 @@ impl ClientHandler for McpClientHandler {
             Ok(result) => {
                 println!("Resource content read successfully for: {}", params.uri);
                 //
-                McpRegistry::global().send(crate::backoffice::mcp::UpdateInstanceResourceContent {
+                self.registry.do_send(crate::backoffice::mcp::UpdateInstanceResourceContent {
                         server_id: self.id.clone(),
                         uri: params.uri.clone(),
                         contents: result.contents.clone(),
-                    }).await.unwrap();
+                    });
                 // CrossRuntimeBridge::global().post(
                     // crate::backoffice::mcp::UpdateInstanceResourceContent {
                     //     server_id: self.id.clone(),
