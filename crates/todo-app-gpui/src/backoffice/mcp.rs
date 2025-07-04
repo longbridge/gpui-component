@@ -1,5 +1,5 @@
 mod adaptor;
-mod client;
+mod client_handler;
 pub(crate) mod server;
 use crate::backoffice::mcp::server::McpServerInstance;
 use crate::config::mcp_config::*;
@@ -15,6 +15,10 @@ use std::{collections::HashMap, time::Duration};
 #[derive(Message, Debug)]
 #[rtype(result = "()")]
 pub struct ExitFromRegistry;
+
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct McpServerConfigUpdated;
 
 #[derive(Message)]
 #[rtype(result = "McpCallToolResult")]
@@ -132,6 +136,16 @@ impl Handler<ExitFromRegistry> for McpServerWorker {
             fut::ready(())
         })
         .boxed_local()
+    }
+}
+
+impl Handler<McpServerConfigUpdated> for McpServerWorker {
+    type Result = ResponseActFuture<Self, ()>;
+
+    fn handle(&mut self, _msg: McpServerConfigUpdated, _ctx: &mut Self::Context) -> Self::Result {
+        log::info!("MCP Server {} configuration updated", self.config.id);
+
+        fut::ready(()).into_actor(self).boxed_local()
     }
 }
 
@@ -276,12 +290,15 @@ impl McpRegistry {
             }
             // 添加新启用的服务器
             for config in configs.iter().filter(|c| c.enabled) {
-                if !self.servers.contains_key(&config.id) {
-                    let server_actor = McpServerWorker::new(config.clone());
-                    let addr = server_actor.start();
-                    self.servers.insert(config.id.clone(), addr);
+                if let Some(addr) = self.servers.get(&config.id) {
+                    addr.do_send(ExitFromRegistry);
+                    self.instances.remove(&config.id);
                 }
+                let server_actor = McpServerWorker::new(config.clone());
+                let addr = server_actor.start();
+                self.servers.insert(config.id.clone(), addr);
             }
+            self.file.open()?;
         }
         Ok(())
     }
@@ -506,10 +523,9 @@ impl Handler<UpdateInstanceResourceContent> for McpRegistry {
             for resource_def in &mut instance.resources {
                 if resource_def.resource.uri == msg.uri {
                     resource_def.update_contents(msg.contents.clone());
-                    log::info!(
+                    println!(
                         "Updated cached content for resource {} in server {}",
-                        msg.uri,
-                        msg.server_id
+                        msg.uri, msg.server_id
                     );
                     // 发送事件通知
                     xbus::post(BoEvent::McpResourceUpdated {

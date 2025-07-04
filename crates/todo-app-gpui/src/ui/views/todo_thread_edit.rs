@@ -354,21 +354,7 @@ impl TodoThreadEdit {
             .pb_2()
             .child(title)
     }
-
-    fn form_row(label: &'static str, content: impl IntoElement) -> impl IntoElement {
-        h_flex()
-            .gap_4()
-            .items_center()
-            .child(
-                div()
-                    .text_sm()
-                    .text_color(gpui::rgb(0x6B7280))
-                    .min_w_24()
-                    .child(label),
-            )
-            .child(div().flex_1().max_w_80().child(content))
-    }
-
+    
     fn open_drawer_at(
         placement: Placement,
         window: &mut Window,

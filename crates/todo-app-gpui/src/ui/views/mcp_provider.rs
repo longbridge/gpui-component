@@ -21,7 +21,7 @@ use gpui_component::{
     *,
 };
 // 从 rmcp 导入需要的类型
-use rmcp::model::{Prompt as McpPrompt, Tool as McpTool};
+use rmcp::model::{Prompt as McpPrompt, Role, Tool as McpTool};
 
 actions!(
     mcp_provider,
@@ -65,10 +65,10 @@ pub struct McpProvider {
             Vec<ResourceTemplateDefinition>,
         ),
     >,
-    // 新增：订阅状态管理
-    resource_subscriptions: std::collections::HashMap<String, std::collections::HashSet<String>>, // provider_id -> Set<resource_uri>
-    resource_template_subscriptions:
-        std::collections::HashMap<String, std::collections::HashSet<String>>, // provider_id -> Set<uri_template>
+    // // 新增：订阅状态管理
+    // resource_subscriptions: std::collections::HashMap<String, std::collections::HashSet<String>>, // provider_id -> Set<resource_uri>
+    // resource_template_subscriptions:
+    //     std::collections::HashMap<String, std::collections::HashSet<String>>, // provider_id -> Set<uri_template>
     _subscriptions: Vec<Subscription>,
 }
 
@@ -113,21 +113,28 @@ impl McpProvider {
             editing_provider: None,
             provider_inputs: std::collections::HashMap::new(),
             cached_capabilities: std::collections::HashMap::new(),
-            // 初始化订阅状态
-            resource_subscriptions: std::collections::HashMap::new(),
-            resource_template_subscriptions: std::collections::HashMap::new(),
+            // // 初始化订阅状态
+            // resource_subscriptions: std::collections::HashMap::new(),
+            // resource_template_subscriptions: std::collections::HashMap::new(),
             _subscriptions: vec![],
         }
     }
 
     // 保存配置到文件
-    fn save_config(&self, window: &mut Window, cx: &mut Context<Self>) {
+    fn save_config(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         println!("保存MCP配置到文件...");
         if let Err(e) = McpConfigManager::save_servers(&self.providers[..]) {
             window.push_notification(format!("保存配置失败: {}", e), cx);
             log::error!("Failed to save MCP config: {}", e);
         }
+        self.refresh_providers(cx);
+        cx.notify();
         xbus::post(&FoEvent::McpConfigUpdated);
+    }
+
+    fn refresh_providers(&mut self, cx: &mut Context<Self>) {
+        self.providers = McpConfigManager::load_servers().unwrap_or_default();
+        cx.notify();
     }
 
     fn tab(&mut self, _: &Tab1, window: &mut Window, cx: &mut Context<Self>) {
@@ -493,191 +500,74 @@ impl McpProvider {
     fn toggle_resource_subscription(
         &mut self,
         provider_id: &str,
-        resource_uri: &str,
+        resource_name: &str,
         subscribe: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let provider_id = provider_id.to_string();
-        let resource_uri = resource_uri.to_string();
-
+        let resource_name = resource_name.to_string();
         if subscribe {
             // 添加订阅
-            self.resource_subscriptions
-                .entry(provider_id.clone())
-                .or_insert_with(std::collections::HashSet::new)
-                .insert(resource_uri.clone());
-
-            // 异步调用订阅方法
-            cx.spawn(async move |this, cx| {
-                let provider_id = provider_id.clone();
-                let resource_uri = resource_uri.clone();
-                match CrossRuntimeBridge::global()
-                    .subscribe_to_resource(provider_id.clone(), resource_uri.clone())
-                    .await
-                {
-                    Ok(_) => {
-                        this.update(cx, |this, cx| {
-                            // window.push_notification(format!("已订阅资源: {}", resource_uri), cx);
-                            cx.notify();
-                        })
-                        .ok();
-                    }
-                    Err(e) => {
-                        this.update(cx, |this, cx| {
-                            // 订阅失败，移除本地状态
-                            if let Some(subscriptions) =
-                                this.resource_subscriptions.get_mut(&provider_id)
-                            {
-                                subscriptions.remove(&resource_uri);
-                            }
-                            //window.push_notification(format!("订阅资源失败: {}", e), cx);
-                            cx.notify();
-                        })
-                        .ok();
-                    }
-                }
-            })
-            .detach();
+            self.providers
+                .iter_mut()
+                .find(|p| p.id == provider_id)
+                .map(|p| {
+                    p.subscribed_resources.insert(resource_name.clone());
+                });
         } else {
             // 取消订阅
-            if let Some(subscriptions) = self.resource_subscriptions.get_mut(&provider_id) {
-                subscriptions.remove(&resource_uri);
+            if let Some(provider) = self.providers.iter_mut().find(|p| p.id == provider_id) {
+                provider.subscribed_resources.remove(&resource_name);
             }
-
-            // 异步调用取消订阅方法
-            cx.spawn(async move |this, cx| {
-                let provider_id = provider_id.clone();
-                let resource_uri = resource_uri.clone();
-                match CrossRuntimeBridge::global()
-                    .unsubscribe_from_resource(provider_id, resource_uri.clone())
-                    .await
-                {
-                    Ok(_) => {
-                        this.update(cx, |this, cx| {
-                            // window
-                            //     .push_notification(format!("已取消订阅资源: {}", resource_uri), cx);
-                            cx.notify();
-                        })
-                        .ok();
-                    }
-                    Err(e) => {
-                        this.update(cx, |this, cx| {
-                            // window.push_notification(format!("取消订阅资源失败: {}", e), cx);
-                            cx.notify();
-                        })
-                        .ok();
-                    }
-                }
-            })
-            .detach();
         }
+        self.save_config(window, cx);
     }
 
     // 切换资源模板订阅状态
     fn toggle_resource_template_subscription(
         &mut self,
         provider_id: &str,
-        uri_template: &str,
+        resouce_name: &str,
         subscribe: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let provider_id = provider_id.to_string();
-        let uri_template = uri_template.to_string();
-
+        let resouce_name = resouce_name.to_string();
         if subscribe {
             // 添加订阅
-            self.resource_template_subscriptions
-                .entry(provider_id.clone())
-                .or_insert_with(std::collections::HashSet::new)
-                .insert(uri_template.clone());
-
-            // 异步调用订阅方法
-            cx.spawn(async move |this, cx| {
-                let provider_id = provider_id.clone();
-                let uri_template = uri_template.clone();
-                match CrossRuntimeBridge::global()
-                    .subscribe_to_resource_template(provider_id.clone(), uri_template.clone())
-                    .await
-                {
-                    Ok(_) => {
-                        this.update(cx, |this, cx| {
-                            // window
-                            //     .push_notification(format!("已订阅资源模板: {}", uri_template), cx);
-                            cx.notify();
-                        })
-                        .ok();
-                    }
-                    Err(e) => {
-                        this.update(cx, |this, cx| {
-                            // 订阅失败，移除本地状态
-                            if let Some(subscriptions) =
-                                this.resource_template_subscriptions.get_mut(&provider_id)
-                            {
-                                subscriptions.remove(&uri_template);
-                            }
-                            //window.push_notification(format!("订阅资源模板失败: {}", e), cx);
-                            cx.notify();
-                        })
-                        .ok();
-                    }
-                }
-            })
-            .detach();
+            self.providers
+                .iter_mut()
+                .find(|p| p.id == provider_id)
+                .map(|p| {
+                    p.subscribed_resource_templates.insert(resouce_name.clone());
+                });
         } else {
             // 取消订阅
-            if let Some(subscriptions) = self.resource_template_subscriptions.get_mut(&provider_id)
-            {
-                subscriptions.remove(&uri_template);
+            if let Some(provider) = self.providers.iter_mut().find(|p| p.id == provider_id) {
+                provider.subscribed_resource_templates.remove(&resouce_name);
             }
-
-            // 异步调用取消订阅方法
-            cx.spawn(async move |this, cx| {
-                let provider_id = provider_id.clone();
-                let uri_template = uri_template.clone();
-                match CrossRuntimeBridge::global()
-                    .unsubscribe_from_resource_template(provider_id, uri_template.clone())
-                    .await
-                {
-                    Ok(_) => {
-                        this.update(cx, |this, cx| {
-                            // window.push_notification(
-                            //     format!("已取消订阅资源模板: {}", uri_template),
-                            //     cx,
-                            // );
-                            cx.notify();
-                        })
-                        .ok();
-                    }
-                    Err(e) => {
-                        this.update(cx, |this, cx| {
-                            // window
-                            //     .push_notification(format!("取消订阅资源模板失败: {}", e), cx);
-                            cx.notify();
-                        })
-                        .ok();
-                    }
-                }
-            })
-            .detach();
         }
+        self.save_config(window, cx);
     }
 
     // 检查资源是否已订阅
-    fn is_resource_subscribed(&self, provider_id: &str, resource_uri: &str) -> bool {
-        self.resource_subscriptions
-            .get(provider_id)
-            .map(|subscriptions| subscriptions.contains(resource_uri))
-            .unwrap_or(false)
+    fn is_resource_subscribed(&self, provider_id: &str, resource_name: &str) -> bool {
+        self.providers
+            .iter()
+            .find(|p| p.id == provider_id)
+            .map_or(false, |p| p.subscribed_resources.contains(resource_name))
     }
 
     // 检查资源模板是否已订阅
-    fn is_resource_template_subscribed(&self, provider_id: &str, uri_template: &str) -> bool {
-        self.resource_template_subscriptions
-            .get(provider_id)
-            .map(|subscriptions| subscriptions.contains(uri_template))
-            .unwrap_or(false)
+    fn is_resource_template_subscribed(&self, provider_id: &str, resource_name: &str) -> bool {
+        self.providers
+            .iter()
+            .find(|p| p.id == provider_id)
+            .map_or(false, |p| {
+                p.subscribed_resource_templates.contains(resource_name)
+            })
     }
 }
 
@@ -1060,13 +950,15 @@ impl McpProvider {
         div().child(match tab_index {
             0 => div().child(Self::render_config_content_static(provider)),
             1 => {
-                // 传递 provider_id 和 cx 参数
-                div().child(Self::render_resources_content_static(&resources))
+                // 使用交互式方法支持订阅
+                div().child(self.render_resources_content_interactive(&resources, &provider.id, cx))
             }
             2 => {
-                // 传递 provider_id 和 cx 参数
-                div().child(Self::render_resource_templates_content_static(
+                // 使用交互式方法支持订阅
+                div().child(self.render_resource_templates_content_interactive(
                     &resource_templates,
+                    &provider.id,
+                    cx,
                 ))
             }
             3 => div().child(Self::render_tools_content_static(&tools)),
@@ -1163,146 +1055,6 @@ impl McpProvider {
                     ),
                 ),
         )
-    }
-
-    // 渲染资源的静态方法
-    fn render_resources_content_static(resources: &[ResourceDefinition]) -> impl IntoElement {
-        v_flex()
-            .gap_2()
-            .children(resources.iter().map(|resource| {
-                v_flex()
-                    .gap_2()
-                    .p_3()
-                    .bg(gpui::rgb(0xFAFAFA))
-                    .rounded_md()
-                    .border_1()
-                    .border_color(gpui::rgb(0xE5E7EB))
-                    .child(
-                        h_flex()
-                            .items_center()
-                            .gap_2()
-                            .child(
-                                Icon::new(IconName::Database)
-                                    .small()
-                                    .text_color(gpui::rgb(0x059669)),
-                            )
-                            .child(
-                                div()
-                                    .font_medium()
-                                    .text_color(gpui::rgb(0x111827))
-                                    .child(SharedString::new(resource.resource.name.clone())),
-                            )
-                            .when_some(resource.resource.mime_type.clone(), |this, mime_type| {
-                                this.child(
-                                    div()
-                                        .px_2()
-                                        .py_1()
-                                        .bg(gpui::rgb(0xE0F2FE))
-                                        .text_color(gpui::rgb(0x0369A1))
-                                        .rounded_md()
-                                        .text_xs()
-                                        .child(mime_type),
-                                )
-                            }),
-                    )
-                    .when_some(
-                        resource.resource.description.clone(),
-                        |this, description| {
-                            this.child(
-                                div()
-                                    .text_sm()
-                                    .text_color(gpui::rgb(0x6B7280))
-                                    .child(description),
-                            )
-                        },
-                    )
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(gpui::rgb(0x9CA3AF))
-                            .child(resource.resource.uri.clone()),
-                    )
-            }))
-            .when(resources.is_empty(), |this| {
-                this.child(
-                    div()
-                        .text_sm()
-                        .text_color(gpui::rgb(0x9CA3AF))
-                        .child("暂无可用资源"),
-                )
-            })
-    }
-
-    // 渲染资源的静态方法
-    fn render_resource_templates_content_static(
-        resources: &[ResourceTemplateDefinition],
-    ) -> impl IntoElement {
-        v_flex()
-            .gap_2()
-            .children(resources.iter().map(|resource| {
-                v_flex()
-                    .gap_2()
-                    .p_3()
-                    .bg(gpui::rgb(0xFAFAFA))
-                    .rounded_md()
-                    .border_1()
-                    .border_color(gpui::rgb(0xE5E7EB))
-                    .child(
-                        h_flex()
-                            .items_center()
-                            .gap_2()
-                            .child(
-                                Icon::new(IconName::Database)
-                                    .small()
-                                    .text_color(gpui::rgb(0x059669)),
-                            )
-                            .child(
-                                div().font_medium().text_color(gpui::rgb(0x111827)).child(
-                                    SharedString::new(resource.resource_template.name.clone()),
-                                ),
-                            )
-                            .when_some(
-                                resource.resource_template.mime_type.clone(),
-                                |this, mime_type| {
-                                    this.child(
-                                        div()
-                                            .px_2()
-                                            .py_1()
-                                            .bg(gpui::rgb(0xE0F2FE))
-                                            .text_color(gpui::rgb(0x0369A1))
-                                            .rounded_md()
-                                            .text_xs()
-                                            .child(mime_type),
-                                    )
-                                },
-                            ),
-                    )
-                    .when_some(
-                        resource.resource_template.description.clone(),
-                        |this, description| {
-                            this.child(
-                                div()
-                                    .text_sm()
-                                    .text_color(gpui::rgb(0x6B7280))
-                                    .child(description),
-                            )
-                        },
-                    )
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(gpui::rgb(0x9CA3AF))
-                            .child(resource.resource_template.uri_template.clone()),
-                    )
-            }))
-            .when(resources.is_empty(), |this| {
-                this.child(
-                    div()
-                        .text_sm()
-                        .text_color(gpui::rgb(0x9CA3AF))
-                        .child("暂无可用资源"),
-                )
-            })
     }
 
     // 渲染工具的静态方法
@@ -1415,6 +1167,283 @@ impl McpProvider {
             })
     }
 
-    // 删除事件监听方法，因为还没有实现相应的事件系统
-    // 删除 subscribe_to_mcp_events 方法
+    // 将资源渲染改为交互式方法，支持订阅功能
+    fn render_resources_content_interactive(
+        &mut self,
+        resources: &[ResourceDefinition],
+        provider_id: &str,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        v_flex()
+            .gap_2()
+            .children(resources.iter().enumerate().map(|(index, resource)| {
+                // 检查是否支持订阅
+                let can_subscribe = resource.subscribable;
+
+                // 检查当前订阅状态
+                let is_subscribed =
+                    self.is_resource_subscribed(provider_id, &resource.resource.uri);
+
+                v_flex()
+                    .gap_2()
+                    .p_3()
+                    .bg(gpui::rgb(0xFAFAFA))
+                    .rounded_md()
+                    .border_1()
+                    .border_color(gpui::rgb(0xE5E7EB))
+                    .child(
+                        h_flex()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                Icon::new(IconName::Database)
+                                    .small()
+                                    .text_color(gpui::rgb(0x059669)),
+                            )
+                            .child(
+                                div()
+                                    .font_medium()
+                                    .text_color(gpui::rgb(0x111827))
+                                    .flex_1()
+                                    .child(SharedString::new(resource.resource.name.clone())),
+                            )
+                            .when_some(resource.resource.mime_type.clone(), |this, mime_type| {
+                                this.child(
+                                    div()
+                                        .px_2()
+                                        .py_1()
+                                        .bg(gpui::rgb(0xE0F2FE))
+                                        .text_color(gpui::rgb(0x0369A1))
+                                        .rounded_md()
+                                        .text_xs()
+                                        .child(mime_type),
+                                )
+                            })
+                            .when(can_subscribe, |this| {
+                                this.child(
+                                    div()
+                                        .flex()
+                                        .items_center()
+                                        .gap_2()
+                                        .child(
+                                            div()
+                                                .text_xs()
+                                                .text_color(gpui::rgb(0x6B7280))
+                                                .child("订阅"),
+                                        )
+                                        .child({
+                                            let provider_id = provider_id.to_string();
+                                            let resource_uri = resource.resource.uri.clone();
+                                            Switch::new(SharedString::new(format!(
+                                                "resource-subscribe-{}-{}",
+                                                provider_id, index
+                                            )))
+                                            .checked(is_subscribed)
+                                            .small()
+                                            .on_click(cx.listener(
+                                                move |this, checked, window, cx| {
+                                                    this.toggle_resource_subscription(
+                                                        &provider_id,
+                                                        &resource_uri,
+                                                        *checked,
+                                                        window,
+                                                        cx,
+                                                    );
+                                                },
+                                            ))
+                                        }),
+                                )
+                            }),
+                    )
+                    .when_some(
+                        resource.resource.description.clone(),
+                        |this, description| {
+                            this.child(
+                                div()
+                                    .text_sm()
+                                    .text_color(gpui::rgb(0x6B7280))
+                                    .child(description),
+                            )
+                        },
+                    )
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(gpui::rgb(0x9CA3AF))
+                            .child(resource.resource.uri.clone()),
+                    )
+                    .when(can_subscribe, |this| {
+                        this.child(
+                            div()
+                                .text_xs()
+                                .text_color(if is_subscribed {
+                                    gpui::rgb(0x059669)
+                                } else {
+                                    gpui::rgb(0x6B7280)
+                                })
+                                .child(if is_subscribed {
+                                    "✓ 已订阅"
+                                } else {
+                                    "○ 支持订阅"
+                                }),
+                        )
+                    })
+            }))
+            .when(resources.is_empty(), |this| {
+                this.child(
+                    div()
+                        .text_sm()
+                        .text_color(gpui::rgb(0x9CA3AF))
+                        .child("暂无可用资源"),
+                )
+            })
+    }
+
+    // 将资源模板渲染改为交互式方法
+    fn render_resource_templates_content_interactive(
+        &mut self,
+        resource_templates: &[ResourceTemplateDefinition],
+        provider_id: &str,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        v_flex()
+            .gap_2()
+            .children(
+                resource_templates
+                    .iter()
+                    .enumerate()
+                    .map(|(index, template)| {
+                        // 检查是否支持订阅
+                        let can_subscribe = template.subscribable;
+
+                        // 检查当前订阅状态
+                        let is_subscribed = self.is_resource_template_subscribed(
+                            provider_id,
+                            &template.resource_template.uri_template,
+                        );
+
+                        v_flex()
+                            .gap_2()
+                            .p_3()
+                            .bg(gpui::rgb(0xFAFAFA))
+                            .rounded_md()
+                            .border_1()
+                            .border_color(gpui::rgb(0xE5E7EB))
+                            .child(
+                                h_flex()
+                                    .items_center()
+                                    .gap_2()
+                                    .child(
+                                        Icon::new(IconName::FilePlus2)
+                                            .small()
+                                            .text_color(gpui::rgb(0x7C3AED)),
+                                    )
+                                    .child(
+                                        div()
+                                            .font_medium()
+                                            .text_color(gpui::rgb(0x111827))
+                                            .flex_1()
+                                            .child(SharedString::new(
+                                                template.resource_template.name.clone(),
+                                            )),
+                                    )
+                                    .when_some(
+                                        template.resource_template.mime_type.clone(),
+                                        |this, mime_type| {
+                                            this.child(
+                                                div()
+                                                    .px_2()
+                                                    .py_1()
+                                                    .bg(gpui::rgb(0xE0F2FE))
+                                                    .text_color(gpui::rgb(0x0369A1))
+                                                    .rounded_md()
+                                                    .text_xs()
+                                                    .child(mime_type),
+                                            )
+                                        },
+                                    )
+                                    .when(can_subscribe, |this| {
+                                        this.child(
+                                            div()
+                                                .flex()
+                                                .items_center()
+                                                .gap_2()
+                                                .child(
+                                                    div()
+                                                        .text_xs()
+                                                        .text_color(gpui::rgb(0x6B7280))
+                                                        .child("订阅"),
+                                                )
+                                                .child({
+                                                    let provider_id = provider_id.to_string();
+                                                    let uri_template = template
+                                                        .resource_template
+                                                        .uri_template
+                                                        .clone();
+                                                    Switch::new(SharedString::new(format!(
+                                                "resource-template-subscribe-{}-{}",
+                                                provider_id,
+                                                index,
+                                            )))
+                                            .checked(is_subscribed)
+                                            .small()
+                                            .on_click(cx.listener(
+                                                move |this, checked, window, cx| {
+                                                    this.toggle_resource_template_subscription(
+                                                        &provider_id,
+                                                        &uri_template,
+                                                        *checked,
+                                                        window,
+                                                        cx,
+                                                    );
+                                                },
+                                            ))
+                                                }),
+                                        )
+                                    }),
+                            )
+                            .when_some(
+                                template.resource_template.description.clone(),
+                                |this, description| {
+                                    this.child(
+                                        div()
+                                            .text_sm()
+                                            .text_color(gpui::rgb(0x6B7280))
+                                            .child(description),
+                                    )
+                                },
+                            )
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(gpui::rgb(0x9CA3AF))
+                                    .child(template.resource_template.uri_template.clone()),
+                            )
+                            .when(can_subscribe, |this| {
+                                this.child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(if is_subscribed {
+                                            gpui::rgb(0x7C3AED)
+                                        } else {
+                                            gpui::rgb(0x6B7280)
+                                        })
+                                        .child(if is_subscribed {
+                                            "✓ 已订阅"
+                                        } else {
+                                            "○ 支持订阅"
+                                        }),
+                                )
+                            })
+                    }),
+            )
+            .when(resource_templates.is_empty(), |this| {
+                this.child(
+                    div()
+                        .text_sm()
+                        .text_color(gpui::rgb(0x9CA3AF))
+                        .child("暂无可用资源模板"),
+                )
+            })
+    }
 }

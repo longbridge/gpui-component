@@ -1,3 +1,4 @@
+use crate::backoffice::mcp::McpRegistry;
 use crate::backoffice::BoEvent;
 use crate::xbus;
 use rmcp::model::{
@@ -5,15 +6,11 @@ use rmcp::model::{
     LoggingLevel, ProtocolVersion, ReadResourceRequestParam, ResourceUpdatedNotificationParam,
 };
 use rmcp::service::{NotificationContext, RequestContext};
-use rmcp::{
-    ClientHandler, RoleClient,
-};
 pub use rmcp::{
-    model::{Root,
-        ClientCapabilities, Implementation, 
-    },
-    Error as McpError
+    model::{ClientCapabilities, Implementation, Root},
+    Error as McpError,
 };
+use rmcp::{ClientHandler, RoleClient};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -21,7 +18,6 @@ pub struct McpClientHandler {
     pub protocol_version: ProtocolVersion,
     pub capabilities: ClientCapabilities,
     pub client_info: Implementation,
-    // pub peer: Option<Peer<RoleClient>>,
     pub id: String,
 }
 
@@ -34,7 +30,6 @@ impl McpClientHandler {
                 name: "xTo-Do/mcp-client".into(),
                 version: "0.1.0".into(),
             },
-            // peer: None,
             id,
         }
     }
@@ -76,8 +71,7 @@ impl ClientHandler for McpClientHandler {
                 log::info!("Tool list: {tools:#?}");
 
                 // 更新 Registry 中的实例状态
-                let registry = crate::backoffice::mcp::McpRegistry::global();
-                registry.do_send(crate::backoffice::mcp::UpdateInstanceTools {
+                McpRegistry::global().do_send(crate::backoffice::mcp::UpdateInstanceTools {
                     server_id: self.id.clone(),
                     tools: tools.tools.clone(),
                 });
@@ -100,8 +94,7 @@ impl ClientHandler for McpClientHandler {
                 log::info!("Prompt list: {prompts:#?}");
 
                 // 更新 Registry 中的实例状态
-                let registry = crate::backoffice::mcp::McpRegistry::global();
-                registry.do_send(crate::backoffice::mcp::UpdateInstancePrompts {
+                McpRegistry::global().do_send(crate::backoffice::mcp::UpdateInstancePrompts {
                     server_id: self.id.clone(),
                     prompts: prompts.prompts.clone(),
                 });
@@ -129,8 +122,7 @@ impl ClientHandler for McpClientHandler {
                 log::info!("Resource list changed: {resources:#?}");
 
                 // 更新 Registry 中的实例状态
-                let registry = crate::backoffice::mcp::McpRegistry::global();
-                registry.do_send(crate::backoffice::mcp::UpdateInstanceResources {
+                McpRegistry::global().do_send(crate::backoffice::mcp::UpdateInstanceResources {
                     server_id: self.id.clone(),
                     resources: resources.clone(),
                 });
@@ -188,23 +180,26 @@ impl ClientHandler for McpClientHandler {
         params: ResourceUpdatedNotificationParam,
         context: NotificationContext<RoleClient>,
     ) {
-        log::info!("Resource updated: {}", params.uri);
-        
+        println!("Resource updated: {}", params.uri);
+
         match context
             .peer
-            .read_resource(ReadResourceRequestParam { uri: params.uri.clone() })
+            .read_resource(ReadResourceRequestParam {
+                uri: params.uri.clone(),
+            })
             .await
         {
             Ok(result) => {
-                log::info!("Resource content read successfully for: {}", params.uri);
-                
+                println!("Resource content read successfully for: {}", params.uri);
+
                 // 更新 Registry 中的实例状态
-                let registry = crate::backoffice::mcp::McpRegistry::global();
-                registry.do_send(crate::backoffice::mcp::UpdateInstanceResourceContent {
-                    server_id: self.id.clone(),
-                    uri: params.uri.clone(),
-                    contents: result.contents.clone(),
-                });
+                McpRegistry::global().do_send(
+                    crate::backoffice::mcp::UpdateInstanceResourceContent {
+                        server_id: self.id.clone(),
+                        uri: params.uri.clone(),
+                        contents: result.contents.clone(),
+                    },
+                );
             }
             Err(err) => {
                 log::error!("Failed to read updated resource {}: {}", params.uri, err);

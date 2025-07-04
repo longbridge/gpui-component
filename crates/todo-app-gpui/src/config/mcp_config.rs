@@ -35,6 +35,15 @@ pub struct McpServerConfig {
     pub enabled: bool,
     pub description: String,
     pub env_vars: std::collections::HashMap<String, String>,
+
+    // 新增：资源订阅配置
+    /// 已订阅的资源 URI 列表
+    #[serde(default)]
+    pub subscribed_resources: std::collections::HashSet<String>,
+
+    /// 已订阅的资源模板 URI 模板列表
+    #[serde(default)]
+    pub subscribed_resource_templates: std::collections::HashSet<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Default)]

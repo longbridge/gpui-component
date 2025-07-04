@@ -488,6 +488,7 @@ impl LlmRegistry {
                     self.configs.insert(config.id.clone(), config.clone());
                 }
             }
+            self.file.open()?;
         }
         Ok(())
     }

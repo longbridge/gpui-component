@@ -1,9 +1,13 @@
-use crate::backoffice::mcp::client::McpClientHandler;
+use crate::backoffice::mcp::client_handler::McpClientHandler;
 use crate::config::mcp_config::{McpServerConfig, McpTransport};
+use crate::xbus;
 use gpui_component::IconName;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ACCEPT, AUTHORIZATION};
 use rig::tool::ToolSet;
-use rmcp::model::{ClientRequest, PingRequestMethod, ReadResourceRequestParam, ResourceContents};
+use rmcp::model::{
+    ClientRequest, PingRequestMethod, ReadResourceRequestParam, ResourceContents,
+    SubscribeRequestParam,
+};
 use rmcp::transport::sse_client::SseClientConfig;
 use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
 use rmcp::transport::{ConfigureCommandExt, StreamableHttpClientTransport, TokioChildProcess};
@@ -145,8 +149,9 @@ impl McpServerInstance {
 
         println!("Starting MCP provider with command: {:?}", command);
         let transport = TokioChildProcess::new(command)?;
-        let client_info = McpClientHandler::new(self.config.id.clone());
-        let client = client_info.serve(transport).await?;
+        let client = McpClientHandler::new(self.config.id.clone())
+            .serve(transport)
+            .await?;
         self.start_serve(client).await
     }
 
@@ -173,8 +178,9 @@ impl McpServerInstance {
             },
         )
         .await?;
-        let client_info = McpClientHandler::new(self.config.id.clone());
-        let client = client_info.serve(transport).await?;
+        let client = McpClientHandler::new(self.config.id.clone())
+            .serve(transport)
+            .await?;
         self.start_serve(client).await
     }
 
@@ -200,10 +206,9 @@ impl McpServerInstance {
                 ..Default::default()
             },
         );
-
-        //let transport = StreamableHttpClientTransport::from_uri(self.command.clone());
-        let client_info = McpClientHandler::new(self.config.id.clone());
-        let client = client_info.serve(transport).await?;
+        let client = McpClientHandler::new(self.config.id.clone())
+            .serve(transport)
+            .await?;
         self.start_serve(client).await
     }
 
@@ -273,8 +278,29 @@ impl McpServerInstance {
                 if subscribe {
                     self.keepalive = true;
                     println!("Server supports resource subscription.");
-                } else {
-                    println!("Server does not support resource subscription.");
+                    for name in self.config.subscribed_resources.iter() {
+                        if let Some(resource) =
+                            self.resources.iter_mut().find(|r| r.resource.name == *name)
+                        {
+                            match client
+                                .subscribe(SubscribeRequestParam {
+                                    uri: resource.resource.uri.clone(),
+                                })
+                                .await
+                            {
+                                Ok(_) => {
+                                    resource.subscribed = true;
+                                }
+                                Err(e) => {
+                                    log::error!(
+                                        "Failed to subscribe to resource {}: {}",
+                                        resource.resource.name,
+                                        e
+                                    );
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -310,11 +336,6 @@ impl McpServerInstance {
             log::info!("McpServerInstance {} stopped", self.config.id);
         }
         Ok(())
-    }
-
-    /// 检查实例是否正在运行
-    pub fn is_running(&self) -> bool {
-        self.client.is_some()
     }
 
     /// 获取实例状态
