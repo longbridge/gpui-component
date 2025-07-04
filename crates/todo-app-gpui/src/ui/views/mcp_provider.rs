@@ -114,10 +114,11 @@ impl McpProvider {
     }
 
     // 保存配置到文件
-    fn save_config(&self, cx: &mut Context<Self>) {
+    fn save_config(&self, window: &mut Window, cx: &mut Context<Self>) {
         println!("保存MCP配置到文件...");
         if let Err(e) = McpConfigManager::save_servers(&self.providers[..]) {
-            eprintln!("保存MCP配置失败: {}", e);
+            window.push_notification(format!("保存配置失败: {}", e), cx);
+            log::error!("Failed to save MCP config: {}", e);
         }
         xbus::post(&FoEvent::McpConfigUpdated);
     }
@@ -141,7 +142,7 @@ impl McpProvider {
         self.expanded_providers.push(new_index);
         self.start_editing(new_index, window, cx);
         cx.notify();
-        self.save_config(cx);
+        self.save_config(window, cx);
     }
 
     fn cancel_edit(&mut self, _: &CancelEdit, window: &mut Window, cx: &mut Context<Self>) {
@@ -168,7 +169,7 @@ impl McpProvider {
     fn save_mcp_provider(
         &mut self,
         _: &SaveMcpProvider,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         if let Some(index) = self.editing_provider {
@@ -213,7 +214,7 @@ impl McpProvider {
             self.provider_inputs.remove(&index);
         }
         self.editing_provider = None;
-        self.save_config(cx);
+        self.save_config(window, cx);
         cx.notify();
     }
 
@@ -254,7 +255,7 @@ impl McpProvider {
                     true
                 })
         });
-        self.save_config(cx);
+        self.save_config(window, cx);
     }
 
     fn confirm_delete_mcp_provider(
@@ -287,7 +288,7 @@ impl McpProvider {
 
             window.push_notification(format!("已成功删除MCP服务 \"{}\"", provider_name), cx);
             cx.notify();
-            self.save_config(cx);
+            self.save_config(window, cx);
         }
     }
 
@@ -341,7 +342,7 @@ impl McpProvider {
             let provider_id = provider.id.clone();
             let provider_name = provider.name.clone();
 
-            self.save_config(cx);
+            self.save_config(window, cx);
 
             if enabled {
                 // 异步刷新能力信息
