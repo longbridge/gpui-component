@@ -537,13 +537,6 @@ impl Handler<UpdateInstanceResourceContent> for McpRegistry {
         msg: UpdateInstanceResourceContent,
         _ctx: &mut Self::Context,
     ) -> Self::Result {
-        println!(
-            "Handling resource update for server_id: {}, uri: {} {} {}",
-            msg.server_id,
-            msg.uri,
-            self.instances.len(),
-            self.instances.contains_key(&msg.server_id)
-        );
         CrossRuntimeBridge::global().post(BoEvent::McpResourceUpdated {
             server_id: msg.server_id.clone(),
             uri: msg.uri.clone(),
@@ -559,30 +552,6 @@ impl Handler<UpdateInstanceResourceContent> for McpRegistry {
             .map_err(|err| format!("Failed to serialize resource update: {}", err))
             .unwrap_or_default(),
         ));
-        // if let Some(instance) = self.instances.get_mut(&msg.server_id) {
-        //     // 查找并更新对应的资源
-        //     // for resource_def in &mut instance.resources {
-        //     //     if resource_def.resource.uri == msg.uri {
-        //     //         resource_def.update_contents(msg.contents.clone());
-        //     //         println!(
-        //     //             "Updated cached content for resource {} in server {}",
-        //     //             msg.uri, msg.server_id
-        //     //         );
-        //     //         // 发送事件通知
-
-        //     //         break;
-        //     //     }
-        //     // }
-        //     xbus::post(BoEvent::McpResourceUpdated {
-        //         server_id: msg.server_id.clone(),
-        //         uri: msg.uri,
-        //         contents: msg.contents,
-        //     });
-        // } else {
-        //     log::warn!(
-        //         "Server instance {} not found for resource update",
-        //         msg.server_id
-        //     );
-        // }
+        
     }
 }
