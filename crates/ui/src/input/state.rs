@@ -2316,7 +2316,7 @@ impl Render for InputState {
         self.mode.update_highlighter(&(0..0), &self.text, "", cx);
 
         div()
-            .id("text-element")
+            .id("input-state")
             .flex_1()
             .when(self.mode.is_multi_line(), |this| this.h_full())
             .flex_grow()

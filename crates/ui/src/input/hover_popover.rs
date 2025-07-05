@@ -99,7 +99,7 @@ impl Render for DiagnosticPopover {
 
         deferred(
             div()
-                .id("code-editor-diagnostic-popover")
+                .id("diagnostic-popover")
                 .absolute()
                 .left(x)
                 .top(y)
