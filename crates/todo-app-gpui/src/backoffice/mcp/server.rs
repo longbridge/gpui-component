@@ -1,5 +1,6 @@
 use crate::backoffice::cross_runtime::CrossRuntimeBridge;
 use crate::backoffice::mcp::client_handler::McpClientHandler;
+use crate::backoffice::mcp::loader::McpServerLoader;
 use crate::backoffice::mcp::{ExitFromRegistry, McpCallToolRequest, McpCallToolResult, McpRegistry, UpdateServerCache};
 use crate::backoffice::BoEvent;
 use crate::config::mcp_config::{McpServerConfig, McpTransport};
@@ -205,236 +206,6 @@ impl McpServer {
 }
 
 impl McpServer {
-    /// 启动连接，返回 client 和快照
-    async fn start_connection(
-        config: McpServerConfig,
-        server_addr: Addr<McpServer>,
-    ) -> anyhow::Result<(Arc<RunningService<RoleClient, McpClientHandler>>, McpServerSnapshot)> {
-        let client = match config.transport {
-            McpTransport::Stdio => Self::start_stdio_connection(&config, server_addr).await?,
-            McpTransport::Sse => Self::start_sse_connection(&config, server_addr).await?,
-            McpTransport::Streamable => Self::start_streamable_connection(&config, server_addr).await?,
-        };
-        
-        let (client_arc, snapshot) = Self::initialize_server_capabilities(config, client).await?;
-        Ok((client_arc, snapshot))
-    }
-
-    /// 启动 STDIO 连接
-    async fn start_stdio_connection(
-        config: &McpServerConfig,
-        server_addr: Addr<McpServer>,
-    ) -> anyhow::Result<RunningService<RoleClient, McpClientHandler>> {
-        let mut command = config.command.split(" ");
-        let command = Command::new(command.nth(0).unwrap_or_default()).configure(|cmd| {
-            let args = command.skip(0).collect::<Vec<_>>();
-            cmd.kill_on_drop(true)
-                .args(args)
-                .envs(&config.env_vars);
-            #[cfg(target_os = "windows")]
-            cmd.creation_flags(0x08000000);
-        });
-        
-        println!("Starting MCP provider with command: {:?}", command);
-        let transport = TokioChildProcess::new(command)?;
-        
-        #[cfg(target_family = "windows")]
-        {
-            use windows::Win32::System::JobObjects::{
-                AssignProcessToJobObject, CreateJobObjectA, JobObjectExtendedLimitInformation,
-                SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
-                JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
-            };
-            use windows::Win32::System::Threading::{OpenProcess, PROCESS_ALL_ACCESS};
-            transport
-                .id()
-                .and_then(|pid: u32| unsafe { OpenProcess(PROCESS_ALL_ACCESS, true, pid).ok() })
-                .and_then(|hprocess| unsafe {
-                    CreateJobObjectA(None, windows::core::s!("x-todo-mcp-job"))
-                        .ok()
-                        .and_then(|hjob| {
-                            let mut jobobjectinformation =
-                                JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
-                            jobobjectinformation.BasicLimitInformation.LimitFlags =
-                                JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-                            SetInformationJobObject(
-                                hjob,
-                                JobObjectExtendedLimitInformation,
-                                &jobobjectinformation as *const _ as *const std::ffi::c_void,
-                                std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
-                            )
-                            .ok()
-                            .and_then(|_| AssignProcessToJobObject(hjob, hprocess).ok())
-                        })
-                });
-        }
-        let client = McpClientHandler::new(config.id.clone(),server_addr).serve(transport).await?;
-        Ok(client)
-    }
-
-    /// 启动 SSE 连接
-    async fn start_sse_connection(
-        config: &McpServerConfig,
-        server_addr: Addr<McpServer>,
-    ) -> anyhow::Result<RunningService<RoleClient, McpClientHandler>> {
-        let mut headers: HeaderMap<HeaderValue> = HeaderMap::new();
-        headers.insert(ACCEPT, HeaderValue::from_static("*/*"));
-        for (key, val) in config.env_vars.iter() {
-            let key = HeaderName::from_bytes(key.as_bytes())?;
-            let val = val.parse()?;
-            headers.insert(key, val);
-        }
-
-        let client = reqwest::Client::builder()
-            .connect_timeout(Duration::from_secs(15))
-            .timeout(Duration::from_secs(90))
-            .read_timeout(Duration::from_secs(900))
-            .default_headers(headers)
-            .build()?;
-            
-        let transport = SseClientTransport::start_with_client(
-            client,
-            SseClientConfig {
-                sse_endpoint: config.command.clone().into(),
-                ..Default::default()
-            },
-        ).await?;
-        let client =  McpClientHandler::new(config.id.clone(),server_addr).serve(transport).await?;
-        Ok(client)
-    }
-
-    /// 启动 Streamable 连接
-    async fn start_streamable_connection(
-        config: &McpServerConfig,
-        server_addr: Addr<McpServer>,
-    ) -> anyhow::Result<RunningService<RoleClient, McpClientHandler>> {
-        let mut headers: HeaderMap<HeaderValue> = HeaderMap::new();
-        headers.insert(ACCEPT, HeaderValue::from_static("*/*"));
-        for (key, val) in config.env_vars.iter() {
-            let key = HeaderName::from_bytes(key.as_bytes())?;
-            let val = val.parse()?;
-            headers.insert(key, val);
-        }
-
-        let client = reqwest::Client::builder()
-            .connect_timeout(Duration::from_secs(15))
-            .timeout(Duration::from_secs(90))
-            .read_timeout(Duration::from_secs(900))
-            .default_headers(headers)
-            .build()?;
-            
-        let transport = StreamableHttpClientTransport::with_client(
-            client,
-            StreamableHttpClientTransportConfig {
-                uri: config.command.clone().into(),
-                ..Default::default()
-            },
-        );
-        let client =   McpClientHandler::new(config.id.clone(),server_addr).serve(transport).await?;
-        Ok(client)
-    }
-
-    /// 初始化服务器能力，返回 client 和快照
-    async fn initialize_server_capabilities(
-        config: McpServerConfig,
-        client: RunningService<RoleClient, McpClientHandler>,
-    ) -> anyhow::Result<(Arc<RunningService<RoleClient, McpClientHandler>>, McpServerSnapshot)> {
-        let server_info = client.peer_info().cloned().unwrap_or_default();
-        println!("Server info: {:#?}", server_info);
-        client.notify_initialized().await?;
-        
-        let mut capabilities = Vec::new();
-        let mut tools = Vec::new();
-        let mut prompts = Vec::new();
-        let mut resources = Vec::new();
-        let mut resource_templates = Vec::new();
-        let mut keepalive = false;
-
-        // 处理工具能力
-        if let Some(capability) = server_info.capabilities.tools {
-            tools = client.list_all_tools().await?;
-            capabilities.push(McpCapability::Tools);
-            if capability.list_changed.unwrap_or(false) {
-                keepalive = true;
-                println!("Server supports tool list changes.");
-            }
-        }
-
-        // 处理提示能力
-        if let Some(capability) = server_info.capabilities.prompts {
-            prompts = client.list_all_prompts().await?;
-            capabilities.push(McpCapability::Prompts);
-            if capability.list_changed.unwrap_or(false) {
-                keepalive = true;
-                println!("Server supports prompt list changes.");
-            }
-        }
-
-        // 处理资源能力
-        if let Some(capability) = server_info.capabilities.resources {
-            let resource_list = client.list_all_resources().await?;
-            let template_list = client.list_all_resource_templates().await?;
-            let subscribable = capability.subscribe.unwrap_or_default();
-            
-            resources = resource_list
-                .iter()
-                .map(|r| ResourceDefinition::new(r.clone(), subscribable))
-                .collect();
-                
-            resource_templates = template_list
-                .into_iter()
-                .map(|r| ResourceTemplateDefinition {
-                    resource_template: r,
-                    subscribed: false,
-                    subscribable,
-                })
-                .collect();
-                
-            capabilities.push(McpCapability::Resources);
-            
-            if capability.list_changed.unwrap_or(false) {
-                keepalive = true;
-                println!("Server supports resource list changes.");
-            }
-
-            // 处理资源订阅
-            if capability.subscribe.unwrap_or(false) {
-                keepalive = true;
-                for name in config.subscribed_resources.iter() {
-                    if let Some(resource) = resources.iter_mut().find(|r| r.resource.name == *name) {
-                        println!("Subscribing to resource: {} ({})", resource.resource.name, resource.resource.uri);
-                        match client.subscribe(SubscribeRequestParam {
-                            uri: resource.resource.uri.clone(),
-                        }).await {
-                            Ok(_) => {
-                                resource.subscribed = true;
-                            }
-                            Err(e) => {
-                                log::error!("Failed to subscribe to resource {}: {}", resource.resource.name, e);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // 创建 client 的 Arc 包装
-        let client_arc = Arc::new(client);
-        
-        // 创建快照
-        let snapshot = McpServerSnapshot::from_server_info(
-            config,
-            capabilities,
-            tools,
-            prompts,
-            resources,
-            resource_templates,
-            keepalive,
-        );
-
-        Ok((client_arc, snapshot))
-    }
-
     /// 连接到 MCP 服务器
     fn connect(&mut self, ctx: &mut Context<Self>) {
         log::info!("Connecting to MCP Server: {}", self.config.id);
@@ -443,47 +214,47 @@ impl McpServer {
         let config = self.config.clone();
         let server_addr = ctx.address();
         
-        Self::start_connection(config, server_addr).into_actor(self)
-        .then(|res, act, _ctx| {
-            match res {
-                Ok((client, snapshot)) => {
-                    log::info!("MCP Server {} connected successfully", act.config.id);
-                    
-                    // 设置 client - 这是关键的修复！
-                    act.client = Some(client);
-                    
-                    // 更新状态
-                    act.status = snapshot.status;
-                    act.capabilities = snapshot.capabilities;
-                    act.tools = snapshot.tools;
-                    act.prompts = snapshot.prompts;
-                    act.resources = snapshot.resources;
-                    act.resource_templates = snapshot.resource_templates;
-                    act.keepalive = snapshot.keepalive;
-                    
-                    // 发送事件通知
-                    CrossRuntimeBridge::global().post(BoEvent::McpServerStarted(act.config.clone()));
-                    
-                    // 通知 Registry 更新缓存
-                    let registry = McpRegistry::global();
-                    registry.do_send(UpdateServerCache {
-                        server_id: act.config.id.clone(),
-                        snapshot: Some(act.create_snapshot()),
-                    });
+        // 使用 McpServerLoader 进行连接
+        McpServerLoader::load_server(config, server_addr)
+            .into_actor(self)
+            .then(|res, act, _ctx| {
+                match res {
+                    Ok((client, snapshot)) => {
+                        log::info!("MCP Server {} connected successfully", act.config.id);
+                        
+                        // 设置客户端和状态
+                        act.client = Some(client);
+                        act.status = snapshot.status;
+                        act.capabilities = snapshot.capabilities;
+                        act.tools = snapshot.tools;
+                        act.prompts = snapshot.prompts;
+                        act.resources = snapshot.resources;
+                        act.resource_templates = snapshot.resource_templates;
+                        act.keepalive = snapshot.keepalive;
+                        
+                        // 发送事件通知
+                        CrossRuntimeBridge::global().post(BoEvent::McpServerStarted(act.config.clone()));
+                        
+                        // 通知 Registry 更新缓存
+                        let registry = McpRegistry::global();
+                        registry.do_send(UpdateServerCache {
+                            server_id: act.config.id.clone(),
+                            snapshot: Some(act.create_snapshot()),
+                        });
+                    }
+                    Err(err) => {
+                        log::error!("Failed to connect to MCP Server {}: {}", act.config.id, err);
+                        act.status = McpServerStatus::Error(err.to_string());
+                        
+                        CrossRuntimeBridge::global().post(BoEvent::Notification(
+                            crate::backoffice::NotificationKind::Error,
+                            format!("Failed to connect to MCP Server {}: {}", act.config.id, err),
+                        ));
+                    }
                 }
-                Err(err) => {
-                    log::error!("Failed to connect to MCP Server {}: {}", act.config.id, err);
-                    act.status = McpServerStatus::Error(err.to_string());
-                    
-                    CrossRuntimeBridge::global().post(BoEvent::Notification(
-                        crate::backoffice::NotificationKind::Error,
-                        format!("Failed to connect to MCP Server {}: {}", act.config.id, err),
-                    ));
-                }
-            }
-            fut::ready(())
-        })
-        .spawn(ctx);
+                fut::ready(())
+            })
+            .spawn(ctx);
     }
 }
 impl McpServer{

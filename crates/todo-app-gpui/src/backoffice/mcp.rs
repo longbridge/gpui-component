@@ -1,5 +1,6 @@
 mod adaptor;
 mod client_handler;
+mod loader;
 pub(crate) mod server;
 
 use crate::backoffice::mcp::server::{McpServer, McpServerSnapshot};
@@ -141,14 +142,20 @@ impl McpRegistry {
             }
 
             // 添加新启用的服务器
+            // for config in configs.iter().filter(|c| c.enabled) {
+            //     if !self.servers.contains_key(&config.id) {
+            //         let server = McpServer::new(config.clone());
+            //         let addr = server.start();
+            //         self.servers.insert(config.id.clone(), addr);
+            //     }
+            // }
             for config in configs.iter().filter(|c| c.enabled) {
-                if !self.servers.contains_key(&config.id) {
-                    let server = McpServer::new(config.clone());
-                    let addr = server.start();
-                    self.servers.insert(config.id.clone(), addr);
-                }
+                self.servers.remove(&config.id).map(|addr|{
+                    addr.do_send(ExitFromRegistry);
+                });
+                let addr = McpServer::new(config.clone()).start();
+                self.servers.insert(config.id.clone(), addr);
             }
-
             self.file.open()?;
         }
         Ok(())
