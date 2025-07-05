@@ -174,8 +174,10 @@ impl RenderOnce for TextInput {
 
         let prefix = self.prefix;
         let suffix = self.suffix;
-        let show_clear_button =
-            self.cleanable && !state.loading && !state.text.is_empty() && state.is_single_line();
+        let show_clear_button = self.cleanable
+            && !state.loading
+            && !state.text.is_empty()
+            && state.mode.is_single_line();
         let has_suffix = suffix.is_some() || state.loading || self.mask_toggle || show_clear_button;
 
         div()
@@ -198,7 +200,7 @@ impl RenderOnce for TextInput {
                     .on_action(window.listener_for(&self.state, InputState::cut))
                     .on_action(window.listener_for(&self.state, InputState::undo))
                     .on_action(window.listener_for(&self.state, InputState::redo))
-                    .when(state.is_multi_line(), |this| {
+                    .when(state.mode.is_multi_line(), |this| {
                         this.on_action(window.listener_for(&self.state, InputState::indent_inline))
                             .on_action(window.listener_for(&self.state, InputState::outdent_inline))
                             .on_action(window.listener_for(&self.state, InputState::indent_block))
@@ -209,7 +211,7 @@ impl RenderOnce for TextInput {
             .on_action(window.listener_for(&self.state, InputState::right))
             .on_action(window.listener_for(&self.state, InputState::select_left))
             .on_action(window.listener_for(&self.state, InputState::select_right))
-            .when(state.is_multi_line(), |this| {
+            .when(state.mode.is_multi_line(), |this| {
                 this.on_action(window.listener_for(&self.state, InputState::up))
                     .on_action(window.listener_for(&self.state, InputState::down))
                     .on_action(window.listener_for(&self.state, InputState::select_up))
@@ -249,7 +251,7 @@ impl RenderOnce for TextInput {
             .input_h(self.size)
             .cursor_text()
             .text_size(font_size)
-            .when(state.is_multi_line(), |this| {
+            .when(state.mode.is_multi_line(), |this| {
                 this.h_auto()
                     .when_some(self.height, |this, height| this.h(height))
             })
@@ -297,7 +299,7 @@ impl RenderOnce for TextInput {
                 )
             })
             .refine_style(&self.style)
-            .when(state.is_multi_line(), |this| {
+            .when(state.mode.is_multi_line(), |this| {
                 if state.last_layout.is_some() {
                     this.relative().child(
                         div()

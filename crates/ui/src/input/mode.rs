@@ -72,6 +72,19 @@ impl InputMode {
         matches!(self, InputMode::CodeEditor { .. })
     }
 
+    #[inline]
+    pub(super) fn is_auto_grow(&self) -> bool {
+        matches!(self, InputMode::AutoGrow { .. })
+    }
+
+    #[inline]
+    pub(super) fn is_multi_line(&self) -> bool {
+        matches!(
+            self,
+            InputMode::MultiLine { .. } | InputMode::AutoGrow { .. } | InputMode::CodeEditor { .. }
+        )
+    }
+
     pub(super) fn set_rows(&mut self, new_rows: usize) {
         match self {
             InputMode::MultiLine { rows, .. } => {

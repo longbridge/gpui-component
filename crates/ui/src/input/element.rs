@@ -79,7 +79,7 @@ impl TextElement {
         let mut cursor_bounds = None;
 
         // If the input has a fixed height (Otherwise is auto-grow), we need to add a bottom margin to the input.
-        let bottom_margin = if state.is_auto_grow() {
+        let bottom_margin = if state.mode.is_auto_grow() {
             px(0.) + line_height
         } else {
             BOTTOM_MARGIN_ROWS * line_height + line_height
@@ -336,7 +336,7 @@ impl TextElement {
         line_height: Pixels,
         input_height: Pixels,
     ) -> Range<usize> {
-        if state.is_single_line() {
+        if state.mode.is_single_line() {
             return 0..1;
         }
 
@@ -510,7 +510,7 @@ impl Element for TextElement {
 
         let mut style = Style::default();
         style.size.width = relative(1.).into();
-        if state.is_multi_line() {
+        if state.mode.is_multi_line() {
             style.flex_grow = 1.0;
             if let Some(h) = state.mode.height() {
                 style.size.height = h.into();
@@ -543,7 +543,7 @@ impl Element for TextElement {
         let highlight_styles = self.highlight_lines(&visible_range, cx);
 
         let state = self.state.read(cx);
-        let multi_line = state.is_multi_line();
+        let multi_line = state.mode.is_multi_line();
         let text = state.text.clone();
         let is_empty = text.is_empty();
         let placeholder = self.placeholder.clone();

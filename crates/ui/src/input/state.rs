@@ -563,7 +563,7 @@ impl InputState {
     ///
     /// move_lines: Number of lines to move vertically (positive for down, negative for up).
     fn move_vertical(&mut self, move_lines: isize, window: &mut Window, cx: &mut Context<Self>) {
-        if self.is_single_line() {
+        if self.mode.is_single_line() {
             return;
         }
 
@@ -654,24 +654,6 @@ impl InputState {
         cx.notify();
     }
 
-    #[inline]
-    pub(super) fn is_multi_line(&self) -> bool {
-        matches!(
-            self.mode,
-            InputMode::MultiLine { .. } | InputMode::AutoGrow { .. } | InputMode::CodeEditor { .. }
-        )
-    }
-
-    #[inline]
-    pub(super) fn is_single_line(&self) -> bool {
-        matches!(self.mode, InputMode::SingleLine)
-    }
-
-    #[inline]
-    pub(super) fn is_auto_grow(&self) -> bool {
-        matches!(self.mode, InputMode::AutoGrow { .. })
-    }
-
     /// Set the text of the input field.
     ///
     /// And the selection_range will be reset to 0..0.
@@ -685,7 +667,7 @@ impl InputState {
         self.replace_text(value, window, cx);
         self.history.ignore = false;
         // Ensure cursor to start when set text
-        if self.is_single_line() {
+        if self.mode.is_single_line() {
             self.selected_range =
                 (Cursor::new(self.text.len())..Cursor::new(self.text.len())).into();
         } else {
@@ -859,7 +841,7 @@ impl InputState {
     }
 
     pub(super) fn up(&mut self, _: &MoveUp, window: &mut Window, cx: &mut Context<Self>) {
-        if self.is_single_line() {
+        if self.mode.is_single_line() {
             return;
         }
 
@@ -875,7 +857,7 @@ impl InputState {
     }
 
     pub(super) fn down(&mut self, _: &MoveDown, window: &mut Window, cx: &mut Context<Self>) {
-        if self.is_single_line() {
+        if self.mode.is_single_line() {
             return;
         }
 
@@ -892,7 +874,7 @@ impl InputState {
     }
 
     pub(super) fn page_up(&mut self, _: &MovePageUp, window: &mut Window, cx: &mut Context<Self>) {
-        if self.is_single_line() {
+        if self.mode.is_single_line() {
             return;
         }
 
@@ -910,7 +892,7 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.is_single_line() {
+        if self.mode.is_single_line() {
             return;
         }
 
@@ -949,7 +931,7 @@ impl InputState {
     }
 
     pub(super) fn select_up(&mut self, _: &SelectUp, window: &mut Window, cx: &mut Context<Self>) {
-        if self.is_single_line() {
+        if self.mode.is_single_line() {
             return;
         }
         let offset = self.start_of_line(window, cx).saturating_sub(1);
@@ -962,7 +944,7 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.is_single_line() {
+        if self.mode.is_single_line() {
             return;
         }
         let offset = (self.end_of_line(window, cx) + 1).min(self.text.len());
@@ -1112,7 +1094,7 @@ impl InputState {
 
     /// Get start of line
     fn start_of_line(&mut self, window: &mut Window, cx: &mut Context<Self>) -> usize {
-        if self.is_single_line() {
+        if self.mode.is_single_line() {
             return 0;
         }
 
@@ -1130,7 +1112,7 @@ impl InputState {
     ///
     /// This is means is always get the first line of selection.
     fn start_of_line_of_selection(&mut self, window: &mut Window, cx: &mut Context<Self>) -> usize {
-        if self.is_single_line() {
+        if self.mode.is_single_line() {
             return 0;
         }
 
@@ -1154,7 +1136,7 @@ impl InputState {
 
     /// Get end of line
     fn end_of_line(&mut self, window: &mut Window, cx: &mut Context<Self>) -> usize {
-        if self.is_single_line() {
+        if self.mode.is_single_line() {
             return self.text.len();
         }
 
@@ -1195,7 +1177,7 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> String {
-        if self.is_single_line() {
+        if self.mode.is_single_line() {
             return "".into();
         }
 
@@ -1326,7 +1308,7 @@ impl InputState {
     }
 
     pub(super) fn enter(&mut self, action: &Enter, window: &mut Window, cx: &mut Context<Self>) {
-        if self.is_multi_line() {
+        if self.mode.is_multi_line() {
             // Get current line indent
             let indent = if self.mode.is_code_editor() {
                 self.indent_of_next_line(window, cx)
@@ -1655,7 +1637,7 @@ impl InputState {
     pub(super) fn paste(&mut self, _: &Paste, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(clipboard) = cx.read_from_clipboard() {
             let mut new_text = clipboard.text().unwrap_or_default();
-            if !self.is_multi_line() {
+            if !self.mode.is_multi_line() {
                 new_text = new_text.replace('\n', "");
             }
 
@@ -1773,7 +1755,7 @@ impl InputState {
             let pos = inner_position - line_origin;
 
             // Return offset by use closest_index_for_x if is single line mode.
-            if self.is_single_line() {
+            if self.mode.is_single_line() {
                 return line.unwrapped_layout.closest_index_for_x(pos.x);
             }
 
@@ -1823,7 +1805,7 @@ impl InputState {
         //
         // If only 1 line, the value is 0
         // If have 2 line, the value is 1
-        if self.is_multi_line() {
+        if self.mode.is_multi_line() {
             let p = point(px(0.), *y_offset);
             let height = line_height + line.wrap_boundaries.len() as f32 * line_height;
             *y_offset = *y_offset + height;
@@ -2336,7 +2318,7 @@ impl Render for InputState {
         div()
             .id("text-element")
             .flex_1()
-            .when(self.is_multi_line(), |this| this.h_full())
+            .when(self.mode.is_multi_line(), |this| this.h_full())
             .flex_grow()
             .overflow_x_hidden()
             .child(TextElement::new(cx.entity().clone()).placeholder(self.placeholder.clone()))
