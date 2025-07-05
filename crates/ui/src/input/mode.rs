@@ -43,6 +43,11 @@ pub enum InputMode {
         rows: usize,
         height: Option<DefiniteLength>,
     },
+    AutoGrow {
+        rows: usize,
+        min_rows: usize,
+        max_rows: usize,
+    },
     CodeEditor {
         tab: TabSize,
         rows: usize,
@@ -52,11 +57,6 @@ pub enum InputMode {
         language: SharedString,
         highlighter: Rc<RefCell<Option<SyntaxHighlighter>>>,
         markers: Rc<Vec<Marker>>,
-    },
-    AutoGrow {
-        rows: usize,
-        min_rows: usize,
-        max_rows: usize,
     },
 }
 
