@@ -222,6 +222,11 @@ impl RenderOnce for OtpInput {
             Size::Size(v) => v * 0.5,
         };
 
+        let cursor_ix = state
+            .value
+            .chars()
+            .count()
+            .min(state.length.saturating_sub(1));
         let mut groups: Vec<Vec<AnyElement>> = Vec::with_capacity(self.number_of_groups);
         let mut group_ix = 0;
         let group_items_count = state.length / self.number_of_groups;
@@ -229,17 +234,17 @@ impl RenderOnce for OtpInput {
             groups.push(vec![]);
         }
 
-        for i in 0..state.length {
-            let c = state.value.chars().nth(i);
-            if i % group_items_count == 0 && i != 0 {
+        for ix in 0..state.length {
+            let c = state.value.chars().nth(ix);
+            if ix % group_items_count == 0 && ix != 0 {
                 group_ix += 1;
             }
 
-            let is_input_focused = i == state.value.chars().count() && is_focused;
+            let is_input_focused = ix == cursor_ix && is_focused;
 
             groups[group_ix].push(
                 h_flex()
-                    .id(i)
+                    .id(ix)
                     .border_1()
                     .border_color(cx.theme().input)
                     .bg(cx.theme().background)
