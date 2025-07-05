@@ -1568,25 +1568,28 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let offset = self.index_for_mouse_position(event.position, window, cx);
-        if let Some(marker) = self.mode.marker_for_offset(offset) {
-            if let Some(diagnostic_popover) = self.diagnostic_popover.as_ref() {
-                if diagnostic_popover.read(cx).marker.range == marker.range {
-                    diagnostic_popover.update(cx, |this, cx| {
-                        this.show(cx);
-                    });
+        if self.mode.is_code_editor() {
+            // Show diagnostic popover on mouse move
+            let offset = self.index_for_mouse_position(event.position, window, cx);
+            if let Some(marker) = self.mode.marker_for_offset(offset) {
+                if let Some(diagnostic_popover) = self.diagnostic_popover.as_ref() {
+                    if diagnostic_popover.read(cx).marker.range == marker.range {
+                        diagnostic_popover.update(cx, |this, cx| {
+                            this.show(cx);
+                        });
 
-                    return;
+                        return;
+                    }
                 }
-            }
 
-            self.diagnostic_popover = Some(DiagnosticPopover::new(marker, cx.entity(), cx));
-            cx.notify();
-        } else {
-            if let Some(diagnostic_popover) = self.diagnostic_popover.as_mut() {
-                diagnostic_popover.update(cx, |this, cx| {
-                    this.check_to_hide(event.position, cx);
-                })
+                self.diagnostic_popover = Some(DiagnosticPopover::new(marker, cx.entity(), cx));
+                cx.notify();
+            } else {
+                if let Some(diagnostic_popover) = self.diagnostic_popover.as_mut() {
+                    diagnostic_popover.update(cx, |this, cx| {
+                        this.check_to_hide(event.position, cx);
+                    })
+                }
             }
         }
     }

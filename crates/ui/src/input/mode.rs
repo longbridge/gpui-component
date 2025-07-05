@@ -60,7 +60,14 @@ pub enum InputMode {
     },
 }
 
+#[allow(unused)]
 impl InputMode {
+    #[inline]
+    pub(super) fn is_single_line(&self) -> bool {
+        matches!(self, InputMode::SingleLine)
+    }
+
+    #[inline]
     pub(super) fn is_code_editor(&self) -> bool {
         matches!(self, InputMode::CodeEditor { .. })
     }
