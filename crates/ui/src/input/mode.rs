@@ -162,7 +162,7 @@ impl InputMode {
     pub(super) fn update_highlighter(
         &mut self,
         selected_range: &Range<usize>,
-        full_text: SharedString,
+        full_text: &SharedString,
         new_text: &str,
         cx: &mut App,
     ) {

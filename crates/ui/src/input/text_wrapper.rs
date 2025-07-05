@@ -47,20 +47,20 @@ impl TextWrapper {
 
     pub(super) fn set_wrap_width(&mut self, wrap_width: Option<Pixels>, cx: &mut App) {
         self.wrap_width = wrap_width;
-        self.update(self.text.clone(), true, cx);
+        self.update(&self.text.clone(), true, cx);
     }
 
     pub(super) fn set_font(&mut self, font: Font, font_size: Pixels, cx: &mut App) {
         self.font = font;
         self.font_size = font_size;
-        self.update(self.text.clone(), true, cx);
+        self.update(&self.text.clone(), true, cx);
     }
 
     /// Update the text wrapper and recalculate the wrapped lines.
     ///
     /// If the `text` is the same as the current text, do nothing.
-    pub(super) fn update(&mut self, text: SharedString, force: bool, cx: &mut App) {
-        if self.text == text && !force {
+    pub(super) fn update(&mut self, text: &SharedString, force: bool, cx: &mut App) {
+        if &self.text == text && !force {
             return;
         }
 
@@ -96,7 +96,7 @@ impl TextWrapper {
             prev_line_ix += line.len() + 1;
         }
 
-        self.text = text;
+        self.text = text.clone();
         self.wrapped_lines = wrapped_lines;
         self.lines = lines;
     }

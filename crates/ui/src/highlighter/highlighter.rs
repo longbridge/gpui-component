@@ -202,11 +202,11 @@ impl SyntaxHighlighter {
     pub fn update(
         &mut self,
         selected_range: &Range<usize>,
-        full_text: SharedString,
+        full_text: &SharedString,
         new_text: &str,
         cx: &mut App,
     ) {
-        if self.text == full_text {
+        if &self.text == full_text {
             return;
         }
 
@@ -244,7 +244,7 @@ impl SyntaxHighlighter {
 
         // Update state
         self.old_tree = Some(new_tree);
-        self.text = full_text;
+        self.text = full_text.clone();
 
         // let measure = Measure::new("build_styles");
         self.build_styles(changed_ranges, changed_len, cx);
