@@ -13,6 +13,8 @@ mod ui;
 pub mod xbus;
 use mimalloc::MiMalloc;
 
+ rust_i18n::i18n!("locales", fallback = "en");
+ 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 

@@ -67,6 +67,9 @@ log = "0.4.27"
 ftlog = "0.2.15"
 mimalloc = { version = "0.1.47" }
 actix-web = "4.11.0"
+rust-i18n = "3"
+smol = "1"
+smallvec = "1.13.2"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.61.1", features = [

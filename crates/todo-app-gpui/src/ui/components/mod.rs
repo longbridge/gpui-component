@@ -1,6 +1,6 @@
 pub(crate) mod container;
-// pub(crate) mod section;
 pub(crate) mod appbar;
+pub(crate) mod list;
 pub(crate) mod titlebar;
 
 use gpui::*;

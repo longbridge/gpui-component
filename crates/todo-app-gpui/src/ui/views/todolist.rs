@@ -5,11 +5,11 @@ use crate::ui::views::todo_thread::TodoThreadChat;
 use crate::{config::todo_item::*, ui::views::todo_thread_edit::Save as TodoSaved};
 use gpui::prelude::*;
 use gpui::*;
+use crate::ui::components::{list::{List, ListDelegate, ListEvent, ListItem}};
 use gpui_component::{
     button::{Button, ButtonGroup, ButtonVariants},
     indicator::Indicator,
     label::Label,
-    list::{List, ListDelegate, ListEvent, ListItem},
     popup_menu::PopupMenu,
     tab::TabBar,
     *,

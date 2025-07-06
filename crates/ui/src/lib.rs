@@ -1,11 +1,11 @@
 mod colors;
-mod event;
+pub mod event;
 mod focusable;
 mod icon;
 #[cfg(any(feature = "inspector", debug_assertions))]
 mod inspector;
 mod kbd;
-mod menu;
+pub mod menu;
 mod root;
 mod styled;
 mod svg_img;
@@ -14,7 +14,7 @@ mod title_bar;
 mod virtual_list;
 mod window_border;
 
-pub(crate) mod actions;
+pub mod actions;
 
 pub mod accordion;
 pub mod alert;

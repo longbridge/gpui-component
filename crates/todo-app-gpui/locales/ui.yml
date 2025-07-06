@@ -1,0 +1,157 @@
+_version: 2
+Calendar:
+  week.0:
+    en: Su
+    zh-CN: 日
+    zh-HK: 日
+    it: Do
+  week.1:
+    en: Mo
+    zh-CN: 一
+    zh-HK: 一
+    it: Lu
+  week.2:
+    en: Tu
+    zh-CN: 二
+    zh-HK: 二
+    it: Ma
+  week.3:
+    en: We
+    zh-CN: 三
+    zh-HK: 三
+    it: Me
+  week.4:
+    en: Th
+    zh-CN: 四
+    zh-HK: 四
+    it: Gi
+  week.5:
+    en: Fr
+    zh-CN: 五
+    zh-HK: 五
+    it: Ve
+  week.6:
+    en: Sa
+    zh-CN: 六
+    zh-HK: 六
+    it: Sa
+  month.January:
+    en: January
+    zh-CN: 一月
+    zh-HK: 一月
+    it: Gennaio
+  month.February:
+    en: February
+    zh-CN: 二月
+    zh-HK: 二月
+    it: Febbraio
+  month.March:
+    en: March
+    zh-CN: 三月
+    zh-HK: 三月
+    it: Marzo
+  month.April:
+    en: April
+    zh-CN: 四月
+    zh-HK: 四月
+    it: Aprile
+  month.May:
+    en: May
+    zh-CN: 五月
+    zh-HK: 五月
+    it: Maggio
+  month.June:
+    en: June
+    zh-CN: 六月
+    zh-HK: 六月
+    it: Giugno
+  month.July:
+    en: July
+    zh-CN: 七月
+    zh-HK: 七月
+    it: Luglio
+  month.August:
+    en: August
+    zh-CN: 八月
+    zh-HK: 八月
+    it: Agosto
+  month.September:
+    en: September
+    zh-CN: 九月
+    zh-HK: 九月
+    it: Settembre
+  month.October:
+    en: October
+    zh-CN: 十月
+    zh-HK: 十月
+    it: Ottobre
+  month.November:
+    en: November
+    zh-CN: 十一月
+    zh-HK: 十一月
+    it: Novembre
+  month.December:
+    en: December
+    zh-CN: 十二月
+    zh-HK: 十二月
+    it: Dicembre
+DatePicker:
+  placeholder:
+    en: "Select date"
+    zh-CN: 选择日期
+    zh-HK: 選擇日期
+    it: "Seleziona data"
+Dropdown:
+  placeholder:
+    en: "Please select"
+    zh-CN: "请选择"
+    zh-HK: "請選擇"
+    it: Seleziona
+Dock:
+  Unnamed:
+    en: Unnamed
+    zh-CN: 未命名
+    zh-HK: 未命名
+    it: "Senza nome"
+  Close:
+    en: Close
+    zh-CN: 关闭
+    zh-HK: 關閉
+    it: Chiudi
+  Zoom In:
+    en: Zoom In
+    zh-CN: 放大
+    zh-HK: 放大
+    it: Zoom In
+  Zoom Out:
+    en: Zoom Out
+    zh-CN: 缩小
+    zh-HK: 縮小
+    it: Zoom Out
+  Collapse:
+    en: Collapse
+    zh-CN: 隐藏
+    zh-HK: 隱藏
+    it: Nascondi
+  Expand:
+    en: Expand
+    zh-CN: 展开
+    zh-HK: 展開
+    it: Espandi
+Modal:
+  ok:
+    en: OK
+    zh-CN: 确定
+    zh-HK: 確定
+    it: OK
+  cancel:
+    en: Cancel
+    zh-CN: 取消
+    zh-HK: 取消
+    it: Annulla
+List:
+  search_placeholder:
+    en: Search...
+    zh-CN: 搜索...
+    zh-HK: 搜索...
+    it: Ricerca...
