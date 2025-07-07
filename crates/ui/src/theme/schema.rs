@@ -516,6 +516,10 @@ impl Theme {
         apply_color!(overlay);
         apply_color!(window_border, fallback = self.border);
 
+        // Ensure opacity for list_active, table_active
+        self.colors.list_active = self.colors.list_active.alpha(0.2);
+        self.colors.table_active = self.colors.table_active.alpha(0.2);
+
         if config.mode.is_dark() {
             self.dark_theme = self.colors;
         } else {
