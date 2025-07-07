@@ -358,7 +358,7 @@ impl Handler<LlmChatWithToolsRequest> for LlmProviderService {
 
     fn handle(&mut self, msg: LlmChatWithToolsRequest, _ctx: &mut Self::Context) -> Self::Result {
         let service = self.service.clone();
-        
+
         async move {
             match service
                 .stream_chat_with_tools(

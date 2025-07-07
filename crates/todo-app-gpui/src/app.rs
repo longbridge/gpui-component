@@ -109,7 +109,6 @@ impl Global for AppState {}
 impl AppState {
     /// 初始化应用程序状态
     fn init(cx: &mut App) {
-       
         let state = Self {
             invisible_panels: cx.new(|_| Vec::new()),
             profile_manager: ProfileManager::load(),
@@ -135,7 +134,6 @@ pub fn run() {
 
     let app = Application::new().with_assets(Assets);
     app.run(move |cx| {
-
         gpui_component::init(cx);
         AppState::init(cx);
         Profile::init(cx);

@@ -13,8 +13,8 @@ mod ui;
 pub mod xbus;
 use mimalloc::MiMalloc;
 
- rust_i18n::i18n!("locales", fallback = "en");
- 
+rust_i18n::i18n!("locales", fallback = "en");
+
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
@@ -22,11 +22,12 @@ static GLOBAL: MiMalloc = MiMalloc;
 async fn main() -> anyhow::Result<()> {
     #[cfg(target_os = "windows")]
     {
-        use std::sync::OnceLock; 
+        use std::sync::OnceLock;
         static MUTEX: OnceLock<mutex::Mutex> = OnceLock::new();
         let mutex = mutex::Mutex::try_lock("x-todo-app", true)?;
         MUTEX.set(mutex).ok();
     }
+
     backoffice::start()?;
     app::run();
     Ok(())

@@ -1,3 +1,3 @@
-///洞察用户特征
+///用户洞察
 
 pub struct Insight {}
