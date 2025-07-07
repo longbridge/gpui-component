@@ -39,6 +39,7 @@ mod table_story;
 mod tabs_story;
 mod tag_story;
 mod textarea_story;
+mod themes;
 mod title_bar;
 mod toggle_story;
 mod tooltip_story;

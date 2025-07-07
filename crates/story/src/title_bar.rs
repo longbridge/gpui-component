@@ -2,13 +2,12 @@ use std::rc::Rc;
 
 use gpui::{
     div, prelude::FluentBuilder as _, px, AnyElement, App, AppContext, ClickEvent, Context, Corner,
-    Entity, FocusHandle, Hsla, InteractiveElement as _, IntoElement, MouseButton,
-    ParentElement as _, Render, SharedString, Styled as _, Subscription, Window,
+    Entity, FocusHandle, InteractiveElement as _, IntoElement, MouseButton, ParentElement as _,
+    Render, SharedString, Styled as _, Subscription, Window,
 };
 use gpui_component::{
     badge::Badge,
     button::{Button, ButtonVariants as _},
-    color_picker::{ColorPicker, ColorPickerEvent, ColorPickerState},
     locale,
     popup_menu::PopupMenuExt as _,
     scroll::ScrollbarShow,
@@ -16,13 +15,13 @@ use gpui_component::{
     TitleBar,
 };
 
-use crate::{SelectFont, SelectLocale, SelectRadius, SelectScrollbarShow};
+use crate::{themes::ThemeSwitcher, SelectFont, SelectLocale, SelectRadius, SelectScrollbarShow};
 
 pub struct AppTitleBar {
     title: SharedString,
     locale_selector: Entity<LocaleSelector>,
     font_size_selector: Entity<FontSizeSelector>,
-    theme_color: Entity<ColorPickerState>,
+    theme_switcher: Entity<ThemeSwitcher>,
     child: Rc<dyn Fn(&mut Window, &mut App) -> AnyElement>,
     _subscriptions: Vec<Subscription>,
 }
@@ -42,26 +41,15 @@ impl AppTitleBar {
             Theme::global_mut(cx).scrollbar_show = ScrollbarShow::Hover;
         }
 
-        let theme_color =
-            cx.new(|cx| ColorPickerState::new(window, cx).default_value(cx.theme().primary));
-
-        let _subscriptions = vec![cx.subscribe_in(
-            &theme_color,
-            window,
-            |this, _, ev: &ColorPickerEvent, window, cx| match ev {
-                ColorPickerEvent::Change(color) => {
-                    this.set_theme_color(*color, window, cx);
-                }
-            },
-        )];
+        let theme_switcher = cx.new(|_| ThemeSwitcher::new());
 
         Self {
             title: title.into(),
             locale_selector,
             font_size_selector,
-            theme_color,
+            theme_switcher,
             child: Rc::new(|_, _| div().into_any_element()),
-            _subscriptions,
+            _subscriptions: vec![],
         }
     }
 
@@ -74,30 +62,13 @@ impl AppTitleBar {
         self
     }
 
-    fn set_theme_color(
-        &mut self,
-        color: Option<Hsla>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if let Some(color) = color {
-            let theme = cx.global_mut::<Theme>();
-            theme.apply_color(color);
-            self.theme_color.update(cx, |state, cx| {
-                state.set_value(color, window, cx);
-            });
-            window.refresh();
-        }
-    }
-
-    fn change_color_mode(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
+    fn change_color_mode(&mut self, _: &ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
         let mode = match cx.theme().mode.is_dark() {
             true => ThemeMode::Light,
             false => ThemeMode::Dark,
         };
 
         Theme::change(mode, None, cx);
-        self.set_theme_color(self.theme_color.read(cx).value(), window, cx);
     }
 }
 
@@ -117,12 +88,7 @@ impl Render for AppTitleBar {
                     .gap_2()
                     .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                     .child((self.child.clone())(window, cx))
-                    .child(
-                        ColorPicker::new(&self.theme_color)
-                            .small()
-                            .anchor(Corner::TopRight)
-                            .icon(IconName::Palette),
-                    )
+                    .child(self.theme_switcher.clone())
                     .child(
                         Button::new("theme-mode")
                             .map(|this| {

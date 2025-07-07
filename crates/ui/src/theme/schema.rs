@@ -6,11 +6,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::{Theme, ThemeColor, ThemeMode};
 
+/// Represents a theme configuration.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
 pub struct ThemeConfig {
-    /// The theme id of the theme.
-    pub id: SharedString,
     /// The name of the theme.
     pub name: SharedString,
     /// The author of the theme.
@@ -408,7 +407,7 @@ impl Theme {
         apply_color!(info_active);
         apply_color!(info_foreground);
         apply_color!(info_hover);
-        apply_color!(input);
+        apply_color!(input, fallback = self.border);
         apply_color!(link, fallback = self.primary);
         apply_color!(link_active, fallback = self.link);
         apply_color!(link_hover, fallback = self.link);
