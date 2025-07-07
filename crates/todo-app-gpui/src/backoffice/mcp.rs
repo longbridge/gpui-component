@@ -140,15 +140,6 @@ impl McpRegistry {
                     self.snapshots.remove(&server_id); // 同时移除快照缓存
                 }
             }
-
-            // 添加新启用的服务器
-            // for config in configs.iter().filter(|c| c.enabled) {
-            //     if !self.servers.contains_key(&config.id) {
-            //         let server = McpServer::new(config.clone());
-            //         let addr = server.start();
-            //         self.servers.insert(config.id.clone(), addr);
-            //     }
-            // }
             for config in configs.iter().filter(|c| c.enabled) {
                 self.servers.remove(&config.id).map(|addr| {
                     addr.do_send(ExitFromRegistry);
@@ -175,8 +166,6 @@ impl Actor for McpRegistry {
         log::info!("McpRegistry stopped");
     }
 }
-
-// ===== 消息处理器 =====
 
 impl Handler<McpCallToolRequest> for McpRegistry {
     type Result = ResponseActFuture<Self, McpCallToolResult>;
@@ -212,8 +201,6 @@ impl Handler<McpCallToolRequest> for McpRegistry {
         }
     }
 }
-
-// ===== 快照管理消息 =====
 
 /// 更新服务器缓存快照
 #[derive(Message)]

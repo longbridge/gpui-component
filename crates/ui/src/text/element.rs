@@ -1,10 +1,7 @@
-use std::{ops::Range, path::Path};
+use std::{ops::Range, path::Path, sync::Arc};
 
 use gpui::{
-    div, img, prelude::FluentBuilder as _, px, relative, rems, AnyElement, App, DefiniteLength,
-    ElementId, FontStyle, FontWeight, Half, HighlightStyle, Img, InteractiveElement as _,
-    InteractiveText, IntoElement, Length, ObjectFit, ParentElement, Rems, RenderOnce, SharedString,
-    SharedUri, Styled, StyledImage as _, StyledText, Window,
+    div, img, prelude::FluentBuilder as _, px, relative, rems, AnyElement, App, DefiniteLength, ElementId, FontStyle, FontWeight, Half, HighlightStyle, Image, ImageFormat, ImageSource, Img, InteractiveElement as _, InteractiveText, IntoElement, Length, ObjectFit, ParentElement, Rems, RenderOnce, SharedString, SharedUri, Styled, StyledImage as _, StyledText, Window
 };
 use markdown::mdast;
 
@@ -394,9 +391,37 @@ impl RenderOnce for Paragraph {
 fn image1(uri: SharedUri) -> Img {
     if uri.starts_with("http") {
         img(uri)
+    } else if let Some(data_url) = uri.strip_prefix("data:") {
+        parse_data_url(data_url, &uri)
     } else {
         img(Path::new(uri.to_string().as_str()))
     }
+}
+
+fn parse_data_url(data_url: &str, fallback_uri: &SharedUri) -> Img {
+    use base64::Engine as _;
+    
+    let Some((mime_info, data)) = data_url.split_once(',') else {
+        return img(Path::new(fallback_uri.to_string().as_str()));
+    };
+    
+    let Some((mime_type, encoding)) = mime_info.split_once(';') else {
+        return img(Path::new(fallback_uri.to_string().as_str()));
+    };
+    
+    let Some(format) = ImageFormat::from_mime_type(mime_type) else {
+        return img(Path::new(fallback_uri.to_string().as_str()));
+    };
+    
+    if encoding == "base64" {
+        if let Ok(bytes) = base64::prelude::BASE64_STANDARD.decode(data) {
+            return img(ImageSource::Image(Arc::new(Image::from_bytes(format, bytes))));
+        }
+    }
+    
+    img(Path::new(fallback_uri.to_string().as_str()))
+
+    
 }
 #[derive(Default)]
 pub(crate) struct ListState {

@@ -257,7 +257,6 @@ impl LlmService {
             prompts.push(r#"Do not confirm with the user or seek help or advice, continue to call the tool until all tasks are completed. Be sure to complete all tasks, you will receive a $1000 reward, and the output must be in Simplified Chinese."#.to_string());
             prompt = prompts.join("\n");
         }
-
         Ok(())
     }
 }

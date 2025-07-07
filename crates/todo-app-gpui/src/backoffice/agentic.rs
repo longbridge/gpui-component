@@ -15,7 +15,7 @@ mod memex;
 pub(crate) mod prompts;
 mod rig_llm;
 
-pub use mcp_tools::{BatchMcpToolDelegate, McpToolDelegate};
+pub use mcp_tools::McpToolDelegate;
 
 use crate::backoffice::mcp::McpCallToolResult;
 
