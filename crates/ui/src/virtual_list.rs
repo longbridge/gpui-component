@@ -13,10 +13,10 @@
 use std::{cmp, ops::Range, rc::Rc};
 
 use gpui::{
-    div, point, px, size, AnyElement, App, AvailableSpace, Axis, Bounds, ContentMask, Context, Div,
-    Element, ElementId, Entity, GlobalElementId, Hitbox, InteractiveElement, IntoElement,
-    IsZero as _, Pixels, Render, ScrollHandle, Size, Stateful, StatefulInteractiveElement,
-    StyleRefinement, Styled, Window,
+    div, point, px, size, Along, AnyElement, App, AvailableSpace, Axis, Bounds, ContentMask,
+    Context, Div, Element, ElementId, Entity, GlobalElementId, Hitbox, InteractiveElement,
+    IntoElement, IsZero as _, Pixels, Render, ScrollHandle, Size, Stateful,
+    StatefulInteractiveElement, StyleRefinement, Styled, Window,
 };
 use smallvec::SmallVec;
 
@@ -200,33 +200,21 @@ impl Element for VirtualList {
         // TODO: To cache the item_sizes, item_origins
         // If there have 500,000 items, this method will speed about 500~600µs
         // let start = std::time::Instant::now();
+
         // Prepare each item's size by axis
-        let item_sizes = match self.axis {
-            Axis::Horizontal => self
-                .item_sizes
-                .iter()
-                .enumerate()
-                .map(|(i, size)| {
-                    if i == self.items_count - 1 {
-                        size.width
-                    } else {
-                        size.width + gap
-                    }
-                })
-                .collect::<Vec<_>>(),
-            Axis::Vertical => self
-                .item_sizes
-                .iter()
-                .enumerate()
-                .map(|(i, size)| {
-                    if i == self.items_count - 1 {
-                        size.height
-                    } else {
-                        size.height + gap
-                    }
-                })
-                .collect::<Vec<_>>(),
-        };
+        let item_sizes = self
+            .item_sizes
+            .iter()
+            .enumerate()
+            .map(|(i, size)| {
+                let size = size.along(self.axis);
+                if i + 1 == self.items_count {
+                    size
+                } else {
+                    size + gap
+                }
+            })
+            .collect::<Vec<_>>();
 
         // Prepare each item's origin by axis
         let item_origins = match self.axis {
