@@ -20,8 +20,6 @@ use gpui::{
 };
 use smallvec::SmallVec;
 
-use crate::Measure;
-
 /// Create a virtual list in Vertical direction.
 ///
 /// This is like `uniform_list` in GPUI, but support two axis.
