@@ -5,8 +5,8 @@ use crate::{
     ActiveTheme,
 };
 use gpui::{
-    div, px, App, Axis, DefiniteLength, Div, Edges, Element, ElementId, FocusHandle, Pixels,
-    Refineable, StyleRefinement, Styled, Window,
+    div, point, px, App, Axis, BoxShadow, DefiniteLength, Div, Edges, Element, ElementId,
+    FocusHandle, Hsla, Pixels, Refineable, StyleRefinement, Styled, Window,
 };
 use serde::{Deserialize, Serialize};
 
@@ -20,6 +20,29 @@ pub fn h_flex() -> Div {
 #[inline]
 pub fn v_flex() -> Div {
     div().v_flex()
+}
+
+/// Create a [`BoxShadow`] like CSS.
+///
+/// e.g:
+///
+/// If CSS is `box-shadow: 0 0 10px 0 rgba(0, 0, 0, 0.1);`
+///
+/// Then the equivalent in Rust is `box_shadow(0., 0., 10., 0., hsla(0., 0., 0., 0.1))`
+#[inline]
+pub fn box_shadow(
+    x: impl Into<Pixels>,
+    y: impl Into<Pixels>,
+    blur: impl Into<Pixels>,
+    spread: impl Into<Pixels>,
+    color: Hsla,
+) -> BoxShadow {
+    BoxShadow {
+        offset: point(x.into(), y.into()),
+        blur_radius: blur.into(),
+        spread_radius: spread.into(),
+        color,
+    }
 }
 
 macro_rules! font_weight {

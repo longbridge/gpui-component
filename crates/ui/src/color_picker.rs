@@ -29,16 +29,16 @@ pub enum ColorPickerEvent {
 }
 
 fn color_palettes() -> Vec<Vec<Hsla>> {
-    use crate::colors::DEFAULT_COLOR;
+    use crate::theme::DEFAULT_COLORS;
     use itertools::Itertools as _;
 
     macro_rules! c {
         ($color:tt) => {
-            DEFAULT_COLOR
+            DEFAULT_COLORS
                 .$color
                 .keys()
                 .sorted()
-                .map(|k| DEFAULT_COLOR.$color.get(k).map(|c| c.hsla).unwrap())
+                .map(|k| DEFAULT_COLORS.$color.get(k).map(|c| c.hsla).unwrap())
                 .collect::<Vec<_>>()
         };
     }

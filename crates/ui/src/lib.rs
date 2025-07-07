@@ -1,4 +1,3 @@
-mod colors;
 mod event;
 mod focusable;
 mod icon;
@@ -80,7 +79,6 @@ pub use title_bar::*;
 pub use virtual_list::{h_virtual_list, v_virtual_list, VirtualList};
 pub use window_border::{window_border, window_paddings, WindowBorder};
 
-pub use colors::*;
 pub use icon::*;
 pub use kbd::*;
 pub use svg_img::*;

@@ -12,10 +12,11 @@ use gpui::{
     IntoElement, LayoutId, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PaintQuad, Pixels, Point,
     Position, ScrollHandle, ScrollWheelEvent, Size, Style, UniformListScrollHandle, Window,
 };
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// Scrollbar show mode.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash, Default, JsonSchema)]
 pub enum ScrollbarShow {
     #[default]
     Scrolling,

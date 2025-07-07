@@ -1,10 +1,19 @@
 use std::{collections::HashMap, fmt::Display};
 
-use gpui::{Hsla, SharedString};
+use gpui::{hsla, Hsla, SharedString};
 use serde::{de::Error, Deserialize, Deserializer};
 
-use crate::hsl;
 use anyhow::Result;
+
+/// Create a [`gpui::Hsla`] color.
+///
+/// - h: 0..360.0
+/// - s: 0.0..100.0
+/// - l: 0.0..100.0
+#[inline]
+pub fn hsl(h: f32, s: f32, l: f32) -> Hsla {
+    hsla(h / 360., s / 100.0, l / 100.0, 1.0)
+}
 
 pub trait Colorize: Sized {
     /// Returns a new color with the given opacity.
@@ -154,10 +163,10 @@ impl Colorize for Hsla {
     }
 }
 
-pub(crate) static DEFAULT_COLOR: once_cell::sync::Lazy<ShadcnColors> =
+pub(crate) static DEFAULT_COLORS: once_cell::sync::Lazy<ShadcnColors> =
     once_cell::sync::Lazy::new(|| {
-        serde_json::from_str(include_str!("../default-colors.json"))
-            .expect("failed to parse default-json")
+        serde_json::from_str(include_str!("./default-colors.json"))
+            .expect("failed to parse default-colors.json")
     });
 
 type ColorScales = HashMap<usize, ShadcnColor>;
@@ -273,24 +282,24 @@ impl ColorName {
     /// falls back to 500 if out of range.
     pub fn scale(&self, scale: usize) -> Hsla {
         let colors = match self {
-            ColorName::Gray => &DEFAULT_COLOR.gray,
-            ColorName::Red => &DEFAULT_COLOR.red,
-            ColorName::Orange => &DEFAULT_COLOR.orange,
-            ColorName::Amber => &DEFAULT_COLOR.amber,
-            ColorName::Yellow => &DEFAULT_COLOR.yellow,
-            ColorName::Lime => &DEFAULT_COLOR.lime,
-            ColorName::Green => &DEFAULT_COLOR.green,
-            ColorName::Emerald => &DEFAULT_COLOR.emerald,
-            ColorName::Teal => &DEFAULT_COLOR.teal,
-            ColorName::Cyan => &DEFAULT_COLOR.cyan,
-            ColorName::Sky => &DEFAULT_COLOR.sky,
-            ColorName::Blue => &DEFAULT_COLOR.blue,
-            ColorName::Indigo => &DEFAULT_COLOR.indigo,
-            ColorName::Violet => &DEFAULT_COLOR.violet,
-            ColorName::Purple => &DEFAULT_COLOR.purple,
-            ColorName::Fuchsia => &DEFAULT_COLOR.fuchsia,
-            ColorName::Pink => &DEFAULT_COLOR.pink,
-            ColorName::Rose => &DEFAULT_COLOR.rose,
+            ColorName::Gray => &DEFAULT_COLORS.gray,
+            ColorName::Red => &DEFAULT_COLORS.red,
+            ColorName::Orange => &DEFAULT_COLORS.orange,
+            ColorName::Amber => &DEFAULT_COLORS.amber,
+            ColorName::Yellow => &DEFAULT_COLORS.yellow,
+            ColorName::Lime => &DEFAULT_COLORS.lime,
+            ColorName::Green => &DEFAULT_COLORS.green,
+            ColorName::Emerald => &DEFAULT_COLORS.emerald,
+            ColorName::Teal => &DEFAULT_COLORS.teal,
+            ColorName::Cyan => &DEFAULT_COLORS.cyan,
+            ColorName::Sky => &DEFAULT_COLORS.sky,
+            ColorName::Blue => &DEFAULT_COLORS.blue,
+            ColorName::Indigo => &DEFAULT_COLORS.indigo,
+            ColorName::Violet => &DEFAULT_COLORS.violet,
+            ColorName::Purple => &DEFAULT_COLORS.purple,
+            ColorName::Fuchsia => &DEFAULT_COLORS.fuchsia,
+            ColorName::Pink => &DEFAULT_COLORS.pink,
+            ColorName::Rose => &DEFAULT_COLORS.rose,
         };
 
         if let Some(color) = colors.get(&scale) {
@@ -394,7 +403,7 @@ macro_rules! color_method {
             #[inline]
             #[allow(unused)]
             pub fn [<$color _ $scale>]() -> Hsla {
-                if let Some(color) = DEFAULT_COLOR.$color.get(&($scale as usize)) {
+                if let Some(color) = DEFAULT_COLORS.$color.get(&($scale as usize)) {
                     return color.hsla;
                 }
 
@@ -415,7 +424,7 @@ macro_rules! color_methods {
             /// If the scale number is not found, it will return black color.
             #[inline]
             pub fn [<$color>](scale: usize) -> Hsla {
-                if let Some(color) = DEFAULT_COLOR.$color.get(&scale) {
+                if let Some(color) = DEFAULT_COLORS.$color.get(&scale) {
                     return color.hsla;
                 }
 
@@ -438,11 +447,11 @@ macro_rules! color_methods {
 }
 
 pub fn black() -> Hsla {
-    DEFAULT_COLOR.black.hsla
+    DEFAULT_COLORS.black.hsla
 }
 
 pub fn white() -> Hsla {
-    DEFAULT_COLOR.white.hsla
+    DEFAULT_COLORS.white.hsla
 }
 
 color_methods!(slate);
