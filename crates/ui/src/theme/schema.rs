@@ -365,7 +365,6 @@ impl Theme {
         }
 
         // Base colors for fallback
-
         apply_color!(background);
         apply_color!(border);
         apply_color!(foreground);
