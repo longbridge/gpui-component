@@ -87,6 +87,6 @@ fn main() {
         story::init(cx);
         cx.activate(true);
 
-        story::create_new_window("HTML Example", Example::view, cx);
+        story::create_new_window("HTML Render (native)", Example::view, cx);
     });
 }
