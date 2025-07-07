@@ -4,6 +4,7 @@ mod builtin;
 pub mod cross_runtime;
 pub mod mcp;
 mod todo;
+pub mod llm;
 
 use actix::prelude::*;
 use anyhow::Ok;

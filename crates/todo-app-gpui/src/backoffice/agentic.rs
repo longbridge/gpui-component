@@ -1,7 +1,5 @@
 use futures::Stream;
 /// 这个模型是为了提供一个通用的接口，用于处理记忆、工具调用和LLM交互。
-///
-///
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
@@ -78,12 +76,193 @@ pub struct MediaContent {
     pub size_bytes: Option<u64>,
 }
 
-/// 消息内容 - 支持多模态
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MessageContent {
-    /// 主要内容列表（可包含多种媒体类型）
-    pub parts: Vec<MediaContent>,
+pub struct ToolCall {
+    /// 工具名称
+    pub name: String,
+    /// 工具调用参数（JSON 字符串或键值对字符串）
+    pub args: String,
 }
+
+
+impl ToolCall {
+    pub fn id(&self) -> &str {
+        self.name.split('@').next().unwrap_or(&self.name)
+    }
+    pub fn tool_name(&self) -> &str {
+        self.name.split('@').nth(1).unwrap_or(&self.name)
+    }
+}
+
+/// 消息内容 - 支持多模态和工具调用
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum MessageContent {
+    /// 多媒体内容（文本、图片、音频等）
+    Parts(Vec<MediaContent>),
+    /// 工具调用
+    ToolCall(Vec<ToolCall>),
+}
+
+// impl MessageContent {
+//     /// 创建纯文本内容
+//     pub fn text(content: impl Into<String>) -> Self {
+//         Self::Parts(vec![MediaContent::text(content)])
+//     }
+
+//     /// 创建混合内容
+//     pub fn mixed(parts: Vec<MediaContent>) -> Self {
+//         Self::Parts(parts)
+//     }
+
+//     /// 创建工具调用内容
+//     pub fn tool_calls(tool_calls: Vec<ToolCall>) -> Self {
+//         Self::ToolCall(tool_calls)
+//     }
+
+//     /// 添加媒体部分
+//     pub fn add_media(&mut self, media: MediaContent) {
+//         match self {
+//             Self::Parts(parts) => parts.push(media),
+//             Self::ToolCall(_) => {
+//                 // 如果当前是工具调用，转换为混合类型
+//                 *self = Self::Parts(vec![media]);
+//             }
+//         }
+//     }
+
+//     /// 添加工具调用
+//     pub fn add_tool_call(&mut self, tool_call: ToolCall) {
+//         match self {
+//             Self::ToolCall(calls) => calls.push(tool_call),
+//             Self::Parts(_) => {
+//                 // 如果当前是媒体内容，转换为工具调用
+//                 *self = Self::ToolCall(vec![tool_call]);
+//             }
+//         }
+//     }
+
+//     /// 获取所有文本内容
+//     pub fn get_text_content(&self) -> String {
+//         match self {
+//             Self::Parts(parts) => {
+//                 parts
+//                     .iter()
+//                     .filter_map(|part| {
+//                         if part.is_text() {
+//                             if let MediaData::Text(text) = &part.data {
+//                                 Some(text.clone())
+//                             } else {
+//                                 None
+//                             }
+//                         } else {
+//                             None
+//                         }
+//                     })
+//                     .collect::<Vec<_>>()
+//                     .join("\n")
+//             }
+//             Self::ToolCall(tool_calls) => {
+//                 // 返回工具调用的描述
+//                 tool_calls
+//                     .iter()
+//                     .map(|tc| format!("Tool: {} with args: {}", tc.name, tc.args))
+//                     .collect::<Vec<_>>()
+//                     .join("\n")
+//             }
+//         }
+//     }
+
+//     /// 获取特定媒体类别的内容
+//     pub fn get_media_by_type(&self, media_type: MediaType) -> Vec<&MediaContent> {
+//         match self {
+//             Self::Parts(parts) => {
+//                 parts
+//                     .iter()
+//                     .filter(|part| part.media_type() == media_type)
+//                     .collect()
+//             }
+//             Self::ToolCall(_) => vec![], // 工具调用不包含媒体内容
+//         }
+//     }
+
+//     /// 检查是否包含特定媒体类别
+//     pub fn contains_media_type(&self, media_type: MediaType) -> bool {
+//         match self {
+//             Self::Parts(parts) => {
+//                 parts
+//                     .iter()
+//                     .any(|part| part.media_type() == media_type)
+//             }
+//             Self::ToolCall(_) => false,
+//         }
+//     }
+
+//     /// 获取工具调用
+//     pub fn get_tool_calls(&self) -> Option<&[ToolCall]> {
+//         match self {
+//             Self::ToolCall(tool_calls) => Some(tool_calls),
+//             Self::Parts(_) => None,
+//         }
+//     }
+
+//     /// 获取可变工具调用
+//     pub fn get_tool_calls_mut(&mut self) -> Option<&mut Vec<ToolCall>> {
+//         match self {
+//             Self::ToolCall(tool_calls) => Some(tool_calls),
+//             Self::Parts(_) => None,
+//         }
+//     }
+
+//     /// 获取媒体部分
+//     pub fn get_parts(&self) -> Option<&[MediaContent]> {
+//         match self {
+//             Self::Parts(parts) => Some(parts),
+//             Self::ToolCall(_) => None,
+//         }
+//     }
+
+//     /// 获取可变媒体部分
+//     pub fn get_parts_mut(&mut self) -> Option<&mut Vec<MediaContent>> {
+//         match self {
+//             Self::Parts(parts) => Some(parts),
+//             Self::ToolCall(_) => None,
+//         }
+//     }
+
+//     /// 检查是否为工具调用
+//     pub fn is_tool_call(&self) -> bool {
+//         matches!(self, Self::ToolCall(_))
+//     }
+
+//     /// 检查是否为媒体内容
+//     pub fn is_media_content(&self) -> bool {
+//         matches!(self, Self::Parts(_))
+//     }
+
+//     /// 检查是否为纯文本
+//     pub fn is_text_only(&self) -> bool {
+//         match self {
+//             Self::Parts(parts) => parts.len() == 1 && parts[0].is_text(),
+//             Self::ToolCall(_) => false,
+//         }
+//     }
+
+//     /// 检查是否为空
+//     pub fn is_empty(&self) -> bool {
+//         match self {
+//             Self::Parts(parts) => parts.is_empty(),
+//             Self::ToolCall(calls) => calls.is_empty(),
+//         }
+//     }
+
+//     /// 获取内容长度
+//     pub fn len(&self) -> usize {
+//         match self {
+//             Self::Parts(parts) => parts.len(),
+//             Self::ToolCall(calls) => calls.len(),
+//         }
+//     }
+// }
 
 /// 消息角色枚举
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -227,53 +406,161 @@ impl MediaContent {
 impl MessageContent {
     /// 创建纯文本内容
     pub fn text(text: impl Into<String>) -> Self {
-        Self {
-            parts: vec![MediaContent::text(text)],
-        }
+        Self::Parts(vec![MediaContent::text(text)])
     }
 
     /// 创建混合内容
     pub fn mixed(parts: Vec<MediaContent>) -> Self {
-        Self { parts }
+        Self::Parts(parts)
+    }
+
+    /// 创建工具调用内容
+    pub fn tool_calls(tool_calls: Vec<ToolCall>) -> Self {
+        Self::ToolCall(tool_calls)
     }
 
     /// 添加媒体部分
     pub fn add_media(&mut self, media: MediaContent) {
-        self.parts.push(media);
+        match self {
+            Self::Parts(parts) => parts.push(media),
+            Self::ToolCall(_) => {
+                // 如果当前是工具调用，转换为混合类型
+                *self = Self::Parts(vec![media]);
+            }
+        }
+    }
+
+    /// 添加工具调用
+    pub fn add_tool_call(&mut self, tool_call: ToolCall) {
+        match self {
+            Self::ToolCall(calls) => calls.push(tool_call),
+            Self::Parts(_) => {
+                // 如果当前是媒体内容，转换为工具调用
+                *self = Self::ToolCall(vec![tool_call]);
+            }
+        }
     }
 
     /// 获取所有文本内容
     pub fn get_text_content(&self) -> String {
-        self.parts
-            .iter()
-            .filter_map(|part| {
-                if part.is_text() {
-                    if let MediaData::Text(text) = &part.data {
-                        Some(text.clone())
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
+        match self {
+            Self::Parts(parts) => {
+                parts
+                    .iter()
+                    .filter_map(|part| {
+                        if part.is_text() {
+                            if let MediaData::Text(text) = &part.data {
+                                Some(text.clone())
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            }
+            Self::ToolCall(tool_calls) => {
+                // 返回工具调用的描述
+                tool_calls
+                    .iter()
+                    .map(|tc| format!("Tool: {} with args: {}", tc.name, tc.args))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            }
+        }
     }
 
     /// 获取特定媒体类别的内容
     pub fn get_media_by_type(&self, media_type: MediaType) -> Vec<&MediaContent> {
-        self.parts
-            .iter()
-            .filter(|part| part.media_type() == media_type)
-            .collect()
+        match self {
+            Self::Parts(parts) => {
+                parts
+                    .iter()
+                    .filter(|part| part.media_type() == media_type)
+                    .collect()
+            }
+            Self::ToolCall(_) => vec![], // 工具调用不包含媒体内容
+        }
     }
 
     /// 检查是否包含特定媒体类别
     pub fn contains_media_type(&self, media_type: MediaType) -> bool {
-        self.parts
-            .iter()
-            .any(|part| part.media_type() == media_type)
+        match self {
+            Self::Parts(parts) => {
+                parts
+                    .iter()
+                    .any(|part| part.media_type() == media_type)
+            }
+            Self::ToolCall(_) => false,
+        }
+    }
+
+    /// 获取工具调用
+    pub fn get_tool_calls(&self) -> Option<&[ToolCall]> {
+        match self {
+            Self::ToolCall(tool_calls) => Some(tool_calls),
+            Self::Parts(_) => None,
+        }
+    }
+
+    /// 获取可变工具调用
+    pub fn get_tool_calls_mut(&mut self) -> Option<&mut Vec<ToolCall>> {
+        match self {
+            Self::ToolCall(tool_calls) => Some(tool_calls),
+            Self::Parts(_) => None,
+        }
+    }
+
+    /// 获取媒体部分
+    pub fn get_parts(&self) -> Option<&[MediaContent]> {
+        match self {
+            Self::Parts(parts) => Some(parts),
+            Self::ToolCall(_) => None,
+        }
+    }
+
+    /// 获取可变媒体部分
+    pub fn get_parts_mut(&mut self) -> Option<&mut Vec<MediaContent>> {
+        match self {
+            Self::Parts(parts) => Some(parts),
+            Self::ToolCall(_) => None,
+        }
+    }
+
+    /// 检查是否为工具调用
+    pub fn is_tool_call(&self) -> bool {
+        matches!(self, Self::ToolCall(_))
+    }
+
+    /// 检查是否为媒体内容
+    pub fn is_media_content(&self) -> bool {
+        matches!(self, Self::Parts(_))
+    }
+
+    /// 检查是否为纯文本
+    pub fn is_text_only(&self) -> bool {
+        match self {
+            Self::Parts(parts) => parts.len() == 1 && parts[0].is_text(),
+            Self::ToolCall(_) => false,
+        }
+    }
+
+    /// 检查是否为空
+    pub fn is_empty(&self) -> bool {
+        match self {
+            Self::Parts(parts) => parts.is_empty(),
+            Self::ToolCall(calls) => calls.is_empty(),
+        }
+    }
+
+    /// 获取内容长度
+    pub fn len(&self) -> usize {
+        match self {
+            Self::Parts(parts) => parts.len(),
+            Self::ToolCall(calls) => calls.len(),
+        }
     }
 }
 
@@ -304,6 +591,16 @@ impl ChatMessage {
         Self::text(MessageRole::System, content)
     }
 
+    /// 获取消息的文本内容 - 这是缺少的方法
+    pub fn get_text(&self) -> String {
+        self.content.get_text_content()
+    }
+
+    /// 获取消息的文本内容（别名方法）
+    pub fn text_content(&self) -> String {
+        self.get_text()
+    }
+    
     /// 创建多模态消息
     pub fn multimodal(role: MessageRole, content: MessageContent) -> Self {
         Self {
@@ -312,6 +609,32 @@ impl ChatMessage {
             id: None,
             timestamp: Some(chrono::Utc::now().timestamp() as u64),
             metadata: HashMap::new(),
+        }
+    }
+
+    /// 创建工具调用消息
+    pub fn tool_calls(tool_calls: Vec<ToolCall>) -> Self {
+        Self {
+            role: MessageRole::Assistant,
+            content: MessageContent::tool_calls(tool_calls),
+            id: None,
+            timestamp: Some(chrono::Utc::now().timestamp() as u64),
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// 创建工具响应消息
+    pub fn tool_response(tool_name: &str, result: &str) -> Self {
+        Self {
+            role: MessageRole::Tool,
+            content: MessageContent::text(format!("Tool {} result: {}", tool_name, result)),
+            id: None,
+            timestamp: Some(chrono::Utc::now().timestamp() as u64),
+            metadata: {
+                let mut meta = HashMap::new();
+                meta.insert("tool_name".to_string(), tool_name.to_string());
+                meta
+            },
         }
     }
 
@@ -329,16 +652,31 @@ impl ChatMessage {
 
     /// 检查是否为纯文本消息
     pub fn is_text_only(&self) -> bool {
-        self.content.parts.len() == 1 && self.content.parts[0].is_text()
+        self.content.is_text_only()
     }
 
-    /// 获取文本内容（向后兼容）
-    pub fn get_text(&self) -> String {
-        self.content.get_text_content()
+    /// 检查是否为工具调用消息
+    pub fn is_tool_call(&self) -> bool {
+        self.content.is_tool_call()
+    }
+
+    /// 检查是否为媒体消息
+    pub fn is_media_message(&self) -> bool {
+        self.content.is_media_content()
+    }
+
+    /// 添加工具调用到现有消息
+    pub fn add_tool_call(&mut self, tool_call: ToolCall) {
+        self.content.add_tool_call(tool_call);
+    }
+
+    /// 添加媒体内容到现有消息
+    pub fn add_media(&mut self, media: MediaContent) {
+        self.content.add_media(media);
     }
 }
 
-// 为了向后兼容，提供从旧格式转换的方法
+// 为了向后兼容，保留从字符串转换的方法
 impl From<&str> for MessageContent {
     fn from(text: &str) -> Self {
         Self::text(text)
@@ -348,6 +686,18 @@ impl From<&str> for MessageContent {
 impl From<String> for MessageContent {
     fn from(text: String) -> Self {
         Self::text(text)
+    }
+}
+
+impl From<Vec<MediaContent>> for MessageContent {
+    fn from(parts: Vec<MediaContent>) -> Self {
+        Self::Parts(parts)
+    }
+}
+
+impl From<Vec<ToolCall>> for MessageContent {
+    fn from(tool_calls: Vec<ToolCall>) -> Self {
+        Self::ToolCall(tool_calls)
     }
 }
 
@@ -440,10 +790,19 @@ pub trait LLM: Send + Sync {
         while let Some(chunk) = stream.next().await {
             match chunk {
                 Ok(message) => {
-                    // 合并内容
                     let text = message.get_text();
-                    final_message.content.parts[0] =
-                        MediaContent::text(final_message.get_text() + &text);
+                    // 修复：正确处理 MessageContent 枚举
+                    match &mut final_message.content {
+                        MessageContent::Parts(parts) => {
+                            if let Some(MediaContent { data: MediaData::Text(existing_text), .. }) = parts.get_mut(0) {
+                                existing_text.push_str(&text);
+                            }
+                        }
+                        MessageContent::ToolCall(_) => {
+                            // 如果是工具调用，创建新的文本内容
+                            final_message.content = MessageContent::text(text);
+                        }
+                    }
                 }
                 Err(e) => return Err(e),
             }
@@ -462,8 +821,18 @@ pub trait LLM: Send + Sync {
             match chunk {
                 Ok(message) => {
                     let text = message.get_text();
-                    final_message.content.parts[0] =
-                        MediaContent::text(final_message.get_text() + &text);
+                    // 修复：正确处理 MessageContent 枚举
+                    match &mut final_message.content {
+                        MessageContent::Parts(parts) => {
+                            if let Some(MediaContent { data: MediaData::Text(existing_text), .. }) = parts.get_mut(0) {
+                                existing_text.push_str(&text);
+                            }
+                        }
+                        MessageContent::ToolCall(_) => {
+                            // 如果是工具调用，创建新的文本内容
+                            final_message.content = MessageContent::text(text);
+                        }
+                    }
                 }
                 Err(e) => return Err(e),
             }
@@ -486,8 +855,18 @@ pub trait LLM: Send + Sync {
             match chunk {
                 Ok(message) => {
                     let text = message.get_text();
-                    final_message.content.parts[0] =
-                        MediaContent::text(final_message.get_text() + &text);
+                    // 修复：正确处理 MessageContent 枚举
+                    match &mut final_message.content {
+                        MessageContent::Parts(parts) => {
+                            if let Some(MediaContent { data: MediaData::Text(existing_text), .. }) = parts.get_mut(0) {
+                                existing_text.push_str(&text);
+                            }
+                        }
+                        MessageContent::ToolCall(_) => {
+                            // 如果是工具调用，创建新的文本内容
+                            final_message.content = MessageContent::text(text);
+                        }
+                    }
                 }
                 Err(e) => return Err(e),
             }
@@ -738,13 +1117,11 @@ pub struct GlobalState {
 }
 
 /// 运行时上下文 - Agent的持久化状态和能力
-pub struct RuntimeContext<M: Memory, L: LLM, T: ToolDelegate> {
+pub struct RuntimeContext<M: Memory, L: LLM> {
     /// 记忆系统（持久化）
     pub memory: M,
     /// LLM接口（能力）
     pub llm: L,
-    /// 工具委托（能力）
-    pub tools: T,
     /// Agent配置
     pub config: AgentConfig,
     /// 全局状态
@@ -841,14 +1218,13 @@ impl Default for PerformanceMetrics {
     }
 }
 
-impl<M: Memory, L: LLM, T: ToolDelegate> RuntimeContext<M, L, T> {
-    pub fn new(memory: M, llm: L, tools: T) -> Self {
+impl<M: Memory, L: LLM> RuntimeContext<M, L> {
+    pub fn new(memory: M, llm: L) -> Self {
         let now = chrono::Utc::now().timestamp() as u64;
 
         Self {
             memory,
             llm,
-            tools,
             config: AgentConfig::default(),
             global_state: GlobalState {
                 startup_time: now,
@@ -994,13 +1370,12 @@ impl ToolDelegate for () {
 pub trait Agent {
     type Memory: Memory;
     type LLM: LLM;
-    type Tools: ToolDelegate;
+    // type Tools: ToolDelegate;
 
     /// 获取组件实例
     fn memory(&self) -> &Self::Memory;
     fn memory_mut(&mut self) -> &mut Self::Memory;
     fn llm(&self) -> &Self::LLM;
-    fn tools(&self) -> &Self::Tools;
 
     /// 处理用户输入并生成响应
     async fn process_input(&mut self, input: &str) -> anyhow::Result<String> {
@@ -1083,8 +1458,8 @@ pub trait Agent {
 /// 高级智能体特性 - 合并原来的 AdvancedAgent 和 ContextualAgent
 pub trait AdvancedAgent: Agent {
     /// 获取运行时上下文
-    fn runtime_context(&self) -> &RuntimeContext<Self::Memory, Self::LLM, Self::Tools>;
-    fn runtime_context_mut(&mut self) -> &mut RuntimeContext<Self::Memory, Self::LLM, Self::Tools>;
+    fn runtime_context(&self) -> &RuntimeContext<Self::Memory, Self::LLM>;
+    fn runtime_context_mut(&mut self) -> &mut RuntimeContext<Self::Memory, Self::LLM>;
 
     /// 获取执行上下文
     fn execution_context(&self) -> &ExecutionContext;
@@ -1101,10 +1476,6 @@ pub trait AdvancedAgent: Agent {
 
     fn llm(&self) -> &Self::LLM {
         &self.runtime_context().llm
-    }
-
-    fn tools(&self) -> &Self::Tools {
-        &self.runtime_context().tools
     }
 
     /// 获取配置
@@ -1483,19 +1854,19 @@ pub trait AdvancedAgent: Agent {
 }
 
 /// AI智能体实现 - 包含完整的高级功能
-pub struct AiAgent<M: Memory, L: LLM, T: ToolDelegate> {
+pub struct AiAgent<M: Memory, L: LLM> {
     /// 运行时上下文
-    runtime_context: RuntimeContext<M, L, T>,
+    runtime_context: RuntimeContext<M, L>,
     /// 执行上下文
     execution_context: ExecutionContext,
     /// 活跃任务
     active_tasks: HashMap<String, TaskState>,
 }
 
-impl<M: Memory, L: LLM, T: ToolDelegate> AiAgent<M, L, T> {
-    pub fn new(memory: M, llm: L, tools: T, session_id: String) -> Self {
+impl<M: Memory, L: LLM> AiAgent<M, L> {
+    pub fn new( session_id: String,memory: M, llm: L) -> Self {
         Self {
-            runtime_context: RuntimeContext::new(memory, llm, tools),
+            runtime_context: RuntimeContext::new(memory, llm),
             execution_context: ExecutionContext::new(session_id),
             active_tasks: HashMap::new(),
         }
@@ -1568,10 +1939,9 @@ impl<M: Memory, L: LLM, T: ToolDelegate> AiAgent<M, L, T> {
     }
 }
 
-impl<M: Memory, L: LLM, T: ToolDelegate> Agent for AiAgent<M, L, T> {
+impl<M: Memory, L: LLM> Agent for AiAgent<M, L> {
     type Memory = M;
     type LLM = L;
-    type Tools = T;
 
     fn memory(&self) -> &Self::Memory {
         &self.runtime_context.memory
@@ -1585,10 +1955,6 @@ impl<M: Memory, L: LLM, T: ToolDelegate> Agent for AiAgent<M, L, T> {
         &self.runtime_context.llm
     }
 
-    fn tools(&self) -> &Self::Tools {
-        &self.runtime_context.tools
-    }
-
     async fn process_with_context(&mut self, input: &str) -> anyhow::Result<String> {
         self.process_with_full_context(input).await
     }
@@ -1599,12 +1965,12 @@ impl<M: Memory, L: LLM, T: ToolDelegate> Agent for AiAgent<M, L, T> {
     }
 }
 
-impl<M: Memory, L: LLM, T: ToolDelegate> AdvancedAgent for AiAgent<M, L, T> {
-    fn runtime_context(&self) -> &RuntimeContext<Self::Memory, Self::LLM, Self::Tools> {
+impl<M: Memory, L: LLM> AdvancedAgent for AiAgent<M, L> {
+    fn runtime_context(&self) -> &RuntimeContext<Self::Memory, Self::LLM> {
         &self.runtime_context
     }
 
-    fn runtime_context_mut(&mut self) -> &mut RuntimeContext<Self::Memory, Self::LLM, Self::Tools> {
+    fn runtime_context_mut(&mut self) -> &mut RuntimeContext<Self::Memory, Self::LLM> {
         &mut self.runtime_context
     }
 
