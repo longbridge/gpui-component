@@ -27,6 +27,322 @@ pub struct MemoryEntry {
     pub timestamp: Option<u64>,
 }
 
+/// 媒体数据存储方式
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum MediaData {
+    /// 直接内嵌的文本内容
+    Text(String),
+    /// Base64 编码的二进制数据（适用于小文件）
+    Base64(String),
+    /// 文件路径引用
+    FilePath(String),
+    /// URL 引用
+    Url(String),
+    /// 二进制数据（仅在内存中使用，不序列化）
+    #[serde(skip)]
+    Binary(Vec<u8>),
+}
+
+/// 媒体类型枚举（从 MIME 类型推导）
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MediaType {
+    Text,
+    Image,
+    Audio,
+    Video,
+    Document,
+    Application,
+    Unknown,
+}
+
+/// 媒体内容
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MediaContent {
+    /// MIME 类型（直接表示具体格式）
+    pub mime_type: String,
+    /// 内容数据
+    pub data: MediaData,
+    /// 可选的描述信息
+    pub description: Option<String>,
+    /// 文件名（如果适用）
+    pub filename: Option<String>,
+    /// 文件大小（字节）
+    pub size_bytes: Option<u64>,
+}
+
+/// 消息内容 - 支持多模态
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MessageContent {
+    /// 主要内容列表（可包含多种媒体类型）
+    pub parts: Vec<MediaContent>,
+}
+
+/// 消息角色枚举
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MessageRole {
+    System,
+    User,
+    Assistant,
+    Tool,
+}
+
+/// 聊天消息结构 - 多模态版本
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatMessage {
+    /// 消息角色
+    pub role: MessageRole,
+    /// 多模态内容
+    pub content: MessageContent,
+    /// 消息ID（可选）
+    pub id: Option<String>,
+    /// 时间戳
+    pub timestamp: Option<u64>,
+    /// 元数据
+    pub metadata: HashMap<String, String>,
+}
+
+impl MediaContent {
+    /// 创建文本内容
+    pub fn text(content: impl Into<String>) -> Self {
+        Self {
+            mime_type: "text/plain".to_string(),
+            data: MediaData::Text(content.into()),
+            description: None,
+            filename: None,
+            size_bytes: None,
+        }
+    }
+
+    /// 创建图片内容
+    pub fn image_jpeg(data: MediaData) -> Self {
+        Self {
+            mime_type: "image/jpeg".to_string(),
+            data,
+            description: None,
+            filename: None,
+            size_bytes: None,
+        }
+    }
+
+    /// 创建图片内容
+    pub fn image_png(data: MediaData) -> Self {
+        Self {
+            mime_type: "image/png".to_string(),
+            data,
+            description: None,
+            filename: None,
+            size_bytes: None,
+        }
+    }
+
+    /// 创建音频内容
+    pub fn audio_mp3(data: MediaData) -> Self {
+        Self {
+            mime_type: "audio/mpeg".to_string(),
+            data,
+            description: None,
+            filename: None,
+            size_bytes: None,
+        }
+    }
+
+    /// 创建视频内容
+    pub fn video_mp4(data: MediaData) -> Self {
+        Self {
+            mime_type: "video/mp4".to_string(),
+            data,
+            description: None,
+            filename: None,
+            size_bytes: None,
+        }
+    }
+
+    /// 从 MIME 类型和数据创建
+    pub fn from_mime_type(mime_type: impl Into<String>, data: MediaData) -> Self {
+        Self {
+            mime_type: mime_type.into(),
+            data,
+            description: None,
+            filename: None,
+            size_bytes: None,
+        }
+    }
+
+    /// 从 MIME 类型推导媒体类别
+    pub fn media_type(&self) -> MediaType {
+        match self.mime_type.split('/').next().unwrap_or("") {
+            "text" => MediaType::Text,
+            "image" => MediaType::Image,
+            "audio" => MediaType::Audio,
+            "video" => MediaType::Video,
+            "application" => match self.mime_type.as_str() {
+                "application/pdf"
+                | "application/msword"
+                | "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => {
+                    MediaType::Document
+                }
+                _ => MediaType::Application,
+            },
+            _ => MediaType::Unknown,
+        }
+    }
+
+    /// 检查是否为文本类型
+    pub fn is_text(&self) -> bool {
+        self.media_type() == MediaType::Text
+    }
+
+    /// 检查是否为图片类型
+    pub fn is_image(&self) -> bool {
+        self.media_type() == MediaType::Image
+    }
+
+    /// 添加描述
+    pub fn with_description(mut self, description: impl Into<String>) -> Self {
+        self.description = Some(description.into());
+        self
+    }
+
+    /// 添加文件名
+    pub fn with_filename(mut self, filename: impl Into<String>) -> Self {
+        self.filename = Some(filename.into());
+        self
+    }
+
+    /// 添加文件大小
+    pub fn with_size(mut self, size_bytes: u64) -> Self {
+        self.size_bytes = Some(size_bytes);
+        self
+    }
+}
+
+impl MessageContent {
+    /// 创建纯文本内容
+    pub fn text(text: impl Into<String>) -> Self {
+        Self {
+            parts: vec![MediaContent::text(text)],
+        }
+    }
+
+    /// 创建混合内容
+    pub fn mixed(parts: Vec<MediaContent>) -> Self {
+        Self { parts }
+    }
+
+    /// 添加媒体部分
+    pub fn add_media(&mut self, media: MediaContent) {
+        self.parts.push(media);
+    }
+
+    /// 获取所有文本内容
+    pub fn get_text_content(&self) -> String {
+        self.parts
+            .iter()
+            .filter_map(|part| {
+                if part.is_text() {
+                    if let MediaData::Text(text) = &part.data {
+                        Some(text.clone())
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// 获取特定媒体类别的内容
+    pub fn get_media_by_type(&self, media_type: MediaType) -> Vec<&MediaContent> {
+        self.parts
+            .iter()
+            .filter(|part| part.media_type() == media_type)
+            .collect()
+    }
+
+    /// 检查是否包含特定媒体类别
+    pub fn contains_media_type(&self, media_type: MediaType) -> bool {
+        self.parts
+            .iter()
+            .any(|part| part.media_type() == media_type)
+    }
+}
+
+impl ChatMessage {
+    /// 创建文本消息的便捷方法
+    pub fn text(role: MessageRole, content: impl Into<String>) -> Self {
+        Self {
+            role,
+            content: MessageContent::text(content),
+            id: None,
+            timestamp: Some(chrono::Utc::now().timestamp() as u64),
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// 创建用户文本消息
+    pub fn user_text(content: impl Into<String>) -> Self {
+        Self::text(MessageRole::User, content)
+    }
+
+    /// 创建助手文本消息
+    pub fn assistant_text(content: impl Into<String>) -> Self {
+        Self::text(MessageRole::Assistant, content)
+    }
+
+    /// 创建系统文本消息
+    pub fn system_text(content: impl Into<String>) -> Self {
+        Self::text(MessageRole::System, content)
+    }
+
+    /// 创建多模态消息
+    pub fn multimodal(role: MessageRole, content: MessageContent) -> Self {
+        Self {
+            role,
+            content,
+            id: None,
+            timestamp: Some(chrono::Utc::now().timestamp() as u64),
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// 添加元数据
+    pub fn with_metadata(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.metadata.insert(key.into(), value.into());
+        self
+    }
+
+    /// 设置消息ID
+    pub fn with_id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    /// 检查是否为纯文本消息
+    pub fn is_text_only(&self) -> bool {
+        self.content.parts.len() == 1 && self.content.parts[0].is_text()
+    }
+
+    /// 获取文本内容（向后兼容）
+    pub fn get_text(&self) -> String {
+        self.content.get_text_content()
+    }
+}
+
+// 为了向后兼容，提供从旧格式转换的方法
+impl From<&str> for MessageContent {
+    fn from(text: &str) -> Self {
+        Self::text(text)
+    }
+}
+
+impl From<String> for MessageContent {
+    fn from(text: String) -> Self {
+        Self::text(text)
+    }
+}
+
 /// 记忆体定义，为LLM提供短期和长期记忆存储和检索功能。
 pub trait Memory: Send + Sync {
     /// 存储记忆，带有类型标识
@@ -80,87 +396,26 @@ pub trait Memory: Send + Sync {
     }
 }
 
-/// 消息角色枚举
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum MessageRole {
-    System,
-    User,
-    Assistant,
-    Tool,
-}
-
-/// 聊天消息结构
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChatMessage {
-    pub role: MessageRole,
-    pub content: String,
-}
-
-/// 工具参数定义
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolParameter {
-    pub name: String,
-    pub param_type: String,
-    pub description: String,
-    pub required: bool,
-}
-
-/// 工具信息
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolInfo {
-    pub name: String,
-    pub description: String,
-    pub parameters: Vec<ToolParameter>,
-}
-
-/// 工具调用的委托接口，允许不同的工具实现自己的调用逻辑。
-pub trait ToolDelegate: Send + Sync {
-    type Output: Debug + Send + Sync;
-    type Args: Send + Sync;
-
-    /// 调用指定工具
-    async fn call(&self, name: &str, args: Self::Args) -> anyhow::Result<Self::Output>;
-
-    /// 获取可用工具列表
-    fn available_tools(&self) -> Vec<ToolInfo>;
-}
-
-/// 默认的工具委托实现，什么都不做。
-impl ToolDelegate for () {
-    type Output = ();
-    type Args = ();
-
-    async fn call(&self, _name: &str, _args: Self::Args) -> anyhow::Result<Self::Output> {
-        Ok(())
-    }
-
-    fn available_tools(&self) -> Vec<ToolInfo> {
-        vec![]
-    }
-}
-
 /// LLM特性，定义了LLM的基本交互方法，包含了洞察和知识处理能力。
 pub trait LLM: Send + Sync {
-    type Output: Debug + Send + Sync;
-
     /// 基础对话能力
-    async fn completion(&self, prompt: &str) -> anyhow::Result<Self::Output>;
-    async fn chat(&self, messages: &[ChatMessage]) -> anyhow::Result<Self::Output>;
+    async fn completion(&self, prompt: &str) -> anyhow::Result<ChatMessage>;
+    async fn chat(&self, messages: &[ChatMessage]) -> anyhow::Result<ChatMessage>;
 
     /// 带工具调用的对话
     async fn chat_with_tools<T: ToolDelegate>(
         &self,
         messages: &[ChatMessage],
         tools: &T,
-    ) -> anyhow::Result<Self::Output>;
+    ) -> anyhow::Result<ChatMessage>;
 
     /// 数据分析和洞察能力
-    async fn analyze(&self, data: &str) -> anyhow::Result<Self::Output>;
-    async fn summarize(&self, content: &str) -> anyhow::Result<Self::Output>;
+    async fn analyze(&self, data: &str) -> anyhow::Result<ChatMessage>;
+    async fn summarize(&self, content: &str) -> anyhow::Result<ChatMessage>;
 
     /// 知识处理能力
-    async fn extract_knowledge(&self, raw_data: &str) -> anyhow::Result<Self::Output>;
-    async fn query_knowledge(&self, query: &str) -> anyhow::Result<Self::Output>;
+    async fn extract_knowledge(&self, raw_data: &str) -> anyhow::Result<ChatMessage>;
+    async fn query_knowledge(&self, query: &str) -> anyhow::Result<ChatMessage>;
 }
 
 /// 学习配置
@@ -587,6 +842,49 @@ impl<M: Memory, L: LLM, T: ToolDelegate> RuntimeContext<M, L, T> {
         });
 
         Ok(())
+    }
+}
+
+/// 工具参数定义
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolParameter {
+    pub name: String,
+    pub param_type: String,
+    pub description: String,
+    pub required: bool,
+}
+
+/// 工具信息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolInfo {
+    pub name: String,
+    pub description: String,
+    pub parameters: Vec<ToolParameter>,
+}
+
+/// 工具调用的委托接口，允许不同的工具实现自己的调用逻辑。
+pub trait ToolDelegate: Send + Sync {
+    type Output: Debug + Send + Sync;
+    type Args: Send + Sync;
+
+    /// 调用指定工具
+    async fn call(&self, name: &str, args: Self::Args) -> anyhow::Result<Self::Output>;
+
+    /// 获取可用工具列表
+    fn available_tools(&self) -> Vec<ToolInfo>;
+}
+
+/// 默认的工具委托实现，什么都不做。
+impl ToolDelegate for () {
+    type Output = ();
+    type Args = ();
+
+    async fn call(&self, _name: &str, _args: Self::Args) -> anyhow::Result<Self::Output> {
+        Ok(())
+    }
+
+    fn available_tools(&self) -> Vec<ToolInfo> {
+        vec![]
     }
 }
 
@@ -1211,4 +1509,19 @@ impl<M: Memory, L: LLM, T: ToolDelegate> AdvancedAgent for AiAgent<M, L, T> {
     fn execution_context_mut(&mut self) -> &mut ExecutionContext {
         &mut self.execution_context
     }
+}
+
+/// 媒体处理工具 trait
+pub trait MediaProcessor: Send + Sync {
+    /// 处理上传的文件
+    async fn process_upload(&self, file_path: &str) -> anyhow::Result<MediaContent>;
+
+    /// 从 URL 获取媒体内容
+    async fn fetch_from_url(&self, url: &str) -> anyhow::Result<MediaContent>;
+
+    /// 压缩媒体内容
+    async fn compress_media(&self, media: &MediaContent) -> anyhow::Result<MediaContent>;
+
+    /// 提取文本内容（OCR、语音转文字等）
+    async fn extract_text(&self, media: &MediaContent) -> anyhow::Result<Option<String>>;
 }
