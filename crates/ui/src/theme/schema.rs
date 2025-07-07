@@ -517,9 +517,9 @@ impl Theme {
         apply_color!(window_border, fallback = self.border);
 
         if config.mode.is_dark() {
-            self.dark_theme = self.colors.clone();
+            self.dark_theme = self.colors;
         } else {
-            self.light_theme = self.colors.clone();
+            self.light_theme = self.colors;
         }
     }
 }

@@ -56,7 +56,7 @@ impl Render for ThemeSwitcher {
                 this.current_theme_name = switch.0.clone();
                 let theme_name = this.current_theme_name.clone();
 
-                if let Some(theme_config) = THEMES.get(&theme_name).map(|theme| theme) {
+                if let Some(theme_config) = THEMES.get(&theme_name) {
                     Theme::global_mut(cx).apply_config(theme_config);
                 } else if theme_name == "default-light" {
                     Theme::global_mut(cx).light_theme = ThemeColor::light();
