@@ -293,6 +293,9 @@ pub struct LlmProviderConfig {
     pub models: Vec<ModelInfo>,
     #[serde(default)]
     pub retry_config: RetryConfig,
+
+    #[serde(skip)]
+    pub default_model: Option<String>,
 }
 
 impl Default for LlmProviderConfig {
@@ -306,6 +309,7 @@ impl Default for LlmProviderConfig {
             enabled: true,
             retry_config: RetryConfig::default(),
             models: vec![],
+            default_model: None,
         }
     }
 }
@@ -452,7 +456,7 @@ impl LlmProviderManager {
 
         // 合并现有模型配置和新获取的模型
         let mut updated_models = Vec::new();
-        
+
         for new_model in models {
             if let Some(existing_model) = provider.models.iter().find(|m| m.id == new_model.id) {
                 // 保留现有配置，但更新其他信息

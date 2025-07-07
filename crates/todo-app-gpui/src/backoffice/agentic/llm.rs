@@ -8,6 +8,8 @@ use crate::{
 };
 use actix::prelude::*;
 use futures::StreamExt;
+use rig::completion::{Completion, Prompt};
+use rig::streaming::StreamingCompletion;
 use rig::{
     agent::Agent,
     message::{Message as RigMessage, *},
@@ -222,7 +224,6 @@ impl LlmService {
                 .max_tokens(4096)
                 .temperature(0.7)
                 .build();
-
             let mut stream = agent.stream_chat(&prompt, chat_history.clone()).await?;
             chat_history.push(RigMessage::user(prompt.clone()));
 

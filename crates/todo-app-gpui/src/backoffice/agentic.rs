@@ -1,15 +1,18 @@
+use futures::Stream;
 /// 这个模型是为了提供一个通用的接口，用于处理记忆、工具调用和LLM交互。
 ///
 ///
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
+use std::pin::Pin;
 
 mod insight;
 mod knowledge;
 pub(crate) mod llm;
 mod memex;
 pub(crate) mod prompts;
+mod rig_llm;
 
 /// 记忆类型枚举
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -396,26 +399,120 @@ pub trait Memory: Send + Sync {
     }
 }
 
+/// 流式响应类型
+pub type ChatStream = Pin<Box<dyn Stream<Item = anyhow::Result<ChatMessage>> + Send>>;
+
 /// LLM特性，定义了LLM的基本交互方法，包含了洞察和知识处理能力。
 pub trait LLM: Send + Sync {
-    /// 基础对话能力
-    async fn completion(&self, prompt: &str) -> anyhow::Result<ChatMessage>;
-    async fn chat(&self, messages: &[ChatMessage]) -> anyhow::Result<ChatMessage>;
+    /// 基础对话能力 - 流式响应
+    async fn completion_stream(&self, prompts: &[ChatMessage]) -> anyhow::Result<ChatStream>;
 
-    /// 带工具调用的对话
+    /// 带工具调用的对话 - 流式响应
+    async fn completion_with_tools_stream<T: ToolDelegate>(
+        &self,
+        prompts: &[ChatMessage],
+        tools: &T,
+    ) -> anyhow::Result<ChatStream>;
+
+    /// 对话接口 - 流式响应
+    async fn chat_stream(&self, messages: &[ChatMessage]) -> anyhow::Result<ChatStream>;
+
+    /// 带工具调用的对话 - 流式响应
+    async fn chat_with_tools_stream<T: ToolDelegate>(
+        &self,
+        messages: &[ChatMessage],
+        tools: &T,
+    ) -> anyhow::Result<ChatStream>;
+
+    /// 基础对话能力 - 一次性响应（便捷方法）
+    async fn completion(&self, prompts: &[ChatMessage]) -> anyhow::Result<ChatMessage> {
+        let mut stream = self.completion_stream(prompts).await?;
+        let mut final_message = ChatMessage::assistant_text("");
+
+        // 收集流式响应并合并
+        use futures::StreamExt;
+        while let Some(chunk) = stream.next().await {
+            match chunk {
+                Ok(message) => {
+                    // 合并内容
+                    let text = message.get_text();
+                    final_message.content.parts[0] =
+                        MediaContent::text(final_message.get_text() + &text);
+                }
+                Err(e) => return Err(e),
+            }
+        }
+
+        Ok(final_message)
+    }
+
+    /// 对话接口 - 一次性响应（便捷方法）
+    async fn chat(&self, messages: &[ChatMessage]) -> anyhow::Result<ChatMessage> {
+        let mut stream = self.chat_stream(messages).await?;
+        let mut final_message = ChatMessage::assistant_text("");
+
+        use futures::StreamExt;
+        while let Some(chunk) = stream.next().await {
+            match chunk {
+                Ok(message) => {
+                    let text = message.get_text();
+                    final_message.content.parts[0] =
+                        MediaContent::text(final_message.get_text() + &text);
+                }
+                Err(e) => return Err(e),
+            }
+        }
+
+        Ok(final_message)
+    }
+
+    /// 带工具调用的对话 - 一次性响应（便捷方法）
     async fn chat_with_tools<T: ToolDelegate>(
         &self,
         messages: &[ChatMessage],
         tools: &T,
-    ) -> anyhow::Result<ChatMessage>;
+    ) -> anyhow::Result<ChatMessage> {
+        let mut stream = self.chat_with_tools_stream(messages, tools).await?;
+        let mut final_message = ChatMessage::assistant_text("");
 
-    /// 数据分析和洞察能力
-    async fn analyze(&self, data: &str) -> anyhow::Result<ChatMessage>;
-    async fn summarize(&self, content: &str) -> anyhow::Result<ChatMessage>;
+        use futures::StreamExt;
+        while let Some(chunk) = stream.next().await {
+            match chunk {
+                Ok(message) => {
+                    let text = message.get_text();
+                    final_message.content.parts[0] =
+                        MediaContent::text(final_message.get_text() + &text);
+                }
+                Err(e) => return Err(e),
+            }
+        }
 
-    /// 知识处理能力
-    async fn extract_knowledge(&self, raw_data: &str) -> anyhow::Result<ChatMessage>;
-    async fn query_knowledge(&self, query: &str) -> anyhow::Result<ChatMessage>;
+        Ok(final_message)
+    }
+
+    /// 数据分析和洞察能力 - 通常不需要流式，直接返回结果
+    async fn analyze(&self, data: &str) -> anyhow::Result<ChatMessage> {
+        let messages = vec![
+            ChatMessage::system_text("你是一个数据分析专家，请分析提供的数据。"),
+            ChatMessage::user_text(format!("请分析以下数据：\n{}", data)),
+        ];
+        self.completion(&messages).await
+    }
+    async fn summarize(&self, content: &str) -> anyhow::Result<ChatMessage> {
+        let messages = vec![
+            ChatMessage::system_text("你是一个内容总结专家，请简洁地总结内容要点。"),
+            ChatMessage::user_text(format!("请总结以下内容：\n{}", content)),
+        ];
+        self.completion(&messages).await
+    }
+    /// 知识处理能力 - 通常不需要流式，直接返回结果  
+    async fn extract_knowledge(&self, raw_data: &str) -> anyhow::Result<ChatMessage> {
+        let messages = vec![
+            ChatMessage::system_text("你是一个知识提取专家，请提取关键信息和知识点。"),
+            ChatMessage::user_text(format!("请从以下数据中提取关键知识点：\n{}", raw_data)),
+        ];
+        self.completion(&messages).await
+    }
 }
 
 /// 学习配置
@@ -1020,10 +1117,8 @@ pub trait AdvancedAgent: Agent {
         self.runtime_context_mut().increment_interactions();
 
         // 更新执行上下文
-        self.execution_context_mut().add_message(ChatMessage {
-            role: MessageRole::User,
-            content: input.to_string(),
-        });
+        self.execution_context_mut()
+            .add_message(ChatMessage::text(MessageRole::User, input));
 
         // 存储到记忆
         let input_key = format!(
@@ -1055,10 +1150,8 @@ pub trait AdvancedAgent: Agent {
             self.runtime_context_mut().record_error(&format!("{:?}", e));
         } else if let Ok(ref response) = result {
             // 添加响应到上下文
-            self.execution_context_mut().add_message(ChatMessage {
-                role: MessageRole::Assistant,
-                content: response.clone(),
-            });
+            self.execution_context_mut()
+                .add_message(ChatMessage::text(MessageRole::Assistant, response));
 
             // 智能学习
             let importance = self
@@ -1160,13 +1253,17 @@ pub trait AdvancedAgent: Agent {
             format!("请谨慎回答：{}", input)
         };
 
-        let result = Agent::llm(self).completion(&context_prompt).await?;
+        let result = Agent::llm(self)
+            .completion(&[ChatMessage::user_text(context_prompt)])
+            .await?;
         Ok(format!("{:?}", result))
     }
 
     async fn process_exploratively(&mut self, input: &str) -> anyhow::Result<String> {
         let exploratory_prompt = format!("请创新性地分析和回答：{}", input);
-        let result = Agent::llm(self).completion(&exploratory_prompt).await?;
+        let result = Agent::llm(self)
+            .completion(&[ChatMessage::user_text(exploratory_prompt)])
+            .await?;
 
         // 自动学习新信息
         if input.len() > self.learning_config().min_info_length {
@@ -1193,7 +1290,9 @@ pub trait AdvancedAgent: Agent {
             input.to_string()
         };
 
-        let result = Agent::llm(self).completion(&context_aware_prompt).await?;
+        let result = Agent::llm(self)
+            .completion(&[ChatMessage::user_text(context_aware_prompt)])
+            .await?;
 
         // 选择性学习
         if input.len() > 50 && memories.len() < 3 {
@@ -1224,7 +1323,9 @@ pub trait AdvancedAgent: Agent {
                 .join("\n")
         );
 
-        let result = Agent::llm(self).completion(&expert_prompt).await?;
+        let result = Agent::llm(self)
+            .completion(&[ChatMessage::user_text(expert_prompt)])
+            .await?;
 
         // 专家模式下的高质量学习
         let _ = self.smart_learn(input, 0.8).await;
