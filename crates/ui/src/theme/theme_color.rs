@@ -3,7 +3,7 @@ use gpui::{transparent_black, Hsla};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Default, Clone, Copy, JsonSchema, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, JsonSchema)]
 pub struct ThemeColor {
     /// Used for accents such as hover background on MenuItem, ListItem, etc.
     pub accent: Hsla,

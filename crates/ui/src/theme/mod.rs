@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::ops::{Deref, DerefMut};
 
 mod color;
+mod schema;
 mod theme_color;
 pub use color::*;
 pub use theme_color::*;
