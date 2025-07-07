@@ -20,11 +20,13 @@ use gpui::{
 };
 use smallvec::SmallVec;
 
-/// Create a virtual list in Vertical direction.
+/// Create a [`VirtualList`] in vertical direction.
 ///
 /// This is like `uniform_list` in GPUI, but support two axis.
 ///
 /// The `item_sizes` is the size of each column.
+///
+/// See also [`h_virtual_list`]
 #[inline]
 pub fn v_virtual_list<R, V>(
     view: Entity<V>,
@@ -39,7 +41,9 @@ where
     virtual_list(view, id, Axis::Vertical, item_sizes, f)
 }
 
-/// Create a virtual list in Horizontal direction.
+/// Create a [`VirtualList`] in horizontal direction.
+///
+/// See also [`v_virtual_list`]
 #[inline]
 pub fn h_virtual_list<R, V>(
     view: Entity<V>,
@@ -91,7 +95,7 @@ where
     }
 }
 
-/// VirtualItem component for rendering a large number of differently sized columns.
+/// VirtualList component for rendering a large number of differently sized items.
 pub struct VirtualList {
     id: ElementId,
     axis: Axis,
