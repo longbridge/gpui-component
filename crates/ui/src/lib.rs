@@ -143,6 +143,7 @@ pub fn measure_if(name: impl Into<SharedString>, if_: bool, f: impl FnOnce()) {
 
 /// Measures the execution time.
 #[inline]
+#[track_caller]
 pub fn measure(name: impl Into<SharedString>, f: impl FnOnce()) {
     measure_if(name, true, f);
 }
@@ -153,6 +154,7 @@ pub struct Measure {
 }
 
 impl Measure {
+    #[track_caller]
     pub fn new(name: impl Into<SharedString>) -> Self {
         Self {
             name: name.into(),
@@ -160,6 +162,7 @@ impl Measure {
         }
     }
 
+    #[track_caller]
     pub fn end(self) {
         let duration = self.start.elapsed();
         tracing::trace!("{} in {:?}", self.name, duration);

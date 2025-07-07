@@ -20,6 +20,8 @@ use gpui::{
 };
 use smallvec::SmallVec;
 
+use crate::Measure;
+
 /// Create a virtual list in Vertical direction.
 ///
 /// This is like `uniform_list` in GPUI, but support two axis.
@@ -153,8 +155,15 @@ impl VirtualList {
 pub struct VirtualListFrameState {
     /// Visible items to be painted.
     items: SmallVec<[AnyElement; 32]>,
-    item_sizes: Vec<Pixels>,
-    item_origins: Vec<Pixels>,
+    size_layout: ItemSizeLayout,
+}
+
+#[derive(Default, Clone)]
+pub struct ItemSizeLayout {
+    items_sizes: Rc<Vec<Size<Pixels>>>,
+    container_size: Size<Pixels>,
+    sizes: Vec<Pixels>,
+    origins: Vec<Pixels>,
 }
 
 impl IntoElement for VirtualList {
@@ -197,55 +206,68 @@ impl Element for VirtualList {
         }
         .to_pixels(font_size.into(), window.rem_size());
 
-        // Prepare each item's size by axis
-        // TODO: To cache the item_sizes, item_origins
-        // If there have 500,000 items, this method will speed about 500~600µs
-        // let start = std::time::Instant::now();
-        let item_sizes = self
-            .item_sizes
-            .iter()
-            .enumerate()
-            .map(|(i, size)| {
-                let size = size.along(self.axis);
-                if i + 1 == self.items_count {
-                    size
-                } else {
-                    size + gap
+        let (layout_id, size_layout) = window.with_element_state(
+            global_id.unwrap(),
+            |state: Option<ItemSizeLayout>, window| {
+                let mut state = state.unwrap_or(ItemSizeLayout::default());
+
+                if state.items_sizes != self.item_sizes {
+                    state.items_sizes = self.item_sizes.clone();
+                    // Prepare each item's size by axis
+                    state.sizes = self
+                        .item_sizes
+                        .iter()
+                        .enumerate()
+                        .map(|(i, size)| {
+                            let size = size.along(self.axis);
+                            if i + 1 == self.items_count {
+                                size
+                            } else {
+                                size + gap
+                            }
+                        })
+                        .collect::<Vec<_>>();
+
+                    // Prepare each item's origin by axis
+                    state.origins = state
+                        .sizes
+                        .iter()
+                        .scan(px(0.), |cumulative, size| match self.axis {
+                            Axis::Horizontal => {
+                                let x = *cumulative;
+                                *cumulative += *size;
+                                Some(x)
+                            }
+                            Axis::Vertical => {
+                                let y = *cumulative;
+                                *cumulative += *size;
+                                Some(y)
+                            }
+                        })
+                        .collect::<Vec<_>>();
+                    state.container_size = Size {
+                        width: px(self.item_sizes.iter().map(|size| size.width.0).sum::<f32>()),
+                        height: px(self
+                            .item_sizes
+                            .iter()
+                            .map(|size| size.height.0)
+                            .sum::<f32>()),
+                    };
                 }
-            })
-            .collect::<Vec<_>>();
 
-        // Prepare each item's origin by axis
-        let item_origins = match self.axis {
-            Axis::Horizontal => item_sizes
-                .iter()
-                .scan(px(0.), |cumulative_x, size| {
-                    let x = *cumulative_x;
-                    *cumulative_x += *size;
-                    Some(x)
-                })
-                .collect::<Vec<_>>(),
-            Axis::Vertical => item_sizes
-                .iter()
-                .scan(px(0.), |cumulative_y, size| {
-                    let y = *cumulative_y;
-                    *cumulative_y += *size;
-                    Some(y)
-                })
-                .collect::<Vec<_>>(),
-        };
-        // println!("layout: {} {:?}", item_sizes.len(), start.elapsed());
+                let (layout_id, _) = self
+                    .base
+                    .request_layout(global_id, inspector_id, window, cx);
 
-        let (layout_id, _) = self
-            .base
-            .request_layout(global_id, inspector_id, window, cx);
+                ((layout_id, state.clone()), state)
+            },
+        );
 
         (
             layout_id,
             VirtualListFrameState {
                 items: SmallVec::new(),
-                item_sizes,
-                item_origins,
+                size_layout,
             },
         )
     }
@@ -282,17 +304,17 @@ impl Element for VirtualList {
             Axis::Vertical => border.top + padding.top + border.bottom + padding.bottom,
         };
 
-        let item_sizes = &layout.item_sizes;
-        let item_origins = &layout.item_origins;
+        let item_sizes = &layout.size_layout.sizes;
+        let item_origins = &layout.size_layout.origins;
 
         let content_size = match self.axis {
             Axis::Horizontal => Size {
-                width: px(item_sizes.iter().map(|size| size.0).sum::<f32>()) + padding_size,
+                width: layout.size_layout.container_size.width + padding_size,
                 height: (first_item_size.height + padding_size).max(padded_bounds.size.height),
             },
             Axis::Vertical => Size {
                 width: (first_item_size.width + padding_size).max(padded_bounds.size.width),
-                height: px(item_sizes.iter().map(|size| size.0).sum::<f32>()) + padding_size,
+                height: layout.size_layout.container_size.height + padding_size,
             },
         };
 
