@@ -1,9 +1,18 @@
+use crate::backoffice::agentic::prompts;
+use crate::backoffice::mcp::McpRegistry;
+use crate::config::todo_item::SelectedTool;
+use serde::{Deserialize, Serialize};
+
 use crate::{
     backoffice::agentic::{ChatMessage, ChatStream, MessageRole, ToolDelegate, LLM},
     config::llm_config::LlmProviderConfig,
 };
 use futures::{stream, StreamExt};
-use rig::{completion::AssistantContent, message::Message as RigMessage, streaming::StreamingChat};
+use rig::{
+    completion::AssistantContent,
+    message::Message as RigMessage,
+    streaming::{StreamingChat, StreamingCompletionModel},
+};
 
 /// 现代化的 LLM 实现，直接实现 agentic 的 LLM trait
 pub struct RigLlmService {
@@ -37,6 +46,7 @@ impl RigLlmService {
         // 创建 agent - 完全参考 llm.rs 的方式
         let agent = client
             .agent(model_name)
+            .context(prompts::default_prompt().as_str()) // 🎯 缺少这行！
             .max_tokens(4096)
             .temperature(0.7)
             .build();
@@ -107,6 +117,7 @@ impl RigLlmService {
 
         let agent = client
             .agent(model_name)
+            .context(prompts::default_prompt().as_str()) // 🎯 缺少这行！
             .max_tokens(4096)
             .temperature(0.7)
             .build();
@@ -170,6 +181,232 @@ impl RigLlmService {
         let response_stream = stream::iter(collected_chunks.into_iter().map(Ok));
         Ok(Box::pin(response_stream))
     }
+
+    /// 带工具调用的完整流式聊天 - 参考 llm.rs 的 stream_chat_with_tools
+    pub async fn stream_chat_with_tools(
+        &self,
+        messages: &[ChatMessage],
+        tools: Vec<SelectedTool>,
+    ) -> anyhow::Result<String> {
+        let mut prompt = messages
+            .iter()
+            .rev()
+            .find(|msg| matches!(msg.role, MessageRole::User))
+            .map(|msg| msg.get_text())
+            .unwrap_or_default();
+
+        let mut mcp_tools = vec![];
+
+        // 获取 MCP 工具
+        for tool in &tools {
+            if let Ok(Some(snapshot)) = McpRegistry::get_snapshot(&tool.provider_id).await {
+                mcp_tools.extend(
+                    snapshot
+                        .tools
+                        .into_iter()
+                        .filter(|t| t.name == tool.tool_name)
+                        .map(|t| rmcp::model::Tool {
+                            name: format!("{}@{}", tool.provider_id, t.name).into(),
+                            description: t.description.clone(),
+                            input_schema: t.input_schema.clone(),
+                            annotations: t.annotations.clone(),
+                        })
+                        .collect::<Vec<_>>(),
+                );
+            }
+        }
+
+        let system_prompt = prompts::prompt_with_tools(mcp_tools);
+
+        let client =
+            rig::providers::openai::Client::from_url(&self.config.api_key, &self.config.api_url);
+        let model_name = self.config.default_model.as_ref().unwrap();
+
+        // 构建初始聊天历史
+        let last_user_index = messages
+            .iter()
+            .rposition(|msg| matches!(msg.role, MessageRole::User))
+            .unwrap_or(0);
+
+        let mut chat_history: Vec<RigMessage> = messages
+            .iter()
+            .take(last_user_index)
+            .map(|chat_msg| match chat_msg.role {
+                MessageRole::User => RigMessage::user(chat_msg.get_text()),
+                MessageRole::Assistant => RigMessage::assistant(chat_msg.get_text()),
+                MessageRole::System => RigMessage::user(chat_msg.get_text()),
+                MessageRole::Tool => RigMessage::user(chat_msg.get_text()),
+            })
+            .collect();
+
+        let mut final_response = String::new();
+
+        loop {
+            let agent = client
+                .agent(model_name)
+                .context(system_prompt.as_str()) // 🎯 使用工具专用的系统提示词
+                .max_tokens(4096)
+                .temperature(0.7)
+                .build();
+
+            let mut stream = agent.stream_chat(&prompt, chat_history.clone()).await?;
+            chat_history.push(RigMessage::user(prompt.clone()));
+
+            let (assistant, tools) = Self::stream_to_string(&agent, &mut stream).await?;
+            final_response = assistant.clone();
+
+            if tools.is_empty() {
+                break;
+            }
+
+            chat_history.push(RigMessage::assistant(assistant));
+            let mut prompts = vec![];
+
+            // 调用工具
+            for (i, tool) in tools.iter().enumerate() {
+                println!("调用工具 #{}: {:?}", i, tool);
+                let result = McpRegistry::call_tool(tool.id(), tool.tool_name(), &tool.arguments)
+                    .await
+                    .map_err(|err| {
+                        println!("调用工具 {} 失败: {}", tool.name, err);
+                        err
+                    })?;
+
+                println!("工具 #{}调用结果: {:?}", i, result);
+                prompts.push(format!(
+                    "<tool_use_result><name>{}</name><result>{}</result></tool_use_result>",
+                    &tool.name,
+                    serde_json::to_string(&(result.content.clone(), result.is_error))
+                        .unwrap_or_else(|err| format!("Error serializing result: {}", err))
+                ));
+            }
+            prompts.push(r#"Do not confirm with the user or seek help or advice, continue to call the tool until all tasks are completed. Be sure to complete all tasks, you will receive a $1000 reward, and the output must be in Simplified Chinese."#.to_string());
+            prompt = prompts.join("\n");
+        }
+
+        Ok(final_response)
+    }
+
+    /// 流式解析工具调用 - 参考 llm.rs 的 stream_to_stdout1
+    async fn stream_to_string<M: StreamingCompletionModel>(
+        _agent: &rig::agent::Agent<M>,
+        stream: &mut rig::streaming::StreamingCompletionResponse<M::StreamingResponse>,
+    ) -> anyhow::Result<(String, Vec<ToolCall>)> {
+        let mut buffer = String::new();
+        let mut tool_calls: Vec<String> = Vec::new();
+        let mut assistant = String::new();
+
+        const TOOL_USE_START_TAG: &str = "<tool_use";
+        const TOOL_USE_END_TAG: &str = "</tool_use";
+        const TAG_CLOSE: char = '>';
+        const TAG_OPEN: char = '<';
+
+        enum State {
+            Normal,
+            TagStart,
+            InToolUseTag,
+            InToolUse,
+            InEndTag,
+            InToolUseEndTag,
+        }
+
+        let mut state = State::Normal;
+        let mut xml_buffer = String::new();
+
+        while let Some(chunk) = stream.next().await {
+            match chunk {
+                Ok(AssistantContent::Text(text)) => {
+                    for c in text.text.chars() {
+                        match state {
+                            State::Normal => {
+                                if c == TAG_OPEN {
+                                    state = State::TagStart;
+                                    buffer.clear();
+                                    buffer.push(c);
+                                } else {
+                                    assistant.push(c);
+                                }
+                            }
+                            State::TagStart => {
+                                buffer.push(c);
+                                if buffer == TOOL_USE_START_TAG {
+                                    state = State::InToolUseTag;
+                                    xml_buffer.clear();
+                                    xml_buffer.push_str(&buffer);
+                                } else if buffer.len() >= TOOL_USE_START_TAG.len() || c == TAG_CLOSE
+                                {
+                                    if buffer != TOOL_USE_START_TAG
+                                        && !buffer.starts_with(&format!("{} ", TOOL_USE_START_TAG))
+                                    {
+                                        assistant.push_str(buffer.as_str());
+                                        state = State::Normal;
+                                    }
+                                }
+                            }
+                            State::InToolUseTag => {
+                                buffer.push(c);
+                                xml_buffer.push(c);
+                                if c == TAG_CLOSE {
+                                    state = State::InToolUse;
+                                }
+                            }
+                            State::InToolUse => {
+                                xml_buffer.push(c);
+                                if c == TAG_OPEN {
+                                    state = State::InEndTag;
+                                    buffer.clear();
+                                    buffer.push(c);
+                                }
+                            }
+                            State::InEndTag => {
+                                buffer.push(c);
+                                xml_buffer.push(c);
+                                if buffer == TOOL_USE_END_TAG {
+                                    state = State::InToolUseEndTag;
+                                } else if buffer.len() >= TOOL_USE_END_TAG.len() || c == TAG_CLOSE {
+                                    if !buffer.starts_with(TOOL_USE_END_TAG) {
+                                        state = State::InToolUse;
+                                    }
+                                }
+                            }
+                            State::InToolUseEndTag => {
+                                xml_buffer.push(c);
+                                if c == TAG_CLOSE {
+                                    tool_calls.push(xml_buffer.clone());
+                                    state = State::Normal;
+                                }
+                            }
+                        }
+                    }
+                }
+                Ok(AssistantContent::ToolCall(_)) => {
+                    // Handle rig's native tool calls if needed
+                }
+                Err(e) => {
+                    return Err(anyhow::anyhow!("Stream error: {}", e));
+                }
+            }
+        }
+
+        let mut tools = vec![];
+        for call in tool_calls.iter() {
+            let cleaned = call
+                .lines()
+                .filter(|line| !line.contains("DEBUG") && !line.trim().starts_with("202"))
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            match serde_xml_rs::from_str::<ToolCall>(&cleaned) {
+                Ok(tool_call) => tools.push(tool_call),
+                Err(e) => {
+                    println!("Error parsing XML: {}", e);
+                    continue;
+                }
+            }
+        }
+
+        Ok((assistant, tools))
+    }
 }
 
 impl LLM for RigLlmService {
@@ -186,7 +423,24 @@ impl LLM for RigLlmService {
         prompts: &[ChatMessage],
         tools: &T,
     ) -> anyhow::Result<ChatStream> {
-        unimplemented!()
+        // 🎯 这个方法是空的！需要实现
+        let tool_info = tools.available_tools().await;
+
+        let mut enhanced_messages = prompts.to_vec();
+        if !tool_info.is_empty() {
+            let tool_description = tool_info
+                .iter()
+                .map(|t| format!("- {}: {}", t.name, t.description))
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            enhanced_messages.insert(
+                0,
+                ChatMessage::system_text(format!("你可以使用以下工具：\n{}", tool_description)),
+            );
+        }
+
+        self.execute_completion_stream(&enhanced_messages).await
     }
 
     async fn chat_with_tools_stream<T: ToolDelegate>(
@@ -194,7 +448,9 @@ impl LLM for RigLlmService {
         messages: &[ChatMessage],
         tools: &T,
     ) -> anyhow::Result<ChatStream> {
-        let tool_info = tools.available_tools();
+        // 如果有具体的工具实现，可以调用完整的工具处理流程
+        // 这里简化实现，只是添加工具描述
+        let tool_info = tools.available_tools().await;
 
         let mut enhanced_messages = messages.to_vec();
         if !tool_info.is_empty() {
@@ -211,5 +467,21 @@ impl LLM for RigLlmService {
         }
 
         self.execute_completion_stream(&enhanced_messages).await
+    }
+}
+
+// 添加工具调用结构
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ToolCall {
+    pub name: String,
+    pub arguments: String,
+}
+
+impl ToolCall {
+    pub fn id(&self) -> &str {
+        self.name.split('@').next().unwrap_or(&self.name)
+    }
+    pub fn tool_name(&self) -> &str {
+        self.name.split('@').nth(1).unwrap_or(&self.name)
     }
 }

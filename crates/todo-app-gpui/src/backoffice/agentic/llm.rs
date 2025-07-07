@@ -167,7 +167,9 @@ impl LlmService {
             })
             .collect::<Vec<RigMessage>>();
 
-        let mut stream = agent.stream_chat(prompt, messages).await?;
+        let mut stream: StreamingCompletionResponse<
+            rig::providers::openai::StreamingCompletionResponse,
+        > = agent.stream_chat(prompt, messages).await?;
         println!("Streaming chat with model: {}", model_id);
         let (assistant, _tools) = stream_to_stdout1(source, &agent, &mut stream).await?;
         Ok(assistant)

@@ -1,50 +1,8 @@
-//! # bp-prompt
-//!
-//! `bp-prompt` is a Rust library for generating system prompts with dynamic environment and tool information,
-//! suitable for agentic AI systems or any scenario requiring context-rich prompt construction.
-//!
-//! ## Features
-//! - Collects and injects OS, timezone, memory, working directory, home directory, locale, and application info into prompt templates.
-//! - Supports dynamic tool descriptions for agent tool-use scenarios.
-//! - Allows custom user system prompts.
-//! - Cross-platform and environment-variable aware.
-//!
-//! ## Main APIs
-//! - [`prompt(tools: Vec<Tool>) -> String`]: Generate a system prompt with environment and tool info.
-//! - [`prompt_with_user_system_prompt<S: AsRef<str>>(tools: Vec<Tool>, user_system_prompt: S) -> String`]: Generate a prompt with custom user system prompt.
-//!
-//! ## Example
-//! ```rust
-//! use bp_prompt::{prompt, prompt_with_user_system_prompt};
-//! use rmcp::model::Tool;
-//!
-//! let tools = vec![/* your Tool instances */];
-//! let sys_prompt = prompt(tools);
-//! // or
-//! let custom_prompt = prompt_with_user_system_prompt(tools, "You are a helpful assistant.");
-//! ```
-//!
-//! ## Environment Info Collected
-//! - OS info (name, version, kernel)
-//! - Current datetime (ISO 8601)
-//! - Timezone (from env or local offset)
-//! - Available/total memory
-//! - Working directory
-//! - Home directory
-//! - User locale (LANG/LC_ALL/LC_MESSAGES)
-//! - Application info (customizable)
-//!
-//! ## Use Cases
-//! - Agent/AI system context injection
-//! - Multi-tool agentic prompt generation
-//! - Any prompt needing dynamic runtime environment info
-//!
-//! Customize or extend by editing `system_prompt.md` or the Rust functions as needed.
-
 use chrono::Local;
-use rmcp::model::Tool;
 use std::env;
 use sysinfo::System;
+
+use crate::backoffice::agentic::ToolInfo;
 
 fn get_os_info() -> String {
     let mut sys = System::new_all();
@@ -130,20 +88,19 @@ pub fn default_prompt() -> String {
         .replace("{{ APPLICATION_INFO }}", "xTo-Do | Agentic AI")
 }
 
-pub fn prompt_with_tools(tools: Vec<Tool>) -> String {
+pub fn prompt_with_tools(tools: Vec<ToolInfo>) -> String {
     const USER_SYSTEM_PROMPT: &str =
         "You are an assistant, using known tools to help him complete tasks.";
     prompt_with_user_system_prompt(tools, USER_SYSTEM_PROMPT)
 }
 
 pub fn prompt_with_user_system_prompt<S: AsRef<str>>(
-    tools: Vec<Tool>,
+    tools: Vec<ToolInfo>,
     user_system_prompt: S,
 ) -> String {
     let tools_str = tools
         .into_iter()
         .fold(Vec::new(), |mut acc, tool| {
-            let description = tool.description.as_deref().unwrap_or_default();
             let tool_entry = format!(
                 r#"
 <tool>
@@ -152,9 +109,7 @@ pub fn prompt_with_user_system_prompt<S: AsRef<str>>(
     <arguments>{}</arguments>
 </tool>
 "#,
-                &tool.name,
-                description,
-                &tool.schema_as_json_value().to_string()
+                &tool.name, tool.description, &tool.parameters
             );
             acc.push(tool_entry);
             acc

@@ -10,9 +10,12 @@ use std::pin::Pin;
 mod insight;
 mod knowledge;
 pub(crate) mod llm;
+pub(crate) mod mcp_tools;
 mod memex;
 pub(crate) mod prompts;
 mod rig_llm;
+
+pub use mcp_tools::{BatchMcpToolDelegate, McpToolDelegate};
 
 /// 记忆类型枚举
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -942,21 +945,12 @@ impl<M: Memory, L: LLM, T: ToolDelegate> RuntimeContext<M, L, T> {
     }
 }
 
-/// 工具参数定义
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolParameter {
-    pub name: String,
-    pub param_type: String,
-    pub description: String,
-    pub required: bool,
-}
-
 /// 工具信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolInfo {
     pub name: String,
     pub description: String,
-    pub parameters: Vec<ToolParameter>,
+    pub parameters: String,
 }
 
 /// 工具调用的委托接口，允许不同的工具实现自己的调用逻辑。
@@ -968,7 +962,7 @@ pub trait ToolDelegate: Send + Sync {
     async fn call(&self, name: &str, args: Self::Args) -> anyhow::Result<Self::Output>;
 
     /// 获取可用工具列表
-    fn available_tools(&self) -> Vec<ToolInfo>;
+    async fn available_tools(&self) -> Vec<ToolInfo>;
 }
 
 /// 默认的工具委托实现，什么都不做。
@@ -980,10 +974,12 @@ impl ToolDelegate for () {
         Ok(())
     }
 
-    fn available_tools(&self) -> Vec<ToolInfo> {
+    async fn available_tools(&self) -> Vec<ToolInfo> {
         vec![]
     }
 }
+
+//TODO:实现基于MCP的ToolDelegate实现
 
 /// 基础智能体特性
 pub trait Agent {
