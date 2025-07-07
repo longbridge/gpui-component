@@ -4,10 +4,10 @@ mod loader;
 pub(crate) mod server;
 
 use crate::backoffice::mcp::server::{McpServer, McpServerSnapshot};
-use crate::backoffice::{ YamlFile};
+use crate::backoffice::YamlFile;
 use crate::config::mcp_config::*;
 use actix::prelude::*;
-use rmcp::model::{Content};
+use rmcp::model::Content;
 use std::{collections::HashMap, time::Duration};
 
 #[derive(Message, Debug)]
@@ -150,7 +150,7 @@ impl McpRegistry {
             //     }
             // }
             for config in configs.iter().filter(|c| c.enabled) {
-                self.servers.remove(&config.id).map(|addr|{
+                self.servers.remove(&config.id).map(|addr| {
                     addr.do_send(ExitFromRegistry);
                 });
                 let addr = McpServer::new(config.clone()).start();
@@ -237,21 +237,6 @@ impl Handler<UpdateServerCache> for McpRegistry {
     }
 }
 
-/// 获取服务器快照
-#[derive(Message)]
-#[rtype(result = "Option<McpServerSnapshot>")]
-pub struct GetServerSnapshot {
-    pub server_id: String,
-}
-
-impl Handler<GetServerSnapshot> for McpRegistry {
-    type Result =  Option<McpServerSnapshot>;
-
-    fn handle(&mut self, msg: GetServerSnapshot, _ctx: &mut Self::Context) -> Self::Result {
-        self.snapshots.get(&msg.server_id).cloned()
-    }
-}
-
 /// 获取所有服务器快照
 #[derive(Message)]
 #[rtype(result = "Vec<McpServerSnapshot>")]
@@ -267,39 +252,18 @@ impl Handler<GetAllSnapshots> for McpRegistry {
     }
 }
 
-// ===== 兼容性支持 - 为了保持与现有代码的兼容性 =====
-
-/// 兼容性类型别名 - 逐步迁移到 McpServerSnapshot
-pub type McpServerInstance = McpServerSnapshot;
-
 /// 兼容性消息 - 获取实例（实际返回快照）
 #[derive(Message)]
 #[rtype(result = "Option<McpServerSnapshot>")]
-pub struct GetServerInstance {
+pub struct GetServerSnapshot {
     pub server_id: String,
 }
 
-impl Handler<GetServerInstance> for McpRegistry {
+impl Handler<GetServerSnapshot> for McpRegistry {
     type Result = Option<McpServerSnapshot>;
 
-    fn handle(&mut self, msg: GetServerInstance, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: GetServerSnapshot, _ctx: &mut Self::Context) -> Self::Result {
         log::debug!("Getting snapshot for server_id: {}", msg.server_id);
         self.snapshots.get(&msg.server_id).cloned()
     }
 }
-
-/// 兼容性消息 - 获取所有实例（实际返回快照）
-#[derive(Message)]
-#[rtype(result = "Vec<McpServerSnapshot>")]
-pub struct GetAllInstances;
-
-impl Handler<GetAllInstances> for McpRegistry {
-    type Result = Vec<McpServerSnapshot>;
-
-    fn handle(&mut self, _msg: GetAllInstances, _ctx: &mut Self::Context) -> Self::Result {
-        let mut snapshots: Vec<_> = self.snapshots.values().cloned().collect();
-        snapshots.sort_by(|a, b| a.config.name.cmp(&b.config.name));
-        snapshots
-    }
-}
-

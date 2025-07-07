@@ -218,8 +218,8 @@ impl TodoThreadEdit {
         let todo_edit_entity = cx.entity().clone();
         
         cx.spawn(async move |_this, cx| {
-            if let Some(instance) = CrossRuntimeBridge::global().get_instance(&server_id).await {
-                  let tools=instance.tools;
+            if let Some(snapshot) = CrossRuntimeBridge::global().get_server_snapshot(&server_id).await {
+                  let tools=snapshot.tools;
                 todo_edit_entity.update(cx, |todo_edit, todo_cx| {
                             todo_edit.cached_server_tools.insert(server_id.clone(), tools);
                             todo_cx.notify();
@@ -608,8 +608,8 @@ impl TodoThreadEdit {
                     let server_id_for_load = server_id.clone();
                     let todo_edit_entity_for_load = todo_edit_entity.clone();
                     drawer_cx.spawn(async move | cx| {
-                        if let Some(instance) = CrossRuntimeBridge::global().get_instance(&server_id_for_load).await {
-                            let tools= instance.tools.clone();
+                        if let Some(snapshot) = CrossRuntimeBridge::global().get_server_snapshot(&server_id_for_load).await {
+                            let tools= snapshot.tools.clone();
                             todo_edit_entity_for_load.update(cx, |todo_edit, todo_cx| {
                                 todo_edit.cached_server_tools.insert(server_id_for_load.clone(), tools);
                                 todo_cx.notify();

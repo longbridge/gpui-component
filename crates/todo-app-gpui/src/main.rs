@@ -27,7 +27,6 @@ async fn main() -> anyhow::Result<()> {
         let mutex = mutex::Mutex::try_lock("x-todo-app", true)?;
         MUTEX.set(mutex).ok();
     }
-
     backoffice::start()?;
     app::run();
     Ok(())

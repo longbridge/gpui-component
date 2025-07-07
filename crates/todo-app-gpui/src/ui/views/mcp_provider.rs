@@ -307,15 +307,15 @@ impl McpProvider {
     // 异步获取提供商能力
     fn refresh_provider_capabilities(&mut self, cx: &mut Context<Self>) {
         cx.spawn(async move |this, cx| {
-            for instance in CrossRuntimeBridge::global().get_all_instances().await {
+            for snapshot in CrossRuntimeBridge::global().get_all_server_snapshot().await {
                 // 获取能力信息
-                let mut tools = instance.tools.clone();
+                let mut tools = snapshot.tools.clone();
                 tools.sort_by(|a, b| a.name.cmp(&b.name));
-                let mut prompts = instance.prompts.clone();
+                let mut prompts = snapshot.prompts.clone();
                 prompts.sort_by(|a, b| a.name.cmp(&b.name));
-                let mut resources = instance.resources.clone();
+                let mut resources = snapshot.resources.clone();
                 resources.sort_by(|a, b| a.resource.uri.cmp(&b.resource.uri));
-                let mut resource_templates = instance.resource_templates.clone();
+                let mut resource_templates = snapshot.resource_templates.clone();
                 resource_templates.sort_by(|a, b| {
                     a.resource_template
                         .uri_template
@@ -330,7 +330,7 @@ impl McpProvider {
                 // 更新缓存和UI
                 this.update(cx, |this, cx| {
                     this.cached_capabilities.insert(
-                        instance.config.id.clone(),
+                        snapshot.config.id.clone(),
                         (tools, prompts, resources, resource_templates),
                     );
                     cx.notify();

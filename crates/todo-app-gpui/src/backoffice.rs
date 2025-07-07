@@ -3,7 +3,6 @@ mod builtin;
 // pub mod crb;
 pub mod cross_runtime;
 pub mod mcp;
-mod meta;
 mod todo;
 
 use actix::prelude::*;
@@ -16,7 +15,7 @@ use crate::{
     backoffice::{
         agentic::llm::LlmRegistry,
         cross_runtime::CrossRuntimeBridge,
-        mcp::{server::ResourceDefinition, GetServerInstance, McpRegistry},
+        mcp::{server::ResourceDefinition, GetServerSnapshot, McpRegistry},
     },
     config::mcp_config::McpServerConfig,
 };

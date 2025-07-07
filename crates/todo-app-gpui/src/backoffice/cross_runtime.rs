@@ -3,9 +3,9 @@ use std::any::{Any, TypeId};
 use crate::backoffice::agentic::llm::{
     LlmChatRequest, LlmChatResult, LlmChatWithToolsRequest, LlmRegistry,
 };
-use crate::backoffice::mcp::McpServerInstance;
+use crate::backoffice::mcp::server::McpServerSnapshot;
 use crate::backoffice::mcp::{
-    GetAllInstances, GetServerInstance, McpCallToolRequest, McpCallToolResult, McpRegistry,
+    GetAllSnapshots, GetServerSnapshot, McpCallToolRequest, McpCallToolResult, McpRegistry,
 };
 use crate::config::todo_item::SelectedTool;
 use crate::ui::views::todo_thread::ChatMessage;
@@ -79,238 +79,6 @@ impl CrossRuntimeBridge {
     }
 }
 
-/// 消息处理器特征
-///
-/// **设计目的**: 实现类型擦除，允许不同类型的消息在同一个队列中处理
-///
-/// **核心思想**:
-/// - 每种业务操作对应一个具体的 Handler 实现
-/// - 通过 trait object 实现统一的消息接口
-/// - `Box<Self>` 转移所有权，避免生命周期问题
-trait MessageHandler {
-    /// 处理消息的核心方法
-    ///
-    /// **执行环境**: 在独立的 Arbiter 中执行，不阻塞调度器
-    /// **错误处理**: 每个 handler 负责自己的错误处理和响应
-    /// **资源管理**: 通过 `Box<Self>` 自动管理内存
-    fn handle(self: Box<Self>);
-}
-
-// ===== MCP 相关处理器 =====
-
-/// 获取服务器实例消息处理器
-///
-/// **业务功能**: 从 MCP Registry 获取指定 ID 的服务器实例
-/// **异步模式**: 使用 oneshot 通道返回结果到 GPUI 线程
-/// **错误处理**: 网络错误或 Actor 错误会返回 None
-struct GetInstanceHandler {
-    /// 目标服务器的唯一标识符
-    server_id: String,
-    /// 响应通道，用于将结果发送回 GPUI 线程
-    ///
-    /// **类型**: `Option<McpServerInstance>` - None 表示服务器不存在或获取失败
-    /// **生命周期**: 消息处理完成后自动释放
-    response: oneshot::Sender<Option<McpServerInstance>>,
-}
-
-impl MessageHandler for GetInstanceHandler {
-    fn handle(self: Box<Self>) {
-        // 在新的 Arbiter 中执行，避免阻塞消息调度器
-        Arbiter::new().spawn(async move {
-            // 获取全局 MCP Registry 的地址
-            let registry = McpRegistry::global();
-
-            // 发送获取实例的消息到 Registry Actor
-            let result = registry
-                .send(GetServerInstance {
-                    server_id: self.server_id,
-                })
-                .await;
-
-            // 处理 Actor 通信结果
-            let instance = match result {
-                Ok(instance) => instance,
-                Err(e) => {
-                    // 记录错误但不中断处理流程
-                    eprintln!("Failed to get server instance: {}", e);
-                    None
-                }
-            };
-
-            // 将结果发送回 GPUI 线程，忽略发送失败（接收端可能已关闭）
-            let _ = self.response.send(instance);
-        });
-    }
-}
-
-/// 工具调用消息处理器
-///
-/// **业务功能**: 调用指定 MCP 服务器的特定工具
-/// **参数验证**: 在 Actor 层面进行参数验证和格式检查
-/// **结果处理**: 统一包装成功和错误结果
-struct CallToolHandler {
-    /// 目标服务器 ID
-    server_id: String,
-    /// 要调用的工具名称
-    tool_name: String,
-    /// 工具参数（JSON 字符串格式）
-    arguments: String,
-    /// 响应通道
-    ///
-    /// **成功**: `Ok(McpCallToolResult)` - 包含工具执行结果
-    /// **失败**: `Err(String)` - 包含错误描述信息
-    response: oneshot::Sender<Result<McpCallToolResult, String>>,
-}
-
-impl MessageHandler for CallToolHandler {
-    fn handle(self: Box<Self>) {
-        Arbiter::new().spawn(async move {
-            let registry = McpRegistry::global();
-
-            // 构造工具调用请求
-            let result = registry
-                .send(McpCallToolRequest {
-                    id: self.server_id,
-                    name: self.tool_name,
-                    arguments: self.arguments,
-                })
-                .await;
-
-            // 统一错误处理：将 Actor 错误转换为字符串
-            let final_result = match result {
-                Ok(tool_result) => Ok(tool_result),
-                Err(e) => Err(e.to_string()),
-            };
-
-            let _ = self.response.send(final_result);
-        });
-    }
-}
-
-/// 获取所有实例消息处理器
-///
-/// **业务功能**: 获取当前所有活跃的 MCP 服务器实例列表
-/// **使用场景**: UI 展示服务器状态、工具选择器等
-/// **数据一致性**: 返回的是某个时间点的快照，可能与实时状态有微小差异
-struct GetAllInstancesHandler {
-    /// 响应通道，返回实例列表
-    ///
-    /// **空列表**: 当没有活跃实例或获取失败时返回空 Vec
-    /// **顺序**: 不保证特定的排序，由 Registry 内部实现决定
-    response: oneshot::Sender<Vec<McpServerInstance>>,
-}
-
-impl MessageHandler for GetAllInstancesHandler {
-    fn handle(self: Box<Self>) {
-        Arbiter::new().spawn(async move {
-            let registry = McpRegistry::global();
-            let result = registry.send(GetAllInstances).await;
-            // 错误时返回空列表，确保 UI 不会因为网络问题而崩溃
-            let instances = result.unwrap_or_default();
-            let _ = self.response.send(instances);
-        });
-    }
-}
-
-/// LLM 聊天消息处理器
-///
-/// **业务功能**: 与指定的 LLM 提供商进行对话
-/// **上下文管理**: 支持传递聊天历史以保持对话连续性
-/// **提供商抽象**: 通过 provider_id 和 model_id 抽象不同的 LLM 服务
-struct LlmChatHandler {
-    /// LLM 提供商标识（如 "openai", "anthropic"）
-    provider_id: String,
-    /// 模型标识（如 "gpt-4", "claude-3"）
-    model_id: String,
-    /// 消息来源标识（用于日志和调试）
-    source: String,
-    /// 用户输入的提示词
-    prompt: String,
-    /// 聊天历史记录
-    ///
-    /// **TODO**: 未来应移至 Agent 层管理，减少跨运行时数据传输
-    chat_history: Vec<ChatMessage>,
-    /// 响应通道
-    ///
-    /// **成功**: `Ok(LlmChatResult)` - 包含 LLM 的回复和元数据
-    /// **失败**: `Err(String)` - 包含错误信息（API 错误、网络错误等）
-    response: oneshot::Sender<Result<LlmChatResult, String>>,
-}
-
-impl MessageHandler for LlmChatHandler {
-    fn handle(self: Box<Self>) {
-        Arbiter::new().spawn(async move {
-            let registry = LlmRegistry::global();
-
-            // 构造 LLM 聊天请求
-            let result = registry
-                .send(LlmChatRequest {
-                    provider_id: self.provider_id,
-                    model_id: self.model_id,
-                    source: self.source,
-                    prompt: self.prompt,
-                    chat_history: self.chat_history,
-                })
-                .await;
-
-            // 错误统一转换为字符串，简化 GPUI 端的错误处理
-            let final_result = match result {
-                Ok(chat_result) => Ok(chat_result),
-                Err(e) => Err(e.to_string()),
-            };
-
-            let _ = self.response.send(final_result);
-        });
-    }
-}
-
-/// LLM 带工具聊天消息处理器
-///
-/// **业务功能**: 支持工具调用的 LLM 对话（如 Function Calling）
-/// **工具集成**: 将选定的 MCP 工具暴露给 LLM，实现 AI Agent 功能
-/// **执行流程**: LLM 可以决定调用工具，工具结果会影响最终回复
-struct LlmChatWithToolsHandler {
-    provider_id: String,
-    model_id: String,
-    source: String,
-    prompt: String,
-    /// 可用工具列表
-    ///
-    /// **工具定义**: 包含工具的 schema 和调用信息
-    /// **权限控制**: 只有明确选择的工具才会暴露给 LLM
-    /// **安全考虑**: 工具执行在受控环境中，避免恶意调用
-    tools: Vec<SelectedTool>,
-    chat_history: Vec<ChatMessage>,
-    response: oneshot::Sender<Result<LlmChatResult, String>>,
-}
-
-impl MessageHandler for LlmChatWithToolsHandler {
-    fn handle(self: Box<Self>) {
-        Arbiter::new().spawn(async move {
-            let registry = LlmRegistry::global();
-
-            // 构造带工具的聊天请求
-            let result = registry
-                .send(LlmChatWithToolsRequest {
-                    provider_id: self.provider_id,
-                    model_id: self.model_id,
-                    source: self.source,
-                    prompt: self.prompt,
-                    tools: self.tools,
-                    chat_history: self.chat_history,
-                })
-                .await;
-
-            let final_result = match result {
-                Ok(chat_result) => Ok(chat_result),
-                Err(e) => Err(e.to_string()),
-            };
-
-            let _ = self.response.send(final_result);
-        });
-    }
-}
-
 impl CrossRuntimeBridge {
     /// 创建新的桥接器实例
     ///
@@ -368,12 +136,15 @@ impl CrossRuntimeBridge {
     /// - UI 显示服务器详情
     /// - 验证服务器是否可用
     /// - 获取服务器提供的工具列表
-    pub async fn get_instance<S: ToString>(&self, server_id: S) -> Option<McpServerInstance> {
+    pub async fn get_server_snapshot<S: ToString>(
+        &self,
+        server_id: S,
+    ) -> Option<McpServerSnapshot> {
         // 创建一次性响应通道
         let (response_tx, response_rx) = oneshot::channel();
 
         // 构造消息处理器
-        let handler = Box::new(GetInstanceHandler {
+        let handler = Box::new(GetServerSnapshotHandler {
             server_id: server_id.to_string(),
             response: response_tx,
         });
@@ -430,7 +201,7 @@ impl CrossRuntimeBridge {
 
     /// 异步获取所有服务器实例
     ///
-    /// **返回**: `Vec<McpServerInstance>` - 当前所有活跃的服务器实例
+    /// **返回**: `Vec<McpServerSnapshot>` - 当前所有活跃的服务器实例
     ///
     /// **使用场景**:
     /// - 服务器管理界面
@@ -440,10 +211,10 @@ impl CrossRuntimeBridge {
     /// **性能考虑**:
     /// - 返回的是快照数据，不保证实时性
     /// - 大量服务器时可能有性能影响，考虑分页或缓存
-    pub async fn get_all_instances(&self) -> Vec<McpServerInstance> {
+    pub async fn get_all_server_snapshot(&self) -> Vec<McpServerSnapshot> {
         let (response_tx, response_rx) = oneshot::channel();
 
-        let handler = Box::new(GetAllInstancesHandler {
+        let handler = Box::new(GetAllSnapshotsHandler {
             response: response_tx,
         });
 
@@ -547,6 +318,236 @@ impl CrossRuntimeBridge {
         response_rx
             .await
             .map_err(|_| "Failed to receive response".to_string())?
+    }
+}
+
+/// 消息处理器特征
+///
+/// **设计目的**: 实现类型擦除，允许不同类型的消息在同一个队列中处理
+///
+/// **核心思想**:
+/// - 每种业务操作对应一个具体的 Handler 实现
+/// - 通过 trait object 实现统一的消息接口
+/// - `Box<Self>` 转移所有权，避免生命周期问题
+trait MessageHandler {
+    /// 处理消息的核心方法
+    ///
+    /// **执行环境**: 在独立的 Arbiter 中执行，不阻塞调度器
+    /// **错误处理**: 每个 handler 负责自己的错误处理和响应
+    /// **资源管理**: 通过 `Box<Self>` 自动管理内存
+    fn handle(self: Box<Self>);
+}
+
+/// 获取服务器实例消息处理器
+///
+/// **业务功能**: 从 MCP Registry 获取指定 ID 的服务器实例
+/// **异步模式**: 使用 oneshot 通道返回结果到 GPUI 线程
+/// **错误处理**: 网络错误或 Actor 错误会返回 None
+struct GetServerSnapshotHandler {
+    /// 目标服务器的唯一标识符
+    server_id: String,
+    /// 响应通道，用于将结果发送回 GPUI 线程
+    ///
+    /// **类型**: `Option<McpServerInstance>` - None 表示服务器不存在或获取失败
+    /// **生命周期**: 消息处理完成后自动释放
+    response: oneshot::Sender<Option<McpServerSnapshot>>,
+}
+
+impl MessageHandler for GetServerSnapshotHandler {
+    fn handle(self: Box<Self>) {
+        // 在新的 Arbiter 中执行，避免阻塞消息调度器
+        Arbiter::new().spawn(async move {
+            // 获取全局 MCP Registry 的地址
+            let registry = McpRegistry::global();
+
+            // 发送获取实例的消息到 Registry Actor
+            let result = registry
+                .send(GetServerSnapshot {
+                    server_id: self.server_id,
+                })
+                .await;
+
+            // 处理 Actor 通信结果
+            let instance = match result {
+                Ok(instance) => instance,
+                Err(e) => {
+                    // 记录错误但不中断处理流程
+                    eprintln!("Failed to get server instance: {}", e);
+                    None
+                }
+            };
+
+            // 将结果发送回 GPUI 线程，忽略发送失败（接收端可能已关闭）
+            let _ = self.response.send(instance);
+        });
+    }
+}
+
+/// 工具调用消息处理器
+///
+/// **业务功能**: 调用指定 MCP 服务器的特定工具
+/// **参数验证**: 在 Actor 层面进行参数验证和格式检查
+/// **结果处理**: 统一包装成功和错误结果
+struct CallToolHandler {
+    /// 目标服务器 ID
+    server_id: String,
+    /// 要调用的工具名称
+    tool_name: String,
+    /// 工具参数（JSON 字符串格式）
+    arguments: String,
+    /// 响应通道
+    ///
+    /// **成功**: `Ok(McpCallToolResult)` - 包含工具执行结果
+    /// **失败**: `Err(String)` - 包含错误描述信息
+    response: oneshot::Sender<Result<McpCallToolResult, String>>,
+}
+
+impl MessageHandler for CallToolHandler {
+    fn handle(self: Box<Self>) {
+        Arbiter::new().spawn(async move {
+            let registry = McpRegistry::global();
+
+            // 构造工具调用请求
+            let result = registry
+                .send(McpCallToolRequest {
+                    id: self.server_id,
+                    name: self.tool_name,
+                    arguments: self.arguments,
+                })
+                .await;
+
+            // 统一错误处理：将 Actor 错误转换为字符串
+            let final_result = match result {
+                Ok(tool_result) => Ok(tool_result),
+                Err(e) => Err(e.to_string()),
+            };
+
+            let _ = self.response.send(final_result);
+        });
+    }
+}
+
+/// 获取所有实例消息处理器
+///
+/// **业务功能**: 获取当前所有活跃的 MCP 服务器实例列表
+/// **使用场景**: UI 展示服务器状态、工具选择器等
+/// **数据一致性**: 返回的是某个时间点的快照，可能与实时状态有微小差异
+struct GetAllSnapshotsHandler {
+    /// 响应通道，返回实例列表
+    ///
+    /// **空列表**: 当没有活跃实例或获取失败时返回空 Vec
+    /// **顺序**: 不保证特定的排序，由 Registry 内部实现决定
+    response: oneshot::Sender<Vec<McpServerSnapshot>>,
+}
+
+impl MessageHandler for GetAllSnapshotsHandler {
+    fn handle(self: Box<Self>) {
+        Arbiter::new().spawn(async move {
+            let registry = McpRegistry::global();
+            let result = registry.send(GetAllSnapshots).await;
+            // 错误时返回空列表，确保 UI 不会因为网络问题而崩溃
+            let instances = result.unwrap_or_default();
+            let _ = self.response.send(instances);
+        });
+    }
+}
+
+/// LLM 聊天消息处理器
+///
+/// **业务功能**: 与指定的 LLM 提供商进行对话
+/// **上下文管理**: 支持传递聊天历史以保持对话连续性
+/// **提供商抽象**: 通过 provider_id 和 model_id 抽象不同的 LLM 服务
+struct LlmChatHandler {
+    /// LLM 提供商标识（如 "openai", "anthropic"）
+    provider_id: String,
+    /// 模型标识（如 "gpt-4", "claude-3"）
+    model_id: String,
+    /// 消息来源标识（用于日志和调试）
+    source: String,
+    /// 用户输入的提示词
+    prompt: String,
+    /// 聊天历史记录
+    ///
+    /// **TODO**: 未来应移至 Agent 层管理，减少跨运行时数据传输
+    chat_history: Vec<ChatMessage>,
+    /// 响应通道
+    ///
+    /// **成功**: `Ok(LlmChatResult)` - 包含 LLM 的回复和元数据
+    /// **失败**: `Err(String)` - 包含错误信息（API 错误、网络错误等）
+    response: oneshot::Sender<Result<LlmChatResult, String>>,
+}
+
+impl MessageHandler for LlmChatHandler {
+    fn handle(self: Box<Self>) {
+        Arbiter::new().spawn(async move {
+            let registry = LlmRegistry::global();
+
+            // 构造 LLM 聊天请求
+            let result = registry
+                .send(LlmChatRequest {
+                    provider_id: self.provider_id,
+                    model_id: self.model_id,
+                    source: self.source,
+                    prompt: self.prompt,
+                    chat_history: self.chat_history,
+                })
+                .await;
+
+            // 错误统一转换为字符串，简化 GPUI 端的错误处理
+            let final_result = match result {
+                Ok(chat_result) => Ok(chat_result),
+                Err(e) => Err(e.to_string()),
+            };
+
+            let _ = self.response.send(final_result);
+        });
+    }
+}
+
+/// LLM 带工具聊天消息处理器
+///
+/// **业务功能**: 支持工具调用的 LLM 对话（如 Function Calling）
+/// **工具集成**: 将选定的 MCP 工具暴露给 LLM，实现 AI Agent 功能
+/// **执行流程**: LLM 可以决定调用工具，工具结果会影响最终回复
+struct LlmChatWithToolsHandler {
+    provider_id: String,
+    model_id: String,
+    source: String,
+    prompt: String,
+    /// 可用工具列表
+    ///
+    /// **工具定义**: 包含工具的 schema 和调用信息
+    /// **权限控制**: 只有明确选择的工具才会暴露给 LLM
+    /// **安全考虑**: 工具执行在受控环境中，避免恶意调用
+    tools: Vec<SelectedTool>,
+    chat_history: Vec<ChatMessage>,
+    response: oneshot::Sender<Result<LlmChatResult, String>>,
+}
+
+impl MessageHandler for LlmChatWithToolsHandler {
+    fn handle(self: Box<Self>) {
+        Arbiter::new().spawn(async move {
+            let registry = LlmRegistry::global();
+
+            // 构造带工具的聊天请求
+            let result = registry
+                .send(LlmChatWithToolsRequest {
+                    provider_id: self.provider_id,
+                    model_id: self.model_id,
+                    source: self.source,
+                    prompt: self.prompt,
+                    tools: self.tools,
+                    chat_history: self.chat_history,
+                })
+                .await;
+
+            let final_result = match result {
+                Ok(chat_result) => Ok(chat_result),
+                Err(e) => Err(e.to_string()),
+            };
+
+            let _ = self.response.send(final_result);
+        });
     }
 }
 

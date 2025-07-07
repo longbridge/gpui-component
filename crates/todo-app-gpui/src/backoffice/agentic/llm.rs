@@ -184,9 +184,9 @@ impl LlmService {
         let mut mcp_tools = vec![];
 
         for tool in &tools {
-            if let Ok(Some(instance)) = McpRegistry::get_snapshot(&tool.provider_id).await {
+            if let Ok(Some(snapshot)) = McpRegistry::get_snapshot(&tool.provider_id).await {
                 mcp_tools.extend(
-                    instance
+                    snapshot
                         .tools
                         .into_iter()
                         .filter(|t| t.name == tool.tool_name)
