@@ -2,9 +2,7 @@ use gpui::{
     px, App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render, Styled,
     Window,
 };
-use gpui_component::{
-    blue_500, green_500, indicator::Indicator, sky_500, v_flex, IconName, Sizable,
-};
+use gpui_component::{indicator::Indicator, v_flex, ActiveTheme as _, IconName, Sizable};
 
 use crate::section;
 
@@ -51,7 +49,7 @@ impl Focusable for IndicatorStory {
 }
 
 impl Render for IndicatorStory {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .items_center()
             .gap_y_3()
@@ -59,8 +57,8 @@ impl Render for IndicatorStory {
             .child(
                 section("Indicator with color")
                     .gap_x_2()
-                    .child(Indicator::new().color(blue_500()))
-                    .child(Indicator::new().color(green_500())),
+                    .child(Indicator::new().color(cx.theme().blue))
+                    .child(Indicator::new().color(cx.theme().green)),
             )
             .child(
                 section("Indicator with size")
@@ -79,7 +77,7 @@ impl Render for IndicatorStory {
                         Indicator::new()
                             .icon(IconName::LoaderCircle)
                             .large()
-                            .color(sky_500()),
+                            .color(cx.theme().cyan),
                     ),
             )
     }

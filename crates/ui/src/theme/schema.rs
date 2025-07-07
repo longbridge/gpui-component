@@ -4,7 +4,7 @@ use palette::FromColor as _;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::{Theme, ThemeColor, ThemeMode};
+use crate::{Colorize, Theme, ThemeColor, ThemeMode};
 
 /// Represents a theme configuration.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
@@ -313,6 +313,42 @@ pub struct ThemeConfigColors {
     /// This is only works on Linux, other platforms we can't change the window border color.
     #[serde(rename = "window.border")]
     pub window_border: Option<SharedString>,
+
+    /// Base blue color.
+    #[serde(rename = "base.blue")]
+    blue: Option<String>,
+    /// Base light blue color.
+    #[serde(rename = "base.blue.light")]
+    blue_light: Option<String>,
+    /// Base cyan color.
+    #[serde(rename = "base.cyan")]
+    cyan: Option<String>,
+    /// Base light cyan color.
+    #[serde(rename = "base.cyan.light")]
+    cyan_light: Option<String>,
+    /// Base green color.
+    #[serde(rename = "base.green")]
+    green: Option<String>,
+    /// Base light green color.
+    #[serde(rename = "base.green.light")]
+    green_light: Option<String>,
+    /// Base magenta color.
+    #[serde(rename = "base.magenta")]
+    magenta: Option<String>,
+    #[serde(rename = "base.magenta.light")]
+    magenta_light: Option<String>,
+    /// Base red color.
+    #[serde(rename = "base.red")]
+    red: Option<String>,
+    /// Base light red color.
+    #[serde(rename = "base.red.light")]
+    red_light: Option<String>,
+    /// Base yellow color.
+    #[serde(rename = "base.yellow")]
+    yellow: Option<String>,
+    /// Base light yellow color.
+    #[serde(rename = "base.yellow.light")]
+    yellow_light: Option<String>,
 }
 
 /// Try to parse HEX color, `#RRGGBB` or `#RRGGBBAA`
@@ -349,6 +385,8 @@ impl Theme {
                     } else {
                         self.$config_field = default_theme.$config_field;
                     }
+                } else {
+                    self.$config_field = default_theme.$config_field;
                 }
             };
             // With fallback
@@ -364,6 +402,17 @@ impl Theme {
         }
 
         // Base colors for fallback
+        apply_color!(red);
+        apply_color!(red_light, fallback = self.red.opacity(0.8));
+        apply_color!(green);
+        apply_color!(green_light, fallback = self.green.opacity(0.8));
+        apply_color!(blue);
+        apply_color!(blue_light, fallback = self.blue.opacity(0.8));
+        apply_color!(magenta);
+        apply_color!(magenta_light, fallback = self.magenta.opacity(0.8));
+        apply_color!(cyan);
+        apply_color!(cyan_light, fallback = self.cyan.opacity(0.8));
+
         apply_color!(background);
         apply_color!(border);
         apply_color!(foreground);
@@ -387,11 +436,11 @@ impl Theme {
         apply_color!(card, fallback = self.background);
         apply_color!(card_foreground, fallback = self.foreground);
         apply_color!(caret, fallback = self.primary);
-        apply_color!(chart_1);
-        apply_color!(chart_2);
-        apply_color!(chart_3);
-        apply_color!(chart_4);
-        apply_color!(chart_5);
+        apply_color!(chart_1, fallback = self.blue.lighten(0.4));
+        apply_color!(chart_2, fallback = self.blue.lighten(0.2));
+        apply_color!(chart_3, fallback = self.blue);
+        apply_color!(chart_4, fallback = self.blue.darken(0.2));
+        apply_color!(chart_5, fallback = self.blue.darken(0.4));
         apply_color!(danger);
         apply_color!(danger_active, fallback = self.danger);
         apply_color!(danger_foreground);
@@ -466,6 +515,12 @@ impl Theme {
         apply_color!(warning_foreground);
         apply_color!(overlay);
         apply_color!(window_border, fallback = self.border);
+
+        if config.mode.is_dark() {
+            self.dark_theme = self.colors.clone();
+        } else {
+            self.light_theme = self.colors.clone();
+        }
     }
 }
 

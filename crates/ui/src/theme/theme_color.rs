@@ -197,6 +197,17 @@ pub struct ThemeColor {
     ///
     /// This is only works on Linux, other platforms we can't change the window border color.
     pub window_border: Hsla,
+
+    pub red: Hsla,
+    pub red_light: Hsla,
+    pub green: Hsla,
+    pub green_light: Hsla,
+    pub blue: Hsla,
+    pub blue_light: Hsla,
+    pub magenta: Hsla,
+    pub magenta_light: Hsla,
+    pub cyan: Hsla,
+    pub cyan_light: Hsla,
 }
 
 impl ThemeColor {
@@ -296,6 +307,16 @@ impl ThemeColor {
             warning_foreground: gray_50(),
             overlay: black().opacity(0.05),
             window_border: neutral_200(),
+            red: red_500(),
+            red_light: red_200(),
+            green: green_500(),
+            green_light: green_200(),
+            blue: blue_500(),
+            blue_light: blue_200(),
+            magenta: purple_500(),
+            magenta_light: purple_200(),
+            cyan: cyan_500(),
+            cyan_light: cyan_200(),
         }
     }
 
@@ -395,6 +416,16 @@ impl ThemeColor {
             warning_hover: yellow_900().lighten(0.1),
             overlay: white().opacity(0.03),
             window_border: neutral_800(),
+            red: red_500(),
+            red_light: red_200(),
+            green: green_500(),
+            green_light: green_200(),
+            blue: blue_500(),
+            blue_light: blue_200(),
+            magenta: purple_500(),
+            magenta_light: purple_200(),
+            cyan: cyan_500(),
+            cyan_light: cyan_200(),
         }
     }
 }

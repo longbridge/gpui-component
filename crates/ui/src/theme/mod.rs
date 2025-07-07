@@ -108,20 +108,24 @@ impl Theme {
 
     pub fn change(mode: impl Into<ThemeMode>, window: Option<&mut Window>, cx: &mut App) {
         let mode = mode.into();
-        let colors = match mode {
-            ThemeMode::Light => ThemeColor::light(),
-            ThemeMode::Dark => ThemeColor::dark(),
-        };
-
         if !cx.has_global::<Theme>() {
-            let theme = Theme::from(colors);
+            let colors = match mode {
+                ThemeMode::Light => ThemeColor::light(),
+                ThemeMode::Dark => ThemeColor::dark(),
+            };
+            let mut theme = Theme::from(colors);
+            theme.light_theme = ThemeColor::light();
+            theme.dark_theme = ThemeColor::dark();
             cx.set_global(theme);
         }
 
         let theme = cx.global_mut::<Theme>();
-
         theme.mode = mode;
-        theme.colors = colors;
+        theme.colors = if mode.is_dark() {
+            theme.dark_theme
+        } else {
+            theme.light_theme
+        };
 
         if let Some(window) = window {
             window.refresh();

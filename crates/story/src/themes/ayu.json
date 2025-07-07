@@ -47,7 +47,19 @@
       "tab.foreground": "#8d8986",
       "tab_bar.background": "#ECECED",
       "title_bar.background": "#ECECED",
-      "title_bar.border": "#CFD1D2"
+      "title_bar.border": "#CFD1D2",
+      "base.yellow": "#e7c547",
+      "base.yellow.light": "#ffc94a",
+      "base.red": "#ff3333",
+      "base.red.light": "#ff6565",
+      "base.blue": "#41a6d9",
+      "base.blue.light": "#73d8ff",
+      "base.green": "#86b300",
+      "base.geeen.light": "#b8e532",
+      "base.magenta": "#f07178",
+      "base.magenta.light": "#ffa3aa",
+      "base.cyan": "#95e6cb",
+      "base.cyan.light": "#7ff1cb"
     }
   },
   {
@@ -94,7 +106,18 @@
       "tab.active.foreground": "#B3B1AD",
       "tab.background": "#13151A00",
       "tab.foreground": "#82807d",
-      "tab_bar.background": "#13151A"
+      "tab_bar.background": "#13151A",
+      "base.yellow": "#e7c547",
+      "base.red": "#ff3333",
+      "base.red.light": "#ff6565",
+      "base.blue": "#36a3d9",
+      "base.blue.light": "#68d5ff",
+      "base.green": "#b8cc52",
+      "base.green.light": "#eafe84",
+      "base.magenta": "#f07178",
+      "base.magenta.light": "#ffa3aa",
+      "base.cyan": "#95e6cb",
+      "base.cyan.light": "#c7fffd"
     }
   }
 ]

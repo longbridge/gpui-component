@@ -51,7 +51,19 @@
       "table.head.foreground": "#feffffb3",
       "table.row.border": "#4b647970",
       "title_bar.background": "#040404",
-      "title_bar.border": "#333333"
+      "title_bar.border": "#333333",
+      "base.red": "#d84a33",
+      "base.red.light": "#d76b42",
+      "base.green": "#5da602",
+      "base.green.light": "#99b52c",
+      "base.blue": "#417ab3",
+      "base.blue.light": "#97d7ef",
+      "base.cyan": "#bdcfe5",
+      "base.cyan.light": "#bdcfe5",
+      "base.magenta": "#e5c499",
+      "base.magenta.light": "#aa7900",
+      "base.yellow": "#eebb6e",
+      "base.yellow.light": "#ffb670"
     }
   },
   {
@@ -107,7 +119,19 @@
       "table.head.foreground": "#f8dcc0b3",
       "table.row.border": "#333333",
       "title_bar.background": "#1f1d45",
-      "title_bar.border": "#333150"
+      "title_bar.border": "#333150",
+      "base.red": "#bd0013",
+      "base.red.light": "#fc5f5a",
+      "base.green": "#549235",
+      "base.green.light": "#9eff6e",
+      "base.blue": "#0f4ac6",
+      "base.blue.light": "#1997c6",
+      "base.cyan": "#c8faf4",
+      "base.cyan.light": "#c8faf4",
+      "base.magenta": "#665993",
+      "base.magenta.light": "#9b5953",
+      "base.yellow": "#e7741e",
+      "base.yellow.light": "#efc11a"
     }
   }
 ]
