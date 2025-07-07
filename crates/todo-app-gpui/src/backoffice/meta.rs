@@ -1,10 +1,11 @@
 /// 这个模型是为了提供一个通用的接口，用于处理记忆、工具调用和LLM交互。
 ///
 ///
-use actix::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 mod insight;
 mod knowledge;
@@ -1002,50 +1003,8 @@ pub trait AdvancedAgent: Agent {
     }
 }
 
-#[derive(Message)]
-#[rtype(result = "anyhow::Result<String>")]
-pub struct ProcessInput {
-    pub input: String,
-}
-
-#[derive(Message)]
-#[rtype(result = "anyhow::Result<String>")]
-pub struct ExecuteTask {
-    pub task_description: String,
-}
-
-#[derive(Message)]
-#[rtype(result = "anyhow::Result<Option<TaskState>>")]
-pub struct GetTaskStatus {
-    pub task_id: String,
-}
-
-#[derive(Message)]
-#[rtype(result = "anyhow::Result<()>")]
-pub struct Learn {
-    pub information: String,
-}
-
-#[derive(Message)]
-#[rtype(result = "anyhow::Result<String>")]
-pub struct Reflect;
-
-#[derive(Message)]
-#[rtype(result = "anyhow::Result<LearningStats>")]
-pub struct GetLearningStats;
-
-#[derive(Message)]
-#[rtype(result = "anyhow::Result<ExecutionContext>")]
-pub struct GetExecutionContext;
-
-#[derive(Message)]
-#[rtype(result = "anyhow::Result<()>")]
-pub struct UpdateConfig {
-    pub config: AgentConfig,
-}
-
-/// Actix Actor 实现的智能体
-pub struct ActorAgent<M: Memory + 'static, L: LLM + 'static, T: ToolDelegate + 'static> {
+/// AI智能体实现 - 包含完整的高级功能
+pub struct AiAgent<M: Memory, L: LLM, T: ToolDelegate> {
     /// 运行时上下文
     runtime_context: RuntimeContext<M, L, T>,
     /// 执行上下文
@@ -1054,7 +1013,7 @@ pub struct ActorAgent<M: Memory + 'static, L: LLM + 'static, T: ToolDelegate + '
     active_tasks: HashMap<String, TaskState>,
 }
 
-impl<M: Memory + 'static, L: LLM + 'static, T: ToolDelegate + 'static> ActorAgent<M, L, T> {
+impl<M: Memory, L: LLM, T: ToolDelegate> AiAgent<M, L, T> {
     pub fn new(memory: M, llm: L, tools: T, session_id: String) -> Self {
         Self {
             runtime_context: RuntimeContext::new(memory, llm, tools),
@@ -1062,24 +1021,83 @@ impl<M: Memory + 'static, L: LLM + 'static, T: ToolDelegate + 'static> ActorAgen
             active_tasks: HashMap::new(),
         }
     }
-}
 
-impl<M: Memory + Unpin + 'static, L: LLM + Unpin + 'static, T: ToolDelegate + Unpin + 'static> Actor
-    for ActorAgent<M, L, T>
-{
-    type Context = Context<Self>;
+    /// 获取配置
+    pub fn config(&self) -> &AgentConfig {
+        &self.runtime_context.config
+    }
 
-    fn started(&mut self, _ctx: &mut Self::Context) {
-        println!(
-            "ActorAgent started with session: {}",
-            self.execution_context.session_id
-        );
+    /// 更新配置
+    pub fn update_config(&mut self, config: AgentConfig) {
+        self.runtime_context.config = config;
+    }
+
+    /// 获取学习统计
+    pub async fn get_learning_stats(&self) -> anyhow::Result<LearningStats> {
+        self.learning_stats().await
+    }
+
+    /// 获取任务状态
+    pub fn get_task_status(&self, task_id: &str) -> Option<&TaskState> {
+        self.active_tasks.get(task_id)
+    }
+
+    /// 获取执行上下文
+    pub fn get_execution_context(&self) -> &ExecutionContext {
+        &self.execution_context
+    }
+
+    /// 获取性能指标
+    pub fn get_performance_metrics(&self) -> &PerformanceMetrics {
+        &self.runtime_context.performance_metrics
+    }
+
+    /// 手动触发反思
+    pub async fn manual_reflect(&mut self) -> anyhow::Result<String> {
+        let reflection = self.reflect().await?;
+        let reflection_entry = ReflectionEntry {
+            timestamp: chrono::Utc::now().timestamp() as u64,
+            trigger: ReflectionTrigger::Manual,
+            content: reflection.clone(),
+            insights: vec![],
+            action_items: vec![],
+        };
+        self.runtime_context.add_reflection(reflection_entry);
+        Ok(reflection)
+    }
+
+    /// 创建新任务
+    pub fn create_task(&mut self, task_type: &str, description: &str) -> String {
+        let task_id = format!("task_{}", chrono::Utc::now().timestamp());
+        let task_state = TaskState {
+            task_id: task_id.clone(),
+            task_type: task_type.to_string(),
+            status: TaskStatus::Pending,
+            progress: 0.0,
+            created_at: chrono::Utc::now().timestamp() as u64,
+            updated_at: chrono::Utc::now().timestamp() as u64,
+            metadata: {
+                let mut meta = HashMap::new();
+                meta.insert("description".to_string(), description.to_string());
+                meta
+            },
+            steps: vec![],
+            current_step: 0,
+        };
+        self.active_tasks.insert(task_id.clone(), task_state);
+        task_id
+    }
+
+    /// 更新任务状态
+    pub fn update_task_status(&mut self, task_id: &str, status: TaskStatus) {
+        if let Some(task) = self.active_tasks.get_mut(task_id) {
+            task.status = status;
+            task.updated_at = chrono::Utc::now().timestamp() as u64;
+        }
     }
 }
 
-impl<M: Memory + Unpin + 'static, L: LLM + Unpin + 'static, T: ToolDelegate + Unpin + 'static> Agent
-    for ActorAgent<M, L, T>
-{
+impl<M: Memory, L: LLM, T: ToolDelegate> Agent for AiAgent<M, L, T> {
     type Memory = M;
     type LLM = L;
     type Tools = T;
@@ -1110,9 +1128,7 @@ impl<M: Memory + Unpin + 'static, L: LLM + Unpin + 'static, T: ToolDelegate + Un
     }
 }
 
-impl<M: Memory + Unpin + 'static, L: LLM + Unpin + 'static, T: ToolDelegate + Unpin + 'static>
-    AdvancedAgent for ActorAgent<M, L, T>
-{
+impl<M: Memory, L: LLM, T: ToolDelegate> AdvancedAgent for AiAgent<M, L, T> {
     fn runtime_context(&self) -> &RuntimeContext<Self::Memory, Self::LLM, Self::Tools> {
         &self.runtime_context
     }
@@ -1127,99 +1143,5 @@ impl<M: Memory + Unpin + 'static, L: LLM + Unpin + 'static, T: ToolDelegate + Un
 
     fn execution_context_mut(&mut self) -> &mut ExecutionContext {
         &mut self.execution_context
-    }
-}
-
-// Message Handlers
-impl<M: Memory + Unpin + 'static, L: LLM + Unpin + 'static, T: ToolDelegate + Unpin + 'static>
-    Handler<ProcessInput> for ActorAgent<M, L, T>
-{
-    type Result = ResponseActFuture<Self, anyhow::Result<String>>;
-
-    fn handle(&mut self, msg: ProcessInput, _ctx: &mut Self::Context) -> Self::Result {
-        let input = msg.input;
-        Box::pin(async move { self.process_with_full_context(&input).await }.into_actor(self))
-    }
-}
-
-impl<M: Memory + Unpin + 'static, L: LLM + Unpin + 'static, T: ToolDelegate + Unpin + 'static>
-    Handler<GetExecutionContext> for ActorAgent<M, L, T>
-{
-    type Result = anyhow::Result<ExecutionContext>;
-
-    fn handle(&mut self, _msg: GetExecutionContext, _ctx: &mut Self::Context) -> Self::Result {
-        Ok(self.execution_context.clone())
-    }
-}
-
-impl<M: Memory + Unpin + 'static, L: LLM + Unpin + 'static, T: ToolDelegate + Unpin + 'static>
-    Handler<UpdateConfig> for ActorAgent<M, L, T>
-{
-    type Result = anyhow::Result<()>;
-
-    fn handle(&mut self, msg: UpdateConfig, _ctx: &mut Self::Context) -> Self::Result {
-        self.runtime_context.config = msg.config;
-        Ok(())
-    }
-}
-
-impl<M: Memory + Unpin + 'static, L: LLM + Unpin + 'static, T: ToolDelegate + Unpin + 'static>
-    Handler<GetLearningStats> for ActorAgent<M, L, T>
-{
-    type Result = ResponseFuture<anyhow::Result<LearningStats>>;
-
-    fn handle(&mut self, _msg: GetLearningStats, _ctx: &mut Self::Context) -> Self::Result {
-        // 同样的问题，我们需要避免生命周期问题
-        Box::pin(async move {
-            Ok(LearningStats {
-                total_learned_items: 0,
-                recent_learning_rate: 0.0,
-                last_reflection_time: None,
-                knowledge_categories: vec!["general".to_string()],
-            })
-        })
-    }
-}
-
-impl<M: Memory + Unpin + 'static, L: LLM + Unpin + 'static, T: ToolDelegate + Unpin + 'static>
-    Handler<Learn> for ActorAgent<M, L, T>
-{
-    type Result = ResponseFuture<anyhow::Result<()>>;
-
-    fn handle(&mut self, _msg: Learn, _ctx: &mut Self::Context) -> Self::Result {
-        Box::pin(async move {
-            // 为了避免生命周期问题，暂时返回简单的 Ok
-            Ok(())
-        })
-    }
-}
-
-impl<M: Memory + Unpin + 'static, L: LLM + Unpin + 'static, T: ToolDelegate + Unpin + 'static>
-    Handler<Reflect> for ActorAgent<M, L, T>
-{
-    type Result = ResponseFuture<anyhow::Result<String>>;
-
-    fn handle(&mut self, _msg: Reflect, _ctx: &mut Self::Context) -> Self::Result {
-        Box::pin(async move { Ok("反思完成".to_string()) })
-    }
-}
-
-impl<M: Memory + Unpin + 'static, L: LLM + Unpin + 'static, T: ToolDelegate + Unpin + 'static>
-    Handler<ExecuteTask> for ActorAgent<M, L, T>
-{
-    type Result = ResponseFuture<anyhow::Result<String>>;
-
-    fn handle(&mut self, _msg: ExecuteTask, _ctx: &mut Self::Context) -> Self::Result {
-        Box::pin(async move { Ok("任务执行完成".to_string()) })
-    }
-}
-
-impl<M: Memory + Unpin + 'static, L: LLM + Unpin + 'static, T: ToolDelegate + Unpin + 'static>
-    Handler<GetTaskStatus> for ActorAgent<M, L, T>
-{
-    type Result = anyhow::Result<Option<TaskState>>;
-
-    fn handle(&mut self, msg: GetTaskStatus, _ctx: &mut Self::Context) -> Self::Result {
-        Ok(self.active_tasks.get(&msg.task_id).cloned())
     }
 }
