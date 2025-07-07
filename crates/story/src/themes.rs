@@ -4,7 +4,7 @@ use gpui::{div, Action, InteractiveElement as _, ParentElement as _, Render, Sha
 use gpui_component::{
     button::{Button, ButtonVariants},
     popup_menu::PopupMenuExt,
-    IconName, Theme, ThemeConfig,
+    IconName, Theme, ThemeColor, ThemeConfig,
 };
 
 fn parse_themes(source: &str) -> Vec<ThemeConfig> {
@@ -14,10 +14,12 @@ fn parse_themes(source: &str) -> Vec<ThemeConfig> {
 static THEMES: LazyLock<HashMap<SharedString, ThemeConfig>> = LazyLock::new(|| {
     let mut themes = HashMap::new();
     for source in [
-        include_str!("./themes/ayu.json"),
         include_str!("./themes/adventure.json"),
-        include_str!("./themes/tokyonight.json"),
+        include_str!("./themes/ayu.json"),
         include_str!("./themes/catppuccin.json"),
+        include_str!("./themes/macos-classic.json"),
+        include_str!("./themes/solarized.json"),
+        include_str!("./themes/tokyonight.json"),
     ] {
         for sub_theme in parse_themes(source) {
             themes.insert(sub_theme.name.clone(), sub_theme);
@@ -28,16 +30,16 @@ static THEMES: LazyLock<HashMap<SharedString, ThemeConfig>> = LazyLock::new(|| {
 
 #[derive(Action, Clone, PartialEq)]
 #[action(namespace = themes, no_json)]
-struct SwitchTheme(Option<SharedString>);
+struct SwitchTheme(SharedString);
 
 pub struct ThemeSwitcher {
-    current_theme_name: Option<SharedString>,
+    current_theme_name: SharedString,
 }
 
 impl ThemeSwitcher {
     pub fn new() -> Self {
         Self {
-            current_theme_name: None,
+            current_theme_name: "default-light".into(),
         }
     }
 }
@@ -52,13 +54,16 @@ impl Render for ThemeSwitcher {
             .id("theme-switcher")
             .on_action(cx.listener(|this, switch: &SwitchTheme, _, cx| {
                 this.current_theme_name = switch.0.clone();
+                let theme_name = this.current_theme_name.clone();
 
-                if let Some(theme_config) = this
-                    .current_theme_name
-                    .as_ref()
-                    .and_then(|name| THEMES.get(name).map(|theme| theme))
-                {
+                if let Some(theme_config) = THEMES.get(&theme_name).map(|theme| theme) {
                     Theme::global_mut(cx).apply_config(theme_config);
+                } else if theme_name == "default-light" {
+                    Theme::global_mut(cx).light_theme = ThemeColor::light();
+                    Theme::global_mut(cx).colors = ThemeColor::light();
+                } else if theme_name == "default-dark" {
+                    Theme::global_mut(cx).dark_theme = ThemeColor::dark();
+                    Theme::global_mut(cx).colors = ThemeColor::dark();
                 }
                 cx.notify();
             }))
@@ -69,21 +74,27 @@ impl Render for ThemeSwitcher {
                     .popup_menu({
                         let current_theme_id = self.current_theme_name.clone();
                         move |menu, _, _| {
-                            let mut menu = menu.menu_with_check(
-                                "Default",
-                                current_theme_id.is_none(),
-                                Box::new(SwitchTheme(None)),
-                            );
+                            let mut menu = menu
+                                .menu_with_check(
+                                    "Default Light",
+                                    current_theme_id == "default-light",
+                                    Box::new(SwitchTheme("default-light".into())),
+                                )
+                                .menu_with_check(
+                                    "Default Dark",
+                                    current_theme_id == "default-dark",
+                                    Box::new(SwitchTheme("default-dark".into())),
+                                );
 
                             let mut names = THEMES.keys().collect::<Vec<&SharedString>>();
                             names.sort();
 
                             for theme_name in names {
-                                let is_selected = Some(theme_name.clone()) == current_theme_id;
+                                let is_selected = *theme_name == current_theme_id;
                                 menu = menu.menu_with_check(
                                     theme_name.clone(),
                                     is_selected,
-                                    Box::new(SwitchTheme(Some(theme_name.clone()))),
+                                    Box::new(SwitchTheme(theme_name.clone())),
                                 );
                             }
 
