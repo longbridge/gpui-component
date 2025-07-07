@@ -1,4 +1,4 @@
-use crate::backoffice::agentic::prompts;
+use crate::backoffice::agentic::{prompts, ToolInfo};
 use crate::backoffice::cross_runtime::CrossRuntimeBridge;
 use crate::{
     backoffice::mcp::McpRegistry,
@@ -194,11 +194,11 @@ impl LlmService {
                         .tools
                         .into_iter()
                         .filter(|t| t.name == tool.tool_name)
-                        .map(|t| Tool {
-                            name: format!("{}@{}", tool.provider_id, t.name).into(),
-                            description: t.description.clone(),
-                            input_schema: t.input_schema.clone(),
-                            annotations: t.annotations.clone(),
+                        .map(|t| ToolInfo {
+                            name: ToolInfo::format_tool_name(&tool.provider_id, &tool.tool_name),
+                            description: t.description.unwrap_or_default().to_string(),
+                            parameters: serde_json::Value::Object(t.input_schema.as_ref().clone())
+                                .to_string(),
                         })
                         .collect::<Vec<_>>(),
                 );

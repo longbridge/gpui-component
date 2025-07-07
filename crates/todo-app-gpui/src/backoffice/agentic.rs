@@ -17,6 +17,8 @@ mod rig_llm;
 
 pub use mcp_tools::{BatchMcpToolDelegate, McpToolDelegate};
 
+use crate::backoffice::mcp::McpCallToolResult;
+
 /// 记忆类型枚举
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MemoryType {
@@ -407,24 +409,25 @@ pub type ChatStream = Pin<Box<dyn Stream<Item = anyhow::Result<ChatMessage>> + S
 
 /// LLM特性，定义了LLM的基本交互方法，包含了洞察和知识处理能力。
 pub trait LLM: Send + Sync {
+    type ToolDelegate: ToolDelegate<Output = McpCallToolResult, Args = String>;
     /// 基础对话能力 - 流式响应
     async fn completion_stream(&self, prompts: &[ChatMessage]) -> anyhow::Result<ChatStream>;
 
     /// 带工具调用的对话 - 流式响应
-    async fn completion_with_tools_stream<T: ToolDelegate>(
+    async fn completion_with_tools_stream(
         &self,
         prompts: &[ChatMessage],
-        tools: &T,
+        tools: &Self::ToolDelegate,
     ) -> anyhow::Result<ChatStream>;
 
     /// 对话接口 - 流式响应
     async fn chat_stream(&self, messages: &[ChatMessage]) -> anyhow::Result<ChatStream>;
 
     /// 带工具调用的对话 - 流式响应
-    async fn chat_with_tools_stream<T: ToolDelegate>(
+    async fn chat_with_tools_stream(
         &self,
         messages: &[ChatMessage],
-        tools: &T,
+        tools: &Self::ToolDelegate,
     ) -> anyhow::Result<ChatStream>;
 
     /// 基础对话能力 - 一次性响应（便捷方法）
@@ -470,10 +473,10 @@ pub trait LLM: Send + Sync {
     }
 
     /// 带工具调用的对话 - 一次性响应（便捷方法）
-    async fn chat_with_tools<T: ToolDelegate>(
+    async fn chat_with_tools(
         &self,
         messages: &[ChatMessage],
-        tools: &T,
+        tools: &Self::ToolDelegate,
     ) -> anyhow::Result<ChatMessage> {
         let mut stream = self.chat_with_tools_stream(messages, tools).await?;
         let mut final_message = ChatMessage::assistant_text("");
@@ -953,10 +956,16 @@ pub struct ToolInfo {
     pub parameters: String,
 }
 
+impl ToolInfo {
+    pub fn format_tool_name(provider_id: &str, tool_name: &str) -> String {
+        format!("{}@{}", provider_id, tool_name)
+    }
+}
+
 /// 工具调用的委托接口，允许不同的工具实现自己的调用逻辑。
 pub trait ToolDelegate: Send + Sync {
-    type Output: Debug + Send + Sync;
-    type Args: Send + Sync;
+    type Output;
+    type Args;
 
     /// 调用指定工具
     async fn call(&self, name: &str, args: Self::Args) -> anyhow::Result<Self::Output>;

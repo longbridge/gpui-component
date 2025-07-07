@@ -47,11 +47,6 @@ impl McpToolDelegate {
                 .find(|tool| tool.tool_name == name)
         }
     }
-
-    /// 格式化工具的完整名称
-    fn format_tool_name(provider_id: &str, tool_name: &str) -> String {
-        format!("{}@{}", provider_id, tool_name)
-    }
 }
 
 impl ToolDelegate for McpToolDelegate {
@@ -83,7 +78,7 @@ impl ToolDelegate for McpToolDelegate {
                         .into_iter()
                         .filter(|t| t.name == tool.tool_name)
                         .map(|t| ToolInfo {
-                            name: Self::format_tool_name(&tool.provider_id, &tool.tool_name),
+                            name: ToolInfo::format_tool_name(&tool.provider_id, &tool.tool_name),
                             description: t.description.unwrap_or_default().to_string(),
                             parameters: Value::Object(t.input_schema.as_ref().clone()).to_string(),
                         })

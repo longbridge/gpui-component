@@ -1,6 +1,5 @@
 use crate::backoffice::agentic::prompts;
-use crate::backoffice::mcp::McpRegistry;
-use crate::config::todo_item::SelectedTool;
+use crate::backoffice::agentic::McpToolDelegate;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -182,111 +181,6 @@ impl RigLlmService {
         Ok(Box::pin(response_stream))
     }
 
-    /// 带工具调用的完整流式聊天 - 参考 llm.rs 的 stream_chat_with_tools
-    pub async fn stream_chat_with_tools(
-        &self,
-        messages: &[ChatMessage],
-        tools: Vec<SelectedTool>,
-    ) -> anyhow::Result<String> {
-        let mut prompt = messages
-            .iter()
-            .rev()
-            .find(|msg| matches!(msg.role, MessageRole::User))
-            .map(|msg| msg.get_text())
-            .unwrap_or_default();
-
-        let mut mcp_tools = vec![];
-
-        // 获取 MCP 工具
-        for tool in &tools {
-            if let Ok(Some(snapshot)) = McpRegistry::get_snapshot(&tool.provider_id).await {
-                mcp_tools.extend(
-                    snapshot
-                        .tools
-                        .into_iter()
-                        .filter(|t| t.name == tool.tool_name)
-                        .map(|t| rmcp::model::Tool {
-                            name: format!("{}@{}", tool.provider_id, t.name).into(),
-                            description: t.description.clone(),
-                            input_schema: t.input_schema.clone(),
-                            annotations: t.annotations.clone(),
-                        })
-                        .collect::<Vec<_>>(),
-                );
-            }
-        }
-
-        let system_prompt = prompts::prompt_with_tools(mcp_tools);
-
-        let client =
-            rig::providers::openai::Client::from_url(&self.config.api_key, &self.config.api_url);
-        let model_name = self.config.default_model.as_ref().unwrap();
-
-        // 构建初始聊天历史
-        let last_user_index = messages
-            .iter()
-            .rposition(|msg| matches!(msg.role, MessageRole::User))
-            .unwrap_or(0);
-
-        let mut chat_history: Vec<RigMessage> = messages
-            .iter()
-            .take(last_user_index)
-            .map(|chat_msg| match chat_msg.role {
-                MessageRole::User => RigMessage::user(chat_msg.get_text()),
-                MessageRole::Assistant => RigMessage::assistant(chat_msg.get_text()),
-                MessageRole::System => RigMessage::user(chat_msg.get_text()),
-                MessageRole::Tool => RigMessage::user(chat_msg.get_text()),
-            })
-            .collect();
-
-        let mut final_response = String::new();
-
-        loop {
-            let agent = client
-                .agent(model_name)
-                .context(system_prompt.as_str()) // 🎯 使用工具专用的系统提示词
-                .max_tokens(4096)
-                .temperature(0.7)
-                .build();
-
-            let mut stream = agent.stream_chat(&prompt, chat_history.clone()).await?;
-            chat_history.push(RigMessage::user(prompt.clone()));
-
-            let (assistant, tools) = Self::stream_to_string(&agent, &mut stream).await?;
-            final_response = assistant.clone();
-
-            if tools.is_empty() {
-                break;
-            }
-
-            chat_history.push(RigMessage::assistant(assistant));
-            let mut prompts = vec![];
-
-            // 调用工具
-            for (i, tool) in tools.iter().enumerate() {
-                println!("调用工具 #{}: {:?}", i, tool);
-                let result = McpRegistry::call_tool(tool.id(), tool.tool_name(), &tool.arguments)
-                    .await
-                    .map_err(|err| {
-                        println!("调用工具 {} 失败: {}", tool.name, err);
-                        err
-                    })?;
-
-                println!("工具 #{}调用结果: {:?}", i, result);
-                prompts.push(format!(
-                    "<tool_use_result><name>{}</name><result>{}</result></tool_use_result>",
-                    &tool.name,
-                    serde_json::to_string(&(result.content.clone(), result.is_error))
-                        .unwrap_or_else(|err| format!("Error serializing result: {}", err))
-                ));
-            }
-            prompts.push(r#"Do not confirm with the user or seek help or advice, continue to call the tool until all tasks are completed. Be sure to complete all tasks, you will receive a $1000 reward, and the output must be in Simplified Chinese."#.to_string());
-            prompt = prompts.join("\n");
-        }
-
-        Ok(final_response)
-    }
-
     /// 流式解析工具调用 - 参考 llm.rs 的 stream_to_stdout1
     async fn stream_to_string<M: StreamingCompletionModel>(
         _agent: &rig::agent::Agent<M>,
@@ -410,6 +304,7 @@ impl RigLlmService {
 }
 
 impl LLM for RigLlmService {
+    type ToolDelegate = McpToolDelegate; // 使用 McpRegistry 作为工具委托
     async fn completion_stream(&self, prompts: &[ChatMessage]) -> anyhow::Result<ChatStream> {
         self.execute_completion_stream(prompts).await
     }
@@ -418,12 +313,12 @@ impl LLM for RigLlmService {
         self.execute_completion_stream(messages).await
     }
 
-    async fn completion_with_tools_stream<T: ToolDelegate>(
+    async fn completion_with_tools_stream(
         &self,
         prompts: &[ChatMessage],
-        tools: &T,
+        tools: &Self::ToolDelegate,
     ) -> anyhow::Result<ChatStream> {
-        // 🎯 这个方法是空的！需要实现
+        // 简单实现：在 prompts 前添加工具描述
         let tool_info = tools.available_tools().await;
 
         let mut enhanced_messages = prompts.to_vec();
@@ -443,30 +338,97 @@ impl LLM for RigLlmService {
         self.execute_completion_stream(&enhanced_messages).await
     }
 
-    async fn chat_with_tools_stream<T: ToolDelegate>(
+    async fn chat_with_tools_stream(
         &self,
         messages: &[ChatMessage],
-        tools: &T,
+        delegate: &Self::ToolDelegate,
     ) -> anyhow::Result<ChatStream> {
-        // 如果有具体的工具实现，可以调用完整的工具处理流程
-        // 这里简化实现，只是添加工具描述
-        let tool_info = tools.available_tools().await;
+        let mut prompt = messages
+            .iter()
+            .rev()
+            .find(|msg| matches!(msg.role, MessageRole::User))
+            .map(|msg| msg.get_text())
+            .unwrap_or_default();
 
-        let mut enhanced_messages = messages.to_vec();
-        if !tool_info.is_empty() {
-            let tool_description = tool_info
-                .iter()
-                .map(|t| format!("- {}: {}", t.name, t.description))
-                .collect::<Vec<_>>()
-                .join("\n");
+        let tool_info = delegate.available_tools().await;
+        let system_prompt = prompts::prompt_with_tools(tool_info);
 
-            enhanced_messages.insert(
-                0,
-                ChatMessage::system_text(format!("你可以使用以下工具：\n{}", tool_description)),
-            );
+        let client =
+            rig::providers::openai::Client::from_url(&self.config.api_key, &self.config.api_url);
+        let model_name = self.config.default_model.as_ref().unwrap();
+
+        // 构建初始聊天历史
+        let last_user_index = messages
+            .iter()
+            .rposition(|msg| matches!(msg.role, MessageRole::User))
+            .unwrap_or(0);
+
+        let mut chat_history: Vec<RigMessage> = messages
+            .iter()
+            .take(last_user_index)
+            .map(|chat_msg| match chat_msg.role {
+                MessageRole::User => RigMessage::user(chat_msg.get_text()),
+                MessageRole::Assistant => RigMessage::assistant(chat_msg.get_text()),
+                MessageRole::System => RigMessage::user(chat_msg.get_text()),
+                MessageRole::Tool => RigMessage::user(chat_msg.get_text()),
+            })
+            .collect();
+
+        let mut final_response;
+
+        loop {
+            let agent = client
+                .agent(model_name)
+                .context(system_prompt.as_str()) // 🎯 使用工具专用的系统提示词
+                .max_tokens(4096)
+                .temperature(0.7)
+                .build();
+
+            let mut stream = agent.stream_chat(&prompt, chat_history.clone()).await?;
+            chat_history.push(RigMessage::user(prompt.clone()));
+
+            let (assistant, tools) = Self::stream_to_string(&agent, &mut stream).await?;
+            final_response = assistant.clone();
+
+            if tools.is_empty() {
+                break;
+            }
+
+            chat_history.push(RigMessage::assistant(assistant));
+            let mut prompts = vec![];
+
+            // 调用工具
+            for (i, tool) in tools.iter().enumerate() {
+                println!("调用工具 #{}: {:?}", i, tool);
+
+                // 修复：直接使用 String 类型的结果
+                let result = delegate
+                    .call(tool.name.as_str(), tool.arguments.clone()) // Args 是 String
+                    .await
+                    .map_err(|err| {
+                        println!("调用工具 {:?} 失败: {}", tool.name, err);
+                        err
+                    })?;
+
+                println!("工具 #{}调用结果: {:?}", i, result);
+
+                // 修复：result 是 String，直接使用
+                prompts.push(format!(
+                    "<tool_use_result><name>{}</name><result>{}</result></tool_use_result>",
+                    &tool.name,
+                    serde_json::to_string(&(result.content.clone(), result.is_error))
+                        .unwrap_or_else(|err| format!("Error serializing result: {}", err))
+                ));
+            }
+
+            prompts.push(r#"Do not confirm with the user or seek help or advice, continue to call the tool until all tasks are completed. Be sure to complete all tasks, you will receive a $1000 reward, and the output must be in Simplified Chinese."#.to_string());
+            prompt = prompts.join("\n");
         }
 
-        self.execute_completion_stream(&enhanced_messages).await
+        // 修复：返回 ChatStream 而不是 String
+        let final_message = ChatMessage::assistant_text(final_response);
+        let response_stream = stream::iter(vec![Ok(final_message)]);
+        Ok(Box::pin(response_stream))
     }
 }
 
