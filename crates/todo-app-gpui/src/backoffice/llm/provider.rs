@@ -59,59 +59,6 @@ impl<'a> LlmProvider<'a> {
         Ok(models)
     }
 
-    // pub async fn stream_chat(
-    //     &self,
-    //     model_id: &str,
-    //     messages: &[ChatMessage],
-    // ) -> anyhow::Result<ChatStream> {
-    //     let client =
-    //         rig::providers::openai::Client::from_url(&self.config.api_key, &self.config.api_url);
-
-    //     let agent = client
-    //         .agent(model_id)
-    //         .context(prompts::default_prompt().as_str())
-    //         .max_tokens(4096)
-    //         .temperature(0.7)
-    //         .build();
-
-    //     // 找到最后一条用户消息的索引
-    //     let last_user_index = messages
-    //         .iter()
-    //         .rposition(|msg| matches!(msg.role, MessageRole::User))
-    //         .unwrap_or(0);
-
-    //     // 提取最后一条用户消息作为 prompt
-    //     let prompt = if last_user_index < messages.len() {
-    //         messages[last_user_index].get_text()
-    //     } else {
-    //         "执行".to_string()
-    //     };
-
-    //     // 转换除最后一条用户消息外的所有消息为上下文
-    //     let chat_history: Vec<RigMessage> = messages
-    //         .iter()
-    //         .take(last_user_index)
-    //         .map(|chat_msg| match chat_msg.role {
-    //             MessageRole::User => RigMessage::user(chat_msg.get_text()),
-    //             MessageRole::Assistant => RigMessage::assistant(chat_msg.get_text()),
-    //             MessageRole::System => RigMessage::user(chat_msg.get_text()),
-    //             MessageRole::Tool => RigMessage::user(chat_msg.get_text()),
-    //         })
-    //         .collect();
-
-    //     let rig_stream = agent.stream_chat(&prompt, chat_history).await?;
-    //     let chat_stream = rig_stream.map(|result| match result {
-    //         Ok(AssistantContent::Text(text)) => Ok(ChatMessage::assistant_chunk(text.text)),
-    //         Ok(AssistantContent::ToolCall(tool)) => Ok(ChatMessage::tool_call(ToolCall {
-    //             name: tool.function.name,
-    //             args: tool.function.arguments.to_string(),
-    //         })),
-    //         Err(e) => Err(anyhow::anyhow!("Stream error: {}", e)),
-    //     });
-
-    //     Ok(Box::pin(chat_stream))
-    // }
-
     pub async fn stream_chat(
         &self,
         model_id: &str,
@@ -121,9 +68,23 @@ impl<'a> LlmProvider<'a> {
             "开始使用 LLM Provider '{}' 进行聊天，模型 ID: '{}'",
             self.config.id, model_id
         );
+        messages.iter().for_each(|msg| {
+            println!(
+                "消息 - 角色: {:?}, 内容: {}",
+                msg.role,
+                msg.get_text().replace('\n', " ")
+            );
+        });
         let client =
             rig::providers::openai::Client::from_url(&self.config.api_key, &self.config.api_url);
 
+        let tools: Vec<ToolDefinition> = messages
+            .iter()
+            .flat_map(|msg| msg.get_tool_definitions())
+            .cloned()
+            .collect();
+        let no_tools = tools.is_empty();
+        let system_prompt = build_system_prompt(messages, tools);
         // 1. 从ChatMessage数组的contents字段里提取最后一条用户消息作为prompt
         let prompt = messages
             .iter()
@@ -131,8 +92,6 @@ impl<'a> LlmProvider<'a> {
             .find(|msg| matches!(msg.role, MessageRole::User))
             .map(|msg| msg.get_text())
             .unwrap_or_else(|| "执行".to_string());
-
-        // 获取最后一条用户消息的索引
         let last_user_index = messages
             .iter()
             .rposition(|msg| matches!(msg.role, MessageRole::User))
@@ -153,19 +112,6 @@ impl<'a> LlmProvider<'a> {
             })
             .collect();
 
-        // 3. 从ChatMessage数组里提取Tool消息（工具定义）
-        let tools: Vec<ToolDefinition> = messages
-            .iter()
-            .flat_map(|msg| msg.get_tool_definitions())
-            .cloned()
-            .collect();
-        let no_tools = tools.is_empty();
-        // 构建系统提示
-        let system_prompt = if no_tools {
-            prompts::default_prompt()
-        } else {
-            prompts::prompt_with_tools(tools)
-        };
         println!("使用系统提示: {}", system_prompt);
         let agent = client
             .agent(model_id)
@@ -180,28 +126,35 @@ impl<'a> LlmProvider<'a> {
         if no_tools {
             // 没有工具，使用简单的流转换
             let chat_stream = rig_stream.map(|result| match result {
-                Ok(AssistantContent::Text(text)) => {
-                    println!("接收到助手文本: {}", text.text);
-                    Ok(ChatMessage::assistant_chunk(text.text))
-                }
-                Ok(AssistantContent::ToolCall(tool)) => {
-                    println!("接收到工具调用: {:?}", tool);
-                    Ok(ChatMessage::tool_call(ToolCall {
-                        name: tool.function.name,
-                        args: tool.function.arguments.to_string(),
-                    }))
-                }
-                Err(e) => {
-                    println!("流处理错误: {}", e);
-                    Err(anyhow::anyhow!("Stream error: {}", e))
-                }
+                Ok(AssistantContent::Text(text)) => Ok(ChatMessage::assistant_chunk(text.text)),
+                Ok(AssistantContent::ToolCall(tool)) => Ok(ChatMessage::tool_call(ToolCall {
+                    name: tool.function.name,
+                    args: tool.function.arguments.to_string(),
+                })),
+                Err(e) => Err(anyhow::anyhow!("Stream error: {}", e)),
             });
             Ok(Box::pin(chat_stream))
         } else {
-            // 有工具，创建流式解析器
             let chat_stream = create_streaming_tool_parser(&agent, rig_stream);
             Ok(Box::pin(chat_stream))
         }
+    }
+}
+
+fn build_system_prompt(messages: &[ChatMessage], tools: Vec<ToolDefinition>) -> String {
+    let user_system_prompt = messages
+        .iter()
+        .rev() // 从最新的消息开始查找
+        .find(|msg| matches!(msg.role, MessageRole::System) && !msg.has_tool_definitions());
+    match (user_system_prompt, tools.is_empty()) {
+        (Some(user_system_prompt), false) => {
+            prompts::with_tools_user_system_prompt(tools, user_system_prompt.get_text())
+        }
+        (Some(custom_prompt), true) => {
+            prompts::default_with_user_system_prompt(custom_prompt.get_text())
+        }
+        (None, false) => prompts::with_tools(tools),
+        (None, true) => prompts::default_prompt(),
     }
 }
 

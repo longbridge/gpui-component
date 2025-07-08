@@ -71,8 +71,13 @@ fn get_locate_zone() -> String {
     let offset = Local::now().offset().to_string();
     format!("Local Offset: {}", offset)
 }
-
+const USER_SYSTEM_PROMPT: &str =
+    "You are an assistant, using known tools to help him complete tasks.";
 pub fn default_prompt() -> String {
+    default_with_user_system_prompt(USER_SYSTEM_PROMPT)
+}
+
+pub fn default_with_user_system_prompt<S: AsRef<str>>(user_system_prompt: S) -> String {
     let template = include_str!("default_prompt.md");
     template
         .replace("{{ OS_INFO }}", &get_os_info())
@@ -86,15 +91,14 @@ pub fn default_prompt() -> String {
         .replace("{{ HOME_DIRECTORY }}", &get_home_directory())
         .replace("{{ USER_LOCALE }}", &get_user_locale())
         .replace("{{ APPLICATION_INFO }}", "xTo-Do | Agentic AI")
+        .replace("{{ USER_SYSTEM_PROMPT }}", user_system_prompt.as_ref())
 }
 
-pub fn prompt_with_tools(tools: Vec<ToolDefinition>) -> String {
-    const USER_SYSTEM_PROMPT: &str =
-        "You are an assistant, using known tools to help him complete tasks.";
-    prompt_with_user_system_prompt(tools, USER_SYSTEM_PROMPT)
+pub fn with_tools(tools: Vec<ToolDefinition>) -> String {
+    with_tools_user_system_prompt(tools, USER_SYSTEM_PROMPT)
 }
 
-pub fn prompt_with_user_system_prompt<S: AsRef<str>>(
+pub fn with_tools_user_system_prompt<S: AsRef<str>>(
     tools: Vec<ToolDefinition>,
     user_system_prompt: S,
 ) -> String {

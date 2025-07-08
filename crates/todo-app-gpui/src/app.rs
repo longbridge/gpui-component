@@ -31,6 +31,7 @@ pub enum FoEvent {
     LlmConfigUpdated,
     TodoDialogMessage(String), // 任务对话框消息
     TodoUpdated,               // 任务更新事件
+    TodoChatWindowClosed(String),
 }
 
 actions!(story, [Quit, Open, CloseWindow, ToggleSearch]);

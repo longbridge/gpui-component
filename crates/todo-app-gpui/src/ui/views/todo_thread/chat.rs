@@ -65,7 +65,7 @@ impl TodoThreadChat {
 
         // 添加用户消息到聊天历史
         self.chat_messages.push(user_message);
-
+        let history_message = self.chat_messages.clone();
         // 清空输入框
         self.chat_input
             .update(cx, |input, cx| input.set_value("", window, cx));
@@ -87,7 +87,6 @@ impl TodoThreadChat {
         let provider_id = provider_info.id.clone();
         let model_id = selected_model.model_id.clone();
         let source = self.todoitem.id.clone();
-        let history_message = self.chat_messages.clone();
 
         // 发起异步调用
         cx.spawn(async move |this, cx| {

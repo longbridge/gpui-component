@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 
 use super::todo_thread_edit::TodoThreadEdit;
+use crate::ui::components::list::{List, ListDelegate, ListEvent, ListItem};
 use crate::ui::views::todo_thread::TodoThreadChat;
+use crate::xbus;
 use crate::{config::todo_item::*, ui::views::todo_thread_edit::Save as TodoSaved};
 use gpui::prelude::*;
 use gpui::*;
-use crate::ui::components::{list::{List, ListDelegate, ListEvent, ListItem}};
 use gpui_component::{
     button::{Button, ButtonGroup, ButtonVariants},
     indicator::Indicator,
@@ -447,6 +448,7 @@ pub struct TodoList {
     todo_list: Entity<List<TodoListDelegate>>,
     selected_todo: Option<Todo>,
     _subscriptions: Vec<Subscription>,
+    _global_subscriptions: Vec<xbus::Subscription>,
     todo_filter: TodoFilter,
     active_tab_ix: usize,
     opened_windows: HashMap<String, WindowHandle<Root>>,
@@ -498,6 +500,7 @@ impl TodoList {
             todo_list,
             selected_todo: None,
             _subscriptions,
+            _global_subscriptions: vec![],
             todo_filter: TodoFilter::default(),
             active_tab_ix: 0,
             opened_windows: HashMap::new(),

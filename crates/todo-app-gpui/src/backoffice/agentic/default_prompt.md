@@ -10,3 +10,9 @@
 - Working Directory: {{ WORKING_DIRECTORY }} (if relevant for file operations)
 - User Locale: {{ USER_LOCALE }}
 - Application: {{ APPLICATION_INFO }}
+
+## User Instructions
+
+{{ USER_SYSTEM_PROMPT }}
+
+Now Begin! If you solve the task correctly, you will receive a reward of $1,000,000.

@@ -1,5 +1,6 @@
 mod chat;
 mod view;
+use crate::app::FoEvent;
 use crate::backoffice::cross_runtime::StreamMessage;
 use crate::backoffice::llm::types::{ChatMessage, MessageRole};
 use crate::config::todo_item::*;
@@ -119,6 +120,11 @@ impl TodoThreadChat {
     }
 
     fn new(todoitem: Todo, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let todo_id = todoitem.id.clone();
+        window.on_window_should_close(cx, move |_window, _app| {
+            CrossRuntimeBridge::global().post(FoEvent::TodoChatWindowClosed(todo_id.clone()));
+            true
+        });
         // 聊天输入框 - 多行支持
         let chat_input = cx.new(|cx| {
             let placeholder = if cfg!(target_os = "macos") {
