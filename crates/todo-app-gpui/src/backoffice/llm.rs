@@ -1,6 +1,9 @@
-mod service;
+mod provider;
+pub mod types;
+
 use crate::backoffice::agentic::{prompts, ToolInfo};
 use crate::backoffice::cross_runtime::CrossRuntimeBridge;
+use crate::backoffice::llm::provider::LlmProvider;
 use crate::{
     backoffice::mcp::McpRegistry,
     backoffice::{BoEvent, YamlFile},
@@ -20,7 +23,6 @@ use rig::{
 use rmcp::model::Tool;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, time::Duration};
-
 
 #[derive(Message)]
 #[rtype(result = "LlmChatResult")]
@@ -73,7 +75,7 @@ pub struct LlmChatResult {
 
 // Registry 保持不变，但使用新的命名
 pub struct LlmRegistry {
-    providers: HashMap<String, RigLlmService>,
+    providers: HashMap<String, LlmProviderConfig>,
     file: YamlFile,
     handle: Option<SpawnHandle>,
 }
@@ -110,14 +112,23 @@ impl LlmRegistry {
             // 添加新启用的提供商
             for config in configs.iter().filter(|c| c.enabled) {
                 if !self.providers.contains_key(&config.id) {
-                   let mut llm =  RigLlmService::new(config.clone())?;
-                   async move {
-                     llm.load_models().await;
-                     llm
-                   }.into_actor(self).then(|llm,act,ctx|{
-                    act.providers.insert(llm.config.id.clone(), llm);
-                    fut::ready(())
-                   }).spawn(ctx);
+                    let mut llm = LlmProvider::new(config.clone())?;
+                    let mut config = config.clone();
+                    async move { llm.load_models().await }
+                        .into_actor(self)
+                        .then(move |models, act, ctx| match models {
+                            Ok(models) => {
+                                log::info!("Loaded models for {}: {:?}", config.id, models);
+                                config.models = models;
+                                act.providers.insert(config.id.clone(), config);
+                                fut::ready(())
+                            }
+                            Err(err) => {
+                                log::error!("Failed to load models for {}: {}", config.id, err);
+                                fut::ready(())
+                            }
+                        })
+                        .spawn(ctx);
                 }
             }
             self.file.open()?;
@@ -175,7 +186,7 @@ impl Handler<LlmChatRequest> for LlmRegistry {
     type Result = ResponseActFuture<Self, LlmChatResult>;
 
     fn handle(&mut self, msg: LlmChatRequest, _ctx: &mut Self::Context) -> Self::Result {
-        if let Some(worker) = self.providers.get(&msg.provider_id) {
+        if let Some(config) = self.providers.get(&msg.provider_id) {
             let provider_id = msg.provider_id.clone();
             let model_id = msg.model_id.clone();
             worker
