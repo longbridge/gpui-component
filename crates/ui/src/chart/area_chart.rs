@@ -94,8 +94,8 @@ where
             return;
         }
 
-        let width = bounds.size.width.to_f64();
-        let height = bounds.size.height.to_f64() - AXIS_GAP;
+        let width = bounds.size.width.0;
+        let height = bounds.size.height.0 - AXIS_GAP;
 
         // X scale
         let x = ScalePoint::new(self.data.iter().map(|v| x_fn(v)).collect(), vec![0., width]);
@@ -134,7 +134,7 @@ where
 
         // Draw grid
         Grid::new()
-            .y((0..=3).map(|i| height * i as f64 / 4.0).collect())
+            .y((0..=3).map(|i| height * i as f32 / 4.0).collect())
             .stroke(cx.theme().border)
             .dash_array(&[px(4.), px(2.)])
             .paint(&bounds, window);

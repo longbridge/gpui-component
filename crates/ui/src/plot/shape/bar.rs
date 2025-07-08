@@ -8,10 +8,10 @@ use crate::plot::{
 #[allow(clippy::type_complexity)]
 pub struct Bar<T> {
     data: Vec<T>,
-    x: Box<dyn Fn(&T) -> Option<f64>>,
-    band_width: f64,
-    y0: f64,
-    y1: Box<dyn Fn(&T) -> Option<f64>>,
+    x: Box<dyn Fn(&T) -> Option<f32>>,
+    band_width: f32,
+    y0: f32,
+    y1: Box<dyn Fn(&T) -> Option<f32>>,
     fill: Box<dyn Fn(&T) -> Hsla>,
     label: Option<Box<dyn Fn(&T, Point<Pixels>) -> Text>>,
 }
@@ -47,20 +47,20 @@ impl<T> Bar<T> {
     /// Set the x of the Bar.
     pub fn x<F>(mut self, x: F) -> Self
     where
-        F: Fn(&T) -> Option<f64> + 'static,
+        F: Fn(&T) -> Option<f32> + 'static,
     {
         self.x = Box::new(x);
         self
     }
 
     /// Set the band width of the Bar.
-    pub fn band_width(mut self, band_width: f64) -> Self {
+    pub fn band_width(mut self, band_width: f32) -> Self {
         self.band_width = band_width;
         self
     }
 
     /// Set the y0 of the Bar.
-    pub fn y0(mut self, y0: f64) -> Self {
+    pub fn y0(mut self, y0: f32) -> Self {
         self.y0 = y0;
         self
     }
@@ -68,7 +68,7 @@ impl<T> Bar<T> {
     /// Set the y1 of the Bar.
     pub fn y1<F>(mut self, y: F) -> Self
     where
-        F: Fn(&T) -> Option<f64> + 'static,
+        F: Fn(&T) -> Option<f32> + 'static,
     {
         self.y1 = Box::new(y);
         self
@@ -106,21 +106,13 @@ impl<T> Bar<T> {
                 let is_negative = y_tick > self.y0;
                 let (p1, p2) = if is_negative {
                     (
-                        origin_point(px(x_tick as f32), px(self.y0 as f32), origin),
-                        origin_point(
-                            px((x_tick + self.band_width) as f32),
-                            px(y_tick as f32),
-                            origin,
-                        ),
+                        origin_point(px(x_tick), px(self.y0), origin),
+                        origin_point(px(x_tick + self.band_width), px(y_tick), origin),
                     )
                 } else {
                     (
-                        origin_point(px(x_tick as f32), px(y_tick as f32), origin),
-                        origin_point(
-                            px((x_tick + self.band_width) as f32),
-                            px(self.y0 as f32),
-                            origin,
-                        ),
+                        origin_point(px(x_tick), px(y_tick), origin),
+                        origin_point(px(x_tick + self.band_width), px(self.y0), origin),
                     )
                 };
 
@@ -132,11 +124,11 @@ impl<T> Bar<T> {
                     labels.push(label(
                         v,
                         point(
-                            px((x_tick + self.band_width / 2.) as f32),
+                            px(x_tick + self.band_width / 2.),
                             if is_negative {
-                                px((y_tick + TEXT_GAP) as f32)
+                                px(y_tick + TEXT_GAP)
                             } else {
-                                px((y_tick - TEXT_HEIGHT) as f32)
+                                px(y_tick - TEXT_HEIGHT)
                             },
                         ),
                     ));

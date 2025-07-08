@@ -7,9 +7,9 @@ use gpui::{
 
 use super::origin_point;
 
-pub const TEXT_SIZE: f64 = 10.;
-pub const TEXT_GAP: f64 = 2.;
-pub const TEXT_HEIGHT: f64 = TEXT_SIZE + TEXT_GAP;
+pub const TEXT_SIZE: f32 = 10.;
+pub const TEXT_GAP: f32 = 2.;
+pub const TEXT_HEIGHT: f32 = TEXT_SIZE + TEXT_GAP;
 
 pub struct Text {
     pub text: SharedString,

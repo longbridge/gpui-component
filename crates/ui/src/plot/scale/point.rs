@@ -8,14 +8,14 @@ use super::Scale;
 #[derive(Clone)]
 pub struct ScalePoint<T> {
     domain: Vec<T>,
-    range_tick: f64,
+    range_tick: f32,
 }
 
 impl<T> ScalePoint<T>
 where
     T: PartialEq,
 {
-    pub fn new(domain: Vec<T>, range: Vec<f64>) -> Self {
+    pub fn new(domain: Vec<T>, range: Vec<f32>) -> Self {
         let len = domain.len();
         let range_tick = if len.is_zero() {
             0.
@@ -26,7 +26,7 @@ where
                 .into_option()
                 .map_or(0., |(min, max)| max - min);
 
-            range_diff / (len - 1) as f64
+            range_diff / (len - 1) as f32
         };
 
         Self { domain, range_tick }
@@ -37,12 +37,12 @@ impl<T> Scale<T> for ScalePoint<T>
 where
     T: PartialEq,
 {
-    fn tick(&self, value: &T) -> Option<f64> {
+    fn tick(&self, value: &T) -> Option<f32> {
         let index = self.domain.iter().position(|v| v == value)?;
-        Some(index as f64 * self.range_tick)
+        Some(index as f32 * self.range_tick)
     }
 
-    fn least_index(&self, tick: f64) -> usize {
+    fn least_index(&self, tick: f32) -> usize {
         let index = (tick / self.range_tick).round() as usize;
         index.min(self.domain.len().saturating_sub(1))
     }

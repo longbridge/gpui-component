@@ -5,7 +5,7 @@ use gpui::{
 
 use super::{label::Label, label::Text, label::TEXT_GAP, label::TEXT_SIZE, origin_point};
 
-pub const AXIS_GAP: f64 = 18.;
+pub const AXIS_GAP: f32 = 18.;
 
 pub struct AxisText {
     pub text: SharedString,
@@ -75,7 +75,7 @@ impl Axis {
                 .into_iter()
                 .map(|t| Text {
                     text: t.text,
-                    origin: point(t.tick, x + px((TEXT_GAP * 3.) as f32)),
+                    origin: point(t.tick, x + px(TEXT_GAP * 3.)),
                     color: t.color,
                     font_size: t.font_size,
                     font_weight: FontWeight::NORMAL,
@@ -105,7 +105,7 @@ impl Axis {
                 .into_iter()
                 .map(|t| Text {
                     text: t.text,
-                    origin: point(y + px(TEXT_GAP as f32), t.tick),
+                    origin: point(y + px(TEXT_GAP), t.tick),
                     color: t.color,
                     font_size: t.font_size,
                     font_weight: FontWeight::NORMAL,

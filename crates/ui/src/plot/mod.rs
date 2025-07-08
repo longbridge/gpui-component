@@ -35,15 +35,15 @@ where
 
 pub fn polygon<T>(points: &[Point<T>], bounds: &Bounds<Pixels>) -> Option<Path<Pixels>>
 where
-    T: Default + Clone + Copy + Debug + Into<f64> + PartialEq,
+    T: Default + Clone + Copy + Debug + Into<f32> + PartialEq,
 {
     let mut path = PathBuilder::stroke(px(1.));
     let points = &points
         .iter()
         .map(|p| {
             point(
-                px((p.x.into() + bounds.origin.x.to_f64()) as f32),
-                px((p.y.into() + bounds.origin.y.to_f64()) as f32),
+                px(p.x.into() + bounds.origin.x.0),
+                px(p.y.into() + bounds.origin.y.0),
             )
         })
         .collect::<Vec<_>>();

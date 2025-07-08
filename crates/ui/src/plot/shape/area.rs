@@ -7,9 +7,9 @@ use crate::plot::{origin_point, StrokeStyle};
 #[allow(clippy::type_complexity)]
 pub struct Area<T> {
     data: Vec<T>,
-    x: Box<dyn Fn(&T) -> Option<f64>>,
-    y0: Option<f64>,
-    y1: Box<dyn Fn(&T) -> Option<f64>>,
+    x: Box<dyn Fn(&T) -> Option<f32>>,
+    y0: Option<f32>,
+    y1: Box<dyn Fn(&T) -> Option<f32>>,
     fill: Background,
     stroke: Background,
     stroke_style: StrokeStyle,
@@ -46,14 +46,14 @@ impl<T> Area<T> {
     /// Set the x of the Area.
     pub fn x<F>(mut self, x: F) -> Self
     where
-        F: Fn(&T) -> Option<f64> + 'static,
+        F: Fn(&T) -> Option<f32> + 'static,
     {
         self.x = Box::new(x);
         self
     }
 
     /// Set the y0 of the Area.
-    pub fn y0(mut self, y0: f64) -> Self {
+    pub fn y0(mut self, y0: f32) -> Self {
         self.y0 = Some(y0);
         self
     }
@@ -61,7 +61,7 @@ impl<T> Area<T> {
     /// Set the y1 of the Area.
     pub fn y1<F>(mut self, y1: F) -> Self
     where
-        F: Fn(&T) -> Option<f64> + 'static,
+        F: Fn(&T) -> Option<f32> + 'static,
     {
         self.y1 = Box::new(y1);
         self
@@ -97,7 +97,7 @@ impl<T> Area<T> {
             let y_tick = (self.y1)(v);
 
             if let (Some(x), Some(y)) = (x_tick, y_tick) {
-                let pos = origin_point(px(x as f32), px(y as f32), origin);
+                let pos = origin_point(px(x), px(y), origin);
 
                 points.push(pos);
             }
@@ -150,8 +150,8 @@ impl<T> Area<T> {
         if let Some(last) = self.data.last() {
             let x_tick = (self.x)(last);
             if let (Some(x), Some(y)) = (x_tick, self.y0) {
-                area_builder.line_to(origin_point(px(x as f32), px(y as f32), bounds.origin));
-                area_builder.line_to(origin_point(px(0.), px(y as f32), bounds.origin));
+                area_builder.line_to(origin_point(px(x), px(y), bounds.origin));
+                area_builder.line_to(origin_point(px(0.), px(y), bounds.origin));
                 area_builder.close();
             }
         }

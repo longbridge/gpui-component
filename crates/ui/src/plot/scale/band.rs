@@ -8,15 +8,15 @@ use super::Scale;
 #[derive(Clone)]
 pub struct ScaleBand<T> {
     domain: Vec<T>,
-    range_diff: f64,
-    avg_width: f64,
-    padding_inner: f64,
-    padding_outer: f64,
+    range_diff: f32,
+    avg_width: f32,
+    padding_inner: f32,
+    padding_outer: f32,
 }
 
 impl<T> ScaleBand<T> {
-    pub fn new(domain: Vec<T>, range: Vec<f64>) -> Self {
-        let len = domain.len() as f64;
+    pub fn new(domain: Vec<T>, range: Vec<f32>) -> Self {
+        let len = domain.len() as f32;
         let range_diff = range
             .iter()
             .minmax()
@@ -33,18 +33,18 @@ impl<T> ScaleBand<T> {
     }
 
     /// Get the width of the band.
-    pub fn band_width(&self) -> f64 {
+    pub fn band_width(&self) -> f32 {
         (self.avg_width * (1. - self.padding_inner)).min(30.)
     }
 
     /// Set the padding inner of the band.
-    pub fn padding_inner(mut self, padding_inner: f64) -> Self {
+    pub fn padding_inner(mut self, padding_inner: f32) -> Self {
         self.padding_inner = padding_inner;
         self
     }
 
     /// Set the padding outer of the band.
-    pub fn padding_outer(mut self, padding_outer: f64) -> Self {
+    pub fn padding_outer(mut self, padding_outer: f32) -> Self {
         self.padding_outer = padding_outer;
         self
     }
@@ -54,7 +54,7 @@ impl<T> Scale<T> for ScaleBand<T>
 where
     T: PartialEq,
 {
-    fn tick(&self, value: &T) -> Option<f64> {
+    fn tick(&self, value: &T) -> Option<f32> {
         let index = self.domain.iter().position(|v| v == value)?;
         let domain_len = self.domain.len();
 
@@ -63,13 +63,13 @@ where
             return Some((self.range_diff - self.band_width()) / 2.);
         }
 
-        let ratio = 1. + self.padding_inner / (self.domain.len() - 1) as f64;
+        let ratio = 1. + self.padding_inner / (self.domain.len() - 1) as f32;
         let padding_outer_width = self.avg_width * self.padding_outer;
-        let avg_width = (self.range_diff - padding_outer_width * 2.) / self.domain.len() as f64;
-        Some(index as f64 * avg_width * ratio + padding_outer_width)
+        let avg_width = (self.range_diff - padding_outer_width * 2.) / self.domain.len() as f32;
+        Some(index as f32 * avg_width * ratio + padding_outer_width)
     }
 
-    fn least_index(&self, tick: f64) -> usize {
+    fn least_index(&self, tick: f32) -> usize {
         let index = (tick / self.avg_width).round() as usize;
         index.min(self.domain.len().saturating_sub(1))
     }

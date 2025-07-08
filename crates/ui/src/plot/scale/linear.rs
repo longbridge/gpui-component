@@ -10,15 +10,15 @@ pub struct ScaleLinear<T> {
     domain_len: usize,
     domain_min: T,
     domain_diff: T,
-    range_min: f64,
-    range_diff: f64,
+    range_min: f32,
+    range_diff: f32,
 }
 
 impl<T> ScaleLinear<T>
 where
     T: Copy + PartialOrd + Num + ToPrimitive + Sealed,
 {
-    pub fn new(domain: Vec<T>, range: Vec<f64>) -> Self {
+    pub fn new(domain: Vec<T>, range: Vec<f32>) -> Self {
         let (domain_min, domain_max) = domain
             .iter()
             .minmax()
@@ -45,17 +45,17 @@ impl<T> Scale<T> for ScaleLinear<T>
 where
     T: Copy + PartialOrd + Num + ToPrimitive + Sealed,
 {
-    fn tick(&self, value: &T) -> Option<f64> {
+    fn tick(&self, value: &T) -> Option<f32> {
         if self.domain_diff.is_zero() {
             return None;
         }
 
-        let ratio = ((*value - self.domain_min) / self.domain_diff).to_f64()?;
+        let ratio = ((*value - self.domain_min) / self.domain_diff).to_f32()?;
 
         Some((1. - ratio) * self.range_diff + self.range_min)
     }
 
-    fn least_index(&self, tick: f64) -> usize {
+    fn least_index(&self, tick: f32) -> usize {
         let index = (tick / self.range_diff).round() as usize;
         index.min(self.domain_len.saturating_sub(1))
     }

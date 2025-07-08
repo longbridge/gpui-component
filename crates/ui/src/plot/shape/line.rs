@@ -10,8 +10,8 @@ use crate::plot::{origin_point, StrokeStyle};
 #[allow(clippy::type_complexity)]
 pub struct Line<T> {
     data: Vec<T>,
-    x: Box<dyn Fn(&T) -> Option<f64>>,
-    y: Box<dyn Fn(&T) -> Option<f64>>,
+    x: Box<dyn Fn(&T) -> Option<f32>>,
+    y: Box<dyn Fn(&T) -> Option<f32>>,
     stroke: Background,
     stroke_width: Pixels,
     stroke_style: StrokeStyle,
@@ -55,7 +55,7 @@ impl<T> Line<T> {
     /// Set the x of the Line.
     pub fn x<F>(mut self, x: F) -> Self
     where
-        F: Fn(&T) -> Option<f64> + 'static,
+        F: Fn(&T) -> Option<f32> + 'static,
     {
         self.x = Box::new(x);
         self
@@ -64,7 +64,7 @@ impl<T> Line<T> {
     /// Set the y of the Line.
     pub fn y<F>(mut self, y: F) -> Self
     where
-        F: Fn(&T) -> Option<f64> + 'static,
+        F: Fn(&T) -> Option<f32> + 'static,
     {
         self.y = Box::new(y);
         self
@@ -135,15 +135,11 @@ impl<T> Line<T> {
             let y_tick = (self.y)(v);
 
             if let (Some(x), Some(y)) = (x_tick, y_tick) {
-                let pos = origin_point(px(x as f32), px(y as f32), origin);
+                let pos = origin_point(px(x), px(y), origin);
 
                 if self.dot {
-                    let dot_radius = self.dot_size.to_f64() / 2.;
-                    let dot_pos = origin_point(
-                        px((x - dot_radius) as f32),
-                        px((y - dot_radius) as f32),
-                        origin,
-                    );
+                    let dot_radius = self.dot_size.0 / 2.;
+                    let dot_pos = origin_point(px(x - dot_radius), px(y - dot_radius), origin);
                     paint_dots.push(self.paint_dot(dot_pos));
                 }
 

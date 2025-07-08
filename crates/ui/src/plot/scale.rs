@@ -10,8 +10,8 @@ pub(crate) use sealed::Sealed;
 
 pub trait Scale<T> {
     /// Get the tick of the scale.
-    fn tick(&self, value: &T) -> Option<f64>;
+    fn tick(&self, value: &T) -> Option<f32>;
 
     /// Get the least index of the scale.
-    fn least_index(&self, tick: f64) -> usize;
+    fn least_index(&self, tick: f32) -> usize;
 }
