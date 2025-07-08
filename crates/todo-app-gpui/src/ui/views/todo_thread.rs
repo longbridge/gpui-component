@@ -146,7 +146,6 @@ impl TodoThreadChat {
             },
         );
         cx.spawn(async move |this, app| {
-            println!("开始接收消息");
             let _sub = _sub;
             'a: loop {
                 Timer::after(Duration::from_millis(50)).await;
@@ -181,7 +180,6 @@ impl TodoThreadChat {
                     })
                     .ok();
             }
-            println!("消息接收循环结束");
         })
         .detach();
 
