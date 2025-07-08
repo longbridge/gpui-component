@@ -1,76 +1,32 @@
 mod provider;
 pub mod types;
 
-use crate::backoffice::agentic::{prompts, ToolInfo};
-use crate::backoffice::cross_runtime::CrossRuntimeBridge;
 use crate::backoffice::llm::provider::LlmProvider;
+use crate::backoffice::llm::types::{ChatMessage, ChatStream};
 use crate::{
-    backoffice::mcp::McpRegistry,
-    backoffice::{BoEvent, YamlFile},
+    backoffice::YamlFile,
     config::{llm_config::*, provider_config_path, todo_item::SelectedTool},
-    ui::views::todo_thread::{ChatMessage, StreamMessage},
 };
 use actix::prelude::*;
-use futures::StreamExt;
-use gpui_component::fuchsia;
-use rig::completion::{Completion, Prompt};
-use rig::streaming::StreamingCompletion;
-use rig::{
-    agent::Agent,
-    message::{Message as RigMessage, *},
-    streaming::{StreamingChat, StreamingCompletionModel, StreamingCompletionResponse},
-};
-use rmcp::model::Tool;
-use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, time::Duration};
 
 #[derive(Message)]
-#[rtype(result = "LlmChatResult")]
+#[rtype(result = "anyhow::Result<ChatStream>")]
 pub struct LlmChatRequest {
     pub provider_id: String,
     pub model_id: String,
     pub source: String,
-    pub prompt: String,
-    pub chat_history: Vec<ChatMessage>,
+    pub messages: Vec<ChatMessage>,
 }
 
 #[derive(Message)]
-#[rtype(result = "LlmChatResult")]
+#[rtype(result = "anyhow::Result<ChatStream>")]
 pub struct LlmChatWithToolsRequest {
     pub provider_id: String,
     pub model_id: String,
     pub source: String,
-    pub prompt: String,
+    pub messages: Vec<ChatMessage>,
     pub tools: Vec<SelectedTool>,
-    pub chat_history: Vec<ChatMessage>,
-}
-
-#[derive(Message)]
-#[rtype(result = "anyhow::Result<Vec<ModelInfo>>")]
-pub struct LoadModelsRequest {
-    pub provider_id: String,
-}
-
-#[derive(Message)]
-#[rtype(result = "anyhow::Result<()>")]
-pub struct SyncModelsRequest {
-    pub provider_id: String,
-}
-
-#[derive(Message)]
-#[rtype(result = "Vec<ModelInfo>")]
-pub struct GetProviderModelsRequest {
-    pub provider_id: String,
-    pub enabled_only: bool,
-}
-
-#[derive(Debug, Clone)]
-pub struct LlmChatResult {
-    pub provider_id: String,
-    pub model_id: String,
-    pub response: String,
-    pub is_error: bool,
-    pub error_message: Option<String>,
 }
 
 // Registry 保持不变，但使用新的命名
@@ -96,39 +52,32 @@ impl LlmRegistry {
                 .collect();
 
             // 移除不再启用的提供商
-            let providers_to_remove: Vec<String> = self
-                .providers
-                .keys()
-                .filter(|id| !enabled_ids.contains(&id.as_str()))
-                .cloned()
-                .collect();
-
-            for provider_id in providers_to_remove {
-                if let Some(addr) = self.providers.remove(&provider_id) {
-                    self.providers.remove(&provider_id);
-                }
-            }
+            self.providers
+                .retain(|id, _| enabled_ids.contains(&id.as_str()));
 
             // 添加新启用的提供商
             for config in configs.iter().filter(|c| c.enabled) {
                 if !self.providers.contains_key(&config.id) {
-                    let mut llm = LlmProvider::new(config.clone())?;
-                    let mut config = config.clone();
-                    async move { llm.load_models().await }
-                        .into_actor(self)
-                        .then(move |models, act, ctx| match models {
-                            Ok(models) => {
-                                log::info!("Loaded models for {}: {:?}", config.id, models);
-                                config.models = models;
-                                act.providers.insert(config.id.clone(), config);
-                                fut::ready(())
-                            }
-                            Err(err) => {
-                                log::error!("Failed to load models for {}: {}", config.id, err);
-                                fut::ready(())
-                            }
-                        })
-                        .spawn(ctx);
+                    let config_clone = config.clone();
+                    let mut config = config_clone.clone();
+                    async move {
+                        let llm = LlmProvider::new(&config_clone)?;
+                        llm.load_models().await
+                    }
+                    .into_actor(self)
+                    .then(move |models, act, ctx| match models {
+                        Ok(models) => {
+                            log::info!("Loaded models for {}: {:?}", config.id, models);
+                            config.models = models;
+                            act.providers.insert(config.id.clone(), config);
+                            fut::ready(())
+                        }
+                        Err(err) => {
+                            log::error!("Failed to load models for {}: {}", config.id, err);
+                            fut::ready(())
+                        }
+                    })
+                    .spawn(ctx);
                 }
             }
             self.file.open()?;
@@ -183,35 +132,27 @@ impl Actor for LlmRegistry {
 }
 
 impl Handler<LlmChatRequest> for LlmRegistry {
-    type Result = ResponseActFuture<Self, LlmChatResult>;
+    type Result = ResponseActFuture<Self, anyhow::Result<ChatStream>>;
 
     fn handle(&mut self, msg: LlmChatRequest, _ctx: &mut Self::Context) -> Self::Result {
-        if let Some(config) = self.providers.get(&msg.provider_id) {
-            let provider_id = msg.provider_id.clone();
+        if let Some(config) = self.providers.get(&msg.provider_id).cloned() {
             let model_id = msg.model_id.clone();
-            worker
-                .send(msg)
-                .into_actor(self)
-                .map(|res, _act, _ctx| match res {
-                    Ok(result) => result,
-                    Err(err) => LlmChatResult {
-                        provider_id,
-                        model_id,
-                        response: String::new(),
-                        is_error: true,
-                        error_message: Some(format!("Actor error: {}", err)),
-                    },
-                })
-                .boxed_local()
-        } else {
+            let messages = msg.messages;
+
             async move {
-                LlmChatResult {
-                    provider_id: msg.provider_id.clone(),
-                    model_id: msg.model_id.clone(),
-                    response: String::new(),
-                    is_error: true,
-                    error_message: Some("Provider not found".to_string()),
-                }
+                let llm = LlmProvider::new(&config)?;
+                llm.stream_chat(&model_id, &messages).await
+            }
+            .into_actor(self)
+            .map(|res, _act, _ctx| res)
+            .boxed_local()
+        } else {
+            let provider_id = msg.provider_id.clone();
+            async move {
+                Err(anyhow::anyhow!(
+                    "Provider '{}' not found or not enabled",
+                    provider_id
+                ))
             }
             .into_actor(self)
             .boxed_local()
@@ -220,35 +161,42 @@ impl Handler<LlmChatRequest> for LlmRegistry {
 }
 
 impl Handler<LlmChatWithToolsRequest> for LlmRegistry {
-    type Result = ResponseActFuture<Self, LlmChatResult>;
+    type Result = ResponseActFuture<Self, anyhow::Result<ChatStream>>;
 
     fn handle(&mut self, msg: LlmChatWithToolsRequest, _ctx: &mut Self::Context) -> Self::Result {
-        if let Some(worker) = self.providers.get(&msg.provider_id) {
-            let provider_id = msg.provider_id.clone();
+        if let Some(config) = self.providers.get(&msg.provider_id).cloned() {
             let model_id = msg.model_id.clone();
-            worker
-                .send(msg)
-                .into_actor(self)
-                .map(|res, _act, _ctx| match res {
-                    Ok(result) => result,
-                    Err(err) => LlmChatResult {
-                        provider_id,
-                        model_id,
-                        response: String::new(),
-                        is_error: true,
-                        error_message: Some(format!("Actor error: {}", err)),
-                    },
-                })
-                .boxed_local()
-        } else {
+            let messages = msg.messages;
+            let tools = msg.tools;
+
             async move {
-                LlmChatResult {
-                    provider_id: msg.provider_id.clone(),
-                    model_id: msg.model_id.clone(),
-                    response: String::new(),
-                    is_error: true,
-                    error_message: Some("Provider not found".to_string()),
-                }
+                let llm = LlmProvider::new(&config)?;
+                // 转换 SelectedTool 为 ToolInfo
+                let tool_infos: Vec<types::ToolInfo> = tools
+                    .into_iter()
+                    .map(|selected_tool| types::ToolInfo {
+                        name: types::ToolInfo::format_tool_name(
+                            &selected_tool.provider_id,
+                            &selected_tool.tool_name,
+                        ),
+                        description: selected_tool.description,
+                        parameters: selected_tool.args_schema.unwrap_or_default(),
+                    })
+                    .collect();
+
+                llm.stream_chat_with_tools(&model_id, &messages, tool_infos)
+                    .await
+            }
+            .into_actor(self)
+            .map(|res, _act, _ctx| res)
+            .boxed_local()
+        } else {
+            let provider_id = msg.provider_id.clone();
+            async move {
+                Err(anyhow::anyhow!(
+                    "Provider '{}' not found or not enabled",
+                    provider_id
+                ))
             }
             .into_actor(self)
             .boxed_local()
@@ -256,67 +204,43 @@ impl Handler<LlmChatWithToolsRequest> for LlmRegistry {
     }
 }
 
-// 添加更新提供商缓存的消息
-#[derive(Message)]
-#[rtype(result = "()")]
-pub struct UpdateProviderCache {
-    pub provider_id: String,
-    pub config: Option<LlmProviderConfig>,
-}
-
-// impl Handler<UpdateProviderCache> for LlmRegistry {
-//     type Result = ();
-
-//     fn handle(&mut self, msg: UpdateProviderCache, _ctx: &mut Self::Context) -> Self::Result {
-//         if let Some(config) = msg.config {
-//             self.configs.insert(msg.provider_id, config);
-//         } else {
-//             self.configs.remove(&msg.provider_id);
-//         }
-//     }
-// }
-
 impl LlmRegistry {
-    pub async fn chat(
+    pub async fn chat_stream(
         provider_id: &str,
         model_id: &str,
         source: &str,
-        prompt: &str,
-        chat_history: Vec<ChatMessage>,
-    ) -> anyhow::Result<LlmChatResult> {
+        messages: Vec<ChatMessage>,
+    ) -> anyhow::Result<ChatStream> {
         let registry = Self::global();
         let result = registry
             .send(LlmChatRequest {
                 provider_id: provider_id.to_string(),
                 model_id: model_id.to_string(),
                 source: source.to_string(),
-                prompt: prompt.to_string(),
-                chat_history,
+                messages: messages,
             })
-            .await?;
+            .await??;
         Ok(result)
     }
 
     /// 静态方法：使用工具进行聊天
-    pub async fn chat_with_tools(
+    pub async fn chat_stream_with_tools(
         provider_id: &str,
         model_id: &str,
         source: &str,
-        prompt: &str,
         tools: Vec<SelectedTool>,
-        chat_history: Vec<ChatMessage>,
-    ) -> anyhow::Result<LlmChatResult> {
+        messages: Vec<ChatMessage>,
+    ) -> anyhow::Result<ChatStream> {
         let registry = Self::global();
         let result = registry
             .send(LlmChatWithToolsRequest {
                 provider_id: provider_id.to_string(),
                 model_id: model_id.to_string(),
                 source: source.to_string(),
-                prompt: prompt.to_string(),
-                tools,
-                chat_history,
+                tools: tools.clone(),
+                messages,
             })
-            .await?;
+            .await??;
         Ok(result)
     }
 }

@@ -203,6 +203,9 @@ impl TodoThreadEdit {
                     provider_name: server.name.clone(),
                     description: tool.description.as_ref().map(|s| s.to_string()).unwrap_or_default(),
                     tool_name: tool.name.to_string(),
+                    args_schema: Some(
+                        serde_json::Value::Object(tool.input_schema.as_ref().clone()).to_string(),
+                    )
                 });
         } else {
             // 如果未选中，则移除

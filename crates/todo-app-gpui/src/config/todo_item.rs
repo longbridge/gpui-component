@@ -87,6 +87,8 @@ pub struct SelectedTool {
     pub provider_name: String,
     #[serde(default)]
     pub description: String,
+    #[serde(default)]
+    pub args_schema: Option<String>, // 工具调用参数
 }
 
 /// Todo项目主结构
@@ -271,13 +273,19 @@ impl Todo {
     }
 
     /// 添加选中的工具
-    pub fn add_selected_tool(&mut self, provider_id: &str, tool_name: &str) -> anyhow::Result<()> {
+    pub fn add_selected_tool(
+        &mut self,
+        provider_id: &str,
+        tool_name: &str,
+        args_schema: &str,
+    ) -> anyhow::Result<()> {
         if let Ok(Some(provider)) = McpConfigManager::get_server(provider_id) {
             let selected_tool = SelectedTool {
                 provider_id: provider_id.to_string(),
                 tool_name: tool_name.to_string(),
                 provider_name: provider.name.clone(),
                 description: String::new(),
+                args_schema: Some(args_schema.to_string()),
             };
 
             // 检查是否已存在
