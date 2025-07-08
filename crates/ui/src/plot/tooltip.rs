@@ -19,8 +19,8 @@ impl CrossLine {
         }
     }
 
-    pub fn height(mut self, height: f64) -> Self {
-        self.height = Some(height as f32);
+    pub fn height(mut self, height: f32) -> Self {
+        self.height = Some(height);
         self
     }
 }

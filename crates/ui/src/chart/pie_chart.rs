@@ -15,10 +15,10 @@ use crate::{
 #[derive(IntoPlot)]
 pub struct PieChart<T: 'static> {
     data: Vec<T>,
-    inner_radius: f64,
-    outer_radius: f64,
-    pad_angle: f64,
-    value: Option<Rc<dyn Fn(&T) -> f64>>,
+    inner_radius: f32,
+    outer_radius: f32,
+    pad_angle: f32,
+    value: Option<Rc<dyn Fn(&T) -> f32>>,
     color: Option<Rc<dyn Fn(&T) -> Hsla>>,
 }
 
@@ -37,22 +37,22 @@ impl<T> PieChart<T> {
         }
     }
 
-    pub fn inner_radius(mut self, inner_radius: f64) -> Self {
+    pub fn inner_radius(mut self, inner_radius: f32) -> Self {
         self.inner_radius = inner_radius;
         self
     }
 
-    pub fn outer_radius(mut self, outer_radius: f64) -> Self {
+    pub fn outer_radius(mut self, outer_radius: f32) -> Self {
         self.outer_radius = outer_radius;
         self
     }
 
-    pub fn pad_angle(mut self, pad_angle: f64) -> Self {
+    pub fn pad_angle(mut self, pad_angle: f32) -> Self {
         self.pad_angle = pad_angle;
         self
     }
 
-    pub fn value(mut self, value: impl Fn(&T) -> f64 + 'static) -> Self {
+    pub fn value(mut self, value: impl Fn(&T) -> f32 + 'static) -> Self {
         self.value = Some(Rc::new(value));
         self
     }
@@ -73,7 +73,7 @@ impl<T> Plot for PieChart<T> {
         };
 
         let outer_radius = if self.outer_radius.is_zero() {
-            bounds.size.height.to_f64() * 0.4
+            bounds.size.height.0 * 0.4
         } else {
             self.outer_radius
         };

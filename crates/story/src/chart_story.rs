@@ -164,7 +164,7 @@ impl Render for ChartStory {
                     .child(chart_container(
                         "Pie Chart",
                         PieChart::new(self.monthly_devices.clone())
-                            .value(|d| d.desktop)
+                            .value(|d| d.desktop as f32)
                             .outer_radius(100.)
                             .color(move |d| d.color(color)),
                         true,
@@ -173,7 +173,7 @@ impl Render for ChartStory {
                     .child(chart_container(
                         "Pie Chart - Donut",
                         PieChart::new(self.monthly_devices.clone())
-                            .value(|d| d.desktop)
+                            .value(|d| d.desktop as f32)
                             .outer_radius(100.)
                             .inner_radius(60.)
                             .color(move |d| d.color(color)),
@@ -183,7 +183,7 @@ impl Render for ChartStory {
                     .child(chart_container(
                         "Pie Chart - Pad Angle",
                         PieChart::new(self.monthly_devices.clone())
-                            .value(|d| d.desktop)
+                            .value(|d| d.desktop as f32)
                             .outer_radius(100.)
                             .inner_radius(60.)
                             .pad_angle(4. / 100.)
