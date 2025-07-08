@@ -1,5 +1,7 @@
 mod chat;
 mod view;
+use crate::backoffice::cross_runtime::StreamMessage;
+use crate::backoffice::llm::types::{ChatMessage, MessageRole};
 use crate::config::todo_item::*;
 use crate::{app::AppExt, backoffice::cross_runtime::CrossRuntimeBridge};
 use gpui::prelude::*;
@@ -19,35 +21,35 @@ actions!(todo_thread, [Tab, TabPrev, SendMessage]);
 
 const CONTEXT: &str = "TodoThread";
 
-#[derive(Debug, Clone)]
-pub struct ChatMessage {
-    pub id: String,
-    pub role: MessageRole,
-    pub content: String,
-    pub timestamp: chrono::DateTime<chrono::Utc>,
-    pub model: Option<String>,
-    pub tools_used: Vec<String>,
-    pub source: String,
-}
+// // // #[derive(Debug, Clone)]
+// // // pub struct ChatMessage {
+// // //     pub id: String,
+// // //     pub role: MessageRole,
+// // //     pub content: String,
+// // //     pub timestamp: chrono::DateTime<chrono::Utc>,
+// // //     pub model: Option<String>,
+// // //     pub tools_used: Vec<String>,
+// // //     pub source: String,
+// // // }
 
-#[derive(Debug, Clone)]
-pub struct StreamMessage {
-    source: String,
-    message: rig::message::Message,
-}
+// // #[derive(Debug, Clone)]
+// // pub struct StreamMessage {
+// //     source: String,
+// //     message: rig::message::Message,
+// // }
 
-impl StreamMessage {
-    pub fn new(source: String, message: rig::message::Message) -> Self {
-        Self { source, message }
-    }
-}
+// impl StreamMessage {
+//     pub fn new(source: String, message: rig::message::Message) -> Self {
+//         Self { source, message }
+//     }
+// }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum MessageRole {
-    User,
-    Assistant,
-    System,
-}
+// #[derive(Debug, Clone, PartialEq, Eq)]
+// pub enum MessageRole {
+//     User,
+//     Assistant,
+//     System,
+// }
 
 impl MessageRole {
     fn display_name(&self) -> &'static str {
@@ -63,14 +65,6 @@ impl MessageRole {
             MessageRole::User => gpui::rgb(0x3B82F6),
             MessageRole::Assistant => gpui::rgb(0x10B981),
             MessageRole::System => gpui::rgb(0x6B7280),
-        }
-    }
-
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            MessageRole::User => "user",
-            MessageRole::Assistant => "assistant",
-            MessageRole::System => "system",
         }
     }
 }
@@ -144,6 +138,7 @@ impl TodoThreadChat {
         let _sub = CrossRuntimeBridge::global().subscribe(
             move |StreamMessage { source, message }: &StreamMessage| {
                 if &todo_id == source {
+                    println!("接收到消息: {} {:?}", source, message);
                     tx.try_send(message.clone()).unwrap_or_else(|e| {
                         tracing::error!("Failed to send message to channel: {}", e);
                     });
@@ -151,10 +146,10 @@ impl TodoThreadChat {
             },
         );
         cx.spawn(async move |this, app| {
-            //println!("开始接收AI助手响应");
+            println!("开始接收消息");
             let _sub = _sub;
             'a: loop {
-                Timer::after(Duration::from_millis(10)).await;
+                Timer::after(Duration::from_millis(50)).await;
                 let mut buffer = String::new();
                 loop {
                     match rx.try_recv() {
@@ -164,15 +159,11 @@ impl TodoThreadChat {
                         Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => {
                             break 'a;
                         }
-                        Ok(msg) => match msg {
-                            rig::message::Message::Assistant { content } => match content.first() {
-                                AssistantContent::Text(text) => {
-                                    buffer.push_str(&text.text);
-                                }
-                                AssistantContent::ToolCall(tool_call) => {}
-                            },
-                            rig::message::Message::User { content } => {}
-                        },
+                        Ok(msg) => {
+                            if msg.is_text_only() {
+                                buffer.push_str(&msg.get_text());
+                            }
+                        }
                     }
                 }
                 if buffer.is_empty() {
@@ -182,7 +173,7 @@ impl TodoThreadChat {
                 entity
                     .update(app, |this, cx| {
                         if let Some(last_message) = this.chat_messages.last_mut() {
-                            last_message.content.push_str(&buffer);
+                            last_message.add_text(&buffer);
                         }
                         this.is_loading = false;
                         this.scroll_handle.scroll_to_bottom();
@@ -190,20 +181,12 @@ impl TodoThreadChat {
                     })
                     .ok();
             }
+            println!("消息接收循环结束");
         })
         .detach();
 
         let _subscriptions = vec![cx.subscribe_in(&chat_input, window, Self::on_chat_input_event)];
-        // 初始化欢迎消息
-        let chat_messages = vec![ChatMessage {
-            id: "user_prompt".to_string(),
-            role: MessageRole::System,
-            content: todoitem.description.clone(),
-            timestamp: chrono::Utc::now(),
-            model: None,
-            tools_used: vec![],
-            source: todoitem.id.clone(),
-        }];
+        let chat_messages = vec![ChatMessage::system_text(todoitem.description.clone())];
 
         Self {
             focus_handle: cx.focus_handle(),

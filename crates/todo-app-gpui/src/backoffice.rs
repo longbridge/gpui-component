@@ -2,9 +2,9 @@ pub mod agentic;
 mod builtin;
 // pub mod crb;
 pub mod cross_runtime;
+pub mod llm;
 pub mod mcp;
 mod todo;
-pub mod llm;
 
 use actix::prelude::*;
 use anyhow::Ok;
@@ -14,8 +14,8 @@ use std::fs::File;
 
 use crate::{
     backoffice::{
-        agentic::llm::LlmRegistry,
         cross_runtime::CrossRuntimeBridge,
+        llm::LlmRegistry,
         mcp::{server::ResourceDefinition, GetServerSnapshot, McpRegistry},
     },
     config::mcp_config::McpServerConfig,

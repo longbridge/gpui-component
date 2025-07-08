@@ -19,16 +19,6 @@ pub struct LlmChatRequest {
     pub messages: Vec<ChatMessage>,
 }
 
-#[derive(Message)]
-#[rtype(result = "anyhow::Result<ChatStream>")]
-pub struct LlmChatWithToolsRequest {
-    pub provider_id: String,
-    pub model_id: String,
-    pub source: String,
-    pub messages: Vec<ChatMessage>,
-    pub tools: Vec<SelectedTool>,
-}
-
 // Registry 保持不变，但使用新的命名
 pub struct LlmRegistry {
     providers: HashMap<String, LlmProviderConfig>,
@@ -67,13 +57,13 @@ impl LlmRegistry {
                     .into_actor(self)
                     .then(move |models, act, ctx| match models {
                         Ok(models) => {
-                            log::info!("Loaded models for {}: {:?}", config.id, models);
+                            println!("Loaded models for {}: {:?}", config.id, models);
                             config.models = models;
                             act.providers.insert(config.id.clone(), config);
                             fut::ready(())
                         }
                         Err(err) => {
-                            log::error!("Failed to load models for {}: {}", config.id, err);
+                            println!("Failed to load models for {}: {}", config.id, err);
                             fut::ready(())
                         }
                     })
@@ -135,57 +125,24 @@ impl Handler<LlmChatRequest> for LlmRegistry {
     type Result = ResponseActFuture<Self, anyhow::Result<ChatStream>>;
 
     fn handle(&mut self, msg: LlmChatRequest, _ctx: &mut Self::Context) -> Self::Result {
+        println!(
+            "Received LLM chat request: provider_id={}, model_id={}, source={}, messages={}",
+            msg.provider_id,
+            msg.model_id,
+            msg.source,
+            msg.messages.len()
+        );
         if let Some(config) = self.providers.get(&msg.provider_id).cloned() {
             let model_id = msg.model_id.clone();
-            let messages = msg.messages;
+            let message = msg.messages;
 
             async move {
+                println!(
+                    "Starting LLM chat with provider: {}, model: {}, source: {}",
+                    msg.provider_id, model_id, msg.source
+                );
                 let llm = LlmProvider::new(&config)?;
-                llm.stream_chat(&model_id, &messages).await
-            }
-            .into_actor(self)
-            .map(|res, _act, _ctx| res)
-            .boxed_local()
-        } else {
-            let provider_id = msg.provider_id.clone();
-            async move {
-                Err(anyhow::anyhow!(
-                    "Provider '{}' not found or not enabled",
-                    provider_id
-                ))
-            }
-            .into_actor(self)
-            .boxed_local()
-        }
-    }
-}
-
-impl Handler<LlmChatWithToolsRequest> for LlmRegistry {
-    type Result = ResponseActFuture<Self, anyhow::Result<ChatStream>>;
-
-    fn handle(&mut self, msg: LlmChatWithToolsRequest, _ctx: &mut Self::Context) -> Self::Result {
-        if let Some(config) = self.providers.get(&msg.provider_id).cloned() {
-            let model_id = msg.model_id.clone();
-            let messages = msg.messages;
-            let tools = msg.tools;
-
-            async move {
-                let llm = LlmProvider::new(&config)?;
-                // 转换 SelectedTool 为 ToolInfo
-                let tool_infos: Vec<types::ToolInfo> = tools
-                    .into_iter()
-                    .map(|selected_tool| types::ToolInfo {
-                        name: types::ToolInfo::format_tool_name(
-                            &selected_tool.provider_id,
-                            &selected_tool.tool_name,
-                        ),
-                        description: selected_tool.description,
-                        parameters: selected_tool.args_schema.unwrap_or_default(),
-                    })
-                    .collect();
-
-                llm.stream_chat_with_tools(&model_id, &messages, tool_infos)
-                    .await
+                llm.stream_chat(&model_id, &message).await
             }
             .into_actor(self)
             .map(|res, _act, _ctx| res)
@@ -217,27 +174,6 @@ impl LlmRegistry {
                 provider_id: provider_id.to_string(),
                 model_id: model_id.to_string(),
                 source: source.to_string(),
-                messages: messages,
-            })
-            .await??;
-        Ok(result)
-    }
-
-    /// 静态方法：使用工具进行聊天
-    pub async fn chat_stream_with_tools(
-        provider_id: &str,
-        model_id: &str,
-        source: &str,
-        tools: Vec<SelectedTool>,
-        messages: Vec<ChatMessage>,
-    ) -> anyhow::Result<ChatStream> {
-        let registry = Self::global();
-        let result = registry
-            .send(LlmChatWithToolsRequest {
-                provider_id: provider_id.to_string(),
-                model_id: model_id.to_string(),
-                source: source.to_string(),
-                tools: tools.clone(),
                 messages,
             })
             .await??;

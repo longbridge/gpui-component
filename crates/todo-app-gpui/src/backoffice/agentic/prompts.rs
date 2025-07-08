@@ -2,7 +2,7 @@ use chrono::Local;
 use std::env;
 use sysinfo::System;
 
-use crate::backoffice::agentic::ToolInfo;
+use crate::backoffice::agentic::ToolDefinition;
 
 fn get_os_info() -> String {
     let mut sys = System::new_all();
@@ -88,14 +88,14 @@ pub fn default_prompt() -> String {
         .replace("{{ APPLICATION_INFO }}", "xTo-Do | Agentic AI")
 }
 
-pub fn prompt_with_tools(tools: Vec<ToolInfo>) -> String {
+pub fn prompt_with_tools(tools: Vec<ToolDefinition>) -> String {
     const USER_SYSTEM_PROMPT: &str =
         "You are an assistant, using known tools to help him complete tasks.";
     prompt_with_user_system_prompt(tools, USER_SYSTEM_PROMPT)
 }
 
 pub fn prompt_with_user_system_prompt<S: AsRef<str>>(
-    tools: Vec<ToolInfo>,
+    tools: Vec<ToolDefinition>,
     user_system_prompt: S,
 ) -> String {
     let tools_str = tools

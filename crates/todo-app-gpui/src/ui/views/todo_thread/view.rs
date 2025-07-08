@@ -1,6 +1,6 @@
 use super::*;
 use crate::backoffice::cross_runtime::CrossRuntimeBridge;
-use crate::backoffice::mcp::McpRegistry; // 新增导入
+use crate::backoffice::llm::types::MessageRole;
 use crate::{config::{mcp_config::McpConfigManager, llm_config::LlmProviderManager}};
 use chrono::Local;
 use gpui::prelude::*;
@@ -45,7 +45,7 @@ impl TodoThreadChat {
                                     div()
                                         .text_xs()
                                         .text_color(
-                                            if message.source.as_str()== VPA&& message.role == MessageRole::Assistant {
+                                            if message.get_source().unwrap_or_default()== VPA&& message.role == MessageRole::Assistant {
                                                gpui::red().to_rgb()
                                             } else {
                                                message.role.color()
@@ -53,7 +53,7 @@ impl TodoThreadChat {
                                         )
                                         .font_medium()
                                         .child(
-                                            if message.source.as_str()== VPA&& message.role == MessageRole::Assistant {
+                                            if message.get_source().unwrap_or_default()== VPA&& message.role == MessageRole::Assistant {
                                                 "AI助理"
                                             } else {
                                                 message.role.display_name()
@@ -66,7 +66,7 @@ impl TodoThreadChat {
                                         .text_color(gpui::rgb(0x9CA3AF))
                                         .child(message.timestamp.with_timezone(&Local).format("%H:%M").to_string()),
                                 )
-                                .when_some(message.model.as_ref(), |this, model| {
+                                .when_some(message.get_model_id(), |this, model| {
                                     this.child(
                                         div()
                                             .text_xs()
@@ -88,16 +88,16 @@ impl TodoThreadChat {
                                     this.bg(gpui::rgb(0xF3F4F6)).text_color(gpui::rgb(0x374151))
                                 })
                                 .child(TextView::markdown(
-                                    SharedString::new(format!("chat-message-{}", message.id)),
-                                    message.content.clone(),
+                                    SharedString::new(format!("chat-message-{:?}", message.id)),
+                                    message.get_text(),
                                 )),
                         )
-                        .when(!message.tools_used.is_empty(), |this| {
+                        .when(message.has_tool_definitions(), |this| {
                             this.child(
                                 div()
                                     .text_xs()
                                     .text_color(gpui::rgb(0x6B7280))
-                                    .child(format!("使用工具: {}", message.tools_used.join(", "))),
+                                    .child(format!("使用工具: {}", message.get_tool_definitions().iter().map(|tool|tool.name.as_str()).collect::<Vec<_>>().join(", "))),
                             )
                         }),
                 ),
@@ -548,7 +548,7 @@ impl Render for TodoThreadChat {
                                         .children(
                                             self.chat_messages
                                                 .iter()
-                                                .filter(|msg| !msg.content.trim().is_empty())
+                                                .filter(|msg| !msg.get_text().is_empty())
                                                 .map(|msg| self.render_chat_message(msg)),
                                         )
                                         .when(self.is_loading, |this| {

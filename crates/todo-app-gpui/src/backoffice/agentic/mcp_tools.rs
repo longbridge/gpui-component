@@ -1,6 +1,6 @@
 use crate::{
     backoffice::{
-        agentic::{ToolDelegate, ToolInfo},
+        agentic::{ToolDefinition, ToolDelegate},
         mcp::{McpCallToolResult, McpRegistry},
     },
     config::todo_item::SelectedTool,
@@ -68,7 +68,7 @@ impl ToolDelegate for McpToolDelegate {
         Ok(result)
     }
 
-    async fn available_tools(&self) -> Vec<ToolInfo> {
+    async fn available_tools(&self) -> Vec<ToolDefinition> {
         let mut tools = Vec::new();
         for tool in &self.selected_tools {
             if let Ok(Some(snapshot)) = McpRegistry::get_snapshot(&tool.provider_id).await {
@@ -77,8 +77,11 @@ impl ToolDelegate for McpToolDelegate {
                         .tools
                         .into_iter()
                         .filter(|t| t.name == tool.tool_name)
-                        .map(|t| ToolInfo {
-                            name: ToolInfo::format_tool_name(&tool.provider_id, &tool.tool_name),
+                        .map(|t| ToolDefinition {
+                            name: ToolDefinition::format_tool_name(
+                                &tool.provider_id,
+                                &tool.tool_name,
+                            ),
                             description: t.description.unwrap_or_default().to_string(),
                             parameters: Value::Object(t.input_schema.as_ref().clone()).to_string(),
                         })
@@ -136,7 +139,7 @@ impl ToolDelegate for BatchMcpToolDelegate {
         self.inner.call(name, args).await
     }
 
-    async fn available_tools(&self) -> Vec<ToolInfo> {
+    async fn available_tools(&self) -> Vec<ToolDefinition> {
         self.inner.available_tools().await
     }
 }

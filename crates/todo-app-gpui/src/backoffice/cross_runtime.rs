@@ -1,16 +1,12 @@
-use std::any::{Any, TypeId};
-
-use crate::backoffice::agentic::llm::{
-    LlmChatRequest, LlmChatResult, LlmChatWithToolsRequest, LlmRegistry,
-};
+use crate::backoffice::llm::{types::*, LlmChatRequest, LlmRegistry};
 use crate::backoffice::mcp::server::McpServerSnapshot;
 use crate::backoffice::mcp::{
     GetAllSnapshots, GetServerSnapshot, McpCallToolRequest, McpCallToolResult, McpRegistry,
 };
-use crate::config::todo_item::SelectedTool;
-use crate::ui::views::todo_thread::ChatMessage;
 use crate::xbus::{self, Subscription};
 use actix::Arbiter;
+use futures::StreamExt;
+use std::any::{Any, TypeId};
 use tokio::sync::{mpsc, oneshot};
 /// 跨运行时通信桥接器
 ///
@@ -250,17 +246,15 @@ impl CrossRuntimeBridge {
         provider_id: String,
         model_id: String,
         source: String,
-        prompt: String,
-        chat_history: Vec<ChatMessage>, //TODO:放到Agent里维护，下游不需要维护
-    ) -> Result<LlmChatResult, String> {
+        messages: Vec<ChatMessage>, //TODO:放到Agent里维护，下游不需要维护
+    ) -> Result<(), String> {
         let (response_tx, response_rx) = oneshot::channel();
 
         let handler = Box::new(LlmChatHandler {
             provider_id,
             model_id,
             source,
-            prompt,
-            chat_history,
+            messages,
             response: response_tx,
         });
 
@@ -273,52 +267,33 @@ impl CrossRuntimeBridge {
             .map_err(|_| "Failed to receive response".to_string())?
     }
 
-    /// 异步 LLM 带工具聊天
-    ///
-    /// **功能**: 支持工具调用的 AI Agent 对话
-    ///
-    /// **核心特性**:
-    /// - LLM 可以分析用户需求并决定调用哪些工具
-    /// - 工具执行结果会作为上下文影响 LLM 的最终回复
-    /// - 支持多轮工具调用和复杂的推理链
-    ///
-    /// **工具安全**:
-    /// - 只有明确授权的工具才会暴露给 LLM
-    /// - 工具执行在隔离环境中，限制潜在风险
-    /// - 所有工具调用都有详细的日志记录
-    ///
-    /// **参数**:
-    /// - `tools`: 可用工具列表，包含工具的 schema 和权限信息
-    /// - 其他参数与 `llm_chat` 相同
-    pub async fn llm_chat_with_tools(
-        &self,
-        provider_id: String,
-        model_id: String,
-        source: String,
-        prompt: String,
-        tools: Vec<SelectedTool>,
-        chat_history: Vec<ChatMessage>,
-    ) -> Result<LlmChatResult, String> {
-        let (response_tx, response_rx) = oneshot::channel();
+    //     pub async fn llm_chat_with_tools(
+    //         &self,
+    //         provider_id: String,
+    //         model_id: String,
+    //         source: String,
+    //         tools: Vec<SelectedTool>,
+    //         messages: Vec<ChatMessage>,
+    //     ) -> Result<(), String> {
+    //         let (response_tx, response_rx) = oneshot::channel();
 
-        let handler = Box::new(LlmChatWithToolsHandler {
-            provider_id,
-            model_id,
-            source,
-            prompt,
-            tools,
-            chat_history,
-            response: response_tx,
-        });
+    //         let handler = Box::new(LlmChatWithToolsHandler {
+    //             provider_id,
+    //             model_id,
+    //             source,
+    //             tools,
+    //             messages,
+    //             response: response_tx,
+    //         });
 
-        if self.dispatcher.send(handler).is_err() {
-            return Err("Failed to send message to dispatcher".to_string());
-        }
+    //         if self.dispatcher.send(handler).is_err() {
+    //             return Err("Failed to send message to dispatcher".to_string());
+    //         }
 
-        response_rx
-            .await
-            .map_err(|_| "Failed to receive response".to_string())?
-    }
+    //         response_rx
+    //             .await
+    //             .map_err(|_| "Failed to receive response".to_string())?
+    //     }
 }
 
 /// 消息处理器特征
@@ -464,92 +439,114 @@ struct LlmChatHandler {
     model_id: String,
     /// 消息来源标识（用于日志和调试）
     source: String,
-    /// 用户输入的提示词
-    prompt: String,
     /// 聊天历史记录
     ///
     /// **TODO**: 未来应移至 Agent 层管理，减少跨运行时数据传输
-    chat_history: Vec<ChatMessage>,
+    messages: Vec<ChatMessage>,
     /// 响应通道
     ///
     /// **成功**: `Ok(LlmChatResult)` - 包含 LLM 的回复和元数据
     /// **失败**: `Err(String)` - 包含错误信息（API 错误、网络错误等）
-    response: oneshot::Sender<Result<LlmChatResult, String>>,
+    response: oneshot::Sender<Result<(), String>>,
 }
 
 impl MessageHandler for LlmChatHandler {
     fn handle(self: Box<Self>) {
         Arbiter::new().spawn(async move {
-            let registry = LlmRegistry::global();
+            let result = LlmRegistry::chat_stream(
+                &self.provider_id,
+                &self.model_id,
+                &self.source,
+                self.messages,
+            )
+            .await;
 
-            // 构造 LLM 聊天请求
-            let result = registry
-                .send(LlmChatRequest {
-                    provider_id: self.provider_id,
-                    model_id: self.model_id,
-                    source: self.source,
-                    prompt: self.prompt,
-                    chat_history: self.chat_history,
-                })
-                .await;
-
+            println!("开始处理 LLM 聊天请求");
             // 错误统一转换为字符串，简化 GPUI 端的错误处理
-            let final_result = match result {
-                Ok(chat_result) => Ok(chat_result),
-                Err(e) => Err(e.to_string()),
-            };
-
-            let _ = self.response.send(final_result);
+            match result {
+                Ok(mut stream) => {
+                    let _ = self.response.send(Ok(()));
+                    let source = self.source.clone();
+                    println!("开始接收 LLM 聊天流消息");
+                    while let Some(Ok(message)) = stream.next().await {
+                        println!("接收到 LLM 聊天流消息: {:?}", message);
+                        // 处理每条消息，通常是发送到 UI 或其他处理器
+                        let stream_message = StreamMessage {
+                            source: source.clone(),
+                            message,
+                        };
+                        // 这里可以将消息发送到 UI 或其他处理器
+                        xbus::post(stream_message);
+                    }
+                    println!("LLM 聊天流消息接收完毕");
+                }
+                Err(err) => {
+                    let _ = self.response.send(Err(err.to_string()));
+                }
+            }
         });
     }
 }
 
-/// LLM 带工具聊天消息处理器
-///
-/// **业务功能**: 支持工具调用的 LLM 对话（如 Function Calling）
-/// **工具集成**: 将选定的 MCP 工具暴露给 LLM，实现 AI Agent 功能
-/// **执行流程**: LLM 可以决定调用工具，工具结果会影响最终回复
-struct LlmChatWithToolsHandler {
-    provider_id: String,
-    model_id: String,
-    source: String,
-    prompt: String,
-    /// 可用工具列表
-    ///
-    /// **工具定义**: 包含工具的 schema 和调用信息
-    /// **权限控制**: 只有明确选择的工具才会暴露给 LLM
-    /// **安全考虑**: 工具执行在受控环境中，避免恶意调用
-    tools: Vec<SelectedTool>,
-    chat_history: Vec<ChatMessage>,
-    response: oneshot::Sender<Result<LlmChatResult, String>>,
-}
+// /// LLM 带工具聊天消息处理器
+// ///
+// /// **业务功能**: 支持工具调用的 LLM 对话（如 Function Calling）
+// /// **工具集成**: 将选定的 MCP 工具暴露给 LLM，实现 AI Agent 功能
+// /// **执行流程**: LLM 可以决定调用工具，工具结果会影响最终回复
+// struct LlmChatWithToolsHandler {
+//     provider_id: String,
+//     model_id: String,
+//     source: String,
+//     /// 可用工具列表
+//     ///
+//     /// **工具定义**: 包含工具的 schema 和调用信息
+//     /// **权限控制**: 只有明确选择的工具才会暴露给 LLM
+//     /// **安全考虑**: 工具执行在受控环境中，避免恶意调用
+//     tools: Vec<SelectedTool>,
+//     messages: Vec<ChatMessage>,
+//     response: oneshot::Sender<Result<(), String>>,
+// }
 
-impl MessageHandler for LlmChatWithToolsHandler {
-    fn handle(self: Box<Self>) {
-        Arbiter::new().spawn(async move {
-            let registry = LlmRegistry::global();
+// impl MessageHandler for LlmChatWithToolsHandler {
+//     fn handle(self: Box<Self>) {
+//         Arbiter::new().spawn(async move {
+//             let registry = LlmRegistry::global();
 
-            // 构造带工具的聊天请求
-            let result = registry
-                .send(LlmChatWithToolsRequest {
-                    provider_id: self.provider_id,
-                    model_id: self.model_id,
-                    source: self.source,
-                    prompt: self.prompt,
-                    tools: self.tools,
-                    chat_history: self.chat_history,
-                })
-                .await;
+//             // 构造带工具的聊天请求
+//             let result = registry
+//                 .send(LlmChatWithToolsRequest {
+//                     provider_id: self.provider_id,
+//                     model_id: self.model_id,
+//                     source: self.source.clone(),
+//                     tools: self.tools,
+//                     messages: self.messages,
+//                 })
+//                 .await;
 
-            let final_result = match result {
-                Ok(chat_result) => Ok(chat_result),
-                Err(e) => Err(e.to_string()),
-            };
-
-            let _ = self.response.send(final_result);
-        });
-    }
-}
+//             match match result {
+//                 Ok(Ok(chat_result)) => Ok(chat_result),
+//                 Ok(Err(err)) => Err(err.to_string()),
+//                 Err(e) => Err(e.to_string()),
+//             } {
+//                 Ok(mut stream) => {
+//                     let _ = self.response.send(Ok(()));
+//                     let source = self.source.clone();
+//                     while let Some(Ok(message)) = stream.next().await {
+//                         let stream_message = StreamMessage {
+//                             source: source.clone(),
+//                             message,
+//                         };
+//                         // 这里可以将消息发送到 UI 或其他处理器
+//                         xbus::post(stream_message);
+//                     }
+//                 }
+//                 Err(err) => {
+//                     let _ = self.response.send(Err(err));
+//                 }
+//             }
+//         });
+//     }
+// }
 
 /// 全局桥接器实例
 ///
@@ -567,3 +564,9 @@ impl MessageHandler for LlmChatWithToolsHandler {
 /// let result = bridge.call_tool("server1", "tool1", "{}").await;
 /// ```
 static CROSS_RUNTIME_BRIDGE: std::sync::OnceLock<CrossRuntimeBridge> = std::sync::OnceLock::new();
+
+#[derive(Debug, Clone)]
+pub struct StreamMessage {
+    pub source: String,
+    pub message: ChatMessage,
+}

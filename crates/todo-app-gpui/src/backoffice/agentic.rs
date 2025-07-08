@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 mod insight;
 mod knowledge;
-pub(crate) mod llm;
+// pub(crate) mod llm;
 pub(crate) mod mcp_tools;
 mod memex;
 pub(crate) mod prompts;
@@ -116,25 +116,32 @@ pub trait LLM: Send + Sync {
                 Ok(message) => {
                     let text = message.get_text();
                     // 修复：正确处理 MessageContent 枚举
-                    match &mut final_message.content {
-                        MessageContent::Parts(parts) => {
-                            if let Some(MediaContent {
-                                data: MediaData::Text(existing_text),
-                                ..
-                            }) = parts.get_mut(0)
-                            {
-                                existing_text.push_str(&text);
-                            }
-                        }
-                        MessageContent::Chunk(_) => {
-                            // 如果是工具调用，创建新的文本内容
-                            final_message.content = MessageContent::text(text);
-                        }
-                        MessageContent::ToolCall(_) => {
-                            // 如果是工具调用，创建新的文本内容
-                            final_message.content = MessageContent::text(text);
-                        }
-                    }
+                    // match &mut final_message.content {
+                    //     MessageContent::Parts(parts) => {
+                    //         if let Some(MediaContent {
+                    //             data: MediaData::Text(existing_text),
+                    //             ..
+                    //         }) = parts.get_mut(0)
+                    //         {
+                    //             existing_text.push_str(&text);
+                    //         }
+                    //     }
+                    //     MessageContent::Part(part) => {
+                    //         // 如果是工具调用，创建新的文本内容
+                    //         final_message.content = MessageContent::text(text);
+                    //     }
+                    //     MessageContent::Chunk(_) => {
+                    //         final_message.content = MessageContent::text(text);
+                    //     }
+                    //     MessageContent::ToolCall(_) => {
+                    //         // // 如果是工具调用，创建新的文本内容
+                    //         // final_message.content = MessageContent::text(text);
+                    //     }
+                    //     MessageContent::ToolDefinitions(_) => {
+                    //         // // 如果是工具调用，创建新的文本内容
+                    //         // final_message.content = MessageContent::text(text);
+                    //     }
+                    // }
                 }
                 Err(e) => return Err(e),
             }
@@ -154,25 +161,33 @@ pub trait LLM: Send + Sync {
                 Ok(message) => {
                     let text = message.get_text();
                     // 修复：正确处理 MessageContent 枚举
-                    match &mut final_message.content {
-                        MessageContent::Parts(parts) => {
-                            if let Some(MediaContent {
-                                data: MediaData::Text(existing_text),
-                                ..
-                            }) = parts.get_mut(0)
-                            {
-                                existing_text.push_str(&text);
-                            }
-                        }
-                        MessageContent::Chunk(_) => {
-                            // 如果是工具调用，创建新的文本内容
-                            final_message.content = MessageContent::text(text);
-                        }
-                        MessageContent::ToolCall(_) => {
-                            // 如果是工具调用，创建新的文本内容
-                            final_message.content = MessageContent::text(text);
-                        }
-                    }
+                    // match &mut final_message.content {
+                    //     MessageContent::Parts(parts) => {
+                    //         if let Some(MediaContent {
+                    //             data: MediaData::Text(existing_text),
+                    //             ..
+                    //         }) = parts.get_mut(0)
+                    //         {
+                    //             existing_text.push_str(&text);
+                    //         }
+                    //     }
+                    //     MessageContent::Chunk(_) => {
+                    //         // 如果是工具调用，创建新的文本内容
+                    //         final_message.content = MessageContent::text(text);
+                    //     }
+                    //     MessageContent::ToolCall(_) => {
+                    //         // 如果是工具调用，创建新的文本内容
+                    //         final_message.content = MessageContent::text(text);
+                    //     }
+                    //     MessageContent::ToolDefinitions(_) => {
+                    //         // 如果是工具调用，创建新的文本内容
+                    //         final_message.content = MessageContent::text(text);
+                    //     }
+                    //     MessageContent::Part(part) => {
+                    //         // 如果是工具调用，创建新的文本内容
+                    //         final_message.content = MessageContent::text(text);
+                    //     }
+                    // }
                 }
                 Err(e) => return Err(e),
             }
@@ -196,25 +211,33 @@ pub trait LLM: Send + Sync {
                 Ok(message) => {
                     let text = message.get_text();
                     // 修复：正确处理 MessageContent 枚举
-                    match &mut final_message.content {
-                        MessageContent::Parts(parts) => {
-                            if let Some(MediaContent {
-                                data: MediaData::Text(existing_text),
-                                ..
-                            }) = parts.get_mut(0)
-                            {
-                                existing_text.push_str(&text);
-                            }
-                        }
-                        MessageContent::Chunk(_) => {
-                            // 如果是工具调用，创建新的文本内容
-                            final_message.content = MessageContent::text(text);
-                        }
-                        MessageContent::ToolCall(_) => {
-                            // 如果是工具调用，创建新的文本内容
-                            final_message.content = MessageContent::text(text);
-                        }
-                    }
+                    // match &mut final_message.content {
+                    //     MessageContent::Parts(parts) => {
+                    //         if let Some(MediaContent {
+                    //             data: MediaData::Text(existing_text),
+                    //             ..
+                    //         }) = parts.get_mut(0)
+                    //         {
+                    //             existing_text.push_str(&text);
+                    //         }
+                    //     }
+                    //     MessageContent::Chunk(_) => {
+                    //         // 如果是工具调用，创建新的文本内容
+                    //         final_message.content = MessageContent::text(text);
+                    //     }
+                    //     MessageContent::ToolCall(_) => {
+                    //         // 如果是工具调用，创建新的文本内容
+                    //         final_message.content = MessageContent::text(text);
+                    //     }
+                    //     MessageContent::ToolDefinitions(_) => {
+                    //         // 如果是工具调用，创建新的文本内容
+                    //         final_message.content = MessageContent::text(text);
+                    //     }
+                    //     MessageContent::Part(part) => {
+                    //         // 如果是工具调用，创建新的文本内容
+                    //         final_message.content = MessageContent::text(text);
+                    //     }
+                    // }
                 }
                 Err(e) => return Err(e),
             }
@@ -681,7 +704,7 @@ pub trait ToolDelegate: Send + Sync {
     async fn call(&self, name: &str, args: Self::Args) -> anyhow::Result<Self::Output>;
 
     /// 获取可用工具列表
-    async fn available_tools(&self) -> Vec<ToolInfo>;
+    async fn available_tools(&self) -> Vec<ToolDefinition>;
 }
 
 /// 默认的工具委托实现，什么都不做。
@@ -693,7 +716,7 @@ impl ToolDelegate for () {
         Ok(())
     }
 
-    async fn available_tools(&self) -> Vec<ToolInfo> {
+    async fn available_tools(&self) -> Vec<ToolDefinition> {
         vec![]
     }
 }
