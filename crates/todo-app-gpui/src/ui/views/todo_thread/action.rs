@@ -60,24 +60,14 @@ impl TodoThreadChat {
         // 创建用户消息并添加工具定义
         let user_message =
             ChatMessage::user_text_with_source(message_content.clone(), todo.id.clone())
-                .with_tool_definitions(
-                    self.todoitem
-                        .selected_tools
-                        .iter()
-                        .map(|tool| ToolDefinition {
-                            name: ToolDefinition::format_tool_name(
-                                &tool.provider_id,
-                                &tool.tool_name,
-                            ),
-                            description: tool.description.clone(),
-                            parameters: tool.args_schema.clone().unwrap_or_default(),
-                        })
-                        .collect::<Vec<_>>(),
+                .with_model(
+                    selected_model.model_id.clone(),
+                    selected_model.model_name.clone(),
                 );
 
         // 添加用户消息到聊天历史
         self.chat_messages.push(user_message);
-        let history_message = self.chat_messages.clone();
+        let mut history_message = self.chat_messages.clone();
         // 清空输入框
         self.chat_input
             .update(cx, |input, cx| input.set_value("", window, cx));
@@ -88,10 +78,7 @@ impl TodoThreadChat {
 
         // 准备助手消息占位符
         let assistant_placeholder =
-            ChatMessage::assistant_text_with_source("".to_string(), todo.id.clone()).with_model(
-                selected_model.model_id.clone(),
-                selected_model.model_name.clone(),
-            );
+            ChatMessage::assistant_text_with_source("".to_string(), todo.id.clone());
 
         self.chat_messages.push(assistant_placeholder);
 
@@ -99,9 +86,20 @@ impl TodoThreadChat {
         let provider_id = provider_info.id.clone();
         let model_id = selected_model.model_id.clone();
         let source = self.todoitem.id.clone();
+        history_message.push(ChatMessage::tool_definitions(
+            self.todoitem
+                .selected_tools
+                .iter()
+                .map(|tool| ToolDefinition {
+                    name: ToolDefinition::format_tool_name(&tool.provider_id, &tool.tool_name),
+                    description: tool.description.clone(),
+                    parameters: tool.args_schema.clone().unwrap_or_default(),
+                })
+                .collect::<Vec<_>>(),
+        ));
 
         // 发起异步调用
-        cx.spawn(async move |this, cx| {
+        cx.spawn(async move |_this, _cx| {
             tracing::trace!(
                 "开始调用 LLM - Provider: {}, Model: {}",
                 provider_id,

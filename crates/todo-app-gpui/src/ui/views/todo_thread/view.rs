@@ -46,7 +46,7 @@ impl TodoThreadChat {
                                     div()
                                         .text_xs()
                                         .text_color(
-                                            if message.get_source().unwrap_or_default()== VPA&& message.role == MessageRole::Assistant {
+                                            if message.get_source().unwrap_or_default()== VPA && message.role == MessageRole::Assistant {
                                                gpui::red().to_rgb()
                                             } else {
                                                message.role.color()
@@ -54,7 +54,7 @@ impl TodoThreadChat {
                                         )
                                         .font_medium()
                                         .child(
-                                            if message.get_source().unwrap_or_default()== VPA&& message.role == MessageRole::Assistant {
+                                            if message.get_source().unwrap_or_default()== VPA && message.role == MessageRole::Assistant {
                                                 "AI助理"
                                             } else {
                                                 message.role.display_name()
@@ -82,25 +82,40 @@ impl TodoThreadChat {
                                 .p_3()
                                 .rounded_lg()
                                 .text_sm()
-                                .when(is_user, |this| {
+                                .when(is_user&&!self.is_loading, |this| {
                                     this.bg(gpui::rgb(0x3B82F6)).text_color(gpui::rgb(0xFFFFFF))
                                 })
-                                .when(!is_user, |this| {
+                                .when(!is_user&&!self.is_loading, |this| {
                                     this.bg(gpui::rgb(0xF3F4F6)).text_color(gpui::rgb(0x374151))
-                                })
-                                .child(TextView::markdown(
+                                }).when(self.is_loading, |this| {
+                                            this.child(
+                                                h_flex().justify_start().py_2().child(
+                                                    div()
+                                                        .p_3()
+                                                        .bg(gpui::rgb(0xF3F4F6))
+                                                        .rounded_lg()
+                                                        .text_color(gpui::rgb(0x6B7280))
+                                                        .child("AI正在思考中..."),
+                                                ),
+                                            )
+                                        }).when(!self.is_loading,|this|{
+                                            this.child(
+                                                TextView::markdown(
                                     SharedString::new(format!("chat-message-{:?}", message.id)),
-                                    message.get_text(),
-                                )),
+                                    message.get_text_without_tools(),
+                                )
+                                            )
+                                        })
+                              ,
                         )
-                        .when(message.has_tool_definitions(), |this| {
-                            this.child(
-                                div()
-                                    .text_xs()
-                                    .text_color(gpui::rgb(0x6B7280))
-                                    .child(format!("使用工具: {}", message.get_tool_definitions().iter().map(|tool|tool.name.as_str()).collect::<Vec<_>>().join(", "))),
-                            )
-                        }),
+                        // .when(message.has_tool_definitions(), |this| {
+                        //     this.child(
+                        //         div()
+                        //             .text_xs()
+                        //             .text_color(gpui::rgb(0x6B7280))
+                        //             .child(format!("使用工具: {}", message.get_tool_definitions().iter().map(|tool|tool.name.as_str()).collect::<Vec<_>>().join(", "))),
+                        //     )
+                        // }),
                 ),
             )
     }
@@ -519,9 +534,9 @@ impl TodoThreadChat {
 impl Render for TodoThreadChat {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         tracing::trace!("渲染TodoThreadChat视图");
-        self.chat_messages.iter().for_each(|msg|{
-            tracing::trace!("消息内容: {}", msg.get_text());
-        });
+        // self.chat_messages.iter().for_each(|msg|{
+        //     tracing::trace!("消息内容: {}", msg.get_text());
+        // });
         let selected_model = self.get_model_display_text(cx);
         let selected_tool = self.get_tool_display_text(cx);
         let has_tools = !selected_tool.is_empty();
@@ -549,25 +564,13 @@ impl Render for TodoThreadChat {
                                         .p_1()
                                         .gap_1()
                                         .overflow_y_scroll()
-                                        .track_scroll(&self.scroll_handle)
+                                       .track_scroll(&self.scroll_handle)
                                         .children(
                                             self.chat_messages
                                                 .iter()
-                                                .filter(|msg| !msg.get_text().is_empty())
+                                                .filter(|msg| !msg.get_text_without_tools().is_empty())
                                                 .map(|msg| self.render_chat_message(msg)),
                                         )
-                                        .when(self.is_loading, |this| {
-                                            this.child(
-                                                h_flex().justify_start().py_2().child(
-                                                    div()
-                                                        .p_3()
-                                                        .bg(gpui::rgb(0xF3F4F6))
-                                                        .rounded_lg()
-                                                        .text_color(gpui::rgb(0x6B7280))
-                                                        .child("AI正在思考中..."),
-                                                ),
-                                            )
-                                        }),
                                 ),
                         )
                         .child(

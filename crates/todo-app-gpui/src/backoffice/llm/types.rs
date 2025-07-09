@@ -547,7 +547,17 @@ impl ChatMessage {
             .map(|content| content.get_text_content())
             .filter(|text| !text.is_empty())
             .collect::<Vec<_>>()
-            .join("\n")
+            .join("")
+    }
+
+    pub fn get_text_without_tools(&self) -> String {
+        self.contents
+            .iter()
+            .filter(|content| !content.is_tool_call() && !content.is_tool_definitions())
+            .map(|content| content.get_text_content())
+            .filter(|text| !text.is_empty())
+            .collect::<Vec<_>>()
+            .join("")
     }
 
     /// 检查是否为纯文本消息
@@ -609,6 +619,10 @@ impl ChatMessage {
     /// 添加文本内容
     pub fn add_text(&mut self, text: impl Into<String>) {
         self.contents.push(MessageContent::text(text));
+    }
+
+    pub fn add_text_chunk(&mut self, text: impl Into<String>) {
+        self.contents.push(MessageContent::TextChunk(text.into()));
     }
 
     /// 设置消息来源
