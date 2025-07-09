@@ -64,12 +64,13 @@ impl<'a> LlmProvider<'a> {
         model_id: &str,
         messages: &[ChatMessage],
     ) -> anyhow::Result<ChatStream> {
-        println!(
+        tracing::trace!(
             "开始使用 LLM Provider '{}' 进行聊天，模型 ID: '{}'",
-            self.config.id, model_id
+            self.config.id,
+            model_id
         );
         messages.iter().for_each(|msg| {
-            println!(
+            tracing::trace!(
                 "消息 - 角色: {:?}, 内容: {}",
                 msg.role,
                 msg.get_text().replace('\n', " ")
@@ -112,7 +113,7 @@ impl<'a> LlmProvider<'a> {
             })
             .collect();
 
-        println!("使用系统提示: {}", system_prompt);
+        tracing::trace!("使用系统提示: {}", system_prompt);
         let agent = client
             .agent(model_id)
             .context(system_prompt.as_str())
@@ -163,7 +164,7 @@ fn create_streaming_tool_parser<M: StreamingCompletionModel + 'static>(
     _: &Agent<M>,
     rig_stream: rig::streaming::StreamingCompletionResponse<M::StreamingResponse>,
 ) -> impl futures::Stream<Item = anyhow::Result<ChatMessage>> {
-    println!("开始创建流式工具解析器");
+    tracing::trace!("开始创建流式工具解析器");
     use futures::stream::unfold;
 
     // 解析状态
@@ -200,7 +201,7 @@ fn create_streaming_tool_parser<M: StreamingCompletionModel + 'static>(
             const TAG_OPEN: char = '<';
 
             while let Some(chunk) = stream.next().await {
-                println!("接收到流数据块 {:?}", chunk);
+                tracing::trace!("接收到流数据块 {:?}", chunk);
                 match chunk {
                     Ok(AssistantContent::Text(text)) => {
                         for c in text.text.chars() {
@@ -302,7 +303,7 @@ fn create_streaming_tool_parser<M: StreamingCompletionModel + 'static>(
                                         // 重置状态，继续解析后续内容
                                         parser_state.state = ParseState::Normal;
                                         parser_state.xml_buffer.clear();
-                                        println!("解析到完整的工具调用 XML: {}", cleaned);
+                                        tracing::trace!("解析到完整的工具调用 XML: {}", cleaned);
                                         if let Ok(tool_call) =
                                             serde_xml_rs::from_str::<ToolCall>(&cleaned)
                                         {

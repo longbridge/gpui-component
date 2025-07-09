@@ -347,7 +347,7 @@ impl MessageHandler for GetServerSnapshotHandler {
                 Ok(instance) => instance,
                 Err(e) => {
                     // 记录错误但不中断处理流程
-                    eprintln!("Failed to get server instance: {}", e);
+                    tracing::warn!("Failed to get server instance: {}", e);
                     None
                 }
             };
@@ -461,16 +461,15 @@ impl MessageHandler for LlmChatHandler {
             )
             .await;
 
-            println!("开始处理 LLM 聊天请求");
+            tracing::trace!("开始处理 LLM 聊天请求");
             // 错误统一转换为字符串，简化 GPUI 端的错误处理
             match result {
                 Ok(mut stream) => {
                     let _ = self.response.send(Ok(()));
                     let source = self.source.clone();
-                    println!("开始接收 LLM 聊天流消息");
+                    tracing::trace!("开始接收 LLM 聊天流消息");
                     while let Some(Ok(message)) = stream.next().await {
-                        println!("接收到 LLM 聊天流消息: {:?}", message);
-                        // 处理每条消息，通常是发送到 UI 或其他处理器
+                        tracing::trace!("接收到 LLM 聊天流消息: {:?}", message);
                         let stream_message = StreamMessage {
                             source: source.clone(),
                             message,
@@ -478,7 +477,7 @@ impl MessageHandler for LlmChatHandler {
                         // 这里可以将消息发送到 UI 或其他处理器
                         xbus::post(stream_message);
                     }
-                    println!("LLM 聊天流消息接收完毕");
+                    tracing::trace!("LLM 聊天流消息接收完毕");
                 }
                 Err(err) => {
                     let _ = self.response.send(Err(err.to_string()));

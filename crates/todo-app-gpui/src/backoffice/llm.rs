@@ -57,13 +57,13 @@ impl LlmRegistry {
                     .into_actor(self)
                     .then(move |models, act, ctx| match models {
                         Ok(models) => {
-                            println!("Loaded models for {}: {:?}", config.id, models);
+                            tracing::trace!("Loaded models for {}: {:?}", config.id, models);
                             config.models = models;
                             act.providers.insert(config.id.clone(), config);
                             fut::ready(())
                         }
                         Err(err) => {
-                            println!("Failed to load models for {}: {}", config.id, err);
+                            tracing::trace!("Failed to load models for {}: {}", config.id, err);
                             fut::ready(())
                         }
                     })
@@ -102,7 +102,7 @@ impl LlmRegistry {
             return;
         }
         if let Err(err) = self.check_and_update(ctx) {
-            println!("{} {err}", self.file.path.display());
+            tracing::error!("{} {err}", self.file.path.display());
         }
     }
 }
@@ -113,11 +113,11 @@ impl Actor for LlmRegistry {
     fn started(&mut self, ctx: &mut Self::Context) {
         let handle = ctx.run_interval(Duration::from_secs(1), Self::tick);
         self.handle = Some(handle);
-        println!("LlmRegistry started");
+        tracing::trace!("LlmRegistry started");
     }
 
     fn stopped(&mut self, _ctx: &mut Self::Context) {
-        log::info!("LlmRegistry stopped");
+        tracing::trace!("LlmRegistry stopped");
     }
 }
 
@@ -125,7 +125,7 @@ impl Handler<LlmChatRequest> for LlmRegistry {
     type Result = ResponseActFuture<Self, anyhow::Result<ChatStream>>;
 
     fn handle(&mut self, msg: LlmChatRequest, _ctx: &mut Self::Context) -> Self::Result {
-        println!(
+        tracing::trace!(
             "Received LLM chat request: provider_id={}, model_id={}, source={}, messages={}",
             msg.provider_id,
             msg.model_id,
@@ -137,9 +137,11 @@ impl Handler<LlmChatRequest> for LlmRegistry {
             let message = msg.messages;
 
             async move {
-                println!(
+                tracing::trace!(
                     "Starting LLM chat with provider: {}, model: {}, source: {}",
-                    msg.provider_id, model_id, msg.source
+                    msg.provider_id,
+                    model_id,
+                    msg.source
                 );
                 let llm = LlmProvider::new(&config)?;
                 llm.stream_chat(&model_id, &message).await

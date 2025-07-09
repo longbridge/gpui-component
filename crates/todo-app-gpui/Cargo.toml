@@ -64,7 +64,6 @@ duration-str = "0.17.0"
 chrono-tz = "0.10.3"
 sysinfo = "0.35.1"
 log = "0.4.27"
-ftlog = "0.2.15"
 mimalloc = { version = "0.1.47" }
 actix-web = "4.11.0"
 rust-i18n = "3"

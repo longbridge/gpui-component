@@ -144,7 +144,7 @@ impl TodoThreadChat {
         let _sub = CrossRuntimeBridge::global().subscribe(
             move |StreamMessage { source, message }: &StreamMessage| {
                 if &todo_id == source {
-                    println!("接收到消息: {} {:?}", source, message);
+                    tracing::trace!("接收到消息: {} {:?}", source, message);
                     tx.try_send(message.clone()).unwrap_or_else(|e| {
                         tracing::error!("Failed to send message to channel: {}", e);
                     });
