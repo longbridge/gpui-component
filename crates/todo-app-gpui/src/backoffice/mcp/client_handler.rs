@@ -18,11 +18,11 @@ pub struct McpClientHandler {
     pub capabilities: ClientCapabilities,
     pub client_info: Implementation,
     pub id: String,
-    server:actix::Addr<McpServer>,
+    server: actix::Addr<McpServer>,
 }
 
 impl McpClientHandler {
-    pub fn new(id: String,server:actix::Addr<McpServer>) -> Self {
+    pub fn new(id: String, server: actix::Addr<McpServer>) -> Self {
         Self {
             protocol_version: Default::default(),
             capabilities: ClientCapabilities::default(),
@@ -91,7 +91,7 @@ impl ClientHandler for McpClientHandler {
         match ctx.peer.list_prompts(None).await {
             Ok(prompts) => {
                 log::info!("Prompt list: {prompts:#?}");
-                 self.server.do_send(UpdateInstancePrompts {
+                self.server.do_send(UpdateInstancePrompts {
                     server_id: self.id.clone(),
                     prompts: prompts.prompts.clone(),
                 });
@@ -117,12 +117,10 @@ impl ClientHandler for McpClientHandler {
             },
             |resources| {
                 log::info!("Resource list changed: {resources:#?}");
-                self.server.do_send(
-                    UpdateInstanceResources {
-                        server_id: self.id.clone(),
-                        resources: resources.clone(),
-                    },
-                );
+                self.server.do_send(UpdateInstanceResources {
+                    server_id: self.id.clone(),
+                    resources: resources.clone(),
+                });
             },
         );
     }
@@ -177,7 +175,7 @@ impl ClientHandler for McpClientHandler {
         params: ResourceUpdatedNotificationParam,
         context: NotificationContext<RoleClient>,
     ) {
-        println!("Resource updated: {}", params.uri);
+        tracing::trace!("Resource updated: {}", params.uri);
 
         match context
             .peer
@@ -187,13 +185,13 @@ impl ClientHandler for McpClientHandler {
             .await
         {
             Ok(result) => {
-                println!("Resource content read successfully for: {}", params.uri);
+                tracing::trace!("Resource content read successfully for: {}", params.uri);
                 //
                 self.server.do_send(UpdateInstanceResourceContent {
-                        server_id: self.id.clone(),
-                        uri: params.uri.clone(),
-                        contents: result.contents.clone(),
-                    });
+                    server_id: self.id.clone(),
+                    uri: params.uri.clone(),
+                    contents: result.contents.clone(),
+                });
             }
             Err(err) => {
                 log::error!("Failed to read updated resource {}: {}", params.uri, err);

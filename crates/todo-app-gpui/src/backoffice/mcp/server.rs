@@ -1,28 +1,25 @@
 use crate::backoffice::cross_runtime::CrossRuntimeBridge;
 use crate::backoffice::mcp::client_handler::McpClientHandler;
 use crate::backoffice::mcp::loader::McpServerLoader;
-use crate::backoffice::mcp::{ExitFromRegistry, McpCallToolRequest, McpCallToolResult, McpRegistry, UpdateServerCache};
+use crate::backoffice::mcp::{
+    ExitFromRegistry, McpCallToolRequest, McpCallToolResult, McpRegistry, UpdateServerCache,
+};
 use crate::backoffice::BoEvent;
 use crate::config::mcp_config::{McpServerConfig, McpTransport};
+use actix::prelude::*;
 use gpui_component::IconName;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ACCEPT, AUTHORIZATION};
-use rmcp::model::{
-    ClientRequest, PingRequestMethod,  ResourceContents,
-    SubscribeRequestParam,
-};
+use rmcp::model::{ClientRequest, PingRequestMethod, ResourceContents, SubscribeRequestParam};
 use rmcp::transport::sse_client::SseClientConfig;
 use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
 use rmcp::transport::{ConfigureCommandExt, StreamableHttpClientTransport, TokioChildProcess};
 use rmcp::{
-    model::{CallToolRequestParam},
-    service::RunningService,
-    transport::SseClientTransport,
-    RoleClient,
+    model::CallToolRequestParam, service::RunningService, transport::SseClientTransport, RoleClient,
 };
 pub use rmcp::{
     model::{
-        Prompt as McpPrompt, Resource as McpResource, ResourceTemplate as McpResourceTemplate,
-        Tool as McpTool,Content
+        Content, Prompt as McpPrompt, Resource as McpResource,
+        ResourceTemplate as McpResourceTemplate, Tool as McpTool,
     },
     ServiceExt,
 };
@@ -30,8 +27,6 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::process::Command;
-use actix::prelude::*;
-
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub enum McpCapability {
@@ -45,7 +40,7 @@ impl McpCapability {
     pub fn icon(&self) -> IconName {
         match self {
             McpCapability::Resources => IconName::Database,
-             McpCapability::ResourceTemplate => IconName::Database,
+            McpCapability::ResourceTemplate => IconName::Database,
             McpCapability::Tools => IconName::Wrench,
             McpCapability::Prompts => IconName::SquareTerminal,
         }
@@ -117,10 +112,9 @@ pub struct McpServerSnapshot {
     pub tools: Vec<McpTool>,
     pub prompts: Vec<McpPrompt>,
     pub resources: Vec<ResourceDefinition>,
-    pub resource_templates: Vec<ResourceTemplateDefinition>, 
+    pub resource_templates: Vec<ResourceTemplateDefinition>,
     pub keepalive: bool,
 }
-
 
 impl McpServerSnapshot {
     /// 创建一个空的快照（仅包含配置）
@@ -160,8 +154,6 @@ impl McpServerSnapshot {
     }
 }
 
-
-
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum McpServerStatus {
     Stopped,
@@ -170,13 +162,12 @@ pub enum McpServerStatus {
     Error(String),
 }
 
-
 pub struct McpServer {
     config: McpServerConfig,
     client: Option<Arc<RunningService<RoleClient, McpClientHandler>>>,
     status: McpServerStatus,
     keepalive: bool,
-    
+
     // MCP 能力数据
     capabilities: Vec<McpCapability>,
     tools: Vec<McpTool>,
@@ -210,10 +201,10 @@ impl McpServer {
     fn connect(&mut self, ctx: &mut Context<Self>) {
         log::info!("Connecting to MCP Server: {}", self.config.id);
         self.status = McpServerStatus::Starting;
-        
+
         let config = self.config.clone();
         let server_addr = ctx.address();
-        
+
         // 使用 McpServerLoader 进行连接
         McpServerLoader::load_server(config, server_addr)
             .into_actor(self)
@@ -221,7 +212,7 @@ impl McpServer {
                 match res {
                     Ok((client, snapshot)) => {
                         log::info!("MCP Server {} connected successfully", act.config.id);
-                        
+
                         // 设置客户端和状态
                         act.client = Some(client);
                         act.status = snapshot.status;
@@ -231,10 +222,11 @@ impl McpServer {
                         act.resources = snapshot.resources;
                         act.resource_templates = snapshot.resource_templates;
                         act.keepalive = snapshot.keepalive;
-                        
+
                         // 发送事件通知
-                        CrossRuntimeBridge::global().post(BoEvent::McpServerStarted(act.config.clone()));
-                        
+                        CrossRuntimeBridge::global()
+                            .post(BoEvent::McpServerStarted(act.config.clone()));
+
                         // 通知 Registry 更新缓存
                         let registry = McpRegistry::global();
                         registry.do_send(UpdateServerCache {
@@ -245,7 +237,7 @@ impl McpServer {
                     Err(err) => {
                         log::error!("Failed to connect to MCP Server {}: {}", act.config.id, err);
                         act.status = McpServerStatus::Error(err.to_string());
-                        
+
                         CrossRuntimeBridge::global().post(BoEvent::Notification(
                             crate::backoffice::NotificationKind::Error,
                             format!("Failed to connect to MCP Server {}: {}", act.config.id, err),
@@ -257,8 +249,8 @@ impl McpServer {
             .spawn(ctx);
     }
 }
-impl McpServer{
-     /// 创建快照用于跨运行时传递
+impl McpServer {
+    /// 创建快照用于跨运行时传递
     pub fn create_snapshot(&self) -> McpServerSnapshot {
         McpServerSnapshot {
             config: self.config.clone(),
@@ -278,21 +270,22 @@ impl McpServer{
             if self.keepalive || self.config.transport == McpTransport::Sse {
                 let client = client.clone();
                 let server_name = self.config.name.clone();
-                
+
                 async move {
                     tokio::time::timeout(
                         Duration::from_secs(3),
                         client.send_request(ClientRequest::PingRequest(rmcp::model::PingRequest {
                             method: PingRequestMethod,
                             extensions: Default::default(),
-                        }))
-                    ).await
+                        })),
+                    )
+                    .await
                 }
                 .into_actor(self)
                 .then(move |res, act, ctx| {
                     match res {
                         Ok(Ok(_)) => {
-                            println!("MCP Server {} is keeping alive", server_name);
+                            tracing::trace!("MCP Server {} is keeping alive", server_name);
                         }
                         _ => {
                             log::warn!("MCP Server {} ping failed, reconnecting", server_name);
@@ -324,24 +317,23 @@ impl Handler<ExitFromRegistry> for McpServer {
         log::info!("MCP Server {} exiting", self.config.id);
         let server_id = self.config.id.clone();
         // 异步停止实例
-         McpRegistry::global().do_send(UpdateServerCache {
-                server_id,
-                snapshot: None,
-            });
-            ctx.stop();
+        McpRegistry::global().do_send(UpdateServerCache {
+            server_id,
+            snapshot: None,
+        });
+        ctx.stop();
     }
 }
-
 
 impl Handler<McpCallToolRequest> for McpServer {
     type Result = ResponseActFuture<Self, McpCallToolResult>;
 
-   fn handle(&mut self, msg: McpCallToolRequest, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: McpCallToolRequest, _ctx: &mut Self::Context) -> Self::Result {
         let server_id = self.config.id.clone();
         let tool_name = msg.name.clone();
         let arguments = msg.arguments.clone();
         let client = self.client.clone();
-        
+
         async move {
             let result = if let Some(client) = &client {
                 let server = client.peer().clone();
@@ -351,7 +343,9 @@ impl Handler<McpCallToolRequest> for McpServer {
                         name: tool_name.clone().into(),
                         arguments: serde_json::from_str(&arguments).unwrap_or_default(),
                     }),
-                ).await {
+                )
+                .await
+                {
                     Ok(Ok(result)) => McpCallToolResult {
                         id: server_id,
                         name: tool_name,
@@ -386,7 +380,6 @@ impl Handler<McpCallToolRequest> for McpServer {
     }
 }
 
-
 /// 工具列表更新通知
 #[derive(Message, Clone)]
 #[rtype(result = "()")]
@@ -402,22 +395,22 @@ impl Handler<UpdateInstanceTools> for McpServer {
         // 检查是否是针对当前服务器的更新
         if msg.server_id == self.config.id {
             log::debug!("Updating tools for server: {}", self.config.id);
-            
+
             // 直接更新自己的工具列表
             self.tools = msg.tools.clone();
-            
+
             // 更新能力列表
             if !self.tools.is_empty() && !self.capabilities.contains(&McpCapability::Tools) {
                 self.capabilities.push(McpCapability::Tools);
             }
-            
+
             // 通知 Registry 更新缓存快照
             let registry = McpRegistry::global();
             registry.do_send(UpdateServerCache {
                 server_id: self.config.id.clone(),
                 snapshot: Some(self.create_snapshot()),
             });
-            
+
             // 发送全局事件通知
             CrossRuntimeBridge::global().post(BoEvent::McpToolListUpdated(
                 self.config.id.clone(),
@@ -442,22 +435,22 @@ impl Handler<UpdateInstancePrompts> for McpServer {
         // 检查是否是针对当前服务器的更新
         if msg.server_id == self.config.id {
             log::debug!("Updating prompts for server: {}", self.config.id);
-            
+
             // 直接更新自己的提示列表
             self.prompts = msg.prompts.clone();
-            
+
             // 更新能力列表
             if !self.prompts.is_empty() && !self.capabilities.contains(&McpCapability::Prompts) {
                 self.capabilities.push(McpCapability::Prompts);
             }
-            
+
             // 通知 Registry 更新缓存快照
             let registry = McpRegistry::global();
             registry.do_send(UpdateServerCache {
                 server_id: self.config.id.clone(),
                 snapshot: Some(self.create_snapshot()),
             });
-            
+
             // 发送全局事件通知
             CrossRuntimeBridge::global().post(BoEvent::McpPromptListUpdated(
                 self.config.id.clone(),
@@ -482,9 +475,10 @@ impl Handler<UpdateInstanceResources> for McpServer {
         // 检查是否是针对当前服务器的更新
         if msg.server_id == self.config.id {
             log::debug!("Updating resources for server: {}", self.config.id);
-            
+
             // 保留原有的订阅状态和能力设置
-            let subscribable = self.resources
+            let subscribable = self
+                .resources
                 .first()
                 .map(|r| r.subscribable)
                 .unwrap_or(false);
@@ -492,7 +486,11 @@ impl Handler<UpdateInstanceResources> for McpServer {
             // 更新资源列表，保留已有的缓存内容和订阅状态
             let mut new_resources = Vec::new();
             for new_resource in msg.resources.iter() {
-                if let Some(existing) = self.resources.iter().find(|r| r.resource.uri == new_resource.uri) {
+                if let Some(existing) = self
+                    .resources
+                    .iter()
+                    .find(|r| r.resource.uri == new_resource.uri)
+                {
                     // 保留现有资源的状态和缓存
                     let mut updated = existing.clone();
                     updated.resource = new_resource.clone();
@@ -502,22 +500,23 @@ impl Handler<UpdateInstanceResources> for McpServer {
                     new_resources.push(ResourceDefinition::new(new_resource.clone(), subscribable));
                 }
             }
-            
+
             self.resources = new_resources;
-            
+
             // 更新能力列表
-            if (!self.resources.is_empty() || !self.resource_templates.is_empty()) 
-                && !self.capabilities.contains(&McpCapability::Resources) {
+            if (!self.resources.is_empty() || !self.resource_templates.is_empty())
+                && !self.capabilities.contains(&McpCapability::Resources)
+            {
                 self.capabilities.push(McpCapability::Resources);
             }
-            
+
             // 通知 Registry 更新缓存快照
             let registry = McpRegistry::global();
             registry.do_send(UpdateServerCache {
                 server_id: self.config.id.clone(),
                 snapshot: Some(self.create_snapshot()),
             });
-            
+
             // 发送全局事件通知
             CrossRuntimeBridge::global().post(BoEvent::McpResourceListUpdated(
                 self.config.id.clone(),
@@ -539,15 +538,27 @@ pub struct UpdateInstanceResourceContent {
 impl Handler<UpdateInstanceResourceContent> for McpServer {
     type Result = ();
 
-    fn handle(&mut self, msg: UpdateInstanceResourceContent, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(
+        &mut self,
+        msg: UpdateInstanceResourceContent,
+        _ctx: &mut Self::Context,
+    ) -> Self::Result {
         // 检查是否是针对当前服务器的更新
         if msg.server_id == self.config.id {
-            log::debug!("Updating resource content for server: {} uri: {}", self.config.id, msg.uri);
-            
+            log::debug!(
+                "Updating resource content for server: {} uri: {}",
+                self.config.id,
+                msg.uri
+            );
+
             // 更新对应资源的缓存内容
-            if let Some(resource) = self.resources.iter_mut().find(|r| r.resource.uri == msg.uri) {
+            if let Some(resource) = self
+                .resources
+                .iter_mut()
+                .find(|r| r.resource.uri == msg.uri)
+            {
                 resource.update_contents(msg.contents.clone());
-                
+
                 // 通知 Registry 更新缓存快照
                 let registry = McpRegistry::global();
                 registry.do_send(UpdateServerCache {
@@ -555,7 +566,7 @@ impl Handler<UpdateInstanceResourceContent> for McpServer {
                     snapshot: Some(self.create_snapshot()),
                 });
             }
-            
+
             // 发送全局事件通知
             CrossRuntimeBridge::global().post(BoEvent::McpResourceUpdated {
                 server_id: self.config.id.clone(),
@@ -563,16 +574,16 @@ impl Handler<UpdateInstanceResourceContent> for McpServer {
                 contents: msg.contents.clone(),
             });
 
-             CrossRuntimeBridge::global().post(BoEvent::Notification(
-            crate::backoffice::NotificationKind::Info,
-            serde_json::to_string_pretty(&BoEvent::McpResourceUpdated {
-                server_id: msg.server_id.clone(),
-                uri: msg.uri,
-                contents: msg.contents,
-            })
-            .map_err(|err| format!("Failed to serialize resource update: {}", err))
-            .unwrap_or_default(),
-        ));
+            CrossRuntimeBridge::global().post(BoEvent::Notification(
+                crate::backoffice::NotificationKind::Info,
+                serde_json::to_string_pretty(&BoEvent::McpResourceUpdated {
+                    server_id: msg.server_id.clone(),
+                    uri: msg.uri,
+                    contents: msg.contents,
+                })
+                .map_err(|err| format!("Failed to serialize resource update: {}", err))
+                .unwrap_or_default(),
+            ));
         }
     }
 }

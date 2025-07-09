@@ -112,7 +112,7 @@ impl McpRegistry {
             return;
         }
         if let Err(err) = self.check_and_update(ctx) {
-            println!("{} {err}", self.file.path.display());
+            tracing::error!("{} {err}", self.file.path.display());
         }
     }
 
