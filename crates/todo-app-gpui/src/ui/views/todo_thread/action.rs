@@ -248,11 +248,11 @@ impl TodoThreadChat {
         match crate::config::todo_item::TodoManager::update_todo(self.todoitem.clone()) {
             Ok(_) => {
                 // 保存成功，可以显示通知
-                log::info!("Todo item saved successfully");
+                tracing::info!("Todo item saved successfully");
             }
             Err(err) => {
                 // 保存失败，显示错误通知
-                log::error!("Failed to save todo item: {}", err);
+                tracing::error!("Failed to save todo item: {}", err);
                 window.push_notification(
                     (
                         gpui_component::notification::NotificationType::Error,

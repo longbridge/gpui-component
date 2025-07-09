@@ -148,7 +148,7 @@ impl TodoThreadChat {
                                                                                 todo_edit.save( window, todo_cx);
                                                                                 todo_cx.notify();
                                                                             });
-                                                                            println!("切换模型选择: {}",model_name_to_toggle);
+                                                                            tracing::trace!("切换模型选择: {}",model_name_to_toggle);
                                                                         }
                                                                     }
                                                                 ),
@@ -381,7 +381,7 @@ impl TodoThreadChat {
                                                                                             todo_edit.save( window, todo_cx);
                                                                                             todo_cx.notify();
                                                                                         });
-                                                                                        println!(
+                                                                                        tracing::trace!(
                                                                                             "切换工具选择: {}",
                                                                                             tool_name_to_toggle
                                                                                         );
@@ -433,6 +433,7 @@ impl TodoThreadChat {
                 )
         });
     }
+
 
 fn render_chat_message(&self,idx:usize, message: &ChatMessage) -> impl IntoElement {
         tracing::trace!("渲染消息: {:?}", message);

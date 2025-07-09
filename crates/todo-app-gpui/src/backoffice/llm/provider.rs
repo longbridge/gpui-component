@@ -64,18 +64,6 @@ impl<'a> LlmProvider<'a> {
         model_id: &str,
         messages: &[ChatMessage],
     ) -> anyhow::Result<ChatStream> {
-        tracing::trace!(
-            "开始使用 LLM Provider '{}' 进行聊天，模型 ID: '{}'",
-            self.config.id,
-            model_id
-        );
-        messages.iter().for_each(|msg| {
-            tracing::trace!(
-                "消息 - 角色: {:?}, 内容: {}",
-                msg.role,
-                msg.get_text().replace('\n', " ")
-            );
-        });
         let client =
             rig::providers::openai::Client::from_url(&self.config.api_key, &self.config.api_url);
 
@@ -165,7 +153,7 @@ fn create_streaming_tool_parser<M: StreamingCompletionModel + 'static>(
     rig_stream: rig::streaming::StreamingCompletionResponse<M::StreamingResponse>,
 ) -> impl futures::Stream<Item = anyhow::Result<ChatMessage>> {
     tracing::trace!("开始创建流式工具解析器");
-    use futures::stream::unfold;
+    use futures::stream;
 
     // 解析状态
     struct ParserState {
@@ -192,7 +180,7 @@ fn create_streaming_tool_parser<M: StreamingCompletionModel + 'static>(
         current_text: String::new(),
     };
 
-    unfold(
+    stream::unfold(
         (rig_stream, initial_state),
         |(mut stream, mut parser_state)| async move {
             const TOOL_USE_START_TAG: &str = "<tool_use";

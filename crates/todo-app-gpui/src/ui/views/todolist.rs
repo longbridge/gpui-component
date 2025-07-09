@@ -508,7 +508,7 @@ impl TodoList {
             opened_windows: HashMap::new(),
             edited_windows: HashMap::new(),
         };
-        celf.set_active_tab(1, window, cx);
+        celf.set_active_tab(1,  cx);
         celf.start_external_message_handler(cx);
         celf
     }
@@ -532,12 +532,18 @@ impl TodoList {
             while let Some(ev) = rx.recv().await {
                 if let FoEvent::TodoChatWindowClosed(todo_id) = ev {
                     this.update(app, |this, cx| {
+                        tracing::trace!("处理关闭Todo窗口事件: {}", todo_id);
                         this.opened_windows.remove(&todo_id);
+                        this.set_active_tab(this.active_tab_ix, cx);
+                        cx.notify();
                     })
                     .ok();
                 } else if let FoEvent::TodoEditWindowClosed(todo_id) = ev {
                     this.update(app, |this, cx| {
+                         tracing::trace!("处理关闭Todo编辑窗口事件: {}", todo_id);
                         this.edited_windows.remove(&todo_id);
+                        this.set_active_tab(this.active_tab_ix, cx);
+                         cx.notify();
                     })
                     .ok();
                 }
@@ -561,7 +567,7 @@ impl TodoList {
         if let Some(mut todo) = self.selected_todo.clone() {
             todo.follow = !todo.follow;
             TodoManager::update_todo(todo).ok();
-            self.set_active_tab(self.active_tab_ix, window, cx);
+            self.set_active_tab(self.active_tab_ix, cx);
         }
     }
     fn redo_todo(&mut self, _: &Redo, window: &mut Window, cx: &mut Context<Self>) {
@@ -569,7 +575,7 @@ impl TodoList {
         if let Some(mut todo) = self.selected_todo.clone() {
             todo.status = TodoStatus::Todo;
             TodoManager::update_todo(todo).ok();
-            self.set_active_tab(self.active_tab_ix, window, cx);
+            self.set_active_tab(self.active_tab_ix,  cx);
         }
     }
     fn done_todo(&mut self, _: &Completed, window: &mut Window, cx: &mut Context<Self>) {
@@ -577,7 +583,7 @@ impl TodoList {
         if let Some(mut todo) = self.selected_todo.clone() {
             todo.status = TodoStatus::Done;
             TodoManager::update_todo(todo).ok();
-            self.set_active_tab(self.active_tab_ix, window, cx);
+            self.set_active_tab(self.active_tab_ix,  cx);
         }
     }
     fn pause_todo(&mut self, _: &Pause, window: &mut Window, cx: &mut Context<Self>) {
@@ -590,21 +596,21 @@ impl TodoList {
             }
 
             TodoManager::update_todo(todo).ok();
-            self.set_active_tab(self.active_tab_ix, window, cx);
+            self.set_active_tab(self.active_tab_ix,  cx);
         }
     }
     fn clone_todo(&mut self, _: &Clone, window: &mut Window, cx: &mut Context<Self>) {
         println!("Clone action triggered");
         if let Some(todo) = self.selected_todo.clone() {
             TodoManager::copy_todo(&todo.id).ok();
-            self.set_active_tab(self.active_tab_ix, window, cx);
+            self.set_active_tab(self.active_tab_ix,  cx);
         }
     }
 
     fn delete_todo(&mut self, _: &Delete, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(todo) = self.selected_todo.clone() {
             TodoManager::delete_todo(&todo.id).ok();
-            self.set_active_tab(self.active_tab_ix, window, cx);
+            self.set_active_tab(self.active_tab_ix,  cx);
         }
     }
 
@@ -612,9 +618,8 @@ impl TodoList {
         TodoThreadEdit::add(cx);
     }
     fn open_todo(&mut self, _: &Open, _: &mut Window, cx: &mut Context<Self>) {
-        if let Some(todo) = self.selected_todo.clone() {
+        if let Some(todo) = self.selected_todo.clone()  {
             let todo_id = todo.id.clone();
-
             match self.opened_windows.get(&todo_id) {
                 Some(handle) if handle.is_active(cx).is_some() => {
                     // Window exists and is active, just focus it
@@ -679,14 +684,14 @@ impl TodoList {
             .retain(|_, handle| handle.is_active(cx).is_some());
         self.edited_windows
             .retain(|_, handle| handle.is_active(cx).is_some());
-        self.set_active_tab(self.active_tab_ix, window, cx);
+        self.set_active_tab(self.active_tab_ix,  cx);
     }
     fn todo_updated(&mut self, _: &TodoSaved, window: &mut Window, cx: &mut Context<Self>) {
         tracing::trace!("Todo updated");
-        self.set_active_tab(self.active_tab_ix, window, cx);
+        self.set_active_tab(self.active_tab_ix,  cx);
     }
 
-    fn set_todo_filter(&mut self, filter: TodoFilter, _: &mut Window, cx: &mut Context<Self>) {
+    fn set_todo_filter(&mut self, filter: TodoFilter, cx: &mut Context<Self>) {
         self.todo_filter = filter;
         self.todo_list.update(cx, |list, _cx| {
             let todos: Vec<Todo> = TodoManager::list_todos()
@@ -714,14 +719,14 @@ impl TodoList {
         cx.notify();
     }
 
-    fn set_active_tab(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
+    fn set_active_tab(&mut self, ix: usize, cx: &mut Context<Self>) {
         println!("Set active tab: {}", ix);
         self.active_tab_ix = ix;
         match ix {
-            0 => self.set_todo_filter(TodoFilter::All, window, cx),
-            1 => self.set_todo_filter(TodoFilter::Planned, window, cx),
-            2 => self.set_todo_filter(TodoFilter::Completed, window, cx),
-            3 => self.set_todo_filter(TodoFilter::Recycle, window, cx),
+            0 => self.set_todo_filter(TodoFilter::All,  cx),
+            1 => self.set_todo_filter(TodoFilter::Planned,  cx),
+            2 => self.set_todo_filter(TodoFilter::Completed,  cx),
+            3 => self.set_todo_filter(TodoFilter::Recycle,  cx),
             _ => {}
         }
         cx.notify();
@@ -788,7 +793,7 @@ impl Render for TodoList {
                             .segmented()
                             .selected_index(self.active_tab_ix)
                             .on_click(cx.listener(|this, ix: &usize, window, cx| {
-                                this.set_active_tab(*ix, window, cx);
+                                this.set_active_tab(*ix,  cx);
                             }))
                             .children(vec!["全部", "计划中", "已完成"])
                             .suffix(
