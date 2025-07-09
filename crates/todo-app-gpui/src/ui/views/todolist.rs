@@ -1,6 +1,8 @@
 use std::collections::HashMap;
+use std::time::Duration;
 
 use super::todo_thread_edit::TodoThreadEdit;
+use crate::app::{AppExt, FoEvent};
 use crate::ui::components::list::{List, ListDelegate, ListEvent, ListItem};
 use crate::ui::views::todo_thread::TodoThreadChat;
 use crate::xbus;
@@ -507,7 +509,43 @@ impl TodoList {
             edited_windows: HashMap::new(),
         };
         celf.set_active_tab(1, window, cx);
+        celf.start_external_message_handler(cx);
         celf
+    }
+}
+
+impl TodoList {
+    fn start_external_message_handler(&self, cx: &mut Context<Self>) {
+        cx.spawn(async move |this, app: &mut AsyncApp| {
+            let (tx, mut rx) = tokio::sync::mpsc::channel(10);
+            // 订阅外部消息
+            let _sub = app.subscribe_event(move |ev: &FoEvent| match ev {
+                FoEvent::TodoChatWindowClosed(todo_id) | FoEvent::TodoEditWindowClosed(todo_id) => {
+                    tracing::trace!("接收到关闭Todo窗口事件: {}", todo_id);
+                    tx.try_send(ev.clone()).unwrap_or_else(|e| {
+                        tracing::error!("Failed to send message to channel: {}", e);
+                    });
+                }
+                _ => {}
+            });
+
+            while let Some(ev) = rx.recv().await {
+                if let FoEvent::TodoChatWindowClosed(todo_id) = ev {
+                    this.update(app, |this, cx| {
+                        this.opened_windows.remove(&todo_id);
+                    })
+                    .ok();
+                } else if let FoEvent::TodoEditWindowClosed(todo_id) = ev {
+                    this.update(app, |this, cx| {
+                        this.edited_windows.remove(&todo_id);
+                    })
+                    .ok();
+                }
+            }
+
+            tracing::info!("外部消息处理器已停止");
+        })
+        .detach();
     }
 
     fn selected_todo(&mut self, cx: &mut Context<Self>) {
@@ -571,7 +609,7 @@ impl TodoList {
     }
 
     fn new_todo(&mut self, _: &New, window: &mut Window, cx: &mut Context<Self>) {
-        TodoThreadEdit::add(window, cx);
+        TodoThreadEdit::add(cx);
     }
     fn open_todo(&mut self, _: &Open, _: &mut Window, cx: &mut Context<Self>) {
         if let Some(todo) = self.selected_todo.clone() {
@@ -623,16 +661,28 @@ impl TodoList {
                         .ok();
                 }
                 _ => {
-                    // Window doesn't exist or is inactive, create new one
-                    let handle = TodoThreadEdit::edit(todo, window, cx);
+                    let handle = TodoThreadEdit::edit(todo, cx);
                     self.edited_windows.insert(todo_id, handle);
                 }
             }
         }
     }
 
+    fn todo_thread_chat_closed(
+        &mut self,
+        _: &FoEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        tracing::trace!("Todo thread chat closed");
+        self.opened_windows
+            .retain(|_, handle| handle.is_active(cx).is_some());
+        self.edited_windows
+            .retain(|_, handle| handle.is_active(cx).is_some());
+        self.set_active_tab(self.active_tab_ix, window, cx);
+    }
     fn todo_updated(&mut self, _: &TodoSaved, window: &mut Window, cx: &mut Context<Self>) {
-        println!("Todo updated");
+        tracing::trace!("Todo updated");
         self.set_active_tab(self.active_tab_ix, window, cx);
     }
 

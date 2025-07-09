@@ -1,3 +1,4 @@
+use crate::backoffice::cross_runtime::CrossRuntimeBridge;
 use crate::backoffice::mcp::{GetServerSnapshot, McpRegistry};
 use crate::config::llm_config::LlmProviderManager;
 use crate::config::mcp_config::McpConfigManager;
@@ -14,7 +15,7 @@ use crate::ui::views::llm_provider::LlmProvider;
 use crate::ui::views::mcp_provider::McpProvider;
 use crate::ui::views::profile::Profile;
 use crate::ui::views::settings::Settings;
-use crate::ui::*;
+use crate::{ui::*, xbus};
 use gpui::*;
 use gpui_component::dock::{register_panel, PanelControl, PanelInfo};
 use gpui_component::Root;
@@ -23,7 +24,9 @@ use raw_window_handle::RawWindowHandle;
 use serde::{Deserialize, Serialize};
 #[cfg(target_os = "windows")]
 use windows::Win32::Foundation::HWND;
-
+// #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
+// #[action(namespace = example, no_json)]
+// struct ChangeSize(Size);
 ///前台发生的事件
 #[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub enum FoEvent {
@@ -32,9 +35,10 @@ pub enum FoEvent {
     TodoDialogMessage(String), // 任务对话框消息
     TodoUpdated,               // 任务更新事件
     TodoChatWindowClosed(String),
+    TodoEditWindowClosed(String),
 }
 
-actions!(story, [Quit, Open, CloseWindow, ToggleSearch]);
+actions!(x_todo_app, [Quit, Open, ToggleSearch]);
 
 /// 故事状态，用于序列化和反序列化故事信息
 #[derive(Debug, Serialize, Deserialize)]
@@ -55,7 +59,6 @@ impl ViewKitState {
         serde_json::from_value(value).unwrap()
     }
 
-    /// 转换为故事元组
     pub fn to_viewkit(
         &self,
         window: &mut Window,
@@ -267,6 +270,141 @@ pub trait AppExt {
         F: FnOnce(&mut Window, &mut App) -> E + Send + 'static;
 
     fn dispatch_global_action(&mut self, action: Box<dyn Action>);
+
+    fn dispatch_event<E: std::any::Any + 'static + Send + Sync>(&self, event: E) {
+        CrossRuntimeBridge::global().post(event);
+    }
+
+    fn subscribe_event<
+        E: std::any::Any + 'static + Send + Sync,
+        F: Fn(&E) + Send + Sync + 'static,
+    >(
+        &self,
+        f: F,
+    ) -> xbus::Subscription {
+        CrossRuntimeBridge::global().subscribe(f)
+    }
+
+    fn subscribe_event_any<F: Fn(std::any::TypeId, &dyn std::any::Any) + Send + Sync + 'static>(
+        &self,
+        f: F,
+    ) -> xbus::Subscription {
+        CrossRuntimeBridge::global().subscribe_any(f)
+    }
+}
+impl AppExt for AsyncApp {
+    fn create_window<F, E>(
+        &mut self,
+        options: WindowOptions,
+        crate_view_fn: F,
+    ) -> WindowHandle<Root>
+    where
+        E: Into<AnyView>,
+        F: FnOnce(&mut Window, &mut App) -> E + Send + 'static,
+    {
+        let window = self
+            .open_window(options, |window, cx| {
+                let view = crate_view_fn(window, cx);
+                let root = cx.new(|_cx| TodoRoot::with_no_title_bar(view));
+                cx.new(|cx| Root::new(root.into(), window, cx))
+            })
+            .expect("failed to open window");
+        window
+            .update(self, |_, window, _| {
+                window.activate_window();
+                window.set_window_title("xTo-Do Utility");
+            })
+            .expect("failed to update window");
+        window
+    }
+
+    fn create_todo_window<F, E>(
+        &mut self,
+        options: WindowOptions,
+        crate_view_fn: F,
+    ) -> WindowHandle<Root>
+    where
+        E: Into<AnyView>,
+        F: FnOnce(&mut Window, &mut App) -> E + Send + 'static,
+    {
+        let show = options.show;
+        let window = self
+            .open_window(options, |window, cx| {
+                #[cfg(target_os = "windows")]
+                {
+                    // use windows::Win32::UI::WindowsAndMessaging::{
+                    //     WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_SIZEBOX, WS_SYSMENU,
+                    // };
+                    //window.set_display_affinity(0x00000011);
+                    // let mut style = window.style();
+                    // style &= !(WS_SIZEBOX.0 as i32
+                    //     | WS_MINIMIZEBOX.0 as i32
+                    //     | WS_MAXIMIZEBOX.0 as i32
+                    //     | WS_SYSMENU.0 as i32);
+                    // window.set_style(style);
+                }
+                let view = crate_view_fn(window, cx);
+                let root = cx.new(|cx| TodoRoot::new(view, window, cx));
+
+                cx.new(|cx| Root::new(root.into(), window, cx))
+            })
+            .expect("failed to open window");
+        if show {
+            window
+                .update(self, |_, window, _| {
+                    window.activate_window();
+                    window.set_window_title("xTo-Do Utility");
+                })
+                .expect("failed to update window");
+        }
+        window
+    }
+
+    fn create_normal_window<F, E>(
+        &mut self,
+        title: impl Into<SharedString>,
+        options: WindowOptions,
+        crate_view_fn: F,
+    ) -> WindowHandle<Root>
+    where
+        E: Into<AnyView>,
+        F: FnOnce(&mut Window, &mut App) -> E + Send + 'static,
+    {
+        let title = title.into();
+        let window: WindowHandle<Root> = self
+            .open_window(options, |window, cx| {
+                #[cfg(target_os = "windows")]
+                {
+                    // use windows::Win32::UI::WindowsAndMessaging::{
+                    //     WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_SIZEBOX, WS_SYSMENU,
+                    // };
+                    // window.set_display_affinity(0x00000011);
+                    // let mut style = window.style();
+                    // style &= !(WS_SIZEBOX.0 as i32
+                    //     | WS_MINIMIZEBOX.0 as i32
+                    //     | WS_MAXIMIZEBOX.0 as i32
+                    //     | WS_SYSMENU.0 as i32);
+                    // window.set_style(style);
+                }
+                let view = crate_view_fn(window, cx);
+                let root = cx.new(|cx| NormalRoot::new(title.clone(), view, window, cx));
+
+                cx.new(|cx| Root::new(root.into(), window, cx))
+            })
+            .expect("failed to open window");
+
+        window
+            .update(self, |_, window, _| {
+                window.activate_window();
+                window.set_window_title(&title);
+            })
+            .expect("failed to update window");
+        window
+    }
+
+    fn dispatch_global_action(&mut self, action: Box<dyn Action>) {
+        unimplemented!("AsyncApp does not support dispatching global actions directly");
+    }
 }
 
 impl AppExt for App {

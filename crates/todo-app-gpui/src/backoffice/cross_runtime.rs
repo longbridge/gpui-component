@@ -221,8 +221,6 @@ impl CrossRuntimeBridge {
         response_rx.await.unwrap_or_default()
     }
 
-    // ===== LLM 方法（仅保留聊天相关）=====
-
     /// 异步 LLM 聊天
     ///
     /// **功能**: 与指定的 LLM 模型进行对话
@@ -266,34 +264,6 @@ impl CrossRuntimeBridge {
             .await
             .map_err(|_| "Failed to receive response".to_string())?
     }
-
-    //     pub async fn llm_chat_with_tools(
-    //         &self,
-    //         provider_id: String,
-    //         model_id: String,
-    //         source: String,
-    //         tools: Vec<SelectedTool>,
-    //         messages: Vec<ChatMessage>,
-    //     ) -> Result<(), String> {
-    //         let (response_tx, response_rx) = oneshot::channel();
-
-    //         let handler = Box::new(LlmChatWithToolsHandler {
-    //             provider_id,
-    //             model_id,
-    //             source,
-    //             tools,
-    //             messages,
-    //             response: response_tx,
-    //         });
-
-    //         if self.dispatcher.send(handler).is_err() {
-    //             return Err("Failed to send message to dispatcher".to_string());
-    //         }
-
-    //         response_rx
-    //             .await
-    //             .map_err(|_| "Failed to receive response".to_string())?
-    //     }
 }
 
 /// 消息处理器特征
@@ -486,66 +456,6 @@ impl MessageHandler for LlmChatHandler {
         });
     }
 }
-
-// /// LLM 带工具聊天消息处理器
-// ///
-// /// **业务功能**: 支持工具调用的 LLM 对话（如 Function Calling）
-// /// **工具集成**: 将选定的 MCP 工具暴露给 LLM，实现 AI Agent 功能
-// /// **执行流程**: LLM 可以决定调用工具，工具结果会影响最终回复
-// struct LlmChatWithToolsHandler {
-//     provider_id: String,
-//     model_id: String,
-//     source: String,
-//     /// 可用工具列表
-//     ///
-//     /// **工具定义**: 包含工具的 schema 和调用信息
-//     /// **权限控制**: 只有明确选择的工具才会暴露给 LLM
-//     /// **安全考虑**: 工具执行在受控环境中，避免恶意调用
-//     tools: Vec<SelectedTool>,
-//     messages: Vec<ChatMessage>,
-//     response: oneshot::Sender<Result<(), String>>,
-// }
-
-// impl MessageHandler for LlmChatWithToolsHandler {
-//     fn handle(self: Box<Self>) {
-//         Arbiter::new().spawn(async move {
-//             let registry = LlmRegistry::global();
-
-//             // 构造带工具的聊天请求
-//             let result = registry
-//                 .send(LlmChatWithToolsRequest {
-//                     provider_id: self.provider_id,
-//                     model_id: self.model_id,
-//                     source: self.source.clone(),
-//                     tools: self.tools,
-//                     messages: self.messages,
-//                 })
-//                 .await;
-
-//             match match result {
-//                 Ok(Ok(chat_result)) => Ok(chat_result),
-//                 Ok(Err(err)) => Err(err.to_string()),
-//                 Err(e) => Err(e.to_string()),
-//             } {
-//                 Ok(mut stream) => {
-//                     let _ = self.response.send(Ok(()));
-//                     let source = self.source.clone();
-//                     while let Some(Ok(message)) = stream.next().await {
-//                         let stream_message = StreamMessage {
-//                             source: source.clone(),
-//                             message,
-//                         };
-//                         // 这里可以将消息发送到 UI 或其他处理器
-//                         xbus::post(stream_message);
-//                     }
-//                 }
-//                 Err(err) => {
-//                     let _ = self.response.send(Err(err));
-//                 }
-//             }
-//         });
-//     }
-// }
 
 /// 全局桥接器实例
 ///

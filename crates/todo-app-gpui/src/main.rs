@@ -55,8 +55,11 @@ fn init_log() -> anyhow::Result<()> {
 
     #[cfg(not(debug_assertions))]
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env().add_directive("todo-app-gpui=info".parse()?))
-        .with_max_level(tracing::Level::WARN)
+        .with_env_filter(
+            EnvFilter::from_default_env()
+                .add_directive(LevelFilter::WARN.into())
+                .add_directive("todo_app_gpui=info".parse()?),
+        )
         .with_writer(std::io::stderr)
         .with_ansi(true)
         .with_line_number(true)

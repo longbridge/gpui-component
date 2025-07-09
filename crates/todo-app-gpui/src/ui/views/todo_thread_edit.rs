@@ -1,14 +1,13 @@
-use crate::app::AppExt;
+use crate::app::{AppExt, FoEvent};
 #[cfg(target_os = "windows")]
 use crate::app::WindowExt;
 use crate::backoffice::cross_runtime::CrossRuntimeBridge;
-use crate::backoffice::mcp::McpRegistry; // 新增导入
 use crate::config::mcp_config::McpConfigManager;
 use crate::config::llm_config::LlmProviderManager;
 use crate::config::todo_item::*;
 use crate::config::llm_config::ModelInfo;
 use crate::ui::views::todo_thread::{Tab, TabPrev};
-use crate::{app::AppState, config::llm_config::LlmProviderConfig};
+use crate::{config::llm_config::LlmProviderConfig};
 
 // 从 rmcp 导入 MCP 类型
 use rmcp::model::{Tool as McpTool};
@@ -243,7 +242,7 @@ const SIZE: gpui::Size<Pixels> = size(WIDTH, HEIGHT);
 
 // 实现 TodoThreadEdit界面的相关方法
 impl TodoThreadEdit {
-    pub fn edit(todo: Todo, parent: &mut Window, cx: &mut App)->WindowHandle<Root> {
+    pub fn edit(todo: Todo, cx: &mut App)->WindowHandle<Root> {
         cx.activate(true);
         let window_bounds = Bounds::centered(None, SIZE, cx);
         let options = WindowOptions {
@@ -258,17 +257,14 @@ impl TodoThreadEdit {
             window_decorations: Some(gpui::WindowDecorations::Client),
             ..Default::default()
         };
-        let parent_handle = parent.window_handle();
         cx.create_normal_window(
             format!("xTo-Do {}", todo.title),
             options,
-            move |window, cx| cx.new(|cx| Self::new(todo, parent_handle, window, cx)),
+            move |window, cx| cx.new(|cx| Self::new(todo, window, cx)),
         )
-        // #[cfg(target_os = "windows")]
-        // parent.enable_window(false);
     }
 
-    pub fn add(parent: &mut Window, cx: &mut App) {
+    pub fn add( cx: &mut App) {
         cx.activate(true);
         let window_size = SIZE;
         let window_bounds = Bounds::centered(None, window_size, cx);
@@ -284,17 +280,14 @@ impl TodoThreadEdit {
             window_decorations: Some(gpui::WindowDecorations::Client),
             ..Default::default()
         };
-        let parent_handle = parent.window_handle();
+       
         cx.create_normal_window("xTodo-创建", options, move |window, cx| {
-            cx.new(|cx| Self::new(Todo::default(), parent_handle, window, cx))
+            cx.new(|cx| Self::new(Todo::default(),window, cx))
         });
-        #[cfg(target_os = "windows")]
-        parent.enable_window(false);
     }
 
     fn new(
         todo: Todo,
-        parent: AnyWindowHandle,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -305,15 +298,9 @@ impl TodoThreadEdit {
             state.set_value(todo.description.clone(), window, cx);
             state
         });
-        window.on_window_should_close(cx, move |window, cx| {
-            window.clear_notifications(cx);
-            parent
-                .update(cx, |_, window, cx| {
-                    #[cfg(target_os = "windows")]
-                    window.enable_window(true);
-                    window.activate_window();
-                })
-                .ok();
+        let todo_id = todo.id.clone();
+        window.on_window_should_close(cx, move |_window, cx| {
+             cx.dispatch_event(FoEvent::TodoEditWindowClosed(todo_id.clone()));
             true
         });
         // 时间选择器

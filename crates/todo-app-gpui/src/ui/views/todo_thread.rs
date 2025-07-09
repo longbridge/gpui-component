@@ -1,56 +1,21 @@
-mod chat;
+mod action;
 mod view;
+use crate::app::AppExt;
 use crate::app::FoEvent;
 use crate::backoffice::cross_runtime::StreamMessage;
 use crate::backoffice::llm::types::{ChatMessage, MessageRole};
 use crate::config::todo_item::*;
-use crate::{app::AppExt, backoffice::cross_runtime::CrossRuntimeBridge};
 use gpui::prelude::*;
 use gpui::*;
-use gpui_component::{
-    input::{InputEvent, InputState},
-    scroll::ScrollbarState,
-    *,
-};
-use rig::message::AssistantContent;
+use gpui_component::{input::InputState, scroll::ScrollbarState, *};
 use std::time::Duration;
 
 // 从 rmcp 导入 MCP 类型
 use rmcp::model::Tool as McpTool;
 
-actions!(todo_thread, [Tab, TabPrev, SendMessage]);
+actions!(todo_thread, [Tab, TabPrev, CloseWindow, SendMessage]);
 
 const CONTEXT: &str = "TodoThread";
-
-// // // #[derive(Debug, Clone)]
-// // // pub struct ChatMessage {
-// // //     pub id: String,
-// // //     pub role: MessageRole,
-// // //     pub content: String,
-// // //     pub timestamp: chrono::DateTime<chrono::Utc>,
-// // //     pub model: Option<String>,
-// // //     pub tools_used: Vec<String>,
-// // //     pub source: String,
-// // // }
-
-// // #[derive(Debug, Clone)]
-// // pub struct StreamMessage {
-// //     source: String,
-// //     message: rig::message::Message,
-// // }
-
-// impl StreamMessage {
-//     pub fn new(source: String, message: rig::message::Message) -> Self {
-//         Self { source, message }
-//     }
-// }
-
-// #[derive(Debug, Clone, PartialEq, Eq)]
-// pub enum MessageRole {
-//     User,
-//     Assistant,
-//     System,
-// }
 
 impl MessageRole {
     fn display_name(&self) -> &'static str {
@@ -121,78 +86,28 @@ impl TodoThreadChat {
 
     fn new(todoitem: Todo, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let todo_id = todoitem.id.clone();
-        window.on_window_should_close(cx, move |_window, _app| {
-            CrossRuntimeBridge::global().post(FoEvent::TodoChatWindowClosed(todo_id.clone()));
+        window.on_window_should_close(cx, move |_window, app| {
+            app.dispatch_event(FoEvent::TodoChatWindowClosed(todo_id.clone()));
             true
         });
         // 聊天输入框 - 多行支持
         let chat_input = cx.new(|cx| {
-            let placeholder = if cfg!(target_os = "macos") {
+            const PLACEHOLDER: &'static str = if cfg!(target_os = "macos") {
                 "输入消息与AI助手对话...，按Cmd+Enter发送，按ESC清除输入框"
             } else {
                 "输入消息与AI助手对话...，按Ctrl+Enter发送，按ESC清除输入框"
             };
             InputState::new(window, cx)
-                .placeholder(placeholder)
+                .placeholder(PLACEHOLDER)
                 .clean_on_escape()
                 .multi_line()
                 .auto_grow(1, 6)
         });
 
-        let (tx, mut rx) = tokio::sync::mpsc::channel(1000);
-        let todo_id = todoitem.id.clone();
-        let _sub = CrossRuntimeBridge::global().subscribe(
-            move |StreamMessage { source, message }: &StreamMessage| {
-                if &todo_id == source {
-                    tracing::trace!("接收到消息: {} {:?}", source, message);
-                    tx.try_send(message.clone()).unwrap_or_else(|e| {
-                        tracing::error!("Failed to send message to channel: {}", e);
-                    });
-                }
-            },
-        );
-        cx.spawn(async move |this, app| {
-            let _sub = _sub;
-            'a: loop {
-                Timer::after(Duration::from_millis(50)).await;
-                let mut buffer = String::new();
-                loop {
-                    match rx.try_recv() {
-                        Err(tokio::sync::mpsc::error::TryRecvError::Empty) => {
-                            break;
-                        }
-                        Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => {
-                            break 'a;
-                        }
-                        Ok(msg) => {
-                            if msg.is_text_only() {
-                                buffer.push_str(&msg.get_text());
-                            }
-                        }
-                    }
-                }
-                if buffer.is_empty() {
-                    continue;
-                }
-                let entity = this.clone();
-                entity
-                    .update(app, |this, cx| {
-                        if let Some(last_message) = this.chat_messages.last_mut() {
-                            last_message.add_text(&buffer);
-                        }
-                        this.is_loading = false;
-                        this.scroll_handle.scroll_to_bottom();
-                        cx.notify();
-                    })
-                    .ok();
-            }
-        })
-        .detach();
-
         let _subscriptions = vec![cx.subscribe_in(&chat_input, window, Self::on_chat_input_event)];
         let chat_messages = vec![ChatMessage::system_text(todoitem.description.clone())];
 
-        Self {
+        let instance = Self {
             focus_handle: cx.focus_handle(),
             chat_messages,
             chat_input,
@@ -205,159 +120,95 @@ impl TodoThreadChat {
             scroll_state: ScrollbarState::default(),
             scroll_size: gpui::Size::default(),
             todoitem,
-        }
+        };
+        instance.start_external_message_handler(cx);
+        instance
     }
 
-    // 新增：获取缓存的工具数据
-    fn get_server_tools(&self, server_id: &str) -> Vec<McpTool> {
-        self.cached_server_tools
-            .get(server_id)
-            .cloned()
-            .unwrap_or_default()
+    /// 启动外部消息处理器
+    fn start_external_message_handler(&self, cx: &mut Context<Self>) {
+        let todo_id = self.todoitem.id.clone();
+
+        cx.spawn(async move |this, app: &mut AsyncApp| {
+            Self::handle_external_messages(this, app, todo_id).await;
+        })
+        .detach();
     }
 
-    // 新增：获取模型选择显示文本
-    fn get_model_display_text(&self, _cx: &App) -> String {
-        if let Some(selected_model) = &self.todoitem.selected_model {
-            selected_model.model_name.clone()
-        } else {
-            "".to_string()
-        }
-    }
+    /// 处理外部消息的异步任务
+    async fn handle_external_messages(this: WeakEntity<Self>, app: &mut AsyncApp, todo_id: String) {
+        let (tx, mut rx) = tokio::sync::mpsc::channel(100);
 
-    // 新增：获取工具选择显示文本
-    fn get_tool_display_text(&self, _cx: &App) -> String {
-        let selected_count = self.todoitem.selected_tools.len();
-
-        if selected_count == 0 {
-            "".to_string()
-        } else if selected_count <= 2 {
-            self.todoitem
-                .selected_tools
-                .iter()
-                .map(|item| item.tool_name.as_str())
-                .collect::<Vec<_>>()
-                .join(", ")
-        } else {
-            let first_two = self
-                .todoitem
-                .selected_tools
-                .iter()
-                .take(2)
-                .map(|item| item.tool_name.as_str())
-                .collect::<Vec<_>>()
-                .join(", ");
-            format!("{} 等{}个工具", first_two, selected_count)
-        }
-    }
-
-    // 新增：切换手风琴状态
-    fn toggle_accordion(&mut self, open_indices: &[usize], cx: &mut Context<Self>) {
-        self.expanded_providers = open_indices.to_vec();
-        cx.notify();
-    }
-
-    fn toggle_tool_accordion(&mut self, open_indices: &[usize], cx: &mut Context<Self>) {
-        self.expanded_tool_providers = open_indices.to_vec();
-        cx.notify();
-    }
-
-    // 新增：切换模型选择
-    fn toggle_model_selection(
-        &mut self,
-        checked: bool,
-        model: &crate::config::llm_config::ModelInfo,
-        provider: &crate::config::llm_config::LlmProviderConfig,
-        cx: &mut Context<Self>,
-    ) {
-        if checked {
-            self.todoitem.selected_model = Some(crate::config::todo_item::SelectedModel {
-                provider_id: provider.id.clone(),
-                provider_name: provider.name.clone(),
-                model_id: model.id.clone(),
-                model_name: model.display_name.clone(),
-            });
-        } else {
-            self.todoitem.selected_model = None;
-        }
-        cx.notify();
-    }
-
-    // 新增：切换工具选择
-    fn toggle_tool_selection(
-        &mut self,
-        checked: bool,
-        tool: &McpTool,
-        server: &crate::config::mcp_config::McpServerConfig,
-        cx: &mut Context<Self>,
-    ) {
-        if checked {
-            self.todoitem
-                .selected_tools
-                .push(crate::config::todo_item::SelectedTool {
-                    provider_id: server.id.clone(),
-                    provider_name: server.name.clone(),
-                    description: tool
-                        .description
-                        .as_ref()
-                        .map(|desc| desc.to_string())
-                        .unwrap_or_default(),
-                    tool_name: tool.name.to_string(),
-                    args_schema: Some(
-                        serde_json::Value::Object(tool.input_schema.as_ref().clone()).to_string(),
-                    ),
+        // 订阅外部消息
+        let _sub = app.subscribe_event(move |StreamMessage { source, message }: &StreamMessage| {
+            if &todo_id == source {
+                tracing::trace!("接收到消息: {} {:?}", source, message);
+                tx.try_send(message.clone()).unwrap_or_else(|e| {
+                    tracing::error!("Failed to send message to channel: {}", e);
                 });
+            }
+        });
+
+        // 消息处理循环
+        'message_loop: loop {
+            Timer::after(Duration::from_millis(50)).await;
+
+            let mut buffer = String::new();
+            let mut message_count = 0;
+
+            // 批量收集消息
+            loop {
+                match rx.try_recv() {
+                    Err(tokio::sync::mpsc::error::TryRecvError::Empty) => {
+                        break;
+                    }
+                    Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => {
+                        tracing::info!("外部消息通道已断开连接");
+                        break 'message_loop;
+                    }
+                    Ok(msg) => {
+                        if msg.is_text_only() {
+                            buffer.push_str(&msg.get_text());
+                            message_count += 1;
+                        }
+                    }
+                }
+            }
+
+            // 如果没有新消息，继续等待
+            if buffer.is_empty() {
+                continue;
+            }
+
+            // 更新UI
+            let update_result = this.update(app, |this, cx| {
+                Self::process_received_message(this, buffer, cx);
+            });
+
+            if update_result.is_err() {
+                tracing::warn!("更新UI失败，可能组件已销毁");
+                break 'message_loop;
+            }
+
+            tracing::trace!("处理了 {} 条消息", message_count);
+        }
+
+        tracing::info!("外部消息处理器已停止");
+    }
+
+    /// 处理接收到的消息
+    fn process_received_message(&mut self, buffer: String, cx: &mut Context<Self>) {
+        if let Some(last_message) = self.chat_messages.last_mut() {
+            last_message.add_text(&buffer);
         } else {
-            self.todoitem
-                .selected_tools
-                .retain(|t| t.tool_name != tool.name || t.provider_id != server.id);
+            // 如果没有消息，创建一个新的助手消息
+            let new_message =
+                ChatMessage::assistant_text_with_source(buffer, self.todoitem.id.clone());
+            self.chat_messages.push(new_message);
         }
+
+        self.is_loading = false;
+        self.scroll_handle.scroll_to_bottom();
         cx.notify();
-    }
-
-    // 新增：保存方法（用于在选择模型/工具后保存状态）
-    fn save(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        // 这里可以保存 todoitem 的状态
-        // 根据需要实现具体的保存逻辑
-        match crate::config::todo_item::TodoManager::update_todo(self.todoitem.clone()) {
-            Ok(_) => {
-                // 保存成功，可以显示通知
-                log::info!("Todo item saved successfully");
-            }
-            Err(err) => {
-                // 保存失败，显示错误通知
-                log::error!("Failed to save todo item: {}", err);
-                window.push_notification(
-                    (
-                        gpui_component::notification::NotificationType::Error,
-                        SharedString::new(format!("保存失败: {}", err)),
-                    ),
-                    cx,
-                );
-            }
-        }
-        cx.notify();
-    }
-
-    pub(crate) fn tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
-        self.cycle_focus(true, window, cx);
-    }
-
-    pub(crate) fn on_chat_input_event(
-        &mut self,
-        _entity: &Entity<InputState>,
-        event: &InputEvent,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        match event {
-            InputEvent::PressEnter { secondary, .. } if *secondary => {
-                window.dispatch_action(Box::new(SendMessage), cx);
-            }
-            InputEvent::PressEnter { .. } => {
-                // 普通Enter只是换行，不做任何处理
-            }
-            _ => {}
-        }
     }
 }

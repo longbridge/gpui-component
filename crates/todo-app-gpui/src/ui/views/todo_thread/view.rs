@@ -23,6 +23,7 @@ impl Focusable for TodoThreadChat {
 
 impl TodoThreadChat {
     fn render_chat_message(&self, message: &ChatMessage) -> impl IntoElement {
+        tracing::trace!("渲染消息: {:?}", message);
         let is_user = matches!(message.role, MessageRole::User);
        
         h_flex()
@@ -517,6 +518,10 @@ impl TodoThreadChat {
 
 impl Render for TodoThreadChat {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        tracing::trace!("渲染TodoThreadChat视图");
+        self.chat_messages.iter().for_each(|msg|{
+            tracing::trace!("消息内容: {}", msg.get_text());
+        });
         let selected_model = self.get_model_display_text(cx);
         let selected_tool = self.get_tool_display_text(cx);
         let has_tools = !selected_tool.is_empty();
