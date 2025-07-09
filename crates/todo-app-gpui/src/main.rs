@@ -13,7 +13,6 @@ mod ui;
 pub mod xbus;
 
 use mimalloc::MiMalloc;
-#[cfg(debug_assertions)]
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::EnvFilter;
 
@@ -45,7 +44,6 @@ fn init_log() -> anyhow::Result<()> {
                 .add_directive(LevelFilter::WARN.into())
                 .add_directive("todo_app_gpui=trace".parse()?),
         )
-        // .with_max_level(LevelFilter::OFF)
         .with_writer(std::io::stderr)
         .with_ansi(true)
         .with_line_number(true)
