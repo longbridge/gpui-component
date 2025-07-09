@@ -22,103 +22,7 @@ impl Focusable for TodoThreadChat {
 }
 
 impl TodoThreadChat {
-    fn render_chat_message(&self, message: &ChatMessage) -> impl IntoElement {
-        tracing::trace!("渲染消息: {:?}", message);
-        let is_user = matches!(message.role, MessageRole::User);
-       
-        h_flex()
-            .w_full()
-            .py_2()
-            .px_3()
-            .when(is_user, |this| this.justify_end())
-            .when(!is_user, |this| this.justify_start())
-            .child(
-                div().max_w_full().flex_wrap().child(
-                    v_flex()
-                        .gap_1()
-                        .child(
-                            // 消息头部：角色和时间
-                            h_flex()
-                                .items_center()
-                                .gap_2()
-                                .when(is_user, |this| this.justify_end())
-                                .child(
-                                    div()
-                                        .text_xs()
-                                        .text_color(
-                                            if message.get_source().unwrap_or_default()== VPA && message.role == MessageRole::Assistant {
-                                               gpui::red().to_rgb()
-                                            } else {
-                                               message.role.color()
-                                            }
-                                        )
-                                        .font_medium()
-                                        .child(
-                                            if message.get_source().unwrap_or_default()== VPA && message.role == MessageRole::Assistant {
-                                                "AI助理"
-                                            } else {
-                                                message.role.display_name()
-                                            }
-                                        ),
-                                )
-                                .child(
-                                    div()
-                                        .text_xs()
-                                        .text_color(gpui::rgb(0x9CA3AF))
-                                        .child(message.timestamp.with_timezone(&Local).format("%H:%M").to_string()),
-                                )
-                                .when_some(message.get_model_id(), |this, model| {
-                                    this.child(
-                                        div()
-                                            .text_xs()
-                                            .text_color(gpui::rgb(0x6B7280))
-                                            .child(format!("({})", model)),
-                                    )
-                                }),
-                        )
-                        .child(
-                            // 消息内容
-                            div()
-                                .p_3()
-                                .rounded_lg()
-                                .text_sm()
-                                .when(is_user&&!self.is_loading, |this| {
-                                    this.bg(gpui::rgb(0x3B82F6)).text_color(gpui::rgb(0xFFFFFF))
-                                })
-                                .when(!is_user&&!self.is_loading, |this| {
-                                    this.bg(gpui::rgb(0xF3F4F6)).text_color(gpui::rgb(0x374151))
-                                }).when(self.is_loading, |this| {
-                                            this.child(
-                                                h_flex().justify_start().py_2().child(
-                                                    div()
-                                                        .p_3()
-                                                        .bg(gpui::rgb(0xF3F4F6))
-                                                        .rounded_lg()
-                                                        .text_color(gpui::rgb(0x6B7280))
-                                                        .child("AI正在思考中..."),
-                                                ),
-                                            )
-                                        }).when(!self.is_loading,|this|{
-                                            this.child(
-                                                TextView::markdown(
-                                    SharedString::new(format!("chat-message-{:?}", message.id)),
-                                    message.get_text_without_tools(),
-                                )
-                                            )
-                                        })
-                              ,
-                        )
-                        // .when(message.has_tool_definitions(), |this| {
-                        //     this.child(
-                        //         div()
-                        //             .text_xs()
-                        //             .text_color(gpui::rgb(0x6B7280))
-                        //             .child(format!("使用工具: {}", message.get_tool_definitions().iter().map(|tool|tool.name.as_str()).collect::<Vec<_>>().join(", "))),
-                        //     )
-                        // }),
-                ),
-            )
-    }
+    
 
     fn render_open_model_drawer_at(
         &mut self,
@@ -529,18 +433,92 @@ impl TodoThreadChat {
                 )
         });
     }
+
+fn render_chat_message(&self,idx:usize, message: &ChatMessage) -> impl IntoElement {
+        tracing::trace!("渲染消息: {:?}", message);
+        let is_user = matches!(message.role, MessageRole::User);
+        h_flex()
+            .w_full()
+            .py_2()
+            .px_3()
+            .when(is_user, |this| this.justify_end())
+            .when(!is_user, |this| this.justify_start())
+            .child(
+                div().max_w_full().flex_wrap().child(
+                    v_flex()
+                        .gap_1()
+                        .child(
+                            // 消息头部：角色和时间
+                            h_flex()
+                                .items_center()
+                                .gap_2()
+                                .when(is_user, |this| this.justify_end())
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(
+                                            if message.get_source().unwrap_or_default() == VPA && message.role == MessageRole::Assistant {
+                                                gpui::red().to_rgb()
+                                            } else {
+                                                message.role.color()
+                                            }
+                                        )
+                                        .font_medium()
+                                        .child(
+                                            if message.get_source().unwrap_or_default() == VPA && message.role == MessageRole::Assistant {
+                                                "AI助理"
+                                            } else {
+                                                message.role.display_name()
+                                            }
+                                        ),
+                                )
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(gpui::rgb(0x9CA3AF))
+                                        .child(message.timestamp.with_timezone(&Local).format("%H:%M").to_string()),
+                                )
+                                .when_some(message.get_model_id(), |this, model| {
+                                    this.child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(gpui::rgb(0x6B7280))
+                                            .child(format!("({})", model)),
+                                    )
+                                }),
+                        )
+                        .child(
+                            // 消息内容
+                            div()
+                                .p_3()
+                                .rounded_lg()
+                                .text_sm()
+                                .when(is_user, |this| {
+                                    this.bg(gpui::rgb(0x3B82F6)).text_color(gpui::rgb(0xFFFFFF))
+                                })
+                                .when(!is_user, |this| {
+                                    this.bg(gpui::rgb(0xF3F4F6)).text_color(gpui::rgb(0x374151))
+                                })
+                                .child(
+                                    TextView::markdown(
+                                        SharedString::new(format!("chat-message-{}", idx)),
+                                        message.get_text_without_tools(),
+                                    )
+                                ),
+                        )
+               ),
+            )
+    }
 }
 
 impl Render for TodoThreadChat {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         tracing::trace!("渲染TodoThreadChat视图");
-        // self.chat_messages.iter().for_each(|msg|{
-        //     tracing::trace!("消息内容: {}", msg.get_text());
-        // });
         let selected_model = self.get_model_display_text(cx);
         let selected_tool = self.get_tool_display_text(cx);
         let has_tools = !selected_tool.is_empty();
         let has_models = !selected_model.is_empty();
+        
         v_flex()
             .key_context(CONTEXT)
             .id("todo-thread-view")
@@ -568,131 +546,147 @@ impl Render for TodoThreadChat {
                                         .children(
                                             self.chat_messages
                                                 .iter()
-                                                .filter(|msg| !msg.get_text_without_tools().is_empty())
-                                                .map(|msg| self.render_chat_message(msg)),
+                                                .filter(|msg| !msg.get_text_without_tools().is_empty()).enumerate()
+                                                .map(|(idx,msg)| self.render_chat_message(idx,msg)),
                                         )
+                                        .when(self.is_loading, |this| {
+                                            this.child(
+                                                h_flex()
+                                                    .justify_start()
+                                                    .py_2()
+                                                    .px_3()
+                                                    .child(
+                                                        div()
+                                                            .p_3()
+                                                            .bg(gpui::rgb(0xF3F4F6))
+                                                            .rounded_lg()
+                                                            .text_color(gpui::rgb(0x6B7280))
+                                                            .child("AI正在思考中..."),
+                                                    )
+                                            )
+                                        }),
+                                ),
+                        )
+                        // .child(
+                        //     div()
+                        //         .absolute()
+                        //         .top_0()
+                        //         .left_0()
+                        //         .right_0()
+                        //         .bottom_0()
+                        //         .child(
+                        //             Scrollbar::horizontal(&self.scroll_state, &self.scroll_handle)
+                        //                 .scroll_size(self.scroll_size),
+                        //         ),
+                        // ),
+                ),
+            )
+            .when(self.todoitem.status==TodoStatus::Alert||self.todoitem.status==TodoStatus::InProgress||self.todoitem.status==TodoStatus::Suspended||self.todoitem.status==TodoStatus::Todo, |this|
+                this.child(
+                    // 聊天输入区域 - 固定在底部
+                    v_flex()
+                        .p_1()
+                        .gap_0()
+                        .border_1()
+                        .border_1()
+                        .rounded_lg()
+                        .border_color(gpui::rgb(0xE5E7EB))
+                        .when(has_models || has_tools, |this| {
+                            this.child(
+                                h_flex()
+                                    .items_center()
+                                    .gap_2()
+                                    .bg(gpui::rgb(0xF9FAFB))
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(gpui::rgb(0x6B7280))
+                                            .child(selected_model),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(gpui::rgb(0x6B7280))
+                                            .child(selected_tool),
+                                    ),
+                            )
+                        })
+                        .child(
+                            h_flex()
+                                .items_center()
+                                .justify_start()
+                                .gap_1()
+                                .bg(gpui::rgb(0xF9FAFB))
+                                .child(
+                                    h_flex().justify_start().items_center().gap_2().child(
+                                        Button::new("show-chat-model-drawer")
+                                            .icon(
+                                                Icon::new(IconName::Database)
+                                                    .xsmall()
+                                                    .when(has_models, |this| {
+                                                        this.text_color(green_500())
+                                                    }),
+                                            )
+                                            .ghost()
+                                            .small()
+                                            .justify_center()
+                                            .tooltip("选择模型")
+                                            .on_click(cx.listener(|this, _, window, cx| {
+                                                this.render_open_model_drawer_at(
+                                                    Placement::Left,
+                                                    window,
+                                                    cx,
+                                                )
+                                            })),
+                                    ),
+                                )
+                                .child(
+                                    h_flex().justify_start().items_center().gap_2().child(
+                                        Button::new("show-chat-tool-drawer")
+                                            .icon(
+                                                Icon::new(IconName::Wrench)
+                                                    .xsmall()
+                                                    .when(has_tools, |this| {
+                                                        this.text_color(green_500())
+                                                    }),
+                                            )
+                                            .ghost()
+                                            .small()
+                                            .justify_center()
+                                            .tooltip("选择工具")
+                                            .on_click(cx.listener(|this, _, window, cx| {
+                                                this.render_open_tool_drawer_at(
+                                                    Placement::Left,
+                                                    window,
+                                                    cx,
+                                                )
+                                            })),
+                                    ),
                                 ),
                         )
                         .child(
-                            div()
-                                .absolute()
-                                .top_0()
-                                .left_0()
-                                .right_0()
-                                .bottom_0()
-                                .child(
-                                    Scrollbar::vertical(&self.scroll_state, &self.scroll_handle)
-                                        .scroll_size(self.scroll_size),
-                                ),
-                        ),
-                ),
-            ).when(self.todoitem.status==TodoStatus::Alert||self.todoitem.status==TodoStatus::InProgress||self.todoitem.status==TodoStatus::Suspended||self.todoitem.status==TodoStatus::Todo, |this|
-            this.child(
-                // 聊天输入区域 - 固定在底部
-                v_flex()
-                    .p_1()
-                    .gap_0()
-                    .border_1()
-                    .border_1()
-                    .rounded_lg()
-                    .border_color(gpui::rgb(0xE5E7EB))
-                    .when(has_models || has_tools, |this| {
-                        this.child(
                             h_flex()
-                                .items_center()
-                                .gap_2()
-                                .bg(gpui::rgb(0xF9FAFB))
+                                .gap_1()
                                 .child(
+                                    // 多行输入框
                                     div()
-                                        .text_xs()
-                                        .text_color(gpui::rgb(0x6B7280))
-                                        .child(selected_model),
+                                        .w_full()
+                                        .text_sm()
+                                        .child(TextInput::new(&self.chat_input).bordered(false)),
                                 )
                                 .child(
-                                    div()
-                                        .text_xs()
-                                        .text_color(gpui::rgb(0x6B7280))
-                                        .child(selected_tool),
+                                    h_flex().justify_end().child(
+                                        Button::new("send-message")
+                                            .with_variant(ButtonVariant::Primary)
+                                            .icon(IconName::Send)
+                                            .disabled(self.is_loading)
+                                            .on_click(cx.listener(|this, _, window, cx| {
+                                                this.send_message(&SendMessage, window, cx);
+                                            })),
+                                    ),
                                 ),
-                        )
-                    })
-                    .child(
-                        h_flex()
-                            .items_center()
-                            .justify_start()
-                            .gap_1()
-                            .bg(gpui::rgb(0xF9FAFB))
-                            .child(
-                                h_flex().justify_start().items_center().gap_2().child(
-                                    Button::new("show-chat-model-drawer")
-                                        .icon(
-                                            Icon::new(IconName::Database)
-                                                .xsmall()
-                                                .when(has_models, |this| {
-                                                    this.text_color(green_500())
-                                                }),
-                                        )
-                                        .ghost()
-                                        .small()
-                                        .justify_center()
-                                        .tooltip("选择模型")
-                                        .on_click(cx.listener(|this, _, window, cx| {
-                                            this.render_open_model_drawer_at(
-                                                Placement::Left,
-                                                window,
-                                                cx,
-                                            )
-                                        })),
-                                ),
-                            )
-                            .child(
-                                h_flex().justify_start().items_center().gap_2().child(
-                                    Button::new("show-chat-tool-drawer")
-                                        .icon(
-                                            Icon::new(IconName::Wrench)
-                                                .xsmall()
-                                                .when(has_tools, |this| {
-                                                    this.text_color(green_500())
-                                                }),
-                                        )
-                                        .ghost()
-                                        .small()
-                                        .justify_center()
-                                        .tooltip("选择工具")
-                                        .on_click(cx.listener(|this, _, window, cx| {
-                                            this.render_open_tool_drawer_at(
-                                                Placement::Left,
-                                                window,
-                                                cx,
-                                            )
-                                        })),
-                                ),
-                            ),
-                    )
-                    .child(
-                        h_flex()
-                            .gap_1()
-                            .child(
-                                // 多行输入框
-                                div()
-                                    .w_full()
-                                    .text_sm()
-                                    .child(TextInput::new(&self.chat_input).bordered(false)),
-                            )
-                            .child(
-                                h_flex().justify_end().child(
-                                    Button::new("send-message")
-                                        .with_variant(ButtonVariant::Primary)
-                                        .icon(IconName::Send)
-                                        .disabled(self.is_loading)
-                                        .on_click(cx.listener(|this, _, window, cx| {
-                                            this.send_message(&SendMessage, window, cx);
-                                        })),
-                                ),
-                            ),
-                    ),
+                        ),
+                )
             )
-            )
-            
     }
 }

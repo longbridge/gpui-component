@@ -113,8 +113,8 @@ pub struct ChatMessage {
     pub role: MessageRole,
     /// 多模态内容
     pub contents: Vec<MessageContent>,
-    /// 消息ID（可选）
-    pub id: Option<String>,
+    // /// 消息ID（可选）
+    // pub id: Option<String>,
     /// 时间戳（必须）
     pub timestamp: DateTime<Utc>,
     /// 元数据
@@ -127,7 +127,7 @@ impl ChatMessage {
         Self {
             role,
             contents: vec![MessageContent::text(content)],
-            id: None,
+            // id: None,
             timestamp: Utc::now(),
             metadata: HashMap::new(),
         }
@@ -142,7 +142,7 @@ impl ChatMessage {
         Self {
             role,
             contents: vec![MessageContent::text(content)],
-            id: None,
+            // id: None,
             timestamp: Utc::now(),
             metadata: {
                 let mut meta = HashMap::new();
@@ -162,7 +162,7 @@ impl ChatMessage {
         Self {
             role,
             contents: vec![MessageContent::text(content)],
-            id: None,
+            // id: None,
             timestamp: Utc::now(),
             metadata: {
                 let mut meta = HashMap::new();
@@ -184,7 +184,7 @@ impl ChatMessage {
         Self {
             role,
             contents: vec![MessageContent::text(content)],
-            id: None,
+            // id: None,
             timestamp: Utc::now(),
             metadata: {
                 let mut meta = HashMap::new();
@@ -248,7 +248,7 @@ impl ChatMessage {
         Self {
             role: MessageRole::Assistant,
             contents: vec![MessageContent::chunk(content)],
-            id: None,
+            // id: None,
             timestamp: Utc::now(),
             metadata: {
                 let mut meta = HashMap::new();
@@ -266,7 +266,7 @@ impl ChatMessage {
         Self {
             role: MessageRole::Assistant,
             contents: vec![MessageContent::chunk(content)],
-            id: None,
+            // id: None,
             timestamp: Utc::now(),
             metadata: {
                 let mut meta = HashMap::new();
@@ -285,7 +285,7 @@ impl ChatMessage {
         Self {
             role: MessageRole::Assistant,
             contents: vec![MessageContent::chunk(content)],
-            id: None,
+            // id: None,
             timestamp: Utc::now(),
             metadata: {
                 let mut meta = HashMap::new();
@@ -307,7 +307,7 @@ impl ChatMessage {
         Self {
             role: MessageRole::Assistant,
             contents: vec![MessageContent::chunk(content)],
-            id: None,
+            // id: None,
             timestamp: Utc::now(),
             metadata: {
                 let mut meta = HashMap::new();
@@ -343,7 +343,7 @@ impl ChatMessage {
         Self {
             role: MessageRole::System,
             contents: vec![MessageContent::tool_definitions(tools)],
-            id: None,
+            // id: None,
             timestamp: Utc::now(),
             metadata: {
                 let mut meta = HashMap::new();
@@ -362,7 +362,7 @@ impl ChatMessage {
         Self {
             role: MessageRole::System,
             contents: vec![MessageContent::tool_definitions(tools)],
-            id: None,
+            // id: None,
             timestamp: Utc::now(),
             metadata: {
                 let mut meta = HashMap::new();
@@ -382,7 +382,7 @@ impl ChatMessage {
         Self {
             role: MessageRole::System,
             contents: vec![MessageContent::tool_definitions(tools)],
-            id: None,
+            // id: None,
             timestamp: Utc::now(),
             metadata: {
                 let mut meta = HashMap::new();
@@ -400,7 +400,7 @@ impl ChatMessage {
         Self {
             role: MessageRole::Assistant,
             contents: vec![MessageContent::tool_call(tool_call)],
-            id: None,
+            // id: None,
             timestamp: Utc::now(),
             metadata: {
                 let mut meta = HashMap::new();
@@ -415,7 +415,7 @@ impl ChatMessage {
         Self {
             role: MessageRole::Assistant,
             contents: vec![MessageContent::tool_call(tool_call)],
-            id: None,
+            // id: None,
             timestamp: Utc::now(),
             metadata: {
                 let mut meta = HashMap::new();
@@ -434,7 +434,7 @@ impl ChatMessage {
         Self {
             role: MessageRole::Assistant,
             contents: vec![MessageContent::tool_call(tool_call)],
-            id: None,
+            // id: None,
             timestamp: Utc::now(),
             metadata: {
                 let mut meta = HashMap::new();
@@ -451,7 +451,7 @@ impl ChatMessage {
         Self {
             role,
             contents,
-            id: None,
+            // id: None,
             timestamp: Utc::now(),
             metadata: HashMap::new(),
         }
@@ -466,7 +466,7 @@ impl ChatMessage {
         Self {
             role,
             contents,
-            id: None,
+            // id: None,
             timestamp: Utc::now(),
             metadata: {
                 let mut meta = HashMap::new();
@@ -486,7 +486,7 @@ impl ChatMessage {
         Self {
             role,
             contents,
-            id: None,
+            // id: None,
             timestamp: Utc::now(),
             metadata: {
                 let mut meta = HashMap::new();
@@ -636,11 +636,11 @@ impl ChatMessage {
         self.metadata.get("source").map(|s| s.as_str())
     }
 
-    /// 设置消息ID
-    pub fn with_id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    // /// 设置消息ID
+    // pub fn with_id(mut self, id: impl Into<String>) -> Self {
+    //     self.id = Some(id.into());
+    //     self
+    // }
 
     pub fn with_tool_definitions(mut self, tools: Vec<ToolDefinition>) -> Self {
         self.contents.push(MessageContent::tool_definitions(tools));

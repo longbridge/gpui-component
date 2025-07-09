@@ -1212,10 +1212,11 @@ pub trait AdvancedAgent: Agent {
 
 /// AI智能体实现 - 包含完整的高级功能
 pub struct AiAgent<M: Memory, L: LLM> {
-    /// 运行时上下文
-    runtime_context: RuntimeContext<M, L>,
-    /// 执行上下文
-    execution_context: ExecutionContext,
+    // /// 运行时上下文
+    // runtime_context: RuntimeContext<M, L>,
+    // /// 执行上下文
+    // execution_context: ExecutionContext,
+    context: ContextAware<M, L>,
     /// 活跃任务
     active_tasks: HashMap<String, TaskState>,
 }
@@ -1223,20 +1224,22 @@ pub struct AiAgent<M: Memory, L: LLM> {
 impl<M: Memory, L: LLM> AiAgent<M, L> {
     pub fn new(session_id: String, memory: M, llm: L) -> Self {
         Self {
-            runtime_context: RuntimeContext::new(memory, llm),
-            execution_context: ExecutionContext::new(session_id),
+            context: ContextAware {
+                runtime_context: RuntimeContext::new(memory, llm),
+                execution_context: ExecutionContext::new(session_id),
+            },
             active_tasks: HashMap::new(),
         }
     }
 
     /// 获取配置
     pub fn config(&self) -> &AgentConfig {
-        &self.runtime_context.config
+        &self.context.runtime_context.config
     }
 
     /// 更新配置
     pub fn update_config(&mut self, config: AgentConfig) {
-        self.runtime_context.config = config;
+        self.context.runtime_context.config = config;
     }
 
     /// 获取学习统计
@@ -1251,12 +1254,12 @@ impl<M: Memory, L: LLM> AiAgent<M, L> {
 
     /// 获取执行上下文
     pub fn get_execution_context(&self) -> &ExecutionContext {
-        &self.execution_context
+        &self.context.execution_context
     }
 
     /// 获取性能指标
     pub fn get_performance_metrics(&self) -> &PerformanceMetrics {
-        &self.runtime_context.performance_metrics
+        &self.context.runtime_context.performance_metrics
     }
 
     /// 创建新任务
@@ -1301,15 +1304,15 @@ impl<M: Memory, L: LLM> Agent for AiAgent<M, L> {
     type LLM = L;
 
     fn memory(&self) -> &Self::Memory {
-        &self.runtime_context.memory
+        &self.context.runtime_context.memory
     }
 
     fn memory_mut(&mut self) -> &mut Self::Memory {
-        &mut self.runtime_context.memory
+        &mut self.context.runtime_context.memory
     }
 
     fn llm(&self) -> &Self::LLM {
-        &self.runtime_context.llm
+        &self.context.runtime_context.llm
     }
 
     async fn process_with_context(&mut self, input: &str) -> anyhow::Result<String> {
@@ -1324,19 +1327,19 @@ impl<M: Memory, L: LLM> Agent for AiAgent<M, L> {
 
 impl<M: Memory, L: LLM> AdvancedAgent for AiAgent<M, L> {
     fn runtime_context(&self) -> &RuntimeContext<Self::Memory, Self::LLM> {
-        &self.runtime_context
+        &self.context.runtime_context
     }
 
     fn runtime_context_mut(&mut self) -> &mut RuntimeContext<Self::Memory, Self::LLM> {
-        &mut self.runtime_context
+        &mut self.context.runtime_context
     }
 
     fn execution_context(&self) -> &ExecutionContext {
-        &self.execution_context
+        &self.context.execution_context
     }
 
     fn execution_context_mut(&mut self) -> &mut ExecutionContext {
-        &mut self.execution_context
+        &mut self.context.execution_context
     }
 }
 
@@ -1353,4 +1356,10 @@ pub trait MediaProcessor: Send + Sync {
 
     /// 提取文本内容（OCR、语音转文字等）
     async fn extract_text(&self, media: &MediaContent) -> anyhow::Result<Option<String>>;
+}
+
+pub struct ContextAware<M: Memory, L: LLM> {
+    runtime_context: RuntimeContext<M, L>,
+    /// 执行上下文
+    execution_context: ExecutionContext,
 }
