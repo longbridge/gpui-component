@@ -13,6 +13,8 @@ mod ui;
 pub mod xbus;
 
 use mimalloc::MiMalloc;
+#[cfg(debug_assertions)]
+use tracing::level_filters::LevelFilter;
 use tracing_subscriber::EnvFilter;
 
 rust_i18n::i18n!("locales", fallback = "en");
@@ -39,9 +41,11 @@ fn init_log() -> anyhow::Result<()> {
     #[cfg(debug_assertions)]
     tracing_subscriber::fmt()
         .with_env_filter(
-            EnvFilter::from_default_env().add_directive("todo-app-gpui=trace".parse()?),
+            EnvFilter::from_default_env()
+                .add_directive(LevelFilter::WARN.into())
+                .add_directive("todo_app_gpui=trace".parse()?),
         )
-        .with_max_level(tracing::Level::WARN)
+        // .with_max_level(LevelFilter::OFF)
         .with_writer(std::io::stderr)
         .with_ansi(true)
         .with_line_number(true)

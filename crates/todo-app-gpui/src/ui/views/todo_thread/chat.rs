@@ -21,11 +21,11 @@ impl TodoThreadChat {
 
         // 检查是否选择了模型
         let Some(selected_model) = &self.todoitem.selected_model else {
-            println!("未选择模型，无法发送消息");
+            tracing::trace!("未选择模型，无法发送消息");
             return;
         };
 
-        println!("使用模型: {:?}", selected_model);
+        tracing::trace!("使用模型: {:?}", selected_model);
 
         // 获取模型提供商信息
         let Some(provider_info) = LlmProviderManager::get_enabled_providers()
@@ -33,13 +33,13 @@ impl TodoThreadChat {
             .find(|provider| provider.id == selected_model.provider_id)
             .cloned()
         else {
-            println!("未找到模型提供商: {}", selected_model.provider_id);
+            tracing::trace!("未找到模型提供商: {}", selected_model.provider_id);
             return;
         };
 
         // 检查模型ID是否有效
         if selected_model.model_id.is_empty() {
-            println!("模型ID为空，无法发送消息");
+            tracing::trace!("模型ID为空，无法发送消息");
             return;
         }
 
@@ -90,9 +90,10 @@ impl TodoThreadChat {
 
         // 发起异步调用
         cx.spawn(async move |this, cx| {
-            println!(
+            tracing::trace!(
                 "开始调用 LLM - Provider: {}, Model: {}",
-                provider_id, model_id
+                provider_id,
+                model_id
             );
 
             match CrossRuntimeBridge::global()
@@ -100,10 +101,10 @@ impl TodoThreadChat {
                 .await
             {
                 Ok(_) => {
-                    println!("LLM 调用成功");
+                    tracing::trace!("LLM 调用成功");
                 }
                 Err(e) => {
-                    println!("LLM 调用失败: {:?}", e);
+                    tracing::error!("LLM 调用失败: {:?}", e);
                     // // 可以考虑在这里更新UI显示错误信息
                     // cx.update(|cx| {
                     //     // this.is_loading = false;
