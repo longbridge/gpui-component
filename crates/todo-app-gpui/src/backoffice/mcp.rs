@@ -30,25 +30,17 @@ pub struct McpCallToolResult {
     pub is_error: bool,
 }
 
-/// 简化的 MCP Registry - 移除 McpServerInstance，使用快照缓存
 pub struct McpRegistry {
-    /// MCP 服务器 Actor 地址映射
     servers: HashMap<String, Addr<McpServer>>,
-    /// 服务器快照缓存，用于快速查询和跨运行时传递
     snapshots: HashMap<String, McpServerSnapshot>,
-    /// 配置文件监控
     file: YamlFile,
-    /// 定时检查句柄
     handle: Option<SpawnHandle>,
 }
 
 impl McpRegistry {
-    /// 获取全局注册表实例
     pub fn global() -> Addr<Self> {
         McpRegistry::from_registry()
     }
-
-    /// 异步工具调用
     pub async fn call_tool(
         server_id: &str,
         tool_name: &str,
@@ -65,7 +57,6 @@ impl McpRegistry {
         Ok(result)
     }
 
-    /// 异步获取服务器快照
     pub async fn get_snapshot(server_id: &str) -> anyhow::Result<Option<McpServerSnapshot>> {
         let result = McpRegistry::global()
             .send(GetServerSnapshot {
@@ -76,7 +67,6 @@ impl McpRegistry {
         Ok(result)
     }
 
-    /// 异步获取所有服务器快照
     pub async fn get_all_snapshots() -> anyhow::Result<Vec<McpServerSnapshot>> {
         let result = McpRegistry::global().send(GetAllSnapshots).await?;
         Ok(result)
@@ -104,7 +94,6 @@ impl Supervised for McpRegistry {
 impl SystemService for McpRegistry {}
 
 impl McpRegistry {
-    /// 定时检查配置文件变化
     fn tick(&mut self, ctx: &mut Context<Self>) {
         if let Ok(false) = &self.file.exist() {
             self.servers.clear();
@@ -116,7 +105,6 @@ impl McpRegistry {
         }
     }
 
-    /// 检查配置文件更新并同步服务器状态
     fn check_and_update(&mut self, _ctx: &mut Context<Self>) -> anyhow::Result<()> {
         if self.file.modified()? {
             let configs = McpConfigManager::load_servers()?;
@@ -202,7 +190,6 @@ impl Handler<McpCallToolRequest> for McpRegistry {
     }
 }
 
-/// 更新服务器缓存快照
 #[derive(Message)]
 #[rtype(result = "()")]
 pub struct UpdateServerCache {
@@ -224,7 +211,6 @@ impl Handler<UpdateServerCache> for McpRegistry {
     }
 }
 
-/// 获取所有服务器快照
 #[derive(Message)]
 #[rtype(result = "Vec<McpServerSnapshot>")]
 pub struct GetAllSnapshots;
@@ -239,7 +225,6 @@ impl Handler<GetAllSnapshots> for McpRegistry {
     }
 }
 
-/// 兼容性消息 - 获取实例（实际返回快照）
 #[derive(Message)]
 #[rtype(result = "Option<McpServerSnapshot>")]
 pub struct GetServerSnapshot {

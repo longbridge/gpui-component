@@ -113,8 +113,6 @@ pub struct ChatMessage {
     pub role: MessageRole,
     /// 多模态内容
     pub contents: Vec<MessageContent>,
-    // /// 消息ID（可选）
-    // pub id: Option<String>,
     /// 时间戳（必须）
     pub timestamp: DateTime<Utc>,
     /// 元数据

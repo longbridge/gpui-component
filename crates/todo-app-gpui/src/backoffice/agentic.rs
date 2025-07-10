@@ -1,9 +1,12 @@
+/// agentic模块的目的是实现具备图灵完备的Ai Agent系统，不是目标完备的AGI
 use super::llm::types::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
+mod feedback;
 mod insight;
 mod knowledge;
+mod regulator;
 // pub(crate) mod llm;
 pub(crate) mod mcp_tools;
 mod memex;

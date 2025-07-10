@@ -11,8 +11,6 @@ use rig::{
     streaming::{StreamingChat, StreamingCompletionModel},
 };
 
-/// 现代化的 LLM 实现，直接实现 agentic 的 LLM trait
-
 #[derive(Debug, Clone)]
 pub struct LlmProvider {
     pub(crate) config: LlmProviderConfig,

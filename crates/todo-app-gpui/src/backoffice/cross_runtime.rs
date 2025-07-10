@@ -1,4 +1,4 @@
-use crate::backoffice::llm::{types::*, LlmChatRequest, LlmRegistry};
+use crate::backoffice::llm::{types::*, LlmRegistry};
 use crate::backoffice::mcp::server::McpServerSnapshot;
 use crate::backoffice::mcp::{
     GetAllSnapshots, GetServerSnapshot, McpCallToolRequest, McpCallToolResult, McpRegistry,
