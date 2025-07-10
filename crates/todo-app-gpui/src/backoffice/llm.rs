@@ -280,7 +280,7 @@ async fn create_tool_enabled_stream(
                     {
                         Ok(result) => {
                             tracing::debug!("工具调用结果: {:?}", result);
-                            let mut chat_message = ChatMessage::user_text("工具调用结果: ");
+                            let mut chat_message = ChatMessage::user_text("");
                             result.content.iter().for_each(|content| match content.raw {
                                 RawContent::Text(ref text) => {
                                     let result = format!(
