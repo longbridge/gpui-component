@@ -118,7 +118,7 @@ impl LlmProvider {
                 Ok(AssistantContent::Text(text)) => Ok(ChatMessage::assistant_chunk(text.text)),
                 Ok(AssistantContent::ToolCall(tool)) => Ok(ChatMessage::tool_call(ToolCall {
                     name: tool.function.name,
-                    args: tool.function.arguments.to_string(),
+                    arguments: tool.function.arguments.to_string(),
                 })),
                 Err(e) => Err(anyhow::anyhow!("Stream error: {}", e)),
             });
@@ -152,7 +152,7 @@ fn create_streaming_tool_parser<M: StreamingCompletionModel + 'static>(
     _: &Agent<M>,
     rig_stream: rig::streaming::StreamingCompletionResponse<M::StreamingResponse>,
 ) -> impl futures::Stream<Item = anyhow::Result<ChatMessage>> {
-    tracing::trace!("开始创建流式工具解析器");
+    tracing::debug!("开始创建流式工具解析器");
     use futures::stream;
 
     // 解析状态
@@ -189,7 +189,7 @@ fn create_streaming_tool_parser<M: StreamingCompletionModel + 'static>(
             const TAG_OPEN: char = '<';
 
             while let Some(chunk) = stream.next().await {
-                tracing::trace!("接收到流数据块 {:?}", chunk);
+                tracing::debug!("接收到流数据块 {:?}", chunk);
                 match chunk {
                     Ok(AssistantContent::Text(text)) => {
                         for c in text.text.chars() {
@@ -291,7 +291,7 @@ fn create_streaming_tool_parser<M: StreamingCompletionModel + 'static>(
                                         // 重置状态，继续解析后续内容
                                         parser_state.state = ParseState::Normal;
                                         parser_state.xml_buffer.clear();
-                                        tracing::trace!("解析到完整的工具调用 XML: {}", cleaned);
+                                        tracing::debug!("解析到完整的工具调用 XML: {}", cleaned);
                                         if let Ok(tool_call) =
                                             serde_xml_rs::from_str::<ToolCall>(&cleaned)
                                         {
@@ -319,7 +319,7 @@ fn create_streaming_tool_parser<M: StreamingCompletionModel + 'static>(
                         // 处理 Rig 原生工具调用
                         let tool_call = ToolCall {
                             name: tool.function.name,
-                            args: tool.function.arguments.to_string(),
+                            arguments: tool.function.arguments.to_string(),
                         };
                         let message = ChatMessage::tool_call(tool_call);
                         return Some((Ok(message), (stream, parser_state)));

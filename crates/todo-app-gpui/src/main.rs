@@ -42,7 +42,7 @@ fn init_log() -> anyhow::Result<()> {
         .with_env_filter(
             EnvFilter::from_default_env()
                 .add_directive(LevelFilter::WARN.into())
-                .add_directive("todo_app_gpui=trace".parse()?),
+                .add_directive("todo_app_gpui=debug".parse()?),
         )
         .with_writer(std::io::stderr)
         .with_ansi(true)

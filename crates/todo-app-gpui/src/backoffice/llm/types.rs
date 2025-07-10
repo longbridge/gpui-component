@@ -68,7 +68,7 @@ pub struct ToolCall {
     pub name: String,
     /// 工具调用参数（JSON 字符串或键值对字符串）
     #[serde(default)]
-    pub args: String,
+    pub arguments: String,
 }
 
 impl ToolCall {
@@ -998,7 +998,10 @@ impl MessageContent {
                 .join("\n"),
             Self::ToolCall(tool_call) => {
                 // 返回工具调用的描述
-                format!("Tool: {} with args: {}", tool_call.name, tool_call.args)
+                format!(
+                    "Tool: {} with args: {}",
+                    tool_call.name, tool_call.arguments
+                )
             }
             Self::ToolDefinitions(tools) => {
                 // 返回工具定义的描述

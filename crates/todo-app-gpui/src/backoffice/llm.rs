@@ -63,7 +63,7 @@ impl LlmRegistry {
                             fut::ready(())
                         }
                         Err(err) => {
-                            tracing::trace!("Failed to load models for {}: {}", config.id, err);
+                            tracing::error!("Failed to load models for {}: {}", config.id, err);
                             fut::ready(())
                         }
                     })
@@ -269,15 +269,16 @@ async fn create_tool_enabled_stream(
                     tool_call,
                     mut chat_history,
                 } => {
-                    tracing::info!("执行工具调用: {:?}", tool_call);
+                    tracing::debug!("执行工具调用: {:?}", tool_call);
                     let tool_result = match McpRegistry::call_tool(
                         tool_call.id(),
                         tool_call.tool_name(),
-                        &tool_call.args,
+                        &tool_call.arguments,
                     )
                     .await
                     {
                         Ok(result) => {
+                            tracing::debug!("工具调用结果: {:?}", result);
                             let mut chat_message = ChatMessage::user_text("工具调用结果: ");
                             result.content.iter().for_each(|content| match content.raw {
                                 RawContent::Text(ref text) => {
@@ -295,7 +296,10 @@ async fn create_tool_enabled_stream(
                             });
                             chat_message
                         }
-                        Err(e) => ChatMessage::user_text(format!("工具调用失败: {}", e)),
+                        Err(e) => {
+                            tracing::error!("工具调用失败: {}", e);
+                            ChatMessage::user_text(format!("工具调用失败: {}", e))
+                        }
                     };
                     chat_history.push(tool_result.clone());
                     let continuation_prompt =
