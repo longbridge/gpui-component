@@ -88,7 +88,9 @@ impl LlmProvider {
         let chat_history: Vec<RigMessage> = messages
             .iter()
             .take(last_user_index)
-            .filter(|chat_msg| !chat_msg.has_tool_definitions())
+            .filter(|chat_msg| {
+                !chat_msg.has_tool_definitions() && chat_msg.role != MessageRole::System
+            })
             .map(|chat_msg| match chat_msg.role {
                 MessageRole::User => RigMessage::user(chat_msg.get_text()),
                 MessageRole::Assistant => RigMessage::assistant(chat_msg.get_text()),
@@ -99,7 +101,9 @@ impl LlmProvider {
         tracing::debug!("使用模型: {}", model_id);
         tracing::debug!("使用系统提示: {}", system_prompt);
         tracing::debug!("使用提示: {}", prompt);
-        tracing::debug!("使用聊天历史: {:?}", chat_history);
+        chat_history.iter().enumerate().for_each(|(idx, msg)| {
+            tracing::debug!("聊天历史消息({}): {:?}", idx, msg);
+        });
         let agent = client
             .agent(model_id)
             .context(system_prompt.as_str())
