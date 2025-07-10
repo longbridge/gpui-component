@@ -322,9 +322,9 @@ async fn create_tool_enabled_stream(
                         }
                     };
                     chat_history.push(tool_result.clone());
-                    let continuation_prompt =
-                        ChatMessage::user_text("继续完成任务，基于工具调用的结果。");
-                    chat_history.push(continuation_prompt);
+                    // let continuation_prompt =
+                    //     ChatMessage::user_text("继续完成任务，基于工具调用的结果。");
+                    // chat_history.push(continuation_prompt);
 
                     let new_state = ToolStreamState::Streaming {
                         stream: None,

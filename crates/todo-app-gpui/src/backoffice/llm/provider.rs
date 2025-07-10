@@ -160,29 +160,45 @@ fn create_streaming_tool_parser_simple<S>(
     input_stream: S,
 ) -> impl futures::Stream<Item = anyhow::Result<ChatMessage>>
 where
-    S: futures::Stream<Item = anyhow::Result<String>> + Send + Unpin + 'static, // 添加 Unpin 约束
+    S: futures::Stream<Item = anyhow::Result<String>> + Send + Unpin + 'static,
 {
     use futures::stream;
-    use futures::StreamExt; // 确保导入了 StreamExt
+    use futures::StreamExt;
 
     stream::unfold(
-        (input_stream, StreamingToolParser::new()),
-        |(mut stream, mut parser)| async move {
+        (input_stream, StreamingToolParser::new(), Vec::<ChatMessage>::new()),
+        |(mut stream, mut parser, mut message_queue)| async move {
+            // 如果队列中有消息，先发送队列中的消息
+            if !message_queue.is_empty() {
+                let message = message_queue.remove(0);
+                return Some((Ok(message), (stream, parser, message_queue)));
+            }
+
             match stream.next().await {
                 Some(Ok(text)) => {
                     tracing::debug!("处理文本chunk: {}", text);
-                    let messages = parser.process_chunk(&text);
-                    if let Some(message) = messages.into_iter().next() {
-                        Some((Ok(message), (stream, parser)))
+                    let mut messages = parser.process_chunk(&text);
+                    
+                    if !messages.is_empty() {
+                        // 取出第一个消息发送，其余放入队列
+                        let first_message = messages.remove(0);
+                        message_queue.extend(messages);
+                        Some((Ok(first_message), (stream, parser, message_queue)))
                     } else {
-                        // 递归处理下一个chunk
-                        Some((Ok(ChatMessage::assistant_chunk("")), (stream, parser)))
+                        // 没有消息，返回空的chunk以保持流活跃
+                        Some((Ok(ChatMessage::assistant_chunk("")), (stream, parser, message_queue)))
                     }
                 }
-                Some(Err(e)) => Some((Err(e), (stream, parser))),
+                Some(Err(e)) => Some((Err(e), (stream, parser, message_queue))),
                 None => {
-                    if let Some(final_message) = parser.finish() {
-                        Some((Ok(final_message), (stream, parser)))
+                    // 流结束，处理剩余内容
+                    let final_messages = parser.finish();
+                    if !final_messages.is_empty() {
+                        // 取出第一个消息发送，其余放入队列
+                        let mut final_iter = final_messages.into_iter();
+                        let first_message = final_iter.next().unwrap();
+                        message_queue.extend(final_iter);
+                        Some((Ok(first_message), (stream, parser, message_queue)))
                     } else {
                         None
                     }
