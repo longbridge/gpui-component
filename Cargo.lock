@@ -6960,6 +6960,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "quick-xml"
+version = "0.38.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8927b0664f5c5a98265138b7e3f90aa19a6b21353182469ace36d4ac527b7b1b"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "quinn"
 version = "0.11.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9272,6 +9281,7 @@ dependencies = [
  "homedir",
  "log",
  "mimalloc",
+ "quick-xml 0.38.0",
  "rand 0.9.1",
  "raw-window-handle",
  "regex",

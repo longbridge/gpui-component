@@ -1,3 +1,4 @@
+mod parser;
 mod provider;
 pub mod types;
 
@@ -282,7 +283,12 @@ async fn create_tool_enabled_stream(
                             let mut chat_message = ChatMessage::user_text("工具调用结果: ");
                             result.content.iter().for_each(|content| match content.raw {
                                 RawContent::Text(ref text) => {
-                                    chat_message.add_text(text.text.clone());
+                                    let result = format!(
+                                        "<tool_use_result><name>{}</name><result>{}</result></tool_use_result>",
+                                        result.name,
+                                        text.text.clone()
+                                    );
+                                    chat_message.add_text(result);
                                 }
                                 RawContent::Image(ref image) => {
                                     chat_message.add_text(format!("处理图片内容: {:?}", image));

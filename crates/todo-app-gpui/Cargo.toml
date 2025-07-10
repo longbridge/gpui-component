@@ -69,6 +69,7 @@ actix-web = "4.11.0"
 rust-i18n = "3"
 smol = "1"
 smallvec = "1.13.2"
+quick-xml = { version = "0.38" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.61.1", features = [
