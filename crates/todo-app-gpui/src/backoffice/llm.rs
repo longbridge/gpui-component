@@ -19,10 +19,8 @@ pub struct LlmChatRequest {
     pub model_id: String,
     pub source: String,
     pub messages: Vec<ChatMessage>,
-    // pub tool_delegate: Option<Box<dyn crate::backoffice::agentic::ToolDelegate<Output = crate::backoffice::mcp::McpCallToolResult, Args = String>>>,
 }
 
-// Registry 保持不变，但使用新的命名
 pub struct LlmRegistry {
     providers: HashMap<String, LlmProviderConfig>,
     file: YamlFile,
@@ -30,7 +28,6 @@ pub struct LlmRegistry {
 }
 
 impl LlmRegistry {
-    /// 获取全局注册表实例
     pub fn global() -> Addr<Self> {
         LlmRegistry::from_registry()
     }
@@ -148,17 +145,12 @@ impl Handler<LlmChatRequest> for LlmRegistry {
                     model_id,
                     source
                 );
-
                 let llm = LlmProvider::new(&config)?;
-
-                // 检查是否需要工具调用
                 let has_tools = messages.iter().any(|msg| msg.has_tool_definitions());
 
                 if has_tools {
-                    // 有工具调用需求，使用工具处理流
                     create_tool_enabled_stream(llm, &model_id, &messages).await
                 } else {
-                    // 普通对话，直接使用provider的流
                     llm.stream_chat(&model_id, &messages).await
                 }
             }
@@ -179,7 +171,6 @@ impl Handler<LlmChatRequest> for LlmRegistry {
     }
 }
 
-/// 创建支持工具调用的流
 async fn create_tool_enabled_stream(
     llm: LlmProvider,
     model_id: &str,
@@ -215,7 +206,6 @@ async fn create_tool_enabled_stream(
                     mut chat_history,
                     mut accumulated_response,
                 } => {
-                    // 如果没有活跃的流，创建新的
                     if stream.is_none() {
                         match llm.stream_chat(&model_id, &chat_history).await {
                             Ok(new_stream) => stream = Some(new_stream),
@@ -227,8 +217,6 @@ async fn create_tool_enabled_stream(
                             }
                         }
                     }
-
-                    // 处理流数据
                     if let Some(mut current_stream) = stream {
                         use futures::StreamExt;
 
@@ -236,10 +224,8 @@ async fn create_tool_enabled_stream(
                             match chunk {
                                 Ok(message) => {
                                     if message.is_tool_call() {
-                                        // 检测到工具调用
                                         let tool_calls = message.get_tool_calls();
                                         if let Some(tool_call) = tool_calls.first().cloned() {
-                                            // 保存当前响应到历史
                                             if !accumulated_response.is_empty() {
                                                 chat_history.push(ChatMessage::assistant_text(
                                                     accumulated_response.clone(),
@@ -254,9 +240,7 @@ async fn create_tool_enabled_stream(
                                             return Some((Ok(message), (llm, model_id, new_state)));
                                         }
                                     } else {
-                                        // 普通文本消息
                                         accumulated_response.push_str(&message.get_text());
-
                                         let new_state = ToolStreamState::Streaming {
                                             stream: Some(current_stream),
                                             chat_history,
@@ -285,9 +269,7 @@ async fn create_tool_enabled_stream(
                     tool_call,
                     mut chat_history,
                 } => {
-                    // 执行工具调用
                     tracing::info!("执行工具调用: {:?}", tool_call);
-
                     let tool_result = match McpRegistry::call_tool(
                         tool_call.id(),
                         tool_call.tool_name(),
@@ -296,7 +278,6 @@ async fn create_tool_enabled_stream(
                     .await
                     {
                         Ok(result) => {
-                            // 添加工具结果到历史
                             let mut chat_message = ChatMessage::user_text("工具调用结果: ");
                             result.content.iter().for_each(|content| match content.raw {
                                 RawContent::Text(ref text) => {
@@ -316,11 +297,7 @@ async fn create_tool_enabled_stream(
                         }
                         Err(e) => ChatMessage::user_text(format!("工具调用失败: {}", e)),
                     };
-
-                    // 添加工具结果到历史
                     chat_history.push(tool_result.clone());
-
-                    // 继续对话
                     let continuation_prompt =
                         ChatMessage::user_text("继续完成任务，基于工具调用的结果。");
                     chat_history.push(continuation_prompt);
@@ -330,8 +307,6 @@ async fn create_tool_enabled_stream(
                         chat_history,
                         accumulated_response: String::new(),
                     };
-
-                    // 返回工具执行结果消息
                     Some((Ok(tool_result.clone()), (llm, model_id, new_state)))
                 }
                 ToolStreamState::Finished => None,
