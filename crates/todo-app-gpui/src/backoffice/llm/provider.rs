@@ -14,20 +14,22 @@ use rig::{
 /// 现代化的 LLM 实现，直接实现 agentic 的 LLM trait
 
 #[derive(Debug, Clone)]
-pub struct LlmProvider<'a> {
-    pub(crate) config: &'a LlmProviderConfig,
+pub struct LlmProvider {
+    pub(crate) config: LlmProviderConfig,
 }
 
-impl<'a> LlmProvider<'a> {
-    pub fn new(config: &'a LlmProviderConfig) -> anyhow::Result<Self> {
+impl LlmProvider {
+    pub fn new(config: &LlmProviderConfig) -> anyhow::Result<Self> {
         // 验证配置
         if config.api_key.is_empty() {
             return Err(anyhow::anyhow!("API key is required"));
         }
-        Ok(Self { config })
+        Ok(Self {
+            config: config.clone(),
+        })
     }
 }
-impl<'a> LlmProvider<'a> {
+impl LlmProvider {
     pub async fn load_models(&self) -> anyhow::Result<Vec<ModelInfo>> {
         let client = rig::providers::mira::Client::new_with_base_url(
             &self.config.api_key,
