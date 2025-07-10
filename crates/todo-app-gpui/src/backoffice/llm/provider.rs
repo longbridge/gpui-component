@@ -7,6 +7,7 @@ use crate::config::llm_config::LlmProviderConfig;
 use crate::config::llm_config::ModelInfo;
 use futures::StreamExt;
 use rig::agent::Agent;
+use rig::streaming::StreamingCompletion;
 use rig::{
     completion::AssistantContent,
     message::Message as RigMessage,
@@ -65,16 +66,19 @@ impl LlmProvider {
         model_id: &str,
         messages: &[ChatMessage],
     ) -> anyhow::Result<ChatStream> {
-        let client =
-            rig::providers::openai::Client::from_url(&self.config.api_key, &self.config.api_url);
-
+    //    messages.iter().enumerate().for_each(|(idx,msg)| {
+    //         tracing::debug!("聊天消息({}): {:?}",idx, msg);
+    //     });
         let tools: Vec<ToolDefinition> = messages
             .iter()
             .flat_map(|msg| msg.get_tool_definitions())
             .cloned()
             .collect();
         let no_tools = tools.is_empty();
+
         let system_prompt = build_system_prompt(messages, tools);
+
+        //取最后一条用户消息
         let prompt = messages
             .iter()
             .rev()
@@ -88,10 +92,8 @@ impl LlmProvider {
 
         let chat_history: Vec<RigMessage> = messages
             .iter()
-            .take(last_user_index)
-            .filter(|chat_msg| {
-                !chat_msg.has_tool_definitions() && chat_msg.role != MessageRole::System
-            })
+            .skip(last_user_index+1)
+            .filter(|chat_msg| chat_msg.role != MessageRole::System)
             .map(|chat_msg| match chat_msg.role {
                 MessageRole::User => RigMessage::user(chat_msg.get_text()),
                 MessageRole::Assistant => RigMessage::assistant(chat_msg.get_text()),
@@ -99,20 +101,19 @@ impl LlmProvider {
                 MessageRole::Tool => RigMessage::user(chat_msg.get_text()),
             })
             .collect();
-        tracing::debug!("使用模型: {}", model_id);
         tracing::debug!("使用系统提示: {}", system_prompt);
         tracing::debug!("使用提示: {}", prompt);
         chat_history.iter().enumerate().for_each(|(idx, msg)| {
             tracing::debug!("聊天历史消息({}): {:?}", idx, msg);
         });
-        let agent = client
+        let agent = rig::providers::openai::Client::from_url(&self.config.api_key, &self.config.api_url)
             .agent(model_id)
             .context(system_prompt.as_str())
             .max_tokens(4096)
             .temperature(0.7)
             .build();
 
-        let rig_stream = agent.stream_chat(&prompt, chat_history).await?;
+        let rig_stream = agent.stream_completion(&prompt, chat_history).await?.stream().await?;
 
         if no_tools {
             // 没有工具，简单转换
@@ -126,14 +127,12 @@ impl LlmProvider {
             });
             Ok(Box::pin(chat_stream))
         } else {
-            // 有工具，使用专门的解析器
             let text_stream = rig_stream.map(|result| match result {
                 Ok(AssistantContent::Text(text)) => Ok(text.text),
                 Ok(AssistantContent::ToolCall(_)) => Ok(String::new()), // 忽略原生工具调用
                 Err(e) => Err(anyhow::anyhow!("Stream error: {}", e)),
             });
 
-            // **修改点：调用 parser 模块中的新函数**
             let parsed_stream = parser::create_streaming_tool_parser(text_stream);
             Ok(Box::pin(parsed_stream))
         }

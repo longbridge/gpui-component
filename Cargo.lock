@@ -9300,6 +9300,7 @@ dependencies = [
  "sysinfo 0.35.2",
  "tempfile",
  "tokio",
+ "tokio-stream",
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
@@ -9378,6 +9379,7 @@ dependencies = [
  "futures-core",
  "pin-project-lite",
  "tokio",
+ "tokio-util",
 ]
 
 [[package]]

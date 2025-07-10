@@ -147,8 +147,8 @@ impl Handler<LlmChatRequest> for LlmRegistry {
                     source
                 );
                 let llm = LlmProvider::new(&config)?;
-                llm.stream_chat(&model_id, &messages).await
-                // create_tool_enabled_stream(llm, &model_id, &messages).await
+                // llm.stream_chat(&model_id, &messages).await
+                create_tool_enabled_stream(llm, &model_id, &messages).await
             }
             .into_actor(self)
             .map(|res, _act, _ctx| res)
@@ -532,173 +532,117 @@ impl LlmRegistry {
     }
 }
 
-async fn chat_stream_with_tools(
+async fn chat_stream_with_tools_simple(
     llm: LlmProvider,
     model_id: &str,
     chat_history: Vec<ChatMessage>,
     max_tool_rounds: usize,
 ) -> anyhow::Result<ChatStream> {
-    use futures::stream;
-    use futures::StreamExt;
+    // 创建一个消息队列，用于将后台任务的消息实时发送到前端
+    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
 
-    let tool_stream = stream::unfold(
-        (
-            llm,
-            model_id.to_string(),
-            chat_history,
-            0usize,                           // tool_rounds_completed
-            std::collections::HashSet::new(), // executed_tool_calls
-            max_tool_rounds,
-        ),
-        |(
-            llm,
-            model_id,
-            mut chat_history,
-            mut tool_rounds_completed,
-            mut executed_tool_calls,
-            max_tool_rounds,
-        )| async move {
-            if tool_rounds_completed >= max_tool_rounds {
-                return None;
-            }
+    // 在后台任务中处理整个工具调用循环，避免阻塞
+    let llm_clone = llm.clone();
+    let model_id_clone = model_id.to_string();
+    let history_clone = chat_history.clone();
+    
+    actix::Arbiter::new().spawn(async move {
+        let mut current_history = history_clone;
+        let mut round = 0;
 
-            let mut stream = match llm.stream_chat(&model_id, &chat_history).await {
+        // 循环执行，直到达到最大轮次或没有工具可调用
+        while round < max_tool_rounds {
+            // 1. 调用LLM获取流式响应
+            let stream_result = llm_clone.stream_chat(&model_id_clone, &current_history).await;
+            let mut stream = match stream_result {
                 Ok(s) => s,
                 Err(e) => {
-                    return Some((
-                        Err(anyhow::anyhow!("Failed to create stream: {}", e)),
-                        (
-                            llm,
-                            model_id,
-                            chat_history,
-                            tool_rounds_completed,
-                            executed_tool_calls,
-                            max_tool_rounds,
-                        ),
-                    ));
+                    let _ = sender.send(Err(e));
+                    break; // 如果创建流失败，则退出
                 }
             };
 
-            let mut pending_tool_calls = Vec::new();
-            let mut accumulated_response = String::new();
-            let mut output_messages = Vec::new();
+            let mut accumulated_text = String::new();
+            let mut tool_calls = Vec::new();
 
-            while let Some(msg) = stream.next().await {
-                match msg {
+            // 2. 处理并转发LLM的流式响应
+            use futures::StreamExt;
+            while let Some(chunk) = stream.next().await {
+                match chunk {
                     Ok(message) => {
                         if message.is_tool_call() {
-                            // 工具调用去重
-                            for tc in message.get_tool_calls() {
-                                let key = format!("{}:{}", tc.name, tc.arguments);
-                                if !executed_tool_calls.contains(&key) {
-                                    pending_tool_calls.push(tc.clone());
-                                    executed_tool_calls.insert(key);
-                                }
+                            // 如果是工具调用，收集起来
+                            if let Some(calls) = message.get_tool_calls() {
+                                tool_calls.extend(calls.iter().cloned());
                             }
-                        } else if !message.get_text().trim().is_empty() {
-                            accumulated_response.push_str(&message.get_text());
-                            output_messages.push(message);
+                        } else {
+                            // 如果是文本，累加起来
+                            accumulated_text.push_str(&message.get_text());
+                        }
+                        // 实时将原始消息转发给调用者
+                        if sender.send(Ok(message)).is_err() {
+                            // 如果接收端关闭，则任务没有意义，退出
+                            return;
                         }
                     }
                     Err(e) => {
-                        return Some((
-                            Err(e),
-                            (
-                                llm,
-                                model_id,
-                                chat_history,
-                                tool_rounds_completed,
-                                executed_tool_calls,
-                                max_tool_rounds,
-                            ),
-                        ));
+                        let _ = sender.send(Err(e));
+                        return; // 出现错误，终止任务
                     }
                 }
             }
 
-            // 输出普通响应
-            for msg in output_messages {
-                return Some((
-                    Ok(msg),
-                    (
-                        llm,
-                        model_id.clone(),
-                        chat_history.clone(),
-                        tool_rounds_completed,
-                        executed_tool_calls.clone(),
-                        max_tool_rounds,
-                    ),
-                ));
+            // 3. 将LLM的文本响应添加到历史记录
+            if !accumulated_text.trim().is_empty() {
+                current_history.push(ChatMessage::assistant_text(accumulated_text));
             }
 
-            // 工具调用
-            if !pending_tool_calls.is_empty() {
-                // 把累计的助手响应加到历史
-                if !accumulated_response.trim().is_empty() {
-                    chat_history.push(ChatMessage::assistant_text(accumulated_response.clone()));
-                }
+            // 4. 如果没有工具调用，说明流程结束，退出循环
+            if tool_calls.is_empty() {
+                break;
+            }
 
-                // 执行所有工具并把结果加到历史
-                for tool_call in &pending_tool_calls {
-                    let tool_result_message = match McpRegistry::call_tool(
-                        tool_call.id(),
-                        tool_call.tool_name(),
-                        &tool_call.arguments,
-                    )
-                    .await
-                    {
-                        Ok(result) => {
-                            let mut tool_result_content = String::new();
-                            for content in &result.content {
-                                match &content.raw {
-                                    RawContent::Text(text) => {
-                                        tool_result_content.push_str(&text.text)
-                                    }
-                                    RawContent::Image(image) => tool_result_content
-                                        .push_str(&format!("图片内容: {:?}", image)),
-                                    RawContent::Resource(resource) => tool_result_content
-                                        .push_str(&format!("资源内容: {:?}", resource)),
-                                    RawContent::Audio(audio) => tool_result_content
-                                        .push_str(&format!("音频内容: {:?}", audio)),
-                                }
+            // 5. 执行所有收集到的工具
+            let _ = sender.send(Ok(ChatMessage::assistant_text(format!(
+                "执行 {} 个工具...",
+                tool_calls.len()
+            ))));
+
+            for tool_call in &tool_calls {
+                let result_content = match McpRegistry::call_tool(
+                    tool_call.id(),
+                    tool_call.tool_name(),
+                    &tool_call.arguments,
+                )
+                .await
+                {
+                    Ok(result) => {
+                        // 将工具结果转换为纯文本
+                        result.content.iter().fold(String::new(), |mut acc, item| {
+                            if let RawContent::Text(text) = &item.raw {
+                                acc.push_str(&text.text);
                             }
-                            ChatMessage::tool_result_text(
-                                &tool_call.name,
-                                tool_result_content,
-                                true,
-                            )
-                        }
-                        Err(e) => ChatMessage::tool_result_text(
-                            &tool_call.name,
-                            format!("错误: {}", e),
-                            false,
-                        ),
-                    };
-                    chat_history.push(tool_result_message);
-                }
+                            acc
+                        })
+                    }
+                    Err(e) => format!("工具调用失败: {}", e),
+                };
 
-                // 工具执行完成，递归进入下一轮
-                tool_rounds_completed += 1;
-                return Some((
-                    Ok(ChatMessage::assistant_text(format!(
-                        "已完成第 {} 轮工具执行，继续生成响应...",
-                        tool_rounds_completed
-                    ))),
-                    (
-                        llm,
-                        model_id,
-                        chat_history,
-                        tool_rounds_completed,
-                        executed_tool_calls,
-                        max_tool_rounds,
-                    ),
-                ));
+                // 创建工具结果消息，并添加到历史记录
+                let result_message =
+                    ChatMessage::tool_result_text(&tool_call.name, result_content, true);
+                current_history.push(result_message.clone());
+
+                // 将工具结果也实时转发给调用者
+                let _ = sender.send(Ok(result_message));
             }
 
-            // 没有工具调用且没有普通响应，结束
-            None
-        },
-    );
+            // 轮次加一，准备下一次循环
+            round += 1;
+        }
+    });
 
-    Ok(Box::pin(tool_stream))
+    // 将接收器包装成一个流并返回
+    let result_stream = tokio_stream::wrappers::UnboundedReceiverStream::new(receiver);
+    Ok(Box::pin(result_stream))
 }
