@@ -280,31 +280,45 @@ async fn create_tool_enabled_stream(
                     {
                         Ok(result) => {
                             tracing::debug!("工具调用结果: {:?}", result);
-                            let mut chat_message = ChatMessage::user_text("");
+                            let mut chat_message = ChatMessage::tool_result();
                             result.content.iter().for_each(|content| match content.raw {
                                 RawContent::Text(ref text) => {
-                                    let result = format!(
-                                        "<tool_use_result><name>{}</name><result>{}</result></tool_use_result>",
+                                    let tool_result = format!(
+                                        "<tool_use_result>
+                                            <name>{}</name>
+                                            <result>{}</result>
+                                        </tool_use_result>",
                                         result.name,
                                         text.text.clone()
                                     );
-                                    chat_message.add_text(result);
+                                    chat_message
+                                        .add_text(tool_result)
+                                        .set_metadata("tool_name", result.name.clone());
                                 }
                                 RawContent::Image(ref image) => {
-                                    chat_message.add_text(format!("处理图片内容: {:?}", image));
+                                    chat_message
+                                        .add_text(format!("处理图片内容: {:?}", image))
+                                        .set_metadata("tool_name", result.name.clone());
                                 }
                                 RawContent::Resource(ref resource) => {
-                                    chat_message.add_text(format!("处理资源内容: {:?}", resource));
+                                    chat_message
+                                        .add_text(format!("处理资源内容: {:?}", resource))
+                                        .set_metadata("tool_name", result.name.clone());
                                 }
                                 RawContent::Audio(ref audio) => {
-                                    chat_message.add_text(format!("处理音频内容: {:?}", audio));
+                                    chat_message
+                                        .add_text(format!("处理音频内容: {:?}", audio))
+                                        .set_metadata("tool_name", result.name.clone());
                                 }
                             });
                             chat_message
                         }
                         Err(e) => {
                             tracing::error!("工具调用失败: {}", e);
-                            ChatMessage::user_text(format!("工具调用失败: {}", e))
+                            let mut chat_message = ChatMessage::tool_result();
+                            chat_message.add_text(format!("工具调用失败: {}", e));
+                            chat_message.set_metadata("tool_name", tool_call.name);
+                            chat_message
                         }
                     };
                     chat_history.push(tool_result.clone());

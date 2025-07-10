@@ -93,6 +93,7 @@ impl LlmProvider {
                 MessageRole::User => RigMessage::user(chat_msg.get_text()),
                 MessageRole::Assistant => RigMessage::assistant(chat_msg.get_text()),
                 MessageRole::System => RigMessage::user(chat_msg.get_text()),
+                MessageRole::Tool => RigMessage::user(chat_msg.get_text()),
             })
             .collect();
         tracing::debug!("使用模型: {}", model_id);

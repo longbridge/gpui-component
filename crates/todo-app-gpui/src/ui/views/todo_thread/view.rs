@@ -438,6 +438,7 @@ impl TodoThreadChat {
 fn render_chat_message(&self,idx:usize, message: &ChatMessage) -> impl IntoElement {
         tracing::trace!("渲染消息: {:?}", message);
         let is_user = matches!(message.role, MessageRole::User);
+        let is_tool= matches!(message.role, MessageRole::Tool);
         h_flex()
             .w_full()
             .py_2()
@@ -499,13 +500,17 @@ fn render_chat_message(&self,idx:usize, message: &ChatMessage) -> impl IntoEleme
                                 })
                                 .when(!is_user, |this| {
                                     this.bg(gpui::rgb(0xF3F4F6)).text_color(gpui::rgb(0x374151))
-                                })
-                                .child(
+                                }).when_else(is_tool, |this|{
+                                    this.when_some(message.get_metadata("tool_name"), |this,name|this.child(name.to_string()))
+                                },|this|{
+                                    this.child(
                                     TextView::markdown(
                                         SharedString::new(format!("chat-message-{}", idx)),
                                         message.get_text_without_tools(),
                                     )
-                                ),
+                                )
+                                })
+                                ,
                         )
                ),
             )

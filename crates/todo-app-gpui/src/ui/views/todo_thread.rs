@@ -24,6 +24,7 @@ impl MessageRole {
             MessageRole::User => "你",
             MessageRole::Assistant => "AI助手",
             MessageRole::System => "系统",
+            MessageRole::Tool => "工具",
         }
     }
 
@@ -32,6 +33,7 @@ impl MessageRole {
             MessageRole::User => gpui::rgb(0x3B82F6),
             MessageRole::Assistant => gpui::rgb(0x10B981),
             MessageRole::System => gpui::rgb(0x6B7280),
+            MessageRole::Tool => gpui::rgb(0xF59E0B),
         }
     }
 }

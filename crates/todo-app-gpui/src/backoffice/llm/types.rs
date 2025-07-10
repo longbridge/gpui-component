@@ -80,6 +80,14 @@ impl ToolCall {
     }
 }
 
+/// 消息角色枚举
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MessageRole {
+    System,
+    User,
+    Assistant,
+    Tool, // 新增：工具返回值角色
+}
 /// 消息内容 - 支持多模态和工具调用
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MessageContent {
@@ -93,14 +101,6 @@ pub enum MessageContent {
     TextChunk(String),
     /// 可用工具列表（给模型的工具定义）
     ToolDefinitions(Vec<ToolDefinition>),
-}
-
-/// 消息角色枚举
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum MessageRole {
-    System,
-    User,
-    Assistant,
 }
 
 /// 流式响应类型
@@ -120,6 +120,41 @@ pub struct ChatMessage {
 }
 
 impl ChatMessage {
+    pub fn user() -> Self {
+        Self {
+            role: MessageRole::User,
+            contents: vec![],
+            timestamp: Utc::now(),
+            metadata: HashMap::new(),
+        }
+    }
+    pub fn system() -> Self {
+        Self {
+            role: MessageRole::System,
+            contents: vec![],
+            timestamp: Utc::now(),
+            metadata: HashMap::new(),
+        }
+    }
+
+    pub fn assistant() -> Self {
+        Self {
+            role: MessageRole::Assistant,
+            contents: vec![],
+            timestamp: Utc::now(),
+            metadata: HashMap::new(),
+        }
+    }
+
+    pub fn tool_result() -> Self {
+        Self {
+            role: MessageRole::Tool,
+            contents: vec![],
+            timestamp: Utc::now(),
+            metadata: HashMap::new(),
+        }
+    }
+
     /// 创建文本消息的便捷方法
     pub fn text(role: MessageRole, content: impl Into<String>) -> Self {
         Self {
@@ -508,6 +543,52 @@ impl ChatMessage {
         self
     }
 
+    pub fn with_tool_definitions(mut self, tools: Vec<ToolDefinition>) -> Self {
+        self.contents.push(MessageContent::tool_definitions(tools));
+        self
+    }
+
+    /// 添加元数据
+    pub fn with_metadata(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.metadata.insert(key.into(), value.into());
+        self
+    }
+
+    /// 设置时间戳
+    pub fn with_timestamp(mut self, timestamp: DateTime<Utc>) -> Self {
+        self.timestamp = timestamp;
+        self
+    }
+
+    /// 设置当前时间戳
+    pub fn with_current_timestamp(mut self) -> Self {
+        self.timestamp = Utc::now();
+        self
+    }
+
+    /// 设置工具结果的执行时间
+    pub fn with_execution_time(mut self, time_ms: u64) -> Self {
+        self.metadata
+            .insert("execution_time_ms".to_string(), time_ms.to_string());
+        self
+    }
+
+    /// 设置工具结果的错误信息
+    pub fn with_tool_error(mut self, error: impl Into<String>) -> Self {
+        self.metadata.insert("error".to_string(), error.into());
+        self.metadata
+            .insert("success".to_string(), "false".to_string());
+        self
+    }
+
+    /// 设置消息来源
+    pub fn with_source(mut self, source: impl Into<String>) -> Self {
+        self.metadata.insert("source".to_string(), source.into());
+        self
+    }
+}
+
+impl ChatMessage {
     /// 获取模型ID
     pub fn get_model_id(&self) -> Option<&str> {
         self.metadata.get("model_id").map(|s| s.as_str())
@@ -615,17 +696,13 @@ impl ChatMessage {
     }
 
     /// 添加文本内容
-    pub fn add_text(&mut self, text: impl Into<String>) {
+    pub fn add_text(&mut self, text: impl Into<String>) -> &mut Self {
         self.contents.push(MessageContent::text(text));
+        self
     }
 
-    pub fn add_text_chunk(&mut self, text: impl Into<String>) {
+    pub fn add_text_chunk(&mut self, text: impl Into<String>) -> &mut Self {
         self.contents.push(MessageContent::TextChunk(text.into()));
-    }
-
-    /// 设置消息来源
-    pub fn with_source(mut self, source: impl Into<String>) -> Self {
-        self.metadata.insert("source".to_string(), source.into());
         self
     }
 
@@ -634,127 +711,257 @@ impl ChatMessage {
         self.metadata.get("source").map(|s| s.as_str())
     }
 
-    // /// 设置消息ID
-    // pub fn with_id(mut self, id: impl Into<String>) -> Self {
-    //     self.id = Some(id.into());
-    //     self
-    // }
-
-    pub fn with_tool_definitions(mut self, tools: Vec<ToolDefinition>) -> Self {
-        self.contents.push(MessageContent::tool_definitions(tools));
-        self
-    }
-
-    /// 添加元数据
-    pub fn with_metadata(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
-        self.metadata.insert(key.into(), value.into());
-        self
-    }
-
     /// 检查是否来自特定来源
     pub fn is_from_source(&self, source: &str) -> bool {
         self.get_source() == Some(source)
     }
 
-    /// 检查是否来自用户
-    pub fn is_from_user(&self) -> bool {
-        self.get_source()
-            .map(|s| s == "user" || s.starts_with("user_"))
+    /// 检查是否为工具结果消息
+    pub fn is_tool_result(&self) -> bool {
+        self.role == MessageRole::Tool
+    }
+
+    /// 获取工具名称（从元数据中）
+    pub fn get_tool_name(&self) -> Option<&str> {
+        self.metadata.get("tool_name").map(|s| s.as_str())
+    }
+
+    /// 检查工具执行是否成功
+    pub fn is_tool_success(&self) -> bool {
+        self.metadata
+            .get("success")
+            .and_then(|s| s.parse::<bool>().ok())
             .unwrap_or(false)
     }
 
-    /// 检查是否来自助手
-    pub fn is_from_assistant(&self) -> bool {
-        self.get_source()
-            .map(|s| s == "assistant" || s.starts_with("assistant_"))
-            .unwrap_or(false)
+    /// 获取工具执行错误信息
+    pub fn get_tool_error(&self) -> Option<&str> {
+        self.metadata.get("error").map(|s| s.as_str())
     }
 
-    /// 检查是否来自系统
-    pub fn is_from_system(&self) -> bool {
-        self.get_source()
-            .map(|s| s == "system" || s.starts_with("system_"))
-            .unwrap_or(false)
+    /// 获取工具执行时间
+    pub fn get_execution_time(&self) -> Option<u64> {
+        self.metadata
+            .get("execution_time_ms")
+            .and_then(|s| s.parse::<u64>().ok())
     }
 
-    /// 检查是否来自工具
-    pub fn is_from_tool(&self) -> bool {
-        self.get_source()
-            .map(|s| s.contains("tool"))
-            .unwrap_or(false)
-    }
-
-    /// 获取来源的类型（提取前缀）
-    pub fn source_type(&self) -> Option<&str> {
-        self.get_source().map(|s| s.split('_').next().unwrap_or(s))
-    }
-
-    /// 设置时间戳
-    pub fn with_timestamp(mut self, timestamp: DateTime<Utc>) -> Self {
-        self.timestamp = timestamp;
+    pub fn set_metadata(&mut self, key: impl Into<String>, value: impl Into<String>) -> &mut Self {
+        self.metadata.insert(key.into(), value.into());
         self
     }
 
-    /// 设置当前时间戳
-    pub fn with_current_timestamp(mut self) -> Self {
-        self.timestamp = Utc::now();
-        self
-    }
-
-    /// 获取时间戳
-    pub fn get_timestamp(&self) -> DateTime<Utc> {
-        self.timestamp
-    }
-
-    /// 检查消息是否在指定时间之后
-    pub fn is_after(&self, time: DateTime<Utc>) -> bool {
-        self.timestamp > time
-    }
-
-    /// 检查消息是否在指定时间之前
-    pub fn is_before(&self, time: DateTime<Utc>) -> bool {
-        self.timestamp < time
-    }
-
-    /// 获取消息年龄（距离现在的时间）
-    pub fn age(&self) -> chrono::Duration {
-        Utc::now() - self.timestamp
-    }
-
-    /// 格式化时间戳为字符串
-    pub fn format_timestamp(&self, format: &str) -> String {
-        self.timestamp.format(format).to_string()
-    }
-
-    /// 获取格式化的时间戳（默认格式）
-    pub fn formatted_timestamp(&self) -> String {
-        self.timestamp.format("%Y-%m-%d %H:%M:%S UTC").to_string()
-    }
-
-    /// 获取 ISO 8601 格式的时间戳
-    pub fn iso_timestamp(&self) -> String {
-        self.timestamp.to_rfc3339()
-    }
-
-    /// 从 Unix 时间戳创建（向后兼容）
-    pub fn from_unix_timestamp(timestamp: u64) -> Option<DateTime<Utc>> {
-        DateTime::from_timestamp(timestamp as i64, 0)
-    }
-
-    /// 转换为 Unix 时间戳（向后兼容）
-    pub fn to_unix_timestamp(&self) -> u64 {
-        self.timestamp.timestamp() as u64
-    }
-
-    /// 设置 Unix 时间戳
-    pub fn with_unix_timestamp(mut self, timestamp: u64) -> Self {
-        if let Some(dt) = Self::from_unix_timestamp(timestamp) {
-            self.timestamp = dt;
-        }
-        self
+    pub fn get_metadata(&self, key: &str) -> Option<&String> {
+        self.metadata.get(key)
     }
 }
+
 impl MediaContent {
+    /// 检查是否为文本内容
+    pub fn is_text(&self) -> bool {
+        matches!(self.data, MediaData::Text(_)) || self.mime_type.starts_with("text/")
+    }
+
+    /// 检查是否为图像内容
+    pub fn is_image(&self) -> bool {
+        self.mime_type.starts_with("image/")
+    }
+
+    /// 检查是否为音频内容
+    pub fn is_audio(&self) -> bool {
+        self.mime_type.starts_with("audio/")
+    }
+
+    /// 检查是否为视频内容
+    pub fn is_video(&self) -> bool {
+        self.mime_type.starts_with("video/")
+    }
+
+    /// 检查是否为应用程序类型
+    pub fn is_application(&self) -> bool {
+        self.mime_type.starts_with("application/")
+    }
+
+    /// 检查是否为二进制数据
+    pub fn is_binary(&self) -> bool {
+        matches!(self.data, MediaData::Binary(_))
+    }
+
+    /// 检查是否为 Base64 编码
+    pub fn is_base64(&self) -> bool {
+        matches!(self.data, MediaData::Base64(_))
+    }
+
+    /// 检查是否为文件路径引用
+    pub fn is_file_path(&self) -> bool {
+        matches!(self.data, MediaData::FilePath(_))
+    }
+
+    /// 检查是否为 URL 引用
+    pub fn is_url(&self) -> bool {
+        matches!(self.data, MediaData::Url(_))
+    }
+
+    /// 获取媒体类型
+    pub fn get_media_type(&self) -> MediaType {
+        if self.is_text() {
+            MediaType::Text
+        } else if self.is_image() {
+            MediaType::Image
+        } else if self.is_audio() {
+            MediaType::Audio
+        } else if self.is_video() {
+            MediaType::Video
+        } else if self.is_application() {
+            MediaType::Application
+        } else {
+            MediaType::Unknown
+        }
+    }
+
+    /// 获取文本内容（如果是文本类型）
+    pub fn get_text(&self) -> Option<&str> {
+        match &self.data {
+            MediaData::Text(text) => Some(text),
+            _ => None,
+        }
+    }
+
+    /// 获取可变文本内容（如果是文本类型）
+    pub fn get_text_mut(&mut self) -> Option<&mut String> {
+        match &mut self.data {
+            MediaData::Text(text) => Some(text),
+            _ => None,
+        }
+    }
+
+    /// 获取二进制数据（如果是二进制类型）
+    pub fn get_binary(&self) -> Option<&[u8]> {
+        match &self.data {
+            MediaData::Binary(data) => Some(data),
+            _ => None,
+        }
+    }
+
+    /// 获取 Base64 数据（如果是 Base64 类型）
+    pub fn get_base64(&self) -> Option<&str> {
+        match &self.data {
+            MediaData::Base64(data) => Some(data),
+            _ => None,
+        }
+    }
+
+    /// 获取文件路径（如果是文件路径类型）
+    pub fn get_file_path(&self) -> Option<&str> {
+        match &self.data {
+            MediaData::FilePath(path) => Some(path),
+            _ => None,
+        }
+    }
+
+    /// 获取 URL（如果是 URL 类型）
+    pub fn get_url(&self) -> Option<&str> {
+        match &self.data {
+            MediaData::Url(url) => Some(url),
+            _ => None,
+        }
+    }
+
+    /// 设置描述
+    pub fn with_description(mut self, description: impl Into<String>) -> Self {
+        self.description = Some(description.into());
+        self
+    }
+
+    /// 设置文件名
+    pub fn with_filename(mut self, filename: impl Into<String>) -> Self {
+        self.filename = Some(filename.into());
+        self
+    }
+
+    /// 设置文件大小
+    pub fn with_size(mut self, size_bytes: u64) -> Self {
+        self.size_bytes = Some(size_bytes);
+        self
+    }
+
+    /// 检查是否有描述
+    pub fn has_description(&self) -> bool {
+        self.description.is_some()
+    }
+
+    /// 检查是否有文件名
+    pub fn has_filename(&self) -> bool {
+        self.filename.is_some()
+    }
+
+    /// 检查是否有文件大小信息
+    pub fn has_size(&self) -> bool {
+        self.size_bytes.is_some()
+    }
+
+    /// 获取显示名称（优先文件名，否则使用描述或默认值）
+    pub fn display_name(&self) -> String {
+        self.filename
+            .as_ref()
+            .or(self.description.as_ref())
+            .cloned()
+            .unwrap_or_else(|| format!("{} content", self.mime_type))
+    }
+
+    /// 估算内容大小（字节）
+    pub fn estimate_size(&self) -> Option<u64> {
+        if let Some(size) = self.size_bytes {
+            return Some(size);
+        }
+
+        match &self.data {
+            MediaData::Text(text) => Some(text.len() as u64),
+            MediaData::Binary(data) => Some(data.len() as u64),
+            MediaData::Base64(data) => {
+                // Base64 解码后的大小约为原始大小的 3/4
+                Some((data.len() as f64 * 0.75) as u64)
+            }
+            MediaData::FilePath(_) | MediaData::Url(_) => None, // 无法估算远程内容大小
+        }
+    }
+
+    /// 检查是否为支持的图像格式
+    pub fn is_supported_image(&self) -> bool {
+        matches!(
+            self.mime_type.as_str(),
+            "image/jpeg" | "image/jpg" | "image/png" | "image/gif" | "image/webp" | "image/svg+xml"
+        )
+    }
+
+    /// 检查是否为支持的音频格式
+    pub fn is_supported_audio(&self) -> bool {
+        matches!(
+            self.mime_type.as_str(),
+            "audio/mpeg" | "audio/mp3" | "audio/wav" | "audio/ogg" | "audio/m4a"
+        )
+    }
+
+    /// 检查是否为支持的视频格式
+    pub fn is_supported_video(&self) -> bool {
+        matches!(
+            self.mime_type.as_str(),
+            "video/mp4" | "video/mpeg" | "video/quicktime" | "video/webm"
+        )
+    }
+
+    /// 检查是否为支持的文档格式
+    pub fn is_supported_document(&self) -> bool {
+        matches!(
+            self.mime_type.as_str(),
+            "application/pdf"
+                | "application/msword"
+                | "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                | "text/plain"
+                | "text/markdown"
+                | "text/html"
+        )
+    }
     /// 创建文本内容
     pub fn text(content: impl Into<String>) -> Self {
         Self {
@@ -821,51 +1028,48 @@ impl MediaContent {
         }
     }
 
-    /// 从 MIME 类型推导媒体类别
-    pub fn media_type(&self) -> MediaType {
-        match self.mime_type.split('/').next().unwrap_or("") {
-            "text" => MediaType::Text,
-            "image" => MediaType::Image,
-            "audio" => MediaType::Audio,
-            "video" => MediaType::Video,
-            "application" => match self.mime_type.as_str() {
-                "application/pdf"
-                | "application/msword"
-                | "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => {
-                    MediaType::Document
-                }
-                _ => MediaType::Application,
-            },
-            _ => MediaType::Unknown,
+    /// 创建二进制内容
+    pub fn binary(data: Vec<u8>, mime_type: impl Into<String>) -> Self {
+        Self {
+            mime_type: mime_type.into(),
+            data: MediaData::Binary(data),
+            description: None,
+            filename: None,
+            size_bytes: None,
         }
     }
 
-    /// 检查是否为文本类型
-    pub fn is_text(&self) -> bool {
-        self.media_type() == MediaType::Text
+    /// 创建 Base64 内容
+    pub fn base64(data: impl Into<String>, mime_type: impl Into<String>) -> Self {
+        Self {
+            mime_type: mime_type.into(),
+            data: MediaData::Base64(data.into()),
+            description: None,
+            filename: None,
+            size_bytes: None,
+        }
     }
 
-    /// 检查是否为图片类型
-    pub fn is_image(&self) -> bool {
-        self.media_type() == MediaType::Image
+    /// 创建文件路径引用
+    pub fn file_path(path: impl Into<String>, mime_type: impl Into<String>) -> Self {
+        Self {
+            mime_type: mime_type.into(),
+            data: MediaData::FilePath(path.into()),
+            description: None,
+            filename: None,
+            size_bytes: None,
+        }
     }
 
-    /// 添加描述
-    pub fn with_description(mut self, description: impl Into<String>) -> Self {
-        self.description = Some(description.into());
-        self
-    }
-
-    /// 添加文件名
-    pub fn with_filename(mut self, filename: impl Into<String>) -> Self {
-        self.filename = Some(filename.into());
-        self
-    }
-
-    /// 添加文件大小
-    pub fn with_size(mut self, size_bytes: u64) -> Self {
-        self.size_bytes = Some(size_bytes);
-        self
+    /// 创建 URL 引用
+    pub fn url(url: impl Into<String>, mime_type: impl Into<String>) -> Self {
+        Self {
+            mime_type: mime_type.into(),
+            data: MediaData::Url(url.into()),
+            description: None,
+            filename: None,
+            size_bytes: None,
+        }
     }
 }
 
@@ -1012,33 +1216,6 @@ impl MessageContent {
                     .join("\n")
             }
             Self::TextChunk(text) => text.clone(),
-        }
-    }
-
-    /// 获取特定媒体类别的内容
-    pub fn get_media_by_type(&self, media_type: MediaType) -> Vec<&MediaContent> {
-        match self {
-            Self::Part(media) => {
-                if media.media_type() == media_type {
-                    vec![media]
-                } else {
-                    vec![]
-                }
-            }
-            Self::Parts(parts) => parts
-                .iter()
-                .filter(|part| part.media_type() == media_type)
-                .collect(),
-            Self::ToolCall(_) | Self::TextChunk(_) | Self::ToolDefinitions(_) => vec![], // 工具相关内容不包含媒体
-        }
-    }
-
-    /// 检查是否包含特定媒体类别
-    pub fn contains_media_type(&self, media_type: MediaType) -> bool {
-        match self {
-            Self::Part(media) => media.media_type() == media_type,
-            Self::Parts(parts) => parts.iter().any(|part| part.media_type() == media_type),
-            Self::ToolCall(_) | Self::TextChunk(_) | Self::ToolDefinitions(_) => false,
         }
     }
 
