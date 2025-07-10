@@ -1,6 +1,7 @@
 use super::parser::StreamingToolParser;
 use super::types::*;
 use crate::backoffice::agentic::prompts;
+use crate::backoffice::llm::parser;
 use crate::config::llm_config::ApiType;
 use crate::config::llm_config::LlmProviderConfig;
 use crate::config::llm_config::ModelInfo;
@@ -132,7 +133,8 @@ impl LlmProvider {
                 Err(e) => Err(anyhow::anyhow!("Stream error: {}", e)),
             });
 
-            let parsed_stream = create_streaming_tool_parser_simple(text_stream);
+            // **修改点：调用 parser 模块中的新函数**
+            let parsed_stream = parser::create_streaming_tool_parser(text_stream);
             Ok(Box::pin(parsed_stream))
         }
     }
@@ -155,55 +157,55 @@ fn build_system_prompt(messages: &[ChatMessage], tools: Vec<ToolDefinition>) -> 
     }
 }
 
-/// 简化的流式工具解析器
-fn create_streaming_tool_parser_simple<S>(
-    input_stream: S,
-) -> impl futures::Stream<Item = anyhow::Result<ChatMessage>>
-where
-    S: futures::Stream<Item = anyhow::Result<String>> + Send + Unpin + 'static,
-{
-    use futures::stream;
-    use futures::StreamExt;
+// /// 简化的流式工具解析器
+// fn create_streaming_tool_parser_simple<S>(
+//     input_stream: S,
+// ) -> impl futures::Stream<Item = anyhow::Result<ChatMessage>>
+// where
+//     S: futures::Stream<Item = anyhow::Result<String>> + Send + Unpin + 'static,
+// {
+//     use futures::stream;
+//     use futures::StreamExt;
 
-    stream::unfold(
-        (input_stream, StreamingToolParser::new(), Vec::<ChatMessage>::new()),
-        |(mut stream, mut parser, mut message_queue)| async move {
-            // 如果队列中有消息，先发送队列中的消息
-            if !message_queue.is_empty() {
-                let message = message_queue.remove(0);
-                return Some((Ok(message), (stream, parser, message_queue)));
-            }
+//     stream::unfold(
+//         (input_stream, StreamingToolParser::new(), Vec::<ChatMessage>::new()),
+//         |(mut stream, mut parser, mut message_queue)| async move {
+//             // 如果队列中有消息，先发送队列中的消息
+//             if !message_queue.is_empty() {
+//                 let message = message_queue.remove(0);
+//                 return Some((Ok(message), (stream, parser, message_queue)));
+//             }
 
-            match stream.next().await {
-                Some(Ok(text)) => {
-                    tracing::debug!("处理文本chunk: {}", text);
-                    let mut messages = parser.process_chunk(&text);
-                    
-                    if !messages.is_empty() {
-                        // 取出第一个消息发送，其余放入队列
-                        let first_message = messages.remove(0);
-                        message_queue.extend(messages);
-                        Some((Ok(first_message), (stream, parser, message_queue)))
-                    } else {
-                        // 没有消息，返回空的chunk以保持流活跃
-                        Some((Ok(ChatMessage::assistant_chunk("")), (stream, parser, message_queue)))
-                    }
-                }
-                Some(Err(e)) => Some((Err(e), (stream, parser, message_queue))),
-                None => {
-                    // 流结束，处理剩余内容
-                    let final_messages = parser.finish();
-                    if !final_messages.is_empty() {
-                        // 取出第一个消息发送，其余放入队列
-                        let mut final_iter = final_messages.into_iter();
-                        let first_message = final_iter.next().unwrap();
-                        message_queue.extend(final_iter);
-                        Some((Ok(first_message), (stream, parser, message_queue)))
-                    } else {
-                        None
-                    }
-                }
-            }
-        },
-    )
-}
+//             match stream.next().await {
+//                 Some(Ok(text)) => {
+//                     tracing::debug!("处理文本chunk: {}", text);
+//                     let mut messages = parser.process_chunk(&text);
+
+//                     if !messages.is_empty() {
+//                         // 取出第一个消息发送，其余放入队列
+//                         let first_message = messages.remove(0);
+//                         message_queue.extend(messages);
+//                         Some((Ok(first_message), (stream, parser, message_queue)))
+//                     } else {
+//                         // 没有消息，返回空的chunk以保持流活跃
+//                         Some((Ok(ChatMessage::assistant_chunk("")), (stream, parser, message_queue)))
+//                     }
+//                 }
+//                 Some(Err(e)) => Some((Err(e), (stream, parser, message_queue))),
+//                 None => {
+//                     // 流结束，处理剩余内容
+//                     let final_messages = parser.finish();
+//                     if !final_messages.is_empty() {
+//                         // 取出第一个消息发送，其余放入队列
+//                         let mut final_iter = final_messages.into_iter();
+//                         let first_message = final_iter.next().unwrap();
+//                         message_queue.extend(final_iter);
+//                         Some((Ok(first_message), (stream, parser, message_queue)))
+//                     } else {
+//                         None
+//                     }
+//                 }
+//             }
+//         },
+//     )
+// }

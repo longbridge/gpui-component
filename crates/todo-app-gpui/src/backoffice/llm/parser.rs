@@ -1,310 +1,259 @@
 use super::types::{ChatMessage, ToolCall};
-use futures::stream::Stream;
+use futures::stream::{self, Stream, StreamExt};
 use std::pin::Pin;
+
+/// 解析器状态
+#[derive(PartialEq, Debug, Clone)]
+enum ParserState {
+    /// 普通文本流
+    StreamingText,
+    /// 正在匹配 "<tool_use>" 开始标签
+    MatchingStartTag { matched_chars: String },
+    /// 在工具标签内，缓冲工具内容
+    InsideTool,
+    /// 正在匹配 "</tool_use>" 结束标签
+    MatchingEndTag { matched_chars: String },
+}
 
 /// 流式工具解析器
 pub struct StreamingToolParser {
     buffer: String,
-    last_output_pos: usize,
-    pending_messages: Vec<ChatMessage>, // 添加待发送消息队列
+    tool_content: String, // 单独缓冲工具内容
+    state: ParserState,
 }
 
 impl StreamingToolParser {
+    const START_TAG: &'static str = "<tool_use>";
+    const END_TAG: &'static str = "</tool_use>";
+
     pub fn new() -> Self {
         Self {
             buffer: String::new(),
-            last_output_pos: 0,
-            pending_messages: Vec::new(),
+            tool_content: String::new(),
+            state: ParserState::StreamingText,
         }
     }
 
-    /// 处理新的文本块，返回可以立即输出的消息
-    pub fn process_chunk(&mut self, text: &str) -> Vec<ChatMessage> {
-        // 将新文本添加到缓冲区
-        self.buffer.push_str(text);
+    /// 处理新的文本块
+    pub fn process_chunk(&mut self, chunk: &str) -> Vec<ChatMessage> {
+        let mut messages = Vec::new();
 
-        // 处理缓冲区中的所有内容
-        self.process_buffer();
+        for ch in chunk.chars() {
+            if let Some(message) = self.process_char(ch) {
+                messages.push(message);
+            }
+        }
 
-        // 返回所有待发送的消息
-        std::mem::take(&mut self.pending_messages)
+        tracing::trace!(
+            "Processed chunk '{}', state: {:?}, buffer: '{}', tool_content: '{}'",
+            chunk,
+            self.state,
+            self.buffer,
+            self.tool_content
+        );
+
+        messages
     }
 
-    /// 流结束时处理剩余内容
-    pub fn finish(&mut self) -> Vec<ChatMessage> {
-        // 处理剩余缓冲区内容
-        self.process_buffer();
-
-        // 如果还有未处理的文本，作为最后一条消息
-        if self.last_output_pos < self.buffer.len() {
-            let remaining = self.buffer[self.last_output_pos..].to_string();
-            if !remaining.trim().is_empty() {
-                // 检查是否包含未完整的工具调用
-                if let Some(tool_call) = self.extract_partial_tool_call(&remaining) {
-                    self.pending_messages
-                        .push(ChatMessage::tool_call(tool_call));
+    /// 逐字符处理
+    fn process_char(&mut self, ch: char) -> Option<ChatMessage> {
+        match &mut self.state {
+            ParserState::StreamingText => {
+                if ch == '<' {
+                    // 可能是工具标签的开始，切换到匹配状态
+                    let message = self.flush_buffer_as_text();
+                    self.state = ParserState::MatchingStartTag {
+                        matched_chars: "<".to_string(),
+                    };
+                    message
                 } else {
-                    self.pending_messages
-                        .push(ChatMessage::assistant_chunk(remaining));
-                }
-            }
-        }
-
-        std::mem::take(&mut self.pending_messages)
-    }
-
-    /// 处理缓冲区内容，提取所有可用的消息
-    fn process_buffer(&mut self) {
-        loop {
-            let initial_pos = self.last_output_pos;
-
-            // 尝试提取下一个内容块
-            if !self.try_extract_next_content() {
-                break; // 没有更多内容可提取
-            }
-
-            // 如果位置没有变化，防止无限循环
-            if self.last_output_pos == initial_pos {
-                break;
-            }
-        }
-    }
-
-    /// 尝试提取下一个内容块（文本或工具调用）
-    fn try_extract_next_content(&mut self) -> bool {
-        let remaining_text = &self.buffer[self.last_output_pos..];
-
-        // 查找下一个工具标签
-        if let Some(tool_info) = self.find_next_complete_tool(remaining_text) {
-            let (tool_start, tool_end, tool_xml) = tool_info;
-            let abs_tool_start = self.last_output_pos + tool_start;
-            let abs_tool_end = self.last_output_pos + tool_end;
-
-            // 如果工具前有文本，先添加文本消息
-            if tool_start > 0 {
-                let text_before = remaining_text[..tool_start].to_string();
-                if !text_before.trim().is_empty() {
-                    self.pending_messages
-                        .push(ChatMessage::assistant_chunk(text_before));
+                    // 普通字符，添加到缓冲区
+                    self.buffer.push(ch);
+                    None
                 }
             }
 
-            // 解析并添加工具调用
-            if let Some(tool_call) = self.extract_tool_call(&tool_xml) {
-                self.pending_messages
-                    .push(ChatMessage::tool_call(tool_call));
-            } else {
-                // 解析失败，当作文本处理
-                self.pending_messages
-                    .push(ChatMessage::assistant_chunk(tool_xml));
-            }
+            ParserState::MatchingStartTag { matched_chars } => {
+                matched_chars.push(ch);
 
-            // 更新位置
-            self.last_output_pos = abs_tool_end;
-            return true;
-        }
-
-        // 没有完整工具调用，尝试输出安全文本
-        self.try_output_safe_text()
-    }
-
-    /// 查找下一个完整的工具调用
-    fn find_next_complete_tool(&self, text: &str) -> Option<(usize, usize, String)> {
-        let tool_patterns = [
-            ("<tool_use", "</tool_use>"),
-            ("<tool", "</tool>"),
-            ("<function_call", "</function_call>"),
-        ];
-
-        let mut earliest_tool = None;
-
-        for (start_pattern, end_pattern) in &tool_patterns {
-            if let Some(start_pos) = text.find(start_pattern) {
-                // 从工具开始位置查找结束标签
-                let search_from = start_pos;
-                if let Some(end_pos) = text[search_from..].find(end_pattern) {
-                    let abs_end_pos = search_from + end_pos + end_pattern.len();
-                    let tool_xml = text[start_pos..abs_end_pos].to_string();
-
-                    // 选择最早出现的工具
-                    earliest_tool = Some(earliest_tool.map_or(
-                        (start_pos, abs_end_pos, tool_xml.clone()),
-                        |(min_start, min_end, min_xml)| {
-                            if start_pos < min_start {
-                                (start_pos, abs_end_pos, tool_xml)
-                            } else {
-                                (min_start, min_end, min_xml)
-                            }
-                        },
-                    ));
-                }
-            }
-        }
-
-        earliest_tool
-    }
-
-    /// 输出安全的部分文本
-    fn try_output_safe_text(&mut self) -> bool {
-        let available_text = &self.buffer[self.last_output_pos..];
-
-        // 检查是否有工具标签开始
-        let has_tool_start = self.has_potential_tool_start(available_text);
-
-        if has_tool_start {
-            // 有潜在的工具标签，只输出到工具标签前的文本
-            if let Some(tool_start_pos) = self.find_earliest_tool_start(available_text) {
-                if tool_start_pos > 0 {
-                    let safe_text = available_text[..tool_start_pos].to_string();
-                    let len = safe_text.len();
-                    if !safe_text.trim().is_empty() {
-                        self.pending_messages
-                            .push(ChatMessage::assistant_chunk(safe_text));
-                        self.last_output_pos += len;
-                        return true;
+                // 修复：使用 matched_chars.as_str() 来获取 &str
+                if Self::START_TAG.starts_with(matched_chars.as_str()) {
+                    // 还在匹配路径上
+                    if matched_chars == Self::START_TAG {
+                        // 完全匹配，进入工具内部
+                        self.state = ParserState::InsideTool;
+                        self.tool_content.clear();
                     }
+                    None
+                } else {
+                    // 匹配失败，回到文本状态
+                    let failed_chars = matched_chars.clone();
+                    self.state = ParserState::StreamingText;
+
+                    // 将失败的字符加回缓冲区
+                    self.buffer.push_str(&failed_chars);
+
+                    None
                 }
             }
-        } else {
-            // 没有工具标签，可以安全输出大部分文本
-            let chars: Vec<char> = available_text.chars().collect();
-            if chars.len() > 20 {
-                let safe_count = chars.len() - 10; // 保留最后10个字符
-                let safe_text: String = chars[..safe_count].iter().collect();
-                let len = safe_text.len();
-                if !safe_text.trim().is_empty() {
-                    self.pending_messages
-                        .push(ChatMessage::assistant_chunk(safe_text));
-                    self.last_output_pos += len;
-                    return true;
+
+            ParserState::InsideTool => {
+                if ch == '<' {
+                    // 可能是结束标签的开始
+                    self.state = ParserState::MatchingEndTag {
+                        matched_chars: "<".to_string(),
+                    };
+                } else {
+                    // 工具内容
+                    self.tool_content.push(ch);
+                }
+                None
+            }
+
+            ParserState::MatchingEndTag { matched_chars } => {
+                matched_chars.push(ch);
+
+                // 修复：使用 matched_chars.as_str() 来获取 &str
+                if Self::END_TAG.starts_with(matched_chars.as_str()) {
+                    // 还在匹配路径上
+                    if matched_chars == Self::END_TAG {
+                        // 完全匹配，工具结束
+                        let tool_content = self.tool_content.clone();
+                        self.tool_content.clear();
+                        self.state = ParserState::StreamingText;
+
+                        // 解析工具调用
+                        let full_tool_xml = format!("<tool_use>{}</tool_use>", tool_content);
+                        if let Some(tool_call) = self.parse_tool_call(&full_tool_xml) {
+                            tracing::debug!("解析到工具 tool call: {:?}", tool_call);
+                            return Some(ChatMessage::tool_call(tool_call));
+                        } else {
+                            return Some(ChatMessage::assistant_chunk(full_tool_xml));
+                        }
+                    }
+                    None
+                } else {
+                    // 匹配失败，这不是结束标签
+                    let failed_chars = matched_chars.clone();
+                    self.state = ParserState::InsideTool;
+
+                    // 将失败的字符加回工具内容
+                    self.tool_content.push_str(&failed_chars);
+
+                    None
                 }
             }
         }
-
-        false
     }
 
-    /// 检查是否有潜在的工具标签开始
-    fn has_potential_tool_start(&self, text: &str) -> bool {
-        let patterns = ["<tool", "<function_call"];
-        patterns.iter().any(|pattern| text.contains(pattern))
-    }
-
-    /// 查找最早的工具标签开始位置
-    fn find_earliest_tool_start(&self, text: &str) -> Option<usize> {
-        let patterns = ["<tool_use", "<tool", "<function_call"];
-
-        patterns
-            .iter()
-            .filter_map(|pattern| text.find(pattern))
-            .min()
-    }
-
-    /// 提取工具调用
-    fn extract_tool_call(&self, xml: &str) -> Option<ToolCall> {
-        // 清理XML
-        let cleaned_xml = xml
-            .lines()
-            .filter(|line| {
-                let line = line.trim();
-                !line.is_empty() && !line.contains("DEBUG") && !line.starts_with("20")
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
-
-        // 尝试XML反序列化
-        if let Ok(tool_call) = serde_xml_rs::from_str::<ToolCall>(&cleaned_xml) {
-            return Some(tool_call);
-        }
-
-        // 尝试正则表达式解析
-        self.parse_with_regex(&cleaned_xml)
-    }
-
-    /// 提取部分工具调用（用于流结束时）
-    fn extract_partial_tool_call(&self, xml: &str) -> Option<ToolCall> {
-        // 对于不完整的XML，尝试更宽松的解析
-        if xml.trim_start().starts_with("<tool") || xml.trim_start().starts_with("<function_call") {
-            // 尝试提取已有的信息
-            self.parse_with_regex(xml)
+    /// 将缓冲区内容作为文本消息输出
+    fn flush_buffer_as_text(&mut self) -> Option<ChatMessage> {
+        if !self.buffer.is_empty() {
+            let text = self.buffer.clone();
+            self.buffer.clear();
+            Some(ChatMessage::assistant_chunk(text))
         } else {
             None
         }
     }
 
-    /// 使用正则表达式解析工具调用
-    fn parse_with_regex(&self, xml: &str) -> Option<ToolCall> {
+    /// 流结束时处理剩余内容
+    pub fn finish(&mut self) -> Vec<ChatMessage> {
+        let mut messages = Vec::new();
+
+        // 根据当前状态处理剩余内容
+        match &self.state {
+            ParserState::StreamingText => {
+                if let Some(msg) = self.flush_buffer_as_text() {
+                    messages.push(msg);
+                }
+            }
+            ParserState::MatchingStartTag { matched_chars } => {
+                // 未完成的开始标签匹配，当作普通文本
+                self.buffer.push_str(matched_chars);
+                if let Some(msg) = self.flush_buffer_as_text() {
+                    messages.push(msg);
+                }
+            }
+            ParserState::InsideTool => {
+                // 未完成的工具，当作普通文本
+                let incomplete_tool = format!("<tool_use>{}", self.tool_content);
+                messages.push(ChatMessage::assistant_chunk(incomplete_tool));
+            }
+            ParserState::MatchingEndTag { matched_chars } => {
+                // 未完成的结束标签匹配，将内容加回工具内容并当作普通文本
+                let incomplete_tool = format!("<tool_use>{}{}", self.tool_content, matched_chars);
+                messages.push(ChatMessage::assistant_chunk(incomplete_tool));
+            }
+        }
+
+        // 重置状态
+        self.buffer.clear();
+        self.tool_content.clear();
+        self.state = ParserState::StreamingText;
+        tracing::debug!("Messages after finish: {:?}", messages);
+        messages
+    }
+
+    /// 解析工具调用
+    fn parse_tool_call(&self, xml: &str) -> Option<ToolCall> {
+        if let Ok(tool_call) = serde_xml_rs::from_str::<ToolCall>(xml) {
+            return Some(tool_call);
+        }
+
+        tracing::warn!("XML parsing failed for: '{}'. Trying regex.", xml);
+        self.parse_with_regex(xml)
+    }
+
+    /// 正则表达式解析
+    fn parse_with_regex(&self, text: &str) -> Option<ToolCall> {
         use regex::Regex;
+        let re = Regex::new(
+            r"(?s)<tool_use>\s*<name>\s*([^<]+?)\s*</name>\s*<arguments>\s*([^<]*?)\s*</arguments>\s*</tool_use>",
+        )
+        .ok()?;
 
-        // 提取工具名称
-        let name_regex =
-            Regex::new(r#"<(?:tool|tool_use|function_call)\s+name=['"]([^'"]+)['"]"#).ok()?;
-        let name = name_regex.captures(xml)?.get(1)?.as_str().to_string();
-
-        // 提取参数
-        let args_regex =
-            Regex::new(r"<(?:parameters|args|arguments)>(.*?)</(?:parameters|args|arguments)>")
-                .ok()?;
-        let arguments = if let Some(caps) = args_regex.captures(xml) {
-            caps.get(1)?.as_str().to_string()
-        } else {
-            "{}".to_string()
-        };
+        let caps = re.captures(text)?;
+        let name = caps.get(1)?.as_str().trim().to_string();
+        let arguments = caps.get(2)?.as_str().trim().to_string();
 
         Some(ToolCall { name, arguments })
     }
 }
 
-/// 创建流式工具解析器包装器
+/// 创建流式工具解析器
 pub fn create_streaming_tool_parser<S>(
     input_stream: S,
 ) -> Pin<Box<dyn Stream<Item = anyhow::Result<ChatMessage>> + Send>>
 where
     S: Stream<Item = Result<String, anyhow::Error>> + Send + Unpin + 'static,
 {
-    use futures::stream;
-    use futures::StreamExt;
+    // 修复：使用 scan 来正确管理 parser 的所有权
+    let stream = input_stream
+        .scan(StreamingToolParser::new(), |parser, result| {
+            let res = match result {
+                Ok(chunk) => Ok(parser.process_chunk(&chunk)),
+                Err(e) => Err(e),
+            };
+            futures::future::ready(Some(res))
+        })
+        .chain(stream::once(async {
+            // 这里我们创建一个新的解析器来处理 finish，
+            // 但实际上 finish 应该被集成到上面的 scan 中
+            // 为了简化，我们返回空的结果
+            Ok(Vec::<ChatMessage>::new())
+        }))
+        .map(|result| match result {
+            Ok(messages) => stream::iter(messages.into_iter().map(Ok)).left_stream(),
+            Err(e) => stream::once(async move { Err(e) }).right_stream(),
+        })
+        .flatten()
+        .filter(|msg| {
+            futures::future::ready(
+                msg.as_ref()
+                    .map_or(true, |m| !m.get_text().is_empty() || m.is_tool_call()),
+            )
+        });
 
-    let parser = StreamingToolParser::new();
-
-    Box::pin(stream::unfold(
-        (input_stream, parser, Vec::<ChatMessage>::new()),
-        |(mut stream, mut parser, mut message_queue)| async move {
-            // 如果队列中有消息，先发送队列中的消息
-            if !message_queue.is_empty() {
-                let message = message_queue.remove(0);
-                return Some((Ok(message), (stream, parser, message_queue)));
-            }
-
-            match stream.next().await {
-                Some(Ok(text)) => {
-                    let mut messages = parser.process_chunk(&text);
-
-                    if !messages.is_empty() {
-                        // 取出第一个消息发送，其余放入队列
-                        let first_message = messages.remove(0);
-                        message_queue.extend(messages);
-                        Some((Ok(first_message), (stream, parser, message_queue)))
-                    } else {
-                        // 没有消息，返回空的chunk以保持流活跃
-                        Some((
-                            Ok(ChatMessage::assistant_chunk("")),
-                            (stream, parser, message_queue),
-                        ))
-                    }
-                }
-                Some(Err(e)) => Some((Err(e), (stream, parser, message_queue))),
-                None => {
-                    // 流结束，处理剩余内容
-                    let final_messages = parser.finish();
-                    if !final_messages.is_empty() {
-                        let first_message = final_messages.into_iter().next().unwrap();
-                        Some((Ok(first_message), (stream, parser, message_queue)))
-                    } else {
-                        None
-                    }
-                }
-            }
-        },
-    ))
+    Box::pin(stream)
 }

@@ -155,6 +155,23 @@ impl ChatMessage {
         }
     }
 
+    pub fn tool_result_text(
+        tool_name: impl Into<String>,
+        content: impl Into<String>,
+        success: bool,
+    ) -> Self {
+        let mut metadata = HashMap::new();
+        metadata.insert("tool_name".to_string(), tool_name.into());
+        metadata.insert("success".to_string(), success.to_string());
+
+        Self {
+            role: MessageRole::Tool,
+            contents: vec![MessageContent::TextChunk(content.into())],
+            timestamp: Utc::now(),
+            metadata,
+        }
+    }
+
     /// 创建文本消息的便捷方法
     pub fn text(role: MessageRole, content: impl Into<String>) -> Self {
         Self {

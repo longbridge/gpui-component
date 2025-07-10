@@ -56,7 +56,7 @@ fn init_log() -> anyhow::Result<()> {
                 .add_directive(LevelFilter::WARN.into())
                 .add_directive("todo_app_gpui=debug".parse()?),
         )
-        .with_writer(file)
+        .with_writer(std::io::stderr)
         .with_ansi(true)
         .with_line_number(true)
         .with_file(true)
@@ -70,7 +70,7 @@ fn init_log() -> anyhow::Result<()> {
                 .add_directive(LevelFilter::WARN.into())
                 .add_directive("todo_app_gpui=info".parse()?),
         )
-        .with_writer(file)
+        .with_writer(std::io::stderr)
         .with_ansi(true)
         .with_line_number(true)
         .with_file(true)
