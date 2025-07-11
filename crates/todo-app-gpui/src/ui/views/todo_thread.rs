@@ -3,13 +3,14 @@ mod view;
 use crate::app::AppExt;
 use crate::app::FoEvent;
 use crate::backoffice::cross_runtime::StreamMessage;
-use crate::backoffice::llm::types::ToolCall;
 use crate::backoffice::llm::types::{ChatMessage, MessageRole};
 use crate::config::todo_item::*;
+use futures::FutureExt;
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::{input::InputState, scroll::ScrollbarState, *};
 use std::time::Duration;
+use tokio::sync::mpsc::{Receiver, Sender};
 
 // 从 rmcp 导入 MCP 类型
 use rmcp::model::Tool as McpTool;
@@ -56,6 +57,7 @@ pub struct TodoThreadChat {
     cached_server_tools: std::collections::HashMap<String, Vec<McpTool>>,
 
     _subscriptions: Vec<Subscription>,
+    extend_channel: Sender<ChatMessage>,
     todoitem: Todo,
 }
 
@@ -95,6 +97,7 @@ impl TodoThreadChat {
 
     fn new(todoitem: Todo, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let todo_id = todoitem.id.clone();
+
         window.on_window_should_close(cx, move |_window, app| {
             app.dispatch_event(FoEvent::TodoChatWindowClosed(todo_id.clone()));
             true
@@ -114,7 +117,7 @@ impl TodoThreadChat {
             ChatMessage::system_text_with_source(todoitem.description.clone(), "task_system")
                 .with_metadata("task_id", todoitem.id.clone()),
         ];
-
+        let extend_channel = Self::start_external_message_handler(todoitem.id.clone(), cx);
         let instance = Self {
             focus_handle: cx.focus_handle(),
             chat_messages,
@@ -128,36 +131,48 @@ impl TodoThreadChat {
             scroll_state: ScrollbarState::default(),
             scroll_size: gpui::Size::default(),
             todoitem,
+            extend_channel,
         };
-        instance.start_external_message_handler(cx);
+
         instance.scroll_handle.scroll_to_bottom();
         instance
     }
 
     /// 启动外部消息处理器
-    fn start_external_message_handler(&self, cx: &mut Context<Self>) {
-        let todo_id = self.todoitem.id.clone();
-
+    fn start_external_message_handler(
+        todo_id: String,
+        cx: &mut Context<Self>,
+    ) -> Sender<ChatMessage> {
+        let (tx, rx) = tokio::sync::mpsc::channel(100);
+        let tx1 = tx.clone();
         cx.spawn(async move |this, app: &mut AsyncApp| {
-            Self::handle_external_messages(this, app, todo_id).await;
+            Self::handle_external_messages(this, app, (todo_id, tx1, rx)).await;
         })
         .detach();
+        tx
     }
 
     /// 处理外部消息的异步任务
-    async fn handle_external_messages(this: WeakEntity<Self>, app: &mut AsyncApp, todo_id: String) {
-        let (tx, mut rx) = tokio::sync::mpsc::channel(100);
-
+    async fn handle_external_messages(
+        this: WeakEntity<Self>,
+        app: &mut AsyncApp,
+        (todo_id, tx, mut rx): (String, Sender<ChatMessage>, Receiver<ChatMessage>),
+    ) {
+        let todo_id_clone = todo_id.clone();
         // 订阅外部消息
         let _sub = app.subscribe_event(move |StreamMessage { source, message }: &StreamMessage| {
-            if &todo_id == source {
+            if &todo_id_clone == source {
                 tracing::trace!("接收到消息: {} {:?}", source, message);
                 tx.try_send(message.clone()).unwrap_or_else(|e| {
                     tracing::error!("Failed to send message to channel: {}", e);
                 });
             }
         });
-
+        tracing::info!(
+            "开始处理外部消息 todoid is {} subscription: {:?}",
+            todo_id,
+            _sub
+        );
         // 消息处理循环
         'message_loop: loop {
             Timer::after(Duration::from_millis(50)).await;
@@ -202,7 +217,7 @@ impl TodoThreadChat {
             tracing::trace!("处理了 {} 条消息", message_count);
         }
 
-        tracing::info!("外部消息处理器已停止");
+        tracing::info!("外部消息处理器已停止 todoid is {}", todo_id);
     }
 
     /// 处理接收到的消息

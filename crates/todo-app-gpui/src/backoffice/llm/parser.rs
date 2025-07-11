@@ -44,7 +44,7 @@ impl StreamingToolParser {
             }
         }
 
-        tracing::trace!(
+        tracing::debug!(
             "Processed chunk '{}', state: {:?}, buffer: '{}', tool_content: '{}'",
             chunk,
             self.state,

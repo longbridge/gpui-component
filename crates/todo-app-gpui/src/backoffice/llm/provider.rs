@@ -66,9 +66,9 @@ impl LlmProvider {
         model_id: &str,
         messages: &[ChatMessage],
     ) -> anyhow::Result<ChatStream> {
-    //    messages.iter().enumerate().for_each(|(idx,msg)| {
-    //         tracing::debug!("聊天消息({}): {:?}",idx, msg);
-    //     });
+        messages.iter().enumerate().for_each(|(idx, msg)| {
+            tracing::debug!("收到的消息({}): {:?}", idx, msg);
+        });
         let tools: Vec<ToolDefinition> = messages
             .iter()
             .flat_map(|msg| msg.get_tool_definitions())
@@ -92,7 +92,7 @@ impl LlmProvider {
 
         let chat_history: Vec<RigMessage> = messages
             .iter()
-            .skip(last_user_index+1)
+            .take(last_user_index)
             .filter(|chat_msg| chat_msg.role != MessageRole::System)
             .map(|chat_msg| match chat_msg.role {
                 MessageRole::User => RigMessage::user(chat_msg.get_text()),
@@ -102,18 +102,19 @@ impl LlmProvider {
             })
             .collect();
         tracing::debug!("使用系统提示: {}", system_prompt);
-        tracing::debug!("使用提示: {}", prompt);
+        tracing::debug!("使用提示({}): {}", prompt, chat_history.len());
         chat_history.iter().enumerate().for_each(|(idx, msg)| {
             tracing::debug!("聊天历史消息({}): {:?}", idx, msg);
         });
-        let agent = rig::providers::openai::Client::from_url(&self.config.api_key, &self.config.api_url)
-            .agent(model_id)
-            .context(system_prompt.as_str())
-            .max_tokens(4096)
-            .temperature(0.7)
-            .build();
+        let agent =
+            rig::providers::openai::Client::from_url(&self.config.api_key, &self.config.api_url)
+                .agent(model_id)
+                .context(system_prompt.as_str())
+                .max_tokens(4096)
+                .temperature(0.7)
+                .build();
 
-        let rig_stream = agent.stream_completion(&prompt, chat_history).await?.stream().await?;
+        let rig_stream = agent.stream_chat(&prompt, chat_history).await?;
 
         if no_tools {
             // 没有工具，简单转换

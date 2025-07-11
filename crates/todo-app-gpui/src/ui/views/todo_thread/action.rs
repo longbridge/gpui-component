@@ -86,18 +86,26 @@ impl TodoThreadChat {
         let provider_id = provider_info.id.clone();
         let model_id = selected_model.model_id.clone();
         let source = self.todoitem.id.clone();
-        history_message.push(ChatMessage::tool_definitions(
-            self.todoitem
-                .selected_tools
-                .iter()
-                .map(|tool| ToolDefinition {
-                    name: ToolDefinition::format_tool_name(&tool.provider_id, &tool.tool_name),
-                    description: tool.description.clone(),
-                    parameters: tool.args_schema.clone().unwrap_or_default(),
-                })
-                .collect::<Vec<_>>(),
-        ));
+        if !self.todoitem.selected_tools.is_empty() {
+            history_message.push(ChatMessage::tool_definitions(
+                self.todoitem
+                    .selected_tools
+                    .iter()
+                    .map(|tool| ToolDefinition {
+                        name: ToolDefinition::format_tool_name(&tool.provider_id, &tool.tool_name),
+                        description: tool.description.clone(),
+                        parameters: tool.args_schema.clone().unwrap_or_default(),
+                    })
+                    .collect::<Vec<_>>(),
+            ));
+        }
 
+        history_message
+            .iter()
+            .enumerate()
+            .for_each(|(idx, message)| {
+                tracing::debug!("UI聊天消息({}): {:?}", idx, message);
+            });
         // 发起异步调用
         cx.spawn(async move |_this, _cx| {
             tracing::trace!(
