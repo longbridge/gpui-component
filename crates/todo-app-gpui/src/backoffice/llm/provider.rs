@@ -92,8 +92,12 @@ impl LlmProvider {
 
         let chat_history: Vec<RigMessage> = messages
             .iter()
-            .take(last_user_index)
-            .filter(|chat_msg| chat_msg.role != MessageRole::System)
+            // .take(last_user_index)
+            .filter(|chat_msg| {
+                chat_msg.role == MessageRole::User
+                    || chat_msg.role == MessageRole::Assistant
+                    || chat_msg.role == MessageRole::Tool
+            })
             .map(|chat_msg| match chat_msg.role {
                 MessageRole::User => RigMessage::user(chat_msg.get_text()),
                 MessageRole::Assistant => RigMessage::assistant(chat_msg.get_text()),
@@ -114,7 +118,7 @@ impl LlmProvider {
                 .temperature(0.7)
                 .build();
 
-        let rig_stream = agent.stream_chat(&prompt, chat_history).await?;
+        let rig_stream = agent.stream_chat("", chat_history).await?;
 
         if no_tools {
             // 没有工具，简单转换
