@@ -9266,6 +9266,7 @@ dependencies = [
  "actix-rt",
  "actix-web",
  "anyhow",
+ "async-stream",
  "chrono",
  "chrono-tz",
  "cron",

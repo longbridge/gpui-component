@@ -12,9 +12,8 @@ mod mutex;
 mod ui;
 pub mod xbus;
 
-use std::sync::OnceLock;
-
 use mimalloc::MiMalloc;
+use std::sync::OnceLock;
 use tracing::level_filters::LevelFilter;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::EnvFilter;
@@ -56,8 +55,8 @@ fn init_log() -> anyhow::Result<()> {
                 .add_directive(LevelFilter::WARN.into())
                 .add_directive("todo_app_gpui=debug".parse()?),
         )
-        .with_writer(file)
-        // .with_writer(std::io::stderr)
+        //.with_writer(file)
+        .with_writer(std::io::stderr)
         .with_ansi(true)
         .with_line_number(true)
         .with_file(true)

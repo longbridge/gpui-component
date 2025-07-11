@@ -1,4 +1,3 @@
-use super::parser::StreamingToolParser;
 use super::types::*;
 use crate::backoffice::agentic::prompts;
 use crate::backoffice::llm::parser;
@@ -6,14 +5,8 @@ use crate::config::llm_config::ApiType;
 use crate::config::llm_config::LlmProviderConfig;
 use crate::config::llm_config::ModelInfo;
 use futures::StreamExt;
-use rig::agent::Agent;
-use rig::streaming::StreamingCompletion;
-use rig::{
-    completion::AssistantContent,
-    message::Message as RigMessage,
-    streaming::{StreamingChat, StreamingCompletionModel},
-};
-
+use rig::providers::openai::Client as OpenAiClient;
+use rig::{completion::AssistantContent, message::Message as RigMessage, streaming::StreamingChat};
 #[derive(Debug, Clone)]
 pub struct LlmProvider {
     pub(crate) config: LlmProviderConfig,
@@ -106,22 +99,19 @@ impl LlmProvider {
             })
             .collect();
         tracing::debug!("使用系统提示: {}", system_prompt);
-        tracing::debug!("使用提示({}): {}", prompt, chat_history.len());
+        tracing::debug!("使用提示({}): {}", chat_history.len(), prompt);
         chat_history.iter().enumerate().for_each(|(idx, msg)| {
             tracing::debug!("聊天历史消息({}): {:?}", idx, msg);
         });
-        let agent =
-            rig::providers::openai::Client::from_url(&self.config.api_key, &self.config.api_url)
-                .agent(model_id)
-                .context(system_prompt.as_str())
-                .max_tokens(4096)
-                .temperature(0.7)
-                .build();
+        let agent = OpenAiClient::from_url(&self.config.api_key, &self.config.api_url)
+            .agent(model_id)
+            .context(system_prompt.as_str())
+            .max_tokens(4096)
+            .temperature(0.7)
+            .build();
 
-        let rig_stream = agent.stream_chat("", chat_history).await?;
-
+        let rig_stream = agent.stream_chat(&prompt, chat_history).await?;
         if no_tools {
-            // 没有工具，简单转换
             let chat_stream = rig_stream.map(|result| match result {
                 Ok(AssistantContent::Text(text)) => Ok(ChatMessage::assistant_chunk(text.text)),
                 Ok(AssistantContent::ToolCall(tool)) => Ok(ChatMessage::tool_call(ToolCall {
@@ -134,7 +124,7 @@ impl LlmProvider {
         } else {
             let text_stream = rig_stream.map(|result| match result {
                 Ok(AssistantContent::Text(text)) => Ok(text.text),
-                Ok(AssistantContent::ToolCall(_)) => Ok(String::new()), // 忽略原生工具调用
+                Ok(AssistantContent::ToolCall(_)) => Ok(String::new()),
                 Err(e) => Err(anyhow::anyhow!("Stream error: {}", e)),
             });
 

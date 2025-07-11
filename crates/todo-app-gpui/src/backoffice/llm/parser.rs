@@ -18,7 +18,7 @@ enum ParserState {
 /// 流式工具解析器
 pub struct StreamingToolParser {
     buffer: String,
-    tool_content: String, // 单独缓冲工具内容
+    tool_content: String,
     state: ParserState,
 }
 
@@ -60,14 +60,12 @@ impl StreamingToolParser {
         match &mut self.state {
             ParserState::StreamingText => {
                 if ch == '<' {
-                    // 可能是工具标签的开始，切换到匹配状态
                     let message = self.flush_buffer_as_text();
                     self.state = ParserState::MatchingStartTag {
                         matched_chars: "<".to_string(),
                     };
                     message
                 } else {
-                    // 普通字符，添加到缓冲区
                     self.buffer.push(ch);
                     None
                 }
@@ -76,9 +74,7 @@ impl StreamingToolParser {
             ParserState::MatchingStartTag { matched_chars } => {
                 matched_chars.push(ch);
 
-                // 修复：使用 matched_chars.as_str() 来获取 &str
                 if Self::START_TAG.starts_with(matched_chars.as_str()) {
-                    // 还在匹配路径上
                     if matched_chars == Self::START_TAG {
                         // 完全匹配，进入工具内部
                         self.state = ParserState::InsideTool;
@@ -89,22 +85,17 @@ impl StreamingToolParser {
                     // 匹配失败，回到文本状态
                     let failed_chars = matched_chars.clone();
                     self.state = ParserState::StreamingText;
-
-                    // 将失败的字符加回缓冲区
                     self.buffer.push_str(&failed_chars);
-
                     None
                 }
             }
 
             ParserState::InsideTool => {
                 if ch == '<' {
-                    // 可能是结束标签的开始
                     self.state = ParserState::MatchingEndTag {
                         matched_chars: "<".to_string(),
                     };
                 } else {
-                    // 工具内容
                     self.tool_content.push(ch);
                 }
                 None
@@ -113,9 +104,7 @@ impl StreamingToolParser {
             ParserState::MatchingEndTag { matched_chars } => {
                 matched_chars.push(ch);
 
-                // 修复：使用 matched_chars.as_str() 来获取 &str
                 if Self::END_TAG.starts_with(matched_chars.as_str()) {
-                    // 还在匹配路径上
                     if matched_chars == Self::END_TAG {
                         // 完全匹配，工具结束
                         let tool_content = self.tool_content.clone();
@@ -125,7 +114,7 @@ impl StreamingToolParser {
                         // 解析工具调用
                         let full_tool_xml = format!("<tool_use>{}</tool_use>", tool_content);
                         if let Some(tool_call) = self.parse_tool_call(&full_tool_xml) {
-                            tracing::debug!("解析到工具 tool call: {:?}", tool_call);
+                            tracing::debug!("解析到工具调用: {:?}", tool_call);
                             return Some(ChatMessage::tool_call(tool_call));
                         } else {
                             return Some(ChatMessage::assistant_chunk(full_tool_xml));
@@ -136,10 +125,7 @@ impl StreamingToolParser {
                     // 匹配失败，这不是结束标签
                     let failed_chars = matched_chars.clone();
                     self.state = ParserState::InsideTool;
-
-                    // 将失败的字符加回工具内容
                     self.tool_content.push_str(&failed_chars);
-
                     None
                 }
             }
@@ -161,7 +147,6 @@ impl StreamingToolParser {
     pub fn finish(&mut self) -> Vec<ChatMessage> {
         let mut messages = Vec::new();
 
-        // 根据当前状态处理剩余内容
         match &self.state {
             ParserState::StreamingText => {
                 if let Some(msg) = self.flush_buffer_as_text() {
@@ -169,19 +154,16 @@ impl StreamingToolParser {
                 }
             }
             ParserState::MatchingStartTag { matched_chars } => {
-                // 未完成的开始标签匹配，当作普通文本
                 self.buffer.push_str(matched_chars);
                 if let Some(msg) = self.flush_buffer_as_text() {
                     messages.push(msg);
                 }
             }
             ParserState::InsideTool => {
-                // 未完成的工具，当作普通文本
                 let incomplete_tool = format!("<tool_use>{}", self.tool_content);
                 messages.push(ChatMessage::assistant_chunk(incomplete_tool));
             }
             ParserState::MatchingEndTag { matched_chars } => {
-                // 未完成的结束标签匹配，将内容加回工具内容并当作普通文本
                 let incomplete_tool = format!("<tool_use>{}{}", self.tool_content, matched_chars);
                 messages.push(ChatMessage::assistant_chunk(incomplete_tool));
             }
@@ -191,6 +173,7 @@ impl StreamingToolParser {
         self.buffer.clear();
         self.tool_content.clear();
         self.state = ParserState::StreamingText;
+
         tracing::debug!("Messages after finish: {:?}", messages);
         messages
     }
@@ -228,32 +211,31 @@ pub fn create_streaming_tool_parser<S>(
 where
     S: Stream<Item = Result<String, anyhow::Error>> + Send + Unpin + 'static,
 {
-    // 修复：使用 scan 来正确管理 parser 的所有权
-    let stream = input_stream
-        .scan(StreamingToolParser::new(), |parser, result| {
-            let res = match result {
-                Ok(chunk) => Ok(parser.process_chunk(&chunk)),
-                Err(e) => Err(e),
-            };
-            futures::future::ready(Some(res))
-        })
-        .chain(stream::once(async {
-            // 这里我们创建一个新的解析器来处理 finish，
-            // 但实际上 finish 应该被集成到上面的 scan 中
-            // 为了简化，我们返回空的结果
-            Ok(Vec::<ChatMessage>::new())
-        }))
-        .map(|result| match result {
-            Ok(messages) => stream::iter(messages.into_iter().map(Ok)).left_stream(),
-            Err(e) => stream::once(async move { Err(e) }).right_stream(),
-        })
-        .flatten()
-        .filter(|msg| {
-            futures::future::ready(
-                msg.as_ref()
-                    .map_or(true, |m| !m.get_text().is_empty() || m.is_tool_call()),
-            )
-        });
+    let stream = async_stream::stream! {
+        let mut parser = StreamingToolParser::new();
+        let mut stream = input_stream;
+
+        while let Some(result) = stream.next().await {
+            match result {
+                Ok(chunk) => {
+                    let messages = parser.process_chunk(&chunk);
+                    for message in messages {
+                        yield Ok(message);
+                    }
+                }
+                Err(e) => {
+                    yield Err(e);
+                    break;
+                }
+            }
+        }
+
+        // 处理流结束时的剩余内容
+        let final_messages = parser.finish();
+        for message in final_messages {
+            yield Ok(message);
+        }
+    };
 
     Box::pin(stream)
 }
