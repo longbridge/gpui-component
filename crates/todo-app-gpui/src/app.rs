@@ -18,7 +18,7 @@ use crate::ui::views::settings::Settings;
 use crate::{ui::*, xbus};
 use gpui::*;
 use gpui_component::dock::{register_panel, PanelControl, PanelInfo};
-use gpui_component::Root;
+use gpui_component::{ActiveTheme, Root, Theme, ThemeMode};
 use raw_window_handle::HasWindowHandle;
 use raw_window_handle::RawWindowHandle;
 use serde::{Deserialize, Serialize};
@@ -144,6 +144,7 @@ pub fn run() {
         LlmProvider::init(cx);
         McpProvider::init(cx);
         Settings::init(cx);
+        Theme::change(ThemeMode::Light, None, cx);
         let http_client = std::sync::Arc::new(
             reqwest_client::ReqwestClient::user_agent("xtodo-utility").unwrap(),
         );

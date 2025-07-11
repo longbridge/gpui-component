@@ -12,10 +12,9 @@ mod mutex;
 mod ui;
 pub mod xbus;
 
+use crate::backoffice::cross_runtime::CrossRuntimeBridge;
 use mimalloc::MiMalloc;
-use std::sync::OnceLock;
 use tracing::level_filters::LevelFilter;
-use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::EnvFilter;
 
 rust_i18n::i18n!("locales", fallback = "en");
@@ -26,7 +25,6 @@ static GLOBAL: MiMalloc = MiMalloc;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     init_log()?;
-
     #[cfg(target_os = "windows")]
     {
         use std::sync::OnceLock;
@@ -40,15 +38,6 @@ async fn main() -> anyhow::Result<()> {
 }
 
 fn init_log() -> anyhow::Result<()> {
-    const GUARD: OnceLock<WorkerGuard> = OnceLock::new();
-    let logs = std::env::current_exe()?.parent().unwrap().join("logs");
-    println!("日志目录: {}", logs.display());
-    std::fs::create_dir_all(&logs).ok();
-
-    // let file_appender = tracing_appender::rolling::never(logs, "todo_app_gpui.log");
-    // let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
-    let file = std::fs::File::create(logs.join("todo_app_gpui.log"))?;
-    //GUARD.set(_guard).ok();
     #[cfg(debug_assertions)]
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -56,7 +45,6 @@ fn init_log() -> anyhow::Result<()> {
                 .add_directive(LevelFilter::WARN.into())
                 .add_directive("todo_app_gpui=debug".parse()?),
         )
-        //.with_writer(file)
         .with_writer(std::io::stderr)
         .with_ansi(true)
         .with_line_number(true)
@@ -65,17 +53,44 @@ fn init_log() -> anyhow::Result<()> {
         .init();
 
     #[cfg(not(debug_assertions))]
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::from_default_env()
-                .add_directive(LevelFilter::WARN.into())
-                .add_directive("todo_app_gpui=info".parse()?),
-        )
-        .with_writer(std::io::stderr)
-        .with_ansi(true)
-        .with_line_number(true)
-        .with_file(true)
-        .with_target(true)
-        .init();
+    {
+        use std::sync::OnceLock;
+        use tracing_appender::non_blocking::WorkerGuard;
+        const GUARD: OnceLock<WorkerGuard> = OnceLock::new();
+        let (non_blocking, _guard) = tracing_appender::non_blocking(LogWriterForGui);
+        GUARD.set(_guard).ok();
+        tracing_subscriber::fmt()
+            .with_env_filter(
+                EnvFilter::from_default_env()
+                    .add_directive(LevelFilter::WARN.into())
+                    .add_directive("todo_app_gpui=debug".parse()?),
+            )
+            .with_writer(non_blocking)
+            .with_ansi(true)
+            .with_line_number(true)
+            .with_file(true)
+            .with_target(true)
+            .init();
+    }
+
     Ok(())
+}
+
+#[derive(Debug)]
+pub struct LogRecord(pub String);
+
+struct LogWriterForGui;
+
+impl std::io::Write for LogWriterForGui {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        CrossRuntimeBridge::global().post(LogRecord(
+            String::from_utf8_lossy(buf).into_owned().to_string(),
+        ));
+        let buf_len = buf.len();
+        Ok(buf_len)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
 }

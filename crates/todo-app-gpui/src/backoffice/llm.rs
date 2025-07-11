@@ -58,10 +58,9 @@ impl LlmRegistry {
                     .into_actor(self)
                     .then(move |models, act, _ctx| match models {
                         Ok(models) => {
-                            tracing::debug!("Loaded models for {}: {:?}", config.id, models);
                             config.models = models;
                             act.providers.insert(config.id.clone(), config.clone());
-                            LlmProviderManager::update_provider(&config.id.clone(), config);
+                            LlmProviderManager::update_provider(&config.id.clone(), config).ok();
                             fut::ready(())
                         }
                         Err(err) => {

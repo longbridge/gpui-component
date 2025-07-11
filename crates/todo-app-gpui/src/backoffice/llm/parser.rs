@@ -1,5 +1,5 @@
 use super::types::{ChatMessage, ToolCall};
-use futures::stream::{self, Stream, StreamExt};
+use futures::stream::{Stream, StreamExt};
 use std::pin::Pin;
 
 /// 解析器状态
@@ -238,4 +238,465 @@ where
     };
 
     Box::pin(stream)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use futures::stream;
+    use tokio_test;
+
+    // 模拟 ChatMessage 和 ToolCall 的测试实现
+    #[derive(Debug, Clone, PartialEq)]
+    pub struct TestChatMessage {
+        pub content: String,
+        pub message_type: MessageType,
+    }
+
+    #[derive(Debug, Clone, PartialEq)]
+    pub enum MessageType {
+        AssistantChunk,
+        ToolCall,
+    }
+
+    #[derive(Debug, Clone, PartialEq)]
+    pub struct TestToolCall {
+        pub name: String,
+        pub arguments: String,
+    }
+
+    impl TestChatMessage {
+        pub fn assistant_chunk(content: String) -> Self {
+            Self {
+                content,
+                message_type: MessageType::AssistantChunk,
+            }
+        }
+
+        pub fn tool_call(tool_call: TestToolCall) -> Self {
+            Self {
+                content: format!("{}:{}", tool_call.name, tool_call.arguments),
+                message_type: MessageType::ToolCall,
+            }
+        }
+    }
+
+    // 测试用的简化解析器
+    struct TestParser {
+        buffer: String,
+        tool_content: String,
+        state: ParserState,
+    }
+
+    impl TestParser {
+        const START_TAG: &'static str = "<tool_use>";
+        const END_TAG: &'static str = "</tool_use>";
+
+        pub fn new() -> Self {
+            Self {
+                buffer: String::new(),
+                tool_content: String::new(),
+                state: ParserState::StreamingText,
+            }
+        }
+
+        pub fn process_chunk(&mut self, chunk: &str) -> Vec<TestChatMessage> {
+            let mut messages = Vec::new();
+            for ch in chunk.chars() {
+                if let Some(message) = self.process_char(ch) {
+                    messages.push(message);
+                }
+            }
+            messages
+        }
+
+        fn process_char(&mut self, ch: char) -> Option<TestChatMessage> {
+            match &mut self.state {
+                ParserState::StreamingText => {
+                    if ch == '<' {
+                        let message = self.flush_buffer_as_text();
+                        self.state = ParserState::MatchingStartTag {
+                            matched_chars: "<".to_string(),
+                        };
+                        message
+                    } else {
+                        self.buffer.push(ch);
+                        None
+                    }
+                }
+
+                ParserState::MatchingStartTag { matched_chars } => {
+                    matched_chars.push(ch);
+
+                    if Self::START_TAG.starts_with(matched_chars.as_str()) {
+                        if matched_chars == Self::START_TAG {
+                            self.state = ParserState::InsideTool;
+                            self.tool_content.clear();
+                        }
+                        None
+                    } else {
+                        let failed_chars = matched_chars.clone();
+                        self.state = ParserState::StreamingText;
+                        self.buffer.push_str(&failed_chars);
+                        None
+                    }
+                }
+
+                ParserState::InsideTool => {
+                    if ch == '<' {
+                        self.state = ParserState::MatchingEndTag {
+                            matched_chars: "<".to_string(),
+                        };
+                    } else {
+                        self.tool_content.push(ch);
+                    }
+                    None
+                }
+
+                ParserState::MatchingEndTag { matched_chars } => {
+                    matched_chars.push(ch);
+
+                    if Self::END_TAG.starts_with(matched_chars.as_str()) {
+                        if matched_chars == Self::END_TAG {
+                            let tool_content = self.tool_content.clone();
+                            self.tool_content.clear();
+                            self.state = ParserState::StreamingText;
+
+                            if let Some(tool_call) = self.parse_tool_call(&tool_content) {
+                                return Some(TestChatMessage::tool_call(tool_call));
+                            } else {
+                                return Some(TestChatMessage::assistant_chunk(format!(
+                                    "<tool_use>{}</tool_use>",
+                                    tool_content
+                                )));
+                            }
+                        }
+                        None
+                    } else {
+                        let failed_chars = matched_chars.clone();
+                        self.state = ParserState::InsideTool;
+                        self.tool_content.push_str(&failed_chars);
+                        None
+                    }
+                }
+            }
+        }
+
+        fn flush_buffer_as_text(&mut self) -> Option<TestChatMessage> {
+            if !self.buffer.is_empty() {
+                let text = self.buffer.clone();
+                self.buffer.clear();
+                Some(TestChatMessage::assistant_chunk(text))
+            } else {
+                None
+            }
+        }
+
+        pub fn finish(&mut self) -> Vec<TestChatMessage> {
+            let mut messages = Vec::new();
+
+            match &self.state {
+                ParserState::StreamingText => {
+                    if let Some(msg) = self.flush_buffer_as_text() {
+                        messages.push(msg);
+                    }
+                }
+                ParserState::MatchingStartTag { matched_chars } => {
+                    self.buffer.push_str(matched_chars);
+                    if let Some(msg) = self.flush_buffer_as_text() {
+                        messages.push(msg);
+                    }
+                }
+                ParserState::InsideTool => {
+                    let incomplete_tool = format!("<tool_use>{}", self.tool_content);
+                    messages.push(TestChatMessage::assistant_chunk(incomplete_tool));
+                }
+                ParserState::MatchingEndTag { matched_chars } => {
+                    let incomplete_tool =
+                        format!("<tool_use>{}{}", self.tool_content, matched_chars);
+                    messages.push(TestChatMessage::assistant_chunk(incomplete_tool));
+                }
+            }
+
+            self.buffer.clear();
+            self.tool_content.clear();
+            self.state = ParserState::StreamingText;
+
+            messages
+        }
+
+        fn parse_tool_call(&self, content: &str) -> Option<TestToolCall> {
+            use regex::Regex;
+            let re = Regex::new(
+                r"(?s)<name>\s*([^<]+?)\s*</name>\s*<arguments>\s*([^<]*?)\s*</arguments>",
+            )
+            .ok()?;
+
+            let caps = re.captures(content)?;
+            let name = caps.get(1)?.as_str().trim().to_string();
+            let arguments = caps.get(2)?.as_str().trim().to_string();
+
+            Some(TestToolCall { name, arguments })
+        }
+    }
+
+    #[test]
+    fn test_simple_text_streaming() {
+        let mut parser = TestParser::new();
+
+        // 测试简单文本流
+        let messages = parser.process_chunk("Hello World");
+        assert_eq!(messages.len(), 0); // 文本还在缓冲区中
+
+        let final_messages = parser.finish();
+        assert_eq!(final_messages.len(), 1);
+        assert_eq!(final_messages[0].content, "Hello World");
+        assert_eq!(final_messages[0].message_type, MessageType::AssistantChunk);
+    }
+
+    #[test]
+    fn test_complete_tool_call_single_chunk() {
+        let mut parser = TestParser::new();
+
+        let tool_xml = "<tool_use><name>search</name><arguments>query</arguments></tool_use>";
+        let messages = parser.process_chunk(tool_xml);
+
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].message_type, MessageType::ToolCall);
+        assert_eq!(messages[0].content, "search:query");
+    }
+
+    #[test]
+    fn test_tool_call_with_surrounding_text() {
+        let mut parser = TestParser::new();
+
+        let input = "Here is a tool call: <tool_use><name>search</name><arguments>rust</arguments></tool_use> and more text";
+        let messages = parser.process_chunk(input);
+
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].content, "Here is a tool call: ");
+        assert_eq!(messages[0].message_type, MessageType::AssistantChunk);
+        assert_eq!(messages[1].content, "search:rust");
+        assert_eq!(messages[1].message_type, MessageType::ToolCall);
+
+        let final_messages = parser.finish();
+        assert_eq!(final_messages.len(), 1);
+        assert_eq!(final_messages[0].content, " and more text");
+    }
+
+    #[test]
+    fn test_streaming_tool_call_char_by_char() {
+        let mut parser = TestParser::new();
+        let mut all_messages = Vec::new();
+
+        let tool_xml = "<tool_use><name>calculate</name><arguments>2+2</arguments></tool_use>";
+
+        // 逐字符处理
+        for ch in tool_xml.chars() {
+            let messages = parser.process_chunk(&ch.to_string());
+            all_messages.extend(messages);
+        }
+
+        assert_eq!(all_messages.len(), 1);
+        assert_eq!(all_messages[0].message_type, MessageType::ToolCall);
+        assert_eq!(all_messages[0].content, "calculate:2+2");
+    }
+
+    #[test]
+    fn test_multiple_tool_calls() {
+        let mut parser = TestParser::new();
+
+        let input = "<tool_use><name>search</name><arguments>rust</arguments></tool_use><tool_use><name>calculate</name><arguments>1+1</arguments></tool_use>";
+        let messages = parser.process_chunk(input);
+
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].content, "search:rust");
+        assert_eq!(messages[1].content, "calculate:1+1");
+    }
+
+    #[test]
+    fn test_incomplete_tool_call() {
+        let mut parser = TestParser::new();
+
+        let incomplete = "<tool_use><name>search</name><arguments>incomplete";
+        let messages = parser.process_chunk(incomplete);
+        assert_eq!(messages.len(), 0);
+
+        let final_messages = parser.finish();
+        assert_eq!(final_messages.len(), 1);
+        assert_eq!(
+            final_messages[0].content,
+            "<tool_use><name>search</name><arguments>incomplete"
+        );
+        assert_eq!(final_messages[0].message_type, MessageType::AssistantChunk);
+    }
+
+    #[test]
+    fn test_false_start_tag() {
+        let mut parser = TestParser::new();
+
+        let input = "<tool_wrong>not a tool</tool_wrong>";
+        let messages = parser.process_chunk(input);
+        assert_eq!(messages.len(), 0);
+
+        let final_messages = parser.finish();
+        assert_eq!(final_messages.len(), 1);
+        assert_eq!(
+            final_messages[0].content,
+            "<tool_wrong>not a tool</tool_wrong>"
+        );
+    }
+
+    #[test]
+    fn test_nested_brackets_in_tool_content() {
+        let mut parser = TestParser::new();
+
+        let input =
+            "<tool_use><name>code</name><arguments><div>nested</div></arguments></tool_use>";
+        let messages = parser.process_chunk(input);
+
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].content, "code:<div>nested</div>");
+    }
+
+    #[test]
+    fn test_partial_end_tag_matching() {
+        let mut parser = TestParser::new();
+
+        let input = "<tool_use><name>test</name><arguments>arg</arguments><not_end_tag></tool_use>";
+        let messages = parser.process_chunk(input);
+
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].content, "test:arg<not_end_tag>");
+    }
+
+    #[test]
+    fn test_streaming_across_chunks() {
+        let mut parser = TestParser::new();
+        let mut all_messages = Vec::new();
+
+        // 分块输入
+        let chunks = vec![
+            "Hello ",
+            "<tool_use><name>se",
+            "arch</name><argumen",
+            "ts>query</arguments></tool_use>",
+            " world",
+        ];
+
+        for chunk in chunks {
+            let messages = parser.process_chunk(chunk);
+            all_messages.extend(messages);
+        }
+
+        let final_messages = parser.finish();
+        all_messages.extend(final_messages);
+
+        assert_eq!(all_messages.len(), 3);
+        assert_eq!(all_messages[0].content, "Hello ");
+        assert_eq!(all_messages[1].content, "search:query");
+        assert_eq!(all_messages[2].content, " world");
+    }
+
+    #[test]
+    fn test_empty_tool_arguments() {
+        let mut parser = TestParser::new();
+
+        let input = "<tool_use><name>ping</name><arguments></arguments></tool_use>";
+        let messages = parser.process_chunk(input);
+
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].content, "ping:");
+    }
+
+    #[test]
+    fn test_whitespace_in_tool_tags() {
+        let mut parser = TestParser::new();
+
+        let input = "<tool_use><name>  search  </name><arguments>  query  </arguments></tool_use>";
+        let messages = parser.process_chunk(input);
+
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].content, "search:query");
+    }
+
+    #[tokio::test]
+    async fn test_streaming_parser_function() {
+        let chunks = vec![
+            Ok("Hello ".to_string()),
+            Ok("<tool_use><name>search</name><arguments>rust</arguments></tool_use>".to_string()),
+            Ok(" world".to_string()),
+        ];
+
+        let input_stream = stream::iter(chunks);
+        let mut parser_stream = create_streaming_tool_parser(input_stream);
+
+        let mut results = Vec::new();
+        while let Some(result) = parser_stream.next().await {
+            results.push(result);
+        }
+
+        assert_eq!(results.len(), 3);
+        assert!(results.iter().all(|r| r.is_ok()));
+    }
+
+    #[tokio::test]
+    async fn test_streaming_parser_with_error() {
+        let chunks = vec![
+            Ok("Hello ".to_string()),
+            Err(anyhow::anyhow!("Network error")),
+            Ok("world".to_string()),
+        ];
+
+        let input_stream = stream::iter(chunks);
+        let mut parser_stream = create_streaming_tool_parser(input_stream);
+
+        let mut results = Vec::new();
+        while let Some(result) = parser_stream.next().await {
+            results.push(result);
+            if result.is_err() {
+                break;
+            }
+        }
+
+        assert_eq!(results.len(), 2); // Hello chunk + error
+        assert!(results[0].is_ok());
+        assert!(results[1].is_err());
+    }
+
+    #[test]
+    fn test_state_reset_after_finish() {
+        let mut parser = TestParser::new();
+
+        // 处理不完整的工具调用
+        parser.process_chunk("<tool_use><name>incomplete");
+        let final_messages = parser.finish();
+        assert_eq!(final_messages.len(), 1);
+
+        // 验证状态已重置
+        assert_eq!(parser.state, ParserState::StreamingText);
+        assert!(parser.buffer.is_empty());
+        assert!(parser.tool_content.is_empty());
+
+        // 处理新的内容应该正常工作
+        let messages = parser.process_chunk("New content");
+        assert_eq!(messages.len(), 0);
+
+        let final_messages = parser.finish();
+        assert_eq!(final_messages.len(), 1);
+        assert_eq!(final_messages[0].content, "New content");
+    }
+
+    #[test]
+    fn test_malformed_xml_fallback() {
+        let mut parser = TestParser::new();
+
+        // 测试格式错误的XML
+        let input = "<tool_use><name>search<arguments>no closing name tag</arguments></tool_use>";
+        let messages = parser.process_chunk(input);
+
+        // 应该作为普通文本处理
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].message_type, MessageType::AssistantChunk);
+    }
 }
