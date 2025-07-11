@@ -26,6 +26,7 @@ static GLOBAL: MiMalloc = MiMalloc;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     init_log()?;
+
     #[cfg(target_os = "windows")]
     {
         use std::sync::OnceLock;

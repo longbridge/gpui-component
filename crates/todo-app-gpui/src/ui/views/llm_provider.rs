@@ -1,4 +1,4 @@
-use crate::app::{AppState, FoEvent};
+use crate::app::FoEvent;
 use crate::backoffice::cross_runtime::CrossRuntimeBridge;
 use crate::config::llm_config::{ApiType, LlmProviderConfig, LlmProviderManager, ModelInfo};
 use crate::ui::components::ViewKit;

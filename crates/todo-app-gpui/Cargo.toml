@@ -92,7 +92,7 @@ version = "0.1.0"
 product-name = "xTo-Do"
 identifier = "com.shouqianba.xTo-Do"
 resources = ["model"]
-icons = ["assets/logo2.png"]
+icons = ["logo0.png"]
 
 # [profile.release]
 # lto = true

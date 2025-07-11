@@ -28,7 +28,11 @@ impl LlmProvider {
             &self.config.api_key,
             &self.config.api_url.replace("/v1", ""),
         )?;
-
+        tracing::debug!(
+            "Loading models for provider {} from {}",
+            self.config.id,
+            self.config.api_url
+        );
         let mut models = client
             .list_models()
             .await?
