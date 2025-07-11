@@ -82,11 +82,12 @@ impl StreamingToolParser {
                     }
                     None
                 } else {
-                    // 匹配失败，回到文本状态
+                    // 匹配失败，立即输出失败的内容
                     let failed_chars = matched_chars.clone();
                     self.state = ParserState::StreamingText;
-                    self.buffer.push_str(&failed_chars);
-                    None
+
+                    // 立即输出失败的内容，而不是添加到缓冲区
+                    Some(ChatMessage::assistant_chunk(failed_chars))
                 }
             }
 
@@ -244,7 +245,6 @@ where
 mod tests {
     use super::*;
     use futures::stream;
-    use tokio_test;
 
     // 模拟 ChatMessage 和 ToolCall 的测试实现
     #[derive(Debug, Clone, PartialEq)]
@@ -335,10 +335,12 @@ mod tests {
                         }
                         None
                     } else {
+                        // 匹配失败，立即输出失败的内容
                         let failed_chars = matched_chars.clone();
                         self.state = ParserState::StreamingText;
-                        self.buffer.push_str(&failed_chars);
-                        None
+
+                        // 立即输出失败的内容，而不是添加到缓冲区
+                        Some(TestChatMessage::assistant_chunk(failed_chars))
                     }
                 }
 
@@ -537,37 +539,69 @@ mod tests {
 
         let input = "<tool_wrong>not a tool</tool_wrong>";
         let messages = parser.process_chunk(input);
-        assert_eq!(messages.len(), 0);
+
+        // 应该有2个立即输出的消息
+        assert_eq!(messages.len(), 3);
+        assert_eq!(messages[0].content, "<tool_w"); // 第一次匹配失败
+        assert_eq!(messages[1].content, "rong>not a tool"); // 遇到 < 时刷新 buffer
+        assert_eq!(messages[2].content, "</"); // 第二次匹配失败
 
         let final_messages = parser.finish();
         assert_eq!(final_messages.len(), 1);
-        assert_eq!(
-            final_messages[0].content,
-            "<tool_wrong>not a tool</tool_wrong>"
-        );
+        assert_eq!(final_messages[0].content, "tool_wrong>"); // 剩余 buffer 内容
     }
 
     #[test]
-    fn test_nested_brackets_in_tool_content() {
+    fn test_false_start_tag_with_space() {
         let mut parser = TestParser::new();
 
-        let input =
-            "<tool_use><name>code</name><arguments><div>nested</div></arguments></tool_use>";
+        let input = "<tool_wrong> not a tool</tool_wrong>";
         let messages = parser.process_chunk(input);
 
-        assert_eq!(messages.len(), 1);
-        assert_eq!(messages[0].content, "code:<div>nested</div>");
+        // 应该有3个立即输出的消息
+        assert_eq!(messages.len(), 3);
+        assert_eq!(messages[0].content, "<tool_w"); // 第一次匹配失败
+        assert_eq!(messages[1].content, "rong> not a tool"); // 遇到 < 时刷新 buffer
+        assert_eq!(messages[2].content, "</"); // 第二次匹配失败
+
+        let final_messages = parser.finish();
+        assert_eq!(final_messages.len(), 1);
+        assert_eq!(final_messages[0].content, "tool_wrong>"); // 剩余 buffer 内容
     }
 
     #[test]
-    fn test_partial_end_tag_matching() {
+    fn test_immediate_text_output_after_false_match() {
         let mut parser = TestParser::new();
 
-        let input = "<tool_use><name>test</name><arguments>arg</arguments><not_end_tag></tool_use>";
+        let input = "<xyz>content";
         let messages = parser.process_chunk(input);
 
+        // 遇到 'x' 时匹配失败，立即输出 "<x"
         assert_eq!(messages.len(), 1);
-        assert_eq!(messages[0].content, "test:arg<not_end_tag>");
+        assert_eq!(messages[0].content, "<x");
+
+        let final_messages = parser.finish();
+        assert_eq!(final_messages.len(), 1);
+        assert_eq!(final_messages[0].content, "yz>content");
+    }
+
+    #[test]
+    fn test_mixed_content_with_false_start() {
+        let mut parser = TestParser::new();
+
+        let input = "Hello <not_tool>test</not_tool> World";
+        let messages = parser.process_chunk(input);
+
+        // 应该有3个立即输出的消息
+        assert_eq!(messages.len(), 4);
+        assert_eq!(messages[0].content, "Hello "); // 遇到 < 时刷新 buffer
+        assert_eq!(messages[1].content, "<n"); // 第一次匹配失败
+        assert_eq!(messages[2].content, "ot_tool>test"); // 遇到 < 时刷新 buffer
+        assert_eq!(messages[3].content, "</"); // 第二次匹配失败
+
+        let final_messages = parser.finish();
+        assert_eq!(final_messages.len(), 1);
+        assert_eq!(final_messages[0].content, "not_tool> World");
     }
 
     #[test]
@@ -653,8 +687,9 @@ mod tests {
 
         let mut results = Vec::new();
         while let Some(result) = parser_stream.next().await {
+            let is_error = result.is_err();
             results.push(result);
-            if result.is_err() {
+            if is_error {
                 break;
             }
         }
