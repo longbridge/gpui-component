@@ -86,6 +86,13 @@ windows = { version = "0.61.1", features = [
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = { version = "0.18" }
 
+[package.metadata.packager]
+before-packaging-command = "cargo build --release"
+version = "0.1.0"
+product-name = "xTo-Do"
+identifier = "com.shouqianba.xTo-Do"
+resources = ["model"]
+icons = ["assets/logo2.png"]
 
 # [profile.release]
 # lto = true
