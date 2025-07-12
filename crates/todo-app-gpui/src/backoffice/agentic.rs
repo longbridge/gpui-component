@@ -6,6 +6,7 @@ use std::fmt::Debug;
 mod feedback;
 mod insight;
 mod knowledge;
+mod llm;
 mod registry;
 mod regulator;
 // pub(crate) mod llm;
@@ -35,18 +36,13 @@ pub struct MemoryEntry {
 /// 记忆体定义，为LLM提供短期和长期记忆存储和检索功能。
 pub trait Memory: Send + Sync {
     /// 存储记忆，带有类型标识
-    async fn store(
-        &mut self,
-        key: &str,
-        value: &str,
-        memory_type: MemoryType,
-    ) -> anyhow::Result<()>;
+    async fn store(&self, key: &str, value: &str, memory_type: MemoryType) -> anyhow::Result<()>;
 
     /// 获取记忆
     async fn get(&self, key: &str, memory_type: MemoryType) -> anyhow::Result<Option<String>>;
 
     /// 清空指定类型的记忆
-    async fn clear(&mut self, memory_type: MemoryType) -> anyhow::Result<()>;
+    async fn clear(&self, memory_type: MemoryType) -> anyhow::Result<()>;
 
     /// 搜索相关记忆，可以指定搜索范围
     async fn search(
@@ -59,7 +55,7 @@ pub trait Memory: Send + Sync {
     async fn list_keys(&self, memory_type: MemoryType) -> anyhow::Result<Vec<String>>;
 
     // 为了向后兼容，保留原有方法
-    async fn store_short_term(&mut self, key: &str, value: &str) -> anyhow::Result<()> {
+    async fn store_short_term(&self, key: &str, value: &str) -> anyhow::Result<()> {
         self.store(key, value, MemoryType::ShortTerm).await
     }
 
@@ -67,7 +63,7 @@ pub trait Memory: Send + Sync {
         self.get(key, MemoryType::ShortTerm).await
     }
 
-    async fn store_long_term(&mut self, key: &str, value: &str) -> anyhow::Result<()> {
+    async fn store_long_term(&self, key: &str, value: &str) -> anyhow::Result<()> {
         self.store(key, value, MemoryType::LongTerm).await
     }
 
@@ -75,7 +71,7 @@ pub trait Memory: Send + Sync {
         self.get(key, MemoryType::LongTerm).await
     }
 
-    async fn clear_short_term(&mut self) -> anyhow::Result<()> {
+    async fn clear_short_term(&self) -> anyhow::Result<()> {
         self.clear(MemoryType::ShortTerm).await
     }
 
