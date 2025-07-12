@@ -7,7 +7,7 @@ mod feedback;
 mod insight;
 mod knowledge;
 mod llm;
-mod registry;
+// mod registry;
 mod regulator;
 // pub(crate) mod llm;
 pub(crate) mod mcp_tools;
