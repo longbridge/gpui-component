@@ -6,6 +6,7 @@ use std::fmt::Debug;
 mod feedback;
 mod insight;
 mod knowledge;
+mod registry;
 mod regulator;
 // pub(crate) mod llm;
 pub(crate) mod mcp_tools;
