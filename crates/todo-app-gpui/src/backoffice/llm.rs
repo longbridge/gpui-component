@@ -5,7 +5,6 @@ pub mod types;
 
 use crate::backoffice::llm::provider::LlmProvider;
 use crate::backoffice::llm::types::{ChatMessage, ChatStream};
-use crate::config::mcp_config::McpConfigManager;
 use crate::{
     backoffice::YamlFile,
     config::{llm_config::*, provider_config_path},

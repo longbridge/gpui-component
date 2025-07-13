@@ -69,7 +69,6 @@ impl LlmProvider {
         let tools: Vec<ToolDefinition> = messages
             .iter()
             .flat_map(|msg| msg.get_tool_definitions())
-            .cloned()
             .collect();
         let no_tools = tools.is_empty();
 
@@ -93,13 +92,12 @@ impl LlmProvider {
             .filter(|chat_msg| {
                 chat_msg.role == MessageRole::User
                     || chat_msg.role == MessageRole::Assistant
-                    || chat_msg.role == MessageRole::Tool
+                    || chat_msg.role == MessageRole::System
             })
             .map(|chat_msg| match chat_msg.role {
                 MessageRole::User => RigMessage::user(chat_msg.get_text()),
                 MessageRole::Assistant => RigMessage::assistant(chat_msg.get_text()),
                 MessageRole::System => RigMessage::user(chat_msg.get_text()),
-                MessageRole::Tool => RigMessage::user(chat_msg.get_text()),
             })
             .collect();
         tracing::debug!("使用系统提示: {}", system_prompt);
@@ -117,11 +115,11 @@ impl LlmProvider {
         let rig_stream = agent.stream_chat(&prompt, chat_history).await?;
         if no_tools {
             let chat_stream = rig_stream.map(|result| match result {
-                Ok(AssistantContent::Text(text)) => Ok(ChatMessage::assistant_chunk(text.text)),
-                Ok(AssistantContent::ToolCall(tool)) => Ok(ChatMessage::tool_call(ToolCall {
+                Ok(AssistantContent::Text(text)) => Ok(ChatMessage::assistant().with_text_chunk(text.text)),
+                Ok(AssistantContent::ToolCall(tool)) => Ok(ChatMessage::system().with_content(MessageContent::ToolCall(ToolCall {
                     name: tool.function.name,
                     arguments: tool.function.arguments.to_string(),
-                })),
+                }))),
                 Err(e) => Err(anyhow::anyhow!("Stream error: {}", e)),
             });
             Ok(Box::pin(chat_stream))

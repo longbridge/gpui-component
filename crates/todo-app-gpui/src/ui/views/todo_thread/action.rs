@@ -1,6 +1,6 @@
 use crate::app::{AppExt, FoEvent};
 use crate::backoffice::cross_runtime::CrossRuntimeBridge;
-use crate::backoffice::llm::types::{ChatMessage, ToolDefinition};
+use crate::backoffice::llm::types::{ChatMessage, MessageContent, ToolDefinition};
 use crate::config::llm_config::LlmProviderManager;
 
 use super::TodoThreadChat;
@@ -59,8 +59,8 @@ impl TodoThreadChat {
 
         // 创建用户消息并添加工具定义
         let user_message =
-            ChatMessage::user_text_with_source(message_content.clone(), todo.id.clone())
-                .with_model(
+            ChatMessage::user().with_text(message_content.clone()).with_source(todo.id.clone())
+                .with_metadata(
                     selected_model.model_id.clone(),
                     selected_model.model_name.clone(),
                 );
@@ -78,7 +78,7 @@ impl TodoThreadChat {
 
         // 准备助手消息占位符
         let assistant_placeholder =
-            ChatMessage::assistant_text_with_source("".to_string(), todo.id.clone());
+            ChatMessage::assistant().with_source( todo.id.clone());
 
         self.chat_messages.push(assistant_placeholder);
 
@@ -86,9 +86,10 @@ impl TodoThreadChat {
         let provider_id = provider_info.id.clone();
         let model_id = selected_model.model_id.clone();
         let source = self.todoitem.id.clone();
+        
         if !self.todoitem.selected_tools.is_empty() {
-            history_message.push(ChatMessage::tool_definitions(
-                self.todoitem
+            history_message.push(ChatMessage::system().with_content(
+               MessageContent::ToolDefinitions(self.todoitem
                     .selected_tools
                     .iter()
                     .map(|tool| ToolDefinition {
@@ -97,7 +98,7 @@ impl TodoThreadChat {
                         parameters: tool.args_schema.clone().unwrap_or_default(),
                     })
                     .collect::<Vec<_>>(),
-            ));
+            )));
         }
 
         history_message

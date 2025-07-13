@@ -1,5 +1,5 @@
 use crate::backoffice::llm::provider::LlmProvider;
-use crate::backoffice::llm::types::{ChatMessage, ChatStream};
+use crate::backoffice::llm::types::{ChatMessage, ChatStream, MessageContent};
 use crate::backoffice::mcp::McpRegistry;
 use rmcp::model::RawContent;
 
@@ -44,7 +44,7 @@ pub(crate) async fn chat_stream_with_tools_simple(
                 match chunk {
                     Ok(message) => {
                         if message.is_tool_call() {
-                            tool_calls.extend(message.get_tool_calls().into_iter().cloned());
+                            tool_calls.extend(message.get_tool_calls());
                         } else {
                             // 如果是文本，累加起来
                             accumulated_text.push_str(&message.get_text());
@@ -64,7 +64,7 @@ pub(crate) async fn chat_stream_with_tools_simple(
 
             // 3. 将LLM的文本响应添加到历史记录
             if !accumulated_text.trim().is_empty() {
-                current_history.push(ChatMessage::assistant_text(accumulated_text));
+                current_history.push(ChatMessage::assistant().with_text(accumulated_text));
             }
 
             // 4. 如果没有工具调用，说明流程结束，退出循环
@@ -72,8 +72,8 @@ pub(crate) async fn chat_stream_with_tools_simple(
                 break;
             }
 
-            // 5. 执行所有收集到的工具
-            let _ = sender.send(Ok(ChatMessage::assistant_text(format!(
+            // // 5. 执行所有收集到的工具
+            let _ = sender.send(Ok(ChatMessage::assistant().with_text(format!(
                 "执行 {} 个工具...",
                 tool_calls.len()
             ))));
@@ -105,7 +105,10 @@ pub(crate) async fn chat_stream_with_tools_simple(
                     tool_call.name, result_content
                 );
                 // 创建工具结果消息，并添加到历史记录
-                let result_message = ChatMessage::tool_result_text(&tool_call.name, content, true);
+                let result_message = ChatMessage::system().with_content(MessageContent::ToolResult(
+                    tool_call.name.clone(),
+                    result_content,
+                ));
                 current_history.push(result_message.clone());
 
                 // 将工具结果也实时转发给调用者

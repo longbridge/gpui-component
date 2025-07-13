@@ -436,9 +436,9 @@ impl TodoThreadChat {
 
 
 fn render_chat_message(&self,idx:usize, message: &ChatMessage) -> impl IntoElement {
-        tracing::trace!("渲染消息: {:?}", message);
+        tracing::debug!("渲染消息第({}): {:?}",idx, message);
         let is_user = matches!(message.role, MessageRole::User);
-        let is_tool= matches!(message.role, MessageRole::Tool);
+        let is_tool=  message.is_tool_result();
         h_flex()
             .w_full()
             .py_2()
@@ -450,7 +450,6 @@ fn render_chat_message(&self,idx:usize, message: &ChatMessage) -> impl IntoEleme
                     v_flex()
                         .gap_1()
                         .child(
-                            // 消息头部：角色和时间
                             h_flex()
                                 .items_center()
                                 .gap_2()
@@ -506,7 +505,7 @@ fn render_chat_message(&self,idx:usize, message: &ChatMessage) -> impl IntoEleme
                                     this.child(
                                     TextView::markdown(
                                         SharedString::new(format!("chat-message-{}", idx)),
-                                        message.get_text_without_tools(),
+                                        message.get_text()
                                     )
                                 )
                                 })
@@ -551,8 +550,8 @@ impl Render for TodoThreadChat {
                                        .track_scroll(&self.scroll_handle)
                                         .children(
                                             self.chat_messages
-                                                .iter()
-                                                .filter(|msg| !msg.get_text_without_tools().is_empty()).enumerate()
+                                                .iter().enumerate()
+                                              //  .filter(|msg| !msg.get_text_without_tools().is_empty()).enumerate()
                                                 .map(|(idx,msg)| self.render_chat_message(idx,msg)),
                                         )
                                         .when(self.is_loading, |this| {

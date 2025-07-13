@@ -107,7 +107,7 @@ pub trait LLM: Send + Sync {
     /// 基础对话能力 - 一次性响应（便捷方法）
     async fn completion(&self, prompts: &[ChatMessage]) -> anyhow::Result<ChatMessage> {
         let mut stream = self.completion_stream(prompts).await?;
-        let mut final_message = ChatMessage::assistant_text("");
+        let  final_message = ChatMessage::assistant();
 
         // 收集流式响应并合并
         use futures::StreamExt;
@@ -115,33 +115,7 @@ pub trait LLM: Send + Sync {
             match chunk {
                 Ok(message) => {
                     let text = message.get_text();
-                    // 修复：正确处理 MessageContent 枚举
-                    // match &mut final_message.content {
-                    //     MessageContent::Parts(parts) => {
-                    //         if let Some(MediaContent {
-                    //             data: MediaData::Text(existing_text),
-                    //             ..
-                    //         }) = parts.get_mut(0)
-                    //         {
-                    //             existing_text.push_str(&text);
-                    //         }
-                    //     }
-                    //     MessageContent::Part(part) => {
-                    //         // 如果是工具调用，创建新的文本内容
-                    //         final_message.content = MessageContent::text(text);
-                    //     }
-                    //     MessageContent::Chunk(_) => {
-                    //         final_message.content = MessageContent::text(text);
-                    //     }
-                    //     MessageContent::ToolCall(_) => {
-                    //         // // 如果是工具调用，创建新的文本内容
-                    //         // final_message.content = MessageContent::text(text);
-                    //     }
-                    //     MessageContent::ToolDefinitions(_) => {
-                    //         // // 如果是工具调用，创建新的文本内容
-                    //         // final_message.content = MessageContent::text(text);
-                    //     }
-                    // }
+                   
                 }
                 Err(e) => return Err(e),
             }
@@ -153,7 +127,7 @@ pub trait LLM: Send + Sync {
     /// 对话接口 - 一次性响应（便捷方法）
     async fn chat(&self, messages: &[ChatMessage]) -> anyhow::Result<ChatMessage> {
         let mut stream = self.chat_stream(messages).await?;
-        let mut final_message = ChatMessage::assistant_text("");
+        let mut final_message = ChatMessage::assistant();
 
         use futures::StreamExt;
         while let Some(chunk) = stream.next().await {
@@ -203,7 +177,7 @@ pub trait LLM: Send + Sync {
         tools: &Self::ToolDelegate,
     ) -> anyhow::Result<ChatMessage> {
         let mut stream = self.chat_with_tools_stream(messages, tools).await?;
-        let mut final_message = ChatMessage::assistant_text("");
+        let mut final_message = ChatMessage::assistant();
 
         use futures::StreamExt;
         while let Some(chunk) = stream.next().await {
@@ -249,23 +223,23 @@ pub trait LLM: Send + Sync {
     /// 数据分析和洞察能力 - 通常不需要流式，直接返回结果
     async fn analyze(&self, data: &str) -> anyhow::Result<ChatMessage> {
         let messages = vec![
-            ChatMessage::system_text("你是一个数据分析专家，请分析提供的数据。"),
-            ChatMessage::user_text(format!("请分析以下数据：\n{}", data)),
+            ChatMessage::system().with_text("你是一个数据分析专家，请分析提供的数据。"),
+            ChatMessage::user().with_text(format!("请分析以下数据：\n{}", data)),
         ];
         self.completion(&messages).await
     }
     async fn summarize(&self, content: &str) -> anyhow::Result<ChatMessage> {
         let messages = vec![
-            ChatMessage::system_text("你是一个内容总结专家，请简洁地总结内容要点。"),
-            ChatMessage::user_text(format!("请总结以下内容：\n{}", content)),
+            ChatMessage::system().with_text("你是一个内容总结专家，请简洁地总结内容要点。"),
+            ChatMessage::user().with_text(format!("请总结以下内容：\n{}", content)),
         ];
         self.completion(&messages).await
     }
     /// 知识处理能力 - 通常不需要流式，直接返回结果  
     async fn extract_knowledge(&self, raw_data: &str) -> anyhow::Result<ChatMessage> {
         let messages = vec![
-            ChatMessage::system_text("你是一个知识提取专家，请提取关键信息和知识点。"),
-            ChatMessage::user_text(format!("请从以下数据中提取关键知识点：\n{}", raw_data)),
+            ChatMessage::system().with_text("你是一个知识提取专家，请提取关键信息和知识点。"),
+            ChatMessage::user().with_text(format!("请从以下数据中提取关键知识点：\n{}", raw_data)),
         ];
         self.completion(&messages).await
     }
@@ -851,7 +825,7 @@ pub trait AdvancedAgent: Agent {
 
         // 更新执行上下文
         self.execution_context_mut()
-            .add_message(ChatMessage::text(MessageRole::User, input));
+            .add_message(ChatMessage::user().with_text(input.to_string()));
 
         // 存储到记忆
         let input_key = format!(
@@ -884,7 +858,7 @@ pub trait AdvancedAgent: Agent {
         } else if let Ok(ref response) = result {
             // 添加响应到上下文
             self.execution_context_mut()
-                .add_message(ChatMessage::text(MessageRole::Assistant, response));
+                .add_message(ChatMessage::assistant().with_text(response));
 
             // 智能学习
             let importance = self
@@ -987,7 +961,7 @@ pub trait AdvancedAgent: Agent {
         };
 
         let result = Agent::llm(self)
-            .completion(&[ChatMessage::user_text(context_prompt)])
+            .completion(&[ChatMessage::user().with_text(context_prompt)])
             .await?;
         Ok(format!("{:?}", result))
     }
@@ -995,7 +969,7 @@ pub trait AdvancedAgent: Agent {
     async fn process_exploratively(&mut self, input: &str) -> anyhow::Result<String> {
         let exploratory_prompt = format!("请创新性地分析和回答：{}", input);
         let result = Agent::llm(self)
-            .completion(&[ChatMessage::user_text(exploratory_prompt)])
+            .completion(&[ChatMessage::user().with_text(exploratory_prompt)])
             .await?;
 
         // 自动学习新信息
@@ -1024,7 +998,7 @@ pub trait AdvancedAgent: Agent {
         };
 
         let result = Agent::llm(self)
-            .completion(&[ChatMessage::user_text(context_aware_prompt)])
+            .completion(&[ChatMessage::user().with_text(context_aware_prompt)])
             .await?;
 
         // 选择性学习
@@ -1057,7 +1031,7 @@ pub trait AdvancedAgent: Agent {
         );
 
         let result = Agent::llm(self)
-            .completion(&[ChatMessage::user_text(expert_prompt)])
+            .completion(&[ChatMessage::user().with_text(expert_prompt)])
             .await?;
 
         // 专家模式下的高质量学习

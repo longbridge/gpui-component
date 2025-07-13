@@ -3,9 +3,9 @@ mod view;
 use crate::app::AppExt;
 use crate::app::FoEvent;
 use crate::backoffice::cross_runtime::StreamMessage;
+use crate::backoffice::llm::types::MessageContent;
 use crate::backoffice::llm::types::{ChatMessage, MessageRole};
 use crate::config::todo_item::*;
-use futures::FutureExt;
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::{input::InputState, scroll::ScrollbarState, *};
@@ -25,7 +25,6 @@ impl MessageRole {
             MessageRole::User => "你",
             MessageRole::Assistant => "AI助手",
             MessageRole::System => "系统",
-            MessageRole::Tool => "工具",
         }
     }
 
@@ -34,7 +33,6 @@ impl MessageRole {
             MessageRole::User => gpui::rgb(0x3B82F6),
             MessageRole::Assistant => gpui::rgb(0x10B981),
             MessageRole::System => gpui::rgb(0x6B7280),
-            MessageRole::Tool => gpui::rgb(0xF59E0B),
         }
     }
 }
@@ -114,8 +112,9 @@ impl TodoThreadChat {
         let _subscriptions = vec![cx.subscribe_in(&chat_input, window, Self::on_chat_input_event)];
         let chat_messages = vec![
             // 1. 系统消息 - 任务描述
-            ChatMessage::system_text_with_source(todoitem.description.clone(), "task_system")
-                .with_metadata("task_id", todoitem.id.clone()),
+            ChatMessage::system()
+                .with_text(todoitem.description.clone())
+                .with_source(todoitem.id.clone()),
         ];
         let extend_channel = Self::start_external_message_handler(todoitem.id.clone(), cx);
         let instance = Self {
@@ -176,10 +175,9 @@ impl TodoThreadChat {
         // 消息处理循环
         'message_loop: loop {
             Timer::after(Duration::from_millis(50)).await;
-
             let mut buffer = String::new();
             let mut message_count = 0;
-
+            let mut is_tool = false;
             // 批量收集消息
             loop {
                 match rx.try_recv() {
@@ -191,46 +189,38 @@ impl TodoThreadChat {
                         break 'message_loop;
                     }
                     Ok(msg) => {
-                        if msg.is_text_only() {
-                            buffer.push_str(&msg.get_text());
-                            message_count += 1;
+                        let update_result = this.update(app, |this, cx| {
+                            this.process_received_message(msg, cx);
+                        });
+                        if update_result.is_err() {
+                            tracing::warn!("更新UI失败，可能组件已销毁");
+                            break 'message_loop;
                         }
+                        message_count += 1;
                     }
                 }
             }
-
-            // 如果没有新消息，继续等待
-            if buffer.is_empty() {
-                continue;
-            }
-
-            // 更新UI
-            let update_result = this.update(app, |this, cx| {
-                Self::process_received_message(this, buffer, cx);
-            });
-
-            if update_result.is_err() {
-                tracing::warn!("更新UI失败，可能组件已销毁");
-                break 'message_loop;
-            }
-
             tracing::trace!("处理了 {} 条消息", message_count);
         }
-
         tracing::info!("外部消息处理器已停止 todoid is {}", todo_id);
     }
 
-    /// 处理接收到的消息
-    fn process_received_message(&mut self, buffer: String, cx: &mut Context<Self>) {
-        if let Some(last_message) = self.chat_messages.last_mut() {
-            last_message.add_text_chunk(&buffer);
-        } else {
-            // 如果没有消息，创建一个新的助手消息
-            let new_message =
-                ChatMessage::assistant_text_with_source(buffer, self.todoitem.id.clone());
-            self.chat_messages.push(new_message);
+    fn last_message(&mut self) -> &mut ChatMessage {
+        if self.chat_messages.is_empty() {
+            self.chat_messages.push(ChatMessage::assistant());
         }
-
+        self.chat_messages.last_mut().expect("No messages in chat")
+    }
+    /// 处理接收到的消息
+    fn process_received_message(&mut self, msg: ChatMessage, cx: &mut Context<Self>) {
+        let last_message = self.last_message();
+        if msg.is_tool_result() {
+            last_message.add_contents(msg.contents);
+        } else if msg.is_tool_call() {
+            last_message.add_contents(msg.contents);
+        } else {
+            last_message.add_content(MessageContent::TextChunk(msg.get_text()));
+        }
         self.is_loading = false;
         self.scroll_handle.scroll_to_bottom();
         cx.notify();

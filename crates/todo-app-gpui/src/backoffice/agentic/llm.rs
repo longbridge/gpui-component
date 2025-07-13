@@ -65,7 +65,7 @@ impl LlmAdapter {
                     tool_descriptions
                 );
 
-                messages.push(ChatMessage::system_text(system_message));
+                messages.push(ChatMessage::system().with_text(system_message));
             }
         }
 
@@ -88,11 +88,11 @@ impl LlmAdapter {
                     match delegate.call(&tool_call.name, tool_call.args).await {
                         Ok(result) => {
                             let result_text = format!("工具调用结果: {:?}", result);
-                            result_messages.push(ChatMessage::assistant_text(result_text));
+                            result_messages.push(ChatMessage::assistant().with_text(result_text));
                         }
                         Err(e) => {
                             let error_text = format!("工具调用失败: {}", e);
-                            result_messages.push(ChatMessage::assistant_text(error_text));
+                            result_messages.push(ChatMessage::assistant().with_text(error_text));
                         }
                     }
                 }
@@ -223,7 +223,7 @@ impl LLM for LlmAdapter {
             }
             Ok(message)
         } else {
-            Ok(ChatMessage::assistant_text(accumulated_text))
+            Ok(ChatMessage::assistant().with_text(accumulated_text))
         }
     }
 
@@ -252,7 +252,7 @@ impl LLM for LlmAdapter {
             }
             Ok(message)
         } else {
-            Ok(ChatMessage::assistant_text(accumulated_text))
+            Ok(ChatMessage::assistant().with_text(accumulated_text))
         }
     }
 
@@ -267,24 +267,24 @@ impl LLM for LlmAdapter {
 
     async fn analyze(&self, data: &str) -> anyhow::Result<ChatMessage> {
         let messages = vec![
-            ChatMessage::system_text("你是一个数据分析专家，请分析提供的数据并提供深入见解。"),
-            ChatMessage::user_text(format!("请分析以下数据并提供详细分析报告：\n\n{}", data)),
+            ChatMessage::system().with_text("你是一个数据分析专家，请分析提供的数据并提供深入见解。"),
+            ChatMessage::user().with_text(format!("请分析以下数据并提供详细分析报告：\n\n{}", data)),
         ];
         self.completion(&messages).await
     }
 
     async fn summarize(&self, content: &str) -> anyhow::Result<ChatMessage> {
         let messages = vec![
-            ChatMessage::system_text("你是一个内容总结专家，请简洁准确地总结内容要点。"),
-            ChatMessage::user_text(format!("请总结以下内容的核心要点：\n\n{}", content)),
+            ChatMessage::system().with_text("你是一个内容总结专家，请简洁准确地总结内容要点。"),
+            ChatMessage::user().with_text(format!("请总结以下内容的核心要点：\n\n{}", content)),
         ];
         self.completion(&messages).await
     }
 
     async fn extract_knowledge(&self, raw_data: &str) -> anyhow::Result<ChatMessage> {
         let messages = vec![
-            ChatMessage::system_text("你是一个知识提取专家，请从数据中提取关键信息和知识点。"),
-            ChatMessage::user_text(format!(
+            ChatMessage::system().with_text("你是一个知识提取专家，请从数据中提取关键信息和知识点。"),
+            ChatMessage::user().with_text(format!(
                 "请从以下数据中提取关键知识点和有价值的信息：\n\n{}",
                 raw_data
             )),

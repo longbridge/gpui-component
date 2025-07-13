@@ -1,3 +1,5 @@
+use crate::backoffice::llm::types::MessageContent;
+
 use super::types::{ChatMessage, ToolCall};
 use futures::stream::{Stream, StreamExt};
 use std::pin::Pin;
@@ -87,7 +89,7 @@ impl StreamingToolParser {
                     self.state = ParserState::StreamingText;
 
                     // 立即输出失败的内容，而不是添加到缓冲区
-                    Some(ChatMessage::assistant_chunk(failed_chars))
+                    Some(ChatMessage::assistant().with_text_chunk(failed_chars))
                 }
             }
 
@@ -116,9 +118,9 @@ impl StreamingToolParser {
                         let full_tool_xml = format!("<tool_use>{}</tool_use>", tool_content);
                         if let Some(tool_call) = self.parse_tool_call(&full_tool_xml) {
                             tracing::debug!("解析到工具调用: {:?}", tool_call);
-                            return Some(ChatMessage::tool_call(tool_call));
+                            return Some(ChatMessage::system().with_content(MessageContent::ToolCall(tool_call)));
                         } else {
-                            return Some(ChatMessage::assistant_chunk(full_tool_xml));
+                            return Some(ChatMessage::assistant().with_text_chunk(full_tool_xml));
                         }
                     }
                     None
@@ -138,7 +140,7 @@ impl StreamingToolParser {
         if !self.buffer.is_empty() {
             let text = self.buffer.clone();
             self.buffer.clear();
-            Some(ChatMessage::assistant_chunk(text))
+            Some(ChatMessage::assistant().with_text_chunk(text))
         } else {
             None
         }
@@ -162,11 +164,11 @@ impl StreamingToolParser {
             }
             ParserState::InsideTool => {
                 let incomplete_tool = format!("<tool_use>{}", self.tool_content);
-                messages.push(ChatMessage::assistant_chunk(incomplete_tool));
+                messages.push(ChatMessage::assistant().with_text_chunk(incomplete_tool));
             }
             ParserState::MatchingEndTag { matched_chars } => {
                 let incomplete_tool = format!("<tool_use>{}{}", self.tool_content, matched_chars);
-                messages.push(ChatMessage::assistant_chunk(incomplete_tool));
+                messages.push(ChatMessage::assistant().with_text_chunk(incomplete_tool));
             }
         }
 
