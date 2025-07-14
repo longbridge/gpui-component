@@ -39,9 +39,12 @@ static THEMES: LazyLock<HashMap<SharedString, ThemeConfig>> = LazyLock::new(|| {
         include_str!("../../../themes/adventure.json"),
         include_str!("../../../themes/ayu.json"),
         include_str!("../../../themes/catppuccin.json"),
+        include_str!("../../../themes/gruvbox.json"),
         include_str!("../../../themes/macos-classic.json"),
         include_str!("../../../themes/solarized.json"),
         include_str!("../../../themes/tokyonight.json"),
+        include_str!("../../../themes/everforest.json"),
+        include_str!("../../../themes/twilight.json"),
     ] {
         for sub_theme in parse_themes(source) {
             themes.insert(sub_theme.name.clone(), sub_theme);
