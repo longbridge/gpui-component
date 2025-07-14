@@ -259,6 +259,7 @@ pub fn init(cx: &mut App) {
         .init();
 
     gpui_component::init(cx);
+    themes::init(cx);
     AppState::init(cx);
     input_story::init(cx);
     number_input_story::init(cx);

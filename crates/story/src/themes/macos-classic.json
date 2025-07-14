@@ -68,7 +68,7 @@
     "url": "https://github.com/huacnlee/zed-theme-macos-classic",
     "mode": "dark",
     "colors": {
-      "accent.background": "#1E1D1E",
+      "accent.background": "#353436",
       "accent.foreground": "#CACCCA",
       "accordion.active.background": "#1E1D1E",
       "accordion.background": "#131313",

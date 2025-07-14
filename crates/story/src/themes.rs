@@ -1,11 +1,29 @@
 use std::{collections::HashMap, sync::LazyLock};
 
-use gpui::{div, Action, InteractiveElement as _, ParentElement as _, Render, SharedString};
+use gpui::{div, Action, App, InteractiveElement as _, ParentElement as _, Render, SharedString};
 use gpui_component::{
     button::{Button, ButtonVariants},
     popup_menu::PopupMenuExt,
     IconName, Theme, ThemeColor, ThemeConfig,
 };
+use serde::{Deserialize, Serialize};
+
+const STATE_FILE: &str = "target/state.json";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct AppState {
+    theme: SharedString,
+}
+
+pub fn init(cx: &mut App) {
+    // Load last theme state
+    let json = std::fs::read_to_string(STATE_FILE).unwrap_or(String::default());
+    if let Ok(state) = serde_json::from_str::<AppState>(&json) {
+        if let Some(theme) = THEMES.get(&state.theme) {
+            Theme::global_mut(cx).apply_config(theme);
+        }
+    }
+}
 
 fn parse_themes(source: &str) -> Vec<ThemeConfig> {
     serde_json::from_str(source).unwrap()
@@ -65,6 +83,14 @@ impl Render for ThemeSwitcher {
                     Theme::global_mut(cx).dark_theme = ThemeColor::dark();
                     Theme::global_mut(cx).colors = ThemeColor::dark();
                 }
+
+                // Save AppState
+                let state = AppState {
+                    theme: theme_name.clone(),
+                };
+                let json = serde_json::to_string_pretty(&state).unwrap();
+                std::fs::write(STATE_FILE, json).unwrap();
+
                 cx.notify();
             }))
             .child(
