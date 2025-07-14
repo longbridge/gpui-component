@@ -1,13 +1,9 @@
-use gpui::{
-    px, App, AppContext, Context, Entity, Focusable, InteractiveElement, IntoElement, KeyBinding,
-    ParentElement, Render, SharedString, Styled, Window,
-};
+use gpui::*;
 
-use gpui_component::{
-    checkbox::Checkbox,
-    dropdown::{Dropdown, DropdownEvent, DropdownItem, DropdownState, SearchableVec},
-    h_flex, v_flex, ActiveTheme, FocusableCycle, IconName, Sizable,
-};
+use gpui_component::button::{Button, ButtonVariants as _};
+use gpui_component::divider::Divider;
+use gpui_component::input::{InputState, TextInput};
+use gpui_component::{checkbox::*, dropdown::*, *};
 
 use crate::section;
 use crate::{Tab, TabPrev};
@@ -58,6 +54,8 @@ pub struct DropdownStory {
     simple_dropdown2: Entity<DropdownState<SearchableVec<SharedString>>>,
     simple_dropdown3: Entity<DropdownState<Vec<SharedString>>>,
     disabled_dropdown: Entity<DropdownState<Vec<SharedString>>>,
+    appearance_dropdown: Entity<DropdownState<Vec<SharedString>>>,
+    input_state: Entity<InputState>,
 }
 
 impl super::Story for DropdownStory {
@@ -97,6 +95,21 @@ impl DropdownStory {
         ];
 
         let country_dropdown = cx.new(|cx| DropdownState::new(countries, Some(6), window, cx));
+        let appearance_dropdown = cx.new(|cx| {
+            DropdownState::new(
+                vec![
+                    "CN".into(),
+                    "US".into(),
+                    "HK".into(),
+                    "JP".into(),
+                    "KR".into(),
+                ],
+                Some(0),
+                window,
+                cx,
+            )
+        });
+        let input_state = cx.new(|cx| InputState::new(window, cx).placeholder("Your phone number"));
 
         let fruits = SearchableVec::new(vec![
             "Apple".into(),
@@ -156,6 +169,8 @@ impl DropdownStory {
                     .new(|cx| DropdownState::new(Vec::<SharedString>::new(), None, window, cx)),
                 disabled_dropdown: cx
                     .new(|cx| DropdownState::new(Vec::<SharedString>::new(), None, window, cx)),
+                appearance_dropdown,
+                input_state,
             }
         })
     }
@@ -275,6 +290,41 @@ impl Render for DropdownStory {
                                 .child("No Data"),
                         ),
                 ),
+            )
+            .child(
+                section("Appearance false with TextInput")
+                    .max_w_128()
+                    .child(
+                        h_flex()
+                            .border_1()
+                            .border_color(cx.theme().input)
+                            .rounded_lg()
+                            .text_color(cx.theme().secondary_foreground)
+                            .w_full()
+                            .gap_1()
+                            .child(
+                                div().w(px(140.)).child(
+                                    Dropdown::new(&self.appearance_dropdown)
+                                        .appearance(false)
+                                        .py_2()
+                                        .pl_3(),
+                                ),
+                            )
+                            .child(Divider::vertical())
+                            .child(
+                                div().flex_1().child(
+                                    TextInput::new(&self.input_state)
+                                        .appearance(false)
+                                        .pr_3()
+                                        .py_2(),
+                                ),
+                            )
+                            .child(
+                                div()
+                                    .p_2()
+                                    .child(Button::new("send").small().ghost().label("Send")),
+                            ),
+                    ),
             )
             .child(
                 section("Selected Values").max_w_lg().child(

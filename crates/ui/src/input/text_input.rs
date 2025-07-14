@@ -80,7 +80,7 @@ impl TextInput {
         self
     }
 
-    /// Set the appearance of the input field.
+    /// Set the appearance of the input field, if false the input field will no border, background.
     pub fn appearance(mut self, appearance: bool) -> Self {
         self.appearance = appearance;
         self

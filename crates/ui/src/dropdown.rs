@@ -264,6 +264,7 @@ pub struct Dropdown<D: DropdownDelegate + 'static> {
     empty: Option<AnyElement>,
     menu_width: Length,
     disabled: bool,
+    appearance: bool,
 }
 
 pub struct SearchableVec<T> {
@@ -533,6 +534,7 @@ where
             empty: None,
             menu_width: Length::Auto,
             disabled: false,
+            appearance: true,
         }
     }
 
@@ -578,6 +580,12 @@ where
 
     pub fn empty(mut self, el: impl IntoElement) -> Self {
         self.empty = Some(el.into_any_element());
+        self
+    }
+
+    /// Set the appearance of the dropdown, if false the dropdown input will no border, background.
+    pub fn appearance(mut self, appearance: bool) -> Self {
+        self.appearance = appearance;
         self
     }
 
@@ -714,17 +722,25 @@ where
                     .flex()
                     .items_center()
                     .justify_between()
-                    .bg(cx.theme().background)
-                    .border_1()
-                    .border_color(cx.theme().input)
-                    .rounded(cx.theme().radius)
-                    .when(cx.theme().shadow, |this| this.shadow_xs())
-                    .map(|this| if self.disabled { this } else { this })
+                    .when(self.appearance, |this| {
+                        this.bg(cx.theme().background)
+                            .border_1()
+                            .border_color(cx.theme().input)
+                            .rounded(cx.theme().radius)
+                            .when(cx.theme().shadow, |this| this.shadow_xs())
+                    })
+                    .map(|this| {
+                        if self.disabled {
+                            this.shadow_none()
+                        } else {
+                            this
+                        }
+                    })
                     .overflow_hidden()
-                    .input_text_size(self.size)
-                    .when(outline_visible, |this| this.focused_border(cx))
                     .input_size(self.size)
+                    .input_text_size(self.size)
                     .refine_style(&self.style)
+                    .when(outline_visible, |this| this.focused_border(cx))
                     .when(allow_open, |this| {
                         this.on_click(window.listener_for(&self.state, DropdownState::toggle_menu))
                     })

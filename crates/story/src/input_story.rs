@@ -4,11 +4,7 @@ use gpui::{
 };
 
 use crate::{section, Tab, TabPrev};
-use gpui_component::{
-    button::{Button, ButtonVariants as _},
-    input::{InputEvent, InputState, MaskPattern, TextInput},
-    v_flex, ContextModal, FocusableCycle, Icon, IconName, Sizable,
-};
+use gpui_component::{button::*, input::*, *};
 
 const CONTEXT: &str = "InputStory";
 
@@ -270,6 +266,27 @@ impl Render for InputStory {
                         "Value: {:?}",
                         window.focused_input(cx).map(|input| input.read(cx).value())
                     ))),
+            )
+            .child(
+                section("Appearance false").max_w_md().child(
+                    div()
+                        .border_1()
+                        .px_6()
+                        .py_5()
+                        .rounded_lg()
+                        .bg(if cx.theme().is_dark() {
+                            yellow_950()
+                        } else {
+                            yellow_50()
+                        })
+                        .text_color(if cx.theme().is_dark() {
+                            yellow_100()
+                        } else {
+                            yellow_900()
+                        })
+                        .w_full()
+                        .child(TextInput::new(&self.input1).appearance(false)),
+                ),
             )
     }
 }
