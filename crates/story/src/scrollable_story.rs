@@ -9,7 +9,6 @@ use gpui_component::{
     divider::Divider,
     h_flex,
     label::Label,
-    neutral_100, neutral_800,
     scroll::{Scrollbar, ScrollbarAxis, ScrollbarState},
     v_flex, v_virtual_list, ActiveTheme as _, Selectable, StyledExt as _,
 };
@@ -236,14 +235,7 @@ impl Render for ScrollableStory {
                                                                     .justify_center()
                                                                     .text_sm()
                                                                     .w(px(100.))
-                                                                    .bg(
-                                                                        if cx.theme().mode.is_dark()
-                                                                        {
-                                                                            neutral_800()
-                                                                        } else {
-                                                                            neutral_100()
-                                                                        },
-                                                                    )
+                                                                    .bg(cx.theme().secondary)
                                                                     .child(if i == 0 {
                                                                         format!("{}", ix)
                                                                     } else {

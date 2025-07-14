@@ -9,9 +9,7 @@ use gpui::{
 use smallvec::SmallVec;
 
 use crate::{
-    highlighter::{LanguageRegistry, SyntaxHighlighter},
-    input::blink_cursor::CURSOR_WIDTH,
-    ActiveTheme as _, Root,
+    highlighter::SyntaxHighlighter, input::blink_cursor::CURSOR_WIDTH, ActiveTheme as _, Root,
 };
 
 use super::{mode::InputMode, InputState, LastLayout};
@@ -366,9 +364,7 @@ impl TextElement {
         visible_range: &Range<usize>,
         cx: &mut App,
     ) -> Option<(usize, Vec<(Range<usize>, HighlightStyle)>)> {
-        let theme = LanguageRegistry::global(cx)
-            .theme(cx.theme().is_dark())
-            .clone();
+        let theme = cx.theme().highlight_theme.clone();
         self.state.update(cx, |state, cx| match &state.mode {
             InputMode::CodeEditor {
                 language,
@@ -876,10 +872,7 @@ impl Element for TextElement {
             }
         }
 
-        let active_line_color = LanguageRegistry::global(cx)
-            .theme(cx.theme().is_dark())
-            .style
-            .active_line;
+        let active_line_color = cx.theme().highlight_theme.style.active_line;
 
         let mut offset_y = px(0.);
         if let Some(line_numbers) = prepaint.line_numbers.as_ref() {

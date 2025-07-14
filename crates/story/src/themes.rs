@@ -1,10 +1,14 @@
-use std::{collections::HashMap, sync::LazyLock};
+use std::{
+    collections::HashMap,
+    sync::{Arc, LazyLock},
+};
 
 use gpui::{div, Action, App, InteractiveElement as _, ParentElement as _, Render, SharedString};
 use gpui_component::{
     button::{Button, ButtonVariants},
+    highlighter::HighlightTheme,
     popup_menu::PopupMenuExt,
-    IconName, Theme, ThemeColor, ThemeConfig,
+    IconName, Sizable, Theme, ThemeColor, ThemeConfig,
 };
 use serde::{Deserialize, Serialize};
 
@@ -19,17 +23,18 @@ pub fn init(cx: &mut App) {
     // Load last theme state
     let json = std::fs::read_to_string(STATE_FILE).unwrap_or(String::default());
     if let Ok(state) = serde_json::from_str::<AppState>(&json) {
+        tracing::info!("apply theme: {:?}", state.theme);
         if let Some(theme) = THEMES.get(&state.theme) {
             Theme::global_mut(cx).apply_config(theme);
         }
     }
 }
 
-fn parse_themes(source: &str) -> Vec<ThemeConfig> {
-    serde_json::from_str(source).unwrap()
-}
-
 static THEMES: LazyLock<HashMap<SharedString, ThemeConfig>> = LazyLock::new(|| {
+    fn parse_themes(source: &str) -> Vec<ThemeConfig> {
+        serde_json::from_str(source).unwrap()
+    }
+
     let mut themes = HashMap::new();
     for source in [
         include_str!("./themes/adventure.json"),
@@ -77,11 +82,9 @@ impl Render for ThemeSwitcher {
                 if let Some(theme_config) = THEMES.get(&theme_name) {
                     Theme::global_mut(cx).apply_config(theme_config);
                 } else if theme_name == "default-light" {
-                    Theme::global_mut(cx).light_theme = ThemeColor::light();
-                    Theme::global_mut(cx).colors = ThemeColor::light();
+                    Theme::global_mut(cx).set_default_light();
                 } else if theme_name == "default-dark" {
-                    Theme::global_mut(cx).dark_theme = ThemeColor::dark();
-                    Theme::global_mut(cx).colors = ThemeColor::dark();
+                    Theme::global_mut(cx).set_default_dark();
                 }
 
                 // Save AppState
@@ -97,6 +100,7 @@ impl Render for ThemeSwitcher {
                 Button::new("btn")
                     .icon(IconName::Palette)
                     .ghost()
+                    .small()
                     .popup_menu({
                         let current_theme_id = self.current_theme_name.clone();
                         move |menu, _, _| {

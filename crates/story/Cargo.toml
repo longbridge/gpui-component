@@ -19,6 +19,7 @@ rust-embed = "8.5.0"
 serde = "1"
 serde_json = "1"
 unindent = "0.2.3"
+tracing.workspace = true
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 tree-sitter-navi = "0.2.2"
 

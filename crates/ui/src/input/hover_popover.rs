@@ -6,7 +6,6 @@ use gpui::{
 };
 
 use crate::{
-    highlighter::LanguageRegistry,
     input::{InputState, Marker},
     text::TextView,
     ActiveTheme as _,
@@ -79,7 +78,7 @@ impl Render for DiagnosticPopover {
         }
 
         let view = cx.entity();
-        let theme = LanguageRegistry::global(cx).theme(cx.theme().is_dark());
+        let theme = &cx.theme().highlight_theme;
 
         let message = self.marker.message.clone();
         let Some(pos) = self.origin(cx) else {

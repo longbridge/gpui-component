@@ -1,8 +1,11 @@
-use crate::scroll::ScrollbarShow;
+use crate::{highlighter::HighlightTheme, scroll::ScrollbarShow};
 use gpui::{px, App, Global, Hsla, Pixels, SharedString, Window, WindowAppearance};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::ops::{Deref, DerefMut};
+use std::{
+    ops::{Deref, DerefMut},
+    sync::Arc,
+};
 
 mod color;
 mod schema;
@@ -32,6 +35,9 @@ pub struct Theme {
     pub colors: ThemeColor,
     pub light_theme: ThemeColor,
     pub dark_theme: ThemeColor,
+    pub highlight_theme: Arc<HighlightTheme>,
+    pub light_highlight_theme: Arc<HighlightTheme>,
+    pub dark_highlight_theme: Arc<HighlightTheme>,
 
     pub mode: ThemeMode,
     pub font_family: SharedString,
@@ -85,6 +91,22 @@ impl Theme {
         self.mode.is_dark()
     }
 
+    /// Sets the theme to default light.
+    pub fn set_default_light(&mut self) {
+        self.light_theme = ThemeColor::light();
+        self.colors = ThemeColor::light();
+        self.light_highlight_theme = Arc::new(HighlightTheme::default_light());
+        self.highlight_theme = self.light_highlight_theme.clone();
+    }
+
+    /// Sets the theme to default dark.
+    pub fn set_default_dark(&mut self) {
+        self.dark_theme = ThemeColor::dark();
+        self.colors = ThemeColor::dark();
+        self.dark_highlight_theme = Arc::new(HighlightTheme::default_dark());
+        self.highlight_theme = self.dark_highlight_theme.clone();
+    }
+
     /// Sync the theme with the system appearance
     pub fn sync_system_appearance(window: Option<&mut Window>, cx: &mut App) {
         // Better use window.appearance() for avoid error on Linux.
@@ -136,6 +158,9 @@ impl Theme {
 impl From<ThemeColor> for Theme {
     fn from(colors: ThemeColor) -> Self {
         let mode = ThemeMode::default();
+        let light_highlight_theme = Arc::new(HighlightTheme::default_light());
+        let dark_highlight_theme = Arc::new(HighlightTheme::default_dark());
+
         Theme {
             mode,
             transparent: Hsla::transparent_black(),
@@ -156,6 +181,9 @@ impl From<ThemeColor> for Theme {
             colors,
             light_theme: ThemeColor::light(),
             dark_theme: ThemeColor::dark(),
+            highlight_theme: light_highlight_theme.clone(),
+            light_highlight_theme: light_highlight_theme,
+            dark_highlight_theme: dark_highlight_theme,
         }
     }
 }

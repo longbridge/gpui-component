@@ -1,11 +1,8 @@
 use gpui::{App, FontWeight, HighlightStyle, Hsla};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashMap,
-    ops::Deref,
-    sync::{Arc, LazyLock},
-};
+use serde_repr::{Deserialize_repr, Serialize_repr};
+use std::{collections::HashMap, ops::Deref, sync::LazyLock};
 
 use super::LanguageConfig;
 use crate::{
@@ -139,6 +136,7 @@ pub struct SyntaxColors {
 pub enum FontStyle {
     Normal,
     Italic,
+    Underline,
 }
 
 impl From<FontStyle> for gpui::FontStyle {
@@ -146,6 +144,37 @@ impl From<FontStyle> for gpui::FontStyle {
         match style {
             FontStyle::Normal => gpui::FontStyle::Normal,
             FontStyle::Italic => gpui::FontStyle::Italic,
+            FontStyle::Underline => gpui::FontStyle::Normal,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, Serialize_repr, Deserialize_repr, JsonSchema)]
+#[repr(u16)]
+pub enum FontWeightContent {
+    Thin = 100,
+    ExtraLight = 200,
+    Light = 300,
+    Normal = 400,
+    Medium = 500,
+    Semibold = 600,
+    Bold = 700,
+    ExtraBold = 800,
+    Black = 900,
+}
+
+impl From<FontWeightContent> for FontWeight {
+    fn from(value: FontWeightContent) -> Self {
+        match value {
+            FontWeightContent::Thin => FontWeight::THIN,
+            FontWeightContent::ExtraLight => FontWeight::EXTRA_LIGHT,
+            FontWeightContent::Light => FontWeight::LIGHT,
+            FontWeightContent::Normal => FontWeight::NORMAL,
+            FontWeightContent::Medium => FontWeight::MEDIUM,
+            FontWeightContent::Semibold => FontWeight::SEMIBOLD,
+            FontWeightContent::Bold => FontWeight::BOLD,
+            FontWeightContent::ExtraBold => FontWeight::EXTRA_BOLD,
+            FontWeightContent::Black => FontWeight::BLACK,
         }
     }
 }
@@ -154,14 +183,14 @@ impl From<FontStyle> for gpui::FontStyle {
 pub struct ThemeStyle {
     color: Option<Hsla>,
     font_style: Option<FontStyle>,
-    font_weight: Option<FontWeight>,
+    font_weight: Option<FontWeightContent>,
 }
 
 impl From<ThemeStyle> for HighlightStyle {
     fn from(style: ThemeStyle) -> Self {
         HighlightStyle {
             color: style.color,
-            font_weight: style.font_weight,
+            font_weight: style.font_weight.map(Into::into),
             font_style: style.font_style.map(Into::into),
             ..Default::default()
         }
@@ -407,8 +436,6 @@ impl HighlightTheme {
 #[derive(Clone)]
 pub struct LanguageRegistry {
     languages: HashMap<String, LanguageConfig>,
-    pub(crate) light_theme: Arc<HighlightTheme>,
-    pub(crate) dark_theme: Arc<HighlightTheme>,
 }
 
 impl gpui::Global for LanguageRegistry {}
@@ -426,8 +453,6 @@ impl LanguageRegistry {
     pub fn new() -> Self {
         let mut registry = Self {
             languages: HashMap::new(),
-            light_theme: Arc::new(HighlightTheme::default_light()),
-            dark_theme: Arc::new(HighlightTheme::default_dark()),
         };
 
         for language in languages::Language::all() {
@@ -439,20 +464,6 @@ impl LanguageRegistry {
 
     pub fn register(&mut self, lang: &str, config: &LanguageConfig) {
         self.languages.insert(lang.to_string(), config.clone());
-    }
-
-    /// Set highlighter theme.
-    pub fn set_theme(&mut self, light: &HighlightTheme, dark: &HighlightTheme) {
-        self.light_theme = Arc::new(light.clone());
-        self.dark_theme = Arc::new(dark.clone());
-    }
-
-    pub(crate) fn theme(&self, is_dark: bool) -> &Arc<HighlightTheme> {
-        if is_dark {
-            &self.dark_theme
-        } else {
-            &self.light_theme
-        }
     }
 
     /// Returns a reference to the map of registered languages.

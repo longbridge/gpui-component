@@ -22,6 +22,7 @@ gpui-component-macros.workspace = true
 rust-i18n.workspace = true
 schemars.workspace = true
 serde.workspace = true
+serde_repr.workspace = true
 serde_json.workspace = true
 smallvec.workspace = true
 smol.workspace = true
