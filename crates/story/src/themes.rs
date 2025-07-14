@@ -1,14 +1,10 @@
-use std::{
-    collections::HashMap,
-    sync::{Arc, LazyLock},
-};
+use std::{collections::HashMap, sync::LazyLock};
 
 use gpui::{div, Action, App, InteractiveElement as _, ParentElement as _, Render, SharedString};
 use gpui_component::{
     button::{Button, ButtonVariants},
-    highlighter::HighlightTheme,
     popup_menu::PopupMenuExt,
-    IconName, Sizable, Theme, ThemeColor, ThemeConfig,
+    IconName, Sizable, Theme, ThemeConfig,
 };
 use serde::{Deserialize, Serialize};
 
