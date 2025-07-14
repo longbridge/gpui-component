@@ -11,6 +11,7 @@ use gpui::*;
 use gpui_component::{input::InputState, scroll::ScrollbarState, *};
 use std::time::Duration;
 use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::sync::mpsc::error::TryRecvError;
 
 // 从 rmcp 导入 MCP 类型
 use rmcp::model::Tool as McpTool;
@@ -181,11 +182,10 @@ impl TodoThreadChat {
             // 批量收集消息
             loop {
                 match rx.try_recv() {
-                    Err(tokio::sync::mpsc::error::TryRecvError::Empty) => {
+                    Err(TryRecvError::Empty) => {
                         break;
                     }
-                    Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => {
-                        tracing::info!("外部消息通道已断开连接");
+                    Err(TryRecvError::Disconnected) => {
                         break 'message_loop;
                     }
                     Ok(msg) => {
