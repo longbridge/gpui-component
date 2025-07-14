@@ -33,12 +33,12 @@ static THEMES: LazyLock<HashMap<SharedString, ThemeConfig>> = LazyLock::new(|| {
 
     let mut themes = HashMap::new();
     for source in [
-        include_str!("./themes/adventure.json"),
-        include_str!("./themes/ayu.json"),
-        include_str!("./themes/catppuccin.json"),
-        include_str!("./themes/macos-classic.json"),
-        include_str!("./themes/solarized.json"),
-        include_str!("./themes/tokyonight.json"),
+        include_str!("../../../themes/adventure.json"),
+        include_str!("../../../themes/ayu.json"),
+        include_str!("../../../themes/catppuccin.json"),
+        include_str!("../../../themes/macos-classic.json"),
+        include_str!("../../../themes/solarized.json"),
+        include_str!("../../../themes/tokyonight.json"),
     ] {
         for sub_theme in parse_themes(source) {
             themes.insert(sub_theme.name.clone(), sub_theme);
