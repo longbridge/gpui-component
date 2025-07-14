@@ -1,5 +1,6 @@
 use std::{collections::HashMap, sync::LazyLock};
 
+use anyhow::Context;
 use gpui::{div, Action, App, InteractiveElement as _, ParentElement as _, Render, SharedString};
 use gpui_component::{
     button::{Button, ButtonVariants},
@@ -31,7 +32,9 @@ pub fn init(cx: &mut App) {
 
 static THEMES: LazyLock<HashMap<SharedString, ThemeConfig>> = LazyLock::new(|| {
     fn parse_themes(source: &str) -> Vec<ThemeConfig> {
-        serde_json::from_str(source).unwrap()
+        serde_json::from_str(source)
+            .context(format!("source: '{}'", source))
+            .unwrap()
     }
 
     let mut themes = HashMap::new();
@@ -39,11 +42,15 @@ static THEMES: LazyLock<HashMap<SharedString, ThemeConfig>> = LazyLock::new(|| {
         include_str!("../../../themes/adventure.json"),
         include_str!("../../../themes/ayu.json"),
         include_str!("../../../themes/catppuccin.json"),
-        include_str!("../../../themes/gruvbox.json"),
-        include_str!("../../../themes/macos-classic.json"),
-        include_str!("../../../themes/solarized.json"),
-        include_str!("../../../themes/tokyonight.json"),
         include_str!("../../../themes/everforest.json"),
+        include_str!("../../../themes/gruvbox.json"),
+        include_str!("../../../themes/hybrid.json"),
+        include_str!("../../../themes/jellybeans.json"),
+        include_str!("../../../themes/macos-classic.json"),
+        include_str!("../../../themes/molokai.json"),
+        include_str!("../../../themes/solarized.json"),
+        include_str!("../../../themes/spaceduck.json"),
+        include_str!("../../../themes/tokyonight.json"),
         include_str!("../../../themes/twilight.json"),
     ] {
         for sub_theme in parse_themes(source) {
