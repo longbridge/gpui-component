@@ -684,8 +684,7 @@ impl TabPanel {
             )
             .children(self.panels.iter().enumerate().filter_map(|(ix, panel)| {
                 let mut active = state.active_panel.as_ref() == Some(panel);
-
-                let dropable = self.collapsed;
+                let droppable = self.collapsed;
 
                 if !panel.visible(cx) {
                     return None;
@@ -721,7 +720,7 @@ impl TabPanel {
                                 }
                             }
                         }))
-                        .when(!dropable, |this| {
+                        .when(!droppable, |this| {
                             this.when(state.draggable, |this| {
                                 this.on_drag(
                                     DragPanel::new(panel.clone(), view.clone()),
