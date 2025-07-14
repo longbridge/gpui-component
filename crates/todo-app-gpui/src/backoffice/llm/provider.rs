@@ -8,11 +8,11 @@ use futures::StreamExt;
 use rig::providers::openai::Client as OpenAiClient;
 use rig::{completion::AssistantContent, message::Message as RigMessage, streaming::StreamingChat};
 #[derive(Debug, Clone)]
-pub struct LlmProvider {
+pub struct LlmChoice {
     pub(crate) config: LlmProviderConfig,
 }
 
-impl LlmProvider {
+impl LlmChoice {
     pub fn new(config: &LlmProviderConfig) -> anyhow::Result<Self> {
         // 验证配置
         if config.api_key.is_empty() {
@@ -140,7 +140,7 @@ fn build_system_prompt(messages: &[ChatMessage], tools: Vec<ToolDefinition>) -> 
     let user_system_prompt = messages
         .iter()
         .rev()
-        .find(|msg| matches!(msg.role, MessageRole::System) && !msg.has_tool_definitions());
+        .find(|msg| matches!(msg.role, MessageRole::System) && !msg.has_tool_definitions() &&!msg.is_tool_call() && !msg.is_tool_result());
     match (user_system_prompt, tools.is_empty()) {
         (Some(user_system_prompt), false) => {
             prompts::with_tools_user_system_prompt(tools, user_system_prompt.get_text())

@@ -3,7 +3,7 @@ mod provider;
 mod stream_tools;
 pub mod types;
 
-use crate::backoffice::llm::provider::LlmProvider;
+use crate::backoffice::llm::provider::LlmChoice;
 use crate::backoffice::llm::types::{ChatMessage, ChatStream};
 use crate::{
     backoffice::YamlFile,
@@ -51,7 +51,7 @@ impl LlmRegistry {
                     let config_clone = config.clone();
                     let mut config = config_clone.clone();
                     async move {
-                        let llm = LlmProvider::new(&config_clone)?;
+                        let llm = LlmChoice::new(&config_clone)?;
                         llm.load_models().await
                     }
                     .into_actor(self)
@@ -145,7 +145,7 @@ impl Handler<LlmChatRequest> for LlmRegistry {
                     model_id,
                     source
                 );
-                let llm = LlmProvider::new(&config)?;
+                let llm = LlmChoice::new(&config)?;
                 // llm.stream_chat(&model_id, &messages).await
                 stream_tools::chat_stream_with_tools_simple(llm, &model_id, messages, 128).await
             }

@@ -199,11 +199,7 @@ impl MessageContent {
                     .join("\n")
             }
             Self::TextChunk(text) => text.clone(),
-            Self::ToolResult(name,result) => format!(
-                "{}
-                {}",
-                name, result
-            ),
+            Self::ToolResult(_name,result) => result.clone(),
             Self::ToolCall(tool_call) => {
                 format!("Tool: {} with args: {}", tool_call.name, tool_call.arguments)
             }

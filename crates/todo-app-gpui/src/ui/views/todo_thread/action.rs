@@ -105,7 +105,7 @@ impl TodoThreadChat {
             .iter()
             .enumerate()
             .for_each(|(idx, message)| {
-                tracing::debug!("UI聊天消息({}): {:?}", idx, message);
+                tracing::trace!("UI历史聊天消息({}): {:?}", idx, message);
             });
         // 发起异步调用
         cx.spawn(async move |_this, _cx| {

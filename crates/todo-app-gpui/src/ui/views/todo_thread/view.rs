@@ -436,7 +436,7 @@ impl TodoThreadChat {
 
 
 fn render_chat_message(&self,idx:usize, message: &ChatMessage) -> impl IntoElement {
-        tracing::debug!("渲染消息第({}): {:?}",idx, message);
+        tracing::trace!("渲染消息第({}): {:?}",idx, message);
         let is_user = matches!(message.role, MessageRole::User);
         let is_tool=  message.is_tool_result();
         h_flex()

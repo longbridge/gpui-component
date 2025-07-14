@@ -1,10 +1,10 @@
-use crate::backoffice::llm::provider::LlmProvider;
+use crate::backoffice::llm::provider::LlmChoice;
 use crate::backoffice::llm::types::{ChatMessage, ChatStream, MessageContent};
 use crate::backoffice::mcp::McpRegistry;
 use rmcp::model::RawContent;
 
 pub(crate) async fn chat_stream_with_tools_simple(
-    llm: LlmProvider,
+    llm: LlmChoice,
     model_id: &str,
     chat_history: Vec<ChatMessage>,
     max_tool_rounds: usize,

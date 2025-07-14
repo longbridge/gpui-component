@@ -1,4 +1,5 @@
 use crate::backoffice::cross_runtime::CrossRuntimeBridge;
+use crate::backoffice::llm::LlmRegistry;
 use crate::backoffice::mcp::{GetServerSnapshot, McpRegistry};
 use crate::config::llm_config::LlmProviderManager;
 use crate::config::mcp_config::McpConfigManager;
