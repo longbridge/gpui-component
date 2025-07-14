@@ -40,6 +40,7 @@ static THEMES: LazyLock<HashMap<SharedString, ThemeConfig>> = LazyLock::new(|| {
     let mut themes = HashMap::new();
     for source in [
         include_str!("../../../themes/adventure.json"),
+        include_str!("../../../themes/alduin.json"),
         include_str!("../../../themes/ayu.json"),
         include_str!("../../../themes/catppuccin.json"),
         include_str!("../../../themes/everforest.json"),
