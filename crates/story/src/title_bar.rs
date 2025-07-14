@@ -41,7 +41,7 @@ impl AppTitleBar {
             Theme::global_mut(cx).scrollbar_show = ScrollbarShow::Hover;
         }
 
-        let theme_switcher = cx.new(|_| ThemeSwitcher::new());
+        let theme_switcher = cx.new(|cx| ThemeSwitcher::new(cx));
 
         Self {
             title: title.into(),

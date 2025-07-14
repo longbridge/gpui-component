@@ -8,18 +8,21 @@ use gpui_component::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::AppState;
+
 const STATE_FILE: &str = "target/state.json";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct AppState {
+struct State {
     theme: SharedString,
 }
 
 pub fn init(cx: &mut App) {
     // Load last theme state
     let json = std::fs::read_to_string(STATE_FILE).unwrap_or(String::default());
-    if let Ok(state) = serde_json::from_str::<AppState>(&json) {
+    if let Ok(state) = serde_json::from_str::<State>(&json) {
         tracing::info!("apply theme: {:?}", state.theme);
+        AppState::global_mut(cx).theme_name = Some(state.theme.clone());
         if let Some(theme) = THEMES.get(&state.theme) {
             Theme::global_mut(cx).apply_config(theme);
         }
@@ -56,9 +59,14 @@ pub struct ThemeSwitcher {
 }
 
 impl ThemeSwitcher {
-    pub fn new() -> Self {
+    pub fn new(cx: &mut App) -> Self {
+        let theme_name = AppState::global(cx)
+            .theme_name
+            .clone()
+            .unwrap_or("default-light".into());
+
         Self {
-            current_theme_name: "default-light".into(),
+            current_theme_name: theme_name,
         }
     }
 }
@@ -84,9 +92,10 @@ impl Render for ThemeSwitcher {
                 }
 
                 // Save AppState
-                let state = AppState {
+                let state = State {
                     theme: theme_name.clone(),
                 };
+                AppState::global_mut(cx).theme_name = Some(theme_name.clone());
                 let json = serde_json::to_string_pretty(&state).unwrap();
                 std::fs::write(STATE_FILE, json).unwrap();
 

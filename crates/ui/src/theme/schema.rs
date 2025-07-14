@@ -410,6 +410,8 @@ impl Theme {
             };
         }
 
+        self.mode = config.mode;
+
         // Base colors for fallback
         apply_color!(red);
         apply_color!(red_light, fallback = self.red.opacity(0.8));
