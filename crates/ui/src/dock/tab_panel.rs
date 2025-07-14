@@ -587,6 +587,8 @@ impl TabPanel {
         let bottom_dock_button = self.render_dock_toggle_button(DockPlacement::Bottom, window, cx);
         let right_dock_button = self.render_dock_toggle_button(DockPlacement::Right, window, cx);
 
+        let is_bottom_dock = bottom_dock_button.is_some();
+
         if self.panels.len() == 1 && panel_style == PanelStyle::Default {
             let panel = self.panels.get(0).unwrap();
 
@@ -682,7 +684,8 @@ impl TabPanel {
             )
             .children(self.panels.iter().enumerate().filter_map(|(ix, panel)| {
                 let mut active = state.active_panel.as_ref() == Some(panel);
-                let disabled = self.collapsed;
+
+                let dropable = self.collapsed;
 
                 if !panel.visible(cx) {
                     return None;
@@ -704,12 +707,22 @@ impl TabPanel {
                         })
                         .py_2()
                         .selected(active)
-                        .disabled(disabled)
-                        .when(!disabled, |this| {
-                            this.on_click(cx.listener(move |view, _, window, cx| {
+                        .on_click(cx.listener({
+                            let is_collapsed = self.collapsed;
+                            let dock_area = self.dock_area.clone();
+                            move |view, _, window, cx| {
                                 view.set_active_ix(ix, window, cx);
-                            }))
-                            .when(state.draggable, |this| {
+
+                                // Open dock if clicked on the collapsed bottom dock
+                                if is_bottom_dock && is_collapsed {
+                                    _ = dock_area.update(cx, |dock_area, cx| {
+                                        dock_area.toggle_dock(DockPlacement::Bottom, window, cx);
+                                    });
+                                }
+                            }
+                        }))
+                        .when(!dropable, |this| {
+                            this.when(state.draggable, |this| {
                                 this.on_drag(
                                     DragPanel::new(panel.clone(), view.clone()),
                                     |drag, _, _, cx| {
