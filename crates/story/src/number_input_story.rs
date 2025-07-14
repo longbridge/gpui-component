@@ -1,6 +1,6 @@
 use gpui::{
-    App, AppContext as _, Context, Entity, FocusHandle, Focusable, InteractiveElement, IntoElement,
-    KeyBinding, ParentElement as _, Render, Styled, Subscription, Window,
+    div, App, AppContext as _, Context, Entity, FocusHandle, Focusable, InteractiveElement,
+    IntoElement, KeyBinding, ParentElement as _, Render, Styled, Subscription, Window,
 };
 use regex::Regex;
 
@@ -8,7 +8,7 @@ use crate::{section, Tab, TabPrev};
 use gpui_component::{
     button::{Button, ButtonVariants},
     input::{InputEvent, InputState, MaskPattern, NumberInput, NumberInputEvent, StepAction},
-    v_flex, FocusableCycle, IconName, Sizable,
+    v_flex, ActiveTheme, FocusableCycle, IconName, Sizable,
 };
 
 const CONTEXT: &str = "NumberInputStory";
@@ -27,6 +27,8 @@ pub struct NumberInputStory {
     number_input2_value: u64,
     number_input3: Entity<InputState>,
     number_input3_value: f64,
+    number_input4: Entity<InputState>,
+    number_input4_value: f64,
 
     _subscriptions: Vec<Subscription>,
 }
@@ -77,6 +79,15 @@ impl NumberInputStory {
                 })
         });
 
+        let number_input4 = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("Number Input without appearance")
+                .mask_pattern(MaskPattern::Number {
+                    separator: Some(','),
+                    fraction: Some(2),
+                })
+        });
+
         let _subscriptions = vec![
             cx.subscribe_in(&number_input1, window, Self::on_input_event),
             cx.subscribe_in(&number_input1, window, Self::on_number_input_event),
@@ -84,6 +95,8 @@ impl NumberInputStory {
             cx.subscribe_in(&number_input2, window, Self::on_number_input_event),
             cx.subscribe_in(&number_input3, window, Self::on_input_event),
             cx.subscribe_in(&number_input3, window, Self::on_number_input_event),
+            cx.subscribe_in(&number_input4, window, Self::on_input_event),
+            cx.subscribe_in(&number_input4, window, Self::on_number_input_event),
         ];
 
         Self {
@@ -93,6 +106,8 @@ impl NumberInputStory {
             number_input2_value: 0,
             number_input3,
             number_input3_value: 0.0,
+            number_input4,
+            number_input4_value: 0.0,
             _subscriptions,
         }
     }
@@ -162,6 +177,11 @@ impl NumberInputStory {
                         this.update(cx, |input, cx| {
                             input.set_value(self.number_input3_value.to_string(), window, cx);
                         });
+                    } else if this == &self.number_input4 {
+                        self.number_input4_value = self.number_input4_value - 1.0;
+                        this.update(cx, |input, cx| {
+                            input.set_value(self.number_input4_value.to_string(), window, cx);
+                        });
                     }
                 }
                 StepAction::Increment => {
@@ -179,6 +199,11 @@ impl NumberInputStory {
                         self.number_input3_value = self.number_input3_value + 1.0;
                         this.update(cx, |input, cx| {
                             input.set_value(self.number_input3_value.to_string(), window, cx);
+                        });
+                    } else if this == &self.number_input4 {
+                        self.number_input4_value = self.number_input4_value + 1.0;
+                        this.update(cx, |input, cx| {
+                            input.set_value(self.number_input4_value.to_string(), window, cx);
                         });
                     }
                 }
@@ -224,6 +249,15 @@ impl Render for NumberInputStory {
                 section("With mask pattern")
                     .max_w_md()
                     .child(NumberInput::new(&self.number_input3)),
+            )
+            .child(
+                section("Without appearance").max_w_md().child(
+                    div()
+                        .w_full()
+                        .bg(cx.theme().secondary)
+                        .rounded_md()
+                        .child(NumberInput::new(&self.number_input4).appearance(false)),
+                ),
             )
     }
 }

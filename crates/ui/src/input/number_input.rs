@@ -29,6 +29,7 @@ pub struct NumberInput {
     size: Size,
     prefix: Option<AnyElement>,
     suffix: Option<AnyElement>,
+    appearance: bool,
 }
 
 impl NumberInput {
@@ -40,6 +41,7 @@ impl NumberInput {
             placeholder: SharedString::default(),
             prefix: None,
             suffix: None,
+            appearance: true,
         }
     }
 
@@ -72,6 +74,12 @@ impl NumberInput {
 
     pub fn suffix(mut self, suffix: impl IntoElement) -> Self {
         self.suffix = Some(suffix.into_any_element());
+        self
+    }
+
+    /// Set the appearance of the number input, if false will no border and background.
+    pub fn appearance(mut self, appearance: bool) -> Self {
+        self.appearance = appearance;
         self
     }
 }
@@ -128,10 +136,12 @@ impl RenderOnce for NumberInput {
             .flex_1()
             .input_size(self.size)
             .px(self.size.input_px() / 2.)
-            .bg(cx.theme().background)
-            .border_color(cx.theme().input)
-            .border_1()
-            .rounded(cx.theme().radius)
+            .when(self.appearance, |this| {
+                this.bg(cx.theme().background)
+                    .border_color(cx.theme().input)
+                    .border_1()
+                    .rounded(cx.theme().radius)
+            })
             .when(focused, |this| this.focused_border(cx))
             .child(
                 Button::new("minus")
