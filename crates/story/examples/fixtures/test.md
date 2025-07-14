@@ -42,6 +42,11 @@ And this is next blockquote
 > First level
 >
 > > Second level
+> > Third level
+>
+> ```rs
+> const FOO: &str = "bar";
+> ```
 
 ## Code block
 

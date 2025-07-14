@@ -382,12 +382,12 @@ fn ast_to_node(value: mdast::Node, style: &TextViewStyle, cx: &mut App) -> eleme
             element::Node::Paragraph(paragraph)
         }
         Node::Blockquote(val) => {
-            let mut paragraph = Paragraph::default();
-            val.children.iter().for_each(|c| {
-                parse_paragraph(&mut paragraph, c);
-            });
-
-            element::Node::Blockquote(paragraph)
+            let children = val
+                .children
+                .into_iter()
+                .map(|c| ast_to_node(c, style, cx))
+                .collect();
+            element::Node::Blockquote { children }
         }
         Node::List(list) => {
             let children = list

@@ -736,7 +736,9 @@ fn parse_node(node: &Rc<Node>, paragraph: &mut Paragraph) -> Option<element::Nod
                     }
                     parse_paragraph(&mut blockquote, child);
                 }
-                children.push(element::Node::Blockquote(blockquote));
+                children.push(element::Node::Blockquote {
+                    children: vec![element::Node::Paragraph(blockquote)],
+                });
 
                 Some(element::Node::Root { children: children })
             }

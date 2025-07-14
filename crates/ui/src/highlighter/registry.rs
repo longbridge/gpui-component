@@ -8,13 +8,13 @@ use std::{
 };
 
 use super::LanguageConfig;
-use crate::{highlighter::languages, ThemeMode};
+use crate::{
+    highlighter::{languages, Language},
+    ThemeMode,
+};
 
 pub(super) fn init(cx: &mut App) {
-    let mut register = LanguageRegistry::new();
-    for language in languages::Language::all() {
-        register.register(language.name(), &language.config());
-    }
+    let register = LanguageRegistry::new();
 
     cx.set_global(register);
 }
@@ -422,12 +422,19 @@ impl LanguageRegistry {
         cx.global_mut::<LanguageRegistry>()
     }
 
+    /// Create a new language registry with default languages and themes.
     pub fn new() -> Self {
-        Self {
+        let mut registry = Self {
             languages: HashMap::new(),
             light_theme: Arc::new(HighlightTheme::default_light()),
             dark_theme: Arc::new(HighlightTheme::default_dark()),
+        };
+
+        for language in languages::Language::all() {
+            registry.register(language.name(), &language.config());
         }
+
+        registry
     }
 
     pub fn register(&mut self, lang: &str, config: &LanguageConfig) {
@@ -455,7 +462,8 @@ impl LanguageRegistry {
 
     /// Returns the language configuration for the given language name.
     pub fn language(&self, name: &str) -> Option<&LanguageConfig> {
-        self.languages.get(name)
+        let language = Language::from_str(name);
+        self.languages.get(language.name())
     }
 }
 
@@ -474,5 +482,16 @@ mod tests {
         assert_eq!(syntax.style("keyword"), Some(rgb(0x0433ff).into()));
         assert_eq!(syntax.style("keyword.repeat"), Some(rgb(0x0433ff).into()));
         assert_eq!(syntax.style("foo"), None);
+    }
+
+    #[test]
+    fn test_registry() {
+        use super::LanguageRegistry;
+        let registry = LanguageRegistry::new();
+
+        assert!(registry.language("rust").is_some());
+        assert!(registry.language("rs").is_some());
+        assert!(registry.language("javascript").is_some());
+        assert!(registry.language("js").is_some());
     }
 }
