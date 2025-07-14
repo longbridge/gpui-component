@@ -1,9 +1,5 @@
 use gpui::*;
-
-use gpui_component::button::{Button, ButtonVariants as _};
-use gpui_component::divider::Divider;
-use gpui_component::input::{InputState, TextInput};
-use gpui_component::{checkbox::*, dropdown::*, *};
+use gpui_component::{button::*, checkbox::*, divider::*, dropdown::*, input::*, *};
 
 use crate::section;
 use crate::{Tab, TabPrev};
