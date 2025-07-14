@@ -1,5 +1,5 @@
 use gpui::{
-    div, prelude::FluentBuilder as _, App, AppContext, Axis, Context, Entity, Focusable,
+    div, prelude::FluentBuilder as _, px, App, AppContext, Axis, Context, Entity, Focusable,
     InteractiveElement, IntoElement, ParentElement as _, Render, Styled, Window,
 };
 use gpui_component::{
@@ -8,14 +8,16 @@ use gpui_component::{
     color_picker::{ColorPicker, ColorPickerState},
     date_picker::{DatePicker, DatePickerState},
     divider::Divider,
+    dropdown::{Dropdown, DropdownState},
     form::{form_field, v_form},
     h_flex,
     input::{InputState, TextInput},
     switch::Switch,
-    v_flex, AxisExt, FocusableCycle, Selectable, Sizable, Size,
+    v_flex, ActiveTheme, AxisExt, FocusableCycle, Selectable, Sizable, Size,
 };
 
 pub struct FormStory {
+    name_prefix_state: Entity<DropdownState<Vec<String>>>,
     name_input: Entity<InputState>,
     email_input: Entity<InputState>,
     bio_input: Entity<InputState>,
@@ -50,6 +52,20 @@ impl FormStory {
     }
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let name_prefix_state = cx.new(|cx| {
+            DropdownState::new(
+                vec![
+                    "Mr.".to_string(),
+                    "Mrs.".to_string(),
+                    "Ms.".to_string(),
+                    "Dr.".to_string(),
+                ],
+                Some(0),
+                window,
+                cx,
+            )
+        });
+
         let name_input = cx.new(|cx| InputState::new(window, cx).default_value("Jason Lee"));
         let color_state = cx.new(|cx| ColorPickerState::new(window, cx));
 
@@ -64,6 +80,7 @@ impl FormStory {
         let date = cx.new(|cx| DatePickerState::new(window, cx));
 
         Self {
+            name_prefix_state,
             name_input,
             email_input,
             bio_input,
@@ -158,9 +175,23 @@ impl Render for FormStory {
                     .layout(self.layout)
                     .with_size(self.size)
                     .child(
-                        form_field()
-                            .label_fn(|_, _| "Name")
-                            .child(TextInput::new(&self.name_input)),
+                        form_field().label_fn(|_, _| "Name").child(
+                            h_flex()
+                                .gap_2()
+                                .border_1()
+                                .border_color(cx.theme().border)
+                                .rounded(cx.theme().radius)
+                                .child(
+                                    div().w(px(90.)).child(
+                                        Dropdown::new(&self.name_prefix_state)
+                                            .pr_0()
+                                            .appearance(false),
+                                    ),
+                                )
+                                .child(div().flex_1().child(
+                                    TextInput::new(&self.name_input).pl_0().appearance(false),
+                                )),
+                        ),
                     )
                     .child(
                         form_field()
