@@ -61,3 +61,6 @@ resvg = { opt-level = 3 }
 rustybuzz = { opt-level = 3 }
 taffy = { opt-level = 3 }
 ttf-parser = { opt-level = 3 }
+
+[workspace.metadata.typos]
+files.extend-exclude = ["**/fixtures/*"]
