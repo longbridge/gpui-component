@@ -456,7 +456,7 @@ impl Theme {
         apply_color!(danger_active, fallback = self.danger.opacity(0.95));
         apply_color!(danger_foreground);
         apply_color!(danger_hover, fallback = self.danger);
-        apply_color!(description_list_label, fallback = self.secondary);
+        apply_color!(description_list_label, fallback = self.border.opacity(0.2));
         apply_color!(
             description_list_label_foreground,
             fallback = self.secondary_foreground
