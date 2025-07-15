@@ -56,6 +56,12 @@ pub struct Theme {
     pub tile_shadow: bool,
 }
 
+impl Default for Theme {
+    fn default() -> Self {
+        Self::from(ThemeColor::light())
+    }
+}
+
 impl Deref for Theme {
     type Target = ThemeColor;
 
