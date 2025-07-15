@@ -1,4 +1,4 @@
-use crate::backoffice::llm::{types::*, LlmRegistry};
+use crate::backoffice::llm::{types::*, LlmChatRequest, LlmRegistry};
 use crate::backoffice::mcp::server::McpServerSnapshot;
 use crate::backoffice::mcp::{
     GetAllSnapshots, GetServerSnapshot, McpCallToolRequest, McpCallToolResult, McpRegistry,
@@ -244,15 +244,19 @@ impl CrossRuntimeBridge {
         provider_id: String,
         model_id: String,
         source: String,
-        messages: Vec<ChatMessage>, //TODO:放到Agent里维护，下游不需要维护
+        prompt: String,
+        history: Vec<ChatMessage>, //TODO:放到Agent里维护，下游不需要维护
     ) -> Result<(), String> {
         let (response_tx, response_rx) = oneshot::channel();
 
         let handler = Box::new(LlmChatHandler {
-            provider_id,
-            model_id,
-            source,
-            messages,
+            request: LlmChatRequest {
+                provider_id,
+                model_id,
+                source,
+                prompt,
+                history, // 使用新的历史参数
+            },
             response: response_tx,
         });
 
@@ -403,16 +407,7 @@ impl MessageHandler for GetAllSnapshotsHandler {
 /// **上下文管理**: 支持传递聊天历史以保持对话连续性
 /// **提供商抽象**: 通过 provider_id 和 model_id 抽象不同的 LLM 服务
 struct LlmChatHandler {
-    /// LLM 提供商标识（如 "openai", "anthropic"）
-    provider_id: String,
-    /// 模型标识（如 "gpt-4", "claude-3"）
-    model_id: String,
-    /// 消息来源标识（用于日志和调试）
-    source: String,
-    /// 聊天历史记录
-    ///
-    /// **TODO**: 未来应移至 Agent 层管理，减少跨运行时数据传输
-    messages: Vec<ChatMessage>,
+    request: LlmChatRequest,
     /// 响应通道
     ///
     /// **成功**: `Ok(LlmChatResult)` - 包含 LLM 的回复和元数据
@@ -423,20 +418,14 @@ struct LlmChatHandler {
 impl MessageHandler for LlmChatHandler {
     fn handle(self: Box<Self>) {
         Arbiter::new().spawn(async move {
-            let result = LlmRegistry::chat_stream(
-                &self.provider_id,
-                &self.model_id,
-                &self.source,
-                self.messages,
-            )
-            .await;
+            let source = self.request.source.clone();
+            let result = LlmRegistry::chat_stream(self.request).await;
 
             tracing::trace!("开始处理 LLM 聊天请求");
             // 错误统一转换为字符串，简化 GPUI 端的错误处理
             match result {
                 Ok(mut stream) => {
                     let _ = self.response.send(Ok(()));
-                    let source = self.source.clone();
                     tracing::trace!("开始接收 LLM 聊天流消息");
                     while let Some(Ok(message)) = stream.next().await {
                         tracing::trace!("接收到 LLM 聊天流消息: {:?}", message);

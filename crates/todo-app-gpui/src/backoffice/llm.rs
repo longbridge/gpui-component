@@ -18,7 +18,40 @@ pub struct LlmChatRequest {
     pub provider_id: String,
     pub model_id: String,
     pub source: String,
-    pub messages: Vec<ChatMessage>,
+    pub prompt: String,
+    pub history: Vec<ChatMessage>,
+}
+
+impl LlmChatRequest {
+    pub fn new(provider_id: String, model_id: String) -> Self {
+        Self {
+            provider_id,
+            model_id,
+            source: String::new(),
+            prompt: String::new(),
+            history: Vec::new(),
+        }
+    }
+
+    pub fn with_source(mut self, source: String) -> Self {
+        self.source = source;
+        self
+    }
+
+    pub fn with_prompt(mut self, prompt: String) -> Self {
+        self.prompt = prompt;
+        self
+    }
+
+    pub fn with_history(mut self, history: Vec<ChatMessage>) -> Self {
+        self.history = history;
+        self
+    }
+
+    pub fn with_message(mut self, message: ChatMessage) -> Self {
+        self.history.push(message);
+        self
+    }
 }
 
 pub struct LlmRegistry {
@@ -130,14 +163,14 @@ impl Handler<LlmChatRequest> for LlmRegistry {
             msg.provider_id,
             msg.model_id,
             msg.source,
-            msg.messages.len(),
+            msg.history.len(),
         );
 
         if let Some(config) = self.providers.get(&msg.provider_id).cloned() {
             let model_id = msg.model_id.clone();
-            let messages = msg.messages;
+            let messages = msg.history;
             let source = msg.source;
-
+            let prompt = msg.prompt;
             async move {
                 tracing::trace!(
                     "Starting LLM chat with provider: {}, model: {}, source: {}",
@@ -146,8 +179,8 @@ impl Handler<LlmChatRequest> for LlmRegistry {
                     source
                 );
                 let llm = LlmChoice::new(&config)?;
-                // llm.stream_chat(&model_id, &messages).await
-                stream_tools::chat_stream_with_tools_simple(llm, &model_id, messages, 128).await
+                stream_tools::chat_stream_with_tools_simple(llm, &model_id, &prompt, messages, 128)
+                    .await
             }
             .into_actor(self)
             .map(|res, _act, _ctx| res)
@@ -167,21 +200,9 @@ impl Handler<LlmChatRequest> for LlmRegistry {
 }
 
 impl LlmRegistry {
-    pub async fn chat_stream(
-        provider_id: &str,
-        model_id: &str,
-        source: &str,
-        messages: Vec<ChatMessage>,
-    ) -> anyhow::Result<ChatStream> {
+    pub async fn chat_stream(request: LlmChatRequest) -> anyhow::Result<ChatStream> {
         let registry = Self::global();
-        let result = registry
-            .send(LlmChatRequest {
-                provider_id: provider_id.to_string(),
-                model_id: model_id.to_string(),
-                source: source.to_string(),
-                messages,
-            })
-            .await??;
+        let result = registry.send(request).await??;
         Ok(result)
     }
 }

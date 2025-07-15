@@ -111,12 +111,13 @@ impl TodoThreadChat {
         });
 
         let _subscriptions = vec![cx.subscribe_in(&chat_input, window, Self::on_chat_input_event)];
-        let chat_messages = vec![
-            // 1. 系统消息 - 任务描述
-            ChatMessage::system()
+        let chat_messages = if todoitem.description.is_empty() {
+            vec![]
+        } else {
+            vec![ChatMessage::system()
                 .with_text(todoitem.description.clone())
-                .with_source(todoitem.id.clone()),
-        ];
+                .with_source(todoitem.id.clone())]
+        };
         let extend_channel = Self::start_external_message_handler(todoitem.id.clone(), cx);
         let instance = Self {
             focus_handle: cx.focus_handle(),
@@ -126,7 +127,7 @@ impl TodoThreadChat {
             scroll_handle: ScrollHandle::new(),
             expanded_providers: Vec::new(),
             expanded_tool_providers: Vec::new(),
-            cached_server_tools: std::collections::HashMap::new(), // 新增初始化
+            cached_server_tools: std::collections::HashMap::new(),
             _subscriptions,
             scroll_state: ScrollbarState::default(),
             scroll_size: gpui::Size::default(),

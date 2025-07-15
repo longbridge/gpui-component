@@ -1,25 +1,31 @@
 use crate::backoffice::llm::provider::LlmChoice;
 use crate::backoffice::llm::types::{ChatMessage, ChatStream, MessageContent, ToolFunction};
 use crate::backoffice::mcp::McpRegistry;
+use futures::StreamExt;
 use rmcp::model::RawContent;
 
 pub(crate) async fn chat_stream_with_tools_simple(
     llm: LlmChoice,
     model_id: &str,
+    prompt: &str,
     chat_history: Vec<ChatMessage>,
     max_tool_rounds: usize,
 ) -> anyhow::Result<ChatStream> {
     let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
     let llm_clone = llm.clone();
     let model_id_clone = model_id.to_string();
-    let history_clone = chat_history.clone();
+    let prompt = prompt.to_string();
+    let chat_history = chat_history.clone();
 
     actix::Arbiter::new().spawn(async move {
-        let mut current_history = history_clone;
         let mut round = 0;
+        let mut prompt = prompt.to_string();
+        let mut current_history = chat_history;
+
         while round < max_tool_rounds {
+            let mut tool_calls = Vec::new();
             let stream_result = llm_clone
-                .stream_chat(&model_id_clone, &current_history)
+                .stream_chat(&model_id_clone, &prompt, &current_history)
                 .await;
             let mut stream = match stream_result {
                 Ok(s) => s,
@@ -28,10 +34,11 @@ pub(crate) async fn chat_stream_with_tools_simple(
                     break;
                 }
             };
+            if round == 0 {
+                current_history.push(ChatMessage::user().with_text(prompt.clone()));
+            }
 
             let mut accumulated_text = String::new();
-            let mut tool_calls = Vec::new();
-            use futures::StreamExt;
             while let Some(chunk) = stream.next().await {
                 tracing::debug!("LLM响应流消息({}): {:?}", round, chunk);
                 match chunk {
@@ -40,9 +47,7 @@ pub(crate) async fn chat_stream_with_tools_simple(
                             tool_calls.extend(message.get_tool_function().cloned());
                         } else {
                             accumulated_text.push_str(&message.get_text());
-                        }
-                        if sender.send(Ok(message)).is_err() {
-                            return;
+                            sender.send(Ok(message)).ok();
                         }
                     }
                     Err(e) => {
@@ -57,14 +62,13 @@ pub(crate) async fn chat_stream_with_tools_simple(
             if !accumulated_text.trim().is_empty() {
                 current_history.push(ChatMessage::assistant().with_text(accumulated_text));
             }
-
             sender
                 .send(Ok(MessageContent::TextChunk(format!(
                     "执行 {} 个工具...\n",
                     tool_calls.len()
                 ))))
                 .ok();
-
+            let mut tool_results = vec![];
             for tool_call in &tool_calls {
                 let result_content = match McpRegistry::call_tool(
                     tool_call.tool_id(),
@@ -81,25 +85,24 @@ pub(crate) async fn chat_stream_with_tools_simple(
                     }),
                     Err(e) => format!("工具调用失败: {}", e),
                 };
-                let content = format!(
-                    "<tool_use_result>
-                        <name>{}</name>
-                        <result>{}</result>
-                    </tool_use_result>",
-                    tool_call.name, result_content
+                tracing::debug!(
+                    "工具调用结果: {}({}) -> {}",
+                    tool_call.tool_name(),
+                    tool_call.arguments,
+                    result_content
                 );
-                let message = MessageContent::ToolFunction(ToolFunction::new(
-                    tool_call.name.clone(),
-                    content,
-                ));
-
-                if let Some(last) = current_history.last_mut() {
-                    last.add_content(message.clone());
-                }
-
-                let _ = sender.send(Ok(message));
+                let message = MessageContent::ToolFunction(
+                    ToolFunction::new(tool_call.name.clone(), tool_call.arguments.clone())
+                        .with_result(result_content),
+                );
+                tool_results.push(message.clone());
+                sender.send(Ok(message)).ok();
             }
-            // 轮次加一，准备下一次循环
+            prompt = tool_results
+                .iter()
+                .map(|result| result.get_text())
+                .collect::<Vec<_>>()
+                .join("\n");
             round += 1;
         }
     });

@@ -61,50 +61,26 @@ impl LlmChoice {
     pub async fn stream_chat(
         &self,
         model_id: &str,
-        messages: &[ChatMessage],
+        prompt: &str,
+        history: &[ChatMessage],
     ) -> anyhow::Result<ChatStream> {
-        messages.iter().enumerate().for_each(|(idx, msg)| {
+        history.iter().enumerate().for_each(|(idx, msg)| {
             tracing::debug!("收到的消息({}): {:?}", idx, msg);
         });
-        let tools: Vec<&ToolDefinition> = messages
+        let tools: Vec<&ToolDefinition> = history
             .iter()
             .flat_map(|msg| msg.get_tool_definitions())
             .collect();
         let no_tools = tools.is_empty();
 
-        let system_prompt = build_system_prompt(messages, tools);
-
-        //取最后一条用户消息
-        let prompt = messages
-            .iter()
-            .rev()
-            .find(|msg| matches!(msg.role, MessageRole::User))
-            .map(|msg| msg.get_text())
-            .unwrap_or_else(|| "执行".to_string());
-        let last_user_index = messages
-            .iter()
-            .rposition(|msg| matches!(msg.role, MessageRole::User))
-            .unwrap_or(0);
-
-        let chat_history: Vec<RigMessage> = messages
-            .iter()
-            // .take(last_user_index)
-            .filter(|chat_msg| {
-                chat_msg.role == MessageRole::User
-                    || chat_msg.role == MessageRole::Assistant
-                    || chat_msg.role == MessageRole::System
-            })
-            .map(|chat_msg| match chat_msg.role {
-                MessageRole::User => RigMessage::user(chat_msg.get_text()),
-                MessageRole::Assistant => RigMessage::assistant(chat_msg.get_text()),
-                MessageRole::System => RigMessage::user(chat_msg.get_text()),
-            })
-            .collect();
+        let system_prompt = build_system_prompt(history, tools);
+        let chat_history = build_history_message(history);
         tracing::debug!("使用系统提示: {}", system_prompt);
         tracing::debug!("使用提示({}): {}", chat_history.len(), prompt);
         chat_history.iter().enumerate().for_each(|(idx, msg)| {
-            tracing::debug!("聊天历史消息({}): {:?}", idx, msg);
+            tracing::debug!("历史消息({}): {:?}", idx, msg);
         });
+
         let agent = OpenAiClient::from_url(&self.config.api_key, &self.config.api_url)
             .agent(model_id)
             .context(system_prompt.as_str())
@@ -112,7 +88,7 @@ impl LlmChoice {
             .temperature(0.7)
             .build();
 
-        let rig_stream = agent.stream_chat(&prompt, chat_history).await?;
+        let rig_stream = agent.stream_chat(prompt, chat_history).await?;
         if no_tools {
             let chat_stream = rig_stream.map(|result| match result {
                 Ok(AssistantContent::Text(text)) => Ok(MessageContent::TextChunk(text.text)),
@@ -133,6 +109,37 @@ impl LlmChoice {
             Ok(Box::pin(parsed_stream))
         }
     }
+}
+
+fn build_history_message(messages: &[ChatMessage]) -> Vec<RigMessage> {
+    messages
+        .iter()
+        .filter_map(|msg| {
+            match msg.role {
+                MessageRole::User => {
+                    // 用户消息：过滤掉包含工具定义的消息
+                    if msg.has_tool_definitions() {
+                        None
+                    } else {
+                        Some(RigMessage::user(msg.get_text()))
+                    }
+                }
+                MessageRole::Assistant => {
+                    // 助手消息：只包含文本内容
+                    let text = msg.get_text();
+                    if !text.trim().is_empty() {
+                        Some(RigMessage::assistant(text))
+                    } else {
+                        None
+                    }
+                }
+                MessageRole::System => {
+                    // 过滤掉系统消息
+                    None
+                }
+            }
+        })
+        .collect()
 }
 
 fn build_system_prompt(messages: &[ChatMessage], tools: Vec<&ToolDefinition>) -> String {

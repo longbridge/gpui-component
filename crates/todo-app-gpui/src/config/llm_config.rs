@@ -325,7 +325,7 @@ impl LlmProviderManager {
             Ok(content) => match serde_yaml::from_str::<Vec<LlmProviderConfig>>(&content) {
                 Ok(providers) => providers,
                 Err(e) => {
-                    eprintln!("Failed to parse LLM provider config: {}", e);
+                    eprintln!("Failed to parse LLM provider config: {}\n{}", e, content);
                     Vec::new()
                 }
             },

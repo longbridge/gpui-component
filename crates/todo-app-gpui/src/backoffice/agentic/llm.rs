@@ -162,7 +162,8 @@ impl LLM for LlmAdapter {
     async fn completion_stream(&self, prompts: &[ChatMessage]) -> anyhow::Result<ChatStream> {
         let messages = self.build_system_message(prompts).await;
 
-        LlmRegistry::chat_stream(&self.provider_id, &self.model_id, &self.source, messages).await
+        // LlmRegistry::chat_stream(&self.provider_id, &self.model_id, &self.source, messages).await
+        unimplemented!("使用 LlmRegistry::chat_stream 替换");
     }
 
     async fn completion_with_tools_stream(
@@ -173,19 +174,21 @@ impl LLM for LlmAdapter {
         // 使用内置的工具委托
         let messages = self.build_system_message(prompts).await;
 
-        LlmRegistry::chat_stream(&self.provider_id, &self.model_id, &self.source, messages).await
+        //  LlmRegistry::chat_stream(&self.provider_id, &self.model_id, &self.source, messages).await
+        unimplemented!("使用 LlmRegistry::chat_stream 替换");
     }
 
     async fn chat_stream(&self, messages: &[ChatMessage]) -> anyhow::Result<ChatStream> {
         let enhanced_messages = self.build_system_message(messages).await;
 
-        LlmRegistry::chat_stream(
-            &self.provider_id,
-            &self.model_id,
-            &self.source,
-            enhanced_messages,
-        )
-        .await
+        // LlmRegistry::chat_stream(
+        //     &self.provider_id,
+        //     &self.model_id,
+        //     &self.source,
+        //     enhanced_messages,
+        // )
+        // .await
+        unimplemented!("使用 LlmRegistry::chat_stream 替换");
     }
 
     async fn chat_with_tools_stream(
@@ -196,13 +199,14 @@ impl LLM for LlmAdapter {
         // 使用内置的工具委托
         let enhanced_messages = self.build_system_message(messages).await;
 
-        LlmRegistry::chat_stream(
-            &self.provider_id,
-            &self.model_id,
-            &self.source,
-            enhanced_messages,
-        )
-        .await
+        // LlmRegistry::chat_stream(
+        //     &self.provider_id,
+        //     &self.model_id,
+        //     &self.source,
+        //     enhanced_messages,
+        // )
+        // .await
+        unimplemented!("使用 LlmRegistry::chat_stream 替换");
     }
 
     async fn completion(&self, prompts: &[ChatMessage]) -> anyhow::Result<ChatMessage> {

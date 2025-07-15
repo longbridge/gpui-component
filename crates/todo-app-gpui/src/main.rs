@@ -39,13 +39,18 @@ async fn main() -> anyhow::Result<()> {
 
 fn init_log() -> anyhow::Result<()> {
     #[cfg(debug_assertions)]
+    let log_file = std::env::current_exe()?
+        .parent()
+        .unwrap()
+        .join("todo_app_gpui.log");
+    let file = std::fs::File::create(&log_file)?;
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::from_default_env()
                 .add_directive(LevelFilter::WARN.into())
                 .add_directive("todo_app_gpui=debug".parse()?),
         )
-        .with_writer(std::io::stderr)
+        .with_writer(file)
         .with_ansi(true)
         .with_line_number(true)
         .with_file(true)

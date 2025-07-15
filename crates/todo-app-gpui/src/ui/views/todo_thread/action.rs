@@ -54,20 +54,41 @@ impl TodoThreadChat {
             tracing::trace!("模型ID为空，无法发送消息");
             return;
         }
-
+        let mut history_message = self.chat_messages.clone();
+        if !self.todoitem.selected_tools.is_empty() {
+            history_message.push(
+                ChatMessage::system().with_content(MessageContent::ToolDefinitions(
+                    self.todoitem
+                        .selected_tools
+                        .iter()
+                        .map(|tool| ToolDefinition {
+                            name: ToolDefinition::format_tool_name(
+                                &tool.provider_id,
+                                &tool.tool_name,
+                            ),
+                            description: tool.description.clone(),
+                            parameters: tool.args_schema.clone().unwrap_or_default(),
+                        })
+                        .collect::<Vec<_>>(),
+                )),
+            );
+        }
         let message_content = message_content.to_string().trim().to_string();
 
-        // 创建用户消息并添加工具定义
-        let user_message =
-            ChatMessage::user().with_text(message_content.clone()).with_source(todo.id.clone())
-                .with_metadata(
-                    selected_model.model_id.clone(),
-                    selected_model.model_name.clone(),
-                );
-
+        // 创建用户消息
+        let user_message = ChatMessage::user()
+            .with_text(message_content.clone())
+            .with_source(todo.id.clone())
+            .with_metadata(
+                selected_model.model_id.clone(),
+                selected_model.model_name.clone(),
+            );
         // 添加用户消息到聊天历史
         self.chat_messages.push(user_message);
-        let mut history_message = self.chat_messages.clone();
+
+        // 准备助手消息占位符
+        self.chat_messages
+            .push(ChatMessage::assistant().with_source(todo.id.clone()));
         // 清空输入框
         self.chat_input
             .update(cx, |input, cx| input.set_value("", window, cx));
@@ -76,46 +97,25 @@ impl TodoThreadChat {
         self.is_loading = true;
         self.scroll_handle.scroll_to_bottom();
 
-        // 准备助手消息占位符
-        let assistant_placeholder =
-            ChatMessage::assistant().with_source( todo.id.clone());
-
-        self.chat_messages.push(assistant_placeholder);
-
         // 准备异步调用参数
         let provider_id = provider_info.id.clone();
         let model_id = selected_model.model_id.clone();
         let source = self.todoitem.id.clone();
-        
-        if !self.todoitem.selected_tools.is_empty() {
-            history_message.push(ChatMessage::system().with_content(
-               MessageContent::ToolDefinitions(self.todoitem
-                    .selected_tools
-                    .iter()
-                    .map(|tool| ToolDefinition {
-                        name: ToolDefinition::format_tool_name(&tool.provider_id, &tool.tool_name),
-                        description: tool.description.clone(),
-                        parameters: tool.args_schema.clone().unwrap_or_default(),
-                    })
-                    .collect::<Vec<_>>(),
-            )));
-        }
-
-        history_message
-            .iter()
-            .enumerate()
-            .for_each(|(idx, message)| {
-                tracing::trace!("UI历史聊天消息({}): {:?}", idx, message);
-            });
         // 发起异步调用
-        cx.spawn(async move |_this, _cx| {
+        cx.spawn(async move |this, cx| {
             tracing::trace!(
                 "开始调用 LLM - Provider: {}, Model: {}",
                 provider_id,
                 model_id
             );
             match CrossRuntimeBridge::global()
-                .llm_chat(provider_id, model_id, source, history_message)
+                .llm_chat(
+                    provider_id,
+                    model_id,
+                    source,
+                    message_content,
+                    history_message,
+                )
                 .await
             {
                 Ok(_) => {
@@ -123,18 +123,16 @@ impl TodoThreadChat {
                 }
                 Err(e) => {
                     tracing::error!("LLM 调用失败: {:?}", e);
-                    // // 可以考虑在这里更新UI显示错误信息
-                    // cx.update(|cx| {
-                    //     // this.is_loading = false;
-                    //     // 移除占位符消息或显示错误消息
-                    //     if let Some(last_message) = this.chat_messages.last_mut() {
-                    //         if last_message.get_text().is_empty() {
-                    //             this.chat_messages.pop();
-                    //         }
-                    //     }
-                    //     cx.notify();
-                    // })
-                    // .ok();
+                    this.update(cx, |this, cx| {
+                        // 移除占位符消息或显示错误消息
+                        if let Some(last_message) = this.chat_messages.last_mut() {
+                            if last_message.get_text().is_empty() {
+                                this.chat_messages.pop();
+                            }
+                        }
+                        cx.notify();
+                    })
+                    .ok();
                 }
             }
         })

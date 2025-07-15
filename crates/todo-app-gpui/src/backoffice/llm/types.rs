@@ -123,24 +123,26 @@ impl ToolFunction {
     }
 
     /// 创建带ID的工具函数调用
-    pub fn with_id(
-        id: impl Into<String>,
-        name: impl Into<String>,
-        arguments: impl Into<String>,
-    ) -> Self {
-        Self {
-            id: Some(id.into()),
-            name: name.into(),
-            arguments: arguments.into(),
-            result: None,
-            status: ToolExecutionStatus::Pending,
-            error: None,
-            started_at: None,
-            completed_at: None,
-            metadata: HashMap::new(),
-        }
+    pub fn with_id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
+        self
     }
 
+    pub fn with_result(mut self, result: impl Into<String>) -> Self {
+        self.result = Some(result.into());
+        self.status = ToolExecutionStatus::Success;
+        self.completed_at = Some(Utc::now());
+        self
+    }
+
+    pub fn with_error(mut self, error: impl Into<String>) -> Self {
+        self.result = Some(error.into());
+        self.status = ToolExecutionStatus::Failed;
+        self.completed_at = Some(Utc::now());
+        self
+    }
+}
+impl ToolFunction {
     /// 获取工具ID部分
     pub fn tool_id(&self) -> &str {
         self.name.split('@').next().unwrap_or(&self.name)
@@ -282,10 +284,12 @@ impl MessageContent {
                 .join("\n"),
             Self::ToolFunction(tool_function) => {
                 format!(
-                    "Tool: {}\nArguments: {}\nResult: {}",
+                    "<tool_use_result>
+                        <name>{}</name>
+                        <result>{}</result>
+                    </tool_use_result>",
                     tool_function.name,
-                    tool_function.arguments,
-                    tool_function.result.as_deref().unwrap_or("")
+                    tool_function.get_output().unwrap_or("")
                 )
             }
         }
