@@ -45,7 +45,12 @@ impl StreamingToolParser {
                 messages.push(message);
             }
         }
-
+ // 关键修复：在每个 chunk 处理完后，如果是 StreamingText 状态且缓冲区有内容，立即输出
+    if matches!(self.state, ParserState::StreamingText) && !self.buffer.is_empty() {
+        if let Some(message) = self.flush_buffer_as_text() {
+            messages.push(message);
+        }
+    }
         tracing::debug!(
             "Processed chunk '{}', state: {:?}, buffer: '{}', tool_content: '{}'",
             chunk,
@@ -53,80 +58,118 @@ impl StreamingToolParser {
             self.buffer,
             self.tool_content
         );
-
         messages
     }
 
-    /// 逐字符处理
+    /// 逐字符处理 - 重构版本
     fn process_char(&mut self, ch: char) -> Option<MessageContent> {
-        match &mut self.state {
-            ParserState::StreamingText => {
-                if ch == '<' {
-                    let message = self.flush_buffer_as_text();
-                    self.state = ParserState::MatchingStartTag {
-                        matched_chars: "<".to_string(),
-                    };
-                    message
-                } else {
-                    self.buffer.push(ch);
-                    None
-                }
-            }
-
-            ParserState::MatchingStartTag { matched_chars } => {
-                matched_chars.push(ch);
-
-                if Self::START_TAG.starts_with(matched_chars.as_str()) {
-                    if matched_chars == Self::START_TAG {
-                        // 完全匹配，进入工具内部
-                        self.state = ParserState::InsideTool;
-                        self.tool_content.clear();
+        loop {
+            match &mut self.state {
+                ParserState::StreamingText => {
+                    if ch == '<' {
+                        let message = self.flush_buffer_as_text();
+                        self.state = ParserState::MatchingStartTag {
+                            matched_chars: "<".to_string(),
+                        };
+                        return message;
+                    } else {
+                        self.buffer.push(ch);
+                        return None;
                     }
-                    None
-                } else {
-                    let failed_chars = matched_chars.clone();
-                    self.state = ParserState::StreamingText;
-                    Some(MessageContent::TextChunk(failed_chars))
                 }
-            }
 
-            ParserState::InsideTool => {
-                if ch == '<' {
-                    self.state = ParserState::MatchingEndTag {
-                        matched_chars: "<".to_string(),
-                    };
-                } else {
-                    self.tool_content.push(ch);
-                }
-                None
-            }
+                ParserState::MatchingStartTag { matched_chars } => {
+                    matched_chars.push(ch);
 
-            ParserState::MatchingEndTag { matched_chars } => {
-                matched_chars.push(ch);
-
-                if Self::END_TAG.starts_with(matched_chars.as_str()) {
-                    if matched_chars == Self::END_TAG {
-                        // 完全匹配，工具结束
-                        let tool_content = self.tool_content.clone();
-                        self.tool_content.clear();
+                    if Self::START_TAG.starts_with(matched_chars.as_str()) {
+                        if matched_chars == Self::START_TAG {
+                            // 完全匹配，进入工具内部
+                            self.state = ParserState::InsideTool;
+                            self.tool_content.clear();
+                        }
+                        return None;
+                    } else {
+                        // 匹配失败，输出失败的内容并重新处理当前字符
+                        let failed_chars = matched_chars.clone();
                         self.state = ParserState::StreamingText;
 
-                        // 解析工具调用
-                        let full_tool_xml = format!("<tool_use>{}</tool_use>", tool_content);
-                        if let Some(tool_call) = self.parse_tool_function(&full_tool_xml) {
-                            tracing::debug!("解析到工具调用: {:?}", tool_call);
-                            return Some(MessageContent::ToolFunction(tool_call));
-                        } else {
-                            return Some(MessageContent::TextChunk(full_tool_xml));
+                        // 获取导致失败的字符
+                        if let Some(last_char) = failed_chars.chars().last() {
+                            let failed_prefix = failed_chars.chars().take(failed_chars.len() - 1).collect::<String>();
+
+                            if !failed_prefix.is_empty() {
+                                // 输出失败的前缀，然后在下一次循环中重新处理last_char
+                                if last_char == '<' {
+                                    self.state = ParserState::MatchingStartTag {
+                                        matched_chars: "<".to_string(),
+                                    };
+                                } else {
+                                    self.buffer.push(last_char);
+                                }
+                                return Some(MessageContent::TextChunk(failed_prefix));
+                            } else {
+                                // 只有一个字符，直接重新处理
+                                continue; // 重新处理当前字符
+                            }
                         }
+
+                        return Some(MessageContent::TextChunk(failed_chars));
                     }
-                    None
-                } else {
-                    // 匹配失败，这不是结束标签
-                    let failed_chars = matched_chars.clone();
-                    self.state = ParserState::InsideTool;
-                    self.tool_content.push_str(&failed_chars);
-                    None
+                }
+
+                ParserState::InsideTool => {
+                    if ch == '<' {
+                        self.state = ParserState::MatchingEndTag {
+                            matched_chars: "<".to_string(),
+                        };
+                    } else {
+                        self.tool_content.push(ch);
+                    }
+                    return None;
+                }
+
+                ParserState::MatchingEndTag { matched_chars } => {
+                    matched_chars.push(ch);
+
+                    if Self::END_TAG.starts_with(matched_chars.as_str()) {
+                        if matched_chars == Self::END_TAG {
+                            // 完全匹配，工具结束
+                            let tool_content = self.tool_content.clone();
+                            self.tool_content.clear();
+                            self.state = ParserState::StreamingText;
+
+                            // 解析工具调用
+                            let full_tool_xml = format!("<tool_use>{}</tool_use>", tool_content);
+                            if let Some(tool_call) = self.parse_tool_function(&full_tool_xml) {
+                                tracing::debug!("解析到工具调用: {:?}", tool_call);
+                                return Some(MessageContent::ToolFunction(tool_call));
+                            } else {
+                                return Some(MessageContent::TextChunk(full_tool_xml));
+                            }
+                        }
+                        return None;
+                    } else {
+                        // 匹配失败，添加到工具内容并重新处理当前字符
+                        let failed_chars = matched_chars.clone();
+                        self.state = ParserState::InsideTool;
+
+                        if let Some(last_char) = failed_chars.chars().last() {
+                            let failed_prefix = failed_chars.chars().take(failed_chars.len() - 1).collect::<String>();
+                            self.tool_content.push_str(&failed_prefix);
+
+                            if last_char == '<' {
+                                self.state = ParserState::MatchingEndTag {
+                                    matched_chars: "<".to_string(),
+                                };
+                            } else {
+                                self.tool_content.push(last_char);
+                            }
+                        } else {
+                            self.tool_content.push_str(&failed_chars);
+                        }
+
+                        return None;
+                    }
                 }
             }
         }
