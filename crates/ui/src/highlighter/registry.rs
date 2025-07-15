@@ -473,6 +473,12 @@ impl LanguageRegistry {
 
     /// Returns the language configuration for the given language name.
     pub fn language(&self, name: &str) -> Option<&LanguageConfig> {
+        // Try to get by name first, there may have a custom language registered
+        if let Some(language) = self.languages.get(name) {
+            return Some(language);
+        }
+
+        // Then try to get built-in language to support short language names, e.g. "js" for "javascript"
         let language = Language::from_str(name);
         self.languages.get(language.name())
     }
@@ -481,6 +487,8 @@ impl LanguageRegistry {
 #[cfg(test)]
 mod tests {
     use gpui::rgb;
+
+    use crate::highlighter::LanguageConfig;
 
     #[test]
     fn test_syntax_colors() {
@@ -498,8 +506,14 @@ mod tests {
     #[test]
     fn test_registry() {
         use super::LanguageRegistry;
-        let registry = LanguageRegistry::new();
+        let mut registry = LanguageRegistry::new();
 
+        registry.register(
+            "foo",
+            &LanguageConfig::new("foo", tree_sitter_bash::LANGUAGE.into(), vec![], "", "", ""),
+        );
+
+        assert!(registry.language("foo").is_some());
         assert!(registry.language("rust").is_some());
         assert!(registry.language("rs").is_some());
         assert!(registry.language("javascript").is_some());
