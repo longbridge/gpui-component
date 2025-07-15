@@ -61,7 +61,9 @@
       "base.magenta.light": "#D4398433",
       "base.cyan": "#2aa198",
       "base.cyan.light": "#93a1a1",
-      "success.background": "#739900"
+      "success.foreground": "#FDF6E3",
+      "warning.foreground": "#FDF6E3",
+      "info.foreground": "#FDF6E3"
     },
     "highlight": {
       "editor.foreground": "#586E75",

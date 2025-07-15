@@ -428,15 +428,15 @@ impl Theme {
         apply_color!(border);
         apply_color!(foreground);
         apply_color!(muted);
-        apply_color!(muted_foreground);
+        apply_color!(muted_foreground, fallback = self.foreground.opacity(0.7));
         apply_color!(primary);
-        apply_color!(primary_active);
-        apply_color!(primary_foreground);
-        apply_color!(primary_hover);
+        apply_color!(primary_active, fallback = self.primary.darken(0.1));
+        apply_color!(primary_foreground, fallback = self.foreground);
+        apply_color!(primary_hover, fallback = self.primary.opacity(0.9));
         apply_color!(secondary);
-        apply_color!(secondary_active);
-        apply_color!(secondary_foreground);
-        apply_color!(secondary_hover);
+        apply_color!(secondary_active, fallback = self.secondary.darken(0.1));
+        apply_color!(secondary_foreground, fallback = self.foreground);
+        apply_color!(secondary_hover, fallback = self.secondary.opacity(0.9));
 
         // Other colors
         apply_color!(accent, fallback = self.secondary);
@@ -453,9 +453,9 @@ impl Theme {
         apply_color!(chart_4, fallback = self.blue.darken(0.2));
         apply_color!(chart_5, fallback = self.blue.darken(0.4));
         apply_color!(danger, fallback = self.red);
-        apply_color!(danger_active, fallback = self.danger.opacity(0.95));
-        apply_color!(danger_foreground);
-        apply_color!(danger_hover, fallback = self.danger);
+        apply_color!(danger_active, fallback = self.danger.darken(0.1));
+        apply_color!(danger_foreground, fallback = self.primary_foreground);
+        apply_color!(danger_hover, fallback = self.danger.opacity(0.9));
         apply_color!(description_list_label, fallback = self.border.opacity(0.2));
         apply_color!(
             description_list_label_foreground,
@@ -464,9 +464,9 @@ impl Theme {
         apply_color!(drag_border, fallback = self.primary.opacity(0.65));
         apply_color!(drop_target, fallback = self.primary.opacity(0.2));
         apply_color!(info, fallback = self.cyan);
-        apply_color!(info_active, fallback = self.info);
-        apply_color!(info_foreground);
-        apply_color!(info_hover, fallback = self.info.opacity(0.95));
+        apply_color!(info_active, fallback = self.info.darken(0.1));
+        apply_color!(info_foreground, fallback = self.primary_foreground);
+        apply_color!(info_hover, fallback = self.info.opacity(0.9));
         apply_color!(input, fallback = self.border);
         apply_color!(link, fallback = self.primary);
         apply_color!(link_active, fallback = self.link);
@@ -499,9 +499,9 @@ impl Theme {
         apply_color!(slider_bar, fallback = self.primary);
         apply_color!(slider_thumb, fallback = self.primary_foreground);
         apply_color!(success, fallback = self.green);
-        apply_color!(success_foreground);
-        apply_color!(success_hover, fallback = self.success.opacity(0.95));
-        apply_color!(success_active, fallback = self.success);
+        apply_color!(success_foreground, fallback = self.primary_foreground);
+        apply_color!(success_hover, fallback = self.success.opacity(0.9));
+        apply_color!(success_active, fallback = self.success.darken(0.1));
         apply_color!(switch, fallback = self.secondary);
         apply_color!(tab, fallback = self.background);
         apply_color!(tab_active, fallback = self.background);
@@ -521,9 +521,9 @@ impl Theme {
         apply_color!(title_bar_border, fallback = self.border);
         apply_color!(tiles, fallback = self.background);
         apply_color!(warning, fallback = self.yellow);
-        apply_color!(warning_active, fallback = self.warning);
-        apply_color!(warning_hover, fallback = self.warning.opacity(0.95));
-        apply_color!(warning_foreground);
+        apply_color!(warning_active, fallback = self.warning.darken(0.1));
+        apply_color!(warning_hover, fallback = self.warning.opacity(0.9));
+        apply_color!(warning_foreground, fallback = self.primary_foreground);
         apply_color!(overlay);
         apply_color!(window_border, fallback = self.border);
 

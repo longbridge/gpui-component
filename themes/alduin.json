@@ -16,7 +16,6 @@
       "card.foreground": "#ebdbb2",
       "danger.background": "#cc241d",
       "danger.active.background": "#cc241d",
-      "danger.foreground": "#282828",
       "danger.hover.background": "#fb4934",
       "foreground": "#9E9E9E",
       "input.border": "#504945",
