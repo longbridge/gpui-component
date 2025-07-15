@@ -66,7 +66,7 @@ impl LlmChoice {
         messages.iter().enumerate().for_each(|(idx, msg)| {
             tracing::debug!("收到的消息({}): {:?}", idx, msg);
         });
-        let tools: Vec<ToolDefinition> = messages
+        let tools: Vec<&ToolDefinition> = messages
             .iter()
             .flat_map(|msg| msg.get_tool_definitions())
             .collect();
@@ -115,11 +115,10 @@ impl LlmChoice {
         let rig_stream = agent.stream_chat(&prompt, chat_history).await?;
         if no_tools {
             let chat_stream = rig_stream.map(|result| match result {
-                Ok(AssistantContent::Text(text)) => Ok(ChatMessage::assistant().with_text_chunk(text.text)),
-                Ok(AssistantContent::ToolCall(tool)) => Ok(ChatMessage::system().with_content(MessageContent::ToolCall(ToolCall {
-                    name: tool.function.name,
-                    arguments: tool.function.arguments.to_string(),
-                }))),
+                Ok(AssistantContent::Text(text)) => Ok(MessageContent::TextChunk(text.text)),
+                Ok(AssistantContent::ToolCall(tool)) => Ok(MessageContent::ToolFunction(
+                    ToolFunction::new(tool.function.name, tool.function.arguments.to_string()),
+                )),
                 Err(e) => Err(anyhow::anyhow!("Stream error: {}", e)),
             });
             Ok(Box::pin(chat_stream))
@@ -136,11 +135,11 @@ impl LlmChoice {
     }
 }
 
-fn build_system_prompt(messages: &[ChatMessage], tools: Vec<ToolDefinition>) -> String {
+fn build_system_prompt(messages: &[ChatMessage], tools: Vec<&ToolDefinition>) -> String {
     let user_system_prompt = messages
         .iter()
         .rev()
-        .find(|msg| matches!(msg.role, MessageRole::System) && !msg.has_tool_definitions() &&!msg.is_tool_call() && !msg.is_tool_result());
+        .find(|msg| matches!(msg.role, MessageRole::System) && !msg.has_tool_definitions());
     match (user_system_prompt, tools.is_empty()) {
         (Some(user_system_prompt), false) => {
             prompts::with_tools_user_system_prompt(tools, user_system_prompt.get_text())

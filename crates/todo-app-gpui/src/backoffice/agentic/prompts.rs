@@ -94,12 +94,12 @@ pub fn default_with_user_system_prompt<S: AsRef<str>>(user_system_prompt: S) -> 
         .replace("{{ USER_SYSTEM_PROMPT }}", user_system_prompt.as_ref())
 }
 
-pub fn with_tools(tools: Vec<ToolDefinition>) -> String {
+pub fn with_tools(tools: Vec<&ToolDefinition>) -> String {
     with_tools_user_system_prompt(tools, USER_SYSTEM_PROMPT)
 }
 
 pub fn with_tools_user_system_prompt<S: AsRef<str>>(
-    tools: Vec<ToolDefinition>,
+    tools: Vec<&ToolDefinition>,
     user_system_prompt: S,
 ) -> String {
     let tools_str = tools

@@ -65,7 +65,10 @@ impl LlmAdapter {
                     tool_descriptions
                 );
 
-                messages.push(ChatMessage::system().with_text(system_message));
+                messages.push(
+                    ChatMessage::system()
+                        .with_content(MessageContent::Part(MediaContent::text(system_message))),
+                );
             }
         }
 
@@ -88,11 +91,15 @@ impl LlmAdapter {
                     match delegate.call(&tool_call.name, tool_call.args).await {
                         Ok(result) => {
                             let result_text = format!("工具调用结果: {:?}", result);
-                            result_messages.push(ChatMessage::assistant().with_text(result_text));
+                            result_messages.push(ChatMessage::assistant().with_content(
+                                MessageContent::Part(MediaContent::text(result_text)),
+                            ));
                         }
                         Err(e) => {
                             let error_text = format!("工具调用失败: {}", e);
-                            result_messages.push(ChatMessage::assistant().with_text(error_text));
+                            result_messages.push(ChatMessage::assistant().with_content(
+                                MessageContent::Part(MediaContent::text(error_text)),
+                            ));
                         }
                     }
                 }
@@ -212,19 +219,19 @@ impl LLM for LlmAdapter {
                 Err(e) => return Err(e),
             }
         }
-
-        if let Some(mut message) = final_message {
-            // 处理工具调用
-            if accumulated_text.contains("<tool_use>") {
-                let tool_results = self.handle_tool_calls(&message).await?;
-                if let Some(result) = tool_results.first() {
-                    message = result.clone();
-                }
-            }
-            Ok(message)
-        } else {
-            Ok(ChatMessage::assistant().with_text(accumulated_text))
-        }
+        unimplemented!("处理工具调用的逻辑");
+        // if let Some(mut message) = final_message {
+        //     // 处理工具调用
+        //     if accumulated_text.contains("<tool_use>") {
+        //         let tool_results = self.handle_tool_calls(&message).await?;
+        //         if let Some(result) = tool_results.first() {
+        //             message = result.clone();
+        //         }
+        //     }
+        //     Ok(message)
+        // } else {
+        //     Ok(ChatMessage::assistant().with_text(accumulated_text))
+        // }
     }
 
     async fn chat(&self, messages: &[ChatMessage]) -> anyhow::Result<ChatMessage> {
@@ -241,19 +248,19 @@ impl LLM for LlmAdapter {
                 Err(e) => return Err(e),
             }
         }
-
-        if let Some(mut message) = final_message {
-            // 处理工具调用
-            if accumulated_text.contains("<tool_use>") {
-                let tool_results = self.handle_tool_calls(&message).await?;
-                if let Some(result) = tool_results.first() {
-                    message = result.clone();
-                }
-            }
-            Ok(message)
-        } else {
-            Ok(ChatMessage::assistant().with_text(accumulated_text))
-        }
+        unimplemented!("处理工具调用的逻辑");
+        // if let Some(mut message) = final_message {
+        //     // 处理工具调用
+        //     if accumulated_text.contains("<tool_use>") {
+        //         let tool_results = self.handle_tool_calls(&message).await?;
+        //         if let Some(result) = tool_results.first() {
+        //             message = result.clone();
+        //         }
+        //     }
+        //     Ok(message)
+        // } else {
+        //     Ok(ChatMessage::assistant().with_text(accumulated_text))
+        // }
     }
 
     async fn chat_with_tools(
@@ -267,8 +274,10 @@ impl LLM for LlmAdapter {
 
     async fn analyze(&self, data: &str) -> anyhow::Result<ChatMessage> {
         let messages = vec![
-            ChatMessage::system().with_text("你是一个数据分析专家，请分析提供的数据并提供深入见解。"),
-            ChatMessage::user().with_text(format!("请分析以下数据并提供详细分析报告：\n\n{}", data)),
+            ChatMessage::system()
+                .with_text("你是一个数据分析专家，请分析提供的数据并提供深入见解。"),
+            ChatMessage::user()
+                .with_text(format!("请分析以下数据并提供详细分析报告：\n\n{}", data)),
         ];
         self.completion(&messages).await
     }
@@ -283,7 +292,8 @@ impl LLM for LlmAdapter {
 
     async fn extract_knowledge(&self, raw_data: &str) -> anyhow::Result<ChatMessage> {
         let messages = vec![
-            ChatMessage::system().with_text("你是一个知识提取专家，请从数据中提取关键信息和知识点。"),
+            ChatMessage::system()
+                .with_text("你是一个知识提取专家，请从数据中提取关键信息和知识点。"),
             ChatMessage::user().with_text(format!(
                 "请从以下数据中提取关键知识点和有价值的信息：\n\n{}",
                 raw_data

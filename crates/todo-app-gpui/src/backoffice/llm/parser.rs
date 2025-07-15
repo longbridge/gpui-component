@@ -1,6 +1,6 @@
 use crate::backoffice::llm::types::MessageContent;
 
-use super::types::{ChatMessage, ToolCall};
+use super::types::*;
 use futures::stream::{Stream, StreamExt};
 use std::pin::Pin;
 
@@ -37,7 +37,7 @@ impl StreamingToolParser {
     }
 
     /// 处理新的文本块
-    pub fn process_chunk(&mut self, chunk: &str) -> Vec<ChatMessage> {
+    pub fn process_chunk(&mut self, chunk: &str) -> Vec<MessageContent> {
         let mut messages = Vec::new();
 
         for ch in chunk.chars() {
@@ -58,7 +58,7 @@ impl StreamingToolParser {
     }
 
     /// 逐字符处理
-    fn process_char(&mut self, ch: char) -> Option<ChatMessage> {
+    fn process_char(&mut self, ch: char) -> Option<MessageContent> {
         match &mut self.state {
             ParserState::StreamingText => {
                 if ch == '<' {
@@ -84,12 +84,9 @@ impl StreamingToolParser {
                     }
                     None
                 } else {
-                    // 匹配失败，立即输出失败的内容
                     let failed_chars = matched_chars.clone();
                     self.state = ParserState::StreamingText;
-
-                    // 立即输出失败的内容，而不是添加到缓冲区
-                    Some(ChatMessage::assistant().with_text_chunk(failed_chars))
+                    Some(MessageContent::TextChunk(failed_chars))
                 }
             }
 
@@ -116,11 +113,11 @@ impl StreamingToolParser {
 
                         // 解析工具调用
                         let full_tool_xml = format!("<tool_use>{}</tool_use>", tool_content);
-                        if let Some(tool_call) = self.parse_tool_call(&full_tool_xml) {
+                        if let Some(tool_call) = self.parse_tool_function(&full_tool_xml) {
                             tracing::debug!("解析到工具调用: {:?}", tool_call);
-                            return Some(ChatMessage::system().with_content(MessageContent::ToolCall(tool_call)));
+                            return Some(MessageContent::ToolFunction(tool_call));
                         } else {
-                            return Some(ChatMessage::assistant().with_text_chunk(full_tool_xml));
+                            return Some(MessageContent::TextChunk(full_tool_xml));
                         }
                     }
                     None
@@ -136,18 +133,18 @@ impl StreamingToolParser {
     }
 
     /// 将缓冲区内容作为文本消息输出
-    fn flush_buffer_as_text(&mut self) -> Option<ChatMessage> {
+    fn flush_buffer_as_text(&mut self) -> Option<MessageContent> {
         if !self.buffer.is_empty() {
             let text = self.buffer.clone();
             self.buffer.clear();
-            Some(ChatMessage::assistant().with_text_chunk(text))
+            Some(MessageContent::TextChunk(text))
         } else {
             None
         }
     }
 
     /// 流结束时处理剩余内容
-    pub fn finish(&mut self) -> Vec<ChatMessage> {
+    pub fn finish(&mut self) -> Vec<MessageContent> {
         let mut messages = Vec::new();
 
         match &self.state {
@@ -164,11 +161,11 @@ impl StreamingToolParser {
             }
             ParserState::InsideTool => {
                 let incomplete_tool = format!("<tool_use>{}", self.tool_content);
-                messages.push(ChatMessage::assistant().with_text_chunk(incomplete_tool));
+                messages.push(MessageContent::TextChunk(incomplete_tool));
             }
             ParserState::MatchingEndTag { matched_chars } => {
                 let incomplete_tool = format!("<tool_use>{}{}", self.tool_content, matched_chars);
-                messages.push(ChatMessage::assistant().with_text_chunk(incomplete_tool));
+                messages.push(MessageContent::TextChunk(incomplete_tool));
             }
         }
 
@@ -182,8 +179,8 @@ impl StreamingToolParser {
     }
 
     /// 解析工具调用
-    fn parse_tool_call(&self, xml: &str) -> Option<ToolCall> {
-        if let Ok(tool_call) = serde_xml_rs::from_str::<ToolCall>(xml) {
+    fn parse_tool_function(&self, xml: &str) -> Option<ToolFunction> {
+        if let Ok(tool_call) = serde_xml_rs::from_str::<ToolFunction>(xml) {
             return Some(tool_call);
         }
 
@@ -192,7 +189,7 @@ impl StreamingToolParser {
     }
 
     /// 正则表达式解析
-    fn parse_with_regex(&self, text: &str) -> Option<ToolCall> {
+    fn parse_with_regex(&self, text: &str) -> Option<ToolFunction> {
         use regex::Regex;
         let re = Regex::new(
             r"(?s)<tool_use>\s*<name>\s*([^<]+?)\s*</name>\s*<arguments>\s*([^<]*?)\s*</arguments>\s*</tool_use>",
@@ -203,14 +200,14 @@ impl StreamingToolParser {
         let name = caps.get(1)?.as_str().trim().to_string();
         let arguments = caps.get(2)?.as_str().trim().to_string();
 
-        Some(ToolCall { name, arguments })
+        Some(ToolFunction::new(name, arguments))
     }
 }
 
 /// 创建流式工具解析器
 pub fn create_streaming_tool_parser<S>(
     input_stream: S,
-) -> Pin<Box<dyn Stream<Item = anyhow::Result<ChatMessage>> + Send>>
+) -> Pin<Box<dyn Stream<Item = anyhow::Result<MessageContent>> + Send>>
 where
     S: Stream<Item = Result<String, anyhow::Error>> + Send + Unpin + 'static,
 {

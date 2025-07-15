@@ -1,5 +1,5 @@
 use crate::backoffice::llm::provider::LlmChoice;
-use crate::backoffice::llm::types::{ChatMessage, ChatStream, MessageContent};
+use crate::backoffice::llm::types::{ChatMessage, ChatStream, MessageContent, ToolFunction};
 use crate::backoffice::mcp::McpRegistry;
 use rmcp::model::RawContent;
 
@@ -33,11 +33,11 @@ pub(crate) async fn chat_stream_with_tools_simple(
             let mut tool_calls = Vec::new();
             use futures::StreamExt;
             while let Some(chunk) = stream.next().await {
-                tracing::debug!("LLM响应流消息: {:?}", chunk);
+                tracing::debug!("LLM响应流消息({}): {:?}", round, chunk);
                 match chunk {
                     Ok(message) => {
-                        if message.is_tool_call() {
-                            tool_calls.extend(message.get_tool_calls());
+                        if message.is_tool_function() {
+                            tool_calls.extend(message.get_tool_function().cloned());
                         } else {
                             accumulated_text.push_str(&message.get_text());
                         }
@@ -46,38 +46,39 @@ pub(crate) async fn chat_stream_with_tools_simple(
                         }
                     }
                     Err(e) => {
-                        let _ = sender.send(Err(e));
+                        sender.send(Err(e)).ok();
                         return;
                     }
                 }
             }
-            if !accumulated_text.trim().is_empty() {
-                current_history.push(ChatMessage::assistant().with_text(accumulated_text));
-            }
             if tool_calls.is_empty() {
                 break;
             }
-            let _ = sender.send(Ok(ChatMessage::system().with_text(format!(
-                "执行 {} 个工具...",
-                tool_calls.len()
-            ))));
+            if !accumulated_text.trim().is_empty() {
+                current_history.push(ChatMessage::assistant().with_text(accumulated_text));
+            }
+
+            sender
+                .send(Ok(MessageContent::TextChunk(format!(
+                    "执行 {} 个工具...\n",
+                    tool_calls.len()
+                ))))
+                .ok();
 
             for tool_call in &tool_calls {
                 let result_content = match McpRegistry::call_tool(
-                    tool_call.id(),
+                    tool_call.tool_id(),
                     tool_call.tool_name(),
                     &tool_call.arguments,
                 )
                 .await
                 {
-                    Ok(result) => {
-                        result.content.iter().fold(String::new(), |mut acc, item| {
-                            if let RawContent::Text(text) = &item.raw {
-                                acc.push_str(&text.text);
-                            }
-                            acc
-                        })
-                    }
+                    Ok(result) => result.content.iter().fold(String::new(), |mut acc, item| {
+                        if let RawContent::Text(text) = &item.raw {
+                            acc.push_str(&text.text);
+                        }
+                        acc
+                    }),
                     Err(e) => format!("工具调用失败: {}", e),
                 };
                 let content = format!(
@@ -87,14 +88,17 @@ pub(crate) async fn chat_stream_with_tools_simple(
                     </tool_use_result>",
                     tool_call.name, result_content
                 );
-                let result_message = ChatMessage::system().with_content(MessageContent::ToolResult(
+                let message = MessageContent::ToolFunction(ToolFunction::new(
                     tool_call.name.clone(),
                     content,
                 ));
-                current_history.push(result_message.clone());
-                let _ = sender.send(Ok(result_message));
-            }
 
+                if let Some(last) = current_history.last_mut() {
+                    last.add_content(message.clone());
+                }
+
+                let _ = sender.send(Ok(message));
+            }
             // 轮次加一，准备下一次循环
             round += 1;
         }

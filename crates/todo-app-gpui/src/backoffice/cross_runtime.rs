@@ -477,5 +477,5 @@ static CROSS_RUNTIME_BRIDGE: std::sync::OnceLock<CrossRuntimeBridge> = std::sync
 #[derive(Debug, Clone)]
 pub struct StreamMessage {
     pub source: String,
-    pub message: ChatMessage,
+    pub message: MessageContent,
 }

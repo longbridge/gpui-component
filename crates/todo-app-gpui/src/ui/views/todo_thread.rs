@@ -10,8 +10,8 @@ use gpui::prelude::*;
 use gpui::*;
 use gpui_component::{input::InputState, scroll::ScrollbarState, *};
 use std::time::Duration;
-use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::mpsc::error::TryRecvError;
+use tokio::sync::mpsc::{Receiver, Sender};
 
 // 从 rmcp 导入 MCP 类型
 use rmcp::model::Tool as McpTool;
@@ -56,7 +56,7 @@ pub struct TodoThreadChat {
     cached_server_tools: std::collections::HashMap<String, Vec<McpTool>>,
 
     _subscriptions: Vec<Subscription>,
-    extend_channel: Sender<ChatMessage>,
+    extend_channel: Sender<MessageContent>,
     todoitem: Todo,
 }
 
@@ -142,7 +142,7 @@ impl TodoThreadChat {
     fn start_external_message_handler(
         todo_id: String,
         cx: &mut Context<Self>,
-    ) -> Sender<ChatMessage> {
+    ) -> Sender<MessageContent> {
         let (tx, rx) = tokio::sync::mpsc::channel(100);
         let tx1 = tx.clone();
         cx.spawn(async move |this, app: &mut AsyncApp| {
@@ -156,7 +156,7 @@ impl TodoThreadChat {
     async fn handle_external_messages(
         this: WeakEntity<Self>,
         app: &mut AsyncApp,
-        (todo_id, tx, mut rx): (String, Sender<ChatMessage>, Receiver<ChatMessage>),
+        (todo_id, tx, mut rx): (String, Sender<MessageContent>, Receiver<MessageContent>),
     ) {
         let todo_id_clone = todo_id.clone();
         // 订阅外部消息
@@ -178,7 +178,6 @@ impl TodoThreadChat {
             Timer::after(Duration::from_millis(50)).await;
             let mut buffer = String::new();
             let mut message_count = 0;
-            let mut is_tool = false;
             // 批量收集消息
             loop {
                 match rx.try_recv() {
@@ -188,18 +187,33 @@ impl TodoThreadChat {
                     Err(TryRecvError::Disconnected) => {
                         break 'message_loop;
                     }
-                    Ok(msg) => {
-                        let update_result = this.update(app, |this, cx| {
-                            this.process_received_message(msg, cx);
-                        });
-                        if update_result.is_err() {
-                            tracing::warn!("更新UI失败，可能组件已销毁");
-                            break 'message_loop;
+                    Ok(msg) => match msg {
+                        MessageContent::ToolFunction(tool) => {
+                            buffer.push_str(&format!(
+                                "工具调用: {}({})\n",
+                                tool.name, tool.arguments
+                            ));
                         }
-                        message_count += 1;
-                    }
+                        MessageContent::TextChunk(text) => {
+                            buffer.push_str(&text);
+                        }
+
+                        MessageContent::Part(part) => {
+                            buffer.push_str(part.get_text().unwrap());
+                        }
+
+                        MessageContent::ToolDefinitions(_) => {}
+                    },
                 }
             }
+            let update_result = this.update(app, |this, cx| {
+                this.process_received_message(MessageContent::TextChunk(buffer), cx);
+            });
+            if update_result.is_err() {
+                tracing::warn!("更新UI失败，可能组件已销毁");
+                break 'message_loop;
+            }
+            message_count += 1;
             tracing::trace!("处理了 {} 条消息", message_count);
         }
         tracing::info!("外部消息处理器已停止 todoid is {}", todo_id);
@@ -212,15 +226,9 @@ impl TodoThreadChat {
         self.chat_messages.last_mut().expect("No messages in chat")
     }
     /// 处理接收到的消息
-    fn process_received_message(&mut self, msg: ChatMessage, cx: &mut Context<Self>) {
+    fn process_received_message(&mut self, msg: MessageContent, cx: &mut Context<Self>) {
         let last_message = self.last_message();
-        if msg.is_tool_result() {
-            last_message.add_contents(msg.contents);
-        } else if msg.is_tool_call() {
-            last_message.add_contents(msg.contents);
-        } else {
-            last_message.add_content(MessageContent::TextChunk(msg.get_text()));
-        }
+        last_message.add_content(msg);
         self.is_loading = false;
         self.scroll_handle.scroll_to_bottom();
         cx.notify();

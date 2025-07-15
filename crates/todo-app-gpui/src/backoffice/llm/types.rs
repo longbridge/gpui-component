@@ -61,22 +61,160 @@ impl ToolDefinition {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolCall {
-    /// 工具名称
-    #[serde(default)]
-    pub name: String,
-    /// 工具调用参数（JSON 字符串或键值对字符串）
-    #[serde(default)]
-    pub arguments: String,
+/// 工具函数执行状态
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub enum ToolExecutionStatus {
+    /// 待执行
+    #[default]
+    Pending,
+    /// 执行中
+    Running,
+    /// 执行成功
+    Success,
+    /// 执行失败
+    Failed,
 }
 
-impl ToolCall {
-    pub fn id(&self) -> &str {
+/// 工具函数 - 统一的工具调用和结果结构
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename = "tool_use")]
+pub struct ToolFunction {
+    /// 唯一标识符（可选）
+    pub id: Option<String>,
+    /// 工具名称 (provider_id@tool_name 格式)
+    pub name: String,
+    /// 工具调用参数（JSON 字符串）
+    #[serde(default)]
+    pub arguments: String,
+    /// 执行结果（可选）
+    #[serde(default)]
+    pub result: Option<String>,
+    /// 执行状态
+    #[serde(skip)]
+    pub status: ToolExecutionStatus,
+    /// 错误信息（如果执行失败）
+    #[serde(default)]
+    pub error: Option<String>,
+    /// 执行开始时间
+    #[serde(default)]
+    pub started_at: Option<DateTime<Utc>>,
+    /// 执行完成时间
+    #[serde(default)]
+    pub completed_at: Option<DateTime<Utc>>,
+    /// 执行元数据
+    #[serde(default)]
+    pub metadata: HashMap<String, String>,
+}
+
+impl ToolFunction {
+    /// 创建新的工具函数调用
+    pub fn new(name: impl Into<String>, arguments: impl Into<String>) -> Self {
+        Self {
+            id: None,
+            name: name.into(),
+            arguments: arguments.into(),
+            result: None,
+            status: ToolExecutionStatus::Pending,
+            error: None,
+            started_at: None,
+            completed_at: None,
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// 创建带ID的工具函数调用
+    pub fn with_id(
+        id: impl Into<String>,
+        name: impl Into<String>,
+        arguments: impl Into<String>,
+    ) -> Self {
+        Self {
+            id: Some(id.into()),
+            name: name.into(),
+            arguments: arguments.into(),
+            result: None,
+            status: ToolExecutionStatus::Pending,
+            error: None,
+            started_at: None,
+            completed_at: None,
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// 获取工具ID部分
+    pub fn tool_id(&self) -> &str {
         self.name.split('@').next().unwrap_or(&self.name)
     }
+
+    /// 获取工具名称部分
     pub fn tool_name(&self) -> &str {
         self.name.split('@').nth(1).unwrap_or(&self.name)
+    }
+
+    /// 获取提供者ID
+    pub fn provider_id(&self) -> Option<&str> {
+        if self.name.contains('@') {
+            Some(self.name.split('@').next().unwrap_or(&self.name))
+        } else {
+            None
+        }
+    }
+
+    /// 开始执行
+    pub fn start_execution(&mut self) -> &mut Self {
+        self.status = ToolExecutionStatus::Running;
+        self.started_at = Some(Utc::now());
+        self
+    }
+
+    /// 设置执行成功
+    pub fn set_success(&mut self, result: impl Into<String>) -> &mut Self {
+        self.result = Some(result.into());
+        self.status = ToolExecutionStatus::Success;
+        self.completed_at = Some(Utc::now());
+        self.error = None;
+        self
+    }
+
+    /// 设置执行失败
+    pub fn set_failed(&mut self, error: impl Into<String>) -> &mut Self {
+        self.error = Some(error.into());
+        self.status = ToolExecutionStatus::Failed;
+        self.completed_at = Some(Utc::now());
+        self
+    }
+
+    /// 检查是否已完成
+    pub fn is_completed(&self) -> bool {
+        matches!(
+            self.status,
+            ToolExecutionStatus::Success | ToolExecutionStatus::Failed
+        )
+    }
+
+    /// 检查是否成功
+    pub fn is_success(&self) -> bool {
+        matches!(self.status, ToolExecutionStatus::Success)
+    }
+
+    /// 检查是否失败
+    pub fn is_failed(&self) -> bool {
+        matches!(self.status, ToolExecutionStatus::Failed)
+    }
+
+    /// 检查是否正在执行
+    pub fn is_running(&self) -> bool {
+        matches!(self.status, ToolExecutionStatus::Running)
+    }
+
+    /// 检查是否待执行
+    pub fn is_pending(&self) -> bool {
+        matches!(self.status, ToolExecutionStatus::Pending)
+    }
+
+    /// 获取执行结果或错误信息
+    pub fn get_output(&self) -> Option<&str> {
+        self.result.as_deref().or(self.error.as_deref())
     }
 }
 
@@ -87,77 +225,39 @@ pub enum MessageRole {
     User,
     Assistant,
 }
+
 /// 消息内容 - 支持多模态和工具调用
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MessageContent {
-    /// 多媒体内容（文本、图片、音频等）
-    Parts(Vec<MediaContent>),
-    /// 单个媒体内容
     Part(MediaContent),
-    /// 工具调用
-    ToolCall(ToolCall),
-    /// 工具调用结果
-    ToolResult(String,String),
+    /// 工具函数调用（新的统一结构）
+    ToolFunction(ToolFunction),
     /// 流式文本块
     TextChunk(String),
-    /// 可用工具列表（给模型的工具定义）
+    /// 工具定义
     ToolDefinitions(Vec<ToolDefinition>),
 }
 
 impl MessageContent {
-    /// 创建文本内容
-    pub fn text(content: impl Into<String>) -> Self {
-        Self::Part(MediaContent::text(content))
+    /// 检查是否为工具函数
+    pub fn is_tool_function(&self) -> bool {
+        matches!(self, Self::ToolFunction(_))
     }
 
-    /// 创建文本块（用于流式响应）
-    pub fn chunk(content: impl Into<String>) -> Self {
-        Self::TextChunk(content.into())
-    }
-
-    /// 创建工具调用内容
-    pub fn tool_call(tool_call: ToolCall) -> Self {
-        Self::ToolCall(tool_call)
-    }
-
-    /// 创建工具结果内容
-    pub fn tool_result(name: impl Into<String>,result: impl Into<String>) -> Self {
-        Self::ToolResult(name.into(),result.into())
-    }
-
-    /// 创建工具定义内容
-    pub fn tool_definitions(tools: Vec<ToolDefinition>) -> Self {
-        Self::ToolDefinitions(tools)
-    }
-
-    /// 创建单个媒体内容
-    pub fn media(media: MediaContent) -> Self {
-        Self::Part(media)
-    }
-
-    /// 创建多媒体内容
-    pub fn multimodal(parts: Vec<MediaContent>) -> Self {
-        Self::Parts(parts)
-    }
-
-    /// 检查是否为文本内容
-    pub fn is_text(&self) -> bool {
+    /// 获取工具函数
+    pub fn get_tool_function(&self) -> Option<&ToolFunction> {
         match self {
-            Self::Part(media) => media.is_text(),
-            Self::Parts(parts) => parts.len() == 1 && parts[0].is_text(),
-            Self::TextChunk(_) => true,
-            Self::ToolCall(_) | Self::ToolResult(_,_) | Self::ToolDefinitions(_) => false,
+            Self::ToolFunction(tf) => Some(tf),
+            _ => None,
         }
     }
 
-    /// 检查是否为工具调用
-    pub fn is_tool_call(&self) -> bool {
-        matches!(self, Self::ToolCall(_))
-    }
-
-    /// 检查是否为工具结果
-    pub fn is_tool_result(&self) -> bool {
-        matches!(self, Self::ToolResult(_,_))
+    /// 获取可变工具函数
+    pub fn get_tool_function_mut(&mut self) -> Option<&mut ToolFunction> {
+        match self {
+            Self::ToolFunction(tf) => Some(tf),
+            _ => None,
+        }
     }
 
     /// 检查是否为工具定义
@@ -170,62 +270,24 @@ impl MessageContent {
         matches!(self, Self::TextChunk(_))
     }
 
-    /// 检查是否为媒体内容
-    pub fn is_media(&self) -> bool {
-        matches!(self, Self::Part(_) | Self::Parts(_))
-    }
-
     /// 获取文本内容
     pub fn get_text(&self) -> String {
         match self {
-            Self::Part(media) => {
-                if let MediaData::Text(text) = &media.data {
-                    text.clone()
-                } else {
-                    String::new()
-                }
-            }
-            Self::Parts(parts) => {
-                parts
-                    .iter()
-                    .filter_map(|part| {
-                        if let MediaData::Text(text) = &part.data {
-                            Some(text.clone())
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            }
+            Self::Part(part) => part.get_text().unwrap_or_default().to_string(),
             Self::TextChunk(text) => text.clone(),
-            Self::ToolResult(_name,result) => result.clone(),
-            Self::ToolCall(tool_call) => {
-                format!("Tool: {} with args: {}", tool_call.name, tool_call.arguments)
+            Self::ToolDefinitions(tools) => tools
+                .iter()
+                .map(|tool| format!("Tool: {} - {}", tool.name, tool.description))
+                .collect::<Vec<_>>()
+                .join("\n"),
+            Self::ToolFunction(tool_function) => {
+                format!(
+                    "Tool: {}\nArguments: {}\nResult: {}",
+                    tool_function.name,
+                    tool_function.arguments,
+                    tool_function.result.as_deref().unwrap_or("")
+                )
             }
-            Self::ToolDefinitions(tools) => {
-                tools
-                    .iter()
-                    .map(|tool| format!("Tool: {} - {}", tool.name, tool.description))
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            }
-        }
-    }
-
-    /// 获取工具调用
-    pub fn get_tool_call(&self) -> Option<&ToolCall> {
-        match self {
-            Self::ToolCall(tool_call) => Some(tool_call),
-            _ => None,
-        }
-    }
-
-    /// 获取工具结果
-    pub fn get_tool_result(&self) -> Option<(&str,&str)> {
-        match self {
-            Self::ToolResult(name,result) => Some((name,result)),
-            _ => None,
         }
     }
 
@@ -237,144 +299,40 @@ impl MessageContent {
         }
     }
 
-    /// 获取媒体内容
-    pub fn get_media(&self) -> Vec<&MediaContent> {
-        match self {
-            Self::Part(media) => vec![media],
-            Self::Parts(parts) => parts.iter().collect(),
-            _ => vec![],
-        }
-    }
-
-    /// 获取可变的工具结果
-    pub fn get_tool_result_mut(&mut self) -> Option<&mut String> {
-        match self {
-            Self::ToolResult(_,result) => Some(result),
-            _ => None,
-        }
-    }
-
-    /// 获取可变的工具调用
-    pub fn get_tool_call_mut(&mut self) -> Option<&mut ToolCall> {
-        match self {
-            Self::ToolCall(tool_call) => Some(tool_call),
-            _ => None,
-        }
-    }
-
-    /// 获取可变的工具定义
-    pub fn get_tool_definitions_mut(&mut self) -> Option<&mut Vec<ToolDefinition>> {
-        match self {
-            Self::ToolDefinitions(tools) => Some(tools),
-            _ => None,
-        }
-    }
-
     /// 添加文本到现有内容
-    pub fn append_text(&mut self, text: &str) {
+    pub fn append_text(&mut self, text: &str) -> &mut Self {
         match self {
             Self::TextChunk(existing) => existing.push_str(text),
-            Self::ToolResult(_,result) => result.push_str(text),
-            Self::Part(media) => {
-                if let MediaData::Text(existing) = &mut media.data {
-                    existing.push_str(text);
-                } else {
-                    *self = Self::TextChunk(text.to_string());
-                }
-            }
-            Self::Parts(parts) => {
-                if let Some(MediaContent {
-                    data: MediaData::Text(existing),
-                    ..
-                }) = parts.first_mut()
-                {
-                    existing.push_str(text);
-                } else {
-                    parts.insert(0, MediaContent::text(text));
-                }
-            }
-            Self::ToolCall(_) | Self::ToolDefinitions(_) => {
-                *self = Self::TextChunk(text.to_string());
-            }
-        }
-    }
 
-    /// 添加媒体内容
-    pub fn add_media(&mut self, media: MediaContent) {
-        match self {
-            Self::Parts(parts) => parts.push(media),
-            Self::Part(existing) => {
-                let existing_media = existing.clone();
-                *self = Self::Parts(vec![existing_media, media]);
+            Self::Part(part) => {
+                if let Some(existing_text) = part.get_text_mut() {
+                    existing_text.push_str(text);
+                } else {
+                    unimplemented!("Cannot append text to non-text content");
+                }
             }
             _ => {
-                *self = Self::Part(media);
+                unimplemented!("Cannot append text to non-text content");
             }
         }
+        self
     }
 
     /// 添加工具定义
-    pub fn add_tool_definition(&mut self, tool: ToolDefinition) {
+    pub fn add_tool_definition(&mut self, tool: ToolDefinition) -> &mut Self {
         match self {
             Self::ToolDefinitions(tools) => tools.push(tool),
             _ => {
                 *self = Self::ToolDefinitions(vec![tool]);
             }
         }
-    }
-
-    /// 检查是否为空
-    pub fn is_empty(&self) -> bool {
-        match self {
-            Self::Part(_) => false,
-            Self::Parts(parts) => parts.is_empty(),
-            Self::ToolCall(_) => false,
-            Self::ToolResult(_,result) => result.is_empty(),
-            Self::ToolDefinitions(tools) => tools.is_empty(),
-            Self::TextChunk(text) => text.is_empty(),
-        }
-    }
-
-    /// 获取内容长度
-    pub fn len(&self) -> usize {
-        match self {
-            Self::Part(_) => 1,
-            Self::Parts(parts) => parts.len(),
-            Self::ToolCall(_) => 1,
-            Self::ToolResult(_,_) => 1,
-            Self::ToolDefinitions(tools) => tools.len(),
-            Self::TextChunk(_) => 1,
-        }
-    }
-
-    /// 转换为最终的文本内容
-    pub fn finalize(self) -> Self {
-        match self {
-            Self::TextChunk(text) => Self::text(text),
-            other => other,
-        }
+        self
     }
 
     /// 克隆并转换为指定类型
     pub fn as_text_chunk(&self) -> Option<String> {
         match self {
             Self::TextChunk(text) => Some(text.clone()),
-            _ => None,
-        }
-    }
-
-    /// 克隆并转换为工具调用
-    pub fn as_tool_call(&self) -> Option<ToolCall> {
-        match self {
-            Self::ToolCall(tool_call) => Some(tool_call.clone()),
-            _ => None,
-        }
-    }
-
-    /// 克隆并转换为工具结果
-    pub fn as_tool_result(&self) -> Option<String> {
-        match self {
-            Self::ToolResult(name,result) => Some(format!("{}\n{}",name, result)),
             _ => None,
         }
     }
@@ -400,8 +358,11 @@ impl MediaContent {
     /// 获取文本内容
     pub fn get_text(&self) -> Option<&str> {
         match &self.data {
-            MediaData::Text(text) => Some(text),
-            _ => None,
+            MediaData::Text(text) => Some(text.as_str()),
+            MediaData::Base64(base64) => Some(base64.as_str()),
+            MediaData::FilePath(path) => Some(path.as_str()),
+            MediaData::Url(url) => Some(url.as_str()),
+            MediaData::Binary(_) => Some("二进制数据"), // 二进制数据不支持直接获取文本
         }
     }
 
@@ -409,7 +370,10 @@ impl MediaContent {
     pub fn get_text_mut(&mut self) -> Option<&mut String> {
         match &mut self.data {
             MediaData::Text(text) => Some(text),
-            _ => None,
+            MediaData::Base64(base64) => Some(base64),
+            MediaData::FilePath(path) => Some(path),
+            MediaData::Url(url) => Some(url),
+            MediaData::Binary(_) => None, // 二进制数据不支持直接获取文本
         }
     }
 }
@@ -440,42 +404,21 @@ impl ChatMessage {
 
     /// 创建空消息
     pub fn empty(role: MessageRole) -> Self {
-        Self {
-            role,
-            contents: Vec::new(),
-            timestamp: Utc::now(),
-            metadata: HashMap::new(),
-        }
+        Self::new(role, vec![])
     }
 
     /// 创建空消息
     pub fn assistant() -> Self {
-        Self {
-            role:MessageRole::Assistant,
-            contents: Vec::new(),
-            timestamp: Utc::now(),
-            metadata: HashMap::new(),
-        }
+        Self::new(MessageRole::Assistant, vec![])
     }
 
     pub fn system() -> Self {
-        Self {
-            role:MessageRole::System,
-            contents: Vec::new(),
-            timestamp: Utc::now(),
-            metadata: HashMap::new(),
-        }
+        Self::new(MessageRole::System, vec![])
     }
     pub fn user() -> Self {
-        Self {
-            role:MessageRole::User,
-            contents: Vec::new(),
-            timestamp: Utc::now(),
-            metadata: HashMap::new(),
-        }
+        Self::new(MessageRole::User, vec![])
     }
 
-    
     pub fn with_role(mut self, role: MessageRole) -> Self {
         self.role = role;
         self
@@ -492,7 +435,8 @@ impl ChatMessage {
     }
 
     pub fn with_text(mut self, text: impl Into<String>) -> Self {
-        self.contents.push(MessageContent::text(text));
+        self.contents
+            .push(MessageContent::Part(MediaContent::text(text)));
         self
     }
 
@@ -506,19 +450,21 @@ impl ChatMessage {
         self
     }
 
-     pub fn with_metadata(mut self, key: impl Into<String>,value: impl Into<String>) -> Self {
+    pub fn with_metadata(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.metadata.insert(key.into(), value.into());
         self
     }
+}
 
+impl ChatMessage {
     /// 添加内容
-    pub fn add_content(&mut self, content: MessageContent)->&mut Self {
+    pub fn add_content(&mut self, content: MessageContent) -> &mut Self {
         self.contents.push(content);
         self
     }
 
     /// 添加多个内容
-    pub fn add_contents(&mut self, contents: Vec<MessageContent>)->&mut Self {
+    pub fn add_contents(&mut self, contents: Vec<MessageContent>) -> &mut Self {
         self.contents.extend(contents);
         self
     }
@@ -552,85 +498,37 @@ impl ChatMessage {
             .join("")
     }
 
-    /// 获取所有工具调用
-    pub fn get_tool_calls(&self) -> Vec<ToolCall> {
-        let tool_calls: Vec<ToolCall> = self.contents
-            .iter()
-            .filter_map(|content| content.get_tool_call())
-            .cloned()
-            .collect();
-        
-        tool_calls
-    }
-
-
-    /// 获取第一个工具调用
-    pub fn get_first_tool_call(&self) -> Option<&ToolCall> {
-        self.contents
-            .iter()
-            .find_map(|content| content.get_tool_call())
-    }
-
     /// 获取所有工具定义
-    pub fn get_tool_definitions(&self) -> Vec<ToolDefinition> {
+    pub fn get_tool_definitions(&self) -> Vec<&ToolDefinition> {
         self.contents
             .iter()
             .filter_map(|content| content.get_tool_definitions())
             .flatten()
-            .cloned()
             .collect()
     }
 
     /// 检查是否包含工具调用
-    pub fn has_tool_calls(&self) -> bool {
-        self.contents.iter().any(|content| content.is_tool_call())
+    pub fn has_tool_function(&self) -> bool {
+        self.contents
+            .iter()
+            .any(|content| content.is_tool_function())
     }
 
     /// 检查是否包含工具定义
     pub fn has_tool_definitions(&self) -> bool {
-        self.contents.iter().any(|content| content.is_tool_definitions())
-    }
-
-    /// 检查是否为工具调用消息
-    pub fn is_tool_call(&self) -> bool {
-        self.contents.iter().any(|content| content.is_tool_call())
-    }
-
-    /// 检查是否为工具结果消息
-    pub fn is_tool_result(&self) -> bool {
-        self.contents.iter().any(|content| content.is_tool_result()) ||
-        self.metadata.get("message_type") == Some(&"tool_result".to_string())
-    }
-
-    /// 检查是否为纯文本消息
-    pub fn is_text_only(&self) -> bool {
-        self.contents.len() == 1 && self.contents[0].is_text()
-    }
-
-    /// 检查是否为多模态消息
-    pub fn is_multimodal(&self) -> bool {
-        self.contents.len() > 1 || 
-        self.contents.iter().any(|content| content.is_media())
-    }
-
-    /// 检查是否为流式文本块
-    pub fn is_text_chunk(&self) -> bool {
-        self.contents.len() == 1 && self.contents[0].is_text_chunk()
+        self.contents
+            .iter()
+            .any(|content| content.is_tool_definitions())
     }
 
     /// 检查是否为空消息
     pub fn is_empty(&self) -> bool {
-        self.contents.is_empty() || self.contents.iter().all(|content| content.is_empty())
+        self.contents.is_empty()
     }
 
     /// 获取消息长度（内容数量）
     pub fn len(&self) -> usize {
         self.contents.len()
-    }
-
-    /// 获取文本长度
-    pub fn text_len(&self) -> usize {
-        self.get_text().len()
     }
 
     /// 获取消息来源
@@ -648,25 +546,27 @@ impl ChatMessage {
         self.metadata.get("model_name").map(|s| s.as_str())
     }
 
-    /// 获取消息类型
-    pub fn get_message_type(&self) -> Option<&str> {
-        self.metadata.get("message_type").map(|s| s.as_str())
-    }
-
     /// 设置消息来源
-    pub fn set_source(&mut self, source: impl Into<String>) {
+    pub fn set_source(&mut self, source: impl Into<String>) -> &mut Self {
         self.metadata.insert("source".to_string(), source.into());
+        self
     }
 
     /// 设置模型信息
-    pub fn set_model(&mut self, model_id: impl Into<String>, model_name: impl Into<String>)->&mut Self {
-        self.metadata.insert("model_id".to_string(), model_id.into());
-        self.metadata.insert("model_name".to_string(), model_name.into());
+    pub fn set_model(
+        &mut self,
+        model_id: impl Into<String>,
+        model_name: impl Into<String>,
+    ) -> &mut Self {
+        self.metadata
+            .insert("model_id".to_string(), model_id.into());
+        self.metadata
+            .insert("model_name".to_string(), model_name.into());
         self
     }
 
     /// 添加元数据
-    pub fn add_metadata(&mut self, key: impl Into<String>, value: impl Into<String>)->&mut Self {
+    pub fn add_metadata(&mut self, key: impl Into<String>, value: impl Into<String>) -> &mut Self {
         self.metadata.insert(key.into(), value.into());
         self
     }
@@ -682,23 +582,14 @@ impl ChatMessage {
     }
 
     /// 清空元数据
-    pub fn clear_metadata(&mut self) ->&mut Self{
+    pub fn clear_metadata(&mut self) -> &mut Self {
         self.metadata.clear();
         self
     }
 
     /// 更新时间戳为当前时间
-    pub fn update_timestamp(&mut self)->&mut Self {
+    pub fn update_timestamp(&mut self) -> &mut Self {
         self.timestamp = Utc::now();
-        self
-    }
-
-    pub fn append_text(&mut self, text: &str)->&mut Self {
-        if let Some(last_content) = self.contents.last_mut() {
-            last_content.append_text(text);
-        } else {
-            self.contents.push(MessageContent::text(text));
-        }
         self
     }
 
@@ -707,25 +598,13 @@ impl ChatMessage {
             if last_content.is_text_chunk() {
                 last_content.append_text(chunk);
             } else {
-                self.contents.push(MessageContent::chunk(chunk));
+                self.contents
+                    .push(MessageContent::TextChunk(chunk.to_string()));
             }
         } else {
-            self.contents.push(MessageContent::chunk(chunk));
+            self.contents
+                .push(MessageContent::TextChunk(chunk.to_string()));
         }
-    }
-
-    pub fn finalize_chunks(&mut self) {
-        for content in &mut self.contents {
-            if content.is_text_chunk() {
-                *content = content.clone().finalize();
-            }
-        }
-    }
-
-
-    /// 检查消息是否匹配指定角色
-    pub fn is_role(&self, role: MessageRole) -> bool {
-        self.role == role
     }
 
     /// 检查消息是否为用户消息
@@ -753,56 +632,11 @@ impl ChatMessage {
         }
     }
 
-    /// 验证消息是否有效
-    pub fn validate(&self) -> Result<(), String> {
-        if self.contents.is_empty() {
-            return Err("消息内容不能为空".to_string());
-        }
-
-        for (i, content) in self.contents.iter().enumerate() {
-            if content.is_empty() {
-                return Err(format!("第 {} 个内容为空", i + 1));
-            }
-        }
-
-        Ok(())
-    }
-
     /// 清理消息（移除空内容）
-    pub fn cleanup(&mut self) {
-        self.contents.retain(|content| !content.is_empty());
-    }
-
-    /// 合并相邻的文本内容
-    pub fn merge_text_contents(&mut self) {
-        let mut merged_contents = Vec::new();
-        let mut current_text = String::new();
-        let mut has_text = false;
-
-        for content in &self.contents {
-            if content.is_text() || content.is_text_chunk() {
-                current_text.push_str(&content.get_text());
-                current_text.push('\n');
-                has_text = true;
-            } else {
-                if has_text {
-                    merged_contents.push(MessageContent::text(current_text.trim()));
-                    current_text.clear();
-                    has_text = false;
-                }
-                merged_contents.push(content.clone());
-            }
-        }
-
-        if has_text {
-            merged_contents.push(MessageContent::text(current_text.trim()));
-        }
-
-        self.contents = merged_contents;
+    pub fn cleanup(&mut self) -> &mut Self {
+        self
     }
 }
 
-
 /// 聊天流类型别名
-pub type ChatStream = Pin<Box<dyn Stream<Item = anyhow::Result<ChatMessage>> + Send>>;
-
+pub type ChatStream = Pin<Box<dyn Stream<Item = anyhow::Result<MessageContent>> + Send>>;
