@@ -270,20 +270,12 @@ impl Render for InputStory {
             .child(
                 section("Appearance false").max_w_md().child(
                     div()
-                        .border_1()
+                        .border_b_2()
                         .px_6()
-                        .py_5()
-                        .rounded_lg()
-                        .bg(if cx.theme().is_dark() {
-                            yellow_950()
-                        } else {
-                            yellow_50()
-                        })
-                        .text_color(if cx.theme().is_dark() {
-                            yellow_100()
-                        } else {
-                            yellow_900()
-                        })
+                        .py_3()
+                        .border_color(cx.theme().border)
+                        .bg(cx.theme().secondary)
+                        .text_color(cx.theme().secondary_foreground)
                         .w_full()
                         .child(TextInput::new(&self.input1).appearance(false)),
                 ),

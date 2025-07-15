@@ -20,8 +20,8 @@ use gpui_component::{
     wry, ActiveTheme as _, ContextModal as _, Icon, IconName, Placement,
 };
 
-use crate::section;
 use crate::TestAction;
+use crate::{section, Story};
 
 pub struct ListItemDeletegate {
     story: WeakEntity<DrawerStory>,
@@ -168,7 +168,7 @@ pub struct DrawerStory {
     overlay_closable: bool,
 }
 
-impl super::Story for DrawerStory {
+impl Story for DrawerStory {
     fn title() -> &'static str {
         "Drawer"
     }

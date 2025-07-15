@@ -3,12 +3,18 @@ use gpui::{
     Styled, Window,
 };
 
-use gpui_component::{clipboard::Clipboard, label::Label, link::Link, v_flex, ContextModal};
+use gpui_component::{
+    clipboard::Clipboard,
+    input::{InputState, TextInput},
+    label::Label,
+    v_flex, ContextModal,
+};
 
 use crate::section;
 
 pub struct ClipboardStory {
     focus_handle: gpui::FocusHandle,
+    url_state: Entity<InputState>,
     masked: bool,
 }
 
@@ -27,8 +33,12 @@ impl super::Story for ClipboardStory {
 }
 
 impl ClipboardStory {
-    pub(crate) fn new(_: &mut Window, cx: &mut App) -> Self {
+    pub(crate) fn new(window: &mut Window, cx: &mut App) -> Self {
+        let url_state =
+            cx.new(|cx| InputState::new(window, cx).default_value("https://github.com"));
+
         Self {
+            url_state,
             focus_handle: cx.focus_handle(),
             masked: false,
         }
@@ -45,12 +55,12 @@ impl Focusable for ClipboardStory {
 }
 impl Render for ClipboardStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        v_flex().gap_6().child(
-            section("Copy to Clipboard")
-                .max_w_md()
-                .child(
+        v_flex()
+            .gap_6()
+            .child(
+                section("Clipboard").max_w_md().child(
                     Clipboard::new("clipboard1")
-                        .content(|_, _| Label::new("Click icon to copy"))
+                        .content(|_, _| Label::new("A clipboard button"))
                         .value_fn({
                             let view = cx.entity().clone();
                             move |_, cx| {
@@ -60,19 +70,21 @@ impl Render for ClipboardStory {
                         .on_copied(|value, window, cx| {
                             window.push_notification(format!("Copied value: {}", value), cx)
                         }),
-                )
-                .child(
-                    Clipboard::new("clipboard2")
-                        .content(|_, _| {
-                            Link::new("link1")
-                                .href("https://github.com")
-                                .child("GitHub")
-                        })
-                        .value("https://github.com")
-                        .on_copied(|value, window, cx| {
-                            window.push_notification(format!("Copied value: {}", value), cx)
-                        }),
                 ),
-        )
+            )
+            .child(
+                section("With in an Input").max_w_md().child(
+                    TextInput::new(&self.url_state).suffix(
+                        Clipboard::new("clipboard2")
+                            .value_fn({
+                                let state = self.url_state.clone();
+                                move |_, cx| state.read(cx).value().clone()
+                            })
+                            .on_copied(|value, window, cx| {
+                                window.push_notification(format!("Copied value: {}", value), cx)
+                            }),
+                    ),
+                ),
+            )
     }
 }

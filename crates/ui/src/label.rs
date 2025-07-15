@@ -1,6 +1,6 @@
 use gpui::{
-    div, rems, App, IntoElement, ParentElement, RenderOnce, SharedString, StyleRefinement, Styled,
-    Window,
+    div, rems, App, HighlightStyle, IntoElement, ParentElement, RenderOnce, SharedString,
+    StyleRefinement, Styled, StyledText, Window,
 };
 
 use crate::{ActiveTheme, StyledExt};
@@ -11,20 +11,26 @@ const MASKED: &'static str = "•";
 pub struct Label {
     style: StyleRefinement,
     label: SharedString,
-    chars_count: usize,
+    secondary: Option<SharedString>,
     masked: bool,
 }
 
 impl Label {
     pub fn new(label: impl Into<SharedString>) -> Self {
         let label: SharedString = label.into();
-        let chars_count = label.chars().count();
         Self {
             style: Default::default(),
             label,
-            chars_count,
+            secondary: None,
             masked: false,
         }
+    }
+
+    /// Set the secondary text for the label,
+    /// the secondary text will be displayed after the label text with `muted` color.
+    pub fn secondary(mut self, secondary: impl Into<SharedString>) -> Self {
+        self.secondary = Some(secondary.into());
+        self
     }
 
     pub fn masked(mut self, masked: bool) -> Self {
@@ -41,16 +47,30 @@ impl Styled for Label {
 
 impl RenderOnce for Label {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let text = if self.masked {
-            SharedString::from(MASKED.repeat(self.chars_count))
-        } else {
-            self.label
+        let mut text = match &self.secondary {
+            Some(secondary) => format!("{} {}", self.label, secondary).into(),
+            None => self.label.clone(),
         };
+        let chars_count = text.chars().count();
+        if self.masked {
+            text = SharedString::from(MASKED.repeat(chars_count))
+        };
+
+        let mut highlights = vec![(0..self.label.len(), HighlightStyle::default())];
+        if self.secondary.is_some() {
+            highlights.push((
+                self.label.len()..text.len(),
+                HighlightStyle {
+                    color: Some(cx.theme().muted_foreground),
+                    ..Default::default()
+                },
+            ));
+        }
 
         div()
             .line_height(rems(1.25))
             .text_color(cx.theme().foreground)
             .refine_style(&self.style)
-            .child(text)
+            .child(StyledText::new(&text).with_highlights(highlights))
     }
 }

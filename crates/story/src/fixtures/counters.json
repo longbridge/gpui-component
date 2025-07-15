@@ -1,0 +1,712 @@
+[
+  { "symbol": "AAPL", "name": "Apple Inc.", "market": "US" },
+  { "symbol": "MSFT", "name": "Microsoft Corp.", "market": "US" },
+  { "symbol": "GOOGL", "name": "Alphabet Inc. Class A", "market": "US" },
+  { "symbol": "AMZN", "name": "Amazon.com Inc.", "market": "US" },
+  { "symbol": "META", "name": "Meta Platforms Inc.", "market": "US" },
+  { "symbol": "TSLA", "name": "Tesla Inc.", "market": "US" },
+  {
+    "symbol": "BRK.B",
+    "name": "Berkshire Hathaway Inc. Class B",
+    "market": "US"
+  },
+  { "symbol": "NVDA", "name": "NVIDIA Corp.", "market": "US" },
+  { "symbol": "JPM", "name": "JPMorgan Chase & Co.", "market": "US" },
+  { "symbol": "V", "name": "Visa Inc.", "market": "US" },
+  { "symbol": "UNH", "name": "UnitedHealth Group Inc.", "market": "US" },
+  { "symbol": "MA", "name": "Mastercard Inc.", "market": "US" },
+  { "symbol": "HD", "name": "Home Depot Inc.", "market": "US" },
+  { "symbol": "PG", "name": "Procter & Gamble Co.", "market": "US" },
+  { "symbol": "LLY", "name": "Eli Lilly and Co.", "market": "US" },
+  { "symbol": "BAC", "name": "Bank of America Corp.", "market": "US" },
+  { "symbol": "XOM", "name": "Exxon Mobil Corp.", "market": "US" },
+  { "symbol": "KO", "name": "Coca-Cola Co.", "market": "US" },
+  { "symbol": "MRK", "name": "Merck & Co. Inc.", "market": "US" },
+  { "symbol": "PEP", "name": "PepsiCo Inc.", "market": "US" },
+  { "symbol": "ABBV", "name": "AbbVie Inc.", "market": "US" },
+  { "symbol": "AVGO", "name": "Broadcom Inc.", "market": "US" },
+  { "symbol": "COST", "name": "Costco Wholesale Corp.", "market": "US" },
+  { "symbol": "WMT", "name": "Walmart Inc.", "market": "US" },
+  { "symbol": "MCD", "name": "McDonald's Corp.", "market": "US" },
+  { "symbol": "ADBE", "name": "Adobe Inc.", "market": "US" },
+  { "symbol": "CRM", "name": "Salesforce Inc.", "market": "US" },
+  { "symbol": "NFLX", "name": "Netflix Inc.", "market": "US" },
+  { "symbol": "TMO", "name": "Thermo Fisher Scientific Inc.", "market": "US" },
+  { "symbol": "ACN", "name": "Accenture plc", "market": "US" },
+  { "symbol": "LIN", "name": "Linde plc", "market": "US" },
+  { "symbol": "TXN", "name": "Texas Instruments Inc.", "market": "US" },
+  { "symbol": "QCOM", "name": "Qualcomm Inc.", "market": "US" },
+  { "symbol": "NEE", "name": "NextEra Energy Inc.", "market": "US" },
+  {
+    "symbol": "PM",
+    "name": "Philip Morris International Inc.",
+    "market": "US"
+  },
+  { "symbol": "HON", "name": "Honeywell International Inc.", "market": "US" },
+  { "symbol": "ORCL", "name": "Oracle Corp.", "market": "US" },
+  { "symbol": "AMGN", "name": "Amgen Inc.", "market": "US" },
+  { "symbol": "INTC", "name": "Intel Corp.", "market": "US" },
+  { "symbol": "DHR", "name": "Danaher Corp.", "market": "US" },
+  { "symbol": "LOW", "name": "Lowe's Companies Inc.", "market": "US" },
+  { "symbol": "UPS", "name": "United Parcel Service Inc.", "market": "US" },
+  { "symbol": "SBUX", "name": "Starbucks Corp.", "market": "US" },
+  { "symbol": "CVX", "name": "Chevron Corp.", "market": "US" },
+  { "symbol": "GS", "name": "Goldman Sachs Group Inc.", "market": "US" },
+  { "symbol": "MDT", "name": "Medtronic plc", "market": "US" },
+  { "symbol": "AXP", "name": "American Express Co.", "market": "US" },
+  { "symbol": "SPGI", "name": "S&P Global Inc.", "market": "US" },
+  { "symbol": "BLK", "name": "BlackRock Inc.", "market": "US" },
+  { "symbol": "SYK", "name": "Stryker Corp.", "market": "US" },
+  { "symbol": "ISRG", "name": "Intuitive Surgical Inc.", "market": "US" },
+  { "symbol": "DE", "name": "Deere & Co.", "market": "US" },
+  { "symbol": "PLD", "name": "Prologis Inc.", "market": "US" },
+  { "symbol": "SCHW", "name": "Charles Schwab Corp.", "market": "US" },
+  { "symbol": "BKNG", "name": "Booking Holdings Inc.", "market": "US" },
+  { "symbol": "CI", "name": "Cigna Group", "market": "US" },
+  { "symbol": "CB", "name": "Chubb Ltd.", "market": "US" },
+  {
+    "symbol": "MMC",
+    "name": "Marsh & McLennan Companies Inc.",
+    "market": "US"
+  },
+  { "symbol": "ADP", "name": "Automatic Data Processing Inc.", "market": "US" },
+  { "symbol": "LRCX", "name": "Lam Research Corp.", "market": "US" },
+  { "symbol": "CME", "name": "CME Group Inc.", "market": "US" },
+  { "symbol": "TGT", "name": "Target Corp.", "market": "US" },
+  { "symbol": "DUK", "name": "Duke Energy Corp.", "market": "US" },
+  { "symbol": "GILD", "name": "Gilead Sciences Inc.", "market": "US" },
+  { "symbol": "AMAT", "name": "Applied Materials Inc.", "market": "US" },
+  { "symbol": "FISV", "name": "Fiserv Inc.", "market": "US" },
+  { "symbol": "MO", "name": "Altria Group Inc.", "market": "US" },
+  { "symbol": "VRTX", "name": "Vertex Pharmaceuticals Inc.", "market": "US" },
+  {
+    "symbol": "REGN",
+    "name": "Regeneron Pharmaceuticals Inc.",
+    "market": "US"
+  },
+  { "symbol": "PGR", "name": "Progressive Corp.", "market": "US" },
+  { "symbol": "ELV", "name": "Elevance Health Inc.", "market": "US" },
+  { "symbol": "EOG", "name": "EOG Resources Inc.", "market": "US" },
+  { "symbol": "FDX", "name": "FedEx Corp.", "market": "US" },
+  {
+    "symbol": "APD",
+    "name": "Air Products and Chemicals Inc.",
+    "market": "US"
+  },
+  { "symbol": "AON", "name": "Aon plc", "market": "US" },
+  { "symbol": "ITW", "name": "Illinois Tool Works Inc.", "market": "US" },
+  { "symbol": "BSX", "name": "Boston Scientific Corp.", "market": "US" },
+  { "symbol": "GM", "name": "General Motors Co.", "market": "US" },
+  { "symbol": "HCA", "name": "HCA Healthcare Inc.", "market": "US" },
+  { "symbol": "GD", "name": "General Dynamics Corp.", "market": "US" },
+  { "symbol": "ZTS", "name": "Zoetis Inc.", "market": "US" },
+  { "symbol": "SYY", "name": "Sysco Corp.", "market": "US" },
+  {
+    "symbol": "AIG",
+    "name": "American International Group Inc.",
+    "market": "US"
+  },
+  { "symbol": "MCO", "name": "Moody's Corp.", "market": "US" },
+  { "symbol": "MS", "name": "Morgan Stanley", "market": "US" },
+  { "symbol": "SLB", "name": "Schlumberger Ltd.", "market": "US" },
+  { "symbol": "SO", "name": "Southern Co.", "market": "US" },
+  { "symbol": "WM", "name": "Waste Management Inc.", "market": "US" },
+  { "symbol": "D", "name": "Dominion Energy Inc.", "market": "US" },
+  { "symbol": "PSA", "name": "Public Storage", "market": "US" },
+  { "symbol": "CNC", "name": "Centene Corp.", "market": "US" },
+  { "symbol": "TRV", "name": "Travelers Companies Inc.", "market": "US" },
+  { "symbol": "AFL", "name": "Aflac Inc.", "market": "US" },
+  { "symbol": "VLO", "name": "Valero Energy Corp.", "market": "US" },
+  { "symbol": "WELL", "name": "Welltower Inc.", "market": "US" },
+  { "symbol": "F", "name": "Ford Motor Co.", "market": "US" },
+  { "symbol": "STZ", "name": "Constellation Brands Inc.", "market": "US" },
+  { "symbol": "NOC", "name": "Northrop Grumman Corp.", "market": "US" },
+  { "symbol": "KHC", "name": "Kraft Heinz Co.", "market": "US" },
+  { "symbol": "EXC", "name": "Exelon Corp.", "market": "US" },
+  { "symbol": "CARR", "name": "Carrier Global Corp.", "market": "US" },
+  { "symbol": "HES", "name": "Hess Corp.", "market": "US" },
+  { "symbol": "WMB", "name": "Williams Companies Inc.", "market": "US" },
+  { "symbol": "VTR", "name": "Ventas Inc.", "market": "US" },
+  { "symbol": "DOW", "name": "Dow Inc.", "market": "US" },
+  { "symbol": "BKR", "name": "Baker Hughes Co.", "market": "US" },
+  { "symbol": "OKE", "name": "ONEOK Inc.", "market": "US" },
+  { "symbol": "NUE", "name": "Nucor Corp.", "market": "US" },
+  { "symbol": "CPB", "name": "Campbell Soup Co.", "market": "US" },
+  { "symbol": "CL", "name": "Colgate-Palmolive Co.", "market": "US" },
+  { "symbol": "EMR", "name": "Emerson Electric Co.", "market": "US" },
+  { "symbol": "ETN", "name": "Eaton Corp. plc", "market": "US" },
+  { "symbol": "ROK", "name": "Rockwell Automation Inc.", "market": "US" },
+  {
+    "symbol": "IFF",
+    "name": "International Flavors & Fragrances Inc.",
+    "market": "US"
+  },
+  { "symbol": "XYL", "name": "Xylem Inc.", "market": "US" },
+  {
+    "symbol": "WAB",
+    "name": "Westinghouse Air Brake Technologies Corp.",
+    "market": "US"
+  },
+  { "symbol": "TDG", "name": "TransDigm Group Inc.", "market": "US" },
+  { "symbol": "MAS", "name": "Masco Corp.", "market": "US" },
+  { "symbol": "AWK", "name": "American Water Works Co. Inc.", "market": "US" },
+  { "symbol": "PNR", "name": "Pentair plc", "market": "US" },
+  { "symbol": "AOS", "name": "A. O. Smith Corp.", "market": "US" },
+  { "symbol": "NDSN", "name": "Nordson Corp.", "market": "US" },
+  { "symbol": "ALB", "name": "Albemarle Corp.", "market": "US" },
+  { "symbol": "APTV", "name": "Aptiv PLC", "market": "US" },
+  { "symbol": "BWA", "name": "BorgWarner Inc.", "market": "US" },
+  { "symbol": "CUM", "name": "Cummins Inc.", "market": "US" },
+  { "symbol": "DOV", "name": "Dover Corp.", "market": "US" },
+  { "symbol": "FLS", "name": "Flowserve Corp.", "market": "US" },
+  { "symbol": "GWW", "name": "W.W. Grainger Inc.", "market": "US" },
+  { "symbol": "IR", "name": "Ingersoll Rand Inc.", "market": "US" },
+  { "symbol": "IT", "name": "Gartner Inc.", "market": "US" },
+  { "symbol": "J", "name": "Jacobs Solutions Inc.", "market": "US" },
+  {
+    "symbol": "LECO",
+    "name": "Lincoln Electric Holdings Inc.",
+    "market": "US"
+  },
+  { "symbol": "MIDD", "name": "Middleby Corp.", "market": "US" },
+  { "symbol": "MLI", "name": "Mueller Industries Inc.", "market": "US" },
+  { "symbol": "NVT", "name": "nVent Electric plc", "market": "US" },
+  { "symbol": "OSK", "name": "Oshkosh Corp.", "market": "US" },
+  { "symbol": "PWR", "name": "Quanta Services Inc.", "market": "US" },
+  { "symbol": "RBC", "name": "Regal Rexnord Corp.", "market": "US" },
+  { "symbol": "SNA", "name": "Snap-on Inc.", "market": "US" },
+  { "symbol": "SWK", "name": "Stanley Black & Decker Inc.", "market": "US" },
+  { "symbol": "TT", "name": "Trane Technologies plc", "market": "US" },
+  { "symbol": "VMI", "name": "Valmont Industries Inc.", "market": "US" },
+  { "symbol": "WMS", "name": "Advanced Drainage Systems Inc.", "market": "US" },
+  { "symbol": "XYL", "name": "Xylem Inc.", "market": "US" },
+  { "symbol": "0700.HK", "name": "Tencent Holdings Ltd.", "market": "HK" },
+  { "symbol": "9988.HK", "name": "Alibaba Group Holding Ltd.", "market": "HK" },
+  { "symbol": "3690.HK", "name": "Meituan", "market": "HK" },
+  { "symbol": "1299.HK", "name": "AIA Group Ltd.", "market": "HK" },
+  { "symbol": "0005.HK", "name": "HSBC Holdings plc", "market": "HK" },
+  {
+    "symbol": "2318.HK",
+    "name": "Ping An Insurance Group Co.",
+    "market": "HK"
+  },
+  {
+    "symbol": "2382.HK",
+    "name": "Sunny Optical Technology Group Co.",
+    "market": "HK"
+  },
+  { "symbol": "1810.HK", "name": "Xiaomi Corp.", "market": "HK" },
+  {
+    "symbol": "0823.HK",
+    "name": "Link Real Estate Investment Trust",
+    "market": "HK"
+  },
+  { "symbol": "0001.HK", "name": "CK Hutchison Holdings Ltd.", "market": "HK" },
+  {
+    "symbol": "0027.HK",
+    "name": "Galaxy Entertainment Group Ltd.",
+    "market": "HK"
+  },
+  { "symbol": "0011.HK", "name": "Hang Seng Bank Ltd.", "market": "HK" },
+  { "symbol": "0002.HK", "name": "CLP Holdings Ltd.", "market": "HK" },
+  {
+    "symbol": "0003.HK",
+    "name": "Hong Kong & China Gas Co. Ltd.",
+    "market": "HK"
+  },
+  { "symbol": "0006.HK", "name": "Power Assets Holdings Ltd.", "market": "HK" },
+  {
+    "symbol": "0016.HK",
+    "name": "Sun Hung Kai Properties Ltd.",
+    "market": "HK"
+  },
+  {
+    "symbol": "0017.HK",
+    "name": "New World Development Co. Ltd.",
+    "market": "HK"
+  },
+  { "symbol": "0023.HK", "name": "Bank of East Asia Ltd.", "market": "HK" },
+  { "symbol": "0066.HK", "name": "MTR Corp. Ltd.", "market": "HK" },
+  { "symbol": "0083.HK", "name": "Sino Land Co. Ltd.", "market": "HK" },
+  { "symbol": "0101.HK", "name": "Hang Lung Properties Ltd.", "market": "HK" },
+  {
+    "symbol": "0144.HK",
+    "name": "China Merchants Port Holdings Co. Ltd.",
+    "market": "HK"
+  },
+  {
+    "symbol": "0151.HK",
+    "name": "Want Want China Holdings Ltd.",
+    "market": "HK"
+  },
+  {
+    "symbol": "0175.HK",
+    "name": "Geely Automobile Holdings Ltd.",
+    "market": "HK"
+  },
+  { "symbol": "0207.HK", "name": "Joy City Property Ltd.", "market": "HK" },
+  { "symbol": "0267.HK", "name": "CITIC Ltd.", "market": "HK" },
+  { "symbol": "0288.HK", "name": "WH Group Ltd.", "market": "HK" },
+  {
+    "symbol": "0322.HK",
+    "name": "China Oilfield Services Ltd.",
+    "market": "HK"
+  },
+  {
+    "symbol": "0386.HK",
+    "name": "China Petroleum & Chemical Corp.",
+    "market": "HK"
+  },
+  {
+    "symbol": "0393.HK",
+    "name": "China Merchants China Direct Investments Ltd.",
+    "market": "HK"
+  },
+  {
+    "symbol": "0416.HK",
+    "name": "Kwoon Chung Bus Holdings Ltd.",
+    "market": "HK"
+  },
+  { "symbol": "0451.HK", "name": "Xinyi Glass Holdings Ltd.", "market": "HK" },
+  {
+    "symbol": "0522.HK",
+    "name": "ASM Pacific Technology Ltd.",
+    "market": "HK"
+  },
+  {
+    "symbol": "0575.HK",
+    "name": "Pacific Textiles Holdings Ltd.",
+    "market": "HK"
+  },
+  {
+    "symbol": "0606.HK",
+    "name": "China Agri-Industries Holdings Ltd.",
+    "market": "HK"
+  },
+  {
+    "symbol": "0669.HK",
+    "name": "Techtronic Industries Co. Ltd.",
+    "market": "HK"
+  },
+  {
+    "symbol": "0688.HK",
+    "name": "China Overseas Land & Investment Ltd.",
+    "market": "HK"
+  },
+  {
+    "symbol": "0708.HK",
+    "name": "China Everbright International Ltd.",
+    "market": "HK"
+  },
+  {
+    "symbol": "0762.HK",
+    "name": "China Unicom (Hong Kong) Ltd.",
+    "market": "HK"
+  },
+  {
+    "symbol": "0808.HK",
+    "name": "China Oilfield Services Ltd.",
+    "market": "HK"
+  },
+  {
+    "symbol": "0836.HK",
+    "name": "China Resources Power Holdings Co. Ltd.",
+    "market": "HK"
+  },
+  { "symbol": "0857.HK", "name": "PetroChina Co. Ltd.", "market": "HK" },
+  { "symbol": "0883.HK", "name": "CNOOC Ltd.", "market": "HK" },
+  {
+    "symbol": "0939.HK",
+    "name": "China Construction Bank Corp.",
+    "market": "HK"
+  },
+  { "symbol": "0941.HK", "name": "China Mobile Ltd.", "market": "HK" },
+  { "symbol": "0968.HK", "name": "Xinyi Solar Holdings Ltd.", "market": "HK" },
+  { "symbol": "0992.HK", "name": "Lenovo Group Ltd.", "market": "HK" },
+  {
+    "symbol": "1038.HK",
+    "name": "CK Infrastructure Holdings Ltd.",
+    "market": "HK"
+  },
+  {
+    "symbol": "1044.HK",
+    "name": "Hengan International Group Co. Ltd.",
+    "market": "HK"
+  },
+  {
+    "symbol": "1093.HK",
+    "name": "CSPC Pharmaceutical Group Ltd.",
+    "market": "HK"
+  },
+  { "symbol": "1109.HK", "name": "China Resources Land Ltd.", "market": "HK" },
+  { "symbol": "1113.HK", "name": "CK Asset Holdings Ltd.", "market": "HK" },
+  {
+    "symbol": "1137.HK",
+    "name": "Hong Kong Technology Venture Co. Ltd.",
+    "market": "HK"
+  },
+  {
+    "symbol": "1177.HK",
+    "name": "Sino Biopharmaceutical Ltd.",
+    "market": "HK"
+  },
+  { "symbol": "1208.HK", "name": "MMG Ltd.", "market": "HK" },
+  { "symbol": "1211.HK", "name": "BYD Co. Ltd.", "market": "HK" },
+  {
+    "symbol": "1288.HK",
+    "name": "Agricultural Bank of China Ltd.",
+    "market": "HK"
+  },
+  {
+    "symbol": "1336.HK",
+    "name": "New China Life Insurance Co. Ltd.",
+    "market": "HK"
+  },
+  {
+    "symbol": "1359.HK",
+    "name": "China Cinda Asset Management Co. Ltd.",
+    "market": "HK"
+  },
+  {
+    "symbol": "1398.HK",
+    "name": "Industrial and Commercial Bank of China Ltd.",
+    "market": "HK"
+  },
+  {
+    "symbol": "1515.HK",
+    "name": "China Resources Medical Holdings Co. Ltd.",
+    "market": "HK"
+  },
+  {
+    "symbol": "1585.HK",
+    "name": "Yihai International Holding Ltd.",
+    "market": "HK"
+  },
+  { "symbol": "1658.HK", "name": "Post Holdings Ltd.", "market": "HK" },
+  { "symbol": "1772.HK", "name": "Ganfeng Lithium Co. Ltd.", "market": "HK" },
+  { "symbol": "1816.HK", "name": "CGN Power Co. Ltd.", "market": "HK" },
+  {
+    "symbol": "1876.HK",
+    "name": "Budweiser Brewing Company APAC Ltd.",
+    "market": "HK"
+  },
+  { "symbol": "1928.HK", "name": "Sands China Ltd.", "market": "HK" },
+  {
+    "symbol": "1997.HK",
+    "name": "Wharf Real Estate Investment Co. Ltd.",
+    "market": "HK"
+  },
+  {
+    "symbol": "2007.HK",
+    "name": "Country Garden Holdings Co. Ltd.",
+    "market": "HK"
+  },
+  {
+    "symbol": "2018.HK",
+    "name": "AAC Technologies Holdings Inc.",
+    "market": "HK"
+  },
+  { "symbol": "2020.HK", "name": "ANTA Sports Products Ltd.", "market": "HK" },
+  {
+    "symbol": "2196.HK",
+    "name": "Fuyao Glass Industry Group Co. Ltd.",
+    "market": "HK"
+  },
+  { "symbol": "2233.HK", "name": "West China Cement Ltd.", "market": "HK" },
+  {
+    "symbol": "2313.HK",
+    "name": "Shenzhou International Group Holdings Ltd.",
+    "market": "HK"
+  },
+  {
+    "symbol": "2328.HK",
+    "name": "PICC Property and Casualty Co. Ltd.",
+    "market": "HK"
+  },
+  { "symbol": "2331.HK", "name": "Li Ning Co. Ltd.", "market": "HK" },
+  {
+    "symbol": "2388.HK",
+    "name": "BOC Hong Kong Holdings Ltd.",
+    "market": "HK"
+  },
+  {
+    "symbol": "2412.HK",
+    "name": "China Merchants Bank Co. Ltd.",
+    "market": "HK"
+  },
+  { "symbol": "2428.HK", "name": "YTO Express Group Co. Ltd.", "market": "HK" },
+  {
+    "symbol": "2600.HK",
+    "name": "China Aluminum International Engineering Corp. Ltd.",
+    "market": "HK"
+  },
+  {
+    "symbol": "2628.HK",
+    "name": "China Life Insurance Co. Ltd.",
+    "market": "HK"
+  },
+  { "symbol": "2688.HK", "name": "ENN Energy Holdings Ltd.", "market": "HK" },
+  { "symbol": "2800.HK", "name": "Tracker Fund of Hong Kong", "market": "HK" },
+  { "symbol": "2822.HK", "name": "CSOP FTSE China A50 ETF", "market": "HK" },
+  {
+    "symbol": "2883.HK",
+    "name": "China Oilfield Services Ltd.",
+    "market": "HK"
+  },
+  {
+    "symbol": "2899.HK",
+    "name": "Zijin Mining Group Co. Ltd.",
+    "market": "HK"
+  },
+  {
+    "symbol": "3328.HK",
+    "name": "Bank of Communications Co. Ltd.",
+    "market": "HK"
+  },
+  { "symbol": "3988.HK", "name": "Bank of China Ltd.", "market": "HK" },
+  {
+    "symbol": "BABA",
+    "name": "Alibaba Group Holding Ltd. ADR",
+    "market": "US"
+  },
+  { "symbol": "JD", "name": "JD.com Inc. ADR", "market": "US" },
+  { "symbol": "PDD", "name": "PDD Holdings Inc. ADR", "market": "US" },
+  { "symbol": "NTES", "name": "NetEase Inc. ADR", "market": "US" },
+  { "symbol": "TAL", "name": "TAL Education Group ADR", "market": "US" },
+  { "symbol": "YUMC", "name": "Yum China Holdings Inc.", "market": "US" },
+  { "symbol": "ZTO", "name": "ZTO Express (Cayman) Inc. ADR", "market": "US" },
+  { "symbol": "BGNE", "name": "BeiGene Ltd. ADR", "market": "US" },
+  { "symbol": "GDS", "name": "GDS Holdings Ltd. ADR", "market": "US" },
+  { "symbol": "HUYA", "name": "HUYA Inc. ADR", "market": "US" },
+  { "symbol": "WB", "name": "Weibo Corp. ADR", "market": "US" },
+  { "symbol": "IQ", "name": "iQIYI Inc. ADR", "market": "US" },
+  { "symbol": "MOMO", "name": "Hello Group Inc. ADR", "market": "US" },
+  { "symbol": "SINA", "name": "Sina Corp.", "market": "US" },
+  { "symbol": "BIDU", "name": "Baidu Inc. ADR", "market": "US" },
+  { "symbol": "XPEV", "name": "XPeng Inc. ADR", "market": "US" },
+  { "symbol": "LI", "name": "Li Auto Inc. ADR", "market": "US" },
+  { "symbol": "NIO", "name": "NIO Inc. ADR", "market": "US" },
+  { "symbol": "EH", "name": "EHang Holdings Ltd. ADR", "market": "US" },
+  {
+    "symbol": "TME",
+    "name": "Tencent Music Entertainment Group ADR",
+    "market": "US"
+  },
+  { "symbol": "DIDI", "name": "DiDi Global Inc. ADR", "market": "US" },
+  { "symbol": "QFIN", "name": "360 DigiTech Inc. ADR", "market": "US" },
+  {
+    "symbol": "KC",
+    "name": "Kingsoft Cloud Holdings Ltd. ADR",
+    "market": "US"
+  },
+  {
+    "symbol": "JKS",
+    "name": "JinkoSolar Holding Co. Ltd. ADR",
+    "market": "US"
+  },
+  { "symbol": "SOL", "name": "Emeren Group Ltd. ADR", "market": "US" },
+  { "symbol": "DQ", "name": "Daqo New Energy Corp. ADR", "market": "US" },
+  { "symbol": "CAN", "name": "Canaan Inc. ADR", "market": "US" },
+  {
+    "symbol": "EDU",
+    "name": "New Oriental Education & Technology Group Inc. ADR",
+    "market": "US"
+  },
+  { "symbol": "ATHM", "name": "Autohome Inc. ADR", "market": "US" },
+  { "symbol": "BZUN", "name": "Baozun Inc. ADR", "market": "US" },
+  { "symbol": "LK", "name": "Luckin Coffee Inc. ADR", "market": "US" },
+  { "symbol": "YJ", "name": "Yunji Inc. ADR", "market": "US" },
+  { "symbol": "VIOT", "name": "Viomi Technology Co. Ltd. ADR", "market": "US" },
+  { "symbol": "WBAI", "name": "500.com Ltd. ADR", "market": "US" },
+  { "symbol": "SFUN", "name": "Fang Holdings Ltd. ADR", "market": "US" },
+  { "symbol": "CTRP", "name": "Trip.com Group Ltd. ADR", "market": "US" },
+  { "symbol": "HTHT", "name": "H World Group Ltd. ADR", "market": "US" },
+  { "symbol": "VIPS", "name": "Vipshop Holdings Ltd. ADR", "market": "US" },
+  { "symbol": "YY", "name": "JOYY Inc. ADR", "market": "US" },
+  {
+    "symbol": "ZNH",
+    "name": "China Southern Airlines Co. Ltd. ADR",
+    "market": "US"
+  },
+  {
+    "symbol": "CEA",
+    "name": "China Eastern Airlines Corp. Ltd. ADR",
+    "market": "US"
+  },
+  {
+    "symbol": "SNP",
+    "name": "China Petroleum & Chemical Corp. ADR",
+    "market": "US"
+  },
+  { "symbol": "PTR", "name": "PetroChina Co. Ltd. ADR", "market": "US" },
+  {
+    "symbol": "ACH",
+    "name": "Aluminum Corp. of China Ltd. ADR",
+    "market": "US"
+  },
+  {
+    "symbol": "SHI",
+    "name": "Sinopec Shanghai Petrochemical Co. Ltd. ADR",
+    "market": "US"
+  },
+  {
+    "symbol": "HNP",
+    "name": "Huaneng Power International Inc. ADR",
+    "market": "US"
+  },
+  { "symbol": "CHA", "name": "China Telecom Corp. Ltd. ADR", "market": "US" },
+  { "symbol": "CHL", "name": "China Mobile Ltd. ADR", "market": "US" },
+  { "symbol": "CMCM", "name": "Cheetah Mobile Inc. ADR", "market": "US" },
+  { "symbol": "CJJD", "name": "China Jo-Jo Drugstores Inc.", "market": "US" },
+  {
+    "symbol": "CNTF",
+    "name": "China TechFaith Wireless Communication Technology Ltd.",
+    "market": "US"
+  },
+  {
+    "symbol": "CNET",
+    "name": "ZW Data Action Technologies Inc.",
+    "market": "US"
+  },
+  { "symbol": "CTK", "name": "CooTek (Cayman) Inc. ADR", "market": "US" },
+  { "symbol": "DOGZ", "name": "Dogness (International) Corp.", "market": "US" },
+  { "symbol": "FANH", "name": "Fanhua Inc. ADR", "market": "US" },
+  {
+    "symbol": "GSMG",
+    "name": "Glory Star New Media Group Holdings Ltd.",
+    "market": "US"
+  },
+  { "symbol": "JFIN", "name": "Jiayin Group Inc. ADR", "market": "US" },
+  { "symbol": "KZIA", "name": "Kazia Therapeutics Ltd. ADR", "market": "US" },
+  { "symbol": "LIZI", "name": "Lizhi Inc. ADR", "market": "US" },
+  { "symbol": "MDJH", "name": "MDJM Ltd.", "market": "US" },
+  { "symbol": "MTC", "name": "MMTec Inc.", "market": "US" },
+  { "symbol": "MY", "name": "MYR Group Inc.", "market": "US" },
+  { "symbol": "NCTY", "name": "The9 Ltd. ADR", "market": "US" },
+  { "symbol": "PUYI", "name": "Puyi Inc. ADR", "market": "US" },
+  {
+    "symbol": "RAAS",
+    "name": "Cloopen Group Holding Ltd. ADR",
+    "market": "US"
+  },
+  { "symbol": "RENN", "name": "Renren Inc. ADR", "market": "US" },
+  { "symbol": "SECO", "name": "Secoo Holding Ltd. ADR", "market": "US" },
+  { "symbol": "SISI", "name": "Shineco Inc.", "market": "US" },
+  { "symbol": "SOS", "name": "SOS Ltd. ADR", "market": "US" },
+  { "symbol": "TC", "name": "TuanChe Ltd. ADR", "market": "US" },
+  { "symbol": "TEDU", "name": "Tarena International Inc. ADR", "market": "US" },
+  { "symbol": "TIGR", "name": "UP Fintech Holding Ltd. ADR", "market": "US" },
+  { "symbol": "TOUR", "name": "Tuniu Corp. ADR", "market": "US" },
+  { "symbol": "WAFU", "name": "Wah Fu Education Group Ltd.", "market": "US" },
+  { "symbol": "XNET", "name": "Xunlei Ltd. ADR", "market": "US" },
+  { "symbol": "YRD", "name": "Yiren Digital Ltd. ADR", "market": "US" },
+  { "symbol": "ZEPP", "name": "Zepp Health Corp. ADR", "market": "US" },
+  {
+    "symbol": "ZKIN",
+    "name": "ZK International Group Co. Ltd.",
+    "market": "US"
+  },
+  { "symbol": "ZLAB", "name": "Zai Lab Ltd. ADR", "market": "US" },
+  { "symbol": "ZM", "name": "Zoom Video Communications Inc.", "market": "US" },
+  { "symbol": "SNAP", "name": "Snap Inc.", "market": "US" },
+  { "symbol": "SQ", "name": "Block Inc.", "market": "US" },
+  { "symbol": "ROKU", "name": "Roku Inc.", "market": "US" },
+  { "symbol": "DOCU", "name": "DocuSign Inc.", "market": "US" },
+  { "symbol": "SHOP", "name": "Shopify Inc.", "market": "US" },
+  { "symbol": "TWLO", "name": "Twilio Inc.", "market": "US" },
+  { "symbol": "CRWD", "name": "CrowdStrike Holdings Inc.", "market": "US" },
+  { "symbol": "OKTA", "name": "Okta Inc.", "market": "US" },
+  { "symbol": "ZS", "name": "Zscaler Inc.", "market": "US" },
+  { "symbol": "DDOG", "name": "Datadog Inc.", "market": "US" },
+  { "symbol": "MDB", "name": "MongoDB Inc.", "market": "US" },
+  { "symbol": "TEAM", "name": "Atlassian Corp.", "market": "US" },
+  { "symbol": "FSLY", "name": "Fastly Inc.", "market": "US" },
+  { "symbol": "NET", "name": "Cloudflare Inc.", "market": "US" },
+  { "symbol": "PLAN", "name": "Anaplan Inc.", "market": "US" },
+  { "symbol": "ESTC", "name": "Elastic N.V.", "market": "US" },
+  { "symbol": "SMAR", "name": "Smartsheet Inc.", "market": "US" },
+  { "symbol": "WORK", "name": "Slack Technologies Inc.", "market": "US" },
+  { "symbol": "DOCS", "name": "Doximity Inc.", "market": "US" },
+  { "symbol": "BILL", "name": "Bill Holdings Inc.", "market": "US" },
+  { "symbol": "U", "name": "Unity Software Inc.", "market": "US" },
+  { "symbol": "RBLX", "name": "Roblox Corp.", "market": "US" },
+  { "symbol": "COIN", "name": "Coinbase Global Inc.", "market": "US" },
+  { "symbol": "HOOD", "name": "Robinhood Markets Inc.", "market": "US" },
+  { "symbol": "ABNB", "name": "Airbnb Inc.", "market": "US" },
+  { "symbol": "LYFT", "name": "Lyft Inc.", "market": "US" },
+  { "symbol": "UBER", "name": "Uber Technologies Inc.", "market": "US" },
+  { "symbol": "DD", "name": "DuPont de Nemours Inc.", "market": "US" },
+  { "symbol": "VEEV", "name": "Veeva Systems Inc.", "market": "US" },
+  { "symbol": "FTNT", "name": "Fortinet Inc.", "market": "US" },
+  { "symbol": "PINS", "name": "Pinterest Inc.", "market": "US" },
+  { "symbol": "ETSY", "name": "Etsy Inc.", "market": "US" },
+  { "symbol": "ALGN", "name": "Align Technology Inc.", "market": "US" },
+  { "symbol": "TDOC", "name": "Teladoc Health Inc.", "market": "US" },
+  { "symbol": "DOCS", "name": "Doximity Inc.", "market": "US" },
+  { "symbol": "MTCH", "name": "Match Group Inc.", "market": "US" },
+  { "symbol": "SPLK", "name": "Splunk Inc.", "market": "US" },
+  { "symbol": "WDAY", "name": "Workday Inc.", "market": "US" },
+  { "symbol": "HUBS", "name": "HubSpot Inc.", "market": "US" },
+  { "symbol": "TTD", "name": "The Trade Desk Inc.", "market": "US" },
+  { "symbol": "PAYC", "name": "Paycom Software Inc.", "market": "US" },
+  { "symbol": "NOW", "name": "ServiceNow Inc.", "market": "US" },
+  { "symbol": "SNOW", "name": "Snowflake Inc.", "market": "US" },
+  { "symbol": "ZS", "name": "Zscaler Inc.", "market": "US" },
+  { "symbol": "DDOG", "name": "Datadog Inc.", "market": "US" },
+  { "symbol": "MDB", "name": "MongoDB Inc.", "market": "US" },
+  { "symbol": "TEAM", "name": "Atlassian Corp.", "market": "US" },
+  { "symbol": "FSLY", "name": "Fastly Inc.", "market": "US" },
+  { "symbol": "NET", "name": "Cloudflare Inc.", "market": "US" },
+  { "symbol": "PLAN", "name": "Anaplan Inc.", "market": "US" },
+  { "symbol": "ESTC", "name": "Elastic N.V.", "market": "US" },
+  { "symbol": "SMAR", "name": "Smartsheet Inc.", "market": "US" },
+  { "symbol": "WORK", "name": "Slack Technologies Inc.", "market": "US" },
+  { "symbol": "DOCS", "name": "Doximity Inc.", "market": "US" },
+  { "symbol": "BILL", "name": "Bill Holdings Inc.", "market": "US" },
+  { "symbol": "U", "name": "Unity Software Inc.", "market": "US" },
+  { "symbol": "RBLX", "name": "Roblox Corp.", "market": "US" },
+  { "symbol": "COIN", "name": "Coinbase Global Inc.", "market": "US" },
+  { "symbol": "HOOD", "name": "Robinhood Markets Inc.", "market": "US" },
+  { "symbol": "ABNB", "name": "Airbnb Inc.", "market": "US" },
+  { "symbol": "LYFT", "name": "Lyft Inc.", "market": "US" },
+  { "symbol": "UBER", "name": "Uber Technologies Inc.", "market": "US" },
+  { "symbol": "DD", "name": "DuPont de Nemours Inc.", "market": "US" },
+  { "symbol": "VEEV", "name": "Veeva Systems Inc.", "market": "US" },
+  { "symbol": "FTNT", "name": "Fortinet Inc.", "market": "US" },
+  { "symbol": "PINS", "name": "Pinterest Inc.", "market": "US" },
+  { "symbol": "ETSY", "name": "Etsy Inc.", "market": "US" },
+  { "symbol": "ALGN", "name": "Align Technology Inc.", "market": "US" },
+  { "symbol": "TDOC", "name": "Teladoc Health Inc.", "market": "US" },
+  { "symbol": "MTCH", "name": "Match Group Inc.", "market": "US" },
+  { "symbol": "SPLK", "name": "Splunk Inc.", "market": "US" },
+  { "symbol": "WDAY", "name": "Workday Inc.", "market": "US" },
+  { "symbol": "HUBS", "name": "HubSpot Inc.", "market": "US" },
+  { "symbol": "TTD", "name": "The Trade Desk Inc.", "market": "US" },
+  { "symbol": "PAYC", "name": "Paycom Software Inc.", "market": "US" },
+  { "symbol": "NOW", "name": "ServiceNow Inc.", "market": "US" },
+  { "symbol": "SNOW", "name": "Snowflake Inc.", "market": "US" },
+  { "symbol": "DOCU", "name": "DocuSign Inc.", "market": "US" },
+  { "symbol": "SHOP", "name": "Shopify Inc.", "market": "US" },
+  { "symbol": "TWLO", "name": "Twilio Inc.", "market": "US" },
+  { "symbol": "CRWD", "name": "CrowdStrike Holdings Inc.", "market": "US" },
+  { "symbol": "OKTA", "name": "Okta Inc.", "market": "US" },
+  { "symbol": "ZS", "name": "Zscaler Inc.", "market": "US" },
+  { "symbol": "DDOG", "name": "Datadog Inc.", "market": "US" },
+  { "symbol": "MDB", "name": "MongoDB Inc.", "market": "US" },
+  { "symbol": "TEAM", "name": "Atlassian Corp.", "market": "US" },
+  { "symbol": "FSLY", "name": "Fastly Inc.", "market": "US" },
+  { "symbol": "NET", "name": "Cloudflare Inc.", "market": "US" },
+  { "symbol": "PLAN", "name": "Anaplan Inc.", "market": "US" },
+  { "symbol": "ESTC", "name": "Elastic N.V.", "market": "US" },
+  { "symbol": "SMAR", "name": "Smartsheet Inc.", "market": "US" },
+  { "symbol": "WORK", "name": "Slack Technologies Inc.", "market": "US" },
+  { "symbol": "DOCS", "name": "Doximity Inc.", "market": "US" },
+  { "symbol": "BILL", "name": "Bill Holdings Inc.", "market": "US" },
+  { "symbol": "U", "name": "Unity Software Inc.", "market": "US" },
+  { "symbol": "RBLX", "name": "Roblox Corp.", "market": "US" },
+  { "symbol": "COIN", "name": "Coinbase Global Inc.", "market": "US" },
+  { "symbol": "HOOD", "name": "Robinhood Markets Inc.", "market": "US" },
+  { "symbol": "ABNB", "name": "Airbnb Inc.", "market": "US" },
+  { "symbol": "LYFT", "name": "Lyft Inc.", "market": "US" },
+  { "symbol": "UBER", "name": "Uber Technologies Inc.", "market": "US" }
+]

@@ -64,6 +64,12 @@ impl Render for LabelStory {
                     .child(Label::new("This is a label")),
             )
             .child(
+                section("Label with secondary text")
+                    .max_w_md()
+                    .items_start()
+                    .child(Label::new("Company Address").secondary("(optional)")),
+            )
+            .child(
                 section("Alignment").max_w_md().child(
                     v_flex()
                         .w_full()
