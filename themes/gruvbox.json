@@ -50,7 +50,7 @@
       "base.magenta.light": "#D3869B66",
       "base.red": "#9d0006",
       "base.green": "#79740e",
-      "base.": "#b57614",
+      "base.yellow": "#b57614",
       "base.blue": "#076678",
       "base.magenta": "#8f3f71",
       "base.cyan": "#427b58"
@@ -232,7 +232,7 @@
       "base.magenta.light": "#D3869B66",
       "base.red": "#cc241d",
       "base.green": "#98971a",
-      "base.": "#d79921",
+      "base.yellow": "#d79921",
       "base.blue": "#458588",
       "base.magenta": "#b16286",
       "base.cyan": "#689d6a"

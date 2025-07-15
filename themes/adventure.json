@@ -61,8 +61,8 @@
       "base.cyan.light": "#bdcfe5",
       "base.magenta": "#e5c499",
       "base.magenta.light": "#aa7900",
-      "base.": "#eebb6e",
-      "base..light": "#ffb670"
+      "base.yellow": "#eebb6e",
+      "base.yellow.light": "#ffb670"
     },
     "highlight": {
       "editor.foreground": "#feffff",
@@ -253,8 +253,8 @@
       "base.cyan.light": "#c8faf4",
       "base.magenta": "#665993",
       "base.magenta.light": "#9b5953",
-      "base.": "#e7741e",
-      "base..light": "#efc11a"
+      "base.yellow": "#e7741e",
+      "base.yellow.light": "#efc11a"
     },
     "highlight": {
       "editor.foreground": "#DDDDDD",

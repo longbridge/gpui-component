@@ -56,7 +56,7 @@
       "base.magenta": "#af8787",
       "base.magenta.light": "#af878788",
       "base.red": "#8b5f61",
-      "base.": "#fed975"
+      "base.yellow": "#fed975"
     },
     "highlight": {
       "editor.foreground": "#DDDDDD",
