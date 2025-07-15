@@ -163,7 +163,7 @@ impl TodoThreadChat {
         // 订阅外部消息
         let _sub = app.subscribe_event(move |StreamMessage { source, message }: &StreamMessage| {
             if &todo_id_clone == source {
-                tracing::trace!("接收到消息: {} {:?}", source, message);
+                tracing::debug!("接收到消息: {} {:?}", source, message);
                 tx.try_send(message.clone()).unwrap_or_else(|e| {
                     tracing::error!("Failed to send message to channel: {}", e);
                 });
@@ -179,6 +179,7 @@ impl TodoThreadChat {
             Timer::after(Duration::from_millis(50)).await;
             let mut buffer = String::new();
             let mut message_count = 0;
+            
             // 批量收集消息
             loop {
                 match rx.try_recv() {
@@ -196,16 +197,25 @@ impl TodoThreadChat {
                             ));
                         }
                         MessageContent::TextChunk(text) => {
-                            buffer.push_str(&text);
+                            if !text.is_empty() {
+                               buffer.push_str(&text);
+                            }
+                            
                         }
-
                         MessageContent::Part(part) => {
-                            buffer.push_str(part.get_text().unwrap());
+                            if let Some(text) = part.get_text() {
+                                if !text.is_empty() {
+                                    buffer.push_str(text);
+                                }
+                            }
                         }
 
                         MessageContent::ToolDefinitions(_) => {}
                     },
                 }
+            }
+            if buffer.is_empty() {
+                continue;
             }
             let update_result = this.update(app, |this, cx| {
                 this.process_received_message(MessageContent::TextChunk(buffer), cx);
@@ -215,7 +225,7 @@ impl TodoThreadChat {
                 break 'message_loop;
             }
             message_count += 1;
-            tracing::trace!("处理了 {} 条消息", message_count);
+            tracing::debug!("处理了 {} 条消息", message_count);
         }
         tracing::info!("外部消息处理器已停止 todoid is {}", todo_id);
     }

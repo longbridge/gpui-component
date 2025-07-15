@@ -40,7 +40,7 @@ async fn main() -> anyhow::Result<()> {
 fn init_log() -> anyhow::Result<()> {
     #[cfg(debug_assertions)]
     {
-let log_file = std::env::current_exe()?
+    let log_file = std::env::current_exe()?
         .parent()
         .unwrap()
         .join("todo_app_gpui.log");
