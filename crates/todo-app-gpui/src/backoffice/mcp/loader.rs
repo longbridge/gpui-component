@@ -45,7 +45,7 @@ impl McpServerLoader {
         // 初始化服务器能力
         let (client_arc, snapshot) = Self::initialize_capabilities(config, client).await?;
 
-        log::info!("MCP server loaded successfully: {}", snapshot.config.name);
+        tracing::info!("MCP server loaded successfully: {}", snapshot.config.name);
         Ok((client_arc, snapshot))
     }
 
@@ -54,7 +54,7 @@ impl McpServerLoader {
         config: &McpServerConfig,
         server_addr: Addr<McpServer>,
     ) -> anyhow::Result<RunningService<RoleClient, McpClientHandler>> {
-        log::debug!("Connecting via STDIO: {}", config.command);
+        tracing::debug!("Connecting via STDIO: {}", config.command);
 
         let mut command_parts = config.command.split(" ");
         let program = command_parts
@@ -86,7 +86,7 @@ impl McpServerLoader {
         config: &McpServerConfig,
         server_addr: Addr<McpServer>,
     ) -> anyhow::Result<RunningService<RoleClient, McpClientHandler>> {
-        log::debug!("Connecting via SSE: {}", config.command);
+        tracing::debug!("Connecting via SSE: {}", config.command);
 
         let headers = Self::build_headers(&config.env_vars)?;
         let http_client = Self::build_http_client(headers)?;
@@ -111,7 +111,7 @@ impl McpServerLoader {
         config: &McpServerConfig,
         server_addr: Addr<McpServer>,
     ) -> anyhow::Result<RunningService<RoleClient, McpClientHandler>> {
-        log::debug!("Connecting via Streamable HTTP: {}", config.command);
+        tracing::debug!("Connecting via Streamable HTTP: {}", config.command);
 
         let headers = Self::build_headers(&config.env_vars)?;
         let http_client = Self::build_http_client(headers)?;
@@ -138,7 +138,7 @@ impl McpServerLoader {
         Arc<RunningService<RoleClient, McpClientHandler>>,
         McpServerSnapshot,
     )> {
-        log::debug!("Initializing server capabilities for: {}", config.name);
+        tracing::debug!("Initializing server capabilities for: {}", config.name);
 
         // 获取服务器信息并初始化
         let server_info = client.peer_info().cloned().unwrap_or_default();
@@ -153,31 +153,31 @@ impl McpServerLoader {
 
         // 检查并加载工具能力
         if let Some(tools_capability) = server_info.capabilities.tools {
-            log::debug!("Loading tools for server: {}", config.name);
+            tracing::debug!("Loading tools for server: {}", config.name);
             tools = client.list_all_tools().await?;
             capabilities.push(McpCapability::Tools);
 
             if tools_capability.list_changed.unwrap_or(false) {
                 keepalive = true;
-                log::debug!("Server {} supports tool list changes", config.name);
+                tracing::debug!("Server {} supports tool list changes", config.name);
             }
         }
 
         // 检查并加载提示能力
         if let Some(prompts_capability) = server_info.capabilities.prompts {
-            log::debug!("Loading prompts for server: {}", config.name);
+            tracing::debug!("Loading prompts for server: {}", config.name);
             prompts = client.list_all_prompts().await?;
             capabilities.push(McpCapability::Prompts);
 
             if prompts_capability.list_changed.unwrap_or(false) {
                 keepalive = true;
-                log::debug!("Server {} supports prompt list changes", config.name);
+                tracing::debug!("Server {} supports prompt list changes", config.name);
             }
         }
 
         // 检查并加载资源能力
         if let Some(resources_capability) = server_info.capabilities.resources {
-            log::debug!("Loading resources for server: {}", config.name);
+            tracing::debug!("Loading resources for server: {}", config.name);
 
             let resource_list = client.list_all_resources().await?;
             let template_list = client.list_all_resource_templates().await?;
@@ -202,7 +202,7 @@ impl McpServerLoader {
 
             if resources_capability.list_changed.unwrap_or(false) {
                 keepalive = true;
-                log::debug!("Server {} supports resource list changes", config.name);
+                tracing::debug!("Server {} supports resource list changes", config.name);
             }
 
             // 处理资源订阅
@@ -213,7 +213,7 @@ impl McpServerLoader {
                         .iter_mut()
                         .find(|r| r.resource.name == *resource_name)
                     {
-                        log::debug!(
+                        tracing::debug!(
                             "Subscribing to resource: {} ({})",
                             resource.resource.name,
                             resource.resource.uri
@@ -227,13 +227,13 @@ impl McpServerLoader {
                         {
                             Ok(_) => {
                                 resource.subscribed = true;
-                                log::debug!(
+                                tracing::debug!(
                                     "Successfully subscribed to resource: {}",
                                     resource.resource.name
                                 );
                             }
                             Err(e) => {
-                                log::error!(
+                                tracing::error!(
                                     "Failed to subscribe to resource {}: {}",
                                     resource.resource.name,
                                     e
@@ -259,7 +259,7 @@ impl McpServerLoader {
             keepalive,
         );
 
-        log::debug!(
+        tracing::debug!(
             "Server capabilities initialized: {:?}",
             snapshot.capabilities
         );

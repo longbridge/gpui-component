@@ -107,7 +107,7 @@ impl CrossRuntimeBridge {
         Self { dispatcher }
     }
 
-    pub fn post<E: Any + 'static + Send + Sync>(&self, event: E) {
+    pub fn emit<E: Any + 'static + Send + Sync>(&self, event: E) {
         xbus::post(event);
     }
 
@@ -437,14 +437,12 @@ impl MessageHandler for LlmChatHandler {
                         match tokio::time::timeout(Duration::from_secs(15), stream.next()).await {
                             Ok(Some(Ok(message))) => {
                                 tracing::trace!("接收到 LLM 聊天流消息: {:?}", message);
-                                let stream_message = StreamMessage::stream(source.clone(), message);
-                                // 这里可以将消息发送到 UI 或其他处理器
-                                xbus::post(stream_message);
+                                xbus::post(StreamMessage::stream(source.clone(), message));
                             }
                             Ok(Some(Err(err))) => {
                                 xbus::post(StreamMessage::stream(
                                     source.clone(),
-                                    MessageContent::TextChunk(format!("模型错误: {:?}", err)),
+                                    MessageContent::TextChunk(err.to_string()),
                                 ));
                             }
                             Ok(None) => {
@@ -455,7 +453,7 @@ impl MessageHandler for LlmChatHandler {
                                 // 超时或错误，发送错误消息
                                 xbus::post(StreamMessage::stream(
                                     source.clone(),
-                                    MessageContent::TextChunk("模型超时".to_string()),
+                                    MessageContent::TextChunk("模型响应超时".to_string()),
                                 ));
                                 break;
                             }
@@ -474,10 +472,10 @@ impl MessageHandler for LlmChatHandler {
                     xbus::post(StreamMessage::done(source));
                 }
                 Err(_) => {
-                    self.response.send(Err("模型超时".to_string())).ok();
+                    self.response.send(Err("模型连接超时".to_string())).ok();
                     xbus::post(StreamMessage::stream(
                         source.clone(),
-                        MessageContent::TextChunk("模型超时".to_string()),
+                        MessageContent::TextChunk("模型连接超时".to_string()),
                     ));
                     xbus::post(StreamMessage::done(source));
                 }

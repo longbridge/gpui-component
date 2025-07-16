@@ -123,11 +123,11 @@ impl McpProvider {
         println!("保存MCP配置到文件...");
         if let Err(e) = McpConfigManager::save_servers(&self.providers[..]) {
             window.push_notification(format!("保存配置失败: {}", e), cx);
-            log::error!("Failed to save MCP config: {}", e);
+            tracing::error!("Failed to save MCP config: {}", e);
         }
         self.refresh_providers(cx);
         cx.notify();
-        CrossRuntimeBridge::global().post(&FoEvent::McpConfigUpdated);
+        CrossRuntimeBridge::global().emit(&FoEvent::McpConfigUpdated);
     }
 
     fn refresh_providers(&mut self, cx: &mut Context<Self>) {

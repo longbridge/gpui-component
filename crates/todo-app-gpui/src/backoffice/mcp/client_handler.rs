@@ -43,7 +43,7 @@ impl ClientHandler for McpClientHandler {
         params: CreateMessageRequestParam,
         _context: RequestContext<RoleClient>,
     ) -> Result<CreateMessageResult, McpError> {
-        log::info!("Create message: {params:#?}");
+        tracing::info!("Create message: {params:#?}");
 
         Err(McpError::method_not_found::<CreateMessageRequestMethod>())
     }
@@ -66,18 +66,18 @@ impl ClientHandler for McpClientHandler {
     }
 
     async fn on_tool_list_changed(&self, context: NotificationContext<RoleClient>) {
-        log::info!("Tool list changed");
+        tracing::info!("Tool list changed");
         match context.peer.list_tools(None).await {
             Ok(tools) => {
-                log::info!("Tool list: {tools:#?}");
+                tracing::info!("Tool list: {tools:#?}");
                 self.server.do_send(UpdateInstanceTools {
                     server_id: self.id.clone(),
                     tools: tools.tools.clone(),
                 });
             }
             Err(err) => {
-                log::error!("Failed to list tools: {err}");
-                CrossRuntimeBridge::global().post(BoEvent::Notification(
+                tracing::error!("Failed to list tools: {err}");
+                CrossRuntimeBridge::global().emit(BoEvent::Notification(
                     crate::backoffice::NotificationKind::Error,
                     format!("Failed to list tools: {err}"),
                 ));
@@ -86,19 +86,19 @@ impl ClientHandler for McpClientHandler {
     }
 
     async fn on_prompt_list_changed(&self, ctx: NotificationContext<RoleClient>) {
-        log::info!("Prompt list changed");
+        tracing::info!("Prompt list changed");
 
         match ctx.peer.list_prompts(None).await {
             Ok(prompts) => {
-                log::info!("Prompt list: {prompts:#?}");
+                tracing::info!("Prompt list: {prompts:#?}");
                 self.server.do_send(UpdateInstancePrompts {
                     server_id: self.id.clone(),
                     prompts: prompts.prompts.clone(),
                 });
             }
             Err(err) => {
-                log::error!("Failed to list prompts: {err}");
-                CrossRuntimeBridge::global().post(BoEvent::Notification(
+                tracing::error!("Failed to list prompts: {err}");
+                CrossRuntimeBridge::global().emit(BoEvent::Notification(
                     crate::backoffice::NotificationKind::Error,
                     format!("Failed to list prompts: {err}"),
                 ));
@@ -109,14 +109,14 @@ impl ClientHandler for McpClientHandler {
     async fn on_resource_list_changed(&self, ctx: NotificationContext<RoleClient>) {
         ctx.peer.list_all_resources().await.map_or_else(
             |err| {
-                log::error!("Failed to list resources: {err}");
-                CrossRuntimeBridge::global().post(BoEvent::Notification(
+                tracing::error!("Failed to list resources: {err}");
+                CrossRuntimeBridge::global().emit(BoEvent::Notification(
                     crate::backoffice::NotificationKind::Error,
                     format!("Failed to list resources: {err}"),
                 ));
             },
             |resources| {
-                log::info!("Resource list changed: {resources:#?}");
+                tracing::info!("Resource list changed: {resources:#?}");
                 self.server.do_send(UpdateInstanceResources {
                     server_id: self.id.clone(),
                     resources: resources.clone(),
@@ -129,8 +129,8 @@ impl ClientHandler for McpClientHandler {
         params: rmcp::model::CancelledNotificationParam,
         _context: NotificationContext<RoleClient>,
     ) {
-        log::info!("Cancelled: {params:#?}");
-        CrossRuntimeBridge::global().post(BoEvent::Notification(
+        tracing::info!("Cancelled: {params:#?}");
+        CrossRuntimeBridge::global().emit(BoEvent::Notification(
             crate::backoffice::NotificationKind::Info,
             format!("Cancelled: {:?}", params.reason),
         ));
@@ -141,24 +141,24 @@ impl ClientHandler for McpClientHandler {
         params: rmcp::model::LoggingMessageNotificationParam,
         _context: NotificationContext<RoleClient>,
     ) {
-        log::info!("Logging message: {params:#?}");
+        tracing::info!("Logging message: {params:#?}");
         if params.level == LoggingLevel::Error {
-            CrossRuntimeBridge::global().post(BoEvent::Notification(
+            CrossRuntimeBridge::global().emit(BoEvent::Notification(
                 crate::backoffice::NotificationKind::Error,
                 format!("Logging error: {}", params.data.to_string()),
             ));
         } else if params.level == LoggingLevel::Warning {
-            CrossRuntimeBridge::global().post(BoEvent::Notification(
+            CrossRuntimeBridge::global().emit(BoEvent::Notification(
                 crate::backoffice::NotificationKind::Warning,
                 format!("Logging warning: {}", params.data.to_string()),
             ));
         } else {
-            CrossRuntimeBridge::global().post(BoEvent::Notification(
+            CrossRuntimeBridge::global().emit(BoEvent::Notification(
                 crate::backoffice::NotificationKind::Info,
                 format!("Logging info: {}", params.data.to_string()),
             ));
         }
-        CrossRuntimeBridge::global().post(BoEvent::Notification(
+        CrossRuntimeBridge::global().emit(BoEvent::Notification(
             crate::backoffice::NotificationKind::Info,
             format!("Logging message: {:?}", params.data.to_string()),
         ));
@@ -194,8 +194,8 @@ impl ClientHandler for McpClientHandler {
                 });
             }
             Err(err) => {
-                log::error!("Failed to read updated resource {}: {}", params.uri, err);
-                CrossRuntimeBridge::global().post(BoEvent::Notification(
+                tracing::error!("Failed to read updated resource {}: {}", params.uri, err);
+                CrossRuntimeBridge::global().emit(BoEvent::Notification(
                     crate::backoffice::NotificationKind::Error,
                     format!("Failed to read updated resource {}: {}", params.uri, err),
                 ));

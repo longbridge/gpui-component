@@ -90,7 +90,7 @@ struct LogWriterForGui;
 
 impl std::io::Write for LogWriterForGui {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        CrossRuntimeBridge::global().post(LogRecord(
+        CrossRuntimeBridge::global().emit(LogRecord(
             String::from_utf8_lossy(buf).into_owned().to_string(),
         ));
         let buf_len = buf.len();

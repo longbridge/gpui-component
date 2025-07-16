@@ -122,7 +122,7 @@ impl Default for LlmRegistry {
 
 impl Supervised for LlmRegistry {
     fn restarting(&mut self, _ctx: &mut Self::Context) {
-        log::info!("LlmRegistry is restarting");
+        tracing::info!("LlmRegistry is restarting");
     }
 }
 

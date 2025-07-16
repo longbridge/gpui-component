@@ -274,7 +274,7 @@ pub trait AppExt {
     fn dispatch_global_action(&mut self, action: Box<dyn Action>);
 
     fn dispatch_event<E: std::any::Any + 'static + Send + Sync>(&self, event: E) {
-        CrossRuntimeBridge::global().post(event);
+        CrossRuntimeBridge::global().emit(event);
     }
 
     fn subscribe_event<

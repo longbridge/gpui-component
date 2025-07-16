@@ -199,7 +199,7 @@ impl McpServer {
 impl McpServer {
     /// 连接到 MCP 服务器
     fn connect(&mut self, ctx: &mut Context<Self>) {
-        log::info!("Connecting to MCP Server: {}", self.config.id);
+        tracing::info!("Connecting to MCP Server: {}", self.config.id);
         self.status = McpServerStatus::Starting;
 
         let config = self.config.clone();
@@ -211,7 +211,7 @@ impl McpServer {
             .then(|res, act, _ctx| {
                 match res {
                     Ok((client, snapshot)) => {
-                        log::info!("MCP Server {} connected successfully", act.config.id);
+                        tracing::info!("MCP Server {} connected successfully", act.config.id);
 
                         // 设置客户端和状态
                         act.client = Some(client);
@@ -225,7 +225,7 @@ impl McpServer {
 
                         // 发送事件通知
                         CrossRuntimeBridge::global()
-                            .post(BoEvent::McpServerStarted(act.config.clone()));
+                            .emit(BoEvent::McpServerStarted(act.config.clone()));
 
                         // 通知 Registry 更新缓存
                         let registry = McpRegistry::global();
@@ -235,10 +235,14 @@ impl McpServer {
                         });
                     }
                     Err(err) => {
-                        log::error!("Failed to connect to MCP Server {}: {}", act.config.id, err);
+                        tracing::error!(
+                            "Failed to connect to MCP Server {}: {}",
+                            act.config.id,
+                            err
+                        );
                         act.status = McpServerStatus::Error(err.to_string());
 
-                        CrossRuntimeBridge::global().post(BoEvent::Notification(
+                        CrossRuntimeBridge::global().emit(BoEvent::Notification(
                             crate::backoffice::NotificationKind::Error,
                             format!("Failed to connect to MCP Server {}: {}", act.config.id, err),
                         ));
@@ -288,7 +292,7 @@ impl McpServer {
                             tracing::trace!("MCP Server {} is keeping alive", server_name);
                         }
                         _ => {
-                            log::warn!("MCP Server {} ping failed, reconnecting", server_name);
+                            tracing::warn!("MCP Server {} ping failed, reconnecting", server_name);
                             act.connect(ctx);
                         }
                     }
@@ -314,7 +318,7 @@ impl Handler<ExitFromRegistry> for McpServer {
     type Result = ();
 
     fn handle(&mut self, _msg: ExitFromRegistry, ctx: &mut Self::Context) -> Self::Result {
-        log::info!("MCP Server {} exiting", self.config.id);
+        tracing::info!("MCP Server {} exiting", self.config.id);
         let server_id = self.config.id.clone();
         // 异步停止实例
         McpRegistry::global().do_send(UpdateServerCache {
@@ -394,7 +398,7 @@ impl Handler<UpdateInstanceTools> for McpServer {
     fn handle(&mut self, msg: UpdateInstanceTools, _ctx: &mut Self::Context) -> Self::Result {
         // 检查是否是针对当前服务器的更新
         if msg.server_id == self.config.id {
-            log::debug!("Updating tools for server: {}", self.config.id);
+            tracing::debug!("Updating tools for server: {}", self.config.id);
 
             // 直接更新自己的工具列表
             self.tools = msg.tools.clone();
@@ -412,7 +416,7 @@ impl Handler<UpdateInstanceTools> for McpServer {
             });
 
             // 发送全局事件通知
-            CrossRuntimeBridge::global().post(BoEvent::McpToolListUpdated(
+            CrossRuntimeBridge::global().emit(BoEvent::McpToolListUpdated(
                 self.config.id.clone(),
                 msg.tools,
             ));
@@ -434,7 +438,7 @@ impl Handler<UpdateInstancePrompts> for McpServer {
     fn handle(&mut self, msg: UpdateInstancePrompts, _ctx: &mut Self::Context) -> Self::Result {
         // 检查是否是针对当前服务器的更新
         if msg.server_id == self.config.id {
-            log::debug!("Updating prompts for server: {}", self.config.id);
+            tracing::debug!("Updating prompts for server: {}", self.config.id);
 
             // 直接更新自己的提示列表
             self.prompts = msg.prompts.clone();
@@ -452,7 +456,7 @@ impl Handler<UpdateInstancePrompts> for McpServer {
             });
 
             // 发送全局事件通知
-            CrossRuntimeBridge::global().post(BoEvent::McpPromptListUpdated(
+            CrossRuntimeBridge::global().emit(BoEvent::McpPromptListUpdated(
                 self.config.id.clone(),
                 msg.prompts,
             ));
@@ -474,7 +478,7 @@ impl Handler<UpdateInstanceResources> for McpServer {
     fn handle(&mut self, msg: UpdateInstanceResources, _ctx: &mut Self::Context) -> Self::Result {
         // 检查是否是针对当前服务器的更新
         if msg.server_id == self.config.id {
-            log::debug!("Updating resources for server: {}", self.config.id);
+            tracing::debug!("Updating resources for server: {}", self.config.id);
 
             // 保留原有的订阅状态和能力设置
             let subscribable = self
@@ -518,7 +522,7 @@ impl Handler<UpdateInstanceResources> for McpServer {
             });
 
             // 发送全局事件通知
-            CrossRuntimeBridge::global().post(BoEvent::McpResourceListUpdated(
+            CrossRuntimeBridge::global().emit(BoEvent::McpResourceListUpdated(
                 self.config.id.clone(),
                 self.resources.clone(),
             ));
@@ -545,7 +549,7 @@ impl Handler<UpdateInstanceResourceContent> for McpServer {
     ) -> Self::Result {
         // 检查是否是针对当前服务器的更新
         if msg.server_id == self.config.id {
-            log::debug!(
+            tracing::debug!(
                 "Updating resource content for server: {} uri: {}",
                 self.config.id,
                 msg.uri
@@ -568,13 +572,13 @@ impl Handler<UpdateInstanceResourceContent> for McpServer {
             }
 
             // 发送全局事件通知
-            CrossRuntimeBridge::global().post(BoEvent::McpResourceUpdated {
+            CrossRuntimeBridge::global().emit(BoEvent::McpResourceUpdated {
                 server_id: self.config.id.clone(),
                 uri: msg.uri.clone(),
                 contents: msg.contents.clone(),
             });
 
-            CrossRuntimeBridge::global().post(BoEvent::Notification(
+            CrossRuntimeBridge::global().emit(BoEvent::Notification(
                 crate::backoffice::NotificationKind::Info,
                 serde_json::to_string_pretty(&BoEvent::McpResourceUpdated {
                     server_id: msg.server_id.clone(),

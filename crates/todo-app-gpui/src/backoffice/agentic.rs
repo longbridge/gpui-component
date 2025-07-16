@@ -6,12 +6,12 @@ use std::fmt::Debug;
 mod feedback;
 mod insight;
 mod knowledge;
-mod llm;
+// mod llm;
 // mod registry;
 mod regulator;
 // pub(crate) mod llm;
 pub(crate) mod mcp_tools;
-mod memex;
+// mod memex;
 pub(crate) mod prompts;
 // mod rig_llm;
 
@@ -39,7 +39,7 @@ pub trait Memory: Send + Sync {
     async fn store(&self, key: &str, value: &str, memory_type: MemoryType) -> anyhow::Result<()>;
 
     /// 获取记忆
-    async fn get(&self, key: &str, memory_type: MemoryType) -> anyhow::Result<Option<String>>;
+    async fn get(&self, key: &str, memory_type: MemoryType) -> anyhow::Result<Option<MemoryEntry>>;
 
     /// 清空指定类型的记忆
     async fn clear(&self, memory_type: MemoryType) -> anyhow::Result<()>;
@@ -59,7 +59,7 @@ pub trait Memory: Send + Sync {
         self.store(key, value, MemoryType::ShortTerm).await
     }
 
-    async fn get_short_term(&self, key: &str) -> anyhow::Result<Option<String>> {
+    async fn get_short_term(&self, key: &str) -> anyhow::Result<Option<MemoryEntry>> {
         self.get(key, MemoryType::ShortTerm).await
     }
 
@@ -67,7 +67,7 @@ pub trait Memory: Send + Sync {
         self.store(key, value, MemoryType::LongTerm).await
     }
 
-    async fn get_long_term(&self, key: &str) -> anyhow::Result<Option<String>> {
+    async fn get_long_term(&self, key: &str) -> anyhow::Result<Option<MemoryEntry>> {
         self.get(key, MemoryType::LongTerm).await
     }
 
@@ -75,150 +75,28 @@ pub trait Memory: Send + Sync {
         self.clear(MemoryType::ShortTerm).await
     }
 
-    async fn search_memory(&self, query: &str) -> anyhow::Result<Vec<(String, String)>> {
+    async fn search_memory(&self, query: &str) -> anyhow::Result<Vec<MemoryEntry>> {
         let entries = self.search(query, None).await?;
-        Ok(entries.into_iter().map(|e| (e.key, e.value)).collect())
+        Ok(entries)
     }
 }
 
 /// LLM特性，定义了LLM的基本交互方法，包含了洞察和知识处理能力。
 pub trait LLM: Send + Sync {
     type ToolDelegate: ToolDelegate<Output = McpCallToolResult, Args = String>;
+
+    async fn completion(&self, messages: &[ChatMessage]) -> anyhow::Result<ChatMessage>;
     /// 基础对话能力 - 流式响应
-    async fn completion_stream(&self, prompts: &[ChatMessage]) -> anyhow::Result<ChatStream>;
+    async fn completion_stream(&self, messages: &[ChatMessage]) -> anyhow::Result<ChatStream>;
 
-    /// 带工具调用的对话 - 流式响应
-    async fn completion_with_tools_stream(
+    /// 对话 - 流式响应
+    async fn chat_stream(
         &self,
-        prompts: &[ChatMessage],
-        tools: &Self::ToolDelegate,
+        prompt: &str,
+        history: &[ChatMessage],
     ) -> anyhow::Result<ChatStream>;
 
-    /// 对话接口 - 流式响应
-    async fn chat_stream(&self, messages: &[ChatMessage]) -> anyhow::Result<ChatStream>;
-
-    /// 带工具调用的对话 - 流式响应
-    async fn chat_with_tools_stream(
-        &self,
-        messages: &[ChatMessage],
-        tools: &Self::ToolDelegate,
-    ) -> anyhow::Result<ChatStream>;
-
-    /// 基础对话能力 - 一次性响应（便捷方法）
-    async fn completion(&self, prompts: &[ChatMessage]) -> anyhow::Result<ChatMessage> {
-        let mut stream = self.completion_stream(prompts).await?;
-        let  final_message = ChatMessage::assistant();
-
-        // 收集流式响应并合并
-        use futures::StreamExt;
-        while let Some(chunk) = stream.next().await {
-            match chunk {
-                Ok(message) => {
-                    let text = message.get_text();
-                   
-                }
-                Err(e) => return Err(e),
-            }
-        }
-
-        Ok(final_message)
-    }
-
-    /// 对话接口 - 一次性响应（便捷方法）
-    async fn chat(&self, messages: &[ChatMessage]) -> anyhow::Result<ChatMessage> {
-        let mut stream = self.chat_stream(messages).await?;
-        let mut final_message = ChatMessage::assistant();
-
-        use futures::StreamExt;
-        while let Some(chunk) = stream.next().await {
-            match chunk {
-                Ok(message) => {
-                    let text = message.get_text();
-                    // 修复：正确处理 MessageContent 枚举
-                    // match &mut final_message.content {
-                    //     MessageContent::Parts(parts) => {
-                    //         if let Some(MediaContent {
-                    //             data: MediaData::Text(existing_text),
-                    //             ..
-                    //         }) = parts.get_mut(0)
-                    //         {
-                    //             existing_text.push_str(&text);
-                    //         }
-                    //     }
-                    //     MessageContent::Chunk(_) => {
-                    //         // 如果是工具调用，创建新的文本内容
-                    //         final_message.content = MessageContent::text(text);
-                    //     }
-                    //     MessageContent::ToolCall(_) => {
-                    //         // 如果是工具调用，创建新的文本内容
-                    //         final_message.content = MessageContent::text(text);
-                    //     }
-                    //     MessageContent::ToolDefinitions(_) => {
-                    //         // 如果是工具调用，创建新的文本内容
-                    //         final_message.content = MessageContent::text(text);
-                    //     }
-                    //     MessageContent::Part(part) => {
-                    //         // 如果是工具调用，创建新的文本内容
-                    //         final_message.content = MessageContent::text(text);
-                    //     }
-                    // }
-                }
-                Err(e) => return Err(e),
-            }
-        }
-
-        Ok(final_message)
-    }
-
-    /// 带工具调用的对话 - 一次性响应（便捷方法）
-    async fn chat_with_tools(
-        &self,
-        messages: &[ChatMessage],
-        tools: &Self::ToolDelegate,
-    ) -> anyhow::Result<ChatMessage> {
-        let mut stream = self.chat_with_tools_stream(messages, tools).await?;
-        let mut final_message = ChatMessage::assistant();
-
-        use futures::StreamExt;
-        while let Some(chunk) = stream.next().await {
-            match chunk {
-                Ok(message) => {
-                    let text = message.get_text();
-                    // 修复：正确处理 MessageContent 枚举
-                    // match &mut final_message.content {
-                    //     MessageContent::Parts(parts) => {
-                    //         if let Some(MediaContent {
-                    //             data: MediaData::Text(existing_text),
-                    //             ..
-                    //         }) = parts.get_mut(0)
-                    //         {
-                    //             existing_text.push_str(&text);
-                    //         }
-                    //     }
-                    //     MessageContent::Chunk(_) => {
-                    //         // 如果是工具调用，创建新的文本内容
-                    //         final_message.content = MessageContent::text(text);
-                    //     }
-                    //     MessageContent::ToolCall(_) => {
-                    //         // 如果是工具调用，创建新的文本内容
-                    //         final_message.content = MessageContent::text(text);
-                    //     }
-                    //     MessageContent::ToolDefinitions(_) => {
-                    //         // 如果是工具调用，创建新的文本内容
-                    //         final_message.content = MessageContent::text(text);
-                    //     }
-                    //     MessageContent::Part(part) => {
-                    //         // 如果是工具调用，创建新的文本内容
-                    //         final_message.content = MessageContent::text(text);
-                    //     }
-                    // }
-                }
-                Err(e) => return Err(e),
-            }
-        }
-
-        Ok(final_message)
-    }
+    async fn chat(&self, prompt: &str, history: &[ChatMessage]) -> anyhow::Result<ChatMessage>;
 
     /// 数据分析和洞察能力 - 通常不需要流式，直接返回结果
     async fn analyze(&self, data: &str) -> anyhow::Result<ChatMessage> {
@@ -296,39 +174,16 @@ pub struct LearningStats {
     pub knowledge_categories: Vec<String>,
 }
 
-/// 任务状态
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum TaskStatus {
+/// 执行状态
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub enum ExecutionStatus {
+    #[default]
     Pending,
     InProgress,
     Completed,
     Failed,
     Paused,
     Cancelled,
-}
-
-/// 任务步骤
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TaskStep {
-    pub step_id: String,
-    pub description: String,
-    pub status: TaskStatus,
-    pub result: Option<String>,
-    pub timestamp: u64,
-}
-
-/// 任务状态
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TaskState {
-    pub task_id: String,
-    pub task_type: String,
-    pub status: TaskStatus,
-    pub progress: f32,
-    pub created_at: u64,
-    pub updated_at: u64,
-    pub metadata: HashMap<String, String>,
-    pub steps: Vec<TaskStep>,
-    pub current_step: usize,
 }
 
 /// 执行上下文 - 单次对话或任务的临时状态
@@ -338,10 +193,9 @@ pub struct ExecutionContext {
     pub session_id: String,
     /// 当前对话历史
     pub conversation_history: Vec<ChatMessage>,
-    /// 当前任务状态
-    pub current_task: Option<TaskState>,
     /// 临时变量
     pub variables: HashMap<String, String>,
+    pub status: ExecutionStatus,
     /// 上下文创建时间
     pub created_at: u64,
     /// 最后更新时间
@@ -402,6 +256,8 @@ pub struct AgentConfig {
     pub context_window_size: usize,
     /// 工具使用策略
     pub tool_usage_strategy: ToolUsageStrategy,
+    /// 系统提示
+    pub system_prompt: String,
 }
 
 /// 反思触发原因
@@ -477,16 +333,22 @@ pub struct RuntimeContext<M: Memory, L: LLM> {
     pub performance_metrics: PerformanceMetrics,
 }
 
+pub struct ContextAware<M: Memory, L: LLM> {
+    runtime_context: RuntimeContext<M, L>,
+    /// 执行上下文
+    execution_context: ExecutionContext,
+}
+
 impl ExecutionContext {
     pub fn new(session_id: String) -> Self {
         let now = chrono::Utc::now().timestamp() as u64;
         Self {
             session_id,
             conversation_history: Vec::new(),
-            current_task: None,
             variables: HashMap::new(),
             created_at: now,
             last_updated: now,
+            status: ExecutionStatus::Pending,
         }
     }
 
@@ -514,22 +376,6 @@ impl ExecutionContext {
         self.variables.get(key)
     }
 
-    pub fn set_task(&mut self, task: TaskState) {
-        self.current_task = Some(task);
-        self.last_updated = chrono::Utc::now().timestamp() as u64;
-    }
-
-    pub fn update_task_progress(&mut self, progress: f32) {
-        if let Some(task) = &mut self.current_task {
-            task.progress = progress;
-            if progress >= 1.0 {
-                task.status = TaskStatus::Completed;
-            }
-            task.updated_at = chrono::Utc::now().timestamp() as u64;
-        }
-        self.last_updated = chrono::Utc::now().timestamp() as u64;
-    }
-
     pub fn is_expired(&self, timeout_seconds: u64) -> bool {
         let now = chrono::Utc::now().timestamp() as u64;
         now - self.last_updated > timeout_seconds
@@ -547,6 +393,7 @@ impl Default for AgentConfig {
             },
             context_window_size: 4096,
             tool_usage_strategy: ToolUsageStrategy::Adaptive,
+            system_prompt: "你是一个智能体，具备学习、反思和执行任务的能力。".to_string(),
         }
     }
 }
@@ -1186,13 +1033,7 @@ pub trait AdvancedAgent: Agent {
 
 /// AI智能体实现 - 包含完整的高级功能
 pub struct AiAgent<M: Memory, L: LLM> {
-    // /// 运行时上下文
-    // runtime_context: RuntimeContext<M, L>,
-    // /// 执行上下文
-    // execution_context: ExecutionContext,
     context: ContextAware<M, L>,
-    /// 活跃任务
-    active_tasks: HashMap<String, TaskState>,
 }
 
 impl<M: Memory, L: LLM> AiAgent<M, L> {
@@ -1202,7 +1043,6 @@ impl<M: Memory, L: LLM> AiAgent<M, L> {
                 runtime_context: RuntimeContext::new(memory, llm),
                 execution_context: ExecutionContext::new(session_id),
             },
-            active_tasks: HashMap::new(),
         }
     }
 
@@ -1221,11 +1061,6 @@ impl<M: Memory, L: LLM> AiAgent<M, L> {
         self.learning_stats().await
     }
 
-    /// 获取任务状态
-    pub fn get_task_status(&self, task_id: &str) -> Option<&TaskState> {
-        self.active_tasks.get(task_id)
-    }
-
     /// 获取执行上下文
     pub fn get_execution_context(&self) -> &ExecutionContext {
         &self.context.execution_context
@@ -1234,36 +1069,6 @@ impl<M: Memory, L: LLM> AiAgent<M, L> {
     /// 获取性能指标
     pub fn get_performance_metrics(&self) -> &PerformanceMetrics {
         &self.context.runtime_context.performance_metrics
-    }
-
-    /// 创建新任务
-    pub fn create_task(&mut self, task_type: &str, description: &str) -> String {
-        let task_id = format!("task_{}", chrono::Utc::now().timestamp());
-        let task_state = TaskState {
-            task_id: task_id.clone(),
-            task_type: task_type.to_string(),
-            status: TaskStatus::Pending,
-            progress: 0.0,
-            created_at: chrono::Utc::now().timestamp() as u64,
-            updated_at: chrono::Utc::now().timestamp() as u64,
-            metadata: {
-                let mut meta = HashMap::new();
-                meta.insert("description".to_string(), description.to_string());
-                meta
-            },
-            steps: vec![],
-            current_step: 0,
-        };
-        self.active_tasks.insert(task_id.clone(), task_state);
-        task_id
-    }
-
-    /// 更新任务状态
-    pub fn update_task_status(&mut self, task_id: &str, status: TaskStatus) {
-        if let Some(task) = self.active_tasks.get_mut(task_id) {
-            task.status = status;
-            task.updated_at = chrono::Utc::now().timestamp() as u64;
-        }
     }
 
     /// 外部定时器调用的 tick 方法 - 智能体的"心跳"
@@ -1330,10 +1135,4 @@ pub trait MediaProcessor: Send + Sync {
 
     /// 提取文本内容（OCR、语音转文字等）
     async fn extract_text(&self, media: &MediaContent) -> anyhow::Result<Option<String>>;
-}
-
-pub struct ContextAware<M: Memory, L: LLM> {
-    runtime_context: RuntimeContext<M, L>,
-    /// 执行上下文
-    execution_context: ExecutionContext,
 }

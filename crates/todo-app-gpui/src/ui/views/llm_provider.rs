@@ -109,7 +109,7 @@ impl LlmProvider {
         if let Err(e) = LlmProviderManager::save_providers(&self.providers[..]) {
             eprintln!("保存配置失败: {}", e);
         }
-        CrossRuntimeBridge::global().post(&FoEvent::LlmConfigUpdated);
+        CrossRuntimeBridge::global().emit(&FoEvent::LlmConfigUpdated);
     }
 
     fn tab(&mut self, _: &Tab1, window: &mut Window, cx: &mut Context<Self>) {

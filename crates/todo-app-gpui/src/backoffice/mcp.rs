@@ -87,7 +87,7 @@ impl Default for McpRegistry {
 
 impl Supervised for McpRegistry {
     fn restarting(&mut self, _ctx: &mut Self::Context) {
-        log::info!("McpRegistry is restarting");
+        tracing::info!("McpRegistry is restarting");
     }
 }
 
@@ -147,11 +147,11 @@ impl Actor for McpRegistry {
     fn started(&mut self, ctx: &mut Self::Context) {
         let handle = ctx.run_interval(Duration::from_secs(1), Self::tick);
         self.handle = Some(handle);
-        log::info!("McpRegistry started");
+        tracing::info!("McpRegistry started");
     }
 
     fn stopped(&mut self, _ctx: &mut Self::Context) {
-        log::info!("McpRegistry stopped");
+        tracing::info!("McpRegistry stopped");
     }
 }
 
@@ -202,10 +202,10 @@ impl Handler<UpdateServerCache> for McpRegistry {
 
     fn handle(&mut self, msg: UpdateServerCache, _ctx: &mut Self::Context) -> Self::Result {
         if let Some(snapshot) = msg.snapshot {
-            log::debug!("Updating snapshot cache for server: {}", msg.server_id);
+            tracing::debug!("Updating snapshot cache for server: {}", msg.server_id);
             self.snapshots.insert(msg.server_id, snapshot);
         } else {
-            log::debug!("Removing snapshot cache for server: {}", msg.server_id);
+            tracing::debug!("Removing snapshot cache for server: {}", msg.server_id);
             self.snapshots.remove(&msg.server_id);
         }
     }
@@ -235,7 +235,7 @@ impl Handler<GetServerSnapshot> for McpRegistry {
     type Result = Option<McpServerSnapshot>;
 
     fn handle(&mut self, msg: GetServerSnapshot, _ctx: &mut Self::Context) -> Self::Result {
-        log::debug!("Getting snapshot for server_id: {}", msg.server_id);
+        tracing::debug!("Getting snapshot for server_id: {}", msg.server_id);
         self.snapshots.get(&msg.server_id).cloned()
     }
 }

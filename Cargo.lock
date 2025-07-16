@@ -8944,9 +8944,9 @@ dependencies = [
 
 [[package]]
 name = "sysinfo"
-version = "0.35.2"
+version = "0.36.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c3ffa3e4ff2b324a57f7aeb3c349656c7b127c3c189520251a648102a92496e"
+checksum = "aab138f5c1bb35231de19049060a87977ad23e04f2303e953bc5c2947ac7dec4"
 dependencies = [
  "libc",
  "memchr",
@@ -9280,7 +9280,6 @@ dependencies = [
  "gpui-component",
  "gtk",
  "homedir",
- "log",
  "mimalloc",
  "quick-xml 0.38.0",
  "rand 0.9.1",
@@ -9298,7 +9297,7 @@ dependencies = [
  "serde_yaml",
  "smallvec",
  "smol 1.3.0",
- "sysinfo 0.35.2",
+ "sysinfo 0.36.0",
  "tempfile",
  "tokio",
  "tokio-stream",
