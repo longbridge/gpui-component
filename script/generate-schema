@@ -1,1 +1,1 @@
-cargo run -p theme-schema > .theme-schema.json
+cargo run -p generate-theme-schema > .theme-schema.json
