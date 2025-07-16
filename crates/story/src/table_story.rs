@@ -8,7 +8,7 @@ use fake::Fake;
 use gpui::{
     div, prelude::FluentBuilder as _, px, Action, AnyElement, App, AppContext, ClickEvent, Context,
     Edges, Entity, Focusable, InteractiveElement, IntoElement, ParentElement, Pixels, Render,
-    SharedString, StatefulInteractiveElement, Styled, Timer, Window,
+    SharedString, StatefulInteractiveElement, Styled, TextAlign, Timer, Window,
 };
 use gpui_component::{
     button::Button,
@@ -19,7 +19,7 @@ use gpui_component::{
     label::Label,
     popup_menu::{PopupMenu, PopupMenuExt},
     table::{self, ColFixed, ColSort, Table, TableDelegate, TableEvent},
-    v_flex, ActiveTheme as _, Selectable, Sizable as _, Size, StyleSized as _,
+    v_flex, ActiveTheme as _, Selectable, Sizable as _, Size, StyleSized as _, StyledExt,
 };
 use serde::{Deserialize, Serialize};
 
@@ -174,20 +174,28 @@ fn random_stocks(size: usize) -> Vec<Stock> {
 struct Column {
     id: SharedString,
     name: SharedString,
+    align: TextAlign,
     sort: Option<ColSort>,
 }
 
 impl Column {
-    fn new(
-        id: impl Into<SharedString>,
-        name: impl Into<SharedString>,
-        sort: Option<ColSort>,
-    ) -> Self {
+    fn new(id: impl Into<SharedString>, name: impl Into<SharedString>) -> Self {
         Self {
             id: id.into(),
             name: name.into(),
-            sort,
+            align: TextAlign::Left,
+            sort: None,
         }
+    }
+
+    fn sortable(mut self) -> Self {
+        self.sort = Some(ColSort::Default);
+        self
+    }
+
+    fn text_right(mut self) -> Self {
+        self.align = TextAlign::Right;
+        self
     }
 }
 
@@ -214,51 +222,53 @@ impl StockTableDelegate {
             size: Size::default(),
             stocks: random_stocks(size),
             columns: vec![
-                Column::new("id", "ID", None),
-                Column::new("market", "Market", None),
-                Column::new("symbol", "Symbol", Some(ColSort::Default)),
-                Column::new("name", "Name", None),
-                Column::new("price", "Price", Some(ColSort::Default)),
-                Column::new("change", "Chg", Some(ColSort::Default)),
-                Column::new("change_percent", "Chg%", Some(ColSort::Default)),
-                Column::new("volume", "Volume", None),
-                Column::new("turnover", "Turnover", None),
-                Column::new("market_cap", "Market Cap", None),
-                Column::new("ttm", "TTM", None),
-                Column::new("five_mins_ranking", "5m Ranking", None),
-                Column::new("th60_days_ranking", "60d Ranking", None),
-                Column::new("year_change_percent", "Year Chg%", None),
-                Column::new("bid", "Bid", None),
-                Column::new("bid_volume", "Bid Vol", None),
-                Column::new("ask", "Ask", None),
-                Column::new("ask_volume", "Ask Vol", None),
-                Column::new("open", "Open", None),
-                Column::new("prev_close", "Prev Close", None),
-                Column::new("high", "High", None),
-                Column::new("low", "Low", None),
-                Column::new("turnover_rate", "Turnover Rate", None),
-                Column::new("rise_rate", "Rise Rate", None),
-                Column::new("amplitude", "Amplitude", None),
-                Column::new("pe_status", "P/E", None),
-                Column::new("pb_status", "P/B", None),
-                Column::new("volume_ratio", "Volume Ratio", None),
-                Column::new("bid_ask_ratio", "Bid Ask Ratio", None),
-                Column::new("latest_pre_close", "Latest Pre Close", None),
-                Column::new("latest_post_close", "Latest Post Close", None),
-                Column::new("pre_market_cap", "Pre Mkt Cap", None),
-                Column::new("pre_market_percent", "Pre Mkt%", None),
-                Column::new("pre_market_change", "Pre Mkt Chg", None),
-                Column::new("post_market_cap", "Post Mkt Cap", None),
-                Column::new("post_market_percent", "Post Mkt%", None),
-                Column::new("post_market_change", "Post Mkt Chg", None),
-                Column::new("float_cap", "Float Cap", None),
-                Column::new("shares", "Shares", None),
-                Column::new("shares_float", "Float Shares", None),
-                Column::new("day_5_ranking", "5d Ranking", None),
-                Column::new("day_10_ranking", "10d Ranking", None),
-                Column::new("day_30_ranking", "30d Ranking", None),
-                Column::new("day_120_ranking", "120d Ranking", None),
-                Column::new("day_250_ranking", "250d Ranking", None),
+                Column::new("id", "ID"),
+                Column::new("market", "Market"),
+                Column::new("symbol", "Symbol").sortable(),
+                Column::new("name", "Name"),
+                Column::new("price", "Price").sortable().text_right(),
+                Column::new("change", "Chg").sortable().text_right(),
+                Column::new("change_percent", "Chg%")
+                    .sortable()
+                    .text_right(),
+                Column::new("volume", "Volume"),
+                Column::new("turnover", "Turnover"),
+                Column::new("market_cap", "Market Cap"),
+                Column::new("ttm", "TTM"),
+                Column::new("five_mins_ranking", "5m Ranking"),
+                Column::new("th60_days_ranking", "60d Ranking"),
+                Column::new("year_change_percent", "Year Chg%"),
+                Column::new("bid", "Bid"),
+                Column::new("bid_volume", "Bid Vol"),
+                Column::new("ask", "Ask"),
+                Column::new("ask_volume", "Ask Vol"),
+                Column::new("open", "Open").text_right(),
+                Column::new("prev_close", "Prev Close").text_right(),
+                Column::new("high", "High").text_right(),
+                Column::new("low", "Low").text_right(),
+                Column::new("turnover_rate", "Turnover Rate"),
+                Column::new("rise_rate", "Rise Rate"),
+                Column::new("amplitude", "Amplitude"),
+                Column::new("pe_status", "P/E"),
+                Column::new("pb_status", "P/B"),
+                Column::new("volume_ratio", "Volume Ratio"),
+                Column::new("bid_ask_ratio", "Bid Ask Ratio"),
+                Column::new("latest_pre_close", "Latest Pre Close"),
+                Column::new("latest_post_close", "Latest Post Close"),
+                Column::new("pre_market_cap", "Pre Mkt Cap"),
+                Column::new("pre_market_percent", "Pre Mkt%"),
+                Column::new("pre_market_change", "Pre Mkt Chg"),
+                Column::new("post_market_cap", "Post Mkt Cap"),
+                Column::new("post_market_percent", "Post Mkt%"),
+                Column::new("post_market_change", "Post Mkt Chg"),
+                Column::new("float_cap", "Float Cap"),
+                Column::new("shares", "Shares"),
+                Column::new("shares_float", "Float Shares"),
+                Column::new("day_5_ranking", "5d Ranking"),
+                Column::new("day_10_ranking", "10d Ranking"),
+                Column::new("day_30_ranking", "30d Ranking"),
+                Column::new("day_120_ranking", "120d Ranking"),
+                Column::new("day_250_ranking", "250d Ranking"),
             ],
             loop_selection: true,
             col_resize: true,
@@ -281,7 +291,12 @@ impl StockTableDelegate {
         self.full_loading = false;
     }
 
-    fn render_value_cell(&self, val: f64, cx: &mut Context<Table<Self>>) -> AnyElement {
+    fn render_value_cell(
+        &self,
+        col: &Column,
+        val: f64,
+        cx: &mut Context<Table<Self>>,
+    ) -> AnyElement {
         let this = div()
             .h_full()
             .table_cell_size(self.size)
@@ -300,7 +315,10 @@ impl StockTableDelegate {
             this
         };
 
-        this.into_any_element()
+        this.when(col.align == TextAlign::Right, |this| {
+            this.h_flex().justify_end()
+        })
+        .into_any_element()
     }
 }
 
@@ -363,15 +381,18 @@ impl TableDelegate for StockTableDelegate {
         &self,
         col_ix: usize,
         _: &mut Window,
-        cx: &mut Context<Table<Self>>,
+        _: &mut Context<Table<Self>>,
     ) -> impl IntoElement {
-        let th = div().child(self.col_name(col_ix, cx));
+        let col = self.columns.get(col_ix).unwrap();
 
-        if col_ix >= 3 && col_ix <= 10 {
-            th.table_cell_size(self.size)
-        } else {
-            th
-        }
+        div()
+            .child(col.name.clone())
+            .when(col_ix >= 3 && col_ix <= 10, |this| {
+                this.table_cell_size(self.size)
+            })
+            .when(col.align == TextAlign::Right, |this| {
+                this.h_flex().w_full().justify_end()
+            })
     }
 
     fn context_menu(
@@ -440,14 +461,14 @@ impl TableDelegate for StockTableDelegate {
                 .into_any_element(),
             "symbol" => stock.counter.symbol_code().into_any_element(),
             "name" => stock.counter.name.clone().into_any_element(),
-            "price" => self.render_value_cell(stock.price, cx),
-            "change" => self.render_value_cell(stock.change, cx),
-            "change_percent" => self.render_value_cell(stock.change_percent, cx),
-            "volume" => self.render_value_cell(stock.volume, cx),
-            "turnover" => self.render_value_cell(stock.turnover, cx),
-            "market_cap" => self.render_value_cell(stock.market_cap, cx),
-            "ttm" => self.render_value_cell(stock.ttm, cx),
-            "five_mins_ranking" => self.render_value_cell(stock.five_mins_ranking, cx),
+            "price" => self.render_value_cell(&col, stock.price, cx),
+            "change" => self.render_value_cell(&col, stock.change, cx),
+            "change_percent" => self.render_value_cell(&col, stock.change_percent, cx),
+            "volume" => self.render_value_cell(&col, stock.volume, cx),
+            "turnover" => self.render_value_cell(&col, stock.turnover, cx),
+            "market_cap" => self.render_value_cell(&col, stock.market_cap, cx),
+            "ttm" => self.render_value_cell(&col, stock.ttm, cx),
+            "five_mins_ranking" => self.render_value_cell(&col, stock.five_mins_ranking, cx),
             "th60_days_ranking" => stock
                 .th60_days_ranking
                 .floor()
@@ -457,14 +478,14 @@ impl TableDelegate for StockTableDelegate {
                 .floor()
                 .to_string()
                 .into_any_element(),
-            "bid" => self.render_value_cell(stock.bid, cx),
-            "bid_volume" => self.render_value_cell(stock.bid_volume, cx),
-            "ask" => self.render_value_cell(stock.ask, cx),
-            "ask_volume" => self.render_value_cell(stock.ask_volume, cx),
-            "open" => stock.open.floor().to_string().into_any_element(),
-            "prev_close" => stock.prev_close.floor().to_string().into_any_element(),
-            "high" => self.render_value_cell(stock.high, cx),
-            "low" => self.render_value_cell(stock.low, cx),
+            "bid" => self.render_value_cell(&col, stock.bid, cx),
+            "bid_volume" => self.render_value_cell(&col, stock.bid_volume, cx),
+            "ask" => self.render_value_cell(&col, stock.ask, cx),
+            "ask_volume" => self.render_value_cell(&col, stock.ask_volume, cx),
+            "open" => self.render_value_cell(&col, stock.open, cx),
+            "prev_close" => self.render_value_cell(&col, stock.prev_close, cx),
+            "high" => self.render_value_cell(&col, stock.high, cx),
+            "low" => self.render_value_cell(&col, stock.low, cx),
             "turnover_rate" => (stock.turnover_rate * 100.0)
                 .floor()
                 .to_string()
@@ -479,8 +500,8 @@ impl TableDelegate for StockTableDelegate {
                 .into_any_element(),
             "pe_status" => stock.pe_status.floor().to_string().into_any_element(),
             "pb_status" => stock.pb_status.floor().to_string().into_any_element(),
-            "volume_ratio" => self.render_value_cell(stock.volume_ratio, cx),
-            "bid_ask_ratio" => self.render_value_cell(stock.bid_ask_ratio, cx),
+            "volume_ratio" => self.render_value_cell(&col, stock.volume_ratio, cx),
+            "bid_ask_ratio" => self.render_value_cell(&col, stock.bid_ask_ratio, cx),
             "latest_pre_close" => stock
                 .latest_pre_close
                 .floor()
