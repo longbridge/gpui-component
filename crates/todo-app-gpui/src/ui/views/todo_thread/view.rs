@@ -547,7 +547,7 @@ impl Render for TodoThreadChat {
                                         .p_1()
                                         .gap_1()
                                         .overflow_y_scroll()
-                                       .track_scroll(&self.scroll_handle)
+                                        .track_scroll(&self.scroll_handle)
                                         .children(
                                             self.chat_messages
                                                 .iter().enumerate()
@@ -572,18 +572,6 @@ impl Render for TodoThreadChat {
                                         }),
                                 ),
                         )
-                        // .child(
-                        //     div()
-                        //         .absolute()
-                        //         .top_0()
-                        //         .left_0()
-                        //         .right_0()
-                        //         .bottom_0()
-                        //         .child(
-                        //             Scrollbar::horizontal(&self.scroll_state, &self.scroll_handle)
-                        //                 .scroll_size(self.scroll_size),
-                        //         ),
-                        // ),
                 ),
             )
             .when(self.todoitem.status==TodoStatus::Alert||self.todoitem.status==TodoStatus::InProgress||self.todoitem.status==TodoStatus::Suspended||self.todoitem.status==TodoStatus::Todo, |this|
@@ -618,8 +606,19 @@ impl Render for TodoThreadChat {
                         })
                         .child(
                             h_flex()
+                                .gap_1()
+                                .child(
+                                    // 多行输入框
+                                    div()
+                                        .w_full()
+                                        .text_sm()
+                                        .child(TextInput::new(&self.chat_input).bordered(false)),
+                                )
+                                ,
+                        ).child(
+                            h_flex()
                                 .items_center()
-                                .justify_start()
+                                .justify_between()
                                 .gap_1()
                                 .bg(gpui::rgb(0xF9FAFB))
                                 .child(
@@ -643,10 +642,7 @@ impl Render for TodoThreadChat {
                                                     cx,
                                                 )
                                             })),
-                                    ),
-                                )
-                                .child(
-                                    h_flex().justify_start().items_center().gap_2().child(
+                                    ).child(
                                         Button::new("show-chat-tool-drawer")
                                             .icon(
                                                 Icon::new(IconName::Wrench)
@@ -667,24 +663,15 @@ impl Render for TodoThreadChat {
                                                 )
                                             })),
                                     ),
-                                ),
-                        )
-                        .child(
-                            h_flex()
-                                .gap_1()
-                                .child(
-                                    // 多行输入框
-                                    div()
-                                        .w_full()
-                                        .text_sm()
-                                        .child(TextInput::new(&self.chat_input).bordered(false)),
                                 )
                                 .child(
-                                    h_flex().justify_end().child(
+                                    h_flex().justify_end().items_center().gap_2().child(
                                         Button::new("send-message")
                                             .with_variant(ButtonVariant::Primary)
                                             .icon(IconName::Send)
-                                            .disabled(self.is_loading)
+                                            .small()
+                                            .justify_center()
+                                            .disabled(self.is_loading||self.is_running)
                                             .on_click(cx.listener(|this, _, window, cx| {
                                                 this.send_message(&SendMessage, window, cx);
                                             })),

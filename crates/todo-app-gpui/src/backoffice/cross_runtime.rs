@@ -429,13 +429,11 @@ impl MessageHandler for LlmChatHandler {
                     tracing::trace!("开始接收 LLM 聊天流消息");
                     while let Some(Ok(message)) = stream.next().await {
                         tracing::trace!("接收到 LLM 聊天流消息: {:?}", message);
-                        let stream_message = StreamMessage {
-                            source: source.clone(),
-                            message,
-                        };
+                        let stream_message = StreamMessage::stream(source.clone(), message);
                         // 这里可以将消息发送到 UI 或其他处理器
                         xbus::post(stream_message);
                     }
+                    xbus::post(StreamMessage::done(source));
                     tracing::trace!("LLM 聊天流消息接收完毕");
                 }
                 Err(err) => {
@@ -464,7 +462,17 @@ impl MessageHandler for LlmChatHandler {
 static CROSS_RUNTIME_BRIDGE: std::sync::OnceLock<CrossRuntimeBridge> = std::sync::OnceLock::new();
 
 #[derive(Debug, Clone)]
-pub struct StreamMessage {
-    pub source: String,
-    pub message: MessageContent,
+pub enum StreamMessage {
+    Stream(String, MessageContent),
+    Done(String),
+}
+
+impl StreamMessage {
+    pub fn stream(source: String, message: MessageContent) -> Self {
+        StreamMessage::Stream(source, message)
+    }
+
+    pub fn done(source: String) -> Self {
+        StreamMessage::Done(source)
+    }
 }

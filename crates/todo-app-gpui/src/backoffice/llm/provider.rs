@@ -14,7 +14,6 @@ pub struct LlmChoice {
 
 impl LlmChoice {
     pub fn new(config: &LlmProviderConfig) -> anyhow::Result<Self> {
-        // 验证配置
         if config.api_key.is_empty() {
             return Err(anyhow::anyhow!("API key is required"));
         }

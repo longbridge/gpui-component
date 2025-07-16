@@ -44,6 +44,7 @@ pub struct TodoThreadChat {
     chat_messages: Vec<ChatMessage>,
     chat_input: Entity<InputState>,
     is_loading: bool,
+    is_running: bool,
     scroll_handle: ScrollHandle,
     scroll_size: gpui::Size<Pixels>,
     scroll_state: ScrollbarState,
@@ -56,7 +57,7 @@ pub struct TodoThreadChat {
     cached_server_tools: std::collections::HashMap<String, Vec<McpTool>>,
 
     _subscriptions: Vec<Subscription>,
-    extend_channel: Sender<MessageContent>,
+    extend_channel: Sender<StreamMessage>,
     todoitem: Todo,
 }
 
@@ -107,7 +108,7 @@ impl TodoThreadChat {
                 .placeholder(PLACEHOLDER)
                 .clean_on_escape()
                 .multi_line()
-                .auto_grow(1, 6)
+                .auto_grow(3, 8)
         });
 
         let _subscriptions = vec![cx.subscribe_in(&chat_input, window, Self::on_chat_input_event)];
@@ -124,6 +125,7 @@ impl TodoThreadChat {
             chat_messages,
             chat_input,
             is_loading: false,
+            is_running: false,
             scroll_handle: ScrollHandle::new(),
             expanded_providers: Vec::new(),
             expanded_tool_providers: Vec::new(),
@@ -143,7 +145,7 @@ impl TodoThreadChat {
     fn start_external_message_handler(
         todo_id: String,
         cx: &mut Context<Self>,
-    ) -> Sender<MessageContent> {
+    ) -> Sender<StreamMessage> {
         let (tx, rx) = tokio::sync::mpsc::channel(100);
         let tx1 = tx.clone();
         cx.spawn(async move |this, app: &mut AsyncApp| {
@@ -157,16 +159,26 @@ impl TodoThreadChat {
     async fn handle_external_messages(
         this: WeakEntity<Self>,
         app: &mut AsyncApp,
-        (todo_id, tx, mut rx): (String, Sender<MessageContent>, Receiver<MessageContent>),
+        (todo_id, tx, mut rx): (String, Sender<StreamMessage>, Receiver<StreamMessage>),
     ) {
         let todo_id_clone = todo_id.clone();
         // 订阅外部消息
-        let _sub = app.subscribe_event(move |StreamMessage { source, message }: &StreamMessage| {
-            if &todo_id_clone == source {
-                tracing::debug!("接收到消息: {} {:?}", source, message);
-                tx.try_send(message.clone()).unwrap_or_else(|e| {
-                    tracing::error!("Failed to send message to channel: {}", e);
-                });
+        let _sub = app.subscribe_event(move |msg: &StreamMessage| match msg {
+            StreamMessage::Stream(source, message) => {
+                if &todo_id_clone == source {
+                    tracing::debug!("接收到消息: {} {:?}", source, message);
+                    tx.try_send(msg.clone()).unwrap_or_else(|e| {
+                        tracing::error!("Failed to send message to channel: {}", e);
+                    });
+                }
+            }
+            StreamMessage::Done(source) => {
+                if &todo_id_clone == source {
+                    tx.try_send(msg.clone()).unwrap_or_else(|e| {
+                        tracing::error!("Failed to send message to channel: {}", e);
+                    });
+                    tracing::debug!("接收到完成消息: {}", source);
+                }
             }
         });
         tracing::info!(
@@ -179,7 +191,7 @@ impl TodoThreadChat {
             Timer::after(Duration::from_millis(50)).await;
             let mut buffer = String::new();
             let mut message_count = 0;
-            
+
             // 批量收集消息
             loop {
                 match rx.try_recv() {
@@ -190,40 +202,53 @@ impl TodoThreadChat {
                         break 'message_loop;
                     }
                     Ok(msg) => match msg {
-                        MessageContent::ToolFunction(tool) => {
-                            buffer.push_str(&format!(
-                                "工具调用: {}({})\n",
-                                tool.name, tool.arguments
-                            ));
-                        }
-                        MessageContent::TextChunk(text) => {
-                            if !text.is_empty() {
-                               buffer.push_str(&text);
+                        StreamMessage::Stream(_, content) => match content {
+                            MessageContent::ToolFunction(tool) => {
+                                buffer.push_str(&format!(
+                                    "工具调用: {}({})\n",
+                                    tool.name, tool.arguments
+                                ));
                             }
-                            
-                        }
-                        MessageContent::Part(part) => {
-                            if let Some(text) = part.get_text() {
+                            MessageContent::TextChunk(text) => {
                                 if !text.is_empty() {
-                                    buffer.push_str(text);
+                                    buffer.push_str(&text);
                                 }
                             }
-                        }
+                            MessageContent::Part(part) => {
+                                if let Some(text) = part.get_text() {
+                                    if !text.is_empty() {
+                                        buffer.push_str(text);
+                                    }
+                                }
+                            }
 
-                        MessageContent::ToolDefinitions(_) => {}
+                            MessageContent::ToolDefinitions(_) => {}
+                        },
+                        StreamMessage::Done(_) => {
+                            this.update(app, |this, cx| {
+                                this.is_running = false;
+                            })
+                            .ok();
+                        }
                     },
                 }
+                this.upgrade().is_none().then(|| {
+                    tracing::warn!("组件已被销毁，停止消息处理");
+                    return;
+                });
             }
             if buffer.is_empty() {
                 continue;
             }
-            let update_result = this.update(app, |this, cx| {
-                this.process_received_message(MessageContent::TextChunk(buffer), cx);
-            });
-            if update_result.is_err() {
-                tracing::warn!("更新UI失败，可能组件已销毁");
+            if this
+                .update(app, |this, cx| {
+                    this.process_received_message(MessageContent::TextChunk(buffer), cx);
+                })
+                .is_err()
+            {
+                tracing::warn!("组件已被销毁，停止消息处理");
                 break 'message_loop;
-            }
+            };
             message_count += 1;
             tracing::debug!("处理了 {} 条消息", message_count);
         }

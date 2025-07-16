@@ -108,6 +108,10 @@ impl TodoThreadChat {
                 provider_id,
                 model_id
             );
+            this.update(cx, |this, cx| {
+                this.is_running = true;
+            })
+            .ok();
             match CrossRuntimeBridge::global()
                 .llm_chat(
                     provider_id,
@@ -124,6 +128,7 @@ impl TodoThreadChat {
                 Err(e) => {
                     tracing::error!("LLM 调用失败: {:?}", e);
                     this.update(cx, |this, cx| {
+                        this.is_running = false;
                         // 移除占位符消息或显示错误消息
                         if let Some(last_message) = this.chat_messages.last_mut() {
                             if last_message.get_text().is_empty() {
@@ -137,7 +142,6 @@ impl TodoThreadChat {
             }
         })
         .detach();
-
         cx.notify();
     }
 
@@ -283,6 +287,10 @@ impl TodoThreadChat {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.is_loading || self.is_running {
+            // 如果正在加载或运行，忽略输入
+            return;
+        }
         match event {
             InputEvent::PressEnter { secondary, .. } if *secondary => {
                 window.dispatch_action(Box::new(SendMessage), cx);
