@@ -816,8 +816,8 @@ where
             .w(col_width)
             .h_full()
             .flex_shrink_0()
-            .truncate()
-            .debug_red()
+            .overflow_hidden()
+            .whitespace_nowrap()
             .table_cell_size(self.size)
             .map(|this| match col_padding {
                 Some(padding) => this
@@ -1224,7 +1224,6 @@ where
                     this.child(
                         h_flex()
                             .relative()
-                            .items_center()
                             .h_full()
                             .children({
                                 let mut items = Vec::with_capacity(left_cols_count);
