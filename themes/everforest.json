@@ -233,9 +233,9 @@
         "base.cyan": "#83c092"
       },
       "highlight": {
-        "editor.foreground": "#DDDDDD",
-        "editor.background": "#000000",
-        "editor.active_line.background": "#131313",
+        "editor.foreground": "#d3c6aa",
+        "editor.background": "#262E34",
+        "editor.active_line.background": "#3c4448",
         "editor.line_number": "#8F8F8F",
         "editor.active_line_number": "#DDDDDD",
         "conflict": "#D2602D",

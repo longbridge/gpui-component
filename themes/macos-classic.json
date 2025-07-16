@@ -222,9 +222,9 @@
         "base.yellow.light": "#7B6508"
       },
       "highlight": {
-        "editor.foreground": "#DDDDDD",
-        "editor.background": "#000000",
-        "editor.active_line.background": "#131313",
+        "editor.foreground": "#CACCCA",
+        "editor.background": "#131313",
+        "editor.active_line.background": "#353436",
         "editor.line_number": "#8F8F8F",
         "editor.active_line_number": "#DDDDDD",
         "conflict": "#D2602D",
