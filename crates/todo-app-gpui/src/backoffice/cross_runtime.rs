@@ -422,7 +422,7 @@ impl MessageHandler for LlmChatHandler {
             let source = self.request.source.clone();
 
             let result = tokio::time::timeout(
-                Duration::from_secs(15),
+                Duration::from_secs(30),
                 LlmRegistry::chat_stream(self.request),
             )
             .await;
@@ -434,7 +434,7 @@ impl MessageHandler for LlmChatHandler {
                     self.response.send(Ok(())).ok();
                     tracing::trace!("开始接收 LLM 聊天流消息");
                     loop {
-                        match tokio::time::timeout(Duration::from_secs(15), stream.next()).await {
+                        match tokio::time::timeout(Duration::from_secs(900), stream.next()).await {
                             Ok(Some(Ok(message))) => {
                                 tracing::trace!("接收到 LLM 聊天流消息: {:?}", message);
                                 xbus::post(StreamMessage::stream(source.clone(), message));
