@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::str::FromStr;
 
-// 任务执行事件，用于广播给 LLM-Agent
+// 任务执行事件，用于广播给 Coordinator
 #[derive(Debug, Clone, Message)]
 #[rtype(result = "()")]
 pub struct JobExecutionEvent {
@@ -357,8 +357,7 @@ impl JobScheduler {
         instructions: impl Into<String>,
         refid: Option<String>,
     ) -> anyhow::Result<()> {
-        let scheduler = Self::global();
-        scheduler
+        Self::global()
             .send(AddJob {
                 id: id.into(),
                 name: name.into(),
@@ -379,8 +378,7 @@ impl JobScheduler {
         refid: Option<String>,
         metadata: HashMap<String, String>,
     ) -> anyhow::Result<()> {
-        let scheduler = Self::global();
-        scheduler
+        Self::global()
             .send(AddJob {
                 id: id.into(),
                 name: name.into(),
@@ -394,14 +392,12 @@ impl JobScheduler {
     }
 
     pub async fn remove_job_async(id: impl Into<String>) -> anyhow::Result<()> {
-        let scheduler = Self::global();
-        scheduler.send(RemoveJob { id: id.into() }).await??;
+        Self::global().send(RemoveJob { id: id.into() }).await??;
         Ok(())
     }
 
     pub async fn enable_job_async(id: impl Into<String>, enabled: bool) -> anyhow::Result<()> {
-        let scheduler = Self::global();
-        scheduler
+        Self::global()
             .send(EnableJob {
                 id: id.into(),
                 enabled,
@@ -411,8 +407,7 @@ impl JobScheduler {
     }
 
     pub async fn list_jobs_async() -> anyhow::Result<Vec<StoredCronJob>> {
-        let scheduler = Self::global();
-        let jobs = scheduler.send(ListJobs).await?;
+        let jobs = Self::global().send(ListJobs).await?;
         Ok(jobs)
     }
 }

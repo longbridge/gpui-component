@@ -338,7 +338,6 @@ impl ListDelegate for TodoListDelegate {
         window: &mut Window,
         cx: &mut Context<List<Self>>,
     ) {
-        println!("Double clicked: {:?} {:?}", ev, self.selected_index);
         window.dispatch_action(Box::new(Open), cx);
     }
 
@@ -484,16 +483,12 @@ impl TodoList {
             &todo_list,
             |this, _todo_list, ev: &ListEvent, cx| match ev {
                 ListEvent::Select(ix) => {
-                    println!("List Selected: {:?}", ix);
                     this.selected_todo(cx);
                 }
                 ListEvent::Confirm(ix) => {
-                    println!("List Confirmed: {:?}", ix);
                     this.selected_todo(cx);
                 }
-                ListEvent::Cancel => {
-                    println!("List Cancelled");
-                }
+                ListEvent::Cancel => {}
             },
         )];
 
@@ -508,7 +503,7 @@ impl TodoList {
             opened_windows: HashMap::new(),
             edited_windows: HashMap::new(),
         };
-        celf.set_active_tab(1,  cx);
+        celf.set_active_tab(1, cx);
         celf.start_external_message_handler(cx);
         celf
     }
@@ -540,10 +535,10 @@ impl TodoList {
                     .ok();
                 } else if let FoEvent::TodoEditWindowClosed(todo_id) = ev {
                     this.update(app, |this, cx| {
-                         tracing::trace!("处理关闭Todo编辑窗口事件: {}", todo_id);
+                        tracing::trace!("处理关闭Todo编辑窗口事件: {}", todo_id);
                         this.edited_windows.remove(&todo_id);
                         this.set_active_tab(this.active_tab_ix, cx);
-                         cx.notify();
+                        cx.notify();
                     })
                     .ok();
                 }
@@ -563,7 +558,6 @@ impl TodoList {
             .retain(|_, handle| handle.is_active(cx).is_some());
     }
     fn follow_todo(&mut self, _: &Follow, window: &mut Window, cx: &mut Context<Self>) {
-        println!("Follow action triggered");
         if let Some(mut todo) = self.selected_todo.clone() {
             todo.follow = !todo.follow;
             TodoManager::update_todo(todo).ok();
@@ -571,23 +565,20 @@ impl TodoList {
         }
     }
     fn redo_todo(&mut self, _: &Redo, window: &mut Window, cx: &mut Context<Self>) {
-        println!("Redo action triggered");
         if let Some(mut todo) = self.selected_todo.clone() {
             todo.status = TodoStatus::Todo;
             TodoManager::update_todo(todo).ok();
-            self.set_active_tab(self.active_tab_ix,  cx);
+            self.set_active_tab(self.active_tab_ix, cx);
         }
     }
     fn done_todo(&mut self, _: &Completed, window: &mut Window, cx: &mut Context<Self>) {
-        println!("Completed action triggered");
         if let Some(mut todo) = self.selected_todo.clone() {
             todo.status = TodoStatus::Done;
             TodoManager::update_todo(todo).ok();
-            self.set_active_tab(self.active_tab_ix,  cx);
+            self.set_active_tab(self.active_tab_ix, cx);
         }
     }
     fn pause_todo(&mut self, _: &Pause, window: &mut Window, cx: &mut Context<Self>) {
-        println!("Completed action triggered");
         if let Some(mut todo) = self.selected_todo.clone() {
             if todo.status == TodoStatus::Suspended {
                 todo.status = TodoStatus::Todo;
@@ -596,21 +587,20 @@ impl TodoList {
             }
 
             TodoManager::update_todo(todo).ok();
-            self.set_active_tab(self.active_tab_ix,  cx);
+            self.set_active_tab(self.active_tab_ix, cx);
         }
     }
     fn clone_todo(&mut self, _: &Clone, window: &mut Window, cx: &mut Context<Self>) {
-        println!("Clone action triggered");
         if let Some(todo) = self.selected_todo.clone() {
             TodoManager::copy_todo(&todo.id).ok();
-            self.set_active_tab(self.active_tab_ix,  cx);
+            self.set_active_tab(self.active_tab_ix, cx);
         }
     }
 
     fn delete_todo(&mut self, _: &Delete, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(todo) = self.selected_todo.clone() {
             TodoManager::delete_todo(&todo.id).ok();
-            self.set_active_tab(self.active_tab_ix,  cx);
+            self.set_active_tab(self.active_tab_ix, cx);
         }
     }
 
@@ -618,7 +608,7 @@ impl TodoList {
         TodoThreadEdit::add(cx);
     }
     fn open_todo(&mut self, _: &Open, _: &mut Window, cx: &mut Context<Self>) {
-        if let Some(todo) = self.selected_todo.clone()  {
+        if let Some(todo) = self.selected_todo.clone() {
             let todo_id = todo.id.clone();
             match self.opened_windows.get(&todo_id) {
                 Some(handle) if handle.is_active(cx).is_some() => {
@@ -684,11 +674,11 @@ impl TodoList {
             .retain(|_, handle| handle.is_active(cx).is_some());
         self.edited_windows
             .retain(|_, handle| handle.is_active(cx).is_some());
-        self.set_active_tab(self.active_tab_ix,  cx);
+        self.set_active_tab(self.active_tab_ix, cx);
     }
     fn todo_updated(&mut self, _: &TodoSaved, window: &mut Window, cx: &mut Context<Self>) {
         tracing::trace!("Todo updated");
-        self.set_active_tab(self.active_tab_ix,  cx);
+        self.set_active_tab(self.active_tab_ix, cx);
     }
 
     fn set_todo_filter(&mut self, filter: TodoFilter, cx: &mut Context<Self>) {
@@ -720,19 +710,17 @@ impl TodoList {
     }
 
     fn set_active_tab(&mut self, ix: usize, cx: &mut Context<Self>) {
-        println!("Set active tab: {}", ix);
         self.active_tab_ix = ix;
         match ix {
-            0 => self.set_todo_filter(TodoFilter::All,  cx),
-            1 => self.set_todo_filter(TodoFilter::Planned,  cx),
-            2 => self.set_todo_filter(TodoFilter::Completed,  cx),
-            3 => self.set_todo_filter(TodoFilter::Recycle,  cx),
+            0 => self.set_todo_filter(TodoFilter::All, cx),
+            1 => self.set_todo_filter(TodoFilter::Planned, cx),
+            2 => self.set_todo_filter(TodoFilter::Completed, cx),
+            3 => self.set_todo_filter(TodoFilter::Recycle, cx),
             _ => {}
         }
         cx.notify();
     }
     fn set_scroll(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
-        println!("Scroll to: {}", ix);
         match ix {
             0 => self.todo_list.update(cx, |list, cx| {
                 list.scroll_to_item(0, window, cx);
@@ -793,7 +781,7 @@ impl Render for TodoList {
                             .segmented()
                             .selected_index(self.active_tab_ix)
                             .on_click(cx.listener(|this, ix: &usize, window, cx| {
-                                this.set_active_tab(*ix,  cx);
+                                this.set_active_tab(*ix, cx);
                             }))
                             .children(vec!["全部", "计划中", "已完成"])
                             .suffix(
@@ -825,7 +813,6 @@ impl Render for TodoList {
                                             .icon(IconName::Plus)
                                             .tooltip("新建待办")
                                             .on_click(cx.listener(|this, _, window, cx| {
-                                                println!("New Todo clicked");
                                                 this.new_todo(&New, window, cx);
                                             })),
                                     ),
