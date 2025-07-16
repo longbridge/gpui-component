@@ -176,6 +176,10 @@ struct Column {
     name: SharedString,
     align: TextAlign,
     sort: Option<ColSort>,
+    paddings: Option<Edges<Pixels>>,
+    width: Pixels,
+    fixed: bool,
+    resizable: bool,
 }
 
 impl Column {
@@ -185,6 +189,10 @@ impl Column {
             name: name.into(),
             align: TextAlign::Left,
             sort: None,
+            paddings: None,
+            width: px(100.),
+            fixed: false,
+            resizable: true,
         }
     }
 
@@ -195,6 +203,26 @@ impl Column {
 
     fn text_right(mut self) -> Self {
         self.align = TextAlign::Right;
+        self
+    }
+
+    fn p_0(mut self) -> Self {
+        self.paddings = Some(Edges::all(px(0.)));
+        self
+    }
+
+    fn w(mut self, width: impl Into<Pixels>) -> Self {
+        self.width = width.into();
+        self
+    }
+
+    fn fixed(mut self) -> Self {
+        self.fixed = true;
+        self
+    }
+
+    fn resizable(mut self, resizable: bool) -> Self {
+        self.resizable = resizable;
         self
     }
 }
@@ -222,37 +250,47 @@ impl StockTableDelegate {
             size: Size::default(),
             stocks: random_stocks(size),
             columns: vec![
-                Column::new("id", "ID"),
-                Column::new("market", "Market"),
-                Column::new("symbol", "Symbol").sortable(),
-                Column::new("name", "Name"),
-                Column::new("price", "Price").sortable().text_right(),
-                Column::new("change", "Chg").sortable().text_right(),
+                Column::new("id", "ID").w(60.).fixed().resizable(false),
+                Column::new("market", "Market")
+                    .w(60.)
+                    .fixed()
+                    .resizable(false),
+                Column::new("symbol", "Symbol").w(100.).fixed().sortable(),
+                Column::new("name", "Name").w(180.).fixed(),
+                Column::new("price", "Price").sortable().text_right().p_0(),
+                Column::new("change", "Chg").sortable().text_right().p_0(),
                 Column::new("change_percent", "Chg%")
                     .sortable()
-                    .text_right(),
-                Column::new("volume", "Volume"),
-                Column::new("turnover", "Turnover"),
-                Column::new("market_cap", "Market Cap"),
-                Column::new("ttm", "TTM"),
-                Column::new("five_mins_ranking", "5m Ranking"),
+                    .text_right()
+                    .p_0(),
+                Column::new("volume", "Volume").p_0(),
+                Column::new("turnover", "Turnover").p_0(),
+                Column::new("market_cap", "Market Cap").p_0(),
+                Column::new("ttm", "TTM").p_0(),
+                Column::new("five_mins_ranking", "5m Ranking")
+                    .text_right()
+                    .p_0(),
                 Column::new("th60_days_ranking", "60d Ranking"),
                 Column::new("year_change_percent", "Year Chg%"),
-                Column::new("bid", "Bid"),
-                Column::new("bid_volume", "Bid Vol"),
-                Column::new("ask", "Ask"),
-                Column::new("ask_volume", "Ask Vol"),
-                Column::new("open", "Open").text_right(),
-                Column::new("prev_close", "Prev Close").text_right(),
-                Column::new("high", "High").text_right(),
-                Column::new("low", "Low").text_right(),
+                Column::new("bid", "Bid").text_right().p_0(),
+                Column::new("bid_volume", "Bid Vol").text_right().p_0(),
+                Column::new("ask", "Ask").text_right().p_0(),
+                Column::new("ask_volume", "Ask Vol").text_right().p_0(),
+                Column::new("open", "Open").text_right().p_0(),
+                Column::new("prev_close", "Prev Close").text_right().p_0(),
+                Column::new("high", "High").text_right().p_0(),
+                Column::new("low", "Low").text_right().p_0(),
                 Column::new("turnover_rate", "Turnover Rate"),
                 Column::new("rise_rate", "Rise Rate"),
                 Column::new("amplitude", "Amplitude"),
                 Column::new("pe_status", "P/E"),
                 Column::new("pb_status", "P/B"),
-                Column::new("volume_ratio", "Volume Ratio"),
-                Column::new("bid_ask_ratio", "Bid Ask Ratio"),
+                Column::new("volume_ratio", "Volume Ratio")
+                    .text_right()
+                    .p_0(),
+                Column::new("bid_ask_ratio", "Bid Ask Ratio")
+                    .text_right()
+                    .p_0(),
                 Column::new("latest_pre_close", "Latest Pre Close"),
                 Column::new("latest_post_close", "Latest Post Close"),
                 Column::new("pre_market_cap", "Pre Mkt Cap"),
@@ -332,29 +370,25 @@ impl TableDelegate for StockTableDelegate {
     }
 
     fn col_name(&self, col_ix: usize, _: &App) -> SharedString {
-        if let Some(col) = self.columns.get(col_ix) {
-            col.name.clone()
-        } else {
-            "--".into()
-        }
+        self.columns
+            .get(col_ix)
+            .map(|col| col.name.clone())
+            .unwrap_or("--".into())
     }
 
     fn col_width(&self, col_ix: usize, _: &App) -> Pixels {
-        px(match col_ix {
-            0 => 60.,
-            1 => 60.,
-            2 => 100.,
-            3 => 180.,
-            _ => 100.,
-        })
+        self.columns
+            .get(col_ix)
+            .map(|col| col.width)
+            .unwrap_or(px(100.))
     }
 
     fn col_padding(&self, col_ix: usize, _: &App) -> Option<Edges<Pixels>> {
-        if col_ix >= 4 && col_ix <= 10 {
-            Some(Edges::all(px(0.)))
-        } else {
-            None
-        }
+        let Some(col) = self.columns.get(col_ix) else {
+            return None;
+        };
+
+        col.paddings
     }
 
     fn col_fixed(&self, col_ix: usize, _: &App) -> Option<table::ColFixed> {
@@ -362,7 +396,11 @@ impl TableDelegate for StockTableDelegate {
             return None;
         }
 
-        if col_ix < 4 {
+        let Some(col) = self.columns.get(col_ix) else {
+            return None;
+        };
+
+        if col.fixed {
             Some(ColFixed::Left)
         } else {
             None
@@ -370,7 +408,11 @@ impl TableDelegate for StockTableDelegate {
     }
 
     fn can_resize_col(&self, col_ix: usize, _: &App) -> bool {
-        return self.col_resize && col_ix > 1;
+        let Some(col) = self.columns.get(col_ix) else {
+            return false;
+        };
+
+        col.resizable
     }
 
     fn can_select_col(&self, _: usize, _: &App) -> bool {
