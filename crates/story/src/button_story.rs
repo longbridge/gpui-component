@@ -588,42 +588,6 @@ impl Render for ButtonStory {
                     ),
             )
             .child(
-                section("Custom Button")
-                    .child(
-                        Button::new("button-6-custom")
-                            .custom(custom_variant)
-                            .label("Custom Button")
-                            .disabled(disabled)
-                            .selected(selected)
-                            .loading(loading)
-                            .when(compact, |this| this.compact())
-                            .on_click(Self::on_click),
-                    )
-                    .child(
-                        Button::new("button-outline-6-custom")
-                            .outline()
-                            .custom(custom_variant)
-                            .label("Outline Button")
-                            .disabled(disabled)
-                            .selected(selected)
-                            .loading(loading)
-                            .when(compact, |this| this.compact())
-                            .on_click(Self::on_click),
-                    )
-                    .child(
-                        Button::new("button-outline-6-custom-1")
-                            .outline()
-                            .icon(IconName::Bell)
-                            .custom(custom_variant)
-                            .label("Icon Button")
-                            .disabled(disabled)
-                            .selected(selected)
-                            .loading(loading)
-                            .when(compact, |this| this.compact())
-                            .on_click(Self::on_click),
-                    ),
-            )
-            .child(
                 section("Button Group").child(
                     ButtonGroup::new("button-group")
                         .outline()
@@ -934,6 +898,42 @@ impl Render for ButtonStory {
                             .selected(selected)
                             .loading(loading)
                             .when(compact, |this| this.compact()),
+                    ),
+            )
+            .child(
+                section("Custom Button")
+                    .child(
+                        Button::new("button-6-custom")
+                            .custom(custom_variant)
+                            .label("Custom Button")
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
+                    )
+                    .child(
+                        Button::new("button-outline-6-custom")
+                            .outline()
+                            .custom(custom_variant)
+                            .label("Outline Button")
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
+                    )
+                    .child(
+                        Button::new("button-outline-6-custom-1")
+                            .outline()
+                            .icon(IconName::Bell)
+                            .custom(custom_variant)
+                            .label("Icon Button")
+                            .disabled(disabled)
+                            .selected(selected)
+                            .loading(loading)
+                            .when(compact, |this| this.compact())
+                            .on_click(Self::on_click),
                     ),
             )
     }

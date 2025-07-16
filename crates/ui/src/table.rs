@@ -812,8 +812,9 @@ where
         let col_width = col_group.width;
         let col_padding = col_group.padding;
 
-        div()
+        h_flex()
             .w(col_width)
+            .items_center()
             .h_full()
             .flex_shrink_0()
             .overflow_hidden()
