@@ -433,6 +433,12 @@ where
         self
     }
 
+    /// Set to loop selection, default to true.
+    pub fn loop_selection(mut self, loop_selection: bool) -> Self {
+        self.loop_selection = loop_selection;
+        self
+    }
+
     /// Set the size to the table.
     pub fn set_size(&mut self, size: Size, cx: &mut Context<Self>) {
         self.size = size;
