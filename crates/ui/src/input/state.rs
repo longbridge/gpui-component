@@ -1963,7 +1963,9 @@ impl InputState {
 
     /// Returns the true to let InputElement to render cursor, when Input is focused and current BlinkCursor is visible.
     pub(crate) fn show_cursor(&self, window: &Window, cx: &App) -> bool {
-        self.focus_handle.is_focused(window) && self.blink_cursor.read(cx).visible()
+        self.focus_handle.is_focused(window)
+            && self.blink_cursor.read(cx).visible()
+            && window.is_window_active()
     }
 
     fn on_focus(&mut self, _: &mut Window, cx: &mut Context<Self>) {
