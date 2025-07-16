@@ -1,4 +1,5 @@
 {
+  "$schema": "https://github.com/longbridge/gpui-component/raw/refs/heads/main/.theme-schema.json",
   "name": "Molokai",
   "author": "Tomas Restrepo",
   "url": "https://github.com/tomasr/molokai",

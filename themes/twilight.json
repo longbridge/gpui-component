@@ -1,4 +1,5 @@
 {
+  "$schema": "https://github.com/longbridge/gpui-component/raw/refs/heads/main/.theme-schema.json",
   "name": "Twilight",
   "author": "MacroMates",
   "url": "https://macromates.com",
