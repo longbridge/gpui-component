@@ -350,7 +350,7 @@ impl TableDelegate for StockTableDelegate {
     }
 
     fn col_padding(&self, col_ix: usize, _: &App) -> Option<Edges<Pixels>> {
-        if col_ix >= 3 && col_ix <= 10 {
+        if col_ix >= 4 && col_ix <= 10 {
             Some(Edges::all(px(0.)))
         } else {
             None

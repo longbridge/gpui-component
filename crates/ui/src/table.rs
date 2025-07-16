@@ -814,8 +814,10 @@ where
 
         div()
             .w(col_width)
+            .h_full()
             .flex_shrink_0()
             .truncate()
+            .debug_red()
             .table_cell_size(self.size)
             .map(|this| match col_padding {
                 Some(padding) => this
@@ -829,7 +831,7 @@ where
 
     /// Show Column selection style, when the column is selected and the selection state is Column.
     fn render_col_wrap(&self, col_ix: usize, _: &mut Window, cx: &mut Context<Self>) -> Div {
-        let el = h_flex().h_full().items_center();
+        let el = h_flex().h_full();
 
         if self.delegate().can_select_col(col_ix, cx)
             && self.selected_col == Some(col_ix)
@@ -1124,7 +1126,6 @@ where
                 this.child(
                     h_flex()
                         .relative()
-                        .h_full()
                         .bg(cx.theme().table_head)
                         .children(
                             self.col_groups
