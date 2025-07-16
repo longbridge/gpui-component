@@ -43,7 +43,7 @@ pub(crate) struct ColGroup {
     pub(crate) bounds: Bounds<Pixels>,
     pub(crate) sort: Option<ColSort>,
     pub(crate) fixed: Option<ColFixed>,
-    pub(crate) padding: Option<Edges<Pixels>>,
+    pub(crate) paddings: Option<Edges<Pixels>>,
 }
 
 #[derive(Clone)]
@@ -144,6 +144,11 @@ pub struct Table<D: TableDelegate> {
     col_groups: Vec<ColGroup>,
     fixed_cols: FixedCols,
 
+    /// Whether the table can loop selection, default is true.
+    ///
+    /// When the prev/next selection is out of the table bounds, the selection will loop to the other side.
+    pub loop_selection: bool,
+
     pub vertical_scroll_handle: UniformListScrollHandle,
     pub vertical_scroll_state: ScrollbarState,
     pub horizontal_scroll_handle: ScrollHandle,
@@ -182,12 +187,12 @@ pub trait TableDelegate: Sized + 'static {
     fn col_name(&self, col_ix: usize, cx: &App) -> SharedString;
 
     /// Returns whether the column at the given index can be resized. Default: true
-    fn can_resize_col(&self, col_ix: usize, cx: &App) -> bool {
+    fn col_resizable(&self, col_ix: usize, cx: &App) -> bool {
         true
     }
 
     /// Returns whether the column at the given index can be selected. Default: false
-    fn can_select_col(&self, col_ix: usize, cx: &App) -> bool {
+    fn col_selectable(&self, col_ix: usize, cx: &App) -> bool {
         false
     }
 
@@ -216,8 +221,13 @@ pub trait TableDelegate: Sized + 'static {
     /// Return the padding of the column at the given index to override the default padding.
     ///
     /// Return None, use the default padding.
-    fn col_padding(&self, col_ix: usize, cx: &App) -> Option<Edges<Pixels>> {
+    fn col_paddings(&self, col_ix: usize, cx: &App) -> Option<Edges<Pixels>> {
         None
+    }
+
+    /// Return true to enable column order change.
+    fn col_movable(&self, col_ix: usize, cx: &App) -> bool {
+        false
     }
 
     /// Perform sort on the column at the given index.
@@ -263,20 +273,6 @@ pub trait TableDelegate: Sized + 'static {
         window: &mut Window,
         cx: &mut Context<Table<Self>>,
     ) -> impl IntoElement;
-
-    /// Return true to enable loop selection on the table.
-    ///
-    /// When the prev/next selection is out of the table bounds, the selection will loop to the other side.
-    ///
-    /// Default: true
-    fn can_loop_select(&self, _: &App) -> bool {
-        true
-    }
-
-    /// Return true to enable column order change.
-    fn can_move_col(&self, col_ix: usize, cx: &App) -> bool {
-        false
-    }
 
     /// Move the column at the given `col_ix` to insert before the column at the given `to_ix`.
     fn move_col(
@@ -403,6 +399,7 @@ where
             size: Size::default(),
             scrollbar_visible: Edges::all(true),
             visible_range: VisibleRangeState::default(),
+            loop_selection: true,
             _load_more_task: Task::ready(()),
             _measure: Vec::new(),
         };
@@ -466,7 +463,7 @@ where
         self.col_groups = (0..self.delegate.cols_count(cx))
             .map(|col_ix| ColGroup {
                 width: self.delegate.col_width(col_ix, cx),
-                padding: self.delegate.col_padding(col_ix, cx),
+                paddings: self.delegate.col_paddings(col_ix, cx),
                 bounds: Bounds::default(),
                 sort: self.delegate.col_sort(col_ix, cx),
                 fixed: self.delegate.col_fixed(col_ix, cx),
@@ -563,7 +560,7 @@ where
     }
 
     fn on_col_head_click(&mut self, col_ix: usize, _: &mut Window, cx: &mut Context<Self>) {
-        if !self.delegate.can_select_col(col_ix, cx) {
+        if !self.delegate.col_selectable(col_ix, cx) {
             return;
         }
 
@@ -584,7 +581,7 @@ where
         if selected_row > 0 {
             selected_row = selected_row.saturating_sub(1);
         } else {
-            if self.delegate.can_loop_select(cx) {
+            if self.loop_selection {
                 selected_row = rows_count.saturating_sub(1);
             }
         }
@@ -601,7 +598,7 @@ where
         let selected_row = match self.selected_row {
             Some(selected_row) if selected_row < rows_count.saturating_sub(1) => selected_row + 1,
             Some(selected_row) => {
-                if self.delegate.can_loop_select(cx) {
+                if self.loop_selection {
                     0
                 } else {
                     selected_row
@@ -624,7 +621,7 @@ where
         if selected_col > 0 {
             selected_col = selected_col.saturating_sub(1);
         } else {
-            if self.delegate.can_loop_select(cx) {
+            if self.loop_selection {
                 selected_col = cols_count.saturating_sub(1);
             }
         }
@@ -641,7 +638,7 @@ where
         if selected_col < self.delegate.cols_count(cx).saturating_sub(1) {
             selected_col += 1;
         } else {
-            if self.delegate.can_loop_select(cx) {
+            if self.loop_selection {
                 selected_col = 0;
             }
         }
@@ -678,7 +675,7 @@ where
         const MIN_WIDTH: Pixels = px(10.0);
         const MAX_WIDTH: Pixels = px(1200.0);
 
-        if !self.delegate.can_resize_col(ix, cx) {
+        if !self.delegate.col_resizable(ix, cx) {
             return;
         }
         let size = size.floor();
@@ -810,7 +807,7 @@ where
         };
 
         let col_width = col_group.width;
-        let col_padding = col_group.padding;
+        let col_padding = col_group.paddings;
 
         div()
             .w(col_width)
@@ -833,7 +830,7 @@ where
     fn render_col_wrap(&self, col_ix: usize, _: &mut Window, cx: &mut Context<Self>) -> Div {
         let el = h_flex().h_full();
 
-        if self.delegate().can_select_col(col_ix, cx)
+        if self.delegate().col_selectable(col_ix, cx)
             && self.selected_col == Some(col_ix)
             && self.selection_state == SelectionState::Column
         {
@@ -896,7 +893,7 @@ where
     ) -> impl IntoElement {
         const HANDLE_SIZE: Pixels = px(2.);
 
-        if !self.delegate.can_resize_col(ix, cx) {
+        if !self.delegate.col_resizable(ix, cx) {
             return div().into_any_element();
         }
 
@@ -1024,8 +1021,8 @@ where
     ) -> impl IntoElement {
         let entity_id = cx.entity_id();
         let col_group = self.col_groups.get(col_ix).expect("BUG: invalid col index");
-        let moveable = self.delegate.can_move_col(col_ix, cx);
-        let paddings = self.delegate.col_padding(col_ix, cx);
+        let movable = self.delegate.col_movable(col_ix, cx);
+        let paddings = self.delegate.col_paddings(col_ix, cx);
         let name = self.delegate.col_name(col_ix, cx);
 
         h_flex()
@@ -1052,7 +1049,7 @@ where
                             })
                             .children(self.render_sort_icon(col_ix, &col_group, window, cx)),
                     )
-                    .when(moveable, |this| {
+                    .when(movable, |this| {
                         this.on_drag(
                             DragCol {
                                 entity_id,

@@ -231,7 +231,6 @@ struct StockTableDelegate {
     stocks: Vec<Stock>,
     columns: Vec<Column>,
     size: Size,
-    loop_selection: bool,
     col_resize: bool,
     col_order: bool,
     col_sort: bool,
@@ -308,7 +307,6 @@ impl StockTableDelegate {
                 Column::new("day_120_ranking", "120d Ranking"),
                 Column::new("day_250_ranking", "250d Ranking"),
             ],
-            loop_selection: true,
             col_resize: true,
             col_order: true,
             col_sort: true,
@@ -383,7 +381,7 @@ impl TableDelegate for StockTableDelegate {
             .unwrap_or(px(100.))
     }
 
-    fn col_padding(&self, col_ix: usize, _: &App) -> Option<Edges<Pixels>> {
+    fn col_paddings(&self, col_ix: usize, _: &App) -> Option<Edges<Pixels>> {
         let Some(col) = self.columns.get(col_ix) else {
             return None;
         };
@@ -407,7 +405,7 @@ impl TableDelegate for StockTableDelegate {
         }
     }
 
-    fn can_resize_col(&self, col_ix: usize, _: &App) -> bool {
+    fn col_resizable(&self, col_ix: usize, _: &App) -> bool {
         let Some(col) = self.columns.get(col_ix) else {
             return false;
         };
@@ -415,7 +413,7 @@ impl TableDelegate for StockTableDelegate {
         col.resizable
     }
 
-    fn can_select_col(&self, _: usize, _: &App) -> bool {
+    fn col_selectable(&self, _: usize, _: &App) -> bool {
         return self.col_selection;
     }
 
@@ -586,11 +584,7 @@ impl TableDelegate for StockTableDelegate {
         }
     }
 
-    fn can_loop_select(&self, _: &App) -> bool {
-        self.loop_selection
-    }
-
-    fn can_move_col(&self, _: usize, _: &App) -> bool {
+    fn col_movable(&self, _: usize, _: &App) -> bool {
         self.col_order
     }
 
@@ -816,7 +810,7 @@ impl TableStory {
 
     fn toggle_loop_selection(&mut self, checked: &bool, _: &mut Window, cx: &mut Context<Self>) {
         self.table.update(cx, |table, cx| {
-            table.delegate_mut().loop_selection = *checked;
+            table.loop_selection = *checked;
             cx.notify();
         });
     }
@@ -907,6 +901,7 @@ impl TableStory {
 impl Render for TableStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
         let delegate = self.table.read(cx).delegate();
+        let loop_selection = self.table.read(cx).loop_selection;
         let rows_count = delegate.rows_count(cx);
         let size = self.size;
 
@@ -923,7 +918,7 @@ impl Render for TableStory {
                     .child(
                         Checkbox::new("loop-selection")
                             .label("Loop Selection")
-                            .selected(delegate.loop_selection)
+                            .selected(loop_selection)
                             .on_click(cx.listener(Self::toggle_loop_selection)),
                     )
                     .child(
