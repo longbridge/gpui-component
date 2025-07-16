@@ -1126,6 +1126,7 @@ where
                 this.child(
                     h_flex()
                         .relative()
+                        .h_full()
                         .bg(cx.theme().table_head)
                         .children(
                             self.col_groups
