@@ -812,13 +812,10 @@ where
         let col_width = col_group.width;
         let col_padding = col_group.padding;
 
-        h_flex()
+        div()
             .w(col_width)
-            .items_center()
-            .h_full()
             .flex_shrink_0()
-            .overflow_hidden()
-            .whitespace_nowrap()
+            .truncate()
             .table_cell_size(self.size)
             .map(|this| match col_padding {
                 Some(padding) => this
@@ -832,7 +829,7 @@ where
 
     /// Show Column selection style, when the column is selected and the selection state is Column.
     fn render_col_wrap(&self, col_ix: usize, _: &mut Window, cx: &mut Context<Self>) -> Div {
-        let el = h_flex().h_full();
+        let el = h_flex().h_full().items_center();
 
         if self.delegate().can_select_col(col_ix, cx)
             && self.selected_col == Some(col_ix)
@@ -1226,6 +1223,7 @@ where
                     this.child(
                         h_flex()
                             .relative()
+                            .items_center()
                             .h_full()
                             .children({
                                 let mut items = Vec::with_capacity(left_cols_count);
