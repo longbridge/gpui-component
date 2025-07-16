@@ -619,10 +619,9 @@ impl Render for TodoThreadChat {
                             h_flex()
                                 .items_center()
                                 .justify_between()
-                                .gap_1()
                                 .bg(gpui::rgb(0xF9FAFB))
                                 .child(
-                                    h_flex().justify_start().items_center().gap_2().child(
+                                    h_flex().justify_start().items_center().gap_1().child(
                                         Button::new("show-chat-model-drawer")
                                             .icon(
                                                 Icon::new(IconName::Database)
@@ -665,7 +664,7 @@ impl Render for TodoThreadChat {
                                     ),
                                 )
                                 .child(
-                                    h_flex().justify_end().items_center().gap_2().child(
+                                    h_flex().justify_end().items_center().gap_1().child(
                                         Button::new("send-message")
                                             .with_variant(ButtonVariant::Primary)
                                             .icon(IconName::Send)
