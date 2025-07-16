@@ -8,6 +8,7 @@ members = [
     "crates/wef/examples/wef-winit",
     "crates/webview",
     "crates/webview/examples/wef-example",
+    "crates/theme-schema"
 ]
 
 default-members = ["crates/story"]

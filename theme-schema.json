@@ -1,5 +1,5 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ThemeSet",
   "description": "Represents a theme configuration.",
   "type": "object",
@@ -37,7 +37,7 @@
     "themes": {
       "type": "array",
       "items": {
-        "$ref": "#/definitions/ThemeConfig"
+        "$ref": "#/$defs/ThemeConfig"
       },
       "default": []
     }
@@ -49,7 +49,7 @@
     "font.size",
     "themes"
   ],
-  "definitions": {
+  "$defs": {
     "ThemeConfig": {
       "type": "object",
       "properties": {
@@ -59,25 +59,17 @@
         },
         "mode": {
           "description": "The mode of the theme, default is light.",
-          "allOf": [
-            {
-              "$ref": "#/definitions/ThemeMode"
-            }
-          ]
+          "$ref": "#/$defs/ThemeMode"
         },
         "colors": {
           "description": "The colors of the theme.",
-          "allOf": [
-            {
-              "$ref": "#/definitions/ThemeConfigColors"
-            }
-          ]
+          "$ref": "#/$defs/ThemeConfigColors"
         },
         "highlight": {
           "description": "The highlight theme, this part is combilbility with `style` section in Zed theme.\n\nhttps://github.com/zed-industries/zed/blob/f50041779dcfd7a76c8aec293361c60c53f02d51/assets/themes/ayu/ayu.json#L9",
           "anyOf": [
             {
-              "$ref": "#/definitions/HighlightThemeStyle"
+              "$ref": "#/$defs/HighlightThemeStyle"
             },
             {
               "type": "null"
@@ -959,7 +951,7 @@
         "editor.background": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -969,7 +961,7 @@
         "editor.foreground": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -979,7 +971,7 @@
         "editor.active_line.background": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -989,7 +981,7 @@
         "editor.line_number": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -999,7 +991,7 @@
         "editor.active_line_number": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -1009,7 +1001,7 @@
         "error": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -1019,7 +1011,7 @@
         "error.background": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -1029,7 +1021,7 @@
         "error.border": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -1039,7 +1031,7 @@
         "warning": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -1049,7 +1041,7 @@
         "warning.background": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -1059,7 +1051,7 @@
         "warning.border": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -1069,7 +1061,7 @@
         "info": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -1079,7 +1071,7 @@
         "info.background": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -1089,7 +1081,7 @@
         "info.border": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -1099,7 +1091,7 @@
         "success": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -1109,7 +1101,7 @@
         "success.background": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -1119,7 +1111,7 @@
         "success.border": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -1129,7 +1121,7 @@
         "hint": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -1139,7 +1131,7 @@
         "hint.background": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -1149,7 +1141,7 @@
         "hint.border": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -1157,7 +1149,7 @@
           ]
         },
         "syntax": {
-          "$ref": "#/definitions/SyntaxColors"
+          "$ref": "#/$defs/SyntaxColors"
         }
       },
       "required": [
@@ -1195,7 +1187,7 @@
         "attribute": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1205,7 +1197,7 @@
         "boolean": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1215,7 +1207,7 @@
         "comment": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1225,7 +1217,7 @@
         "comment_doc": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1235,7 +1227,7 @@
         "constant": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1245,7 +1237,7 @@
         "constructor": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1255,7 +1247,7 @@
         "embedded": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1265,7 +1257,7 @@
         "emphasis": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1275,7 +1267,7 @@
         "emphasis.strong": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1285,7 +1277,7 @@
         "enum": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1295,7 +1287,7 @@
         "function": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1305,7 +1297,7 @@
         "hint": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1315,7 +1307,7 @@
         "keyword": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1325,7 +1317,7 @@
         "label": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1335,7 +1327,7 @@
         "link_text": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1345,7 +1337,7 @@
         "link_uri": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1355,7 +1347,7 @@
         "number": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1365,7 +1357,7 @@
         "operator": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1375,7 +1367,7 @@
         "predictive": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1385,7 +1377,7 @@
         "preproc": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1395,7 +1387,7 @@
         "primary": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1405,7 +1397,7 @@
         "property": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1415,7 +1407,7 @@
         "punctuation": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1425,7 +1417,7 @@
         "punctuation.bracket": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1435,7 +1427,7 @@
         "punctuation.delimiter": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1445,7 +1437,7 @@
         "punctuation.list_marker": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1455,7 +1447,7 @@
         "punctuation.special": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1465,7 +1457,7 @@
         "string": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1475,7 +1467,7 @@
         "string.escape": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1485,7 +1477,7 @@
         "string.regex": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1495,7 +1487,7 @@
         "string.special": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1505,7 +1497,7 @@
         "string.special.symbol": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1515,7 +1507,7 @@
         "tag": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1525,7 +1517,7 @@
         "tag.doctype": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1535,7 +1527,7 @@
         "text.literal": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1545,7 +1537,7 @@
         "title": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1555,7 +1547,7 @@
         "type": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1565,7 +1557,7 @@
         "variable": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1575,7 +1567,7 @@
         "variable.special": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1585,7 +1577,7 @@
         "variant": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1642,7 +1634,7 @@
         "color": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -1652,7 +1644,7 @@
         "font_style": {
           "anyOf": [
             {
-              "$ref": "#/definitions/FontStyle"
+              "$ref": "#/$defs/FontStyle"
             },
             {
               "type": "null"
@@ -1662,7 +1654,7 @@
         "font_weight": {
           "anyOf": [
             {
-              "$ref": "#/definitions/FontWeightContent"
+              "$ref": "#/$defs/FontWeightContent"
             },
             {
               "type": "null"

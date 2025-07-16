@@ -408,8 +408,6 @@ pub struct HighlightThemeStyle {
 pub struct HighlightTheme {
     pub name: String,
     #[serde(default)]
-    pub author: String,
-    #[serde(default)]
     pub appearance: ThemeMode,
     pub style: HighlightThemeStyle,
 }

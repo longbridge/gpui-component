@@ -1,5 +1,6 @@
 [
   {
+    "$schema": "https://github.com/longbridge/gpui-component/raw/refs/heads/main/.theme-schema.json",
     "name": "Everforest Light",
     "author": "sainnhe",
     "url": "https://github.com/sainnhe/everforest",
@@ -176,6 +177,7 @@
     }
   },
   {
+    "$schema": "https://github.com/longbridge/gpui-component/raw/refs/heads/main/.theme-schema.json",
     "name": "Everforest Dark",
     "author": "sainnhe",
     "url": "https://github.com/sainnhe/everforest",

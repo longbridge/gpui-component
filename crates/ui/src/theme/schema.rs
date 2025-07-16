@@ -14,18 +14,28 @@ use crate::{
 /// Represents a theme configuration.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
-pub struct ThemeConfig {
-    /// The name of the theme.
+pub struct ThemeSet {
+    /// The name of the theme set.
     pub name: SharedString,
     /// The author of the theme.
     pub author: Option<SharedString>,
     /// The URL of the theme.
     pub url: Option<SharedString>,
-    /// The mode of the theme, default is light.
-    pub mode: ThemeMode,
+
     /// The base font size, default is 16.
     #[serde(rename = "font.size")]
     pub font_size: Option<f32>,
+
+    #[serde(rename = "themes")]
+    pub themes: Vec<ThemeConfig>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+pub struct ThemeConfig {
+    /// The name of the theme.
+    pub name: SharedString,
+    /// The mode of the theme, default is light.
+    pub mode: ThemeMode,
     /// The colors of the theme.
     pub colors: ThemeConfigColors,
     /// The highlight theme, this part is combilbility with `style` section in Zed theme.
@@ -540,7 +550,6 @@ impl Theme {
         if let Some(style) = &config.highlight {
             let highlight_theme = Arc::new(HighlightTheme {
                 name: config.name.to_string(),
-                author: config.author.clone().unwrap_or_default().to_string(),
                 appearance: self.mode,
                 style: style.clone(),
             });
