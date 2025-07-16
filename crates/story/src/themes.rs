@@ -5,7 +5,7 @@ use gpui::{div, Action, App, InteractiveElement as _, ParentElement as _, Render
 use gpui_component::{
     button::{Button, ButtonVariants},
     popup_menu::PopupMenuExt,
-    IconName, Sizable, Theme, ThemeConfig,
+    IconName, Sizable, Theme, ThemeConfig, ThemeSet,
 };
 use serde::{Deserialize, Serialize};
 
@@ -31,7 +31,7 @@ pub fn init(cx: &mut App) {
 }
 
 static THEMES: LazyLock<HashMap<SharedString, ThemeConfig>> = LazyLock::new(|| {
-    fn parse_themes(source: &str) -> Vec<ThemeConfig> {
+    fn parse_themes(source: &str) -> ThemeSet {
         serde_json::from_str(source)
             .context(format!("source: '{}'", source))
             .unwrap()
@@ -59,10 +59,12 @@ static THEMES: LazyLock<HashMap<SharedString, ThemeConfig>> = LazyLock::new(|| {
         include_str!("../../../themes/tokyonight.json"),
         include_str!("../../../themes/twilight.json"),
     ] {
-        for sub_theme in parse_themes(source) {
-            themes.insert(sub_theme.name.clone(), sub_theme);
+        let theme_set = parse_themes(source);
+        for theme in theme_set.themes {
+            themes.insert(theme.name.clone(), theme);
         }
     }
+
     themes
 });
 
