@@ -7,6 +7,7 @@ use crate::xbus::{self, Subscription};
 use actix::Arbiter;
 use futures::StreamExt;
 use std::any::{Any, TypeId};
+use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
 /// 跨运行时通信桥接器
 ///
@@ -419,25 +420,66 @@ impl MessageHandler for LlmChatHandler {
     fn handle(self: Box<Self>) {
         Arbiter::new().spawn(async move {
             let source = self.request.source.clone();
-            let result = LlmRegistry::chat_stream(self.request).await;
+
+            let result = tokio::time::timeout(
+                Duration::from_secs(15),
+                LlmRegistry::chat_stream(self.request),
+            )
+            .await;
 
             tracing::trace!("开始处理 LLM 聊天请求");
             // 错误统一转换为字符串，简化 GPUI 端的错误处理
             match result {
-                Ok(mut stream) => {
-                    let _ = self.response.send(Ok(()));
+                Ok(Ok(mut stream)) => {
+                    self.response.send(Ok(())).ok();
                     tracing::trace!("开始接收 LLM 聊天流消息");
-                    while let Some(Ok(message)) = stream.next().await {
-                        tracing::trace!("接收到 LLM 聊天流消息: {:?}", message);
-                        let stream_message = StreamMessage::stream(source.clone(), message);
-                        // 这里可以将消息发送到 UI 或其他处理器
-                        xbus::post(stream_message);
+                    loop {
+                        match tokio::time::timeout(Duration::from_secs(15), stream.next()).await {
+                            Ok(Some(Ok(message))) => {
+                                tracing::trace!("接收到 LLM 聊天流消息: {:?}", message);
+                                let stream_message = StreamMessage::stream(source.clone(), message);
+                                // 这里可以将消息发送到 UI 或其他处理器
+                                xbus::post(stream_message);
+                            }
+                            Ok(Some(Err(err))) => {
+                                xbus::post(StreamMessage::stream(
+                                    source.clone(),
+                                    MessageContent::TextChunk(format!("模型错误: {:?}", err)),
+                                ));
+                            }
+                            Ok(None) => {
+                                // 流结束，发送完成消息
+                                break;
+                            }
+                            Err(_) => {
+                                // 超时或错误，发送错误消息
+                                xbus::post(StreamMessage::stream(
+                                    source.clone(),
+                                    MessageContent::TextChunk("模型超时".to_string()),
+                                ));
+                                break;
+                            }
+                        }
                     }
-                    xbus::post(StreamMessage::done(source));
                     tracing::trace!("LLM 聊天流消息接收完毕");
+                    xbus::post(StreamMessage::done(source));
                 }
-                Err(err) => {
-                    let _ = self.response.send(Err(err.to_string()));
+
+                Ok(Err(err)) => {
+                    self.response.send(Err(err.to_string())).ok();
+                    xbus::post(StreamMessage::stream(
+                        source.clone(),
+                        MessageContent::TextChunk(format!("模型错误: {:?}", err)),
+                    ));
+                    xbus::post(StreamMessage::done(source));
+                }
+                Err(_) => {
+                    self.response.send(Err("模型超时".to_string())).ok();
+                    xbus::post(StreamMessage::stream(
+                        source.clone(),
+                        MessageContent::TextChunk("模型超时".to_string()),
+                    ));
+                    xbus::post(StreamMessage::done(source));
                 }
             }
         });
