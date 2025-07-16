@@ -14,7 +14,7 @@ use std::fs::File;
 
 use crate::{
     backoffice::{
-        builtin::{cron::JobRegistry, ticker::Ticker},
+        builtin::{cron::JobScheduler, ticker::Ticker},
         cross_runtime::CrossRuntimeBridge,
         llm::LlmRegistry,
         mcp::{server::ResourceDefinition, GetServerSnapshot, McpRegistry},
@@ -157,7 +157,7 @@ pub fn start() -> anyhow::Result<()> {
             McpRegistry::global();
             LlmRegistry::global();
             Ticker::global();
-            JobRegistry::global();
+            JobScheduler::global();
         });
         sys.run().ok();
     });

@@ -28,7 +28,7 @@ impl Actor for Ticker {
 
     fn started(&mut self, ctx: &mut Self::Context) {
         tracing::info!("Ticker started");
-        ctx.run_interval(Duration::from_secs(1), |_ticker, _ctx| {
+        ctx.run_interval(Duration::from_secs(60), |_ticker, _ctx| {
             let timestamp = chrono::Utc::now().timestamp_millis() as u64;
             CrossRuntimeBridge::global().emit(Tick(timestamp));
         });
