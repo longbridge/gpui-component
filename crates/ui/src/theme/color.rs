@@ -169,19 +169,19 @@ impl Colorize for Hsla {
     }
 
     fn hue(&self, hue: f32) -> Self {
-        let mut color = self.clone();
+        let mut color = *self;
         color.h = hue.clamp(0., 1.);
         color
     }
 
     fn saturation(&self, saturation: f32) -> Self {
-        let mut color = self.clone();
+        let mut color = *self;
         color.s = saturation.clamp(0., 1.);
         color
     }
 
     fn lightness(&self, lightness: f32) -> Self {
-        let mut color = self.clone();
+        let mut color = *self;
         color.l = lightness.clamp(0., 1.);
         color
     }
