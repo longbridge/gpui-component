@@ -41,6 +41,12 @@ pub trait Colorize: Sized {
 
     /// Mix two colors together, the `factor` is a value between 0.0 and 1.0 for first color.
     fn mix(&self, other: Self, factor: f32) -> Self;
+    /// Change the `Hue` of the color by the given in range: 0.0 .. 1.0
+    fn hue(&self, hue: f32) -> Self;
+    /// Change the `Saturation` of the color by the given value in range: 0.0 .. 1.0
+    fn saturation(&self, saturation: f32) -> Self;
+    /// Change the `Lightness` of the color by the given value in range: 0.0 .. 1.0
+    fn lightness(&self, lightness: f32) -> Self;
 
     /// Convert the color to a hex string. For example, "#F8FAFC".
     fn to_hex(&self) -> String;
@@ -160,6 +166,24 @@ impl Colorize for Hsla {
         let v = gpui::Rgba { r, g, b, a };
         let color: Hsla = v.into();
         Ok(color)
+    }
+
+    fn hue(&self, hue: f32) -> Self {
+        let mut color = self.clone();
+        color.h = hue.clamp(0., 1.);
+        color
+    }
+
+    fn saturation(&self, saturation: f32) -> Self {
+        let mut color = self.clone();
+        color.s = saturation.clamp(0., 1.);
+        color
+    }
+
+    fn lightness(&self, lightness: f32) -> Self {
+        let mut color = self.clone();
+        color.l = lightness.clamp(0., 1.);
+        color
     }
 }
 
@@ -570,5 +594,13 @@ mod tests {
             let name1: ColorName = name.to_string().as_str().into();
             assert_eq!(name1, *name);
         }
+    }
+
+    #[test]
+    fn test_h_s_l() {
+        let color = hsl(260., 94., 80.);
+        assert_eq!(color.hue(200. / 360.), hsl(200., 94., 80.));
+        assert_eq!(color.saturation(74. / 100.), hsl(260., 74., 80.));
+        assert_eq!(color.lightness(74. / 100.), hsl(260., 94., 74.));
     }
 }

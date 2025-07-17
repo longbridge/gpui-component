@@ -199,8 +199,8 @@ impl From<ThemeColor> for Theme {
 )]
 #[serde(rename_all = "snake_case")]
 pub enum ThemeMode {
-    Light,
     #[default]
+    Light,
     Dark,
 }
 

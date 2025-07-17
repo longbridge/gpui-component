@@ -11,946 +11,531 @@
     },
     "author": {
       "description": "The author of the theme.",
-      "type": [
-        "string",
-        "null"
-      ],
+      "type": ["string", "null"],
       "default": null
     },
     "url": {
       "description": "The URL of the theme.",
-      "type": [
-        "string",
-        "null"
-      ],
+      "type": ["string", "null"],
       "default": null
     },
     "font.size": {
       "description": "The base font size, default is 16.",
-      "type": [
-        "number",
-        "null"
-      ],
+      "type": ["number", "null"],
       "format": "float",
       "default": null
     },
     "themes": {
       "type": "array",
       "items": {
-        "$ref": "#/definitions/ThemeConfig"
+        "$ref": "#/$defs/ThemeConfig"
       },
       "default": []
     }
   },
-  "required": [
-    "name",
-    "author",
-    "url",
-    "font.size",
-    "themes"
-  ],
-  "definitions": {
+  "required": ["name", "themes"],
+  "$defs": {
     "ThemeConfig": {
       "type": "object",
       "properties": {
         "name": {
           "description": "The name of the theme.",
-          "type": "string"
+          "type": "string",
+          "default": ""
         },
         "mode": {
           "description": "The mode of the theme, default is light.",
-          "allOf": [
-            {
-              "$ref": "#/definitions/ThemeMode"
-            }
-          ]
+          "$ref": "#/$defs/ThemeMode",
+          "default": "light"
         },
         "colors": {
           "description": "The colors of the theme.",
-          "allOf": [
-            {
-              "$ref": "#/definitions/ThemeConfigColors"
-            }
-          ]
+          "$ref": "#/$defs/ThemeConfigColors",
+          "default": {
+            "accent.background": null,
+            "accent.foreground": null,
+            "background": null,
+            "border": null,
+            "danger.background": null,
+            "foreground": null,
+            "muted.background": null,
+            "muted.foreground": null,
+            "primary.background": null,
+            "primary.foreground": null,
+            "secondary.background": null,
+            "secondary.foreground": null,
+            "base.blue": null,
+            "base.cyan": null,
+            "base.green": null,
+            "base.magenta": null,
+            "base.red": null,
+            "base.yellow": null
+          }
         },
         "highlight": {
           "description": "The highlight theme, this part is combilbility with `style` section in Zed theme.\n\nhttps://github.com/zed-industries/zed/blob/f50041779dcfd7a76c8aec293361c60c53f02d51/assets/themes/ayu/ayu.json#L9",
           "anyOf": [
             {
-              "$ref": "#/definitions/HighlightThemeStyle"
+              "$ref": "#/$defs/HighlightThemeStyle"
             },
             {
               "type": "null"
             }
-          ]
+          ],
+          "default": null
         }
       },
-      "required": [
-        "name",
-        "mode",
-        "colors",
-        "highlight"
-      ]
+      "required": ["name", "mode", "colors"]
     },
     "ThemeMode": {
       "type": "string",
-      "enum": [
-        "light",
-        "dark"
-      ]
+      "enum": ["light", "dark"]
     },
     "ThemeConfigColors": {
       "type": "object",
       "properties": {
         "accent.background": {
           "description": "Used for accents such as hover background on MenuItem, ListItem, etc.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "accent.foreground": {
           "description": "Used for accent text color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "accordion.background": {
           "description": "Accordion background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "accordion.active.background": {
           "description": "Accordion active background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "accordion.hover.background": {
           "description": "Accordion hover background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "background": {
           "description": "Default background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "border": {
           "description": "Default border color",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "card.background": {
           "description": "Background color for Card.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "card.foreground": {
           "description": "Text color for Card.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "caret": {
           "description": "Input caret color (Blinking cursor).",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "chart.1": {
           "description": "Chart 1 color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "chart.2": {
           "description": "Chart 2 color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "chart.3": {
           "description": "Chart 3 color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "chart.4": {
           "description": "Chart 4 color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "chart.5": {
           "description": "Chart 5 color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "danger.background": {
           "description": "Danger background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "danger.active.background": {
           "description": "Danger active background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "danger.foreground": {
           "description": "Danger text color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "danger.hover.background": {
           "description": "Danger hover background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "description_list.label.background": {
           "description": "Description List label background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "description_list.label.foreground": {
           "description": "Description List label foreground color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "drag.border": {
           "description": "Drag border color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "drop_target.background": {
           "description": "Drop target background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "foreground": {
           "description": "Default text color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "info.background": {
           "description": "Info background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "info.active.background": {
           "description": "Info active background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "info.foreground": {
           "description": "Info text color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "info.hover.background": {
           "description": "Info hover background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "input.border": {
           "description": "Border color for inputs such as Input, Dropdown, etc.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "link": {
           "description": "Link text color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "link.active": {
           "description": "Active link text color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "link.hover": {
           "description": "Hover link text color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "list.background": {
           "description": "Background color for List and ListItem.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "list.active.background": {
           "description": "Background color for active ListItem.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "list.active.border": {
           "description": "Border color for active ListItem.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "list.even.background": {
           "description": "Stripe background color for even ListItem.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "list.head.background": {
           "description": "Background color for List header.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "list.hover.background": {
           "description": "Hover background color for ListItem.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "muted.background": {
           "description": "Muted backgrounds such as Skeleton and Switch.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "muted.foreground": {
           "description": "Muted text color, as used in disabled text.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "popover.background": {
           "description": "Background color for Popover.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "popover.foreground": {
           "description": "Text color for Popover.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "primary.background": {
           "description": "Primary background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "primary.active.background": {
           "description": "Active primary background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "primary.foreground": {
           "description": "Primary text color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "primary.hover.background": {
           "description": "Hover primary background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "progress.bar.background": {
           "description": "Progress bar background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "ring": {
           "description": "Used for focus ring.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "scrollbar.background": {
           "description": "Scrollbar background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "scrollbar.thumb.background": {
           "description": "Scrollbar thumb background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "scrollbar.thumb.hover.background": {
           "description": "Scrollbar thumb hover background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "secondary.background": {
           "description": "Secondary background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "secondary.active.background": {
           "description": "Active secondary background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "secondary.foreground": {
           "description": "Secondary text color, used for secondary Button text color or secondary text.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "secondary.hover.background": {
           "description": "Hover secondary background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "selection.background": {
           "description": "Input selection background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "sidebar.background": {
           "description": "Sidebar background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "sidebar.accent.background": {
           "description": "Sidebar accent background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "sidebar.accent.foreground": {
           "description": "Sidebar accent text color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "sidebar.border": {
           "description": "Sidebar border color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "sidebar.foreground": {
           "description": "Sidebar text color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "sidebar.primary.background": {
           "description": "Sidebar primary background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "sidebar.primary.foreground": {
           "description": "Sidebar primary text color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "skeleton.background": {
           "description": "Skeleton background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "slider.background": {
           "description": "Slider bar background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "slider.thumb.background": {
           "description": "Slider thumb background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "success.background": {
           "description": "Success background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "success.foreground": {
           "description": "Success text color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "success.hover.background": {
           "description": "Success hover background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "success.active.background": {
           "description": "Success active background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "switch.background": {
           "description": "Switch background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "tab.background": {
           "description": "Tab background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "tab.active.background": {
           "description": "Tab active background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "tab.active.foreground": {
           "description": "Tab active text color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "tab_bar.background": {
           "description": "TabBar background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "tab_bar.segmented.background": {
           "description": "TabBar segmented background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "tab.foreground": {
           "description": "Tab text color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "table.background": {
           "description": "Table background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "table.active.background": {
           "description": "Table active item background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "table.active.border": {
           "description": "Table active item border color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "table.even.background": {
           "description": "Stripe background color for even TableRow.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "table.head.background": {
           "description": "Table head background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "table.head.foreground": {
           "description": "Table head text color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "table.hover.background": {
           "description": "Table item hover background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "table.row.border": {
           "description": "Table row border color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "title_bar.background": {
           "description": "TitleBar background color, use for Window title bar.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "title_bar.border": {
           "description": "TitleBar border color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "tiles.background": {
           "description": "Background color for Tiles.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "warning.background": {
           "description": "Warning background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "warning.active.background": {
           "description": "Warning active background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "warning.hover.background": {
           "description": "Warning hover background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "warning.foreground": {
           "description": "Warning foreground color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "overlay": {
           "description": "Overlay background color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "window.border": {
           "description": "Window border color.\n\n# Platform specific:\n\nThis is only works on Linux, other platforms we can't change the window border color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "base.blue": {
           "description": "Base blue color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "base.blue.light": {
           "description": "Base light blue color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "base.cyan": {
           "description": "Base cyan color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "base.cyan.light": {
           "description": "Base light cyan color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "base.green": {
           "description": "Base green color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "base.green.light": {
           "description": "Base light green color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "base.magenta": {
           "description": "Base magenta color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "base.magenta.light": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "base.red": {
           "description": "Base red color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "base.red.light": {
           "description": "Base light red color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "base.yellow": {
           "description": "Base yellow color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "base.yellow.light": {
           "description": "Base light yellow color.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         }
       },
       "required": [
         "accent.background",
         "accent.foreground",
-        "accordion.background",
-        "accordion.active.background",
-        "accordion.hover.background",
         "background",
         "border",
-        "card.background",
-        "card.foreground",
-        "caret",
-        "chart.1",
-        "chart.2",
-        "chart.3",
-        "chart.4",
-        "chart.5",
         "danger.background",
-        "danger.active.background",
         "danger.foreground",
-        "danger.hover.background",
-        "description_list.label.background",
-        "description_list.label.foreground",
-        "drag.border",
-        "drop_target.background",
         "foreground",
-        "info.background",
-        "info.active.background",
-        "info.foreground",
-        "info.hover.background",
-        "input.border",
-        "link",
-        "link.active",
-        "link.hover",
-        "list.background",
-        "list.active.background",
-        "list.active.border",
-        "list.even.background",
-        "list.head.background",
-        "list.hover.background",
         "muted.background",
         "muted.foreground",
-        "popover.background",
-        "popover.foreground",
         "primary.background",
-        "primary.active.background",
         "primary.foreground",
-        "primary.hover.background",
-        "progress.bar.background",
-        "ring",
-        "scrollbar.background",
-        "scrollbar.thumb.background",
-        "scrollbar.thumb.hover.background",
-        "secondary.background",
-        "secondary.active.background",
-        "secondary.foreground",
-        "secondary.hover.background",
-        "selection.background",
-        "sidebar.background",
-        "sidebar.accent.background",
-        "sidebar.accent.foreground",
-        "sidebar.border",
-        "sidebar.foreground",
-        "sidebar.primary.background",
-        "sidebar.primary.foreground",
-        "skeleton.background",
-        "slider.background",
-        "slider.thumb.background",
-        "success.background",
-        "success.foreground",
-        "success.hover.background",
-        "success.active.background",
-        "switch.background",
-        "tab.background",
-        "tab.active.background",
-        "tab.active.foreground",
-        "tab_bar.background",
-        "tab_bar.segmented.background",
-        "tab.foreground",
-        "table.background",
-        "table.active.background",
-        "table.active.border",
-        "table.even.background",
-        "table.head.background",
-        "table.head.foreground",
-        "table.hover.background",
-        "table.row.border",
-        "title_bar.background",
-        "title_bar.border",
-        "tiles.background",
-        "warning.background",
-        "warning.active.background",
-        "warning.hover.background",
-        "warning.foreground",
-        "overlay",
-        "window.border",
         "base.blue",
-        "base.blue.light",
         "base.cyan",
-        "base.cyan.light",
         "base.green",
-        "base.green.light",
         "base.magenta",
-        "base.magenta.light",
         "base.red",
-        "base.red.light",
-        "base.yellow",
-        "base.yellow.light"
+        "base.yellow"
       ]
     },
     "HighlightThemeStyle": {
@@ -959,7 +544,7 @@
         "editor.background": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -969,7 +554,7 @@
         "editor.foreground": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -979,7 +564,7 @@
         "editor.active_line.background": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -989,7 +574,7 @@
         "editor.line_number": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -999,7 +584,7 @@
         "editor.active_line_number": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -1009,7 +594,7 @@
         "error": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -1019,7 +604,7 @@
         "error.background": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -1029,7 +614,7 @@
         "error.border": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -1039,7 +624,7 @@
         "warning": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -1049,7 +634,7 @@
         "warning.background": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -1059,7 +644,7 @@
         "warning.border": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -1069,7 +654,7 @@
         "info": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -1079,7 +664,7 @@
         "info.background": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -1089,7 +674,7 @@
         "info.border": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -1099,7 +684,7 @@
         "success": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -1109,7 +694,7 @@
         "success.background": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -1119,7 +704,7 @@
         "success.border": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -1129,7 +714,7 @@
         "hint": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -1139,7 +724,7 @@
         "hint.background": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -1149,7 +734,7 @@
         "hint.border": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -1157,32 +742,10 @@
           ]
         },
         "syntax": {
-          "$ref": "#/definitions/SyntaxColors"
+          "$ref": "#/$defs/SyntaxColors"
         }
       },
-      "required": [
-        "editor.background",
-        "editor.foreground",
-        "editor.active_line.background",
-        "editor.line_number",
-        "editor.active_line_number",
-        "error",
-        "error.background",
-        "error.border",
-        "warning",
-        "warning.background",
-        "warning.border",
-        "info",
-        "info.background",
-        "info.border",
-        "success",
-        "success.background",
-        "success.border",
-        "hint",
-        "hint.background",
-        "hint.border",
-        "syntax"
-      ]
+      "required": ["syntax"]
     },
     "Rgba": {
       "type": "string",
@@ -1195,7 +758,7 @@
         "attribute": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1205,7 +768,7 @@
         "boolean": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1215,7 +778,7 @@
         "comment": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1225,7 +788,7 @@
         "comment_doc": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1235,7 +798,7 @@
         "constant": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1245,7 +808,7 @@
         "constructor": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1255,7 +818,7 @@
         "embedded": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1265,7 +828,7 @@
         "emphasis": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1275,7 +838,7 @@
         "emphasis.strong": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1285,7 +848,7 @@
         "enum": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1295,7 +858,7 @@
         "function": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1305,7 +868,7 @@
         "hint": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1315,7 +878,7 @@
         "keyword": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1325,7 +888,7 @@
         "label": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1335,7 +898,7 @@
         "link_text": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1345,7 +908,7 @@
         "link_uri": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1355,7 +918,7 @@
         "number": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1365,7 +928,7 @@
         "operator": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1375,7 +938,7 @@
         "predictive": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1385,7 +948,7 @@
         "preproc": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1395,7 +958,7 @@
         "primary": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1405,7 +968,7 @@
         "property": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1415,7 +978,7 @@
         "punctuation": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1425,7 +988,7 @@
         "punctuation.bracket": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1435,7 +998,7 @@
         "punctuation.delimiter": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1445,7 +1008,7 @@
         "punctuation.list_marker": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1455,7 +1018,7 @@
         "punctuation.special": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1465,7 +1028,7 @@
         "string": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1475,7 +1038,7 @@
         "string.escape": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1485,7 +1048,7 @@
         "string.regex": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1495,7 +1058,7 @@
         "string.special": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1505,7 +1068,7 @@
         "string.special.symbol": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1515,7 +1078,7 @@
         "tag": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1525,7 +1088,7 @@
         "tag.doctype": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1535,7 +1098,7 @@
         "text.literal": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1545,7 +1108,7 @@
         "title": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1555,7 +1118,7 @@
         "type": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1565,7 +1128,7 @@
         "variable": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1575,7 +1138,7 @@
         "variable.special": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1585,7 +1148,7 @@
         "variant": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ThemeStyle"
+              "$ref": "#/$defs/ThemeStyle"
             },
             {
               "type": "null"
@@ -1593,48 +1156,7 @@
           ]
         }
       },
-      "required": [
-        "attribute",
-        "boolean",
-        "comment",
-        "comment_doc",
-        "constant",
-        "constructor",
-        "embedded",
-        "emphasis",
-        "emphasis.strong",
-        "enum",
-        "function",
-        "hint",
-        "keyword",
-        "label",
-        "link_text",
-        "link_uri",
-        "number",
-        "operator",
-        "predictive",
-        "preproc",
-        "primary",
-        "property",
-        "punctuation",
-        "punctuation.bracket",
-        "punctuation.delimiter",
-        "punctuation.list_marker",
-        "punctuation.special",
-        "string",
-        "string.escape",
-        "string.regex",
-        "string.special",
-        "string.special.symbol",
-        "tag",
-        "tag.doctype",
-        "text.literal",
-        "title",
-        "type",
-        "variable",
-        "variable.special",
-        "variant"
-      ]
+      "required": []
     },
     "ThemeStyle": {
       "type": "object",
@@ -1642,7 +1164,7 @@
         "color": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Rgba"
+              "$ref": "#/$defs/Rgba"
             },
             {
               "type": "null"
@@ -1652,7 +1174,7 @@
         "font_style": {
           "anyOf": [
             {
-              "$ref": "#/definitions/FontStyle"
+              "$ref": "#/$defs/FontStyle"
             },
             {
               "type": "null"
@@ -1662,7 +1184,7 @@
         "font_weight": {
           "anyOf": [
             {
-              "$ref": "#/definitions/FontWeightContent"
+              "$ref": "#/$defs/FontWeightContent"
             },
             {
               "type": "null"
@@ -1670,33 +1192,15 @@
           ]
         }
       },
-      "required": [
-        "color",
-        "font_style",
-        "font_weight"
-      ]
+      "required": []
     },
     "FontStyle": {
       "type": "string",
-      "enum": [
-        "normal",
-        "italic",
-        "underline"
-      ]
+      "enum": ["normal", "italic", "underline"]
     },
     "FontWeightContent": {
-      "type": "string",
-      "enum": [
-        "Thin",
-        "ExtraLight",
-        "Light",
-        "Normal",
-        "Medium",
-        "Semibold",
-        "Bold",
-        "ExtraBold",
-        "Black"
-      ]
+      "type": "number",
+      "enum": [100, 200, 300, 400, 500, 600, 700, 800, 900]
     }
   }
 }

@@ -10,7 +10,7 @@ use gpui::{
 use gpui_component::{
     button::Button,
     checkbox::Checkbox,
-    h_flex, hsl,
+    h_flex,
     label::Label,
     list::{List, ListDelegate, ListEvent, ListItem},
     v_flex, ActiveTheme, Sizable,
@@ -74,8 +74,8 @@ impl RenderOnce for CompanyListItem {
         };
 
         let trend_color = match self.company.change_percent {
-            change if change > 0.0 => hsl(0.0, 79.0, 53.0),
-            change if change < 0.0 => hsl(100.0, 79.0, 53.0),
+            change if change > 0.0 => cx.theme().green,
+            change if change < 0.0 => cx.theme().red,
             _ => cx.theme().foreground,
         };
 

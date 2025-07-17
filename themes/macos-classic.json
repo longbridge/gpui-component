@@ -71,23 +71,11 @@
         "editor.active_line_number": "#000000",
         "conflict": "#C5060B",
         "created": "#1642FF",
-        "created.background": "#e5ffe9",
-        "deleted.background": "#FBEAE5",
-        "error.background": "#FBEAE5",
-        "error.border": "#EC9F89",
         "hidden": "#6D6D6D",
         "hint": "#9e5dff",
-        "hint.background": "#ece6ff",
-        "hint.border": "#bc8fff",
-        "info.background": "#E5EAFF",
-        "info.border": "#8DA1FF",
         "modified": "#9e7008",
-        "modified.background": "#fff2e5",
         "predictive": "#A4ABB6",
-        "success.background": "#E5FFE5",
         "warning": "#C99401",
-        "warning.background": "#FFFBE5",
-        "warning.border": "#D9CC89",
         "syntax": {
           "attribute": {
             "color": "#957931"

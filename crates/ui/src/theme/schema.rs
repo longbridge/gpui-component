@@ -31,6 +31,7 @@ pub struct ThemeSet {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
 pub struct ThemeConfig {
     /// The name of the theme.
     pub name: SharedString,
@@ -431,6 +432,8 @@ impl Theme {
         apply_color!(blue_light, fallback = self.blue.opacity(0.8));
         apply_color!(magenta);
         apply_color!(magenta_light, fallback = self.magenta.opacity(0.8));
+        apply_color!(yellow);
+        apply_color!(yellow_light, fallback = self.yellow.opacity(0.8));
         apply_color!(cyan);
         apply_color!(cyan_light, fallback = self.cyan.opacity(0.8));
 

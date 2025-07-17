@@ -6,8 +6,8 @@ use gpui::{
 use gpui_component::{
     button::{Button, ButtonCustomVariant, ButtonGroup, ButtonVariants as _, DropdownButton},
     checkbox::Checkbox,
-    h_flex, indigo, v_flex, white, ActiveTheme, Disableable as _, Icon, IconName, Selectable as _,
-    Sizable as _, Theme,
+    h_flex, v_flex, ActiveTheme, Disableable as _, Icon, IconName, Selectable as _, Sizable as _,
+    Theme,
 };
 use serde::Deserialize;
 
@@ -81,31 +81,11 @@ impl Render for ButtonStory {
         let toggle_multiple = self.toggle_multiple;
 
         let custom_variant = ButtonCustomVariant::new(cx)
-            .color(if cx.theme().mode.is_dark() {
-                indigo(800)
-            } else {
-                indigo(600)
-            })
-            .foreground(if cx.theme().mode.is_dark() {
-                white()
-            } else {
-                white()
-            })
-            .border(if cx.theme().mode.is_dark() {
-                indigo(800)
-            } else {
-                indigo(600)
-            })
-            .hover(if cx.theme().mode.is_dark() {
-                indigo(900)
-            } else {
-                indigo(700)
-            })
-            .active(if cx.theme().mode.is_dark() {
-                indigo(950)
-            } else {
-                indigo(700)
-            });
+            .color(cx.theme().magenta)
+            .foreground(cx.theme().primary_foreground)
+            .border(cx.theme().magenta)
+            .hover(cx.theme().magenta.opacity(0.1))
+            .active(cx.theme().magenta);
 
         v_flex()
             .on_action(

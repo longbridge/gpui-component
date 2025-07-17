@@ -85,9 +85,9 @@ impl Render for DiagnosticPopover {
             return Empty.into_any_element();
         };
         let (border, bg, fg) = (
-            self.marker.severity.border(theme),
-            self.marker.severity.bg(theme),
-            self.marker.severity.fg(theme),
+            self.marker.severity.border(theme, cx),
+            self.marker.severity.bg(theme, cx),
+            self.marker.severity.fg(theme, cx),
         );
 
         let scroll_origin = self.state.read(cx).scroll_handle.offset();

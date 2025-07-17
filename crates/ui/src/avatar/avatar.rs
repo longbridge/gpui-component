@@ -1,5 +1,3 @@
-use std::sync::LazyLock;
-
 use gpui::{
     div, img, prelude::FluentBuilder, App, Div, Hsla, ImageSource, InteractiveElement,
     Interactivity, IntoElement, ParentElement as _, RenderOnce, SharedString, StyleRefinement,
@@ -8,30 +6,8 @@ use gpui::{
 
 use crate::{
     avatar::{avatar_size, AvatarSized as _},
-    ActiveTheme, Icon, IconName, Sizable, Size, StyledExt,
+    ActiveTheme, Colorize, Icon, IconName, Sizable, Size, StyledExt,
 };
-
-static AVATAR_COLORS: LazyLock<[Hsla; 17]> = LazyLock::new(|| {
-    [
-        crate::red_500(),
-        crate::orange_500(),
-        crate::amber_500(),
-        crate::yellow_500(),
-        crate::lime_500(),
-        crate::green_500(),
-        crate::emerald_500(),
-        crate::teal_500(),
-        crate::cyan_500(),
-        crate::sky_500(),
-        crate::blue_500(),
-        crate::indigo_500(),
-        crate::violet_500(),
-        crate::fuchsia_500(),
-        crate::purple_500(),
-        crate::pink_500(),
-        crate::rose_500(),
-    ]
-});
 
 /// User avatar element.
 ///
@@ -106,6 +82,12 @@ impl RenderOnce for Avatar {
         let mut inner_style = StyleRefinement::default();
         inner_style.corner_radii = corner_radii;
 
+        const COLOR_COUNT: u64 = 360 / 15;
+        fn default_color(ix: u64, cx: &mut App) -> Hsla {
+            let h = (ix * 15).clamp(0, 360) as f32;
+            cx.theme().blue.hue(h / 360.0)
+        }
+
         const BG_OPACITY: f32 = 0.2;
 
         self.base
@@ -126,8 +108,8 @@ impl RenderOnce for Avatar {
             })
             .map(|this| match self.src {
                 None => this.when(self.name.is_some(), |this| {
-                    let color_ix = gpui::hash(&self.short_name) % AVATAR_COLORS.len() as u64;
-                    let color = AVATAR_COLORS[color_ix as usize];
+                    let color_ix = gpui::hash(&self.short_name) % COLOR_COUNT;
+                    let color = default_color(color_ix, cx);
 
                     this.bg(color.opacity(BG_OPACITY))
                         .text_color(color)

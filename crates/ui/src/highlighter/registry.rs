@@ -7,7 +7,7 @@ use std::{collections::HashMap, ops::Deref, sync::LazyLock};
 use super::LanguageConfig;
 use crate::{
     highlighter::{languages, Language},
-    ThemeMode,
+    ActiveTheme, Colorize, ThemeMode,
 };
 
 pub(super) fn init(cx: &mut App) {
@@ -306,78 +306,88 @@ pub struct StatusColors {
 
 impl StatusColors {
     #[inline]
-    pub fn error(&self) -> Hsla {
-        self.error.unwrap_or(crate::red_500())
+    pub fn error(&self, cx: &App) -> Hsla {
+        self.error.unwrap_or(cx.theme().red)
     }
 
     #[inline]
-    pub fn error_background(&self) -> Hsla {
-        self.error_background.unwrap_or(crate::red_200())
+    pub fn error_background(&self, cx: &App) -> Hsla {
+        let bg = cx.theme().background;
+        self.error_background
+            .unwrap_or(self.error(cx).lightness(bg.l).saturation(bg.s))
     }
 
     #[inline]
-    pub fn error_border(&self) -> Hsla {
-        self.error_border.unwrap_or(crate::red_500())
+    pub fn error_border(&self, cx: &App) -> Hsla {
+        self.error_border.unwrap_or(self.error(cx))
     }
 
     #[inline]
-    pub fn warning(&self) -> Hsla {
-        self.warning.unwrap_or(crate::yellow_500())
+    pub fn warning(&self, cx: &App) -> Hsla {
+        self.warning.unwrap_or(cx.theme().yellow)
     }
 
     #[inline]
-    pub fn warning_background(&self) -> Hsla {
-        self.warning_background.unwrap_or(crate::yellow_200())
+    pub fn warning_background(&self, cx: &App) -> Hsla {
+        let bg = cx.theme().background;
+        self.warning_background
+            .unwrap_or(self.warning(cx).lightness(bg.l).saturation(bg.s))
     }
 
     #[inline]
-    pub fn warning_border(&self) -> Hsla {
-        self.warning_border.unwrap_or(crate::yellow_500())
+    pub fn warning_border(&self, cx: &App) -> Hsla {
+        self.warning_border.unwrap_or(self.warning(cx))
     }
 
     #[inline]
-    pub fn info(&self) -> Hsla {
-        self.info.unwrap_or(crate::blue_500())
+    pub fn info(&self, cx: &App) -> Hsla {
+        self.info.unwrap_or(cx.theme().blue)
     }
 
     #[inline]
-    pub fn info_background(&self) -> Hsla {
-        self.info_background.unwrap_or(crate::blue_200())
+    pub fn info_background(&self, cx: &App) -> Hsla {
+        let bg = cx.theme().background;
+        self.info_background
+            .unwrap_or(self.info(cx).lightness(bg.l).saturation(bg.s))
     }
 
     #[inline]
-    pub fn info_border(&self) -> Hsla {
-        self.info_border.unwrap_or(crate::blue_500())
+    pub fn info_border(&self, cx: &App) -> Hsla {
+        self.info_border.unwrap_or(self.info(cx))
     }
 
     #[inline]
-    pub fn success(&self) -> Hsla {
-        self.success.unwrap_or(crate::green_500())
+    pub fn success(&self, cx: &App) -> Hsla {
+        self.success.unwrap_or(cx.theme().green)
     }
 
     #[inline]
-    pub fn success_background(&self) -> Hsla {
-        self.success_background.unwrap_or(crate::green_200())
+    pub fn success_background(&self, cx: &App) -> Hsla {
+        let bg = cx.theme().background;
+        self.success_background
+            .unwrap_or(self.success(cx).lightness(bg.l).saturation(bg.s))
     }
 
     #[inline]
-    pub fn success_border(&self) -> Hsla {
-        self.success_border.unwrap_or(crate::green_500())
+    pub fn success_border(&self, cx: &App) -> Hsla {
+        self.success_border.unwrap_or(self.success(cx))
     }
 
     #[inline]
-    pub fn hint(&self) -> Hsla {
-        self.hint.unwrap_or(crate::neutral_500())
+    pub fn hint(&self, cx: &App) -> Hsla {
+        self.hint.unwrap_or(cx.theme().cyan)
     }
 
     #[inline]
-    pub fn hint_background(&self) -> Hsla {
-        self.hint_background.unwrap_or(crate::neutral_200())
+    pub fn hint_background(&self, cx: &App) -> Hsla {
+        let bg = cx.theme().background;
+        self.hint_background
+            .unwrap_or(self.hint(cx).lightness(bg.l).saturation(bg.s))
     }
 
     #[inline]
-    pub fn hint_border(&self) -> Hsla {
-        self.hint_border.unwrap_or(crate::neutral_500())
+    pub fn hint_border(&self, cx: &App) -> Hsla {
+        self.hint_border.unwrap_or(self.hint(cx))
     }
 }
 

@@ -3,8 +3,8 @@ use gpui::{
     Styled, Window,
 };
 use gpui_component::{
-    avatar::Avatar, badge::Badge, blue_500, dock::PanelControl, green_500, red_500, sky_500,
-    v_flex, yellow_500, Icon, IconName, Sizable as _,
+    avatar::Avatar, badge::Badge, dock::PanelControl, v_flex, ActiveTheme as _, Icon, IconName,
+    Sizable as _,
 };
 
 use crate::section;
@@ -50,7 +50,7 @@ impl Focusable for BadgeStory {
 }
 
 impl Render for BadgeStory {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .gap_4()
             .child(
@@ -80,12 +80,24 @@ impl Render for BadgeStory {
             .child(
                 section("Badge with icon")
                     .max_w_md()
-                    .child(Badge::new().icon(IconName::Check).color(sky_500()).child(
-                        Avatar::new().src("https://avatars.githubusercontent.com/u/5518?v=4"),
-                    ))
-                    .child(Badge::new().icon(IconName::Star).color(yellow_500()).child(
-                        Avatar::new().src("https://avatars.githubusercontent.com/u/20092316?v=4"),
-                    )),
+                    .child(
+                        Badge::new()
+                            .icon(IconName::Check)
+                            .color(cx.theme().cyan)
+                            .child(
+                                Avatar::new()
+                                    .src("https://avatars.githubusercontent.com/u/5518?v=4"),
+                            ),
+                    )
+                    .child(
+                        Badge::new()
+                            .icon(IconName::Star)
+                            .color(cx.theme().yellow)
+                            .child(
+                                Avatar::new()
+                                    .src("https://avatars.githubusercontent.com/u/20092316?v=4"),
+                            ),
+                    ),
             )
             .child(
                 section("Badge with dot").max_w_md().child(
@@ -97,10 +109,10 @@ impl Render for BadgeStory {
             .child(
                 section("Badge with color")
                     .max_w_md()
-                    .child(Badge::new().count(3).color(blue_500()).child(
+                    .child(Badge::new().count(3).color(cx.theme().blue).child(
                         Avatar::new().src("https://avatars.githubusercontent.com/u/5518?v=4"),
                     ))
-                    .child(Badge::new().dot().color(green_500()).count(1).child(
+                    .child(Badge::new().dot().color(cx.theme().green).count(1).child(
                         Avatar::new().src("https://avatars.githubusercontent.com/u/5518?v=4"),
                     )),
             )
@@ -112,7 +124,7 @@ impl Render for BadgeStory {
                             Badge::new()
                                 .icon(IconName::Check)
                                 .large()
-                                .color(sky_500())
+                                .color(cx.theme().cyan)
                                 .child(
                                     Avatar::new()
                                         .large()
@@ -121,11 +133,11 @@ impl Render for BadgeStory {
                         ),
                     )
                     .child(
-                        Badge::new().count(2).color(green_500()).large().child(
+                        Badge::new().count(2).color(cx.theme().green).large().child(
                             Badge::new()
                                 .icon(IconName::Star)
                                 .large()
-                                .color(yellow_500())
+                                .color(cx.theme().yellow)
                                 .child(
                                     Avatar::new().large().src(
                                         "https://avatars.githubusercontent.com/u/20092316?v=4",
@@ -134,10 +146,10 @@ impl Render for BadgeStory {
                         ),
                     )
                     .child(
-                        Badge::new().count(3).color(green_500()).child(
+                        Badge::new().count(3).color(cx.theme().green).child(
                             Badge::new()
                                 .icon(IconName::Asterisk)
-                                .color(green_500())
+                                .color(cx.theme().green)
                                 .child(
                                     Avatar::new().src(
                                         "https://avatars.githubusercontent.com/u/22312482?v=4",
@@ -150,7 +162,7 @@ impl Render for BadgeStory {
                             Badge::new()
                                 .icon(IconName::Sun)
                                 .small()
-                                .color(red_500())
+                                .color(cx.theme().red)
                                 .child(
                                     Avatar::new().small().src(
                                         "https://avatars.githubusercontent.com/u/150917089?v=4",

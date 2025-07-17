@@ -416,7 +416,7 @@ impl TextElement {
                             || node_range.end <= visible_range.end
                         {
                             marker_styles
-                                .push((node_range, marker.severity.highlight_style(&theme)));
+                                .push((node_range, marker.severity.highlight_style(&theme, cx)));
                         }
                     }
                 }

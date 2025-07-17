@@ -172,7 +172,7 @@ pub struct ColorPicker {
     id: ElementId,
     style: StyleRefinement,
     state: Entity<ColorPickerState>,
-    featured_colors: Vec<Hsla>,
+    featured_colors: Option<Vec<Hsla>>,
     label: Option<SharedString>,
     icon: Option<Icon>,
     size: Size,
@@ -185,20 +185,7 @@ impl ColorPicker {
             id: ("color-picker", state.entity_id()).into(),
             style: StyleRefinement::default(),
             state: state.clone(),
-            featured_colors: vec![
-                crate::black(),
-                crate::neutral_600(),
-                crate::neutral_400(),
-                crate::white(),
-                crate::red_600(),
-                crate::orange_600(),
-                crate::yellow_600(),
-                crate::green_600(),
-                crate::blue_600(),
-                crate::indigo_600(),
-                crate::purple_600(),
-            ],
-
+            featured_colors: None,
             size: Size::Medium,
             label: None,
             icon: None,
@@ -211,7 +198,7 @@ impl ColorPicker {
     /// This is used to display a set of colors that the user can quickly select from,
     /// for example provided user's last used colors.
     pub fn featured_colors(mut self, colors: Vec<Hsla>) -> Self {
-        self.featured_colors = colors;
+        self.featured_colors = Some(colors);
         self
     }
 
@@ -284,12 +271,27 @@ impl ColorPicker {
     }
 
     fn render_colors(&self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let featured_colors = self.featured_colors.clone().unwrap_or(vec![
+            cx.theme().red,
+            cx.theme().red_light,
+            cx.theme().blue,
+            cx.theme().blue_light,
+            cx.theme().green,
+            cx.theme().green_light,
+            cx.theme().yellow,
+            cx.theme().yellow_light,
+            cx.theme().cyan,
+            cx.theme().cyan_light,
+            cx.theme().magenta,
+            cx.theme().magenta_light,
+        ]);
+
         let state = self.state.clone();
         v_flex()
             .gap_3()
             .child(
                 h_flex().gap_1().children(
-                    self.featured_colors
+                    featured_colors
                         .iter()
                         .map(|color| self.render_item(*color, true, window, cx)),
                 ),

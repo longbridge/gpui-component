@@ -3,7 +3,7 @@ use gpui::{
     RenderOnce, StyleRefinement, Styled, Window,
 };
 
-use crate::{h_flex, red_500, white, ActiveTheme, Icon, Sizable, Size, StyledExt};
+use crate::{h_flex, white, ActiveTheme, Icon, Sizable, Size, StyledExt};
 
 #[derive(Default, Clone)]
 enum BadgeVariant {
@@ -34,7 +34,7 @@ pub struct Badge {
     max: usize,
     variant: BadgeVariant,
     children: Vec<AnyElement>,
-    color: Hsla,
+    color: Option<Hsla>,
     size: Size,
 }
 
@@ -46,7 +46,7 @@ impl Badge {
             count: 0,
             max: 99,
             variant: Default::default(),
-            color: red_500(),
+            color: None,
             children: Vec::new(),
             size: Size::default(),
         }
@@ -80,7 +80,7 @@ impl Badge {
 
     /// Set the color (background) of the badge.
     pub fn color(mut self, color: impl Into<Hsla>) -> Self {
-        self.color = color.into();
+        self.color = Some(color.into());
         self
     }
 }
@@ -122,7 +122,7 @@ impl RenderOnce for Badge {
                         .justify_center()
                         .items_center()
                         .rounded_full()
-                        .bg(self.color)
+                        .bg(self.color.unwrap_or(cx.theme().red))
                         .text_color(white())
                         .text_size(text_size)
                         .map(|this| match self.variant {

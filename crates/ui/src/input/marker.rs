@@ -2,7 +2,7 @@ use crate::{
     highlighter::HighlightTheme,
     input::{InputState, LineColumn},
 };
-use gpui::{px, HighlightStyle, Hsla, SharedString, UnderlineStyle};
+use gpui::{px, App, HighlightStyle, Hsla, SharedString, UnderlineStyle};
 use itertools::Itertools;
 use std::ops::Range;
 
@@ -102,39 +102,39 @@ impl From<&str> for MarkerSeverity {
 }
 
 impl MarkerSeverity {
-    pub(super) fn bg(&self, theme: &HighlightTheme) -> Hsla {
+    pub(super) fn bg(&self, theme: &HighlightTheme, cx: &App) -> Hsla {
         match self {
-            Self::Error => theme.style.status.error_background(),
-            Self::Warning => theme.style.status.warning_background(),
-            Self::Info => theme.style.status.info_background(),
-            Self::Hint => theme.style.status.hint_background(),
+            Self::Error => theme.style.status.error_background(cx),
+            Self::Warning => theme.style.status.warning_background(cx),
+            Self::Info => theme.style.status.info_background(cx),
+            Self::Hint => theme.style.status.hint_background(cx),
         }
     }
 
-    pub(super) fn fg(&self, theme: &HighlightTheme) -> Hsla {
+    pub(super) fn fg(&self, theme: &HighlightTheme, cx: &App) -> Hsla {
         match self {
-            Self::Error => theme.style.status.error(),
-            Self::Warning => theme.style.status.warning(),
-            Self::Info => theme.style.status.info(),
-            Self::Hint => theme.style.status.hint(),
+            Self::Error => theme.style.status.error(cx),
+            Self::Warning => theme.style.status.warning(cx),
+            Self::Info => theme.style.status.info(cx),
+            Self::Hint => theme.style.status.hint(cx),
         }
     }
 
-    pub(super) fn border(&self, theme: &HighlightTheme) -> Hsla {
+    pub(super) fn border(&self, theme: &HighlightTheme, cx: &App) -> Hsla {
         match self {
-            Self::Error => theme.style.status.error_border(),
-            Self::Warning => theme.style.status.warning_border(),
-            Self::Info => theme.style.status.info_border(),
-            Self::Hint => theme.style.status.hint_border(),
+            Self::Error => theme.style.status.error_border(cx),
+            Self::Warning => theme.style.status.warning_border(cx),
+            Self::Info => theme.style.status.info_border(cx),
+            Self::Hint => theme.style.status.hint_border(cx),
         }
     }
 
-    pub(super) fn highlight_style(&self, theme: &HighlightTheme) -> HighlightStyle {
+    pub(super) fn highlight_style(&self, theme: &HighlightTheme, cx: &App) -> HighlightStyle {
         let color = match self {
-            Self::Error => Some(theme.style.status.error()),
-            Self::Warning => Some(theme.style.status.warning()),
-            Self::Info => Some(theme.style.status.info()),
-            Self::Hint => Some(theme.style.status.hint()),
+            Self::Error => Some(theme.style.status.error(cx)),
+            Self::Warning => Some(theme.style.status.warning(cx)),
+            Self::Info => Some(theme.style.status.info(cx)),
+            Self::Hint => Some(theme.style.status.hint(cx)),
         };
 
         let mut style = HighlightStyle::default();
