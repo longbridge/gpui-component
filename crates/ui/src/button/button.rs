@@ -849,64 +849,22 @@ impl ButtonVariant {
 
     fn selected(&self, outline: bool, cx: &mut App) -> ButtonVariantStyle {
         let bg = match self {
-            ButtonVariant::Primary => {
-                if outline {
-                    cx.theme().primary
-                } else {
-                    cx.theme().primary_active
-                }
-            }
-            ButtonVariant::Secondary | ButtonVariant::Ghost => {
-                if outline {
-                    cx.theme().secondary
-                } else {
-                    cx.theme().secondary_active
-                }
-            }
-            ButtonVariant::Danger => {
-                if outline {
-                    cx.theme().danger
-                } else {
-                    cx.theme().danger_active
-                }
-            }
-            ButtonVariant::Warning => {
-                if outline {
-                    cx.theme().warning
-                } else {
-                    cx.theme().warning_active
-                }
-            }
-            ButtonVariant::Success => {
-                if outline {
-                    cx.theme().success
-                } else {
-                    cx.theme().success_active
-                }
-            }
-            ButtonVariant::Info => {
-                if outline {
-                    cx.theme().info
-                } else {
-                    cx.theme().info_active
-                }
-            }
+            ButtonVariant::Primary => cx.theme().primary_active,
+            ButtonVariant::Secondary | ButtonVariant::Ghost => cx.theme().secondary_active,
+            ButtonVariant::Danger => cx.theme().danger_active,
+            ButtonVariant::Warning => cx.theme().warning_active,
+            ButtonVariant::Success => cx.theme().success_active,
+            ButtonVariant::Info => cx.theme().info_active,
             ButtonVariant::Link => cx.theme().transparent,
             ButtonVariant::Text => cx.theme().transparent,
-            ButtonVariant::Custom(colors) => {
-                if outline {
-                    colors.color
-                } else {
-                    colors.active
-                }
-            }
+            ButtonVariant::Custom(colors) => colors.active,
         };
 
         let border = self.border_color(bg, outline, cx);
         let fg = match self {
             ButtonVariant::Link => cx.theme().link_active,
             ButtonVariant::Text => cx.theme().foreground.opacity(0.7),
-            _ => self.text_color(outline, cx),
+            _ => self.text_color(false, cx),
         };
         let underline = self.underline(cx);
         let shadow = self.shadow(outline, cx);
