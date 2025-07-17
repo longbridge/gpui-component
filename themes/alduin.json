@@ -5,7 +5,7 @@
   "url": "https://github.com/AlessandroYorba/Alduin",
   "themes": [
     {
-      "name": "Alduin Light",
+      "name": "Alduin",
       "mode": "dark",
       "colors": {
         "accent.background": "#322F2D",
