@@ -18,7 +18,7 @@ use gpui_component::{
     input::{InputEvent, InputState, TextInput},
     label::Label,
     popup_menu::{PopupMenu, PopupMenuExt},
-    table::{ColFixed, ColSort, Table, TableCell, TableCol, TableDelegate, TableEvent},
+    table::{ColFixed, ColSort, Table, TableCol, TableDelegate, TableEvent},
     v_flex, ActiveTheme as _, Selectable, Sizable as _, Size, StyleSized as _, StyledExt,
 };
 use serde::{Deserialize, Serialize};
@@ -350,28 +350,6 @@ impl TableDelegate for StockTableDelegate {
 
     fn col(&self, col_ix: usize, _cx: &App) -> &TableCol {
         &self.columns[col_ix]
-    }
-
-    fn cell(&self, col_ix: usize, row_ix: usize, _: &App) -> TableCell {
-        let table_cell = TableCell::new();
-
-        if row_ix == 3 {
-            if col_ix == 5 {
-                return table_cell.col_span(2);
-            }
-            if col_ix == 6 {
-                return table_cell.col_span(0);
-            }
-        }
-
-        match row_ix {
-            0 | 3 | 4 | 6 => match col_ix {
-                2 => table_cell.col_span(2),
-                3 => table_cell.col_span(0),
-                _ => table_cell,
-            },
-            _ => table_cell,
-        }
     }
 
     fn render_th(

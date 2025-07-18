@@ -11,18 +11,15 @@ use crate::{
 use gpui::{
     actions, canvas, div, prelude::FluentBuilder, px, uniform_list, App, AppContext, Axis, Bounds,
     Context, Div, DragMoveEvent, Edges, EventEmitter, FocusHandle, Focusable, InteractiveElement,
-    IntoElement, IsZero, KeyBinding, ListSizingBehavior, MouseButton, MouseDownEvent,
-    ParentElement, Pixels, Point, Render, ScrollHandle, ScrollStrategy, ScrollWheelEvent,
-    SharedString, Stateful, StatefulInteractiveElement as _, Styled, Task, UniformListScrollHandle,
-    Window,
+    IntoElement, KeyBinding, ListSizingBehavior, MouseButton, MouseDownEvent, ParentElement,
+    Pixels, Point, Render, ScrollHandle, ScrollStrategy, ScrollWheelEvent, SharedString,
+    StatefulInteractiveElement as _, Styled, Task, UniformListScrollHandle, Window,
 };
 
-mod cell;
 mod column;
 mod delegate;
 mod loading;
 
-pub use cell::*;
 pub use column::*;
 pub use delegate::*;
 
@@ -603,70 +600,29 @@ where
         }
     }
 
-    /// Get col width with col span
-    fn col_width(&self, col_ix: usize, col_span: usize) -> Pixels {
-        if col_span == 0 {
-            return px(0.);
-        }
-
+    fn render_cell(&self, col_ix: usize, _window: &mut Window, _cx: &mut Context<Self>) -> Div {
         let Some(col_group) = self.col_groups.get(col_ix) else {
-            return px(0.);
+            return div();
         };
 
-        let mut width = col_group.width;
-        for i in 1..col_span {
-            if let Some(col) = self.col_groups.get(col_ix + i) {
-                width += col.width;
-            }
-        }
-        width
-    }
-
-    /// Render cell.
-    ///
-    /// - row_ix is None for header cell
-    fn render_cell(
-        &self,
-        col_ix: usize,
-        row_ix: Option<usize>,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Option<Stateful<Div>> {
-        let Some(col_group) = self.col_groups.get(col_ix) else {
-            return None;
-        };
-
-        let col_span = if let Some(row_ix) = row_ix {
-            self.delegate().cell(col_ix, row_ix, cx).col_span
-        } else {
-            col_group.column.col_span
-        };
-
-        let col_width = self.col_width(col_ix, col_span);
+        let col_width = col_group.width;
         let col_padding = col_group.column.paddings;
 
-        if col_width.is_zero() {
-            return None;
-        }
-
-        Some(
-            div()
-                .id(("table-cell", col_ix))
-                .w(col_width)
-                .h_full()
-                .flex_shrink_0()
-                .overflow_hidden()
-                .whitespace_nowrap()
-                .table_cell_size(self.size)
-                .map(|this| match col_padding {
-                    Some(padding) => this
-                        .pl(padding.left)
-                        .pr(padding.right)
-                        .pt(padding.top)
-                        .pb(padding.bottom),
-                    None => this,
-                }),
-        )
+        div()
+            .w(col_width)
+            .h_full()
+            .flex_shrink_0()
+            .overflow_hidden()
+            .whitespace_nowrap()
+            .table_cell_size(self.size)
+            .map(|this| match col_padding {
+                Some(padding) => this
+                    .pl(padding.left)
+                    .pr(padding.right)
+                    .pt(padding.top)
+                    .pb(padding.bottom),
+                None => this,
+            })
     }
 
     /// Show Column selection style, when the column is selected and the selection state is Column.
@@ -890,57 +846,60 @@ where
         let name = col_group.column.name.clone();
 
         h_flex()
-            .children(self.render_cell(col_ix, None, window, cx).map(|this| {
-                this.on_mouse_down(
-                    MouseButton::Left,
-                    cx.listener(move |this, _, window, cx| {
-                        this.on_col_head_click(col_ix, window, cx);
-                    }),
-                )
-                .child(
-                    h_flex()
-                        .size_full()
-                        .justify_between()
-                        .items_center()
-                        .child(self.delegate.render_th(col_ix, window, cx))
-                        .when_some(paddings, |this, paddings| {
-                            // Leave right space for the sort icon, if this column have custom padding
-                            let offset_pr = self.size.table_cell_padding().right - paddings.right;
-                            this.pr(offset_pr.max(px(0.)))
-                        })
-                        .children(self.render_sort_icon(col_ix, &col_group, window, cx)),
-                )
-                .when(movable, |this| {
-                    this.on_drag(
-                        DragCol {
-                            entity_id,
-                            col_ix,
-                            name,
-                            width: col_group.width,
-                        },
-                        |drag, _, _, cx| {
-                            cx.stop_propagation();
-                            cx.new(|_| drag.clone())
-                        },
+            .child(
+                self.render_cell(col_ix, window, cx)
+                    .id(("col-header", col_ix))
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(move |this, _, window, cx| {
+                            this.on_col_head_click(col_ix, window, cx);
+                        }),
                     )
-                    .drag_over::<DragCol>(|this, _, _, cx| {
-                        this.rounded_l_none()
-                            .border_l_2()
-                            .border_r_0()
-                            .border_color(cx.theme().drag_border)
-                    })
-                    .on_drop(cx.listener(
-                        move |table, drag: &DragCol, window, cx| {
-                            // If the drag col is not the same as the drop col, then swap the cols.
-                            if drag.entity_id != cx.entity_id() {
-                                return;
-                            }
+                    .child(
+                        h_flex()
+                            .size_full()
+                            .justify_between()
+                            .items_center()
+                            .child(self.delegate.render_th(col_ix, window, cx))
+                            .when_some(paddings, |this, paddings| {
+                                // Leave right space for the sort icon, if this column have custom padding
+                                let offset_pr =
+                                    self.size.table_cell_padding().right - paddings.right;
+                                this.pr(offset_pr.max(px(0.)))
+                            })
+                            .children(self.render_sort_icon(col_ix, &col_group, window, cx)),
+                    )
+                    .when(movable, |this| {
+                        this.on_drag(
+                            DragCol {
+                                entity_id,
+                                col_ix,
+                                name,
+                                width: col_group.width,
+                            },
+                            |drag, _, _, cx| {
+                                cx.stop_propagation();
+                                cx.new(|_| drag.clone())
+                            },
+                        )
+                        .drag_over::<DragCol>(|this, _, _, cx| {
+                            this.rounded_l_none()
+                                .border_l_2()
+                                .border_r_0()
+                                .border_color(cx.theme().drag_border)
+                        })
+                        .on_drop(cx.listener(
+                            move |table, drag: &DragCol, window, cx| {
+                                // If the drag col is not the same as the drop col, then swap the cols.
+                                if drag.entity_id != cx.entity_id() {
+                                    return;
+                                }
 
-                            table.move_col(drag.col_ix, col_ix, window, cx);
-                        },
-                    ))
-                })
-            }))
+                                table.move_col(drag.col_ix, col_ix, window, cx);
+                            },
+                        ))
+                    }),
+            )
             // resize handle
             .child(self.render_resize_handle(col_ix, window, cx))
             // to save the bounds of this col.
@@ -1088,15 +1047,9 @@ where
                                 let mut items = Vec::with_capacity(left_cols_count);
 
                                 (0..left_cols_count).for_each(|col_ix| {
-                                    items.push(self.render_col_wrap(col_ix, window, cx).children(
-                                        self.render_cell(col_ix, Some(row_ix), window, cx).map(
-                                            |this| {
-                                                this.child(
-                                                    self.measure_render_td(
-                                                        row_ix, col_ix, window, cx,
-                                                    ),
-                                                )
-                                            },
+                                    items.push(self.render_col_wrap(col_ix, window, cx).child(
+                                        self.render_cell(col_ix, window, cx).child(
+                                            self.measure_render_td(row_ix, col_ix, window, cx),
                                         ),
                                     ));
                                 });
@@ -1145,19 +1098,12 @@ where
                                         visible_range.for_each(|col_ix| {
                                             let col_ix = col_ix + left_cols_count;
                                             let el =
-                                                table.render_col_wrap(col_ix, window, cx).children(
-                                                    table
-                                                        .render_cell(
-                                                            col_ix,
-                                                            Some(row_ix),
-                                                            window,
-                                                            cx,
-                                                        )
-                                                        .map(|this| {
-                                                            this.child(table.measure_render_td(
-                                                                row_ix, col_ix, window, cx,
-                                                            ))
-                                                        }),
+                                                table.render_col_wrap(col_ix, window, cx).child(
+                                                    table.render_cell(col_ix, window, cx).child(
+                                                        table.measure_render_td(
+                                                            row_ix, col_ix, window, cx,
+                                                        ),
+                                                    ),
                                                 );
 
                                             items.push(el);
@@ -1228,7 +1174,7 @@ where
                 .children((0..cols_count).map(|col_ix| {
                     h_flex()
                         .left(horizontal_scroll_handle.offset().x)
-                        .children(self.render_cell(col_ix, Some(row_ix), window, cx))
+                        .child(self.render_cell(col_ix, window, cx))
                 }))
                 .child(self.delegate.render_last_empty_col(window, cx))
         }
