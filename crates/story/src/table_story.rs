@@ -196,19 +196,28 @@ impl StockTableDelegate {
                     .w(60.)
                     .fixed(ColFixed::Left)
                     .resizable(false),
-                TableCol::new("name", "Name").w(180.).fixed(ColFixed::Left),
+                TableCol::new("name", "Name")
+                    .w(180.)
+                    .fixed(ColFixed::Left)
+                    .col_span(2),
                 TableCol::new("symbol", "Symbol")
                     .w(100.)
                     .fixed(ColFixed::Left)
+                    .col_span(0)
                     .sortable(),
                 TableCol::new("price", "Price")
                     .sortable()
                     .text_right()
                     .p_0(),
-                TableCol::new("change", "Chg").sortable().text_right().p_0(),
+                TableCol::new("change", "Chg")
+                    .sortable()
+                    .text_right()
+                    .col_span(2)
+                    .p_0(),
                 TableCol::new("change_percent", "Chg%")
                     .sortable()
                     .text_right()
+                    .col_span(0)
                     .p_0(),
                 TableCol::new("volume", "Volume").p_0(),
                 TableCol::new("turnover", "Turnover").p_0(),
@@ -730,6 +739,13 @@ impl TableStory {
         });
     }
 
+    fn toggle_col_fixed(&mut self, checked: &bool, _: &mut Window, cx: &mut Context<Self>) {
+        self.table.update(cx, |table, cx| {
+            table.col_fixed = *checked;
+            cx.notify();
+        });
+    }
+
     fn toggle_col_selection(&mut self, checked: &bool, _: &mut Window, cx: &mut Context<Self>) {
         self.table.update(cx, |table, cx| {
             table.col_selectable = *checked;
@@ -826,6 +842,12 @@ impl Render for TableStory {
                             .label("Column Selectable")
                             .selected(table.col_selectable)
                             .on_click(cx.listener(Self::toggle_col_selection)),
+                    )
+                    .child(
+                        Checkbox::new("fixed")
+                            .label("Column Fixed")
+                            .selected(table.col_fixed)
+                            .on_click(cx.listener(Self::toggle_col_fixed)),
                     )
                     .child(
                         Checkbox::new("stripe")

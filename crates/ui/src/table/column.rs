@@ -10,6 +10,7 @@ use crate::ActiveTheme as _;
 pub struct TableCol {
     pub key: SharedString,
     pub name: SharedString,
+    pub col_span: usize,
     pub align: TextAlign,
     pub sort: Option<ColSort>,
     pub paddings: Option<Edges<Pixels>>,
@@ -25,6 +26,7 @@ impl Default for TableCol {
         Self {
             key: SharedString::new(""),
             name: SharedString::new(""),
+            col_span: 1,
             align: TextAlign::Left,
             sort: None,
             paddings: None,
@@ -45,6 +47,12 @@ impl TableCol {
             name: name.into(),
             ..Default::default()
         }
+    }
+
+    /// Set the col span for the Table Head, default is 1.
+    pub fn col_span(mut self, col_span: usize) -> Self {
+        self.col_span = col_span;
+        self
     }
 
     /// Set the column to be sortable with custom sort function, default is None (not sortable).
@@ -141,11 +149,6 @@ pub enum ColSort {
     Ascending,
     /// Sort in descending order.
     Descending,
-}
-
-#[derive(Clone, Copy, Default)]
-pub(super) struct FixedCols {
-    pub(super) left: usize,
 }
 
 impl Render for DragCol {
