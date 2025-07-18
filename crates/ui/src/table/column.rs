@@ -1,9 +1,97 @@
 use gpui::{
     div, px, Bounds, Context, Edges, Empty, EntityId, IntoElement, ParentElement as _, Pixels,
-    Render, SharedString, Styled as _, Window,
+    Render, SharedString, Styled as _, TextAlign, Window,
 };
 
 use crate::ActiveTheme as _;
+
+/// Represents a column in a table.
+pub struct TableColumn {
+    pub key: SharedString,
+    pub name: SharedString,
+    pub align: TextAlign,
+    pub sort: Option<ColSort>,
+    pub paddings: Option<Edges<Pixels>>,
+    pub width: Pixels,
+    pub fixed: Option<ColFixed>,
+    pub resizable: bool,
+    pub movable: bool,
+}
+
+impl Default for TableColumn {
+    fn default() -> Self {
+        Self {
+            key: SharedString::new(""),
+            name: SharedString::new(""),
+            align: TextAlign::Left,
+            sort: None,
+            paddings: None,
+            width: px(100.),
+            fixed: None,
+            resizable: true,
+            movable: true,
+        }
+    }
+}
+
+impl TableColumn {
+    pub fn new(key: impl Into<SharedString>, name: impl Into<SharedString>) -> Self {
+        Self {
+            key: key.into(),
+            name: name.into(),
+            ..Default::default()
+        }
+    }
+
+    /// Set the column to be sortable with custom sort function, default is None (not sortable).
+    pub fn sort(mut self, sort: ColSort) -> Self {
+        self.sort = Some(sort);
+        self
+    }
+
+    /// Set the alignment of the column text, default is left.
+    ///
+    /// Only `text_left`, `text_right` is supported.
+    pub fn text_right(mut self) -> Self {
+        self.align = TextAlign::Right;
+        self
+    }
+
+    /// Set the padding of the column, default is None.
+    pub fn paddings(mut self, paddings: impl Into<Edges<Pixels>>) -> Self {
+        self.paddings = Some(paddings.into());
+        self
+    }
+
+    pub fn p_0(mut self) -> Self {
+        self.paddings = Some(Edges::all(px(0.)));
+        self
+    }
+
+    /// Set the width of the column, default is 100px.
+    pub fn width(mut self, width: impl Into<Pixels>) -> Self {
+        self.width = width.into();
+        self
+    }
+
+    /// Set whether the column is fixed, default is false.
+    pub fn fixed(mut self, fixed: ColFixed) -> Self {
+        self.fixed = Some(fixed);
+        self
+    }
+
+    /// Set whether the column is resizable, default is true.
+    pub fn resizable(mut self, resizable: bool) -> Self {
+        self.resizable = resizable;
+        self
+    }
+
+    /// Set whether the column is movable, default is true.
+    pub fn movable(mut self, movable: bool) -> Self {
+        self.movable = movable;
+        self
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ColFixed {
