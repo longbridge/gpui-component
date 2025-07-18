@@ -8,27 +8,27 @@ use gpui::{
 use crate::{
     h_flex,
     popup_menu::PopupMenu,
-    table::{loading::Loading, ColSort, Table, TableCol},
+    table::{loading::Loading, Column, ColumnSort, Table},
     ActiveTheme as _, Icon, IconName, Size,
 };
 
 #[allow(unused)]
 pub trait TableDelegate: Sized + 'static {
     /// Return the number of columns in the table.
-    fn cols_count(&self, cx: &App) -> usize;
+    fn columns_count(&self, cx: &App) -> usize;
     /// Return the number of rows in the table.
     fn rows_count(&self, cx: &App) -> usize;
 
     /// Returns the table column at the given index.
     ///
-    /// This only call on Table prepare.
-    fn col(&self, col_ix: usize, cx: &App) -> &TableCol;
+    /// This only call on Table prepare or refresh.
+    fn column(&self, col_ix: usize, cx: &App) -> &Column;
 
     /// Perform sort on the column at the given index.
     fn perform_sort(
         &mut self,
         col_ix: usize,
-        sort: ColSort,
+        sort: ColumnSort,
         window: &mut Window,
         cx: &mut Context<Table<Self>>,
     ) {
@@ -41,7 +41,9 @@ pub trait TableDelegate: Sized + 'static {
         window: &mut Window,
         cx: &mut Context<Table<Self>>,
     ) -> impl IntoElement {
-        div().size_full().child(self.col(col_ix, cx).name.clone())
+        div()
+            .size_full()
+            .child(self.column(col_ix, cx).name.clone())
     }
 
     /// Render the row at the given row and column.
@@ -69,7 +71,7 @@ pub trait TableDelegate: Sized + 'static {
     ) -> impl IntoElement;
 
     /// Move the column at the given `col_ix` to insert before the column at the given `to_ix`.
-    fn move_col(
+    fn move_column(
         &mut self,
         col_ix: usize,
         to_ix: usize,
@@ -158,7 +160,7 @@ pub trait TableDelegate: Sized + 'static {
     ///
     /// This can used to handle some data update, to only update the visible rows.
     /// Please ensure that the data is updated in the background task.
-    fn visible_cols_changed(
+    fn visible_columns_changed(
         &mut self,
         visible_range: Range<usize>,
         window: &mut Window,

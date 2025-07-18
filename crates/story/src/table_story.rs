@@ -18,7 +18,7 @@ use gpui_component::{
     input::{InputEvent, InputState, TextInput},
     label::Label,
     popup_menu::{PopupMenu, PopupMenuExt},
-    table::{ColFixed, ColSort, Table, TableCol, TableDelegate, TableEvent},
+    table::{Column, ColumnFixed, ColumnSort, Table, TableDelegate, TableEvent},
     v_flex, ActiveTheme as _, Selectable, Sizable as _, Size, StyleSized as _, StyledExt,
 };
 use serde::{Deserialize, Serialize};
@@ -173,7 +173,7 @@ fn random_stocks(size: usize) -> Vec<Stock> {
 
 struct StockTableDelegate {
     stocks: Vec<Stock>,
-    columns: Vec<TableCol>,
+    columns: Vec<Column>,
     size: Size,
     loading: bool,
     full_loading: bool,
@@ -188,85 +188,73 @@ impl StockTableDelegate {
             size: Size::default(),
             stocks: random_stocks(size),
             columns: vec![
-                TableCol::new("id", "ID")
+                Column::new("id", "ID")
                     .w(60.)
-                    .fixed(ColFixed::Left)
+                    .fixed(ColumnFixed::Left)
                     .resizable(false),
-                TableCol::new("market", "Market")
+                Column::new("market", "Market")
                     .w(60.)
-                    .fixed(ColFixed::Left)
+                    .fixed(ColumnFixed::Left)
                     .resizable(false),
-                TableCol::new("name", "Name")
-                    .w(180.)
-                    .col_span(2)
-                    .fixed(ColFixed::Left),
-                TableCol::new("symbol", "Symbol")
+                Column::new("name", "Name").w(180.).fixed(ColumnFixed::Left),
+                Column::new("symbol", "Symbol")
                     .w(100.)
-                    .fixed(ColFixed::Left)
-                    .col_span(0)
+                    .fixed(ColumnFixed::Left)
                     .sortable(),
-                TableCol::new("price", "Price")
+                Column::new("price", "Price").sortable().text_right().p_0(),
+                Column::new("change", "Chg").sortable().text_right().p_0(),
+                Column::new("change_percent", "Chg%")
                     .sortable()
                     .text_right()
                     .p_0(),
-                TableCol::new("change", "Chg")
-                    .sortable()
-                    .text_right()
-                    .col_span(2)
-                    .p_0(),
-                TableCol::new("change_percent", "Chg%")
-                    .sortable()
-                    .text_right()
-                    .col_span(0)
-                    .p_0(),
-                TableCol::new("volume", "Volume").p_0(),
-                TableCol::new("turnover", "Turnover").p_0(),
-                TableCol::new("market_cap", "Market Cap").p_0(),
-                TableCol::new("ttm", "TTM").p_0(),
-                TableCol::new("five_mins_ranking", "5m Ranking")
+                Column::new("volume", "Volume").p_0(),
+                Column::new("turnover", "Turnover").p_0(),
+                Column::new("market_cap", "Market Cap").p_0(),
+                Column::new("ttm", "TTM").p_0(),
+                Column::new("five_mins_ranking", "5m Ranking")
                     .text_right()
                     .p_0(),
-                TableCol::new("th60_days_ranking", "60d Ranking"),
-                TableCol::new("year_change_percent", "Year Chg%"),
-                TableCol::new("bid", "Bid").text_right().p_0(),
-                TableCol::new("bid_volume", "Bid Vol").text_right().p_0(),
-                TableCol::new("ask", "Ask").text_right().p_0(),
-                TableCol::new("ask_volume", "Ask Vol").text_right().p_0(),
-                TableCol::new("open", "Open").text_right().p_0(),
-                TableCol::new("prev_close", "Prev Close").text_right().p_0(),
-                TableCol::new("high", "High").text_right().p_0(),
-                TableCol::new("low", "Low").text_right().p_0(),
-                TableCol::new("turnover_rate", "Turnover Rate"),
-                TableCol::new("rise_rate", "Rise Rate"),
-                TableCol::new("amplitude", "Amplitude"),
-                TableCol::new("pe_status", "P/E"),
-                TableCol::new("pb_status", "P/B"),
-                TableCol::new("volume_ratio", "Volume Ratio")
+                Column::new("th60_days_ranking", "60d Ranking"),
+                Column::new("year_change_percent", "Year Chg%"),
+                Column::new("bid", "Bid").text_right().p_0(),
+                Column::new("bid_volume", "Bid Vol").text_right().p_0(),
+                Column::new("ask", "Ask").text_right().p_0(),
+                Column::new("ask_volume", "Ask Vol").text_right().p_0(),
+                Column::new("open", "Open").text_right().p_0(),
+                Column::new("prev_close", "Prev Close").text_right().p_0(),
+                Column::new("high", "High").text_right().p_0(),
+                Column::new("low", "Low").text_right().p_0(),
+                Column::new("turnover_rate", "Turnover Rate"),
+                Column::new("rise_rate", "Rise Rate"),
+                Column::new("amplitude", "Amplitude"),
+                Column::new("pe_status", "P/E"),
+                Column::new("pb_status", "P/B"),
+                Column::new("volume_ratio", "Volume Ratio")
                     .text_right()
                     .p_0(),
-                TableCol::new("bid_ask_ratio", "Bid Ask Ratio")
+                Column::new("bid_ask_ratio", "Bid Ask Ratio")
                     .text_right()
                     .p_0(),
-                TableCol::new("latest_pre_close", "Latest Pre Close"),
-                TableCol::new("latest_post_close", "Latest Post Close"),
-                TableCol::new("pre_market_cap", "Pre Mkt Cap"),
-                TableCol::new("pre_market_percent", "Pre Mkt%"),
-                TableCol::new("pre_market_change", "Pre Mkt Chg"),
-                TableCol::new("post_market_cap", "Post Mkt Cap"),
-                TableCol::new("post_market_percent", "Post Mkt%"),
-                TableCol::new("post_market_change", "Post Mkt Chg"),
-                TableCol::new("float_cap", "Float Cap"),
-                TableCol::new("shares", "Shares"),
-                TableCol::new("shares_float", "Float Shares"),
-                TableCol::new("day_5_ranking", "5d Ranking"),
-                TableCol::new("day_10_ranking", "10d Ranking"),
-                TableCol::new("day_30_ranking", "30d Ranking"),
-                TableCol::new("day_120_ranking", "120d Ranking"),
-                TableCol::new("day_250_ranking", "250d Ranking"),
+                Column::new("latest_pre_close", "Latest Pre Close"),
+                Column::new("latest_post_close", "Latest Post Close"),
+                Column::new("pre_market_cap", "Pre Mkt Cap"),
+                Column::new("pre_market_percent", "Pre Mkt%"),
+                Column::new("pre_market_change", "Pre Mkt Chg"),
+                Column::new("post_market_cap", "Post Mkt Cap"),
+                Column::new("post_market_percent", "Post Mkt%"),
+                Column::new("post_market_change", "Post Mkt Chg"),
+                Column::new("float_cap", "Float Cap"),
+                Column::new("shares", "Shares"),
+                Column::new("shares_float", "Float Shares"),
+                Column::new("day_5_ranking", "5d Ranking"),
+                Column::new("day_10_ranking", "10d Ranking"),
+                Column::new("day_30_ranking", "30d Ranking"),
+                Column::new("day_120_ranking", "120d Ranking"),
+                Column::new("day_250_ranking", "250d Ranking"),
             ],
             loading: false,
             full_loading: false,
-            eof: true,
+            eof: false,
             visible_cols: Range::default(),
             visible_rows: Range::default(),
         }
@@ -279,12 +267,7 @@ impl StockTableDelegate {
         self.full_loading = false;
     }
 
-    fn render_percent(
-        &self,
-        col: &TableCol,
-        val: f64,
-        cx: &mut Context<Table<Self>>,
-    ) -> AnyElement {
+    fn render_percent(&self, col: &Column, val: f64, cx: &mut Context<Table<Self>>) -> AnyElement {
         let right_num = ((val - val.floor()) * 1000.).floor() as i32;
 
         div()
@@ -310,7 +293,7 @@ impl StockTableDelegate {
 
     fn render_value_cell(
         &self,
-        col: &TableCol,
+        col: &Column,
         val: f64,
         cx: &mut Context<Table<Self>>,
     ) -> AnyElement {
@@ -340,7 +323,7 @@ impl StockTableDelegate {
 }
 
 impl TableDelegate for StockTableDelegate {
-    fn cols_count(&self, _: &App) -> usize {
+    fn columns_count(&self, _: &App) -> usize {
         self.columns.len()
     }
 
@@ -348,7 +331,7 @@ impl TableDelegate for StockTableDelegate {
         self.stocks.len()
     }
 
-    fn col(&self, col_ix: usize, _cx: &App) -> &TableCol {
+    fn column(&self, col_ix: usize, _cx: &App) -> &Column {
         &self.columns[col_ix]
     }
 
@@ -510,7 +493,7 @@ impl TableDelegate for StockTableDelegate {
         }
     }
 
-    fn move_col(
+    fn move_column(
         &mut self,
         col_ix: usize,
         to_ix: usize,
@@ -524,22 +507,22 @@ impl TableDelegate for StockTableDelegate {
     fn perform_sort(
         &mut self,
         col_ix: usize,
-        sort: ColSort,
+        sort: ColumnSort,
         _: &mut Window,
         _: &mut Context<Table<Self>>,
     ) {
         if let Some(col) = self.columns.get_mut(col_ix) {
             match col.key.as_ref() {
                 "id" => self.stocks.sort_by(|a, b| match sort {
-                    ColSort::Descending => b.id.cmp(&a.id),
+                    ColumnSort::Descending => b.id.cmp(&a.id),
                     _ => a.id.cmp(&b.id),
                 }),
                 "symbol" => self.stocks.sort_by(|a, b| match sort {
-                    ColSort::Descending => b.counter.symbol.cmp(&a.counter.symbol),
+                    ColumnSort::Descending => b.counter.symbol.cmp(&a.counter.symbol),
                     _ => a.id.cmp(&b.id),
                 }),
                 "change" | "change_percent" => self.stocks.sort_by(|a, b| match sort {
-                    ColSort::Descending => b
+                    ColumnSort::Descending => b
                         .change
                         .partial_cmp(&a.change)
                         .unwrap_or(std::cmp::Ordering::Equal),
@@ -589,7 +572,7 @@ impl TableDelegate for StockTableDelegate {
         self.visible_rows = visible_range;
     }
 
-    fn visible_cols_changed(
+    fn visible_columns_changed(
         &mut self,
         visible_range: Range<usize>,
         _: &mut Window,
@@ -646,7 +629,7 @@ impl TableStory {
             input
         });
 
-        let delegate = StockTableDelegate::new(10);
+        let delegate = StockTableDelegate::new(5000);
         let table = cx.new(|cx| Table::new(delegate, window, cx));
 
         cx.subscribe_in(&table, window, Self::on_table_event)
@@ -790,13 +773,13 @@ impl TableStory {
         _cx: &mut Context<Self>,
     ) {
         match event {
-            TableEvent::ColWidthsChanged(col_widths) => {
-                println!("Col widths changed: {:?}", col_widths)
+            TableEvent::ColumnWidthsChanged(col_widths) => {
+                println!("Column widths changed: {:?}", col_widths)
             }
-            TableEvent::SelectCol(ix) => println!("Select col: {}", ix),
+            TableEvent::SelectColumn(ix) => println!("Select col: {}", ix),
             TableEvent::DoubleClickedRow(ix) => println!("Double clicked row: {}", ix),
             TableEvent::SelectRow(ix) => println!("Select row: {}", ix),
-            TableEvent::MoveCol(origin_idx, target_idx) => {
+            TableEvent::MoveColumn(origin_idx, target_idx) => {
                 println!("Move col index: {} -> {}", origin_idx, target_idx);
             }
         }
@@ -948,7 +931,7 @@ impl Render for TableStory {
                        //         .small()
                        //         .on_click(cx.listener(|this, _, window, cx| {
                        //             this.table.update(cx, |table, cx| {
-                       //                 table.scroll_to_col(table.delegate().cols_count(cx), cx);
+                       //                 table.scroll_to_col(table.delegate().columns_count(cx), cx);
                        //             })
                        //         })),
                        // ),
