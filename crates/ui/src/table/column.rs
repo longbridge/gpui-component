@@ -3,7 +3,7 @@ use gpui::{
     Render, SharedString, Styled as _, TextAlign, Window,
 };
 
-use crate::ActiveTheme as _;
+use crate::{table::TableCell, ActiveTheme as _};
 
 /// Represents a column in a table, used for initializing table columns.
 #[derive(Debug, Clone)]
