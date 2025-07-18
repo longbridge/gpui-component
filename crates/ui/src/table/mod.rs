@@ -781,9 +781,9 @@ where
                             }
 
                             // sync col widths into real widths
-                            for (_, col_group) in view.col_groups.iter_mut().enumerate() {
-                                col_group.width = col_group.bounds.size.width;
-                            }
+                            // for (_, col_group) in view.col_groups.iter_mut().enumerate() {
+                            //     col_group.width = col_group.bounds.size.width;
+                            // }
 
                             let ix = *ix;
                             view.resizing_col = Some(ix);
