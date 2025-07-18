@@ -10,14 +10,18 @@ use crate::{
 };
 use gpui::{
     actions, canvas, div, prelude::FluentBuilder, px, uniform_list, App, AppContext, Axis, Bounds,
-    Context, Div, DragMoveEvent, Edges, Empty, EntityId, EventEmitter, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, KeyBinding, ListSizingBehavior, MouseButton, MouseDownEvent,
-    ParentElement, Pixels, Point, Render, ScrollHandle, ScrollStrategy, ScrollWheelEvent,
-    SharedString, Stateful, StatefulInteractiveElement as _, Styled, Task, UniformListScrollHandle,
-    Window,
+    Context, Div, DragMoveEvent, Edges, EventEmitter, FocusHandle, Focusable, InteractiveElement,
+    IntoElement, KeyBinding, ListSizingBehavior, MouseButton, MouseDownEvent, ParentElement,
+    Pixels, Point, Render, ScrollHandle, ScrollStrategy, ScrollWheelEvent, SharedString,
+    StatefulInteractiveElement as _, Styled, Task, UniformListScrollHandle, Window,
 };
 
+mod column;
+mod delegate;
 mod loading;
+
+pub use column::*;
+pub use delegate::*;
 
 actions!(table, [SelectPrevColumn, SelectNextColumn]);
 
@@ -32,64 +36,6 @@ pub fn init(cx: &mut App) {
     ]);
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ColFixed {
-    Left,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct ColGroup {
-    pub(crate) width: Pixels,
-    pub(crate) bounds: Bounds<Pixels>,
-    pub(crate) sort: Option<ColSort>,
-    pub(crate) fixed: Option<ColFixed>,
-    pub(crate) paddings: Option<Edges<Pixels>>,
-}
-
-#[derive(Clone)]
-pub(crate) struct DragCol {
-    pub(crate) entity_id: EntityId,
-    pub(crate) name: SharedString,
-    pub(crate) width: Pixels,
-    pub(crate) col_ix: usize,
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum ColSort {
-    /// No sorting.
-    Default,
-    /// Sort in ascending order.
-    Ascending,
-    /// Sort in descending order.
-    Descending,
-}
-
-impl Render for DragCol {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        div()
-            .px_4()
-            .py_1()
-            .bg(cx.theme().table_head)
-            .text_color(cx.theme().muted_foreground)
-            .opacity(0.9)
-            .border_1()
-            .border_color(cx.theme().border)
-            .shadow_md()
-            .w(self.width)
-            .min_w(px(100.))
-            .max_w(px(450.))
-            .child(self.name.clone())
-    }
-}
-
-#[derive(Clone)]
-pub struct ResizeCol(pub (EntityId, usize));
-impl Render for ResizeCol {
-    fn render(&mut self, _window: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        Empty
-    }
-}
-
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum SelectionState {
     Column,
@@ -102,14 +48,9 @@ pub enum TableEvent {
     SelectRow(usize),
     /// Double click on the row.
     DoubleClickedRow(usize),
-    SelectCol(usize),
-    ColWidthsChanged(Vec<Pixels>),
-    MoveCol(usize, usize),
-}
-
-#[derive(Clone, Copy, Default)]
-struct FixedCols {
-    left: usize,
+    SelectColumn(usize),
+    ColumnWidthsChanged(Vec<Pixels>),
+    MoveColumn(usize, usize),
 }
 
 /// The visible range of the rows and columns.
@@ -142,12 +83,23 @@ pub struct Table<D: TableDelegate> {
     fixed_head_cols_bounds: Bounds<Pixels>,
 
     col_groups: Vec<ColGroup>,
-    fixed_cols: FixedCols,
 
     /// Whether the table can loop selection, default is true.
     ///
     /// When the prev/next selection is out of the table bounds, the selection will loop to the other side.
     pub loop_selection: bool,
+    /// Whether the table can select column.
+    pub col_selectable: bool,
+    /// Whether the table can select row.
+    pub row_selectable: bool,
+    /// Whether the table can sort.
+    pub sortable: bool,
+    /// Whether the table can resize columns.
+    pub col_resizable: bool,
+    /// Whether the table can move columns.
+    pub col_movable: bool,
+    /// Enable/disable fixed columns feature.
+    pub col_fixed: bool,
 
     pub vertical_scroll_handle: UniformListScrollHandle,
     pub vertical_scroll_state: ScrollbarState,
@@ -176,203 +128,6 @@ pub struct Table<D: TableDelegate> {
     _load_more_task: Task<()>,
 }
 
-#[allow(unused)]
-pub trait TableDelegate: Sized + 'static {
-    /// Return the number of columns in the table.
-    fn cols_count(&self, cx: &App) -> usize;
-    /// Return the number of rows in the table.
-    fn rows_count(&self, cx: &App) -> usize;
-
-    /// Returns the name of the column at the given index.
-    fn col_name(&self, col_ix: usize, cx: &App) -> SharedString;
-
-    /// Returns whether the column at the given index can be resized. Default: true
-    fn col_resizable(&self, col_ix: usize, cx: &App) -> bool {
-        true
-    }
-
-    /// Returns whether the column at the given index can be selected. Default: false
-    fn col_selectable(&self, col_ix: usize, cx: &App) -> bool {
-        false
-    }
-
-    /// Returns the width of the column at the given index.
-    /// Return None, use auto width.
-    ///
-    /// This is only called when the table initializes.
-    ///
-    /// Default: 100px
-    fn col_width(&self, col_ix: usize, cx: &App) -> Pixels {
-        px(100.)
-    }
-
-    /// Return the sort state of the column at the given index.
-    ///
-    /// This is only called when the table initializes.
-    fn col_sort(&self, col_ix: usize, cx: &App) -> Option<ColSort> {
-        None
-    }
-
-    /// Return the fixed side of the column at the given index.
-    fn col_fixed(&self, col_ix: usize, cx: &App) -> Option<ColFixed> {
-        None
-    }
-
-    /// Return the padding of the column at the given index to override the default padding.
-    ///
-    /// Return None, use the default padding.
-    fn col_paddings(&self, col_ix: usize, cx: &App) -> Option<Edges<Pixels>> {
-        None
-    }
-
-    /// Return true to enable column order change.
-    fn col_movable(&self, col_ix: usize, cx: &App) -> bool {
-        false
-    }
-
-    /// Perform sort on the column at the given index.
-    fn perform_sort(
-        &mut self,
-        col_ix: usize,
-        sort: ColSort,
-        window: &mut Window,
-        cx: &mut Context<Table<Self>>,
-    ) {
-    }
-
-    /// Render the header cell at the given column index, default to the column name.
-    fn render_th(
-        &self,
-        col_ix: usize,
-        window: &mut Window,
-        cx: &mut Context<Table<Self>>,
-    ) -> impl IntoElement {
-        div().size_full().child(self.col_name(col_ix, cx))
-    }
-
-    /// Render the row at the given row and column.
-    fn render_tr(
-        &self,
-        row_ix: usize,
-        window: &mut Window,
-        cx: &mut Context<Table<Self>>,
-    ) -> Stateful<Div> {
-        h_flex().id(("table-row", row_ix))
-    }
-
-    /// Render the context menu for the row at the given row index.
-    fn context_menu(&self, row_ix: usize, menu: PopupMenu, window: &Window, cx: &App) -> PopupMenu {
-        menu
-    }
-
-    /// Render cell at the given row and column.
-    fn render_td(
-        &self,
-        row_ix: usize,
-        col_ix: usize,
-        window: &mut Window,
-        cx: &mut Context<Table<Self>>,
-    ) -> impl IntoElement;
-
-    /// Move the column at the given `col_ix` to insert before the column at the given `to_ix`.
-    fn move_col(
-        &mut self,
-        col_ix: usize,
-        to_ix: usize,
-        window: &mut Window,
-        cx: &mut Context<Table<Self>>,
-    ) {
-    }
-
-    /// Return a Element to show when table is empty.
-    fn render_empty(&self, window: &mut Window, cx: &mut Context<Table<Self>>) -> impl IntoElement {
-        h_flex()
-            .size_full()
-            .justify_center()
-            .text_color(cx.theme().muted_foreground.opacity(0.6))
-            .child(Icon::new(IconName::Inbox).size_12())
-            .into_any_element()
-    }
-
-    /// Return true to show the loading view.
-    fn loading(&self, cx: &App) -> bool {
-        false
-    }
-
-    /// Return a Element to show when table is loading, default is built-in Skeleton loading view.
-    ///
-    /// The size is the size of the Table.
-    fn render_loading(
-        &self,
-        size: Size,
-        window: &mut Window,
-        cx: &mut Context<Table<Self>>,
-    ) -> impl IntoElement {
-        loading::Loading::new().size(size)
-    }
-
-    /// Return true to enable load more data when scrolling to the bottom.
-    ///
-    /// Default: true
-    fn can_load_more(&self, cx: &App) -> bool {
-        true
-    }
-
-    /// Returns a threshold value (n rows), of course, when scrolling to the bottom,
-    /// the remaining number of rows triggers `load_more`.
-    /// This should smaller than the total number of first load rows.
-    ///
-    /// Default: 20 rows
-    fn load_more_threshold(&self) -> usize {
-        20
-    }
-
-    /// Load more data when the table is scrolled to the bottom.
-    ///
-    /// This will performed in a background task.
-    ///
-    /// This is always called when the table is near the bottom,
-    /// so you must check if there is more data to load or lock the loading state.
-    fn load_more(&mut self, window: &mut Window, cx: &mut Context<Table<Self>>) {}
-
-    /// Render the last empty column, default to empty.
-    fn render_last_empty_col(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Table<Self>>,
-    ) -> impl IntoElement {
-        h_flex().w_3().h_full().flex_shrink_0()
-    }
-
-    /// Called when the visible range of the rows changed.
-    ///
-    /// NOTE: Make sure this method is fast, because it will be called frequently.
-    ///
-    /// This can used to handle some data update, to only update the visible rows.
-    /// Please ensure that the data is updated in the background task.
-    fn visible_rows_changed(
-        &mut self,
-        visible_range: Range<usize>,
-        window: &mut Window,
-        cx: &mut Context<Table<Self>>,
-    ) {
-    }
-
-    /// Called when the visible range of the columns changed.
-    ///
-    /// NOTE: Make sure this method is fast, because it will be called frequently.
-    ///
-    /// This can used to handle some data update, to only update the visible rows.
-    /// Please ensure that the data is updated in the background task.
-    fn visible_cols_changed(
-        &mut self,
-        visible_range: Range<usize>,
-        window: &mut Window,
-        cx: &mut Context<Table<Self>>,
-    ) {
-    }
-}
-
 impl<D> Table<D>
 where
     D: TableDelegate,
@@ -382,7 +137,6 @@ where
             focus_handle: cx.focus_handle(),
             delegate,
             col_groups: Vec::new(),
-            fixed_cols: FixedCols::default(),
             horizontal_scroll_handle: ScrollHandle::new(),
             vertical_scroll_handle: UniformListScrollHandle::new(),
             vertical_scroll_state: ScrollbarState::default(),
@@ -400,6 +154,12 @@ where
             scrollbar_visible: Edges::all(true),
             visible_range: VisibleRangeState::default(),
             loop_selection: true,
+            col_selectable: true,
+            row_selectable: true,
+            sortable: true,
+            col_movable: true,
+            col_resizable: true,
+            col_fixed: true,
             _load_more_task: Task::ready(()),
             _measure: Vec::new(),
         };
@@ -439,6 +199,26 @@ where
         self
     }
 
+    pub fn col_movable(mut self, col_movable: bool) -> Self {
+        self.col_movable = col_movable;
+        self
+    }
+
+    pub fn col_resizable(mut self, col_resizable: bool) -> Self {
+        self.col_resizable = col_resizable;
+        self
+    }
+
+    pub fn sortable(mut self, sortable: bool) -> Self {
+        self.sortable = sortable;
+        self
+    }
+
+    pub fn row_selectable(mut self, row_selectable: bool) -> Self {
+        self.row_selectable = row_selectable;
+        self
+    }
+
     /// Set the size to the table.
     pub fn set_size(&mut self, size: Size, cx: &mut Context<Self>) {
         self.size = size;
@@ -466,20 +246,16 @@ where
     }
 
     fn prepare_col_groups(&mut self, cx: &mut Context<Self>) {
-        self.col_groups = (0..self.delegate.cols_count(cx))
-            .map(|col_ix| ColGroup {
-                width: self.delegate.col_width(col_ix, cx),
-                paddings: self.delegate.col_paddings(col_ix, cx),
-                bounds: Bounds::default(),
-                sort: self.delegate.col_sort(col_ix, cx),
-                fixed: self.delegate.col_fixed(col_ix, cx),
+        self.col_groups = (0..self.delegate.columns_count(cx))
+            .map(|col_ix| {
+                let column = self.delegate().column(col_ix, cx);
+                ColGroup {
+                    width: column.width,
+                    bounds: Bounds::default(),
+                    column: column.clone(),
+                }
             })
             .collect();
-        self.fixed_cols.left = self
-            .col_groups
-            .iter()
-            .filter(|col| col.fixed == Some(ColFixed::Left))
-            .count();
         cx.notify();
     }
 
@@ -530,7 +306,7 @@ where
             //     self.horizontal_scroll_handle.scroll_to_item(col_ix);
             // }
         }
-        cx.emit(TableEvent::SelectCol(col_ix));
+        cx.emit(TableEvent::SelectColumn(col_ix));
         cx.notify();
     }
 
@@ -566,7 +342,15 @@ where
     }
 
     fn on_col_head_click(&mut self, col_ix: usize, _: &mut Window, cx: &mut Context<Self>) {
-        if !self.delegate.col_selectable(col_ix, cx) {
+        if !self.col_selectable {
+            return;
+        }
+
+        let Some(col_group) = self.col_groups.get(col_ix) else {
+            return;
+        };
+
+        if !col_group.column.selectable {
             return;
         }
 
@@ -623,12 +407,12 @@ where
         cx: &mut Context<Self>,
     ) {
         let mut selected_col = self.selected_col.unwrap_or(0);
-        let cols_count = self.delegate.cols_count(cx);
+        let columns_count = self.delegate.columns_count(cx);
         if selected_col > 0 {
             selected_col = selected_col.saturating_sub(1);
         } else {
             if self.loop_selection {
-                selected_col = cols_count.saturating_sub(1);
+                selected_col = columns_count.saturating_sub(1);
             }
         }
         self.set_selected_col(selected_col, cx);
@@ -641,7 +425,7 @@ where
         cx: &mut Context<Self>,
     ) {
         let mut selected_col = self.selected_col.unwrap_or(0);
-        if selected_col < self.delegate.cols_count(cx).saturating_sub(1) {
+        if selected_col < self.delegate.columns_count(cx).saturating_sub(1) {
             selected_col += 1;
         } else {
             if self.loop_selection {
@@ -653,7 +437,11 @@ where
     }
 
     /// Scroll table when mouse position is near the edge of the table bounds.
-    fn scroll_table_by_col_resizing(&mut self, mouse_position: Point<Pixels>, col_group: ColGroup) {
+    fn scroll_table_by_col_resizing(
+        &mut self,
+        mouse_position: Point<Pixels>,
+        col_group: &ColGroup,
+    ) {
         // Do nothing if pos out of the table bounds right for avoid scroll to the right.
         if mouse_position.x > self.bounds.right() {
             return;
@@ -678,15 +466,22 @@ where
     /// The `ix`` is the index of the col to resize,
     /// and the `size` is the new size for the col.
     fn resize_cols(&mut self, ix: usize, size: Pixels, _: &mut Window, cx: &mut Context<Self>) {
+        if !self.col_resizable {
+            return;
+        }
+
         const MIN_WIDTH: Pixels = px(10.0);
         const MAX_WIDTH: Pixels = px(1200.0);
+        let Some(col_group) = self.col_groups.get_mut(ix) else {
+            return;
+        };
 
-        if !self.delegate.col_resizable(ix, cx) {
+        if !col_group.is_resizable() {
             return;
         }
         let size = size.floor();
 
-        let old_width = self.col_groups[ix].width;
+        let old_width = col_group.width;
         let new_width = size;
         if new_width < MIN_WIDTH {
             return;
@@ -696,35 +491,34 @@ where
         if changed_width > px(-1.0) && changed_width < px(1.0) {
             return;
         }
-        self.col_groups[ix].width = new_width.min(MAX_WIDTH);
-
-        // Resize next col, table not need to resize the right cols.
-        // let next_width = self.col_groups[ix + 1].width.unwrap_or_default();
-        // let next_width = (next_width - changed_width).max(MIN_WIDTH);
-        // self.col_groups[ix + 1].width = Some(next_width);
+        col_group.width = new_width.min(MAX_WIDTH);
 
         cx.notify();
     }
 
     fn perform_sort(&mut self, col_ix: usize, window: &mut Window, cx: &mut Context<Self>) {
-        let sort = self.col_groups.get(col_ix).and_then(|g| g.sort);
+        if !self.sortable {
+            return;
+        }
+
+        let sort = self.col_groups.get(col_ix).and_then(|g| g.column.sort);
         if sort.is_none() {
             return;
         }
 
         let sort = sort.unwrap();
         let sort = match sort {
-            ColSort::Ascending => ColSort::Default,
-            ColSort::Descending => ColSort::Ascending,
-            ColSort::Default => ColSort::Descending,
+            ColumnSort::Ascending => ColumnSort::Default,
+            ColumnSort::Descending => ColumnSort::Ascending,
+            ColumnSort::Default => ColumnSort::Descending,
         };
 
         for (ix, col_group) in self.col_groups.iter_mut().enumerate() {
             if ix == col_ix {
-                col_group.sort = Some(sort);
+                col_group.column.sort = Some(sort);
             } else {
-                if col_group.sort.is_some() {
-                    col_group.sort = Some(ColSort::Default);
+                if col_group.column.sort.is_some() {
+                    col_group.column.sort = Some(ColumnSort::Default);
                 }
             }
         }
@@ -734,7 +528,7 @@ where
         cx.notify();
     }
 
-    fn move_col(
+    fn move_column(
         &mut self,
         col_ix: usize,
         to_ix: usize,
@@ -745,11 +539,11 @@ where
             return;
         }
 
-        self.delegate.move_col(col_ix, to_ix, window, cx);
+        self.delegate.move_column(col_ix, to_ix, window, cx);
         let col_group = self.col_groups.remove(col_ix);
         self.col_groups.insert(to_ix, col_group);
 
-        cx.emit(TableEvent::MoveCol(col_ix, to_ix));
+        cx.emit(TableEvent::MoveColumn(col_ix, to_ix));
         cx.notify();
     }
 
@@ -801,19 +595,18 @@ where
                 return;
             }
             self.delegate_mut()
-                .visible_cols_changed(visible_range.clone(), window, cx);
+                .visible_columns_changed(visible_range.clone(), window, cx);
             self.visible_range.cols = visible_range;
         }
     }
 
-    #[inline]
     fn render_cell(&self, col_ix: usize, _window: &mut Window, _cx: &mut Context<Self>) -> Div {
         let Some(col_group) = self.col_groups.get(col_ix) else {
             return div();
         };
 
         let col_width = col_group.width;
-        let col_padding = col_group.paddings;
+        let col_padding = col_group.column.paddings;
 
         div()
             .w(col_width)
@@ -835,8 +628,14 @@ where
     /// Show Column selection style, when the column is selected and the selection state is Column.
     fn render_col_wrap(&self, col_ix: usize, _: &mut Window, cx: &mut Context<Self>) -> Div {
         let el = h_flex().h_full();
+        let selectable = self.col_selectable
+            && self
+                .col_groups
+                .get(col_ix)
+                .map(|col_group| col_group.column.selectable)
+                .unwrap_or(false);
 
-        if self.delegate().col_selectable(col_ix, cx)
+        if selectable
             && self.selected_col == Some(col_ix)
             && self.selection_state == SelectionState::Column
         {
@@ -899,7 +698,13 @@ where
     ) -> impl IntoElement {
         const HANDLE_SIZE: Pixels = px(2.);
 
-        if !self.delegate.col_resizable(ix, cx) {
+        let resizable = self.col_resizable
+            && self
+                .col_groups
+                .get(ix)
+                .map(|col| col.is_resizable())
+                .unwrap_or(false);
+        if !resizable {
             return div().into_any_element();
         }
 
@@ -924,23 +729,27 @@ where
                     .w(px(1.)),
             )
             .on_drag_move(
-                cx.listener(move |view, e: &DragMoveEvent<ResizeCol>, window, cx| {
+                cx.listener(move |view, e: &DragMoveEvent<ResizeColumn>, window, cx| {
                     match e.drag(cx) {
-                        ResizeCol((entity_id, ix)) => {
+                        ResizeColumn((entity_id, ix)) => {
                             if cx.entity_id() != *entity_id {
                                 return;
                             }
 
                             // sync col widths into real widths
-                            for (_, col_group) in view.col_groups.iter_mut().enumerate() {
-                                col_group.width = col_group.bounds.size.width;
-                            }
+                            // TODO: Consider to remove this, this may not need now.
+                            // for (_, col_group) in view.col_groups.iter_mut().enumerate() {
+                            //     col_group.width = col_group.bounds.size.width;
+                            // }
 
                             let ix = *ix;
                             view.resizing_col = Some(ix);
 
-                            let col_group =
-                                *view.col_groups.get(ix).expect("BUG: invalid col index");
+                            let col_group = view
+                                .col_groups
+                                .get(ix)
+                                .expect("BUG: invalid col index")
+                                .clone();
 
                             view.resize_cols(
                                 ix,
@@ -950,12 +759,12 @@ where
                             );
 
                             // scroll the table if the drag is near the edge
-                            view.scroll_table_by_col_resizing(e.event.position, col_group);
+                            view.scroll_table_by_col_resizing(e.event.position, &col_group);
                         }
                     };
                 }),
             )
-            .on_drag(ResizeCol((cx.entity_id(), ix)), |drag, _, _, cx| {
+            .on_drag(ResizeColumn((cx.entity_id(), ix)), |drag, _, _, cx| {
                 cx.stop_propagation();
                 cx.new(|_| drag.clone())
             })
@@ -969,7 +778,7 @@ where
                     view.resizing_col = None;
 
                     let new_widths = view.col_groups.iter().map(|g| g.width).collect();
-                    cx.emit(TableEvent::ColWidthsChanged(new_widths));
+                    cx.emit(TableEvent::ColumnWidthsChanged(new_widths));
                     cx.notify();
                 }),
             )
@@ -983,14 +792,18 @@ where
         _: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<impl IntoElement> {
-        let Some(sort) = col_group.sort else {
+        if !self.sortable {
+            return None;
+        }
+
+        let Some(sort) = col_group.column.sort else {
             return None;
         };
 
         let (icon, is_on) = match sort {
-            ColSort::Ascending => (IconName::SortAscending, true),
-            ColSort::Descending => (IconName::SortDescending, true),
-            ColSort::Default => (IconName::ChevronsUpDown, false),
+            ColumnSort::Ascending => (IconName::SortAscending, true),
+            ColumnSort::Descending => (IconName::SortDescending, true),
+            ColumnSort::Default => (IconName::ChevronsUpDown, false),
         };
 
         Some(
@@ -1027,9 +840,10 @@ where
     ) -> impl IntoElement {
         let entity_id = cx.entity_id();
         let col_group = self.col_groups.get(col_ix).expect("BUG: invalid col index");
-        let movable = self.delegate.col_movable(col_ix, cx);
-        let paddings = self.delegate.col_paddings(col_ix, cx);
-        let name = self.delegate.col_name(col_ix, cx);
+
+        let movable = self.col_movable && col_group.column.movable;
+        let paddings = col_group.column.paddings;
+        let name = col_group.column.name.clone();
 
         h_flex()
             .child(
@@ -1057,7 +871,7 @@ where
                     )
                     .when(movable, |this| {
                         this.on_drag(
-                            DragCol {
+                            DragColumn {
                                 entity_id,
                                 col_ix,
                                 name,
@@ -1068,20 +882,20 @@ where
                                 cx.new(|_| drag.clone())
                             },
                         )
-                        .drag_over::<DragCol>(|this, _, _, cx| {
+                        .drag_over::<DragColumn>(|this, _, _, cx| {
                             this.rounded_l_none()
                                 .border_l_2()
                                 .border_r_0()
                                 .border_color(cx.theme().drag_border)
                         })
                         .on_drop(cx.listener(
-                            move |table, drag: &DragCol, window, cx| {
+                            move |table, drag: &DragColumn, window, cx| {
                                 // If the drag col is not the same as the drop col, then swap the cols.
                                 if drag.entity_id != cx.entity_id() {
                                     return;
                                 }
 
-                                table.move_col(drag.col_ix, col_ix, window, cx);
+                                table.move_column(drag.col_ix, col_ix, window, cx);
                             },
                         ))
                     }),
@@ -1104,7 +918,7 @@ where
 
     fn render_table_head(
         &mut self,
-        left_cols_count: usize,
+        left_columns_count: usize,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
@@ -1112,7 +926,7 @@ where
         let horizontal_scroll_handle = self.horizontal_scroll_handle.clone();
 
         // Reset fixed head columns bounds, if no fixed columns are present
-        if left_cols_count == 0 {
+        if left_columns_count == 0 {
             self.fixed_head_cols_bounds = Bounds::default();
         }
 
@@ -1123,7 +937,7 @@ where
             .border_b_1()
             .border_color(cx.theme().border)
             .text_color(cx.theme().table_head_foreground)
-            .when(left_cols_count > 0, |this| {
+            .when(left_columns_count > 0, |this| {
                 let view = view.clone();
                 // Render left fixed columns
                 this.child(
@@ -1134,7 +948,7 @@ where
                         .children(
                             self.col_groups
                                 .iter()
-                                .filter(|col| col.fixed == Some(ColFixed::Left))
+                                .filter(|col| col.column.fixed == Some(ColumnFixed::Left))
                                 .enumerate()
                                 .map(|(col_ix, _)| self.render_th(col_ix, window, cx)),
                         )
@@ -1177,10 +991,10 @@ where
                             .children(
                                 self.col_groups
                                     .iter()
-                                    .filter(|col| col.fixed == None)
+                                    .filter(|col| col.column.fixed == None)
                                     .enumerate()
                                     .map(|(col_ix, _)| {
-                                        self.render_th(left_cols_count + col_ix, window, cx)
+                                        self.render_th(left_columns_count + col_ix, window, cx)
                                     }),
                             )
                             .child(self.delegate.render_last_empty_col(window, cx)),
@@ -1193,9 +1007,9 @@ where
         &mut self,
         row_ix: usize,
         rows_count: usize,
-        left_cols_count: usize,
+        left_columns_count: usize,
         col_sizes: Rc<Vec<gpui::Size<Pixels>>>,
-        cols_count: usize,
+        columns_count: usize,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
@@ -1223,16 +1037,16 @@ where
                         this.bg(cx.theme().table_hover)
                     }
                 })
-                .when(left_cols_count > 0, |this| {
+                .when(left_columns_count > 0, |this| {
                     // Left fixed columns
                     this.child(
                         h_flex()
                             .relative()
                             .h_full()
                             .children({
-                                let mut items = Vec::with_capacity(left_cols_count);
+                                let mut items = Vec::with_capacity(left_columns_count);
 
-                                (0..left_cols_count).for_each(|col_ix| {
+                                (0..left_columns_count).for_each(|col_ix| {
                                     items.push(self.render_col_wrap(col_ix, window, cx).child(
                                         self.render_cell(col_ix, window, cx).child(
                                             self.measure_render_td(row_ix, col_ix, window, cx),
@@ -1282,7 +1096,7 @@ where
                                         );
 
                                         visible_range.for_each(|col_ix| {
-                                            let col_ix = col_ix + left_cols_count;
+                                            let col_ix = col_ix + left_columns_count;
                                             let el =
                                                 table.render_col_wrap(col_ix, window, cx).child(
                                                     table.render_cell(col_ix, window, cx).child(
@@ -1357,7 +1171,7 @@ where
                 .border_t_1()
                 .border_color(cx.theme().table_row_border)
                 .when(is_stripe_row, |this| this.bg(cx.theme().table_even))
-                .children((0..cols_count).map(|col_ix| {
+                .children((0..columns_count).map(|col_ix| {
                     h_flex()
                         .left(horizontal_scroll_handle.offset().x)
                         .child(self.render_cell(col_ix, window, cx))
@@ -1467,8 +1281,12 @@ where
         let view = cx.entity().clone();
         let vertical_scroll_handle = self.vertical_scroll_handle.clone();
         let horizontal_scroll_handle = self.horizontal_scroll_handle.clone();
-        let cols_count: usize = self.delegate.cols_count(cx);
-        let left_cols_count = self.fixed_cols.left;
+        let columns_count: usize = self.delegate.columns_count(cx);
+        let left_columns_count = self
+            .col_groups
+            .iter()
+            .filter(|col| self.col_fixed && col.column.fixed == Some(ColumnFixed::Left))
+            .count();
         let rows_count = self.delegate.rows_count(cx);
         let loading = self.delegate.loading(cx);
         let extra_rows_needed = self.calculate_extra_rows_needed(rows_count);
@@ -1484,7 +1302,7 @@ where
             .on_action(cx.listener(Self::action_select_prev_col))
             .size_full()
             .overflow_hidden()
-            .child(self.render_table_head(left_cols_count, window, cx))
+            .child(self.render_table_head(left_columns_count, window, cx))
             .context_menu({
                 let view = view.clone();
                 move |this, window: &mut Window, cx: &mut Context<PopupMenu>| {
@@ -1518,7 +1336,7 @@ where
                                             table
                                                 .col_groups
                                                 .iter()
-                                                .skip(left_cols_count)
+                                                .skip(left_columns_count)
                                                 .map(|col| col.bounds.size)
                                                 .collect(),
                                         );
@@ -1556,9 +1374,9 @@ where
                                             items.push(table.render_table_row(
                                                 row_ix,
                                                 rows_count,
-                                                left_cols_count,
+                                                left_columns_count,
                                                 col_sizes.clone(),
-                                                cols_count,
+                                                columns_count,
                                                 window,
                                                 cx,
                                             ));
@@ -1608,17 +1426,19 @@ where
                 move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds),
                 |_, _, _, _| {},
             ))
-            .child(
-                div()
-                    .absolute()
-                    .top_0()
-                    .size_full()
-                    .when(self.scrollbar_visible.bottom, |this| {
-                        this.child(self.render_horizontal_scrollbar(window, cx))
-                    })
-                    .when(self.scrollbar_visible.right && rows_count > 0, |this| {
-                        this.children(self.render_vertical_scrollbar(window, cx))
-                    }),
-            )
+            .when(!window.is_inspector_picking(cx), |this| {
+                this.child(
+                    div()
+                        .absolute()
+                        .top_0()
+                        .size_full()
+                        .when(self.scrollbar_visible.bottom, |this| {
+                            this.child(self.render_horizontal_scrollbar(window, cx))
+                        })
+                        .when(self.scrollbar_visible.right && rows_count > 0, |this| {
+                            this.children(self.render_vertical_scrollbar(window, cx))
+                        }),
+                )
+            })
     }
 }

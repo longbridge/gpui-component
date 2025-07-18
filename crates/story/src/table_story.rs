@@ -6,9 +6,9 @@ use std::{
 
 use fake::Fake;
 use gpui::{
-    div, prelude::FluentBuilder as _, px, Action, AnyElement, App, AppContext, ClickEvent, Context,
-    Edges, Entity, Focusable, InteractiveElement, IntoElement, ParentElement, Pixels, Render,
-    SharedString, StatefulInteractiveElement, Styled, TextAlign, Timer, Window,
+    div, prelude::FluentBuilder as _, Action, AnyElement, App, AppContext, ClickEvent, Context,
+    Entity, Focusable, InteractiveElement, IntoElement, ParentElement, Render, SharedString,
+    StatefulInteractiveElement, Styled, TextAlign, Timer, Window,
 };
 use gpui_component::{
     button::Button,
@@ -18,7 +18,7 @@ use gpui_component::{
     input::{InputEvent, InputState, TextInput},
     label::Label,
     popup_menu::{PopupMenu, PopupMenuExt},
-    table::{self, ColFixed, ColSort, Table, TableDelegate, TableEvent},
+    table::{Column, ColumnFixed, ColumnSort, Table, TableDelegate, TableEvent},
     v_flex, ActiveTheme as _, Selectable, Sizable as _, Size, StyleSized as _, StyledExt,
 };
 use serde::{Deserialize, Serialize};
@@ -127,7 +127,7 @@ fn random_stocks(size: usize) -> Vec<Stock> {
             id,
             counter: Counter::random(),
             change: (-100.0..100.0).fake(),
-            change_percent: (-1.0..1.0).fake(),
+            change_percent: (-0.1..0.1).fake(),
             volume: (0.0..1000.0).fake(),
             turnover: (0.0..1000.0).fake(),
             market_cap: (0.0..1000.0).fake(),
@@ -171,73 +171,12 @@ fn random_stocks(size: usize) -> Vec<Stock> {
         .collect()
 }
 
-struct Column {
-    id: SharedString,
-    name: SharedString,
-    align: TextAlign,
-    sort: Option<ColSort>,
-    paddings: Option<Edges<Pixels>>,
-    width: Pixels,
-    fixed: bool,
-    resizable: bool,
-}
-
-impl Column {
-    fn new(id: impl Into<SharedString>, name: impl Into<SharedString>) -> Self {
-        Self {
-            id: id.into(),
-            name: name.into(),
-            align: TextAlign::Left,
-            sort: None,
-            paddings: None,
-            width: px(100.),
-            fixed: false,
-            resizable: true,
-        }
-    }
-
-    fn sortable(mut self) -> Self {
-        self.sort = Some(ColSort::Default);
-        self
-    }
-
-    fn text_right(mut self) -> Self {
-        self.align = TextAlign::Right;
-        self
-    }
-
-    fn p_0(mut self) -> Self {
-        self.paddings = Some(Edges::all(px(0.)));
-        self
-    }
-
-    fn w(mut self, width: impl Into<Pixels>) -> Self {
-        self.width = width.into();
-        self
-    }
-
-    fn fixed(mut self) -> Self {
-        self.fixed = true;
-        self
-    }
-
-    fn resizable(mut self, resizable: bool) -> Self {
-        self.resizable = resizable;
-        self
-    }
-}
-
 struct StockTableDelegate {
     stocks: Vec<Stock>,
     columns: Vec<Column>,
     size: Size,
-    col_resize: bool,
-    col_order: bool,
-    col_sort: bool,
-    col_selection: bool,
     loading: bool,
     full_loading: bool,
-    fixed_cols: bool,
     eof: bool,
     visible_rows: Range<usize>,
     visible_cols: Range<usize>,
@@ -249,13 +188,19 @@ impl StockTableDelegate {
             size: Size::default(),
             stocks: random_stocks(size),
             columns: vec![
-                Column::new("id", "ID").w(60.).fixed().resizable(false),
+                Column::new("id", "ID")
+                    .w(60.)
+                    .fixed(ColumnFixed::Left)
+                    .resizable(false),
                 Column::new("market", "Market")
                     .w(60.)
-                    .fixed()
+                    .fixed(ColumnFixed::Left)
                     .resizable(false),
-                Column::new("symbol", "Symbol").w(100.).fixed().sortable(),
-                Column::new("name", "Name").w(180.).fixed(),
+                Column::new("name", "Name").w(180.).fixed(ColumnFixed::Left),
+                Column::new("symbol", "Symbol")
+                    .w(100.)
+                    .fixed(ColumnFixed::Left)
+                    .sortable(),
                 Column::new("price", "Price").sortable().text_right().p_0(),
                 Column::new("change", "Chg").sortable().text_right().p_0(),
                 Column::new("change_percent", "Chg%")
@@ -307,11 +252,6 @@ impl StockTableDelegate {
                 Column::new("day_120_ranking", "120d Ranking"),
                 Column::new("day_250_ranking", "250d Ranking"),
             ],
-            col_resize: true,
-            col_order: true,
-            col_sort: true,
-            col_selection: true,
-            fixed_cols: false,
             loading: false,
             full_loading: false,
             eof: false,
@@ -325,6 +265,30 @@ impl StockTableDelegate {
         self.eof = size <= 50;
         self.loading = false;
         self.full_loading = false;
+    }
+
+    fn render_percent(&self, col: &Column, val: f64, cx: &mut Context<Table<Self>>) -> AnyElement {
+        let right_num = ((val - val.floor()) * 1000.).floor() as i32;
+
+        div()
+            .h_full()
+            .table_cell_size(self.size)
+            .when(col.align == TextAlign::Right, |this| {
+                this.h_flex().justify_end()
+            })
+            .map(|this| {
+                if right_num % 3 == 0 {
+                    this.text_color(cx.theme().red)
+                        .bg(cx.theme().red_light.alpha(0.05))
+                } else if right_num % 3 == 1 {
+                    this.text_color(cx.theme().green)
+                        .bg(cx.theme().green_light.alpha(0.05))
+                } else {
+                    this
+                }
+            })
+            .child(format!("{:.2}%", val * 100.))
+            .into_any_element()
     }
 
     fn render_value_cell(
@@ -359,7 +323,7 @@ impl StockTableDelegate {
 }
 
 impl TableDelegate for StockTableDelegate {
-    fn cols_count(&self, _: &App) -> usize {
+    fn columns_count(&self, _: &App) -> usize {
         self.columns.len()
     }
 
@@ -367,54 +331,8 @@ impl TableDelegate for StockTableDelegate {
         self.stocks.len()
     }
 
-    fn col_name(&self, col_ix: usize, _: &App) -> SharedString {
-        self.columns
-            .get(col_ix)
-            .map(|col| col.name.clone())
-            .unwrap_or("--".into())
-    }
-
-    fn col_width(&self, col_ix: usize, _: &App) -> Pixels {
-        self.columns
-            .get(col_ix)
-            .map(|col| col.width)
-            .unwrap_or(px(100.))
-    }
-
-    fn col_paddings(&self, col_ix: usize, _: &App) -> Option<Edges<Pixels>> {
-        let Some(col) = self.columns.get(col_ix) else {
-            return None;
-        };
-
-        col.paddings
-    }
-
-    fn col_fixed(&self, col_ix: usize, _: &App) -> Option<table::ColFixed> {
-        if !self.fixed_cols {
-            return None;
-        }
-
-        let Some(col) = self.columns.get(col_ix) else {
-            return None;
-        };
-
-        if col.fixed {
-            Some(ColFixed::Left)
-        } else {
-            None
-        }
-    }
-
-    fn col_resizable(&self, col_ix: usize, _: &App) -> bool {
-        let Some(col) = self.columns.get(col_ix) else {
-            return false;
-        };
-
-        col.resizable
-    }
-
-    fn col_selectable(&self, _: usize, _: &App) -> bool {
-        return self.col_selection;
+    fn column(&self, col_ix: usize, _cx: &App) -> &Column {
+        &self.columns[col_ix]
     }
 
     fn render_th(
@@ -487,7 +405,7 @@ impl TableDelegate for StockTableDelegate {
         let stock = self.stocks.get(row_ix).unwrap();
         let col = self.columns.get(col_ix).unwrap();
 
-        match col.id.as_ref() {
+        match col.key.as_ref() {
             "id" => stock.id.to_string().into_any_element(),
             "market" => div()
                 .map(|this| {
@@ -503,7 +421,7 @@ impl TableDelegate for StockTableDelegate {
             "name" => stock.counter.name.clone().into_any_element(),
             "price" => self.render_value_cell(&col, stock.price, cx),
             "change" => self.render_value_cell(&col, stock.change, cx),
-            "change_percent" => self.render_value_cell(&col, stock.change_percent, cx),
+            "change_percent" => self.render_percent(&col, stock.change_percent, cx),
             "volume" => self.render_value_cell(&col, stock.volume, cx),
             "turnover" => self.render_value_cell(&col, stock.turnover, cx),
             "market_cap" => self.render_value_cell(&col, stock.market_cap, cx),
@@ -514,10 +432,7 @@ impl TableDelegate for StockTableDelegate {
                 .floor()
                 .to_string()
                 .into_any_element(),
-            "year_change_percent" => (stock.year_change_percent * 100.0)
-                .floor()
-                .to_string()
-                .into_any_element(),
+            "year_change_percent" => self.render_percent(&col, stock.year_change_percent, cx),
             "bid" => self.render_value_cell(&col, stock.bid, cx),
             "bid_volume" => self.render_value_cell(&col, stock.bid_volume, cx),
             "ask" => self.render_value_cell(&col, stock.ask, cx),
@@ -553,20 +468,14 @@ impl TableDelegate for StockTableDelegate {
                 .to_string()
                 .into_any_element(),
             "pre_market_cap" => stock.pre_market_cap.floor().to_string().into_any_element(),
-            "pre_market_percent" => (stock.pre_market_percent * 100.0)
-                .floor()
-                .to_string()
-                .into_any_element(),
+            "pre_market_percent" => self.render_percent(&col, stock.pre_market_percent, cx),
             "pre_market_change" => stock
                 .pre_market_change
                 .floor()
                 .to_string()
                 .into_any_element(),
             "post_market_cap" => stock.post_market_cap.floor().to_string().into_any_element(),
-            "post_market_percent" => (stock.post_market_percent * 100.0)
-                .floor()
-                .to_string()
-                .into_any_element(),
+            "post_market_percent" => self.render_percent(&col, stock.post_market_percent, cx),
             "post_market_change" => stock
                 .post_market_change
                 .floor()
@@ -584,11 +493,7 @@ impl TableDelegate for StockTableDelegate {
         }
     }
 
-    fn col_movable(&self, _: usize, _: &App) -> bool {
-        self.col_order
-    }
-
-    fn move_col(
+    fn move_column(
         &mut self,
         col_ix: usize,
         to_ix: usize,
@@ -599,37 +504,25 @@ impl TableDelegate for StockTableDelegate {
         self.columns.insert(to_ix, col);
     }
 
-    fn col_sort(&self, col_ix: usize, _: &App) -> Option<ColSort> {
-        if !self.col_sort {
-            return None;
-        }
-
-        self.columns.get(col_ix).and_then(|c| c.sort)
-    }
-
     fn perform_sort(
         &mut self,
         col_ix: usize,
-        sort: ColSort,
+        sort: ColumnSort,
         _: &mut Window,
         _: &mut Context<Table<Self>>,
     ) {
-        if !self.col_sort {
-            return;
-        }
-
         if let Some(col) = self.columns.get_mut(col_ix) {
-            match col.id.as_ref() {
+            match col.key.as_ref() {
                 "id" => self.stocks.sort_by(|a, b| match sort {
-                    ColSort::Descending => b.id.cmp(&a.id),
+                    ColumnSort::Descending => b.id.cmp(&a.id),
                     _ => a.id.cmp(&b.id),
                 }),
                 "symbol" => self.stocks.sort_by(|a, b| match sort {
-                    ColSort::Descending => b.counter.symbol.cmp(&a.counter.symbol),
+                    ColumnSort::Descending => b.counter.symbol.cmp(&a.counter.symbol),
                     _ => a.id.cmp(&b.id),
                 }),
                 "change" | "change_percent" => self.stocks.sort_by(|a, b| match sort {
-                    ColSort::Descending => b
+                    ColumnSort::Descending => b
                         .change
                         .partial_cmp(&a.change)
                         .unwrap_or(std::cmp::Ordering::Equal),
@@ -679,7 +572,7 @@ impl TableDelegate for StockTableDelegate {
         self.visible_rows = visible_range;
     }
 
-    fn visible_cols_changed(
+    fn visible_columns_changed(
         &mut self,
         visible_range: Range<usize>,
         _: &mut Window,
@@ -817,32 +710,35 @@ impl TableStory {
 
     fn toggle_col_resize(&mut self, checked: &bool, _: &mut Window, cx: &mut Context<Self>) {
         self.table.update(cx, |table, cx| {
-            table.delegate_mut().col_resize = *checked;
-            table.refresh(cx);
+            table.col_resizable = *checked;
             cx.notify();
         });
     }
 
     fn toggle_col_order(&mut self, checked: &bool, _: &mut Window, cx: &mut Context<Self>) {
         self.table.update(cx, |table, cx| {
-            table.delegate_mut().col_order = *checked;
-            table.refresh(cx);
+            table.col_movable = *checked;
             cx.notify();
         });
     }
 
     fn toggle_col_sort(&mut self, checked: &bool, _: &mut Window, cx: &mut Context<Self>) {
         self.table.update(cx, |table, cx| {
-            table.delegate_mut().col_sort = *checked;
-            table.refresh(cx);
+            table.sortable = *checked;
+            cx.notify();
+        });
+    }
+
+    fn toggle_col_fixed(&mut self, checked: &bool, _: &mut Window, cx: &mut Context<Self>) {
+        self.table.update(cx, |table, cx| {
+            table.col_fixed = *checked;
             cx.notify();
         });
     }
 
     fn toggle_col_selection(&mut self, checked: &bool, _: &mut Window, cx: &mut Context<Self>) {
         self.table.update(cx, |table, cx| {
-            table.delegate_mut().col_selection = *checked;
-            table.refresh(cx);
+            table.col_selectable = *checked;
             cx.notify();
         });
     }
@@ -852,14 +748,6 @@ impl TableStory {
         let stripe = self.stripe;
         self.table.update(cx, |table, cx| {
             table.set_stripe(stripe, cx);
-            cx.notify();
-        });
-    }
-
-    fn toggle_fixed_cols(&mut self, checked: &bool, _: &mut Window, cx: &mut Context<Self>) {
-        self.table.update(cx, |table, cx| {
-            table.delegate_mut().fixed_cols = *checked;
-            table.refresh(cx);
             cx.notify();
         });
     }
@@ -885,13 +773,13 @@ impl TableStory {
         _cx: &mut Context<Self>,
     ) {
         match event {
-            TableEvent::ColWidthsChanged(col_widths) => {
-                println!("Col widths changed: {:?}", col_widths)
+            TableEvent::ColumnWidthsChanged(col_widths) => {
+                println!("Column widths changed: {:?}", col_widths)
             }
-            TableEvent::SelectCol(ix) => println!("Select col: {}", ix),
+            TableEvent::SelectColumn(ix) => println!("Select col: {}", ix),
             TableEvent::DoubleClickedRow(ix) => println!("Double clicked row: {}", ix),
             TableEvent::SelectRow(ix) => println!("Select row: {}", ix),
-            TableEvent::MoveCol(origin_idx, target_idx) => {
+            TableEvent::MoveColumn(origin_idx, target_idx) => {
                 println!("Move col index: {} -> {}", origin_idx, target_idx);
             }
         }
@@ -900,8 +788,8 @@ impl TableStory {
 
 impl Render for TableStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
-        let delegate = self.table.read(cx).delegate();
-        let loop_selection = self.table.read(cx).loop_selection;
+        let table = &self.table.read(cx);
+        let delegate = table.delegate();
         let rows_count = delegate.rows_count(cx);
         let size = self.size;
 
@@ -918,44 +806,44 @@ impl Render for TableStory {
                     .child(
                         Checkbox::new("loop-selection")
                             .label("Loop Selection")
-                            .selected(loop_selection)
+                            .selected(table.loop_selection)
                             .on_click(cx.listener(Self::toggle_loop_selection)),
                     )
                     .child(
                         Checkbox::new("col-resize")
                             .label("Column Resize")
-                            .selected(delegate.col_resize)
+                            .selected(table.col_resizable)
                             .on_click(cx.listener(Self::toggle_col_resize)),
                     )
                     .child(
                         Checkbox::new("col-order")
                             .label("Column Order")
-                            .selected(delegate.col_order)
+                            .selected(table.col_movable)
                             .on_click(cx.listener(Self::toggle_col_order)),
                     )
                     .child(
                         Checkbox::new("col-sort")
-                            .label("Column Sort")
-                            .selected(delegate.col_sort)
+                            .label("Sortable")
+                            .selected(table.sortable)
                             .on_click(cx.listener(Self::toggle_col_sort)),
                     )
                     .child(
                         Checkbox::new("col-selection")
-                            .label("Column Selection")
-                            .selected(delegate.col_selection)
+                            .label("Column Selectable")
+                            .selected(table.col_selectable)
                             .on_click(cx.listener(Self::toggle_col_selection)),
+                    )
+                    .child(
+                        Checkbox::new("fixed")
+                            .label("Column Fixed")
+                            .selected(table.col_fixed)
+                            .on_click(cx.listener(Self::toggle_col_fixed)),
                     )
                     .child(
                         Checkbox::new("stripe")
                             .label("Stripe")
                             .selected(self.stripe)
                             .on_click(cx.listener(Self::toggle_stripe)),
-                    )
-                    .child(
-                        Checkbox::new("fixed-cols")
-                            .label("Fixed Columns")
-                            .selected(delegate.fixed_cols)
-                            .on_click(cx.listener(Self::toggle_fixed_cols)),
                     )
                     .child(
                         Checkbox::new("loading")
@@ -1043,7 +931,7 @@ impl Render for TableStory {
                        //         .small()
                        //         .on_click(cx.listener(|this, _, window, cx| {
                        //             this.table.update(cx, |table, cx| {
-                       //                 table.scroll_to_col(table.delegate().cols_count(cx), cx);
+                       //                 table.scroll_to_col(table.delegate().columns_count(cx), cx);
                        //             })
                        //         })),
                        // ),
