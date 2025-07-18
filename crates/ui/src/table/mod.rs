@@ -781,6 +781,7 @@ where
                             }
 
                             // sync col widths into real widths
+                            // TODO: Consider to remove this, this may not need now.
                             // for (_, col_group) in view.col_groups.iter_mut().enumerate() {
                             //     col_group.width = col_group.bounds.size.width;
                             // }
