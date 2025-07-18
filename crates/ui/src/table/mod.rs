@@ -583,13 +583,13 @@ where
             return None;
         };
 
-        let options = if let Some(row_ix) = row_ix {
-            self.delegate().cell_options(col_ix, row_ix, cx)
+        let table_cell = if let Some(row_ix) = row_ix {
+            self.delegate().cell(col_ix, row_ix, cx)
         } else {
-            None
+            TableCell::default()
         };
 
-        let col_width = self.col_width(col_ix, options.map(|o| o.col_span).unwrap_or(1));
+        let col_width = self.col_width(col_ix, table_cell.col_span);
         let col_padding = col_group.paddings;
 
         if col_width.is_zero() {

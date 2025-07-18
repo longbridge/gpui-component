@@ -8,7 +8,7 @@ use gpui::{
 use crate::{
     h_flex,
     popup_menu::PopupMenu,
-    table::{loading::Loading, CellOption, ColFixed, ColSort, Table},
+    table::{loading::Loading, ColFixed, ColSort, Table, TableCell},
     ActiveTheme as _, Icon, IconName, Size,
 };
 
@@ -18,6 +18,11 @@ pub trait TableDelegate: Sized + 'static {
     fn cols_count(&self, cx: &App) -> usize;
     /// Return the number of rows in the table.
     fn rows_count(&self, cx: &App) -> usize;
+
+    /// Returns the table cell info for the given row and column.
+    fn cell(&self, row_ix: usize, col_ix: usize, cx: &App) -> TableCell {
+        TableCell::default()
+    }
 
     /// Returns the name of the column at the given index.
     fn col_name(&self, col_ix: usize, cx: &App) -> SharedString;
@@ -74,11 +79,6 @@ pub trait TableDelegate: Sized + 'static {
         window: &mut Window,
         cx: &mut Context<Table<Self>>,
     ) {
-    }
-
-    /// Return the cell config for the col, row index.
-    fn cell_options(&self, col_ix: usize, row_ix: usize, cx: &App) -> Option<CellOption> {
-        None
     }
 
     /// Render the header cell at the given column index, default to the column name.
