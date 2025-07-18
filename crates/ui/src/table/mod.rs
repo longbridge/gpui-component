@@ -252,22 +252,8 @@ where
         self.col_groups = (0..self.delegate.cols_count(cx))
             .map(|col_ix| {
                 let column = self.delegate().col(col_ix, cx);
-                let mut width = column.width;
-                // if column.col_span > 1 {
-                //     let mut next_col = col_ix + 1;
-                //     let mut span = column.col_span - 1;
-                //     while span > 0 && next_col < self.delegate.cols_count(cx) {
-                //         let next = self.delegate().col(next_col, cx);
-                //         width += next.width;
-                //         span -= 1;
-                //         next_col += 1;
-                //     }
-                // } else if column.col_span == 0 {
-                //     width = px(0.);
-                // }
-
                 ColGroup {
-                    width,
+                    width: column.width,
                     bounds: Bounds::default(),
                     column: column.clone(),
                 }
@@ -493,7 +479,7 @@ where
             return;
         };
 
-        if !col_group.column.resizable {
+        if !col_group.is_resizable() {
             return;
         }
         let size = size.floor();
@@ -760,7 +746,7 @@ where
             && self
                 .col_groups
                 .get(ix)
-                .map(|col| col.column.resizable)
+                .map(|col| col.is_resizable())
                 .unwrap_or(false);
         if !resizable {
             return div().into_any_element();

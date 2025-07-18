@@ -3,7 +3,7 @@ use gpui::{
     Render, SharedString, Styled as _, TextAlign, Window,
 };
 
-use crate::{table::TableCell, ActiveTheme as _};
+use crate::ActiveTheme as _;
 
 /// Represents a column in a table, used for initializing table columns.
 #[derive(Debug, Clone)]
@@ -50,6 +50,8 @@ impl TableCol {
     }
 
     /// Set the col span for the Table Head, default is 1.
+    ///
+    /// If col_span is not 1, the column will not be resizable.
     pub fn col_span(mut self, col_span: usize) -> Self {
         self.col_span = col_span;
         self
@@ -127,9 +129,17 @@ pub enum ColFixed {
 pub(crate) struct ColGroup {
     pub(crate) column: TableCol,
     /// This is the runtime width of the column, we may update it when the column is resized.
+    ///
+    /// Including the width with next columns by col_span.
     pub(crate) width: Pixels,
     /// The bounds of the column in the table after it renders.
     pub(crate) bounds: Bounds<Pixels>,
+}
+
+impl ColGroup {
+    pub(crate) fn is_resizable(&self) -> bool {
+        self.column.resizable && self.column.col_span == 1
+    }
 }
 
 #[derive(Clone)]
