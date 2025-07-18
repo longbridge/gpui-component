@@ -1,7 +1,7 @@
 use crate::{
     backoffice::{
-        agentic::{ToolDefinition, ToolDelegate},
-        mcp::{McpCallToolResult, McpRegistry},
+        agentic::{Operator, ToolDefinition},
+        mcp::{McpRegistry, ToolCallResult},
     },
     config::todo_item::SelectedTool,
 };
@@ -9,14 +9,14 @@ use serde_json::Value;
 
 /// 基于 MCP 的工具委托实现
 #[derive(Debug, Clone)]
-pub struct McpToolDelegate {
+pub struct Toolkit {
     /// 可用的工具配置
     pub selected_tools: Vec<SelectedTool>,
     /// 工具调用超时时间（秒）
     pub timeout_seconds: u64,
 }
 
-impl McpToolDelegate {
+impl Toolkit {
     /// 创建新的 MCP 工具委托
     pub fn new(selected_tools: Vec<SelectedTool>) -> Self {
         Self {
@@ -49,8 +49,8 @@ impl McpToolDelegate {
     }
 }
 
-impl ToolDelegate for McpToolDelegate {
-    type Output = McpCallToolResult;
+impl Operator for Toolkit {
+    type Output = ToolCallResult;
     type Args = String; // JSON 字符串或键值对字符串
 
     async fn call(&self, name: &str, args: Self::Args) -> anyhow::Result<Self::Output> {
@@ -97,14 +97,14 @@ impl ToolDelegate for McpToolDelegate {
 /// 批量工具调用委托 - 支持同时调用多个工具
 #[derive(Debug)]
 pub struct BatchMcpToolDelegate {
-    inner: McpToolDelegate,
+    inner: Toolkit,
     max_concurrent_calls: usize,
 }
 
 impl BatchMcpToolDelegate {
     pub fn new(selected_tools: Vec<SelectedTool>) -> Self {
         Self {
-            inner: McpToolDelegate::new(selected_tools),
+            inner: Toolkit::new(selected_tools),
             max_concurrent_calls: 5,
         }
     }
@@ -118,7 +118,7 @@ impl BatchMcpToolDelegate {
     pub async fn batch_call(
         &self,
         calls: Vec<(String, String)>, // (tool_name, args) pairs
-    ) -> anyhow::Result<Vec<McpCallToolResult>> {
+    ) -> anyhow::Result<Vec<ToolCallResult>> {
         use futures::stream::{self, StreamExt};
 
         let results = stream::iter(calls)
@@ -131,8 +131,8 @@ impl BatchMcpToolDelegate {
     }
 }
 
-impl ToolDelegate for BatchMcpToolDelegate {
-    type Output = McpCallToolResult;
+impl Operator for BatchMcpToolDelegate {
+    type Output = ToolCallResult;
     type Args = String;
 
     async fn call(&self, name: &str, args: Self::Args) -> anyhow::Result<Self::Output> {

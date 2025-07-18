@@ -2,7 +2,7 @@ use crate::backoffice::cross_runtime::CrossRuntimeBridge;
 use crate::backoffice::mcp::client_handler::McpClientHandler;
 use crate::backoffice::mcp::loader::McpServerLoader;
 use crate::backoffice::mcp::{
-    ExitFromRegistry, McpCallToolRequest, McpCallToolResult, McpRegistry, UpdateServerCache,
+    ExitFromRegistry, McpRegistry, ToolCallRequest, ToolCallResult, UpdateServerCache,
 };
 use crate::backoffice::BoEvent;
 use crate::config::mcp_config::{McpServerConfig, McpTransport};
@@ -329,10 +329,10 @@ impl Handler<ExitFromRegistry> for McpServer {
     }
 }
 
-impl Handler<McpCallToolRequest> for McpServer {
-    type Result = ResponseActFuture<Self, McpCallToolResult>;
+impl Handler<ToolCallRequest> for McpServer {
+    type Result = ResponseActFuture<Self, ToolCallResult>;
 
-    fn handle(&mut self, msg: McpCallToolRequest, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: ToolCallRequest, _ctx: &mut Self::Context) -> Self::Result {
         let server_id = self.config.id.clone();
         let tool_name = msg.name.clone();
         let arguments = msg.arguments.clone();
@@ -350,19 +350,19 @@ impl Handler<McpCallToolRequest> for McpServer {
                 )
                 .await
                 {
-                    Ok(Ok(result)) => McpCallToolResult {
+                    Ok(Ok(result)) => ToolCallResult {
                         id: server_id,
                         name: tool_name,
                         content: result.content,
                         is_error: false,
                     },
-                    Ok(Err(err)) => McpCallToolResult {
+                    Ok(Err(err)) => ToolCallResult {
                         id: server_id,
                         name: tool_name,
                         content: vec![Content::text(format!("Tool execution error: {}", err))],
                         is_error: true,
                     },
-                    Err(_) => McpCallToolResult {
+                    Err(_) => ToolCallResult {
                         id: server_id,
                         name: tool_name,
                         content: vec![Content::text("Tool execution timeout".to_string())],
@@ -370,7 +370,7 @@ impl Handler<McpCallToolRequest> for McpServer {
                     },
                 }
             } else {
-                McpCallToolResult {
+                ToolCallResult {
                     id: server_id,
                     name: tool_name,
                     content: vec![Content::text("MCP Server not connected".to_string())],

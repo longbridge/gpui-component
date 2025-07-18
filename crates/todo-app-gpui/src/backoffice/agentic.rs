@@ -10,12 +10,12 @@ mod knowledge;
 // mod registry;
 mod regulator;
 // pub(crate) mod llm;
-pub(crate) mod mcp_tools;
+pub(crate) mod toolkit;
 // mod memex;
 pub(crate) mod prompts;
 // mod rig_llm;
 
-use crate::backoffice::mcp::McpCallToolResult;
+use crate::backoffice::mcp::ToolCallResult;
 
 /// 记忆类型枚举
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -79,11 +79,16 @@ pub trait Memory: Send + Sync {
         let entries = self.search(query, None).await?;
         Ok(entries)
     }
+
+    /// 检索工具
+    async fn retrieve_tools(&self) -> Vec<ToolDefinition> {
+        Vec::new()
+    }
 }
 
 /// LLM特性，定义了LLM的基本交互方法，包含了洞察和知识处理能力。
 pub trait LLM: Send + Sync {
-    type ToolDelegate: ToolDelegate<Output = McpCallToolResult, Args = String>;
+    type ToolDelegate: Operator<Output = ToolCallResult, Args = String>;
 
     async fn completion(&self, messages: &[ChatMessage]) -> anyhow::Result<ChatMessage>;
     /// 基础对话能力 - 流式响应
@@ -517,7 +522,7 @@ impl<M: Memory, L: LLM> RuntimeContext<M, L> {
 }
 
 /// 工具调用的委托接口，允许不同的工具实现自己的调用逻辑。
-pub trait ToolDelegate: Send + Sync {
+pub trait Operator: Send + Sync {
     type Output;
     type Args;
 
@@ -529,7 +534,7 @@ pub trait ToolDelegate: Send + Sync {
 }
 
 /// 默认的工具委托实现，什么都不做。
-impl ToolDelegate for () {
+impl Operator for () {
     type Output = ();
     type Args = ();
 

@@ -1,3 +1,7 @@
+#[cfg(target_os = "windows")]
+pub(crate) mod mutex;
+pub(crate) mod tray;
+
 use crate::backoffice::cross_runtime::CrossRuntimeBridge;
 use crate::backoffice::llm::LlmRegistry;
 use crate::backoffice::mcp::{GetServerSnapshot, McpRegistry};
@@ -17,6 +21,7 @@ use crate::ui::views::mcp_provider::McpProvider;
 use crate::ui::views::profile::Profile;
 use crate::ui::views::settings::Settings;
 use crate::{ui::*, xbus};
+use anyhow::Ok;
 use gpui::*;
 use gpui_component::dock::{register_panel, PanelControl, PanelInfo};
 use gpui_component::{ActiveTheme, Root, Theme, ThemeMode};
@@ -133,10 +138,10 @@ impl AppState {
 }
 // actions!(input_story, [Tab, TabPrev]);
 
-pub fn run() {
+pub fn run() -> anyhow::Result<()> {
     const WIDTH: f32 = 480.;
     const HEIGHT: f32 = 880.;
-
+    tray::start_tray()?;
     let app = Application::new().with_assets(Assets);
     app.run(move |cx| {
         gpui_component::init(cx);
@@ -239,6 +244,7 @@ pub fn run() {
         };
         cx.create_todo_window(options, move |window, cx| TodoMainWindow::view(window, cx));
     });
+    Ok(())
 }
 
 pub trait AppExt {

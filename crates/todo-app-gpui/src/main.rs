@@ -7,8 +7,6 @@ mod app;
 mod backoffice;
 mod config;
 pub mod ebus;
-#[cfg(target_os = "windows")]
-mod mutex;
 mod ui;
 pub mod xbus;
 
@@ -28,12 +26,12 @@ async fn main() -> anyhow::Result<()> {
     #[cfg(target_os = "windows")]
     {
         use std::sync::OnceLock;
-        static MUTEX: OnceLock<mutex::Mutex> = OnceLock::new();
-        let mutex = mutex::Mutex::try_lock("x-todo-app", true)?;
+        static MUTEX: OnceLock<app::mutex::Mutex> = OnceLock::new();
+        let mutex = app::mutex::Mutex::try_lock("x-todo-app", true)?;
         MUTEX.set(mutex).ok();
     }
     backoffice::start()?;
-    app::run();
+    app::run()?;
     Ok(())
 }
 

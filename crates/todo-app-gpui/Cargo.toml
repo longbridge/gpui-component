@@ -66,12 +66,15 @@ sysinfo = "0.36.0"
 mimalloc = { version = "0.1.47" }
 actix-web = "4.11.0"
 rust-i18n = "3"
-smol = "1"
+smol = "2.0.2"
 smallvec = "1.13.2"
 quick-xml = { version = "0.38" }
 tracing-appender = "0.2.3"
 tokio-stream = { version = "0.1.17", features = ["full"] }
 async-stream = "0.3"
+tray-icon = "0.19.2"
+image = "0.25.6"
+
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.61.1", features = [

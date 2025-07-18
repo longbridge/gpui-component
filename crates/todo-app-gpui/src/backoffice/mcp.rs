@@ -15,15 +15,15 @@ use std::{collections::HashMap, time::Duration};
 pub struct ExitFromRegistry;
 
 #[derive(Message)]
-#[rtype(result = "McpCallToolResult")]
-pub struct McpCallToolRequest {
+#[rtype(result = "ToolCallResult")]
+pub struct ToolCallRequest {
     pub id: String,
     pub name: String,
     pub arguments: String,
 }
 
 #[derive(Debug, Clone)]
-pub struct McpCallToolResult {
+pub struct ToolCallResult {
     pub id: String,
     pub name: String,
     pub content: Vec<Content>,
@@ -45,9 +45,9 @@ impl McpRegistry {
         server_id: &str,
         tool_name: &str,
         arguments: &str,
-    ) -> anyhow::Result<McpCallToolResult> {
+    ) -> anyhow::Result<ToolCallResult> {
         let result = McpRegistry::global()
-            .send(McpCallToolRequest {
+            .send(ToolCallRequest {
                 id: server_id.to_string(),
                 name: tool_name.to_string(),
                 arguments: arguments.to_string(),
@@ -155,10 +155,10 @@ impl Actor for McpRegistry {
     }
 }
 
-impl Handler<McpCallToolRequest> for McpRegistry {
-    type Result = ResponseActFuture<Self, McpCallToolResult>;
+impl Handler<ToolCallRequest> for McpRegistry {
+    type Result = ResponseActFuture<Self, ToolCallResult>;
 
-    fn handle(&mut self, msg: McpCallToolRequest, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: ToolCallRequest, _ctx: &mut Self::Context) -> Self::Result {
         if let Some(server) = self.servers.get(&msg.id) {
             let id = msg.id.clone();
             let name = msg.name.clone();
@@ -167,7 +167,7 @@ impl Handler<McpCallToolRequest> for McpRegistry {
                 .into_actor(self)
                 .map(|res, _act, _ctx| match res {
                     Ok(result) => result,
-                    Err(err) => McpCallToolResult {
+                    Err(err) => ToolCallResult {
                         id,
                         name,
                         content: vec![Content::text(format!("Error: {}", err))],
@@ -177,7 +177,7 @@ impl Handler<McpCallToolRequest> for McpRegistry {
                 .boxed_local()
         } else {
             async move {
-                McpCallToolResult {
+                ToolCallResult {
                     id: msg.id.clone(),
                     name: msg.name.clone(),
                     content: vec![Content::text("Server not found".to_string())],

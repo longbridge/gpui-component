@@ -1,7 +1,7 @@
 use crate::backoffice::llm::{types::*, LlmChatRequest, LlmRegistry};
 use crate::backoffice::mcp::server::McpServerSnapshot;
 use crate::backoffice::mcp::{
-    GetAllSnapshots, GetServerSnapshot, McpCallToolRequest, McpCallToolResult, McpRegistry,
+    GetAllSnapshots, GetServerSnapshot, McpRegistry, ToolCallRequest, ToolCallResult,
 };
 use crate::xbus::{self, Subscription};
 use actix::Arbiter;
@@ -177,7 +177,7 @@ impl CrossRuntimeBridge {
         server_id: String,
         tool_name: String,
         arguments: String,
-    ) -> Result<McpCallToolResult, String> {
+    ) -> Result<ToolCallResult, String> {
         let (response_tx, response_rx) = oneshot::channel();
 
         let handler = Box::new(CallToolHandler {
@@ -349,7 +349,7 @@ struct CallToolHandler {
     ///
     /// **成功**: `Ok(McpCallToolResult)` - 包含工具执行结果
     /// **失败**: `Err(String)` - 包含错误描述信息
-    response: oneshot::Sender<Result<McpCallToolResult, String>>,
+    response: oneshot::Sender<Result<ToolCallResult, String>>,
 }
 
 impl MessageHandler for CallToolHandler {
@@ -359,7 +359,7 @@ impl MessageHandler for CallToolHandler {
 
             // 构造工具调用请求
             let result = registry
-                .send(McpCallToolRequest {
+                .send(ToolCallRequest {
                     id: self.server_id,
                     name: self.tool_name,
                     arguments: self.arguments,
