@@ -1,14 +1,14 @@
 use std::ops::Range;
 
 use gpui::{
-    div, px, App, Context, Div, Edges, InteractiveElement as _, IntoElement, ParentElement as _,
-    Pixels, SharedString, Stateful, Styled as _, Window,
+    div, App, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _, Stateful,
+    Styled as _, Window,
 };
 
 use crate::{
     h_flex,
     popup_menu::PopupMenu,
-    table::{loading::Loading, ColFixed, ColSort, Table, TableCell},
+    table::{loading::Loading, ColSort, Table, TableCell, TableCol},
     ActiveTheme as _, Icon, IconName, Size,
 };
 
@@ -19,56 +19,12 @@ pub trait TableDelegate: Sized + 'static {
     /// Return the number of rows in the table.
     fn rows_count(&self, cx: &App) -> usize;
 
+    /// Returns the table column at the given index.
+    fn col(&self, col_ix: usize, cx: &App) -> &TableCol;
+
     /// Returns the table cell info for the given row and column.
     fn cell(&self, row_ix: usize, col_ix: usize, cx: &App) -> TableCell {
         TableCell::default()
-    }
-
-    /// Returns the name of the column at the given index.
-    fn col_name(&self, col_ix: usize, cx: &App) -> SharedString;
-
-    /// Returns whether the column at the given index can be resized. Default: true
-    fn col_resizable(&self, col_ix: usize, cx: &App) -> bool {
-        true
-    }
-
-    /// Returns whether the column at the given index can be selected. Default: false
-    fn col_selectable(&self, col_ix: usize, cx: &App) -> bool {
-        false
-    }
-
-    /// Returns the width of the column at the given index.
-    /// Return None, use auto width.
-    ///
-    /// This is only called when the table initializes.
-    ///
-    /// Default: 100px
-    fn col_width(&self, col_ix: usize, cx: &App) -> Pixels {
-        px(100.)
-    }
-
-    /// Return the sort state of the column at the given index.
-    ///
-    /// This is only called when the table initializes.
-    fn col_sort(&self, col_ix: usize, cx: &App) -> Option<ColSort> {
-        None
-    }
-
-    /// Return the fixed side of the column at the given index.
-    fn col_fixed(&self, col_ix: usize, cx: &App) -> Option<ColFixed> {
-        None
-    }
-
-    /// Return the padding of the column at the given index to override the default padding.
-    ///
-    /// Return None, use the default padding.
-    fn col_paddings(&self, col_ix: usize, cx: &App) -> Option<Edges<Pixels>> {
-        None
-    }
-
-    /// Return true to enable column order change.
-    fn col_movable(&self, col_ix: usize, cx: &App) -> bool {
-        false
     }
 
     /// Perform sort on the column at the given index.
@@ -88,7 +44,7 @@ pub trait TableDelegate: Sized + 'static {
         window: &mut Window,
         cx: &mut Context<Table<Self>>,
     ) -> impl IntoElement {
-        div().size_full().child(self.col_name(col_ix, cx))
+        div().size_full().child(self.col(col_ix, cx).name.clone())
     }
 
     /// Render the row at the given row and column.
@@ -98,7 +54,7 @@ pub trait TableDelegate: Sized + 'static {
         window: &mut Window,
         cx: &mut Context<Table<Self>>,
     ) -> Stateful<Div> {
-        h_flex().id(("table-row", row_ix))
+        h_flex().id(("row", row_ix))
     }
 
     /// Render the context menu for the row at the given row index.
