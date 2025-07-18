@@ -18,7 +18,7 @@ use gpui_component::{
     input::{InputEvent, InputState, TextInput},
     label::Label,
     popup_menu::{PopupMenu, PopupMenuExt},
-    table::{self, ColFixed, ColSort, Table, TableDelegate, TableEvent},
+    table::{self, CellOption, ColFixed, ColSort, Table, TableDelegate, TableEvent},
     v_flex, ActiveTheme as _, Selectable, Sizable as _, Size, StyleSized as _, StyledExt,
 };
 use serde::{Deserialize, Serialize};
@@ -254,8 +254,8 @@ impl StockTableDelegate {
                     .w(60.)
                     .fixed()
                     .resizable(false),
-                Column::new("symbol", "Symbol").w(100.).fixed().sortable(),
                 Column::new("name", "Name").w(180.).fixed(),
+                Column::new("symbol", "Symbol").w(100.).fixed().sortable(),
                 Column::new("price", "Price").sortable().text_right().p_0(),
                 Column::new("change", "Chg").sortable().text_right().p_0(),
                 Column::new("change_percent", "Chg%")
@@ -415,6 +415,17 @@ impl TableDelegate for StockTableDelegate {
 
     fn col_selectable(&self, _: usize, _: &App) -> bool {
         return self.col_selection;
+    }
+
+    fn cell_options(&self, col_ix: usize, row_ix: usize, _: &App) -> Option<table::CellOption> {
+        match row_ix {
+            0 | 3 | 4 | 6 => match col_ix {
+                2 => Some(CellOption::default().col_span(2)),
+                3 => Some(CellOption::default().col_span(0)),
+                _ => None,
+            },
+            _ => None,
+        }
     }
 
     fn render_th(
@@ -736,7 +747,7 @@ impl TableStory {
             input
         });
 
-        let delegate = StockTableDelegate::new(5000);
+        let delegate = StockTableDelegate::new(10);
         let table = cx.new(|cx| Table::new(delegate, window, cx));
 
         cx.subscribe_in(&table, window, Self::on_table_event)
