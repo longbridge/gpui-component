@@ -100,30 +100,30 @@ impl From<String> for Paragraph {
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Table {
     pub children: Vec<TableRow>,
-    pub column_aligns: Vec<TableColumnAlign>,
+    pub column_aligns: Vec<ColumnumnAlign>,
 }
 
 impl Table {
-    pub(crate) fn column_align(&self, index: usize) -> TableColumnAlign {
+    pub(crate) fn column_align(&self, index: usize) -> ColumnumnAlign {
         self.column_aligns.get(index).copied().unwrap_or_default()
     }
 }
 
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
-pub enum TableColumnAlign {
+pub enum ColumnumnAlign {
     #[default]
     Left,
     Center,
     Right,
 }
 
-impl From<mdast::AlignKind> for TableColumnAlign {
+impl From<mdast::AlignKind> for ColumnumnAlign {
     fn from(value: mdast::AlignKind) -> Self {
         match value {
-            mdast::AlignKind::None => TableColumnAlign::Left,
-            mdast::AlignKind::Left => TableColumnAlign::Left,
-            mdast::AlignKind::Center => TableColumnAlign::Center,
-            mdast::AlignKind::Right => TableColumnAlign::Right,
+            mdast::AlignKind::None => ColumnumnAlign::Left,
+            mdast::AlignKind::Left => ColumnumnAlign::Left,
+            mdast::AlignKind::Center => ColumnumnAlign::Center,
+            mdast::AlignKind::Right => ColumnumnAlign::Right,
         }
     }
 }
@@ -571,10 +571,10 @@ impl Node {
                                             div()
                                                 .id("cell")
                                                 .flex()
-                                                .when(align == TableColumnAlign::Center, |this| {
+                                                .when(align == ColumnumnAlign::Center, |this| {
                                                     this.justify_center()
                                                 })
-                                                .when(align == TableColumnAlign::Right, |this| {
+                                                .when(align == ColumnumnAlign::Right, |this| {
                                                     this.justify_end()
                                                 })
                                                 .w(Length::Definite(relative(len as f32)))
@@ -863,9 +863,9 @@ impl Node {
                     .iter()
                     .map(|align| {
                         match align {
-                            TableColumnAlign::Left => ":--",
-                            TableColumnAlign::Center => ":-:",
-                            TableColumnAlign::Right => "--:",
+                            ColumnumnAlign::Left => ":--",
+                            ColumnumnAlign::Center => ":-:",
+                            ColumnumnAlign::Right => "--:",
                         }
                         .to_string()
                     })
