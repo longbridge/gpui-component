@@ -198,12 +198,12 @@ impl StockTableDelegate {
                     .resizable(false),
                 TableCol::new("name", "Name")
                     .w(180.)
-                    // .col_span(2)
+                    .col_span(2)
                     .fixed(ColFixed::Left),
                 TableCol::new("symbol", "Symbol")
                     .w(100.)
                     .fixed(ColFixed::Left)
-                    // .col_span(0)
+                    .col_span(0)
                     .sortable(),
                 TableCol::new("price", "Price")
                     .sortable()
@@ -212,12 +212,12 @@ impl StockTableDelegate {
                 TableCol::new("change", "Chg")
                     .sortable()
                     .text_right()
-                    // .col_span(2)
+                    .col_span(2)
                     .p_0(),
                 TableCol::new("change_percent", "Chg%")
                     .sortable()
                     .text_right()
-                    // .col_span(0)
+                    .col_span(0)
                     .p_0(),
                 TableCol::new("volume", "Volume").p_0(),
                 TableCol::new("turnover", "Turnover").p_0(),
@@ -266,7 +266,7 @@ impl StockTableDelegate {
             ],
             loading: false,
             full_loading: false,
-            eof: false,
+            eof: true,
             visible_cols: Range::default(),
             visible_rows: Range::default(),
         }
