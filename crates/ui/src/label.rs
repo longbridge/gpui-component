@@ -165,117 +165,88 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_no_highlights() {
+    fn test_highlight_ranges() {
+        // Basic functionality
+
+        // No highlights
         let label = Label::new("Hello World");
         let result = label.highlight_ranges("Hello World".len());
         assert_eq!(result, Vec::<Range<usize>>::new());
-    }
 
-    #[test]
-    fn test_secondary_text_ranges() {
+        // Secondary text ranges only
         let label = Label::new("Hello").secondary("World");
         let total_length = "Hello World".len();
         let result = label.highlight_ranges(total_length);
-
         assert_eq!(result.len(), 2);
         assert_eq!(result[0], 0..5); // "Hello"
         assert_eq!(result[1], 5..11); // " World"
-    }
 
-    #[test]
-    fn test_highlights_text_single_match() {
-        let label = Label::new("Hello World").highlights("World");
-        let result = label.highlight_ranges("Hello World".len());
+        // Text highlighting
 
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0], 6..11); // "World"
-    }
-
-    #[test]
-    fn test_highlights_text_case_insensitive() {
+        // Single match with case insensitive
         let label = Label::new("Hello World").highlights("WORLD");
         let result = label.highlight_ranges("Hello World".len());
-
         assert_eq!(result.len(), 1);
         assert_eq!(result[0], 6..11); // "World"
-    }
 
-    #[test]
-    fn test_highlights_text_multiple_matches() {
+        // Multiple matches
         let label = Label::new("Hello Hello Hello").highlights("Hello");
         let result = label.highlight_ranges("Hello Hello Hello".len());
-
         assert_eq!(result.len(), 3);
         assert_eq!(result[0], 0..5); // First "Hello"
         assert_eq!(result[1], 6..11); // Second "Hello"
         assert_eq!(result[2], 12..17); // Third "Hello"
-    }
 
-    #[test]
-    fn test_highlights_text_no_match() {
+        // No match and empty search
         let label = Label::new("Hello World").highlights("xyz");
         let result = label.highlight_ranges("Hello World".len());
-
         assert_eq!(result, Vec::<Range<usize>>::new());
-    }
 
-    #[test]
-    fn test_highlights_text_empty_search() {
         let label = Label::new("Hello World").highlights("");
         let result = label.highlight_ranges("Hello World".len());
-
         assert_eq!(result, Vec::<Range<usize>>::new());
-    }
 
-    #[test]
-    fn test_both_secondary_and_highlights() {
+        // Combined functionality
+
+        // Secondary + highlights in main text
         let label = Label::new("Hello").secondary("World").highlights("llo");
         let total_length = "Hello World".len();
         let result = label.highlight_ranges(total_length);
-
         assert_eq!(result.len(), 3);
         assert_eq!(result[0], 0..5); // Main text range
         assert_eq!(result[1], 5..11); // Secondary text range
-        assert_eq!(result[2], 2..5); // "llo" in "Hello"
-    }
+        assert_eq!(result[2], 2..5); // "llo" in main text
 
-    #[test]
-    fn test_highlights_text_boundary() {
-        let label = Label::new("Hello World Hello").highlights("Hello");
-        let result = label.highlight_ranges("Hello World Hello".len());
+        // Highlight in secondary text
+        let label = Label::new("Hello").secondary("World").highlights("World");
+        let total_length = "Hello World".len();
+        let result = label.highlight_ranges(total_length);
+        assert_eq!(result.len(), 3);
+        assert_eq!(result[0], 0..5); // Main text range
+        assert_eq!(result[1], 5..11); // Secondary text range
+        assert_eq!(result[2], 6..11); // "World" in secondary text
 
-        assert_eq!(result.len(), 2);
-        assert_eq!(result[0], 0..5); // Start of "Hello"
-        assert_eq!(result[1], 12..17); // End of "Hello"
-    }
+        // Cross-boundary highlight
+        let label = Label::new("Hello").secondary("World").highlights("o W");
+        let total_length = "Hello World".len();
+        let result = label.highlight_ranges(total_length);
+        assert_eq!(result.len(), 3);
+        assert_eq!(result[0], 0..5); // Main text range
+        assert_eq!(result[1], 5..11); // Secondary text range
+        assert_eq!(result[2], 4..7); // "o W" across boundary
 
-    #[test]
-    fn test_highlights_text_overlapping_match() {
+        // Edge cases
+
+        // Overlapping matches
         let label = Label::new("aaaa").highlights("aa");
         let result = label.highlight_ranges("aaaa".len());
-
         assert!(result.len() >= 2);
         assert_eq!(result[0], 0..2); // First "aa"
         assert_eq!(result[1], 1..3); // Overlapping "aa"
-        if result.len() >= 3 {
-            assert_eq!(result[2], 2..4); // Third "aa"
-        }
-    }
 
-    #[test]
-    fn test_partial_word_highlight() {
-        let label = Label::new("JavaScript is great").highlights("Script");
-        let result = label.highlight_ranges("JavaScript is great".len());
-
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0], 4..10); // "Script" in "JavaScript"
-    }
-
-    #[test]
-    fn test_unicode_text_highlight() {
+        // Unicode text
         let label = Label::new("你好世界，Hello World").highlights("世界");
         let result = label.highlight_ranges("你好世界，Hello World".len());
-
         assert_eq!(result.len(), 1);
         let text = "你好世界，Hello World";
         let start = text.find("世界").unwrap();
