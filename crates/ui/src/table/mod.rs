@@ -13,7 +13,8 @@ use gpui::{
     Context, Div, DragMoveEvent, Edges, EventEmitter, FocusHandle, Focusable, InteractiveElement,
     IntoElement, IsZero, KeyBinding, ListSizingBehavior, MouseButton, MouseDownEvent,
     ParentElement, Pixels, Point, Render, ScrollHandle, ScrollStrategy, ScrollWheelEvent,
-    SharedString, StatefulInteractiveElement as _, Styled, Task, UniformListScrollHandle, Window,
+    SharedString, Stateful, StatefulInteractiveElement as _, Styled, Task, UniformListScrollHandle,
+    Window,
 };
 
 mod cell;
@@ -85,7 +86,6 @@ pub struct Table<D: TableDelegate> {
     fixed_head_cols_bounds: Bounds<Pixels>,
 
     col_groups: Vec<ColGroup>,
-    fixed_cols: FixedCols,
 
     /// Whether the table can loop selection, default is true.
     ///
@@ -101,6 +101,8 @@ pub struct Table<D: TableDelegate> {
     pub col_resizable: bool,
     /// Whether the table can move columns.
     pub col_movable: bool,
+    /// Enable/disable fixed columns feature.
+    pub col_fixed: bool,
 
     pub vertical_scroll_handle: UniformListScrollHandle,
     pub vertical_scroll_state: ScrollbarState,
@@ -138,7 +140,6 @@ where
             focus_handle: cx.focus_handle(),
             delegate,
             col_groups: Vec::new(),
-            fixed_cols: FixedCols::default(),
             horizontal_scroll_handle: ScrollHandle::new(),
             vertical_scroll_handle: UniformListScrollHandle::new(),
             vertical_scroll_state: ScrollbarState::default(),
@@ -161,6 +162,7 @@ where
             sortable: true,
             col_movable: true,
             col_resizable: true,
+            col_fixed: true,
             _load_more_task: Task::ready(()),
             _measure: Vec::new(),
         };
@@ -258,11 +260,6 @@ where
                 }
             })
             .collect();
-        self.fixed_cols.left = self
-            .col_groups
-            .iter()
-            .filter(|col| col.column.fixed == Some(ColFixed::Left))
-            .count();
         cx.notify();
     }
 
@@ -626,25 +623,27 @@ where
         width
     }
 
-    #[inline]
+    /// Render cell.
+    ///
+    /// - row_ix is None for header cell
     fn render_cell(
         &self,
         col_ix: usize,
         row_ix: Option<usize>,
         _window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> Option<Div> {
+    ) -> Option<Stateful<Div>> {
         let Some(col_group) = self.col_groups.get(col_ix) else {
             return None;
         };
 
-        let table_cell = if let Some(row_ix) = row_ix {
-            self.delegate().cell(col_ix, row_ix, cx)
+        let col_span = if let Some(row_ix) = row_ix {
+            self.delegate().cell(col_ix, row_ix, cx).col_span
         } else {
-            TableCell::default()
+            col_group.column.col_span
         };
 
-        let col_width = self.col_width(col_ix, table_cell.col_span);
+        let col_width = self.col_width(col_ix, col_span);
         let col_padding = col_group.column.paddings;
 
         if col_width.is_zero() {
@@ -653,6 +652,7 @@ where
 
         Some(
             div()
+                .id(("table-cell", col_ix))
                 .w(col_width)
                 .h_full()
                 .flex_shrink_0()
@@ -891,57 +891,55 @@ where
 
         h_flex()
             .children(self.render_cell(col_ix, None, window, cx).map(|this| {
-                this.id(("col-header", col_ix))
-                    .on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(move |this, _, window, cx| {
-                            this.on_col_head_click(col_ix, window, cx);
-                        }),
-                    )
-                    .child(
-                        h_flex()
-                            .size_full()
-                            .justify_between()
-                            .items_center()
-                            .child(self.delegate.render_th(col_ix, window, cx))
-                            .when_some(paddings, |this, paddings| {
-                                // Leave right space for the sort icon, if this column have custom padding
-                                let offset_pr =
-                                    self.size.table_cell_padding().right - paddings.right;
-                                this.pr(offset_pr.max(px(0.)))
-                            })
-                            .children(self.render_sort_icon(col_ix, &col_group, window, cx)),
-                    )
-                    .when(movable, |this| {
-                        this.on_drag(
-                            DragCol {
-                                entity_id,
-                                col_ix,
-                                name,
-                                width: col_group.width,
-                            },
-                            |drag, _, _, cx| {
-                                cx.stop_propagation();
-                                cx.new(|_| drag.clone())
-                            },
-                        )
-                        .drag_over::<DragCol>(|this, _, _, cx| {
-                            this.rounded_l_none()
-                                .border_l_2()
-                                .border_r_0()
-                                .border_color(cx.theme().drag_border)
+                this.on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(move |this, _, window, cx| {
+                        this.on_col_head_click(col_ix, window, cx);
+                    }),
+                )
+                .child(
+                    h_flex()
+                        .size_full()
+                        .justify_between()
+                        .items_center()
+                        .child(self.delegate.render_th(col_ix, window, cx))
+                        .when_some(paddings, |this, paddings| {
+                            // Leave right space for the sort icon, if this column have custom padding
+                            let offset_pr = self.size.table_cell_padding().right - paddings.right;
+                            this.pr(offset_pr.max(px(0.)))
                         })
-                        .on_drop(cx.listener(
-                            move |table, drag: &DragCol, window, cx| {
-                                // If the drag col is not the same as the drop col, then swap the cols.
-                                if drag.entity_id != cx.entity_id() {
-                                    return;
-                                }
-
-                                table.move_col(drag.col_ix, col_ix, window, cx);
-                            },
-                        ))
+                        .children(self.render_sort_icon(col_ix, &col_group, window, cx)),
+                )
+                .when(movable, |this| {
+                    this.on_drag(
+                        DragCol {
+                            entity_id,
+                            col_ix,
+                            name,
+                            width: col_group.width,
+                        },
+                        |drag, _, _, cx| {
+                            cx.stop_propagation();
+                            cx.new(|_| drag.clone())
+                        },
+                    )
+                    .drag_over::<DragCol>(|this, _, _, cx| {
+                        this.rounded_l_none()
+                            .border_l_2()
+                            .border_r_0()
+                            .border_color(cx.theme().drag_border)
                     })
+                    .on_drop(cx.listener(
+                        move |table, drag: &DragCol, window, cx| {
+                            // If the drag col is not the same as the drop col, then swap the cols.
+                            if drag.entity_id != cx.entity_id() {
+                                return;
+                            }
+
+                            table.move_col(drag.col_ix, col_ix, window, cx);
+                        },
+                    ))
+                })
             }))
             // resize handle
             .child(self.render_resize_handle(col_ix, window, cx))
@@ -1338,7 +1336,11 @@ where
         let vertical_scroll_handle = self.vertical_scroll_handle.clone();
         let horizontal_scroll_handle = self.horizontal_scroll_handle.clone();
         let cols_count: usize = self.delegate.cols_count(cx);
-        let left_cols_count = self.fixed_cols.left;
+        let left_cols_count = self
+            .col_groups
+            .iter()
+            .filter(|col| self.col_fixed && col.column.fixed == Some(ColFixed::Left))
+            .count();
         let rows_count = self.delegate.rows_count(cx);
         let loading = self.delegate.loading(cx);
         let extra_rows_needed = self.calculate_extra_rows_needed(rows_count);
