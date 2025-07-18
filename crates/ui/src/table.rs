@@ -11,10 +11,10 @@ use crate::{
 use gpui::{
     actions, canvas, div, prelude::FluentBuilder, px, uniform_list, App, AppContext, Axis, Bounds,
     Context, Div, DragMoveEvent, Edges, Empty, EntityId, EventEmitter, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, KeyBinding, ListSizingBehavior, MouseButton, MouseDownEvent,
-    ParentElement, Pixels, Point, Render, ScrollHandle, ScrollStrategy, ScrollWheelEvent,
-    SharedString, Stateful, StatefulInteractiveElement as _, Styled, Task, UniformListScrollHandle,
-    Window,
+    InteractiveElement, IntoElement, IsZero, KeyBinding, ListSizingBehavior, MouseButton,
+    MouseDownEvent, ParentElement, Pixels, Point, Render, ScrollHandle, ScrollStrategy,
+    ScrollWheelEvent, SharedString, Stateful, StatefulInteractiveElement as _, Styled, Task,
+    UniformListScrollHandle, Window,
 };
 
 mod loading;
@@ -62,6 +62,35 @@ pub enum ColSort {
     Ascending,
     /// Sort in descending order.
     Descending,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct CellOption {
+    /// The number of columns spanned by the cell, default is 1.
+    pub col_span: usize,
+    /// The number of rows spanned by the cell, default is 1.
+    pub row_span: usize,
+}
+
+impl Default for CellOption {
+    fn default() -> Self {
+        Self {
+            col_span: 1,
+            row_span: 1,
+        }
+    }
+}
+
+impl CellOption {
+    pub fn col_span(mut self, col_span: usize) -> Self {
+        self.col_span = col_span;
+        self
+    }
+
+    pub fn row_span(mut self, row_span: usize) -> Self {
+        self.row_span = row_span;
+        self
+    }
 }
 
 impl Render for DragCol {
@@ -238,6 +267,11 @@ pub trait TableDelegate: Sized + 'static {
         window: &mut Window,
         cx: &mut Context<Table<Self>>,
     ) {
+    }
+
+    /// Return the cell config for the col, row index.
+    fn cell_options(&self, col_ix: usize, row_ix: usize, cx: &App) -> Option<CellOption> {
+        None
     }
 
     /// Render the header cell at the given column index, default to the column name.
@@ -806,30 +840,67 @@ where
         }
     }
 
-    #[inline]
-    fn render_cell(&self, col_ix: usize, _window: &mut Window, _cx: &mut Context<Self>) -> Div {
+    /// Get col width with col span
+    fn col_width(&self, col_ix: usize, col_span: usize) -> Pixels {
+        if col_span == 0 {
+            return px(0.);
+        }
+
         let Some(col_group) = self.col_groups.get(col_ix) else {
-            return div();
+            return px(0.);
         };
 
-        let col_width = col_group.width;
+        let mut width = col_group.width;
+        for i in 1..col_span {
+            if let Some(col) = self.col_groups.get(col_ix + i) {
+                width += col.width;
+            }
+        }
+        width
+    }
+
+    #[inline]
+    fn render_cell(
+        &self,
+        col_ix: usize,
+        row_ix: Option<usize>,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<Div> {
+        let Some(col_group) = self.col_groups.get(col_ix) else {
+            return None;
+        };
+
+        let options = if let Some(row_ix) = row_ix {
+            self.delegate().cell_options(col_ix, row_ix, cx)
+        } else {
+            None
+        };
+
+        let col_width = self.col_width(col_ix, options.map(|o| o.col_span).unwrap_or(1));
         let col_padding = col_group.paddings;
 
-        div()
-            .w(col_width)
-            .h_full()
-            .flex_shrink_0()
-            .overflow_hidden()
-            .whitespace_nowrap()
-            .table_cell_size(self.size)
-            .map(|this| match col_padding {
-                Some(padding) => this
-                    .pl(padding.left)
-                    .pr(padding.right)
-                    .pt(padding.top)
-                    .pb(padding.bottom),
-                None => this,
-            })
+        if col_width.is_zero() {
+            return None;
+        }
+
+        Some(
+            div()
+                .w(col_width)
+                .h_full()
+                .flex_shrink_0()
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .table_cell_size(self.size)
+                .map(|this| match col_padding {
+                    Some(padding) => this
+                        .pl(padding.left)
+                        .pr(padding.right)
+                        .pt(padding.top)
+                        .pb(padding.bottom),
+                    None => this,
+                }),
+        )
     }
 
     /// Show Column selection style, when the column is selected and the selection state is Column.
@@ -1032,9 +1103,8 @@ where
         let name = self.delegate.col_name(col_ix, cx);
 
         h_flex()
-            .child(
-                self.render_cell(col_ix, window, cx)
-                    .id(("col-header", col_ix))
+            .children(self.render_cell(col_ix, None, window, cx).map(|this| {
+                this.id(("col-header", col_ix))
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(move |this, _, window, cx| {
@@ -1084,8 +1154,8 @@ where
                                 table.move_col(drag.col_ix, col_ix, window, cx);
                             },
                         ))
-                    }),
-            )
+                    })
+            }))
             // resize handle
             .child(self.render_resize_handle(col_ix, window, cx))
             // to save the bounds of this col.
@@ -1233,9 +1303,15 @@ where
                                 let mut items = Vec::with_capacity(left_cols_count);
 
                                 (0..left_cols_count).for_each(|col_ix| {
-                                    items.push(self.render_col_wrap(col_ix, window, cx).child(
-                                        self.render_cell(col_ix, window, cx).child(
-                                            self.measure_render_td(row_ix, col_ix, window, cx),
+                                    items.push(self.render_col_wrap(col_ix, window, cx).children(
+                                        self.render_cell(col_ix, Some(row_ix), window, cx).map(
+                                            |this| {
+                                                this.child(
+                                                    self.measure_render_td(
+                                                        row_ix, col_ix, window, cx,
+                                                    ),
+                                                )
+                                            },
                                         ),
                                     ));
                                 });
@@ -1284,12 +1360,19 @@ where
                                         visible_range.for_each(|col_ix| {
                                             let col_ix = col_ix + left_cols_count;
                                             let el =
-                                                table.render_col_wrap(col_ix, window, cx).child(
-                                                    table.render_cell(col_ix, window, cx).child(
-                                                        table.measure_render_td(
-                                                            row_ix, col_ix, window, cx,
-                                                        ),
-                                                    ),
+                                                table.render_col_wrap(col_ix, window, cx).children(
+                                                    table
+                                                        .render_cell(
+                                                            col_ix,
+                                                            Some(row_ix),
+                                                            window,
+                                                            cx,
+                                                        )
+                                                        .map(|this| {
+                                                            this.child(table.measure_render_td(
+                                                                row_ix, col_ix, window, cx,
+                                                            ))
+                                                        }),
                                                 );
 
                                             items.push(el);
@@ -1360,7 +1443,7 @@ where
                 .children((0..cols_count).map(|col_ix| {
                     h_flex()
                         .left(horizontal_scroll_handle.offset().x)
-                        .child(self.render_cell(col_ix, window, cx))
+                        .children(self.render_cell(col_ix, Some(row_ix), window, cx))
                 }))
                 .child(self.delegate.render_last_empty_col(window, cx))
         }
@@ -1608,17 +1691,19 @@ where
                 move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds),
                 |_, _, _, _| {},
             ))
-            .child(
-                div()
-                    .absolute()
-                    .top_0()
-                    .size_full()
-                    .when(self.scrollbar_visible.bottom, |this| {
-                        this.child(self.render_horizontal_scrollbar(window, cx))
-                    })
-                    .when(self.scrollbar_visible.right && rows_count > 0, |this| {
-                        this.children(self.render_vertical_scrollbar(window, cx))
-                    }),
-            )
+            .when(!window.is_inspector_picking(cx), |this| {
+                this.child(
+                    div()
+                        .absolute()
+                        .top_0()
+                        .size_full()
+                        .when(self.scrollbar_visible.bottom, |this| {
+                            this.child(self.render_horizontal_scrollbar(window, cx))
+                        })
+                        .when(self.scrollbar_visible.right && rows_count > 0, |this| {
+                            this.children(self.render_vertical_scrollbar(window, cx))
+                        }),
+                )
+            })
     }
 }
