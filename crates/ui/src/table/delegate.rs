@@ -8,7 +8,7 @@ use gpui::{
 use crate::{
     h_flex,
     popup_menu::PopupMenu,
-    table::{loading::Loading, ColSort, Table, TableCell, TableCol},
+    table::{loading::Loading, ColSort, Table, TableCol},
     ActiveTheme as _, Icon, IconName, Size,
 };
 
@@ -23,11 +23,6 @@ pub trait TableDelegate: Sized + 'static {
     ///
     /// This only call on Table prepare.
     fn col(&self, col_ix: usize, cx: &App) -> &TableCol;
-
-    /// Returns the table cell info for the given row and column.
-    fn cell(&self, row_ix: usize, col_ix: usize, cx: &App) -> TableCell {
-        TableCell::default()
-    }
 
     /// Perform sort on the column at the given index.
     fn perform_sort(
