@@ -20,6 +20,8 @@ pub trait TableDelegate: Sized + 'static {
     fn rows_count(&self, cx: &App) -> usize;
 
     /// Returns the table column at the given index.
+    ///
+    /// This only call on Table prepare.
     fn col(&self, col_ix: usize, cx: &App) -> &TableCol;
 
     /// Returns the table cell info for the given row and column.

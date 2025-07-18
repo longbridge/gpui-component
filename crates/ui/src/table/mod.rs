@@ -252,9 +252,22 @@ where
         self.col_groups = (0..self.delegate.cols_count(cx))
             .map(|col_ix| {
                 let column = self.delegate().col(col_ix, cx);
+                let mut width = column.width;
+                // if column.col_span > 1 {
+                //     let mut next_col = col_ix + 1;
+                //     let mut span = column.col_span - 1;
+                //     while span > 0 && next_col < self.delegate.cols_count(cx) {
+                //         let next = self.delegate().col(next_col, cx);
+                //         width += next.width;
+                //         span -= 1;
+                //         next_col += 1;
+                //     }
+                // } else if column.col_span == 0 {
+                //     width = px(0.);
+                // }
 
                 ColGroup {
-                    width: column.width,
+                    width,
                     bounds: Bounds::default(),
                     column: column.clone(),
                 }

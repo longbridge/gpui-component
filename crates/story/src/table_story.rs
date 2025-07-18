@@ -127,7 +127,7 @@ fn random_stocks(size: usize) -> Vec<Stock> {
             id,
             counter: Counter::random(),
             change: (-100.0..100.0).fake(),
-            change_percent: (-1.0..1.0).fake(),
+            change_percent: (-0.1..0.1).fake(),
             volume: (0.0..1000.0).fake(),
             turnover: (0.0..1000.0).fake(),
             market_cap: (0.0..1000.0).fake(),
@@ -198,12 +198,12 @@ impl StockTableDelegate {
                     .resizable(false),
                 TableCol::new("name", "Name")
                     .w(180.)
-                    .fixed(ColFixed::Left)
-                    .col_span(2),
+                    // .col_span(2)
+                    .fixed(ColFixed::Left),
                 TableCol::new("symbol", "Symbol")
                     .w(100.)
                     .fixed(ColFixed::Left)
-                    .col_span(0)
+                    // .col_span(0)
                     .sortable(),
                 TableCol::new("price", "Price")
                     .sortable()
@@ -212,12 +212,12 @@ impl StockTableDelegate {
                 TableCol::new("change", "Chg")
                     .sortable()
                     .text_right()
-                    .col_span(2)
+                    // .col_span(2)
                     .p_0(),
                 TableCol::new("change_percent", "Chg%")
                     .sortable()
                     .text_right()
-                    .col_span(0)
+                    // .col_span(0)
                     .p_0(),
                 TableCol::new("volume", "Volume").p_0(),
                 TableCol::new("turnover", "Turnover").p_0(),
@@ -279,6 +279,35 @@ impl StockTableDelegate {
         self.full_loading = false;
     }
 
+    fn render_percent(
+        &self,
+        col: &TableCol,
+        val: f64,
+        cx: &mut Context<Table<Self>>,
+    ) -> AnyElement {
+        let right_num = ((val - val.floor()) * 1000.).floor() as i32;
+
+        div()
+            .h_full()
+            .table_cell_size(self.size)
+            .when(col.align == TextAlign::Right, |this| {
+                this.h_flex().justify_end()
+            })
+            .map(|this| {
+                if right_num % 3 == 0 {
+                    this.text_color(cx.theme().red)
+                        .bg(cx.theme().red_light.alpha(0.05))
+                } else if right_num % 3 == 1 {
+                    this.text_color(cx.theme().green)
+                        .bg(cx.theme().green_light.alpha(0.05))
+                } else {
+                    this
+                }
+            })
+            .child(format!("{:.2}%", val * 100.))
+            .into_any_element()
+    }
+
     fn render_value_cell(
         &self,
         col: &TableCol,
@@ -325,6 +354,15 @@ impl TableDelegate for StockTableDelegate {
 
     fn cell(&self, col_ix: usize, row_ix: usize, _: &App) -> TableCell {
         let table_cell = TableCell::new();
+
+        if row_ix == 3 {
+            if col_ix == 5 {
+                return table_cell.col_span(2);
+            }
+            if col_ix == 6 {
+                return table_cell.col_span(0);
+            }
+        }
 
         match row_ix {
             0 | 3 | 4 | 6 => match col_ix {
@@ -422,7 +460,7 @@ impl TableDelegate for StockTableDelegate {
             "name" => stock.counter.name.clone().into_any_element(),
             "price" => self.render_value_cell(&col, stock.price, cx),
             "change" => self.render_value_cell(&col, stock.change, cx),
-            "change_percent" => self.render_value_cell(&col, stock.change_percent, cx),
+            "change_percent" => self.render_percent(&col, stock.change_percent, cx),
             "volume" => self.render_value_cell(&col, stock.volume, cx),
             "turnover" => self.render_value_cell(&col, stock.turnover, cx),
             "market_cap" => self.render_value_cell(&col, stock.market_cap, cx),
@@ -433,10 +471,7 @@ impl TableDelegate for StockTableDelegate {
                 .floor()
                 .to_string()
                 .into_any_element(),
-            "year_change_percent" => (stock.year_change_percent * 100.0)
-                .floor()
-                .to_string()
-                .into_any_element(),
+            "year_change_percent" => self.render_percent(&col, stock.year_change_percent, cx),
             "bid" => self.render_value_cell(&col, stock.bid, cx),
             "bid_volume" => self.render_value_cell(&col, stock.bid_volume, cx),
             "ask" => self.render_value_cell(&col, stock.ask, cx),
@@ -472,20 +507,14 @@ impl TableDelegate for StockTableDelegate {
                 .to_string()
                 .into_any_element(),
             "pre_market_cap" => stock.pre_market_cap.floor().to_string().into_any_element(),
-            "pre_market_percent" => (stock.pre_market_percent * 100.0)
-                .floor()
-                .to_string()
-                .into_any_element(),
+            "pre_market_percent" => self.render_percent(&col, stock.pre_market_percent, cx),
             "pre_market_change" => stock
                 .pre_market_change
                 .floor()
                 .to_string()
                 .into_any_element(),
             "post_market_cap" => stock.post_market_cap.floor().to_string().into_any_element(),
-            "post_market_percent" => (stock.post_market_percent * 100.0)
-                .floor()
-                .to_string()
-                .into_any_element(),
+            "post_market_percent" => self.render_percent(&col, stock.post_market_percent, cx),
             "post_market_change" => stock
                 .post_market_change
                 .floor()
