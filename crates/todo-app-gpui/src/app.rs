@@ -2,6 +2,8 @@
 pub(crate) mod mutex;
 pub(crate) mod tray;
 
+use std::sync::OnceLock;
+
 use crate::backoffice::cross_runtime::CrossRuntimeBridge;
 use crate::backoffice::llm::LlmRegistry;
 use crate::backoffice::mcp::{GetServerSnapshot, McpRegistry};
@@ -28,6 +30,8 @@ use gpui_component::{ActiveTheme, Root, Theme, ThemeMode};
 use raw_window_handle::HasWindowHandle;
 use raw_window_handle::RawWindowHandle;
 use serde::{Deserialize, Serialize};
+use smol::lock::OnceCell;
+use tray_icon::TrayIcon;
 #[cfg(target_os = "windows")]
 use windows::Win32::Foundation::HWND;
 // #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
@@ -107,6 +111,7 @@ pub struct AppState {
     /// 不可见面板的列表
     pub invisible_panels: Entity<Vec<SharedString>>,
     pub profile_manager: ProfileManager,
+    subscriptions: Vec<Subscription>,
     // pub todo_manager: TodoManager,
 }
 
@@ -122,6 +127,7 @@ impl AppState {
         let state = Self {
             invisible_panels: cx.new(|_| Vec::new()),
             profile_manager: ProfileManager::load(),
+            subscriptions: vec![],
         };
         cx.set_global::<AppState>(state);
     }
@@ -137,13 +143,19 @@ impl AppState {
     }
 }
 // actions!(input_story, [Tab, TabPrev]);
-
+const TRAY: OnceLock<Option<TrayIcon>> = OnceLock::new();
 pub fn run() -> anyhow::Result<()> {
     const WIDTH: f32 = 480.;
     const HEIGHT: f32 = 880.;
-    tray::start_tray()?;
+
     let app = Application::new().with_assets(Assets);
+    app.on_reopen(|app| {
+        println!("Application reopened");
+        app.activate(true);
+    });
     app.run(move |cx| {
+        let tray = tray::start_tray().ok();
+        TRAY.set(tray).ok();
         gpui_component::init(cx);
         AppState::init(cx);
         Profile::init(cx);
@@ -158,9 +170,6 @@ pub fn run() -> anyhow::Result<()> {
         cx.on_action(|_: &Quit, cx: &mut App| {
             cx.quit();
         });
-
-        // cx.activate(true);
-
         // 注册面板
         register_panel(cx, PANEL_NAME, |_, _, info, window, cx| {
             let story_state = match info {
@@ -219,7 +228,6 @@ pub fn run() -> anyhow::Result<()> {
                 items: vec![],
             },
         ]);
-
         cx.on_window_closed(|cx| {
             if cx.windows().is_empty() {
                 cx.quit();

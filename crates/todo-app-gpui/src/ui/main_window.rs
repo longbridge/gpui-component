@@ -62,6 +62,11 @@ impl TodoMainWindow {
     }
 
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
+        window.on_window_should_close(cx, |window, app| {
+            println!("Window closed, hiding app");
+            app.hide();
+            false
+        });
         cx.new(|cx| Self::new(window, cx))
     }
 }
