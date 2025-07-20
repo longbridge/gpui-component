@@ -11,7 +11,7 @@ pub enum TrayEvent {
     Menu(MenuEvent),
     Tray(TrayIconEvent),
 }
-const ICON: &[u8] = include_bytes!("../../../../assets/logo0.ico");
+const ICON: &[u8] = include_bytes!("../../../../assets/logo2.ico");
 fn load_icon() -> tray_icon::Icon {
     let (icon_rgba, icon_width, icon_height) = {
         let image = image::load_from_memory(ICON)

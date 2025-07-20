@@ -23,7 +23,6 @@ use crate::ui::views::mcp_provider::McpProvider;
 use crate::ui::views::profile::Profile;
 use crate::ui::views::settings::Settings;
 use crate::{ui::*, xbus};
-use anyhow::Ok;
 use gpui::*;
 use gpui_component::dock::{register_panel, PanelControl, PanelInfo};
 use gpui_component::{ActiveTheme, Root, Theme, ThemeMode};
@@ -551,7 +550,7 @@ impl AppExt for App {
             if let Err(err) = handle.update(self, |_, window, cx| {
                 window.dispatch_action(action.boxed_clone(), cx);
             }) {
-                println!("更新窗口({window_id})失败: {}", err);
+                tracing::warn!("更新窗口({window_id})失败: {}", err);
             }
         });
     }
