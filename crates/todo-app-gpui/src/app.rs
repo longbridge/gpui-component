@@ -4,13 +4,9 @@ pub(crate) mod tray;
 
 use std::sync::OnceLock;
 
+use crate::app::tray::TrayEvent;
 use crate::backoffice::cross_runtime::CrossRuntimeBridge;
-use crate::backoffice::llm::LlmRegistry;
-use crate::backoffice::mcp::{GetServerSnapshot, McpRegistry};
-use crate::config::llm_config::LlmProviderManager;
-use crate::config::mcp_config::McpConfigManager;
 use crate::config::profile_config::ProfileManager;
-use crate::config::todo_item::TodoManager;
 use crate::ui::assets::Assets;
 
 use crate::ui::components::container::Container;
@@ -25,12 +21,12 @@ use crate::ui::views::settings::Settings;
 use crate::{ui::*, xbus};
 use gpui::*;
 use gpui_component::dock::{register_panel, PanelControl, PanelInfo};
-use gpui_component::{ActiveTheme, Root, Theme, ThemeMode};
+use gpui_component::{ Root, Theme, ThemeMode};
 use raw_window_handle::HasWindowHandle;
 use raw_window_handle::RawWindowHandle;
 use serde::{Deserialize, Serialize};
-use smol::lock::OnceCell;
-use tray_icon::TrayIcon;
+use tray::Tray;
+
 #[cfg(target_os = "windows")]
 use windows::Win32::Foundation::HWND;
 // #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
@@ -142,19 +138,22 @@ impl AppState {
     }
 }
 // actions!(input_story, [Tab, TabPrev]);
-const TRAY: OnceLock<Option<TrayIcon>> = OnceLock::new();
+ const TRAY: OnceLock<Tray> = OnceLock::new();
 pub fn run() -> anyhow::Result<()> {
+     let tray = tray::start_tray()?;
+     let _sub=CrossRuntimeBridge::global().subscribe(|event:&TrayEvent| {
+        println!("Tray event: {:?}", event);
+     });
     const WIDTH: f32 = 480.;
     const HEIGHT: f32 = 880.;
-
     let app = Application::new().with_assets(Assets);
     app.on_reopen(|app| {
         println!("Application reopened");
         app.activate(true);
     });
+  
     app.run(move |cx| {
-        let tray = tray::start_tray().ok();
-        TRAY.set(tray).ok();
+        // TRAY.set(tray).unwrap();
         gpui_component::init(cx);
         AppState::init(cx);
         Profile::init(cx);
@@ -208,7 +207,7 @@ pub fn run() -> anyhow::Result<()> {
         use gpui_component::input::{Copy, Cut, Paste, Redo, Undo};
         cx.set_menus(vec![
             Menu {
-                name: "GPUI App".into(),
+                name: "xTo-Do App".into(),
                 items: vec![MenuItem::action("Quit", Quit)],
             },
             Menu {
@@ -251,6 +250,7 @@ pub fn run() -> anyhow::Result<()> {
         };
         cx.create_todo_window(options, move |window, cx| TodoMainWindow::view(window, cx));
     });
+  
     Ok(())
 }
 

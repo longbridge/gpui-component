@@ -1,62 +1,62 @@
-use tray_icon::menu::MenuEvent;
-use tray_icon::{
-    menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem},
-    TrayIcon, TrayIconBuilder, TrayIconEvent,
-};
-
 use crate::backoffice::cross_runtime::CrossRuntimeBridge;
+use trayicon::*;
 
-#[derive(Debug, Clone)]
+pub type Tray  = TrayIcon<TrayEvent>;
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum TrayEvent {
-    Menu(MenuEvent),
-    Tray(TrayIconEvent),
+    RightClickTrayIcon,
+    LeftClickTrayIcon,
+    DoubleClickTrayIcon,
+    Exit,
+    Item1,
+    Item2,
+    Item3,
+    Item4,
+    CheckItem1,
+    SubItem1,
+    SubItem2,
+    SubItem3,
 }
+
 const ICON: &[u8] = include_bytes!("../../../../assets/logo2.ico");
-fn load_icon() -> tray_icon::Icon {
-    let (icon_rgba, icon_width, icon_height) = {
-        let image = image::load_from_memory(ICON)
-            .expect("Failed to open icon path")
-            .into_rgba8();
-        let (width, height) = image.dimensions();
-        let rgba = image.into_raw();
-        (rgba, width, height)
-    };
-    tray_icon::Icon::from_rgba(icon_rgba, icon_width, icon_height).expect("Failed to open icon")
+fn load_icon() -> Icon {
+   Icon::from_buffer(ICON, None, None).unwrap()
 }
 
-pub(crate) fn start_tray() -> anyhow::Result<TrayIcon> {
-    let icon = load_icon();
-    let tray_menu = Menu::new();
-    let shown = MenuItem::with_id("SHOW_MAIN", "打开", true, None);
-    let exit = MenuItem::with_id("EXIT_MAIN", "退出", true, None);
-    tray_menu
-        .append_items(&[
-            &shown,
-            &PredefinedMenuItem::about(
-                Some("关于"),
-                Some(AboutMetadata {
-                    name: Some("xTo-Do".to_string()),
-                    copyright: Some("© xTo-Do 2025".to_string()),
-                    ..Default::default()
-                }),
-            ),
-            &PredefinedMenuItem::separator(),
-            &exit,
-        ])
-        .ok();
-    let tray_icon = TrayIconBuilder::new()
-        .with_menu(Box::new(tray_menu))
-        // .with_title("")
-        .with_tooltip("xTo-Do 您的工作助理")
-        .with_icon(icon)
-        // .with_menu_on_left_click(false)
+pub(crate) fn start_tray() -> anyhow::Result<Tray> {
+ //   let icon = load_icon();
+    let  tray_icon = TrayIconBuilder::new()
+        .sender(move |event:&TrayEvent| {
+            CrossRuntimeBridge::global().emit(event.clone());
+        })
+        .icon_from_buffer(ICON)
+        .tooltip("xTo-Do Utility")
+        .on_right_click(TrayEvent::RightClickTrayIcon)
+        .on_click(TrayEvent::LeftClickTrayIcon)
+        .on_double_click(TrayEvent::DoubleClickTrayIcon)
+        .menu(
+            MenuBuilder::new()
+                .item("Item 3 Replace Menu 👍", TrayEvent::Item3)
+                .item("Item 2 Change Icon Green", TrayEvent::Item2)
+                .item("Item 1 Change Icon Red", TrayEvent::Item1)
+                .separator()
+                .checkable("This is checkable", true, TrayEvent::CheckItem1)
+                .submenu(
+                    "Sub Menu",
+                    MenuBuilder::new()
+                        .item("Sub item 1", TrayEvent::SubItem1)
+                        .item("Sub Item 2", TrayEvent::SubItem2)
+                        .item("Sub Item 3", TrayEvent::SubItem3),
+                )
+                .with(MenuItem::Item {
+                    name: "Item Disabled".into(),
+                    disabled: true, // Disabled entry example
+                    id: TrayEvent::Item4,
+                    icon: None,
+                })
+                .separator()
+                .item("E&xit", TrayEvent::Exit),
+        )
         .build()?;
-
-    MenuEvent::set_event_handler(Some(move |event| {
-        CrossRuntimeBridge::global().emit(TrayEvent::Menu(event));
-    }));
-    TrayIconEvent::set_event_handler(Some(move |event| {
-        CrossRuntimeBridge::global().emit(TrayEvent::Tray(event));
-    }));
     Ok(tray_icon)
 }
