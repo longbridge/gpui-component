@@ -82,7 +82,7 @@ impl LlmChoice {
 
         let agent = OpenAiClient::from_url(&self.config.api_key, &self.config.api_url)
             .agent(model_id)
-            .context(system_prompt.as_str())
+            .preamble(system_prompt.as_str())
             .max_tokens(4096)
             .temperature(0.7)
             .build();
