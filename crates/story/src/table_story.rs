@@ -189,16 +189,18 @@ impl StockTableDelegate {
             stocks: random_stocks(size),
             columns: vec![
                 Column::new("id", "ID")
-                    .w(60.)
+                    .width(60.)
                     .fixed(ColumnFixed::Left)
                     .resizable(false),
                 Column::new("market", "Market")
-                    .w(60.)
+                    .width(60.)
                     .fixed(ColumnFixed::Left)
                     .resizable(false),
-                Column::new("name", "Name").w(180.).fixed(ColumnFixed::Left),
+                Column::new("name", "Name")
+                    .width(180.)
+                    .fixed(ColumnFixed::Left),
                 Column::new("symbol", "Symbol")
-                    .w(100.)
+                    .width(100.)
                     .fixed(ColumnFixed::Left)
                     .sortable(),
                 Column::new("price", "Price").sortable().text_right().p_0(),

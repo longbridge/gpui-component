@@ -72,7 +72,7 @@ impl Column {
     }
 
     /// Set the padding of the column, default is None.
-    pub fn p(mut self, paddings: impl Into<Edges<Pixels>>) -> Self {
+    pub fn paddings(mut self, paddings: impl Into<Edges<Pixels>>) -> Self {
         self.paddings = Some(paddings.into());
         self
     }
@@ -83,7 +83,7 @@ impl Column {
     }
 
     /// Set the width of the column, default is 100px.
-    pub fn w(mut self, width: impl Into<Pixels>) -> Self {
+    pub fn width(mut self, width: impl Into<Pixels>) -> Self {
         self.width = width.into();
         self
     }
