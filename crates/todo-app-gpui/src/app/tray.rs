@@ -1,7 +1,7 @@
 use crate::backoffice::cross_runtime::CrossRuntimeBridge;
-use anyhow::Ok;
-use tray_item::{IconSource, TrayItem};
-pub type Tray = TrayItem;
+use trayicon::*;
+
+pub type Tray = TrayIcon<TrayEvent>;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum TrayEvent {
@@ -11,30 +11,38 @@ pub enum TrayEvent {
     Exit,
     Open,
     Hide,
+    // Item3,
+    // Item4,
+    // CheckItem1,
+    // SubItem1,
+    // SubItem2,
+    // SubItem3,
 }
 
+const ICON: &[u8] = include_bytes!("../../../../assets/logo2.ico");
+// fn load_icon() -> Icon {
+//     Icon::from_buffer(ICON, None, None).unwrap()
+// }
+
 pub(crate) fn start_tray() -> anyhow::Result<Tray> {
-    #[cfg(target_os = "windows")]
-    const ICON_NAME: &str = "tray-default";
-    #[cfg(not(target_os = "windows"))]
-    const ICON_NAME: &str = "";
-    let mut tray = TrayItem::new("xTo-Do Utility", IconSource::Resource(ICON_NAME))?;
+    //   let icon = load_icon();
+    let tray_icon = TrayIconBuilder::new()
+        .sender(|event: &TrayEvent| {
+            CrossRuntimeBridge::global().emit(event.clone());
+        })
+        .icon_from_buffer(ICON)
+        .tooltip("xTo-Do Utility")
+        .on_right_click(TrayEvent::RightClickTrayIcon)
+        .on_click(TrayEvent::LeftClickTrayIcon)
+        .on_double_click(TrayEvent::DoubleClickTrayIcon)
+        .menu(
+            MenuBuilder::new()
+                .item("打开", TrayEvent::Open)
+                .item("隐藏", TrayEvent::Hide)
+                .separator()
+                .item("退出", TrayEvent::Exit),
+        )
+        .build()?;
 
-    tray.add_label("xTo-Do 实用工具")?;
-
-    tray.add_menu_item("Open", || {
-        CrossRuntimeBridge::global().emit(TrayEvent::Open);
-    })?;
-    tray.add_menu_item("Hide", || {
-        CrossRuntimeBridge::global().emit(TrayEvent::Hide);
-    })?;
-    #[cfg(target_os = "windows")]
-    tray.inner_mut().add_separator()?;
-
-    tray.add_menu_item("Quit", move || {
-        CrossRuntimeBridge::global().emit(TrayEvent::Exit);
-    })?;
-    // #[cfg(target_os = "macos")]
-    // tray.inner_mut().display();
-    Ok(tray)
+    Ok(tray_icon)
 }

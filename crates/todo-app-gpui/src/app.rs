@@ -139,15 +139,19 @@ impl AppState {
 }
 // actions!(input_story, [Tab, TabPrev]);
 pub fn run() -> anyhow::Result<()> {
-    let (tx, mut rx) = tokio::sync::mpsc::channel::<TrayEvent>(10);
     #[cfg(target_os = "windows")]
-    {
-        let tray = tray::start_tray()?;
-        let _sub = CrossRuntimeBridge::global().subscribe(move |event: &TrayEvent| {
-            tx.try_send(event.clone()).ok();
-        });
-    }
-
+    std::thread::spawn(move || {
+        use windows::Win32::UI::WindowsAndMessaging::*;
+        let mut msg = MSG::default();
+        loop {
+            unsafe {
+                GetMessageW(&mut msg, None, 0, 0).as_bool().then(|| {
+                    let _ = TranslateMessage(&msg);
+                    let _ = DispatchMessageA(&msg);
+                });
+            }
+        }
+    });
     const WIDTH: f32 = 480.;
     const HEIGHT: f32 = 880.;
     let app = Application::new().with_assets(Assets);
@@ -157,6 +161,11 @@ pub fn run() -> anyhow::Result<()> {
     });
 
     app.run(move |cx| {
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<TrayEvent>(10);
+        let mut tray = tray::start_tray().unwrap();
+        let _sub = CrossRuntimeBridge::global().subscribe(move |event: &TrayEvent| {
+            tx.try_send(event.clone()).ok();
+        });
         gpui_component::init(cx);
         AppState::init(cx);
         Profile::init(cx);
@@ -171,14 +180,36 @@ pub fn run() -> anyhow::Result<()> {
         cx.on_action(|_: &Quit, cx: &mut App| {
             cx.quit();
         });
-        #[cfg(target_os = "windows")]
         cx.spawn(async move |app| {
+            let _subscription = _sub;
             while let Some(event) = rx.recv().await {
-                println!("Tray event2: {:?}", event);
+                // println!("Tray event2: {:?}", event);
                 match event {
-                    TrayEvent::DoubleClickTrayIcon => {}
-                    TrayEvent::LeftClickTrayIcon => {}
-                    TrayEvent::RightClickTrayIcon => {}
+                    TrayEvent::DoubleClickTrayIcon => {
+                        // println!("Double clicked");
+                    }
+                    TrayEvent::LeftClickTrayIcon => {
+                        app.update(|app| {
+                            //  println!("Left clicked");
+                            app.windows().iter().for_each(|handle| {
+                                handle
+                                    .update(app, |_, window, _| {
+                                        #[cfg(target_os = "windows")]
+                                        {
+                                            window.show();
+                                        }
+                                        window.activate_window();
+                                    })
+                                    .ok();
+                            });
+                            app.activate(true);
+                        })
+                        .ok();
+                    }
+                    TrayEvent::RightClickTrayIcon => {
+                        tray.show_menu().ok();
+                        // println!("Right clicked");
+                    }
                     TrayEvent::Exit => {
                         app.update(|app| {
                             app.quit();
@@ -187,7 +218,7 @@ pub fn run() -> anyhow::Result<()> {
                     }
                     TrayEvent::Open => {
                         app.update(|app| {
-                            println!("Open clicked");
+                            //  println!("Open clicked");
                             app.windows().iter().for_each(|handle| {
                                 handle
                                     .update(app, |_, window, _| {
@@ -205,18 +236,19 @@ pub fn run() -> anyhow::Result<()> {
                     }
                     TrayEvent::Hide => {
                         app.update(|app| {
-                            println!("Hide clicked");
+                            // println!("Hide clicked");
                             app.hide();
-                            app.windows().iter().for_each(|handle| {
-                                handle
-                                    .update(app, |_, window, _| {
-                                        #[cfg(target_os = "windows")]
-                                        {
+                            #[cfg(target_os = "windows")]
+                            {
+                                app.windows().iter().for_each(|handle| {
+                                    handle
+                                        .update(app, |_, window, _| {
                                             window.hide();
-                                        }
-                                    })
-                                    .ok();
-                            });
+                                        })
+                                        .ok();
+                                });
+                            }
+
                             app.activate(false);
                         })
                         .ok();
