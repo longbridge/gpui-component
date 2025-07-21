@@ -11,7 +11,7 @@ use crate::{actions::Cancel, Selectable, StyledExt as _};
 
 const CONTEXT: &str = "Popover";
 
-pub fn init(cx: &mut App) {
+pub(crate) fn init(cx: &mut App) {
     cx.bind_keys([KeyBinding::new("escape", Cancel, Some(CONTEXT))])
 }
 

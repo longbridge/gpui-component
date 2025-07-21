@@ -1,26 +1,29 @@
 use gpui::{
     anchored, canvas, deferred, div, prelude::FluentBuilder as _, px, relative, App, AppContext,
-    Bounds, Context, Corner, ElementId, Entity, EventEmitter, FocusHandle, Focusable, Hsla,
-    InteractiveElement as _, IntoElement, KeyBinding, MouseButton, ParentElement, Pixels, Point,
-    Render, RenderOnce, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled,
-    Subscription, Window,
+    Bounds, ClickEvent, Context, Corner, ElementId, Entity, EventEmitter, FocusHandle, Focusable,
+    Hsla, InteractiveElement as _, IntoElement, KeyBinding, MouseButton, ParentElement, Pixels,
+    Point, Render, RenderOnce, SharedString, StatefulInteractiveElement as _, StyleRefinement,
+    Styled, Subscription, Window,
 };
 
 use crate::{
-    actions::Cancel,
+    actions::{Cancel, Confirm},
     button::{Button, ButtonVariants},
     divider::Divider,
     h_flex,
     input::{InputEvent, InputState, TextInput},
     tooltip::Tooltip,
-    v_flex, ActiveTheme as _, Colorize as _, Icon, Selectable as _, Sizable, Size, StyleSized,
-    StyledExt,
+    v_flex, ActiveTheme as _, Colorize as _, FocusableExt as _, Icon, Selectable as _, Sizable,
+    Size, StyleSized, StyledExt,
 };
 
 const CONTEXT: &'static str = "ColorPicker";
 
 pub fn init(cx: &mut App) {
-    cx.bind_keys([KeyBinding::new("escape", Cancel, Some(CONTEXT))])
+    cx.bind_keys([
+        KeyBinding::new("escape", Cancel, Some(CONTEXT)),
+        KeyBinding::new("enter", Confirm { secondary: false }, Some(CONTEXT)),
+    ])
 }
 
 #[derive(Clone)]
@@ -128,7 +131,12 @@ impl ColorPickerState {
         cx.notify();
     }
 
-    fn toggle_picker(&mut self, _: &gpui::ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
+    fn on_confirm(&mut self, _: &Confirm, _: &mut Window, cx: &mut Context<Self>) {
+        self.open = !self.open;
+        cx.notify();
+    }
+
+    fn toggle_picker(&mut self, _: &ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
         self.open = !self.open;
         cx.notify();
     }
@@ -368,11 +376,15 @@ impl RenderOnce for ColorPicker {
         }
         .into();
 
+        let is_focused = state.focus_handle.is_focused(window);
+        let focus_handle = state.focus_handle.clone().tab_stop(true);
+
         div()
             .id(self.id.clone())
             .key_context(CONTEXT)
-            .track_focus(&state.focus_handle)
+            .track_focus(&focus_handle)
             .on_action(window.listener_for(&self.state, ColorPickerState::on_escape))
+            .on_action(window.listener_for(&self.state, ColorPickerState::on_confirm))
             .child(
                 h_flex()
                     .id("color-picker-input")
@@ -384,6 +396,7 @@ impl RenderOnce for ColorPicker {
                     .when_some(self.icon.clone(), |this, icon| {
                         this.child(
                             Button::new("btn")
+                                .track_focus(&focus_handle)
                                 .ghost()
                                 .selected(state.open)
                                 .with_size(self.size)
@@ -396,9 +409,11 @@ impl RenderOnce for ColorPicker {
                                 .id("color-picker-square")
                                 .bg(cx.theme().background)
                                 .border_1()
+                                .m_1()
                                 .border_color(cx.theme().input)
                                 .rounded(cx.theme().radius)
                                 .shadow_xs()
+                                .rounded(cx.theme().radius)
                                 .overflow_hidden()
                                 .size_with(self.size)
                                 .when_some(state.value, |this, value| {
@@ -412,6 +427,7 @@ impl RenderOnce for ColorPicker {
                                     })
                                 }),
                         )
+                        .focus_ring(is_focused, cx)
                     })
                     .when_some(self.label.clone(), |this, label| this.child(label))
                     .on_click(window.listener_for(&self.state, ColorPickerState::toggle_picker))

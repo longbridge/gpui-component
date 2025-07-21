@@ -26,7 +26,7 @@ impl super::Story for WebViewStory {
         "WebView"
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
         Self::view(window, cx)
     }
     fn on_active(&mut self, active: bool, _window: &mut Window, cx: &mut App) {

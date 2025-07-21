@@ -14,7 +14,7 @@ fake = { version = "2.10.0", features = ["dummy"] }
 rand = "0.8"
 raw-window-handle = { version = "0.6", features = ["std"] }
 regex = "1"
-reqwest_client = { git = "https://github.com/zed-industries/zed.git" }
+reqwest_client.workspace = true
 rust-embed = "8.5.0"
 serde = "1"
 serde_json = "1"

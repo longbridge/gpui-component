@@ -1,8 +1,7 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    div, px, relative, AnyElement, App, DefiniteLength, Entity, InteractiveElement as _,
-    IntoElement, MouseButton, ParentElement as _, Rems, RenderOnce, StyleRefinement, Styled,
-    Window,
+    div, px, relative, AnyElement, App, DefiniteLength, Entity, InteractiveElement, IntoElement,
+    MouseButton, ParentElement as _, Rems, RenderOnce, StyleRefinement, Styled, Window,
 };
 
 use crate::button::{Button, ButtonVariants as _};

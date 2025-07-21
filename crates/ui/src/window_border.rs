@@ -140,7 +140,6 @@ impl RenderOnce for WindowBorder {
                     .map(|div| match decorations {
                         Decorations::Server => div,
                         Decorations::Client { tiling } => div
-                            // .border_color(cx.theme().window_border)
                             .when(!(tiling.top || tiling.right), |div| {
                                 div.rounded_tr(BORDER_RADIUS)
                             })

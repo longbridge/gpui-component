@@ -19,7 +19,7 @@ use crate::{
 actions!(inspector, [ToggleInspector]);
 
 /// Initialize the inspector and register the action to toggle it.
-pub fn init(cx: &mut App) {
+pub(crate) fn init(cx: &mut App) {
     cx.bind_keys(vec![
         #[cfg(target_os = "macos")]
         KeyBinding::new("cmd-alt-i", ToggleInspector, None),

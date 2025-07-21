@@ -20,7 +20,7 @@ use smol::Timer;
 
 use super::loading::Loading;
 
-pub fn init(cx: &mut App) {
+pub(crate) fn init(cx: &mut App) {
     let context: Option<&str> = Some("List");
     cx.bind_keys([
         KeyBinding::new("escape", Cancel, context),

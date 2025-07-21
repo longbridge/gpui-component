@@ -99,7 +99,7 @@ impl super::Story for DescriptionListStory {
         "Use to display details with a tidy layout."
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
         Self::view(window, cx)
     }
 

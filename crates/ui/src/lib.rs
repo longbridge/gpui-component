@@ -1,5 +1,4 @@
 mod event;
-mod focusable;
 mod icon;
 #[cfg(any(feature = "inspector", debug_assertions))]
 mod inspector;
@@ -68,7 +67,6 @@ pub use wry;
 
 pub use crate::Disableable;
 pub use event::InteractiveElementExt;
-pub use focusable::FocusableCycle;
 #[cfg(any(feature = "inspector", debug_assertions))]
 pub use inspector::*;
 pub use menu::{context_menu, popup_menu};
@@ -88,16 +86,18 @@ use std::ops::Deref;
 
 rust_i18n::i18n!("locales", fallback = "en");
 
-/// Initialize the UI module.
+/// Initialize the components.
 ///
-/// This must be called before using any of the UI components.
-/// You can initialize the UI module at your application's entry point.
+/// You must initialize the components at your application's entry point.
 pub fn init(cx: &mut App) {
     theme::init(cx);
     #[cfg(any(feature = "inspector", debug_assertions))]
     inspector::init(cx);
+
+    root::init(cx);
     highlighter::init(cx);
     date_picker::init(cx);
+    color_picker::init(cx);
     dock::init(cx);
     drawer::init(cx);
     dropdown::init(cx);

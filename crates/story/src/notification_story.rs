@@ -32,7 +32,7 @@ impl super::Story for NotificationStory {
         "Push notifications to display a message at the top right of the window"
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
         Self::view(window, cx)
     }
 }

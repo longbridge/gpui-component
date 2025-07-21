@@ -6,7 +6,7 @@ use crate::{
 };
 use gpui::{
     div, point, px, App, Axis, BoxShadow, DefiniteLength, Div, Edges, Element, ElementId,
-    FocusHandle, Hsla, Pixels, Refineable, StyleRefinement, Styled, Window,
+    FocusHandle, Hsla, ParentElement, Pixels, Refineable, StyleRefinement, Styled, Window,
 };
 use serde::{Deserialize, Serialize};
 
@@ -501,6 +501,29 @@ impl<T: Styled> StyleSized<T> for T {
             Size::Small => self.text_sm(),
             _ => self.text_base(),
         }
+    }
+}
+
+pub trait FocusableExt<T: ParentElement + Sized> {
+    /// Add focus ring to the element.
+    fn focus_ring(self, is_focused: bool, cx: &App) -> Self;
+}
+
+impl<T: ParentElement + Sized> FocusableExt<T> for T {
+    fn focus_ring(self, is_focused: bool, cx: &App) -> Self {
+        if !is_focused {
+            return self;
+        }
+
+        self.child(
+            div()
+                .absolute()
+                .size_full()
+                .bg(cx.theme().transparent)
+                .border_1()
+                .border_color(cx.theme().ring)
+                .rounded(cx.theme().radius),
+        )
     }
 }
 

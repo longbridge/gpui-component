@@ -18,7 +18,7 @@ use crate::{
 };
 
 const CONTEXT: &str = "Drawer";
-pub fn init(cx: &mut App) {
+pub(crate) fn init(cx: &mut App) {
     cx.bind_keys([KeyBinding::new("escape", Cancel, Some(CONTEXT))])
 }
 
