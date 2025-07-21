@@ -2696,6 +2696,20 @@ checksum = "41cd446c890d6bed1d8b53acef5f240069ebef91d6fae7c5f52efe61fe8b5eae"
 
 [[package]]
 name = "embed-resource"
+version = "2.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d506610004cfc74a6f5ee7e8c632b355de5eca1f03ee5e5e0ec11b77d4eb3d61"
+dependencies = [
+ "cc",
+ "memchr",
+ "rustc_version",
+ "toml 0.8.23",
+ "vswhom",
+ "winreg 0.52.0",
+]
+
+[[package]]
+name = "embed-resource"
 version = "3.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0963f530273dc3022ab2bdc3fcd6d488e850256f2284a82b7413cb9481ee85dd"
@@ -2705,7 +2719,7 @@ dependencies = [
  "rustc_version",
  "toml 0.8.23",
  "vswhom",
- "winreg",
+ "winreg 0.55.0",
 ]
 
 [[package]]
@@ -3664,7 +3678,7 @@ dependencies = [
  "cosmic-text",
  "ctor",
  "derive_more 0.99.20",
- "embed-resource",
+ "embed-resource 3.0.4",
  "etagere",
  "filedescriptor",
  "flume",
@@ -3757,7 +3771,7 @@ dependencies = [
  "cosmic-text",
  "ctor",
  "derive_more 0.99.20",
- "embed-resource",
+ "embed-resource 3.0.4",
  "etagere",
  "filedescriptor",
  "flume",
@@ -6456,6 +6470,12 @@ checksum = "22ec719bbf3b2a81c109a4e20b1f129b5566b7dce654bc3872f6a05abf82b2c4"
 dependencies = [
  "ttf-parser 0.25.1",
 ]
+
+[[package]]
+name = "padlock"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c10569378a1dacd9f30dbe7ae49e054d2c45dc2f8ee49899903e09c3924e8b6f"
 
 [[package]]
 name = "pango"
@@ -9425,6 +9445,7 @@ dependencies = [
  "crossbeam-skiplist",
  "dirs 6.0.0",
  "duration-str",
+ "embed-resource 2.5.2",
  "fake 4.3.0",
  "futures",
  "futures-util",
@@ -9458,6 +9479,7 @@ dependencies = [
  "tracing-appender",
  "tracing-subscriber",
  "tray-icon",
+ "tray-item",
  "trayicon",
  "unindent",
  "uuid",
@@ -9762,6 +9784,22 @@ dependencies = [
  "png 0.17.16",
  "thiserror 2.0.12",
  "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "tray-item"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "59d4bd406170690dc30eabb3badc67a085beaf9b2c3b1923afcc9c26a2191353"
+dependencies = [
+ "cocoa 0.25.0",
+ "core-graphics 0.23.2",
+ "libc",
+ "objc",
+ "objc-foundation",
+ "objc_id",
+ "padlock",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -11645,6 +11683,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "74c7b26e3480b707944fc872477815d29a8e429d2f93a1ce000f5fa84a15cbcd"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "winreg"
+version = "0.52.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a277a57398d4bfa075df44f501a17cfdf8542d224f0d36095a2adc7aee4ef0a5"
+dependencies = [
+ "cfg-if",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]

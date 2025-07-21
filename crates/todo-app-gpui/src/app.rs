@@ -21,7 +21,7 @@ use crate::ui::views::settings::Settings;
 use crate::{ui::*, xbus};
 use gpui::*;
 use gpui_component::dock::{register_panel, PanelControl, PanelInfo};
-use gpui_component::{ Root, Theme, ThemeMode};
+use gpui_component::{Root, Theme, ThemeMode};
 use raw_window_handle::HasWindowHandle;
 use raw_window_handle::RawWindowHandle;
 use serde::{Deserialize, Serialize};
@@ -138,12 +138,12 @@ impl AppState {
     }
 }
 // actions!(input_story, [Tab, TabPrev]);
- const TRAY: OnceLock<Tray> = OnceLock::new();
 pub fn run() -> anyhow::Result<()> {
-     let tray = tray::start_tray()?;
-     let _sub=CrossRuntimeBridge::global().subscribe(|event:&TrayEvent| {
-        println!("Tray event: {:?}", event);
-     });
+    let tray = tray::start_tray()?;
+    let (tx, mut rx) = tokio::sync::mpsc::channel(10);
+    let _sub = CrossRuntimeBridge::global().subscribe(move |event: &TrayEvent| {
+        tx.try_send(event.clone()).ok();
+    });
     const WIDTH: f32 = 480.;
     const HEIGHT: f32 = 880.;
     let app = Application::new().with_assets(Assets);
@@ -151,9 +151,8 @@ pub fn run() -> anyhow::Result<()> {
         println!("Application reopened");
         app.activate(true);
     });
-  
+
     app.run(move |cx| {
-        // TRAY.set(tray).unwrap();
         gpui_component::init(cx);
         AppState::init(cx);
         Profile::init(cx);
@@ -165,67 +164,116 @@ pub fn run() -> anyhow::Result<()> {
             reqwest_client::ReqwestClient::user_agent("xtodo-utility").unwrap(),
         );
         cx.set_http_client(http_client);
-        cx.on_action(|_: &Quit, cx: &mut App| {
-            cx.quit();
-        });
-        // 注册面板
-        register_panel(cx, PANEL_NAME, |_, _, info, window, cx| {
-            let story_state = match info {
-                PanelInfo::Panel(value) => ViewKitState::from_value(value.clone()),
-                _ => {
-                    unreachable!("Invalid PanelInfo: {:?}", info)
+        // cx.on_action(|_: &Quit, cx: &mut App| {
+        //     cx.quit();
+        // });
+
+        cx.spawn(async move |app| {
+            while let Some(event) = rx.recv().await {
+                println!("Tray event2: {:?}", event);
+                match event {
+                    TrayEvent::DoubleClickTrayIcon => {}
+                    TrayEvent::LeftClickTrayIcon => {}
+                    TrayEvent::RightClickTrayIcon => {}
+                    TrayEvent::Exit => {
+                        app.update(|app| {
+                            app.quit();
+                        })
+                        .ok();
+                    }
+                    TrayEvent::Open => {
+                        app.update(|app| {
+                            println!("Open clicked");
+                            app.windows().iter().for_each(|handle| {
+                                handle
+                                    .update(app, |_, window, _| {
+                                        window.show();
+                                        window.activate_window();
+                                    })
+                                    .ok();
+                            });
+                            app.activate(true);
+                        })
+                        .ok();
+                    }
+                    TrayEvent::Hide => {
+                        app.update(|app| {
+                            println!("Hide clicked");
+                            app.hide();
+                            app.windows().iter().for_each(|handle| {
+                                handle
+                                    .update(app, |_, window, _| {
+                                        window.hide();
+                                    })
+                                    .ok();
+                            });
+                            app.activate(false);
+                        })
+                        .ok();
+                    }
                 }
-            };
+            }
+        })
+        .detach();
 
-            let view = cx.new(|cx| {
-                let (title, description, closable, zoomable, story, on_active) =
-                    story_state.to_viewkit(window, cx);
-                let mut container = Container::new(window, cx)
-                    .story(story, story_state.story_klass)
-                    .on_active(on_active);
+        // // 注册面板
+        // register_panel(cx, PANEL_NAME, |_, _, info, window, cx| {
+        //     let story_state = match info {
+        //         PanelInfo::Panel(value) => ViewKitState::from_value(value.clone()),
+        //         _ => {
+        //             unreachable!("Invalid PanelInfo: {:?}", info)
+        //         }
+        //     };
 
-                // 监听焦点变化
-                cx.on_focus_in(
-                    &container.focus_handle,
-                    window,
-                    |this: &mut Container, _, _| {
-                        println!("Container focus in: {}", this.name);
-                    },
-                )
-                .detach();
+        //     let view = cx.new(|cx| {
+        //         let (title, description, closable, zoomable, story, on_active) =
+        //             story_state.to_viewkit(window, cx);
+        //         let mut container = Container::new(window, cx)
+        //             .story(story, story_state.story_klass)
+        //             .on_active(on_active);
 
-                container.name = title.into();
-                container.description = description.into();
-                container.closable = closable;
-                container.zoomable = zoomable;
-                container
-            });
-            Box::new(view)
-        });
+        //         // 监听焦点变化
+        //         cx.on_focus_in(
+        //             &container.focus_handle,
+        //             window,
+        //             |this: &mut Container, _, _| {
+        //                 println!("Container focus in: {}", this.name);
+        //             },
+        //         )
+        //         .detach();
+
+        //         container.name = title.into();
+        //         container.description = description.into();
+        //         container.closable = closable;
+        //         container.zoomable = zoomable;
+        //         container
+        //     });
+        //     Box::new(view)
+        // });
 
         // 设置应用程序菜单
-        use gpui_component::input::{Copy, Cut, Paste, Redo, Undo};
-        cx.set_menus(vec![
-            Menu {
-                name: "xTo-Do App".into(),
-                items: vec![MenuItem::action("Quit", Quit)],
-            },
-            Menu {
-                name: "Edit".into(),
-                items: vec![
-                    MenuItem::os_action("Undo", Undo, gpui::OsAction::Undo),
-                    MenuItem::os_action("Redo", Redo, gpui::OsAction::Redo),
-                    MenuItem::separator(),
-                    MenuItem::os_action("Cut", Cut, gpui::OsAction::Cut),
-                    MenuItem::os_action("Copy", Copy, gpui::OsAction::Copy),
-                    MenuItem::os_action("Paste", Paste, gpui::OsAction::Paste),
-                ],
-            },
-            Menu {
-                name: "Window".into(),
-                items: vec![],
-            },
-        ]);
+        // use gpui_component::input::{Copy, Cut, Paste, Redo, Undo};
+        // cx.set_menus(vec![
+        //     Menu {
+        //         name: "xTo-Do App".into(),
+        //         items: vec![MenuItem::action("Quit", Quit)],
+        //     },
+        //     Menu {
+        //         name: "Edit".into(),
+        //         items: vec![
+        //             MenuItem::os_action("Undo", Undo, gpui::OsAction::Undo),
+        //             MenuItem::os_action("Redo", Redo, gpui::OsAction::Redo),
+        //             MenuItem::separator(),
+        //             MenuItem::os_action("Cut", Cut, gpui::OsAction::Cut),
+        //             MenuItem::os_action("Copy", Copy, gpui::OsAction::Copy),
+        //             MenuItem::os_action("Paste", Paste, gpui::OsAction::Paste),
+        //         ],
+        //     },
+        //     Menu {
+        //         name: "Window".into(),
+        //         items: vec![],
+        //     },
+        // ]);
         cx.on_window_closed(|cx| {
             if cx.windows().is_empty() {
                 cx.quit();
@@ -250,7 +298,7 @@ pub fn run() -> anyhow::Result<()> {
         };
         cx.create_todo_window(options, move |window, cx| TodoMainWindow::view(window, cx));
     });
-  
+
     Ok(())
 }
 
@@ -560,6 +608,25 @@ impl AppExt for App {
 pub trait WindowExt {
     fn hwnd(&self) -> Option<HWND> {
         None
+    }
+
+    fn show(&self) {
+        use windows::Win32::UI::WindowsAndMessaging::ShowWindow;
+        if let Some(hwnd) = self.hwnd() {
+            unsafe {
+                let _ = ShowWindow(hwnd, windows::Win32::UI::WindowsAndMessaging::SW_SHOW);
+                let _ = ShowWindow(hwnd, windows::Win32::UI::WindowsAndMessaging::SW_RESTORE);
+            }
+        }
+    }
+
+    fn hide(&self) {
+        use windows::Win32::UI::WindowsAndMessaging::ShowWindow;
+        if let Some(hwnd) = self.hwnd() {
+            unsafe {
+                let _ = ShowWindow(hwnd, windows::Win32::UI::WindowsAndMessaging::SW_HIDE);
+            }
+        }
     }
 
     fn style(&self) -> i32 {

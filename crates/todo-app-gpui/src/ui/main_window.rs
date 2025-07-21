@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use crate::{
-    app::Open,
+    app::{Open, WindowExt},
     backoffice::{cross_runtime::CrossRuntimeBridge, BoEvent},
 };
 
@@ -15,9 +15,10 @@ pub struct TodoMainWindow {
 
 impl TodoMainWindow {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        window.on_window_should_close(cx, |_win, app| {
-            app.quit();
-            true
+        window.on_window_should_close(cx, |win, app| {
+            app.hide();
+            win.hide();
+            false
         });
         cx.spawn_in(window, async move |_this, app: &mut AsyncWindowContext| {
             app.update(|_win, app| {
@@ -62,11 +63,6 @@ impl TodoMainWindow {
     }
 
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
-        window.on_window_should_close(cx, |window, app| {
-            println!("Window closed, hiding app");
-            app.hide();
-            false
-        });
         cx.new(|cx| Self::new(window, cx))
     }
 }

@@ -92,10 +92,13 @@ impl Render for WindowDemo {
             .drag_over(|style, path: &ExternalPaths, window, cx| {
                 println!("Drag over: {:?}", path);
                 style.bg(rgba(0xf0f0f0))
-            }).on_drop(cx.listener(move |project_panel, external_paths: &ExternalPaths, window,cx| {
-              println!("Dropped paths: {:?}", external_paths);
-               cx.stop_propagation();
-            }))
+            })
+            .on_drop(cx.listener(
+                move |project_panel, external_paths: &ExternalPaths, window, cx| {
+                    println!("Dropped paths: {:?}", external_paths);
+                    cx.stop_propagation();
+                },
+            ))
             .child(button("Normal", move |_, cx| {
                 cx.open_window(
                     WindowOptions {

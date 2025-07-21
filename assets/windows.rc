@@ -1,0 +1,4 @@
+// aa-exe-icon ICON "icons/app-icon.ico"
+// name-of-icon-in-rc-file ICON "icons/icon-green.ico"
+// another-name-from-rc-file ICON "icons/icon-red.ico"
+tray-default ICON "logo2.ico"

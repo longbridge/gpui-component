@@ -1,4 +1,5 @@
 use super::titlebar::TitleBar;
+use crate::app::WindowExt;
 use crate::ui::views::settings::Settings;
 use crate::ui::{SelectFont, SelectLocale, SelectRadius, SelectScrollbarShow};
 use gpui::*;
@@ -82,22 +83,22 @@ impl Render for AppTitleBar {
                             .icon(IconName::Settings)
                             .small()
                             .ghost()
-                            .on_click(cx.listener(|this,_ev, window, cx| {
+                            .on_click(cx.listener(|this, _ev, window, cx| {
                                 if let Some(handle) = this.setting_window.as_ref() {
-                                     if handle.is_active(cx).is_some(){
+                                    if handle.is_active(cx).is_some() {
                                         handle
                                             .update(cx, |_, window, cx| {
-                                            window.activate_window();
-                                            cx.notify();
-                        })
-                        .ok();
-                                     }else{
-                                         let handle = Settings::open(Some("服务提供商"), window, cx);
-                                this.setting_window = Some(handle);
-                                     }
-                                }else{
-                                let handle = Settings::open(Some("服务提供商"), window, cx);
-                                this.setting_window = Some(handle);
+                                                window.activate_window();
+                                                cx.notify();
+                                            })
+                                            .ok();
+                                    } else {
+                                        let handle = Settings::open(Some("服务提供商"), window, cx);
+                                        this.setting_window = Some(handle);
+                                    }
+                                } else {
+                                    let handle = Settings::open(Some("服务提供商"), window, cx);
+                                    this.setting_window = Some(handle);
                                 }
                             })),
                     )
@@ -310,6 +311,10 @@ impl Render for NormalTitleBar {
         TitleBar::new()
             .show_minimize(false)
             .show_maximize(false)
+            .on_close_window(|_ev, window, app| {
+                app.hide();
+                window.hide();
+            })
             .child(self.title.clone())
             .child(
                 div()
