@@ -246,14 +246,10 @@ fn main() {
         let mut msg = MSG::default();
         loop {
             unsafe {
-                let ret = GetMessageW(&mut msg, None, 0, 0);
-
-                if ret.as_bool() {
+                GetMessageW(&mut msg, None, 0, 0).as_bool().then(|| {
                     let _ = TranslateMessage(&msg);
                     let _ = DispatchMessageA(&msg);
-                } else {
-                    break;
-                }
+                });
             }
         }
     });
