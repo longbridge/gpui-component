@@ -265,7 +265,7 @@ pub fn run() -> anyhow::Result<()> {
         use gpui_component::input::{Copy, Cut, Paste, Redo, Undo};
         cx.set_menus(vec![
             Menu {
-                name: "xTo-Do App".into(),
+                name: "xTo-Do".into(),
                 items: vec![MenuItem::action("Quit", Quit)],
             },
             Menu {
