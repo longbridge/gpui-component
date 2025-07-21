@@ -154,10 +154,10 @@ where
             scrollbar_visible: Edges::all(true),
             visible_range: VisibleRangeState::default(),
             loop_selection: true,
-            col_selectable: true,
+            col_selectable: false,
             row_selectable: true,
             sortable: true,
-            col_movable: true,
+            col_movable: false,
             col_resizable: true,
             col_fixed: true,
             _load_more_task: Task::ready(()),
@@ -199,23 +199,33 @@ where
         self
     }
 
+    /// Set to enable/disable column movable, default to false.
     pub fn col_movable(mut self, col_movable: bool) -> Self {
         self.col_movable = col_movable;
         self
     }
 
+    /// Set to enable/disable column resizable, default to true.
     pub fn col_resizable(mut self, col_resizable: bool) -> Self {
         self.col_resizable = col_resizable;
         self
     }
 
+    /// Set to enable/disable column sortable, default true
     pub fn sortable(mut self, sortable: bool) -> Self {
         self.sortable = sortable;
         self
     }
 
+    /// Set to enable/disable row selectable, default true
     pub fn row_selectable(mut self, row_selectable: bool) -> Self {
         self.row_selectable = row_selectable;
+        self
+    }
+
+    /// Set to enable/disable column selectable, default false
+    pub fn col_selectable(mut self, col_selectable: bool) -> Self {
+        self.col_selectable = col_selectable;
         self
     }
 
