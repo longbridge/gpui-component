@@ -445,7 +445,7 @@ where
 
     fn up(&mut self, _: &SelectPrev, window: &mut Window, cx: &mut Context<Self>) {
         if !self.open {
-            return;
+            self.open = true;
         }
 
         self.list.focus_handle(cx).focus(window);
@@ -722,9 +722,10 @@ where
                     .flex()
                     .items_center()
                     .justify_between()
+                    .border_1()
+                    .border_color(cx.theme().transparent)
                     .when(self.appearance, |this| {
                         this.bg(cx.theme().background)
-                            .border_1()
                             .border_color(cx.theme().input)
                             .rounded(cx.theme().radius)
                             .when(cx.theme().shadow, |this| this.shadow_xs())

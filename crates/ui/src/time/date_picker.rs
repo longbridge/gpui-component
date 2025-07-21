@@ -1,17 +1,17 @@
 use chrono::NaiveDate;
 use gpui::{
-    anchored, deferred, div, prelude::FluentBuilder as _, px, App, AppContext, Context, ElementId,
-    Empty, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement,
-    KeyBinding, MouseButton, ParentElement as _, Render, RenderOnce, SharedString,
+    anchored, deferred, div, prelude::FluentBuilder as _, px, App, AppContext, ClickEvent, Context,
+    ElementId, Empty, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement as _,
+    IntoElement, KeyBinding, MouseButton, ParentElement as _, Render, RenderOnce, SharedString,
     StatefulInteractiveElement as _, StyleRefinement, Styled, Subscription, Window,
 };
 use rust_i18n::t;
 
 use crate::{
-    actions::Cancel,
+    actions::{Cancel, Confirm},
     button::{Button, ButtonVariants as _},
     h_flex,
-    input::clear_button,
+    input::{clear_button, Delete},
     v_flex, ActiveTheme, Icon, IconName, Sizable, Size, StyleSized as _, StyledExt as _,
 };
 
@@ -19,7 +19,12 @@ use super::calendar::{Calendar, CalendarEvent, CalendarState, Date, Matcher};
 
 pub(crate) fn init(cx: &mut App) {
     let context = Some("DatePicker");
-    cx.bind_keys([KeyBinding::new("escape", Cancel, context)])
+    cx.bind_keys([
+        KeyBinding::new("enter", Confirm { secondary: false }, context),
+        KeyBinding::new("escape", Cancel, context),
+        KeyBinding::new("delete", Delete, context),
+        KeyBinding::new("backspace", Delete, context),
+    ])
 }
 
 #[derive(Clone)]
@@ -166,7 +171,7 @@ impl DatePickerState {
         });
     }
 
-    fn escape(&mut self, _: &Cancel, window: &mut Window, cx: &mut Context<Self>) {
+    fn on_escape(&mut self, _: &Cancel, window: &mut Window, cx: &mut Context<Self>) {
         if !self.open {
             cx.propagate();
         }
@@ -175,6 +180,17 @@ impl DatePickerState {
         self.open = false;
 
         cx.notify();
+    }
+
+    fn on_enter(&mut self, _: &Confirm, _: &mut Window, cx: &mut Context<Self>) {
+        if !self.open {
+            self.open = true;
+            cx.notify();
+        }
+    }
+
+    fn on_delete(&mut self, _: &Delete, window: &mut Window, cx: &mut Context<Self>) {
+        self.clean(&ClickEvent::default(), window, cx);
     }
 
     // To focus the Picker Input, if current focus in is on the container.
@@ -330,8 +346,10 @@ impl RenderOnce for DatePicker {
             .id(self.id.clone())
             .key_context("DatePicker")
             .track_focus(&self.focus_handle(cx).tab_stop(true))
+            .on_action(window.listener_for(&self.state, DatePickerState::on_enter))
+            .on_action(window.listener_for(&self.state, DatePickerState::on_delete))
             .when(state.open, |this| {
-                this.on_action(window.listener_for(&self.state, DatePickerState::escape))
+                this.on_action(window.listener_for(&self.state, DatePickerState::on_escape))
             })
             .flex_none()
             .w_full()
@@ -398,7 +416,7 @@ impl RenderOnce for DatePicker {
                                 .on_mouse_up_out(
                                     MouseButton::Left,
                                     window.listener_for(&self.state, |view, _, window, cx| {
-                                        view.escape(&Cancel, window, cx);
+                                        view.on_escape(&Cancel, window, cx);
                                     }),
                                 )
                                 .child(
