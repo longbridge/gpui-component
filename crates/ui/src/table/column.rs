@@ -106,6 +106,12 @@ impl Column {
         self
     }
 
+    /// Set whether the column is fixed on left side, default is false.
+    pub fn fixed_left(mut self) -> Self {
+        self.fixed = Some(ColumnFixed::Left);
+        self
+    }
+
     /// Set whether the column is resizable, default is true.
     pub fn resizable(mut self, resizable: bool) -> Self {
         self.resizable = resizable;
