@@ -72,10 +72,10 @@ quick-xml = { version = "0.38" }
 tracing-appender = "0.2.3"
 tokio-stream = { version = "0.1.17", features = ["full"] }
 async-stream = "0.3"
-tray-icon = "0.21.0"
+# tray-icon = "0.21.0"
 image = "0.25.6"
 trayicon = { git = "https://github.com/Ciantic/trayicon-rs" }
-tray-item = "0.10.0"
+# tray-item = "0.10.0"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.61.1", features = [
