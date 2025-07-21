@@ -63,6 +63,18 @@ impl Column {
         self
     }
 
+    /// Set whether the column is sort with ascending order.
+    pub fn ascending(mut self) -> Self {
+        self.sort = Some(ColumnSort::Ascending);
+        self
+    }
+
+    /// Set whether the column is sort with descending order.
+    pub fn descending(mut self) -> Self {
+        self.sort = Some(ColumnSort::Descending);
+        self
+    }
+
     /// Set the alignment of the column text, default is left.
     ///
     /// Only `text_left`, `text_right` is supported.
