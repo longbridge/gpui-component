@@ -237,80 +237,10 @@ fn main() {
     let first_icon = Icon::from_buffer(icon, None, None).unwrap();
 
     // Needlessly complicated tray icon with all the whistles and bells
-    let mut tray_icon = TrayIconBuilder::new()
-        .sender(move |e| {
-            let _ = s.send(*e);
-        })
-        .icon_from_buffer(icon)
-        .tooltip("Cool Tray 👀 Icon")
-        .on_right_click(Events::RightClickTrayIcon)
-        .on_click(Events::LeftClickTrayIcon)
-        // .on_double_click(Events::DoubleClickTrayIcon)
-        .menu(
-            MenuBuilder::new()
-                .item("Item 3 Replace Menu 👍", Events::Item3)
-                .item("Item 2 Change Icon Green", Events::Item2)
-                .item("Item 1 Change Icon Red", Events::Item1)
-                .separator()
-                .checkable("This is checkable", true, Events::CheckItem1)
-                .submenu(
-                    "Sub Menu",
-                    MenuBuilder::new()
-                        .item("Sub item 1", Events::SubItem1)
-                        .item("Sub Item 2", Events::SubItem2)
-                        .item("Sub Item 3", Events::SubItem3),
-                )
-                .with(MenuItem::Item {
-                    name: "Item Disabled".into(),
-                    disabled: true, // Disabled entry example
-                    id: Events::Item4,
-                    icon: None,
-                })
-                .separator()
-                .item("E&xit", Events::Exit),
-        )
-        .build()
-        .unwrap();
-
-    std::thread::spawn(move || {
-        r.iter().for_each(|m| match m {
-            Events::RightClickTrayIcon => {
-                tray_icon.show_menu().unwrap();
-            }
-            Events::DoubleClickTrayIcon => {
-                println!("Double click");
-            }
-            Events::LeftClickTrayIcon => {
-                println!("Left Click click");
-                // tray_icon.show_menu().unwrap();
-            }
-            Events::Exit => {
-                println!("Please exit");
-                std::process::exit(0);
-            }
-            Events::Item1 => {
-                tray_icon.set_icon(&second_icon).unwrap();
-            }
-            Events::Item2 => {
-                tray_icon.set_icon(&first_icon).unwrap();
-            }
-            Events::Item3 => {
-                tray_icon
-                    .set_menu(
-                        &MenuBuilder::new()
-                            .item("New menu item", Events::Item1)
-                            .item("Exit", Events::Exit),
-                    )
-                    .unwrap();
-            }
-            e => {
-                println!("{:?}", e);
-            }
-        })
-    });
 
     // Your applications message loop. Because all applications require an
     // application loop, you are best served using an `winit` crate.
+    #[cfg(target_os = "windows")]
     std::thread::spawn(move || {
         use windows::Win32::UI::WindowsAndMessaging::*;
         let mut msg = MSG::default();
@@ -329,6 +259,77 @@ fn main() {
     });
 
     Application::new().run(|cx: &mut App| {
+        let mut tray_icon = TrayIconBuilder::new()
+            .sender(move |e| {
+                let _ = s.send(*e);
+            })
+            .icon_from_buffer(icon)
+            .tooltip("Cool Tray 👀 Icon")
+            .on_right_click(Events::RightClickTrayIcon)
+            .on_click(Events::LeftClickTrayIcon)
+            // .on_double_click(Events::DoubleClickTrayIcon)
+            .menu(
+                MenuBuilder::new()
+                    .item("Item 3 Replace Menu 👍", Events::Item3)
+                    .item("Item 2 Change Icon Green", Events::Item2)
+                    .item("Item 1 Change Icon Red", Events::Item1)
+                    .separator()
+                    .checkable("This is checkable", true, Events::CheckItem1)
+                    .submenu(
+                        "Sub Menu",
+                        MenuBuilder::new()
+                            .item("Sub item 1", Events::SubItem1)
+                            .item("Sub Item 2", Events::SubItem2)
+                            .item("Sub Item 3", Events::SubItem3),
+                    )
+                    .with(MenuItem::Item {
+                        name: "Item Disabled".into(),
+                        disabled: true, // Disabled entry example
+                        id: Events::Item4,
+                        icon: None,
+                    })
+                    .separator()
+                    .item("E&xit", Events::Exit),
+            )
+            .build()
+            .unwrap();
+
+        std::thread::spawn(move || {
+            r.iter().for_each(|m| match m {
+                Events::RightClickTrayIcon => {
+                    tray_icon.show_menu().unwrap();
+                }
+                Events::DoubleClickTrayIcon => {
+                    println!("Double click");
+                }
+                Events::LeftClickTrayIcon => {
+                    println!("Left Click click");
+                    // tray_icon.show_menu().unwrap();
+                }
+                Events::Exit => {
+                    println!("Please exit");
+                    std::process::exit(0);
+                }
+                Events::Item1 => {
+                    tray_icon.set_icon(&second_icon).unwrap();
+                }
+                Events::Item2 => {
+                    tray_icon.set_icon(&first_icon).unwrap();
+                }
+                Events::Item3 => {
+                    tray_icon
+                        .set_menu(
+                            &MenuBuilder::new()
+                                .item("New menu item", Events::Item1)
+                                .item("Exit", Events::Exit),
+                        )
+                        .unwrap();
+                }
+                e => {
+                    println!("{:?}", e);
+                }
+            })
+        });
         let bounds = Bounds::centered(None, size(px(800.0), px(600.0)), cx);
 
         cx.open_window(
