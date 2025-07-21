@@ -28,11 +28,13 @@ pub(crate) fn start_tray() -> anyhow::Result<Tray> {
     tray.add_menu_item("Hide", || {
         CrossRuntimeBridge::global().emit(TrayEvent::Hide);
     })?;
+    #[cfg(target_os = "windows")]
     tray.inner_mut().add_separator()?;
+
     tray.add_menu_item("Quit", move || {
         CrossRuntimeBridge::global().emit(TrayEvent::Exit);
     })?;
-    #[cfg(target_os = "macos")]
-    tray.inner_mut().display();
+    // #[cfg(target_os = "macos")]
+    // tray.inner_mut().display();
     Ok(tray)
 }

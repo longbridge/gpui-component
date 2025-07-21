@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use crate::{
-    app::{Open, WindowExt},
+    app::Open,
     backoffice::{cross_runtime::CrossRuntimeBridge, BoEvent},
 };
 
@@ -17,7 +17,11 @@ impl TodoMainWindow {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         window.on_window_should_close(cx, |win, app| {
             app.hide();
-            win.hide();
+            #[cfg(target_os = "windows")]
+            {
+                use crate::app::WindowExt;
+                win.hide();
+            }
             false
         });
         cx.spawn_in(window, async move |_this, app: &mut AsyncWindowContext| {

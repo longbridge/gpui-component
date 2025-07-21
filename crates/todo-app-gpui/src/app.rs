@@ -139,11 +139,15 @@ impl AppState {
 }
 // actions!(input_story, [Tab, TabPrev]);
 pub fn run() -> anyhow::Result<()> {
-    let tray = tray::start_tray()?;
-    let (tx, mut rx) = tokio::sync::mpsc::channel(10);
-    let _sub = CrossRuntimeBridge::global().subscribe(move |event: &TrayEvent| {
-        tx.try_send(event.clone()).ok();
-    });
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<TrayEvent>(10);
+    #[cfg(target_os = "windows")]
+    {
+        let tray = tray::start_tray()?;
+        let _sub = CrossRuntimeBridge::global().subscribe(move |event: &TrayEvent| {
+            tx.try_send(event.clone()).ok();
+        });
+    }
+
     const WIDTH: f32 = 480.;
     const HEIGHT: f32 = 880.;
     let app = Application::new().with_assets(Assets);
@@ -164,10 +168,10 @@ pub fn run() -> anyhow::Result<()> {
             reqwest_client::ReqwestClient::user_agent("xtodo-utility").unwrap(),
         );
         cx.set_http_client(http_client);
-        // cx.on_action(|_: &Quit, cx: &mut App| {
-        //     cx.quit();
-        // });
-
+        cx.on_action(|_: &Quit, cx: &mut App| {
+            cx.quit();
+        });
+        #[cfg(target_os = "windows")]
         cx.spawn(async move |app| {
             while let Some(event) = rx.recv().await {
                 println!("Tray event2: {:?}", event);
@@ -187,7 +191,10 @@ pub fn run() -> anyhow::Result<()> {
                             app.windows().iter().for_each(|handle| {
                                 handle
                                     .update(app, |_, window, _| {
-                                        window.show();
+                                        #[cfg(target_os = "windows")]
+                                        {
+                                            window.show();
+                                        }
                                         window.activate_window();
                                     })
                                     .ok();
@@ -203,7 +210,10 @@ pub fn run() -> anyhow::Result<()> {
                             app.windows().iter().for_each(|handle| {
                                 handle
                                     .update(app, |_, window, _| {
-                                        window.hide();
+                                        #[cfg(target_os = "windows")]
+                                        {
+                                            window.hide();
+                                        }
                                     })
                                     .ok();
                             });
@@ -252,39 +262,39 @@ pub fn run() -> anyhow::Result<()> {
         // });
 
         // 设置应用程序菜单
-        // use gpui_component::input::{Copy, Cut, Paste, Redo, Undo};
-        // cx.set_menus(vec![
-        //     Menu {
-        //         name: "xTo-Do App".into(),
-        //         items: vec![MenuItem::action("Quit", Quit)],
-        //     },
-        //     Menu {
-        //         name: "Edit".into(),
-        //         items: vec![
-        //             MenuItem::os_action("Undo", Undo, gpui::OsAction::Undo),
-        //             MenuItem::os_action("Redo", Redo, gpui::OsAction::Redo),
-        //             MenuItem::separator(),
-        //             MenuItem::os_action("Cut", Cut, gpui::OsAction::Cut),
-        //             MenuItem::os_action("Copy", Copy, gpui::OsAction::Copy),
-        //             MenuItem::os_action("Paste", Paste, gpui::OsAction::Paste),
-        //         ],
-        //     },
-        //     Menu {
-        //         name: "Window".into(),
-        //         items: vec![],
-        //     },
-        // ]);
-        cx.on_window_closed(|cx| {
-            if cx.windows().is_empty() {
-                cx.quit();
-            }
-        })
-        .detach();
+        use gpui_component::input::{Copy, Cut, Paste, Redo, Undo};
+        cx.set_menus(vec![
+            Menu {
+                name: "xTo-Do App".into(),
+                items: vec![MenuItem::action("Quit", Quit)],
+            },
+            Menu {
+                name: "Edit".into(),
+                items: vec![
+                    MenuItem::os_action("Undo", Undo, gpui::OsAction::Undo),
+                    MenuItem::os_action("Redo", Redo, gpui::OsAction::Redo),
+                    MenuItem::separator(),
+                    MenuItem::os_action("Cut", Cut, gpui::OsAction::Cut),
+                    MenuItem::os_action("Copy", Copy, gpui::OsAction::Copy),
+                    MenuItem::os_action("Paste", Paste, gpui::OsAction::Paste),
+                ],
+            },
+            Menu {
+                name: "Window".into(),
+                items: vec![],
+            },
+        ]);
+        // cx.on_window_closed(|cx| {
+        //     if cx.windows().is_empty() {
+        //         cx.quit();
+        //     }
+        // })
+        // .detach();
         cx.activate(true);
         let window_size = size(px(WIDTH), px(HEIGHT));
         let window_bounds = Bounds::centered(None, window_size, cx);
         let options = WindowOptions {
-            app_id: Some("x-todo-app".to_string()),
+            app_id: Some("xTo-Do-App".to_string()),
             window_bounds: Some(WindowBounds::Windowed(window_bounds)),
             titlebar: Some(TitleBar::title_bar_options()),
             window_min_size: None,

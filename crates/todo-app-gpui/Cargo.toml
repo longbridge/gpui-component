@@ -90,12 +90,13 @@ windows = { version = "0.61.1", features = [
 gtk = { version = "0.18" }
 
 [package.metadata.packager]
+name = "xTo-Do"
 before-packaging-command = "cargo build --release"
 version = "0.1.0"
 product-name = "xTo-Do"
 identifier = "com.shouqianba.xTo-Do"
 resources = ["model"]
-icons = ["logo0.ico"]
+icons = ["logo0.png"]
 
 
 # [profile.release]
@@ -104,4 +105,4 @@ icons = ["logo0.ico"]
 
 [build-dependencies]
 winres = "0.1.12"
-embed-resource = "2.3"
+embed-resource = "3.0.5"

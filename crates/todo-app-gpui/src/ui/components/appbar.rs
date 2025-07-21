@@ -1,5 +1,4 @@
 use super::titlebar::TitleBar;
-use crate::app::WindowExt;
 use crate::ui::views::settings::Settings;
 use crate::ui::{SelectFont, SelectLocale, SelectRadius, SelectScrollbarShow};
 use gpui::*;
@@ -313,7 +312,11 @@ impl Render for NormalTitleBar {
             .show_maximize(false)
             .on_close_window(|_ev, window, app| {
                 app.hide();
-                window.hide();
+                #[cfg(target_os = "windows")]
+                {
+                    use crate::app::WindowExt;
+                    window.hide();
+                }
             })
             .child(self.title.clone())
             .child(
