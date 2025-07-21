@@ -1,6 +1,6 @@
 use gpui::{
-    div, px, Bounds, Context, Edges, Empty, EntityId, IntoElement, ParentElement as _, Pixels,
-    Render, SharedString, Styled as _, TextAlign, Window,
+    div, prelude::FluentBuilder, px, Bounds, Context, Edges, Empty, EntityId, IntoElement,
+    ParentElement as _, Pixels, Render, SharedString, Styled as _, TextAlign, Window,
 };
 
 use crate::ActiveTheme as _;
@@ -48,8 +48,18 @@ impl Column {
     }
 
     /// Set the column to be sortable with custom sort function, default is None (not sortable).
+    ///
+    /// See also [`Column::sortable`] to enable sorting with default.
     pub fn sort(mut self, sort: ColumnSort) -> Self {
         self.sort = Some(sort);
+        self
+    }
+
+    /// Set whether the column is sortable, default is true.
+    ///
+    /// See also [`Column::sort`].
+    pub fn sortable(mut self) -> Self {
+        self.sort = Some(ColumnSort::Default);
         self
     }
 
@@ -101,13 +111,9 @@ impl Column {
         self.selectable = selectable;
         self
     }
-
-    /// Set whether the column is sortable, default is true.
-    pub fn sortable(mut self) -> Self {
-        self.sort = Some(ColumnSort::Default);
-        self
-    }
 }
+
+impl FluentBuilder for Column {}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ColumnFixed {
