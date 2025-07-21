@@ -155,17 +155,97 @@ pub fn run() -> anyhow::Result<()> {
     const WIDTH: f32 = 480.;
     const HEIGHT: f32 = 880.;
     let app = Application::new().with_assets(Assets);
-    app.on_reopen(|app| {
-        println!("Application reopened");
-        app.activate(true);
-    });
+    // app.on_reopen(|app| {
+    //     println!("Application reopened");
+    //     app.activate(true);
+    // });
 
     app.run(move |cx| {
-        let (tx, mut rx) = tokio::sync::mpsc::channel::<TrayEvent>(10);
-        let mut tray = tray::start_tray().unwrap();
-        let _sub = CrossRuntimeBridge::global().subscribe(move |event: &TrayEvent| {
-            tx.try_send(event.clone()).ok();
-        });
+        #[cfg(target_os = "windows")]
+        {
+            let (tx, mut rx) = tokio::sync::mpsc::channel::<TrayEvent>(10);
+            let mut tray = tray::start_tray().unwrap();
+            let _sub = CrossRuntimeBridge::global().subscribe(move |event: &TrayEvent| {
+                tx.try_send(event.clone()).ok();
+            });
+            cx.spawn(async move |app| {
+                let _subscription = _sub;
+                while let Some(event) = rx.recv().await {
+                    // println!("Tray event2: {:?}", event);
+                    match event {
+                        TrayEvent::DoubleClickTrayIcon => {
+                            // println!("Double clicked");
+                        }
+                        TrayEvent::LeftClickTrayIcon => {
+                            app.update(|app| {
+                                //  println!("Left clicked");
+                                app.windows().iter().for_each(|handle| {
+                                    handle
+                                        .update(app, |_, window, _| {
+                                            #[cfg(target_os = "windows")]
+                                            {
+                                                window.show();
+                                            }
+                                            window.activate_window();
+                                        })
+                                        .ok();
+                                });
+                                app.activate(true);
+                            })
+                            .ok();
+                        }
+                        TrayEvent::RightClickTrayIcon => {
+                            tray.show_menu().ok();
+                            // println!("Right clicked");
+                        }
+                        TrayEvent::Exit => {
+                            app.update(|app| {
+                                app.quit();
+                            })
+                            .ok();
+                        }
+                        TrayEvent::Open => {
+                            app.update(|app| {
+                                //  println!("Open clicked");
+                                app.windows().iter().for_each(|handle| {
+                                    handle
+                                        .update(app, |_, window, _| {
+                                            #[cfg(target_os = "windows")]
+                                            {
+                                                window.show();
+                                            }
+                                            window.activate_window();
+                                        })
+                                        .ok();
+                                });
+                                app.activate(true);
+                            })
+                            .ok();
+                        }
+                        TrayEvent::Hide => {
+                            app.update(|app| {
+                                // println!("Hide clicked");
+                                app.hide();
+                                #[cfg(target_os = "windows")]
+                                {
+                                    app.windows().iter().for_each(|handle| {
+                                        handle
+                                            .update(app, |_, window, _| {
+                                                window.hide();
+                                            })
+                                            .ok();
+                                    });
+                                }
+
+                                app.activate(false);
+                            })
+                            .ok();
+                        }
+                    }
+                }
+            })
+            .detach();
+        }
         gpui_component::init(cx);
         AppState::init(cx);
         Profile::init(cx);
@@ -180,83 +260,6 @@ pub fn run() -> anyhow::Result<()> {
         cx.on_action(|_: &Quit, cx: &mut App| {
             cx.quit();
         });
-        cx.spawn(async move |app| {
-            let _subscription = _sub;
-            while let Some(event) = rx.recv().await {
-                // println!("Tray event2: {:?}", event);
-                match event {
-                    TrayEvent::DoubleClickTrayIcon => {
-                        // println!("Double clicked");
-                    }
-                    TrayEvent::LeftClickTrayIcon => {
-                        app.update(|app| {
-                            //  println!("Left clicked");
-                            app.windows().iter().for_each(|handle| {
-                                handle
-                                    .update(app, |_, window, _| {
-                                        #[cfg(target_os = "windows")]
-                                        {
-                                            window.show();
-                                        }
-                                        window.activate_window();
-                                    })
-                                    .ok();
-                            });
-                            app.activate(true);
-                        })
-                        .ok();
-                    }
-                    TrayEvent::RightClickTrayIcon => {
-                        tray.show_menu().ok();
-                        // println!("Right clicked");
-                    }
-                    TrayEvent::Exit => {
-                        app.update(|app| {
-                            app.quit();
-                        })
-                        .ok();
-                    }
-                    TrayEvent::Open => {
-                        app.update(|app| {
-                            //  println!("Open clicked");
-                            app.windows().iter().for_each(|handle| {
-                                handle
-                                    .update(app, |_, window, _| {
-                                        #[cfg(target_os = "windows")]
-                                        {
-                                            window.show();
-                                        }
-                                        window.activate_window();
-                                    })
-                                    .ok();
-                            });
-                            app.activate(true);
-                        })
-                        .ok();
-                    }
-                    TrayEvent::Hide => {
-                        app.update(|app| {
-                            // println!("Hide clicked");
-                            app.hide();
-                            #[cfg(target_os = "windows")]
-                            {
-                                app.windows().iter().for_each(|handle| {
-                                    handle
-                                        .update(app, |_, window, _| {
-                                            window.hide();
-                                        })
-                                        .ok();
-                                });
-                            }
-
-                            app.activate(false);
-                        })
-                        .ok();
-                    }
-                }
-            }
-        })
-        .detach();
 
         // // 注册面板
         // register_panel(cx, PANEL_NAME, |_, _, info, window, cx| {
