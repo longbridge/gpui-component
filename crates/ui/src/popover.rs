@@ -278,6 +278,7 @@ impl<M: ManagedView> Element for Popover<M> {
                                 div()
                                     .size_full()
                                     .occlude()
+                                    .tab_group()
                                     .when(!no_style, |this| this.popover_style(cx))
                                     .map(|this| match anchor {
                                         Corner::TopLeft | Corner::TopRight => this.top_1p5(),

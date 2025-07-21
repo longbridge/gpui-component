@@ -65,3 +65,8 @@ ttf-parser = { opt-level = 3 }
 
 [workspace.metadata.typos]
 files.extend-exclude = ["**/fixtures/*"]
+
+
+[patch.'https://github.com/zed-industries/zed']
+gpui = { git = "https://github.com/huacnlee/zed.git", branch = "focus-trap" }
+reqwest_client = { git = "https://github.com/huacnlee/zed.git", branch = "focus-trap" }
