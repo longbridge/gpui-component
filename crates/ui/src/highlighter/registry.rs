@@ -74,7 +74,7 @@ const DEFAULT_LIGHT: LazyLock<HighlightTheme> = LazyLock::new(|| {
 /// Theme for Tree-sitter Highlight
 ///
 /// https://docs.rs/tree-sitter-highlight/0.25.4/tree_sitter_highlight/
-#[derive(Debug, Default, Clone, PartialEq, Eq, Hash, JsonSchema, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct SyntaxColors {
     pub attribute: Option<ThemeStyle>,
     pub boolean: Option<ThemeStyle>,
@@ -150,7 +150,7 @@ impl From<FontStyle> for gpui::FontStyle {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, JsonSchema, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ThemeStyle {
     color: Option<Hsla>,
     font_style: Option<FontStyle>,
@@ -241,7 +241,7 @@ impl SyntaxColors {
     }
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Eq, Hash, JsonSchema, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct StatusColors {
     #[serde(rename = "error")]
     error: Option<Hsla>,
@@ -352,7 +352,7 @@ impl StatusColors {
     }
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Eq, Hash, JsonSchema, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct HighlightThemeStyle {
     #[serde(rename = "editor.background")]
     pub background: Option<Hsla>,
@@ -375,7 +375,7 @@ pub struct HighlightThemeStyle {
 /// This json is compatible with the Zed theme format.
 ///
 /// https://zed.dev/docs/extensions/languages#syntax-highlighting
-#[derive(Debug, Clone, PartialEq, Eq, Hash, JsonSchema, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct HighlightTheme {
     pub name: String,
     #[serde(default)]

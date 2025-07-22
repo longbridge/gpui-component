@@ -7,7 +7,7 @@ use wef::{ContextMenuParams, Frame, LogicalUnit, Point};
 
 use crate::WebView;
 
-#[derive(Action, Debug, Clone, Copy, PartialEq, Eq, Deserialize, JsonSchema)]
+#[derive(Action, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, Deserialize)]
 #[action(namespace = webview)]
 pub(crate) enum ContextMenuAction {
     CopyLinkAddress,

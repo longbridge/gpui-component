@@ -15,6 +15,6 @@ wef.workspace = true
 
 image = { version = "0.25.6", default-features = false }
 serde = { version = "1.0.219", features = ["derive"] }
-schemars = "0.8.22"
+schemars = { version = "1.0.4", features = ["indexmap2"] }
 raw-window-handle = "0.6.2"
 rust-i18n = "3.1.5"

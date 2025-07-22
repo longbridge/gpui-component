@@ -2,9 +2,9 @@ use std::{cell::RefCell, rc::Rc};
 
 use gpui::{
     anchored, deferred, div, prelude::FluentBuilder, px, relative, AnyElement, App, Context,
-    Corner, DismissEvent, DispatchPhase, Element, ElementId, Entity, Focusable, FocusableWrapper,
-    GlobalElementId, InspectorElementId, InteractiveElement, IntoElement, MouseButton,
-    MouseDownEvent, ParentElement, Pixels, Point, Position, Stateful, Style, Window,
+    Corner, DismissEvent, DispatchPhase, Element, ElementId, Entity, Focusable, GlobalElementId,
+    InspectorElementId, InteractiveElement, IntoElement, MouseButton, MouseDownEvent,
+    ParentElement, Pixels, Point, Position, Stateful, Style, Window,
 };
 
 use crate::menu::popup_menu::PopupMenu;
@@ -19,7 +19,7 @@ pub trait ContextMenuExt: ParentElement + Sized {
 }
 
 impl<E> ContextMenuExt for Stateful<E> where E: ParentElement {}
-impl<E> ContextMenuExt for FocusableWrapper<E> where E: ParentElement {}
+// impl<E> ContextMenuExt for FocusableWrapper<E> where E: ParentElement {}
 
 /// A context menu that can be shown on right-click.
 pub struct ContextMenu {

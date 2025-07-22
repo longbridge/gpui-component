@@ -171,16 +171,16 @@ pub trait StyledExt: Styled + Sized {
             .rounded(cx.theme().radius)
     }
 
-    /// TODO: Remove this after PR is merged
-    /// https://github.com/zed-industries/zed/pull/33361
-    fn shadow_xs(self) -> Self {
-        self.shadow(vec![BoxShadow {
-            color: hsla(0., 0., 0., 0.05),
-            offset: point(px(0.), px(1.)),
-            blur_radius: px(2.),
-            spread_radius: px(0.),
-        }])
-    }
+    // /// TODO: Remove this after PR is merged
+    ///// https://github.com/zed-industries/zed/pull/33361
+    // fn shadow_xs(self) -> Self {
+    //     self.shadow(vec![BoxShadow {
+    //         color: hsla(0., 0., 0., 0.05),
+    //         offset: point(px(0.), px(1.)),
+    //         blur_radius: px(2.),
+    //         spread_radius: px(0.),
+    //     }])
+    // }
 }
 
 impl<E: Styled> StyledExt for E {}
