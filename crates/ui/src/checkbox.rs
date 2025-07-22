@@ -6,7 +6,7 @@ use crate::{
 };
 use gpui::{
     div, prelude::FluentBuilder as _, px, relative, rems, svg, AnyElement, App, Div, ElementId,
-    InteractiveElement, IntoElement, KeyBinding, ParentElement, RenderOnce,
+    Entity, InteractiveElement, IntoElement, KeyBinding, ParentElement, RenderOnce,
     StatefulInteractiveElement, StyleRefinement, Styled, Window,
 };
 
@@ -27,7 +27,7 @@ pub struct Checkbox {
     style: StyleRefinement,
     label: Option<Text>,
     children: Vec<AnyElement>,
-    checked: bool,
+    default_checked: bool,
     disabled: bool,
     size: Size,
     tab_stop: bool,
@@ -43,7 +43,7 @@ impl Checkbox {
             style: StyleRefinement::default(),
             label: None,
             children: Vec::new(),
-            checked: false,
+            default_checked: false,
             disabled: false,
             size: Size::default(),
             on_click: None,
@@ -58,7 +58,7 @@ impl Checkbox {
     }
 
     pub fn checked(mut self, checked: bool) -> Self {
-        self.checked = checked;
+        self.default_checked = checked;
         self
     }
 
@@ -77,6 +77,23 @@ impl Checkbox {
     pub fn tab_index(mut self, tab_index: isize) -> Self {
         self.tab_index = tab_index;
         self
+    }
+
+    fn handle_click(
+        on_click: &Option<Rc<dyn Fn(&bool, &mut Window, &mut App) + 'static>>,
+        checked_state: &Entity<bool>,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let new_checked = !*checked_state.read(cx);
+        checked_state.update(cx, |checked, cx| {
+            *checked = new_checked;
+            cx.notify();
+        });
+
+        if let Some(f) = on_click {
+            (f)(&new_checked, window, cx);
+        }
     }
 }
 
@@ -110,7 +127,7 @@ impl Selectable for Checkbox {
     }
 
     fn is_selected(&self) -> bool {
-        self.checked
+        self.default_checked
     }
 }
 
@@ -129,9 +146,22 @@ impl Sizable for Checkbox {
 
 impl RenderOnce for Checkbox {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let clickable = !self.disabled && self.on_click.is_some();
+        let default_checked = self.default_checked;
 
-        let border_color = if self.checked {
+        let focus_handle = window
+            .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
+            .read(cx)
+            .clone();
+
+        let checked_state = window.use_keyed_state(
+            ElementId::Name(format!("{}:checked", self.id.clone()).into()),
+            cx,
+            |_, _| default_checked,
+        );
+
+        let checked = *checked_state.read(cx);
+
+        let border_color = if checked {
             cx.theme().primary
         } else {
             cx.theme().input
@@ -145,9 +175,7 @@ impl RenderOnce for Checkbox {
             (border_color, cx.theme().primary_foreground)
         };
         let radius = cx.theme().radius.min(px(4.));
-        let focus_handle = window
-            .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
-            .read(cx);
+
         let is_focused = focus_handle.is_focused(window);
 
         div().child(
@@ -156,21 +184,18 @@ impl RenderOnce for Checkbox {
                 .key_context(KEY_CONTENT)
                 .track_focus(
                     &focus_handle
-                        .clone()
                         .tab_stop(self.tab_stop)
                         .tab_index(self.tab_index),
                 )
-                .when_some(
-                    self.on_click.clone().filter(|_| clickable),
-                    |this, on_click| {
-                        this.on_action({
-                            let checked = !self.checked;
-                            move |_: &Confirm, window, cx| {
-                                (on_click)(&checked, window, cx);
-                            }
-                        })
-                    },
-                )
+                .when(!self.disabled, |this| {
+                    this.on_action({
+                        let checked_state = checked_state.clone();
+                        let on_click = self.on_click.clone();
+                        move |_: &Confirm, window, cx| {
+                            Self::handle_click(&on_click, &checked_state, window, cx);
+                        }
+                    })
+                })
                 .h_flex()
                 .gap_2()
                 .items_start()
@@ -187,10 +212,10 @@ impl RenderOnce for Checkbox {
                     this.text_color(cx.theme().muted_foreground)
                 })
                 .rounded(cx.theme().radius * 0.5)
-                .refine_style(&self.style)
                 .focus_ring(is_focused, px(2.), window, cx)
+                .refine_style(&self.style)
                 .child(
-                    v_flex()
+                    div()
                         .relative()
                         .map(|this| match self.size {
                             Size::XSmall => this.size_3(),
@@ -204,7 +229,7 @@ impl RenderOnce for Checkbox {
                         .border_color(color)
                         .rounded(radius)
                         .when(cx.theme().shadow && !self.disabled, |this| this.shadow_xs())
-                        .map(|this| match self.checked {
+                        .map(|this| match checked {
                             false => this.bg(cx.theme().background),
                             _ => this.bg(color),
                         })
@@ -221,7 +246,7 @@ impl RenderOnce for Checkbox {
                                     _ => this.size_3(),
                                 })
                                 .text_color(icon_color)
-                                .map(|this| match self.checked {
+                                .map(|this| match checked {
                                     true => this.path(IconName::Check.path()),
                                     _ => this,
                                 }),
@@ -252,16 +277,16 @@ impl RenderOnce for Checkbox {
                             .children(self.children),
                     )
                 })
-                .when_some(
-                    self.on_click.filter(|_| !self.disabled),
-                    |this, on_click| {
-                        this.on_click(move |_, window, cx| {
+                .when(!self.disabled, |this| {
+                    this.on_click({
+                        let on_click = self.on_click.clone();
+                        move |_, window, cx| {
                             cx.stop_propagation();
-                            let checked = !self.checked;
-                            on_click(&checked, window, cx);
-                        })
-                    },
-                ),
+
+                            Self::handle_click(&on_click, &checked_state, window, cx);
+                        }
+                    })
+                }),
         )
     }
 }

@@ -515,7 +515,7 @@ impl<T: ParentElement + Styled + Sized> FocusableExt<T> for T {
             return self;
         }
 
-        const RING_BORDER_WIDTH: Pixels = px(2.);
+        const RING_BORDER_WIDTH: Pixels = px(3.);
         let rem_size = window.rem_size();
         let style = self.style();
 
@@ -582,7 +582,7 @@ impl<T: ParentElement + Styled + Sized> FocusableExt<T> for T {
                 .right(-RING_BORDER_WIDTH + -margins - -border_widths.right)
                 .bottom(-RING_BORDER_WIDTH + -margins - -border_widths.bottom)
                 .border(RING_BORDER_WIDTH)
-                .border_color(cx.theme().ring.alpha(0.5))
+                .border_color(cx.theme().ring.alpha(0.3))
                 .refine_style(&inner_style),
         )
     }

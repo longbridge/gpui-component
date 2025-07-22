@@ -13,7 +13,6 @@ pub struct CheckboxStory {
     focus_handle: gpui::FocusHandle,
     check1: bool,
     check2: bool,
-    check3: bool,
     check4: bool,
     check5: bool,
 }
@@ -42,7 +41,6 @@ impl CheckboxStory {
             focus_handle: cx.focus_handle(),
             check1: false,
             check2: false,
-            check3: true,
             check4: false,
             check5: false,
         }
@@ -64,22 +62,8 @@ impl Render for CheckboxStory {
                 .gap_4()
                 .child(
                     section("Checkbox")
-                        .child(
-                            Checkbox::new("check1")
-                                .label("A normal checkbox")
-                                .checked(self.check1)
-                                .on_click(cx.listener(|v, _, _, _| {
-                                    v.check1 = !v.check1;
-                                })),
-                        )
-                        .child(
-                            Checkbox::new("check3")
-                                .checked(self.check3)
-                                .label("Remember me")
-                                .on_click(cx.listener(|v, _, _, _| {
-                                    v.check3 = !v.check3;
-                                })),
-                        ),
+                        .child(Checkbox::new("1").label("A normal checkbox"))
+                        .child(Checkbox::new("2").checked(true).label("Remember me")),
                 )
                 .child(
                     section("Without label").child(

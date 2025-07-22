@@ -350,11 +350,17 @@ actions!(story, [ShowPanelInfo]);
 #[derive(IntoElement)]
 struct StorySection {
     base: Div,
-    title: AnyElement,
+    title: SharedString,
+    sub_title: Vec<AnyElement>,
     children: Vec<AnyElement>,
 }
 
 impl StorySection {
+    pub fn sub_title(mut self, sub_title: impl IntoElement) -> Self {
+        self.sub_title.push(sub_title.into_any_element());
+        self
+    }
+
     #[allow(unused)]
     fn max_w_md(mut self) -> Self {
         self.base = self.base.max_w(rems(48.));
@@ -395,6 +401,7 @@ impl Styled for StorySection {
 impl RenderOnce for StorySection {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         v_flex()
+            .id(self.title.clone())
             .gap_2()
             .mb_5()
             .w_full()
@@ -403,7 +410,8 @@ impl RenderOnce for StorySection {
                     .justify_between()
                     .w_full()
                     .gap_4()
-                    .child(self.title),
+                    .child(self.title)
+                    .children(self.sub_title),
             )
             .child(
                 v_flex()
@@ -421,9 +429,10 @@ impl RenderOnce for StorySection {
 
 impl ContextMenuExt for StorySection {}
 
-pub(crate) fn section(title: impl IntoElement) -> StorySection {
+pub(crate) fn section(title: impl Into<SharedString>) -> StorySection {
     StorySection {
-        title: title.into_any_element(),
+        title: title.into(),
+        sub_title: vec![],
         base: h_flex()
             .flex_wrap()
             .justify_center()
