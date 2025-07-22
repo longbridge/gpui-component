@@ -6,7 +6,7 @@ use crate::{
 };
 use gpui::{
     div, prelude::FluentBuilder as _, px, relative, rems, svg, AnyElement, App, Div, ElementId,
-    Entity, InteractiveElement, IntoElement, KeyBinding, ParentElement, RenderOnce,
+    InteractiveElement, IntoElement, KeyBinding, ParentElement, RenderOnce,
     StatefulInteractiveElement, StyleRefinement, Styled, Window,
 };
 
@@ -27,7 +27,7 @@ pub struct Checkbox {
     style: StyleRefinement,
     label: Option<Text>,
     children: Vec<AnyElement>,
-    default_checked: bool,
+    checked: bool,
     disabled: bool,
     size: Size,
     tab_stop: bool,
@@ -43,7 +43,7 @@ impl Checkbox {
             style: StyleRefinement::default(),
             label: None,
             children: Vec::new(),
-            default_checked: false,
+            checked: false,
             disabled: false,
             size: Size::default(),
             on_click: None,
@@ -58,7 +58,7 @@ impl Checkbox {
     }
 
     pub fn checked(mut self, checked: bool) -> Self {
-        self.default_checked = checked;
+        self.checked = checked;
         self
     }
 
@@ -81,16 +81,11 @@ impl Checkbox {
 
     fn handle_click(
         on_click: &Option<Rc<dyn Fn(&bool, &mut Window, &mut App) + 'static>>,
-        checked_state: &Entity<bool>,
+        checked: bool,
         window: &mut Window,
         cx: &mut App,
     ) {
-        let new_checked = !*checked_state.read(cx);
-        checked_state.update(cx, |checked, cx| {
-            *checked = new_checked;
-            cx.notify();
-        });
-
+        let new_checked = !checked;
         if let Some(f) = on_click {
             (f)(&new_checked, window, cx);
         }
@@ -127,7 +122,7 @@ impl Selectable for Checkbox {
     }
 
     fn is_selected(&self) -> bool {
-        self.default_checked
+        self.checked
     }
 }
 
@@ -146,20 +141,13 @@ impl Sizable for Checkbox {
 
 impl RenderOnce for Checkbox {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let default_checked = self.default_checked;
+        let checked = self.checked;
 
         let focus_handle = window
             .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
             .read(cx)
             .clone();
-
-        let checked_state = window.use_keyed_state(
-            ElementId::Name(format!("{}:checked", self.id.clone()).into()),
-            cx,
-            |_, _| default_checked,
-        );
-
-        let checked = *checked_state.read(cx);
+        let is_focused = focus_handle.is_focused(window);
 
         let border_color = if checked {
             cx.theme().primary
@@ -176,8 +164,6 @@ impl RenderOnce for Checkbox {
         };
         let radius = cx.theme().radius.min(px(4.));
 
-        let is_focused = focus_handle.is_focused(window);
-
         div().child(
             self.base
                 .id(self.id)
@@ -189,10 +175,10 @@ impl RenderOnce for Checkbox {
                 )
                 .when(!self.disabled, |this| {
                     this.on_action({
-                        let checked_state = checked_state.clone();
                         let on_click = self.on_click.clone();
                         move |_: &Confirm, window, cx| {
-                            Self::handle_click(&on_click, &checked_state, window, cx);
+                            Self::handle_click(&on_click, checked, window, cx);
+                            window.refresh();
                         }
                     })
                 })
@@ -282,8 +268,7 @@ impl RenderOnce for Checkbox {
                         let on_click = self.on_click.clone();
                         move |_, window, cx| {
                             cx.stop_propagation();
-
-                            Self::handle_click(&on_click, &checked_state, window, cx);
+                            Self::handle_click(&on_click, checked, window, cx);
                         }
                     })
                 }),

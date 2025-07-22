@@ -109,6 +109,7 @@ pub fn init(cx: &mut App) {
     table::init(cx);
     button::init(cx);
     checkbox::init(cx);
+    radio::init(cx);
 }
 
 #[inline]
