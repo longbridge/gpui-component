@@ -384,7 +384,13 @@ impl RenderOnce for FormField {
                                 }),
                         )
                     })
-                    .child(div().flex_1().overflow_x_hidden().child(self.child)),
+                    .child(
+                        div()
+                            .w_full()
+                            .flex_1()
+                            .overflow_x_hidden()
+                            .child(self.child),
+                    ),
             )
             .child(
                 // Other

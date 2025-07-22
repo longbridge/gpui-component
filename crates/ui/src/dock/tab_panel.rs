@@ -426,7 +426,11 @@ impl TabPanel {
             .occlude()
             .items_center()
             .when_some(self.toolbar_buttons(window, cx), |this, buttons| {
-                this.children(buttons.into_iter().map(|btn| btn.xsmall().ghost()))
+                this.children(
+                    buttons
+                        .into_iter()
+                        .map(|btn| btn.xsmall().ghost().tab_stop(false)),
+                )
             })
             .map(|this| {
                 let value = if zoomed {
@@ -443,6 +447,7 @@ impl TabPanel {
                             .icon(icon)
                             .xsmall()
                             .ghost()
+                            .tab_stop(false)
                             .tooltip_with_action(tooltip, &ToggleZoom, None)
                             .when(zoomed, |this| this.selected(true))
                             .on_click(cx.listener(|view, _, window, cx| {
@@ -458,6 +463,7 @@ impl TabPanel {
                     .icon(IconName::Ellipsis)
                     .xsmall()
                     .ghost()
+                    .tab_stop(false)
                     .popup_menu({
                         let zoomable = state.zoomable.map_or(false, |v| v.menu_visible());
                         let closable = state.closable;
@@ -555,6 +561,7 @@ impl TabPanel {
                 .icon(icon)
                 .xsmall()
                 .ghost()
+                .tab_stop(false)
                 .tooltip(match is_open {
                     true => t!("Dock.Collapse"),
                     false => t!("Dock.Expand"),
@@ -696,7 +703,7 @@ impl TabPanel {
                 }
 
                 Some(
-                    Tab::new("")
+                    Tab::empty()
                         .map(|this| {
                             if let Some(tab_name) = panel.tab_name(cx) {
                                 this.child(tab_name)
@@ -704,7 +711,6 @@ impl TabPanel {
                                 this.child(panel.title(window, cx))
                             }
                         })
-                        .py_2()
                         .selected(active)
                         .on_click(cx.listener({
                             let is_collapsed = self.collapsed;
@@ -1162,6 +1168,7 @@ impl Render for TabPanel {
         self.bind_actions(cx)
             .id("tab-panel")
             .track_focus(&focus_handle)
+            .tab_group()
             .size_full()
             .overflow_hidden()
             .bg(cx.theme().background)

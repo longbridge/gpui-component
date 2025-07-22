@@ -379,7 +379,7 @@ impl TabVariant {
 pub struct Tab {
     id: ElementId,
     base: Div,
-    pub(super) label: SharedString,
+    pub(super) label: Option<SharedString>,
     icon: Option<Icon>,
     prefix: Option<AnyElement>,
     suffix: Option<AnyElement>,
@@ -427,8 +427,8 @@ impl Default for Tab {
     fn default() -> Self {
         Self {
             id: ElementId::Integer(0),
-            base: div().gap_1(),
-            label: SharedString::new(""),
+            base: div(),
+            label: None,
             icon: None,
             children: Vec::new(),
             disabled: false,
@@ -446,8 +446,13 @@ impl Tab {
     /// Create a new tab with a label.
     pub fn new(label: impl Into<SharedString>) -> Self {
         let mut this = Self::default();
-        this.label = label.into();
+        this.label = Some(label.into());
         this
+    }
+
+    /// Create an empty tab.
+    pub fn empty() -> Self {
+        Self::default()
     }
 
     /// Create a Icon tab.
@@ -579,12 +584,12 @@ impl RenderOnce for Tab {
         let inner_margins = self.variant.inner_margins(self.size);
         let inner_height = self.variant.inner_height(self.size);
         let height = self.variant.height(self.size);
-        let has_label = !self.label.is_empty();
 
         self.base
             .id(self.id)
             .flex()
             .flex_wrap()
+            .gap_1()
             .items_center()
             .flex_shrink_0()
             .overflow_hidden()
@@ -637,8 +642,11 @@ impl RenderOnce for Tab {
                         }
                         None => this
                             .paddings(inner_paddings)
-                            .when(has_label, |this| this.child(self.label))
-                            .when(!has_label, |this| this.children(self.children)),
+                            .map(|this| match self.label {
+                                Some(label) => this.child(label),
+                                None => this,
+                            })
+                            .children(self.children),
                     })
                     .bg(tab_style.inner_bg)
                     .rounded(tab_style.inner_radius)

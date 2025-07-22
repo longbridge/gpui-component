@@ -280,7 +280,7 @@ impl RenderOnce for TabBar {
                             this = this.scrollable();
                             for (ix, (label, disabled)) in item_labels.iter().enumerate() {
                                 this = this.menu_with_check_and_disabled(
-                                    label.clone(),
+                                    label.clone().unwrap_or_default(),
                                     selected_index == Some(ix),
                                     Box::new(SelectTab(ix)),
                                     *disabled,

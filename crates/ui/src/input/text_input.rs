@@ -122,6 +122,7 @@ impl TextInput {
             .icon(IconName::Eye)
             .xsmall()
             .ghost()
+            .tab_stop(false)
             .on_mouse_down(MouseButton::Left, {
                 let state = state.clone();
                 move |_, window, cx| {

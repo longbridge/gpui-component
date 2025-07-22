@@ -212,10 +212,15 @@ impl RenderOnce for Radio {
                             .children(self.children),
                     )
                 })
+                .on_mouse_down(gpui::MouseButton::Left, |_, window, _| {
+                    // Avoid focus on mouse down.
+                    window.prevent_default();
+                })
                 .when(!self.disabled, |this| {
                     this.on_click({
                         let on_click = self.on_click.clone();
                         move |_, window, cx| {
+                            window.prevent_default();
                             cx.stop_propagation();
                             Self::handle_click(&on_click, checked, window, cx);
                         }

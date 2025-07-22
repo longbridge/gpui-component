@@ -7,7 +7,7 @@ use crate::{
 use gpui::{
     div, prelude::FluentBuilder as _, px, relative, Action, AnyElement, App, ClickEvent, Corners,
     Div, Edges, ElementId, Hsla, InteractiveElement, Interactivity, IntoElement, KeyBinding,
-    MouseButton, ParentElement, Pixels, RenderOnce, SharedString, StatefulInteractiveElement as _,
+    ParentElement, Pixels, RenderOnce, SharedString, StatefulInteractiveElement as _,
     StyleRefinement, Styled, Window,
 };
 
@@ -429,6 +429,12 @@ impl RenderOnce for Button {
         self.base
             .id(self.id)
             .key_context(KEY_CONTENT)
+            .track_focus(
+                &focus_handle
+                    .clone()
+                    .tab_stop(self.tab_stop)
+                    .tab_index(self.tab_index),
+            )
             .when_some(
                 self.on_click.clone().filter(|_| clickable),
                 |this, on_click| {
@@ -440,12 +446,6 @@ impl RenderOnce for Button {
                 },
             )
             .relative()
-            .track_focus(
-                &focus_handle
-                    .clone()
-                    .tab_stop(self.tab_stop)
-                    .tab_index(self.tab_index),
-            )
             .flex()
             .flex_shrink_0()
             .items_center()
@@ -530,10 +530,13 @@ impl RenderOnce for Button {
                     .shadow_none()
             })
             .refine_style(&self.style)
+            .on_mouse_down(gpui::MouseButton::Left, |_, window, _| {
+                // Avoid focus on mouse down.
+                window.prevent_default();
+            })
             .when_some(self.on_click.filter(|_| clickable), |this, on_click| {
                 let stop_propagation = self.stop_propagation;
-                this.on_mouse_down(MouseButton::Left, move |_, window, cx| {
-                    window.prevent_default();
+                this.on_click(move |_, _, cx| {
                     if stop_propagation {
                         cx.stop_propagation();
                     }
