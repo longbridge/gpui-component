@@ -2,9 +2,9 @@ use std::{rc::Rc, time::Duration};
 
 use gpui::{
     anchored, div, hsla, point, prelude::FluentBuilder, px, relative, Animation, AnimationExt as _,
-    AnyElement, App, Axis, Bounds, ClickEvent, Div, FocusHandle, Hsla, InteractiveElement,
-    IntoElement, KeyBinding, MouseButton, ParentElement, Pixels, Point, RenderOnce, SharedString,
-    StyleRefinement, Styled, Window,
+    AnyElement, App, Axis, Bounds, BoxShadow, ClickEvent, Div, FocusHandle, Hsla,
+    InteractiveElement, IntoElement, KeyBinding, MouseButton, ParentElement, Pixels, Point,
+    RenderOnce, SharedString, StyleRefinement, Styled, Window,
 };
 use rust_i18n::t;
 
@@ -363,6 +363,11 @@ impl RenderOnce for Modal {
             padding_right = pr.to_pixels(self.width.into(), window.rem_size());
         }
 
+        let make_animation_config = || {
+            Animation::new(Duration::from_secs_f64(0.25))
+                .with_easing(cubic_bezier(0.32, 0.72, 0., 1.))
+        };
+
         anchored()
             .position(point(window_paddings.left, window_paddings.top))
             .snap_to_window()
@@ -397,7 +402,6 @@ impl RenderOnce for Modal {
                             .border_1()
                             .border_color(cx.theme().border)
                             .rounded(cx.theme().radius_lg)
-                            .shadow_xl()
                             .min_h_24()
                             .py_6()
                             .gap_4()
@@ -492,14 +496,31 @@ impl RenderOnce for Modal {
                             })
                             .with_animation(
                                 "slide-down",
-                                Animation::new(Duration::from_secs_f64(0.25))
-                                    .with_easing(cubic_bezier(0.32, 0.72, 0., 1.)),
+                                make_animation_config(),
                                 move |this, delta| {
                                     let y_offset = px(0.) + delta * px(30.);
-                                    this.top(y + y_offset)
+                                    // This is equivalent to `shadow_xl` with an extra opacity.
+                                    let shadow = vec![
+                                        BoxShadow {
+                                            color: hsla(0., 0., 0., 0.1 * delta),
+                                            offset: point(px(0.), px(20.)),
+                                            blur_radius: px(25.),
+                                            spread_radius: px(-5.),
+                                        },
+                                        BoxShadow {
+                                            color: hsla(0., 0., 0., 0.1 * delta),
+                                            offset: point(px(0.), px(8.)),
+                                            blur_radius: px(10.),
+                                            spread_radius: px(-6.),
+                                        },
+                                    ];
+                                    this.top(y + y_offset).shadow(shadow)
                                 },
                             ),
-                    ),
+                    )
+                    .with_animation("fade-in", make_animation_config(), move |this, delta| {
+                        this.opacity(delta)
+                    }),
             )
     }
 }
