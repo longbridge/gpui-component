@@ -20,7 +20,7 @@ impl super::Story for SkeletonStory {
         "Use to show a placeholder while content is loading."
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
         Self::view(window, cx)
     }
 }

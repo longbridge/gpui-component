@@ -35,7 +35,7 @@ impl super::Story for AvatarStory {
         "Avatar is an image that represents a user or organization."
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
         Self::view(window, cx)
     }
 

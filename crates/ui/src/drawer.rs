@@ -18,7 +18,7 @@ use crate::{
 };
 
 const CONTEXT: &str = "Drawer";
-pub fn init(cx: &mut App) {
+pub(crate) fn init(cx: &mut App) {
     cx.bind_keys([KeyBinding::new("escape", Cancel, Some(CONTEXT))])
 }
 
@@ -148,8 +148,9 @@ impl RenderOnce for Drawer {
                     .child(
                         v_flex()
                             .id("drawer")
+                            .tab_group()
                             .key_context(CONTEXT)
-                            .track_focus(&self.focus_handle)
+                            .track_focus(&self.focus_handle.tab_stop(true))
                             .on_action({
                                 let on_close = self.on_close.clone();
                                 move |_: &Cancel, window, cx| {

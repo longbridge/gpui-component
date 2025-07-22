@@ -61,7 +61,7 @@ impl super::Story for ButtonStory {
         false
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
         Self::view(window, cx)
     }
 }
@@ -599,8 +599,8 @@ impl Render for ButtonStory {
                 ),
             )
             .child(
-                section(
-                    h_flex().gap_2().child("Toggle Button Group").child(
+                section("Toggle Button Group")
+                    .sub_title(
                         Checkbox::new("multiple-button")
                             .text_sm()
                             .label("Multiple")
@@ -609,41 +609,40 @@ impl Render for ButtonStory {
                                 view.toggle_multiple = !view.toggle_multiple;
                                 cx.notify();
                             })),
+                    )
+                    .child(
+                        ButtonGroup::new("toggle-button-group")
+                            .outline()
+                            .compact()
+                            .multiple(toggle_multiple)
+                            .child(
+                                Button::new("disabled-toggle-button")
+                                    .label("Disabled")
+                                    .selected(disabled),
+                            )
+                            .child(
+                                Button::new("loading-toggle-button")
+                                    .label("Loading")
+                                    .selected(loading),
+                            )
+                            .child(
+                                Button::new("selected-toggle-button")
+                                    .label("Selected")
+                                    .selected(selected),
+                            )
+                            .child(
+                                Button::new("compact-toggle-button")
+                                    .label("Compact")
+                                    .selected(compact),
+                            )
+                            .on_click(cx.listener(|view, selected: &Vec<usize>, _, cx| {
+                                view.disabled = selected.contains(&0);
+                                view.loading = selected.contains(&1);
+                                view.selected = selected.contains(&2);
+                                view.compact = selected.contains(&3);
+                                cx.notify();
+                            })),
                     ),
-                )
-                .child(
-                    ButtonGroup::new("toggle-button-group")
-                        .outline()
-                        .compact()
-                        .multiple(toggle_multiple)
-                        .child(
-                            Button::new("disabled-toggle-button")
-                                .label("Disabled")
-                                .selected(disabled),
-                        )
-                        .child(
-                            Button::new("loading-toggle-button")
-                                .label("Loading")
-                                .selected(loading),
-                        )
-                        .child(
-                            Button::new("selected-toggle-button")
-                                .label("Selected")
-                                .selected(selected),
-                        )
-                        .child(
-                            Button::new("compact-toggle-button")
-                                .label("Compact")
-                                .selected(compact),
-                        )
-                        .on_click(cx.listener(|view, selected: &Vec<usize>, _, cx| {
-                            view.disabled = selected.contains(&0);
-                            view.loading = selected.contains(&1);
-                            view.selected = selected.contains(&2);
-                            view.compact = selected.contains(&3);
-                            cx.notify();
-                        })),
-                ),
             )
             .child(
                 section("Dropdown Button")

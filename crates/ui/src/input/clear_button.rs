@@ -11,5 +11,6 @@ pub(crate) fn clear_button(cx: &App) -> Button {
         .icon(Icon::new(IconName::CircleX))
         .ghost()
         .xsmall()
+        .tab_stop(false)
         .text_color(cx.theme().muted_foreground)
 }

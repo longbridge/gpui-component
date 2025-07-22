@@ -6,7 +6,7 @@ use gpui::{
     RenderOnce, SharedString, Styled, Window,
 };
 
-use crate::{h_flex, v_flex, ActiveTheme as _, AxisExt, FocusableCycle, Sizable, Size, StyledExt};
+use crate::{h_flex, v_flex, ActiveTheme as _, AxisExt, Sizable, Size, StyledExt};
 
 /// Create a new form with a vertical layout.
 pub fn v_form() -> Form {
@@ -110,18 +110,6 @@ impl Sizable for Form {
     fn with_size(mut self, size: impl Into<Size>) -> Self {
         self.props.size = size.into();
         self
-    }
-}
-
-impl FocusableCycle for Form {
-    fn cycle_focus_handles(&self, _window: &mut Window, _cx: &mut App) -> Vec<FocusHandle>
-    where
-        Self: Sized,
-    {
-        self.fields
-            .iter()
-            .filter_map(|item| item.focus_handle.clone())
-            .collect()
     }
 }
 
@@ -374,6 +362,8 @@ impl RenderOnce for FormField {
                                     this.text_size(size)
                                 })
                                 .font_medium()
+                                .flex()
+                                .flex_row()
                                 .gap_1()
                                 .items_center()
                                 .when_some(self.label, |this, builder| {

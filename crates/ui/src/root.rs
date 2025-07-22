@@ -6,11 +6,22 @@ use crate::{
     window_border, ActiveTheme, Placement,
 };
 use gpui::{
-    canvas, div, prelude::FluentBuilder as _, AnyView, App, AppContext, Context, DefiniteLength,
-    Entity, FocusHandle, InteractiveElement, IntoElement, ParentElement as _, Render, Styled,
-    Window,
+    actions, canvas, div, prelude::FluentBuilder as _, AnyView, App, AppContext, Context,
+    DefiniteLength, Entity, FocusHandle, InteractiveElement, IntoElement, KeyBinding,
+    ParentElement as _, Render, Styled, Window,
 };
 use std::{any::TypeId, rc::Rc};
+
+actions!(root, [Tab, TabPrev]);
+
+const CONTENT: &str = "Root";
+
+pub(crate) fn init(cx: &mut App) {
+    cx.bind_keys([
+        KeyBinding::new("tab", Tab, Some(CONTENT)),
+        KeyBinding::new("shift-tab", TabPrev, Some(CONTENT)),
+    ]);
+}
 
 /// Extension trait for [`WindowContext`] and [`ViewContext`] to add drawer functionality.
 pub trait ContextModal: Sized {
@@ -359,20 +370,27 @@ impl Root {
     pub fn view(&self) -> &AnyView {
         &self.view
     }
+
+    fn on_action_tab(&mut self, _: &Tab, window: &mut Window, _: &mut Context<Self>) {
+        window.focus_next();
+    }
+
+    fn on_action_tab_prev(&mut self, _: &TabPrev, window: &mut Window, _: &mut Context<Self>) {
+        window.focus_prev();
+    }
 }
 
 impl Render for Root {
-    fn render(
-        &mut self,
-        window: &mut gpui::Window,
-        cx: &mut gpui::Context<Self>,
-    ) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let base_font_size = cx.theme().font_size;
         window.set_rem_size(base_font_size);
 
         window_border().child(
             div()
                 .id("root")
+                .key_context(CONTENT)
+                .on_action(cx.listener(Self::on_action_tab))
+                .on_action(cx.listener(Self::on_action_tab_prev))
                 .relative()
                 .size_full()
                 .font_family(".SystemUIFont")

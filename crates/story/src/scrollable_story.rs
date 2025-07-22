@@ -181,7 +181,7 @@ impl super::Story for ScrollableStory {
         and use `virtual_list` to render a large number of items."
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
         Self::view(window, cx)
     }
 }
