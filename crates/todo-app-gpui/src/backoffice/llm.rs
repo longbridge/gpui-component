@@ -12,7 +12,7 @@ use crate::{
 use actix::prelude::*;
 use std::{collections::HashMap, time::Duration};
 
-#[derive(Message)]
+#[derive(Message, Debug, Clone)]
 #[rtype(result = "anyhow::Result<ChatStream>")]
 pub struct LlmChatRequest {
     pub provider_id: String,

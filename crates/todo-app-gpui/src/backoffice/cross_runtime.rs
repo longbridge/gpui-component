@@ -420,23 +420,21 @@ impl MessageHandler for LlmChatHandler {
     fn handle(self: Box<Self>) {
         Arbiter::new().spawn(async move {
             let source = self.request.source.clone();
-
+            tracing::debug!("开始处理 LLM 聊天请求: {:?}", self.request);
             let result = tokio::time::timeout(
                 Duration::from_secs(30),
                 LlmRegistry::chat_stream(self.request),
             )
             .await;
-
-            tracing::trace!("开始处理 LLM 聊天请求");
             // 错误统一转换为字符串，简化 GPUI 端的错误处理
             match result {
                 Ok(Ok(mut stream)) => {
                     self.response.send(Ok(())).ok();
-                    tracing::trace!("开始接收 LLM 聊天流消息");
+                    tracing::debug!("开始接收 LLM 聊天流消息");
                     loop {
                         match tokio::time::timeout(Duration::from_secs(900), stream.next()).await {
                             Ok(Some(Ok(message))) => {
-                                tracing::trace!("接收到 LLM 聊天流消息: {:?}", message);
+                                tracing::debug!("接收到 LLM 聊天流消息: {:?}", message);
                                 xbus::post(StreamMessage::stream(source.clone(), message));
                             }
                             Ok(Some(Err(err))) => {
@@ -459,8 +457,7 @@ impl MessageHandler for LlmChatHandler {
                             }
                         }
                     }
-                    tracing::trace!("LLM 聊天流消息接收完毕");
-                    xbus::post(StreamMessage::done(source));
+                    tracing::debug!("LLM 聊天流消息接收完毕");
                 }
 
                 Ok(Err(err)) => {
@@ -469,7 +466,6 @@ impl MessageHandler for LlmChatHandler {
                         source.clone(),
                         MessageContent::TextChunk(format!("模型错误: {:?}", err)),
                     ));
-                    xbus::post(StreamMessage::done(source));
                 }
                 Err(_) => {
                     self.response.send(Err("模型连接超时".to_string())).ok();
@@ -477,9 +473,9 @@ impl MessageHandler for LlmChatHandler {
                         source.clone(),
                         MessageContent::TextChunk("模型连接超时".to_string()),
                     ));
-                    xbus::post(StreamMessage::done(source));
                 }
             }
+            xbus::post(StreamMessage::done(source));
         });
     }
 }

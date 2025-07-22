@@ -191,7 +191,6 @@ impl TodoThreadChat {
             Timer::after(Duration::from_millis(50)).await;
             let mut buffer = String::new();
             let mut message_count = 0;
-
             // 批量收集消息
             loop {
                 match rx.try_recv() {
@@ -225,17 +224,18 @@ impl TodoThreadChat {
                             MessageContent::ToolDefinitions(_) => {}
                         },
                         StreamMessage::Done(_) => {
+                            tracing::debug!("接收到完成消息，停止处理，更新状态");
                             this.update(app, |this, cx| {
+                                this.is_loading = false;
                                 this.is_running = false;
                             })
                             .ok();
                         }
                     },
                 }
-                this.upgrade().is_none().then(|| {
-                    tracing::warn!("组件已被销毁，停止消息处理");
-                    return;
-                });
+                if this.upgrade().is_none() {
+                    break 'message_loop;
+                }
             }
             if buffer.is_empty() {
                 continue;
@@ -246,7 +246,6 @@ impl TodoThreadChat {
                 })
                 .is_err()
             {
-                tracing::warn!("组件已被销毁，停止消息处理");
                 break 'message_loop;
             };
             message_count += 1;
