@@ -107,6 +107,7 @@ pub fn init(cx: &mut App) {
     popover::init(cx);
     menu::init(cx);
     table::init(cx);
+    button::init(cx);
 }
 
 #[inline]

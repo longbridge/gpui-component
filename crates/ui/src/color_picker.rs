@@ -427,7 +427,7 @@ impl RenderOnce for ColorPicker {
                                     })
                                 }),
                         )
-                        .focus_ring(is_focused, cx)
+                        .focus_ring(is_focused, window, cx)
                     })
                     .when_some(self.label.clone(), |this, label| this.child(label))
                     .on_click(window.listener_for(&self.state, ColorPickerState::toggle_picker))

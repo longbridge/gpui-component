@@ -29,6 +29,7 @@ pub struct TextInput {
     disabled: bool,
     bordered: bool,
     focus_bordered: bool,
+    tab_index: isize,
 }
 
 impl Sizable for TextInput {
@@ -54,6 +55,7 @@ impl TextInput {
             disabled: false,
             bordered: true,
             focus_bordered: true,
+            tab_index: 0,
         }
     }
 
@@ -137,6 +139,12 @@ impl TextInput {
                 }
             })
     }
+
+    /// Set the tab index for the input, default is 0.
+    pub fn tab_index(mut self, index: isize) -> Self {
+        self.tab_index = index;
+        self
+    }
 }
 
 impl Styled for TextInput {
@@ -183,7 +191,8 @@ impl RenderOnce for TextInput {
             .id(("input", self.state.entity_id()))
             .flex()
             .key_context(crate::input::CONTEXT)
-            .track_focus(&state.focus_handle)
+            .track_focus(&state.focus_handle.clone())
+            .tab_index(self.tab_index)
             .when(!state.disabled, |this| {
                 this.on_action(window.listener_for(&self.state, InputState::backspace))
                     .on_action(window.listener_for(&self.state, InputState::delete))
