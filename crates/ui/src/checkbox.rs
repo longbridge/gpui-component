@@ -1,12 +1,23 @@
+use std::rc::Rc;
+
 use crate::{
-    text::Text, v_flex, ActiveTheme, Disableable, IconName, Selectable, Sizable, Size,
-    StyledExt as _,
+    actions::Confirm, text::Text, v_flex, ActiveTheme, Disableable, FocusableExt, IconName,
+    Selectable, Sizable, Size, StyledExt as _,
 };
 use gpui::{
     div, prelude::FluentBuilder as _, px, relative, rems, svg, AnyElement, App, Div, ElementId,
-    InteractiveElement, IntoElement, ParentElement, RenderOnce, StatefulInteractiveElement,
-    StyleRefinement, Styled, Window,
+    InteractiveElement, IntoElement, KeyBinding, ParentElement, RenderOnce,
+    StatefulInteractiveElement, StyleRefinement, Styled, Window,
 };
+
+const KEY_CONTENT: &str = "Checkbox";
+pub(super) fn init(cx: &mut App) {
+    cx.bind_keys(vec![
+        // Add key bindings for button actions if needed
+        KeyBinding::new("enter", Confirm { secondary: false }, Some(KEY_CONTENT)),
+        KeyBinding::new("space", Confirm { secondary: false }, Some(KEY_CONTENT)),
+    ]);
+}
 
 /// A Checkbox element.
 #[derive(IntoElement)]
@@ -19,7 +30,9 @@ pub struct Checkbox {
     checked: bool,
     disabled: bool,
     size: Size,
-    on_click: Option<Box<dyn Fn(&bool, &mut Window, &mut App) + 'static>>,
+    tab_stop: bool,
+    tab_index: isize,
+    on_click: Option<Rc<dyn Fn(&bool, &mut Window, &mut App) + 'static>>,
 }
 
 impl Checkbox {
@@ -34,6 +47,8 @@ impl Checkbox {
             disabled: false,
             size: Size::default(),
             on_click: None,
+            tab_stop: true,
+            tab_index: 0,
         }
     }
 
@@ -48,7 +63,19 @@ impl Checkbox {
     }
 
     pub fn on_click(mut self, handler: impl Fn(&bool, &mut Window, &mut App) + 'static) -> Self {
-        self.on_click = Some(Box::new(handler));
+        self.on_click = Some(Rc::new(handler));
+        self
+    }
+
+    /// Set the tab stop for the checkbox, default is true.
+    pub fn tab_stop(mut self, tab_stop: bool) -> Self {
+        self.tab_stop = tab_stop;
+        self
+    }
+
+    /// Set the tab index for the checkbox, default is 0.
+    pub fn tab_index(mut self, tab_index: isize) -> Self {
+        self.tab_index = tab_index;
         self
     }
 }
@@ -101,7 +128,9 @@ impl Sizable for Checkbox {
 }
 
 impl RenderOnce for Checkbox {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let clickable = !self.disabled && self.on_click.is_some();
+
         let border_color = if self.checked {
             cx.theme().primary
         } else {
@@ -116,10 +145,32 @@ impl RenderOnce for Checkbox {
             (border_color, cx.theme().primary_foreground)
         };
         let radius = cx.theme().radius.min(px(4.));
+        let focus_handle = window
+            .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
+            .read(cx);
+        let is_focused = focus_handle.is_focused(window);
 
         div().child(
             self.base
                 .id(self.id)
+                .key_context(KEY_CONTENT)
+                .track_focus(
+                    &focus_handle
+                        .clone()
+                        .tab_stop(self.tab_stop)
+                        .tab_index(self.tab_index),
+                )
+                .when_some(
+                    self.on_click.clone().filter(|_| clickable),
+                    |this, on_click| {
+                        this.on_action({
+                            let checked = !self.checked;
+                            move |_: &Confirm, window, cx| {
+                                (on_click)(&checked, window, cx);
+                            }
+                        })
+                    },
+                )
                 .h_flex()
                 .gap_2()
                 .items_start()
@@ -135,7 +186,9 @@ impl RenderOnce for Checkbox {
                 .when(self.disabled, |this| {
                     this.text_color(cx.theme().muted_foreground)
                 })
+                .rounded(cx.theme().radius * 0.5)
                 .refine_style(&self.style)
+                .focus_ring(is_focused, px(2.), window, cx)
                 .child(
                     v_flex()
                         .relative()

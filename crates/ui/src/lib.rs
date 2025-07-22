@@ -108,6 +108,7 @@ pub fn init(cx: &mut App) {
     menu::init(cx);
     table::init(cx);
     button::init(cx);
+    checkbox::init(cx);
 }
 
 #[inline]

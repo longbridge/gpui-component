@@ -5,8 +5,8 @@ use crate::{
     Disableable, FocusableExt as _, Icon, Selectable, Sizable, Size, StyleSized, StyledExt,
 };
 use gpui::{
-    div, prelude::FluentBuilder as _, relative, Action, AnyElement, App, ClickEvent, Corners, Div,
-    Edges, ElementId, Hsla, InteractiveElement, Interactivity, IntoElement, KeyBinding,
+    div, prelude::FluentBuilder as _, px, relative, Action, AnyElement, App, ClickEvent, Corners,
+    Div, Edges, ElementId, Hsla, InteractiveElement, Interactivity, IntoElement, KeyBinding,
     MouseButton, ParentElement, Pixels, RenderOnce, SharedString, StatefulInteractiveElement as _,
     StyleRefinement, Styled, Window,
 };
@@ -595,7 +595,7 @@ impl RenderOnce for Button {
                         .build(window, cx)
                 })
             })
-            .focus_ring(is_focused, window, cx)
+            .focus_ring(is_focused, px(0.), window, cx)
     }
 }
 

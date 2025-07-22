@@ -504,13 +504,13 @@ impl<T: Styled> StyleSized<T> for T {
     }
 }
 
-pub trait FocusableExt<T: ParentElement + Styled + Sized> {
+pub(crate) trait FocusableExt<T: ParentElement + Styled + Sized> {
     /// Add focus ring to the element.
-    fn focus_ring(self, is_focused: bool, window: &Window, cx: &App) -> Self;
+    fn focus_ring(self, is_focused: bool, margins: Pixels, window: &Window, cx: &App) -> Self;
 }
 
 impl<T: ParentElement + Styled + Sized> FocusableExt<T> for T {
-    fn focus_ring(mut self, is_focused: bool, window: &Window, cx: &App) -> Self {
+    fn focus_ring(mut self, is_focused: bool, margins: Pixels, window: &Window, cx: &App) -> Self {
         if !is_focused {
             return self;
         }
@@ -541,6 +541,7 @@ impl<T: ParentElement + Styled + Sized> FocusableExt<T> for T {
                 .map(|v| v.to_pixels(rem_size))
                 .unwrap_or_default(),
         };
+
         // Update the radius based on element's corner radii and the ring border width.
         let radius = Corners::<Pixels> {
             top_left: style
@@ -576,12 +577,12 @@ impl<T: ParentElement + Styled + Sized> FocusableExt<T> for T {
             div()
                 .flex_none()
                 .absolute()
-                .top(-RING_BORDER_WIDTH + -border_widths.top)
-                .left(-RING_BORDER_WIDTH + -border_widths.left)
-                .right(-border_widths.right)
-                .bottom(-border_widths.bottom)
+                .top(-RING_BORDER_WIDTH + -margins + -border_widths.top)
+                .left(-RING_BORDER_WIDTH + -margins + -border_widths.left)
+                .right(-RING_BORDER_WIDTH + -margins - -border_widths.right)
+                .bottom(-RING_BORDER_WIDTH + -margins - -border_widths.bottom)
                 .border(RING_BORDER_WIDTH)
-                .border_color(cx.theme().ring.alpha(0.75))
+                .border_color(cx.theme().ring.alpha(0.5))
                 .refine_style(&inner_style),
         )
     }
