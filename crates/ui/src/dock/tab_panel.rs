@@ -696,7 +696,7 @@ impl TabPanel {
                 }
 
                 Some(
-                    Tab::new("")
+                    Tab::empty()
                         .map(|this| {
                             if let Some(tab_name) = panel.tab_name(cx) {
                                 this.child(tab_name)
@@ -704,7 +704,6 @@ impl TabPanel {
                                 this.child(panel.title(window, cx))
                             }
                         })
-                        .py_2()
                         .selected(active)
                         .on_click(cx.listener({
                             let is_collapsed = self.collapsed;
