@@ -1344,6 +1344,9 @@ impl InputState {
             // Add newline and indent
             let new_line_text = format!("\n{}", indent);
             self.replace_text_in_range(None, &new_line_text, window, cx);
+        } else {
+            // Single line input, just emit the event (e.g.: In a modal dialog to confirm).
+            cx.propagate();
         }
 
         cx.emit(InputEvent::PressEnter {
