@@ -626,7 +626,7 @@ impl TableStory {
         let num_stocks_input = cx.new(|cx| {
             let mut input = InputState::new(window, cx)
                 .placeholder("Enter number of Stocks to display")
-                .validate(|s| s.parse::<usize>().is_ok());
+                .validate(|s, _| s.parse::<usize>().is_ok());
             input.set_value("5000", window, cx);
             input
         });

@@ -110,7 +110,7 @@ impl InputStory {
             large_input: cx.new(|cx| InputState::new(window, cx).placeholder("Large input")),
             small_input: cx.new(|cx| {
                 InputState::new(window, cx)
-                    .validate(|s| s.parse::<f32>().is_ok())
+                    .validate(|s, _| s.parse::<f32>().is_ok())
                     .placeholder("validate to limit float number.")
             }),
             prefix_input1,
