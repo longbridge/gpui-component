@@ -1,11 +1,13 @@
-use gpui::*;
+use std::usize;
+
+use gpui::{prelude::FluentBuilder, *};
 use gpui_component::{
     button::{Button, ButtonVariants as _},
     dropdown::{Dropdown, DropdownEvent, DropdownState},
     h_flex,
     highlighter::{Language, LanguageConfig, LanguageRegistry},
     input::{InputEvent, InputState, Marker, TabSize, TextInput},
-    v_flex, ActiveTheme, Selectable, Sizable,
+    v_flex, ActiveTheme, ContextModal, IconName, Sizable,
 };
 use story::Assets;
 
@@ -25,6 +27,7 @@ fn init(cx: &mut App) {
 
 pub struct Example {
     input_state: Entity<InputState>,
+    go_to_line_state: Entity<InputState>,
     language_state: Entity<DropdownState<Vec<SharedString>>>,
     language: Lang,
     line_number: bool,
@@ -101,6 +104,7 @@ impl Example {
                 .default_value(default_language.1)
                 .placeholder("Enter your code here...")
         });
+        let go_to_line_state = cx.new(|cx| InputState::new(window, cx));
         let language_state = cx.new(|cx| {
             DropdownState::new(
                 LANGUAGES.iter().map(|s| s.0.name().into()).collect(),
@@ -133,6 +137,7 @@ impl Example {
 
         Self {
             input_state,
+            go_to_line_state,
             language_state,
             language: default_language.0,
             line_number: true,
@@ -178,6 +183,46 @@ impl Example {
 
         self.need_update = false;
     }
+
+    fn go_to_line(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
+        let input_state = self.input_state.clone();
+        let go_to_line_state = self.go_to_line_state.clone();
+
+        window.open_modal(cx, move |modal, window, cx| {
+            go_to_line_state.update(cx, |state, cx| {
+                state.set_placeholder(
+                    format!("{}", input_state.read(cx).line_column()),
+                    window,
+                    cx,
+                );
+                state.focus(window, cx);
+            });
+
+            modal
+                .title("Go to line")
+                .child(TextInput::new(&go_to_line_state))
+                .confirm()
+                .on_ok({
+                    let go_to_line_state = go_to_line_state.clone();
+                    move |_, _, cx| {
+                        let query = go_to_line_state.read(cx).value();
+                        let mut parts = query
+                            .split(':')
+                            .map(|s| s.trim().parse::<u32>().ok())
+                            .collect::<Vec<_>>()
+                            .into_iter();
+                        let Some(line) = parts.next().and_then(|l| l) else {
+                            return false;
+                        };
+                        let column = parts.next().and_then(|c| c);
+
+                        println!("------- go-to-line: {:?}:{:?}", line, column);
+
+                        true
+                    }
+                })
+        });
+    }
 }
 
 impl Render for Example {
@@ -190,10 +235,10 @@ impl Render for Example {
                 .id("source")
                 .w_full()
                 .flex_1()
-                .p_4()
                 .gap_2()
                 .child(
                     TextInput::new(&self.input_state)
+                        .bordered(false)
                         .h_full()
                         .font_family("Monaco")
                         .text_size(px(12.))
@@ -203,6 +248,11 @@ impl Render for Example {
                     h_flex()
                         .justify_between()
                         .text_sm()
+                        .bg(cx.theme().secondary)
+                        .py_1p5()
+                        .px_4()
+                        .border_t_1()
+                        .border_color(cx.theme().border)
                         .text_color(cx.theme().muted_foreground)
                         .child(
                             h_flex()
@@ -210,14 +260,14 @@ impl Render for Example {
                                 .child(
                                     Dropdown::new(&self.language_state)
                                         .menu_width(px(160.))
-                                        .small(),
+                                        .xsmall(),
                                 )
                                 .child(
                                     Button::new("line-number")
                                         .ghost()
+                                        .when(self.line_number, |this| this.icon(IconName::Check))
                                         .label("Line Number")
-                                        .small()
-                                        .selected(self.line_number)
+                                        .xsmall()
                                         .on_click(cx.listener(|this, _, window, cx| {
                                             this.line_number = !this.line_number;
                                             this.input_state.update(cx, |state, cx| {
@@ -230,7 +280,12 @@ impl Render for Example {
                         .child({
                             let loc = self.input_state.read(cx).line_column();
                             let cursor = self.input_state.read(cx).cursor();
-                            format!("{} ({} c)", loc, cursor.offset())
+
+                            Button::new("line-column")
+                                .ghost()
+                                .xsmall()
+                                .label(format!("{} ({} c)", loc, cursor.offset()))
+                                .on_click(cx.listener(Self::go_to_line))
                         }),
                 ),
         )
