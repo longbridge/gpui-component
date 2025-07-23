@@ -11,9 +11,9 @@ use serde::Deserialize;
 use std::{sync::Arc, time::Duration};
 use story::{
     AccordionStory, AppState, AppTitleBar, Assets, ButtonStory, CalendarStory, DropdownStory,
-    FormStory, IconStory, ImageStory, InputStory, LabelStory, ListStory, ModalStory, Open,
-    PopoverStory, ProgressStory, ResizableStory, ScrollableStory, SidebarStory, StoryContainer,
-    SwitchStory, TableStory, TooltipStory, WebViewStory,
+    FormStory, IconStory, ImageStory, InputStory, LabelStory, ListStory, ModalStory,
+    NotificationStory, Open, PopoverStory, ProgressStory, ResizableStory, ScrollableStory,
+    SidebarStory, StoryContainer, SwitchStory, TableStory, TooltipStory, WebViewStory,
 };
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
@@ -361,6 +361,7 @@ impl StoryWorkspace {
                     Arc::new(StoryContainer::panel::<AccordionStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<SidebarStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<FormStory>(window, cx)),
+                    Arc::new(StoryContainer::panel::<NotificationStory>(window, cx)),
                 ],
                 None,
                 &dock_area,
@@ -522,7 +523,7 @@ impl Render for StoryWorkspace {
             .child(self.dock_area.clone())
             .children(drawer_layer)
             .children(modal_layer)
-            .child(div().absolute().top_8().children(notification_layer))
+            .children(notification_layer)
     }
 }
 
