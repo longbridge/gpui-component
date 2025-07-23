@@ -79,7 +79,8 @@ impl Render for AccordionStory {
                 h_flex()
                     .items_center()
                     .justify_between()
-                    .gap_2()
+                    .gap_4()
+                    .flex_wrap()
                     .child(
                         ButtonGroup::new("toggle-size")
                             .outline()
@@ -116,40 +117,44 @@ impl Render for AccordionStory {
                             })),
                     )
                     .child(
-                        Checkbox::new("multiple")
-                            .label("Multiple")
-                            .checked(self.multiple)
-                            .on_click(cx.listener(|this, checked, _, cx| {
-                                this.multiple = *checked;
-                                cx.notify();
-                            })),
-                    )
-                    .child(
-                        Checkbox::new("show_icon")
-                            .label("Show Icon")
-                            .checked(self.show_icon)
-                            .on_click(cx.listener(|this, checked, _, cx| {
-                                this.show_icon = *checked;
-                                cx.notify();
-                            })),
-                    )
-                    .child(
-                        Checkbox::new("disabled")
-                            .label("Disabled")
-                            .checked(self.disabled)
-                            .on_click(cx.listener(|this, checked, _, cx| {
-                                this.disabled = *checked;
-                                cx.notify();
-                            })),
-                    )
-                    .child(
-                        Checkbox::new("bordered")
-                            .label("Bordered")
-                            .checked(self.bordered)
-                            .on_click(cx.listener(|this, checked, _, cx| {
-                                this.bordered = *checked;
-                                cx.notify();
-                            })),
+                        h_flex()
+                            .gap_2()
+                            .child(
+                                Checkbox::new("multiple")
+                                    .label("Multiple")
+                                    .checked(self.multiple)
+                                    .on_click(cx.listener(|this, checked, _, cx| {
+                                        this.multiple = *checked;
+                                        cx.notify();
+                                    })),
+                            )
+                            .child(
+                                Checkbox::new("show_icon")
+                                    .label("Icon")
+                                    .checked(self.show_icon)
+                                    .on_click(cx.listener(|this, checked, _, cx| {
+                                        this.show_icon = *checked;
+                                        cx.notify();
+                                    })),
+                            )
+                            .child(
+                                Checkbox::new("disabled")
+                                    .label("Disabled")
+                                    .checked(self.disabled)
+                                    .on_click(cx.listener(|this, checked, _, cx| {
+                                        this.disabled = *checked;
+                                        cx.notify();
+                                    })),
+                            )
+                            .child(
+                                Checkbox::new("bordered")
+                                    .label("Bordered")
+                                    .checked(self.bordered)
+                                    .on_click(cx.listener(|this, checked, _, cx| {
+                                        this.bordered = *checked;
+                                        cx.notify();
+                                    })),
+                            ),
                     ),
             )
             .child(
