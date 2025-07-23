@@ -83,6 +83,7 @@ impl RenderOnce for Accordion {
 
         v_flex()
             .id(self.id)
+            .size_full()
             .when(self.bordered, |this| this.gap_1())
             .children(
                 self.children
