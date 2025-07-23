@@ -1,5 +1,3 @@
-use std::usize;
-
 use gpui::{prelude::FluentBuilder, *};
 use gpui_component::{
     button::{Button, ButtonVariants as _},
@@ -26,7 +24,7 @@ fn init(cx: &mut App) {
 }
 
 pub struct Example {
-    input_state: Entity<InputState>,
+    editor: Entity<InputState>,
     go_to_line_state: Entity<InputState>,
     language_state: Entity<DropdownState<Vec<SharedString>>>,
     language: Lang,
@@ -93,7 +91,7 @@ const LANGUAGES: [(Lang, &'static str); 10] = [
 impl Example {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let default_language = LANGUAGES[0].clone();
-        let input_state = cx.new(|cx| {
+        let editor = cx.new(|cx| {
             InputState::new(window, cx)
                 .code_editor(default_language.0.name().to_string())
                 .line_number(true)
@@ -115,7 +113,7 @@ impl Example {
         });
 
         let _subscribes = vec![
-            cx.subscribe(&input_state, |_, _, _: &InputEvent, cx| {
+            cx.subscribe(&editor, |_, _, _: &InputEvent, cx| {
                 cx.notify();
             }),
             cx.subscribe(
@@ -136,7 +134,7 @@ impl Example {
         ];
 
         Self {
-            input_state,
+            editor,
             go_to_line_state,
             language_state,
             language: default_language.0,
@@ -155,7 +153,7 @@ impl Example {
             return;
         }
 
-        self.input_state.update(cx, |state, cx| {
+        self.editor.update(cx, |state, cx| {
             state.set_markers(
                 vec![
                     Marker::new("warning", (2, 1), (2, 31), "Import but not used."),
@@ -176,7 +174,7 @@ impl Example {
 
         let language = self.language.name().to_string();
         let code = LANGUAGES.iter().find(|s| s.0.name() == language).unwrap().1;
-        self.input_state.update(cx, |state, cx| {
+        self.editor.update(cx, |state, cx| {
             state.set_value(code, window, cx);
             state.set_highlighter(language, cx);
         });
@@ -185,30 +183,27 @@ impl Example {
     }
 
     fn go_to_line(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
-        let input_state = self.input_state.clone();
-        let go_to_line_state = self.go_to_line_state.clone();
+        let editor = self.editor.clone();
+        let input_state = self.go_to_line_state.clone();
 
         window.open_modal(cx, move |modal, window, cx| {
-            go_to_line_state.update(cx, |state, cx| {
-                state.set_placeholder(
-                    format!("{}", input_state.read(cx).line_column()),
-                    window,
-                    cx,
-                );
+            input_state.update(cx, |state, cx| {
+                state.set_placeholder(format!("{}", editor.read(cx).line_column()), window, cx);
                 state.focus(window, cx);
             });
 
             modal
                 .title("Go to line")
-                .child(TextInput::new(&go_to_line_state))
+                .child(TextInput::new(&input_state))
                 .confirm()
                 .on_ok({
-                    let go_to_line_state = go_to_line_state.clone();
-                    move |_, _, cx| {
-                        let query = go_to_line_state.read(cx).value();
+                    let editor = editor.clone();
+                    let input_state = input_state.clone();
+                    move |_, window, cx| {
+                        let query = input_state.read(cx).value();
                         let mut parts = query
                             .split(':')
-                            .map(|s| s.trim().parse::<u32>().ok())
+                            .map(|s| s.trim().parse::<usize>().ok())
                             .collect::<Vec<_>>()
                             .into_iter();
                         let Some(line) = parts.next().and_then(|l| l) else {
@@ -216,7 +211,9 @@ impl Example {
                         };
                         let column = parts.next().and_then(|c| c);
 
-                        println!("------- go-to-line: {:?}:{:?}", line, column);
+                        editor.update(cx, |state, cx| {
+                            state.go_to_line(line, column.unwrap_or(1), window, cx);
+                        });
 
                         true
                     }
@@ -237,7 +234,7 @@ impl Render for Example {
                 .flex_1()
                 .gap_2()
                 .child(
-                    TextInput::new(&self.input_state)
+                    TextInput::new(&self.editor)
                         .bordered(false)
                         .h_full()
                         .font_family("Monaco")
@@ -270,7 +267,7 @@ impl Render for Example {
                                         .xsmall()
                                         .on_click(cx.listener(|this, _, window, cx| {
                                             this.line_number = !this.line_number;
-                                            this.input_state.update(cx, |state, cx| {
+                                            this.editor.update(cx, |state, cx| {
                                                 state.set_line_number(this.line_number, window, cx);
                                             });
                                             cx.notify();
@@ -278,8 +275,8 @@ impl Render for Example {
                                 ),
                         )
                         .child({
-                            let loc = self.input_state.read(cx).line_column();
-                            let cursor = self.input_state.read(cx).cursor();
+                            let loc = self.editor.read(cx).line_column();
+                            let cursor = self.editor.read(cx).cursor();
 
                             Button::new("line-column")
                                 .ghost()

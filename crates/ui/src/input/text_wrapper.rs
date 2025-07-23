@@ -115,4 +115,32 @@ impl TextWrapper {
 
         (line + 1, column + 1).into()
     }
+
+    /// Returns the offset of the given line and column (1-based).
+    ///
+    /// - If the `line` is 0, it will return 0.
+    /// - If the `line` is greater than the number of lines, it will return
+    ///   the length of the text.
+    pub(super) fn offset_for_line_column(&self, line: usize, column: usize) -> Option<usize> {
+        if line == 0 || self.lines.is_empty() {
+            return None;
+        }
+
+        let line = line.saturating_sub(1);
+        if line >= self.lines.len() {
+            return Some(self.text.len());
+        }
+
+        let Some(line_wrap) = &self.lines.get(line) else {
+            return None;
+        };
+
+        let offset = line_wrap.range.start;
+        if column == 0 {
+            return Some(offset);
+        }
+        let offset = offset + column.saturating_sub(1).min(line_wrap.range.len());
+
+        Some(offset)
+    }
 }
