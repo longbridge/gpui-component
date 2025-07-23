@@ -245,7 +245,7 @@ impl Render for StoryRoot {
             )
             .children(drawer_layer)
             .children(modal_layer)
-            .child(div().absolute().top_8().children(notification_layer))
+            .children(notification_layer)
     }
 }
 

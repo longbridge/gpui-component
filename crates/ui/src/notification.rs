@@ -398,7 +398,7 @@ impl NotificationList {
                 if let Err(err) =
                     notification.update_in(cx, |note, window, cx| note.dismiss(window, cx))
                 {
-                    println!("failed to auto hide notification: {:?}", err);
+                    tracing::error!("failed to auto hide notification: {:?}", err);
                 }
             })
             .detach();
@@ -438,26 +438,16 @@ impl Render for NotificationList {
         let size = window.viewport_size();
         let items = self.notifications.iter().rev().take(10).rev().cloned();
 
-        div()
-            .absolute()
-            .flex()
-            .top_4()
-            .bottom_4()
-            .right_4()
-            .justify_end()
-            .child(
-                v_flex()
-                    .id("notification-list")
-                    .absolute()
-                    .relative()
-                    .right_0()
-                    .h(size.height - px(8.))
-                    .on_hover(cx.listener(|view, hovered, _, cx| {
-                        view.expanded = *hovered;
-                        cx.notify()
-                    }))
-                    .gap_3()
-                    .children(items),
-            )
+        div().absolute().top_4().right_4().child(
+            v_flex()
+                .id("notification-list")
+                .h(size.height - px(8.))
+                .on_hover(cx.listener(|view, hovered, _, cx| {
+                    view.expanded = *hovered;
+                    cx.notify()
+                }))
+                .gap_3()
+                .children(items),
+        )
     }
 }

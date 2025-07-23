@@ -277,6 +277,9 @@ impl Root {
 
         Some(
             div()
+                .absolute()
+                .top_0()
+                .right_0()
                 .when_some(mt, |this, offset| this.mt(offset))
                 .when_some(mr, |this, offset| this.mr(offset))
                 .child(root.read(cx).notification.clone()),
