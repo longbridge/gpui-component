@@ -323,7 +323,7 @@
         "list.active.background": "#82aaff22",
         "list.active.border": "#82aaff",
         "list.background": "#222436",
-        "list.even.background": "#222436",
+        "list.even.background": "#282a40",
         "muted.background": "#2d3149",
         "muted.foreground": "#6e738d",
         "panel.background": "#2d3149",

@@ -495,8 +495,8 @@ impl Theme {
         apply_color!(progress_bar, fallback = self.primary);
         apply_color!(ring, fallback = self.primary);
         apply_color!(scrollbar, fallback = self.background);
-        apply_color!(scrollbar_thumb, fallback = self.secondary);
-        apply_color!(scrollbar_thumb_hover, fallback = self.secondary_hover);
+        apply_color!(scrollbar_thumb, fallback = self.accent);
+        apply_color!(scrollbar_thumb_hover, fallback = self.scrollbar_thumb);
         apply_color!(selection, fallback = self.primary.opacity(0.5));
         apply_color!(sidebar, fallback = self.background);
         apply_color!(sidebar_accent, fallback = self.accent);

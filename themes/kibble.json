@@ -23,6 +23,7 @@
         "input.border": "#333333",
         "list.active.background": "#3448D122",
         "list.active.border": "#3448D1",
+        "list.hover.background": "#2c292b54",
         "list.even.background": "#24222355",
         "muted.background": "#333333",
         "muted.foreground": "#726E69",
