@@ -822,11 +822,14 @@ impl InputState {
     pub fn go_to_line(
         &mut self,
         line: usize,
-        column: usize,
+        column: Option<usize>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if let Some(offset) = self.text_wrapper.offset_for_line_column(line, column) {
+        if let Some(offset) = self
+            .text_wrapper
+            .offset_for_line_column(line, column.unwrap_or(1))
+        {
             self.move_to(Cursor::new(offset), window, cx);
         }
     }

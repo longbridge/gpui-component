@@ -212,7 +212,7 @@ impl Example {
                         let column = parts.next().and_then(|c| c);
 
                         editor.update(cx, |state, cx| {
-                            state.go_to_line(line, column.unwrap_or(1), window, cx);
+                            state.go_to_line(line, column, window, cx);
                         });
 
                         true
