@@ -363,10 +363,8 @@ impl RenderOnce for Modal {
             padding_right = pr.to_pixels(self.width.into(), window.rem_size());
         }
 
-        let make_animation_config = || {
-            Animation::new(Duration::from_secs_f64(0.25))
-                .with_easing(cubic_bezier(0.32, 0.72, 0., 1.))
-        };
+        let animation = Animation::new(Duration::from_secs_f64(0.25))
+            .with_easing(cubic_bezier(0.32, 0.72, 0., 1.));
 
         anchored()
             .position(point(window_paddings.left, window_paddings.top))
@@ -494,33 +492,27 @@ impl RenderOnce for Modal {
                                         .children(footer(render_ok, render_cancel, window, cx)),
                                 )
                             })
-                            .with_animation(
-                                "slide-down",
-                                make_animation_config(),
-                                move |this, delta| {
-                                    let y_offset = px(0.) + delta * px(30.);
-                                    // This is equivalent to `shadow_xl` with an extra opacity.
-                                    let shadow = vec![
-                                        BoxShadow {
-                                            color: hsla(0., 0., 0., 0.1 * delta),
-                                            offset: point(px(0.), px(20.)),
-                                            blur_radius: px(25.),
-                                            spread_radius: px(-5.),
-                                        },
-                                        BoxShadow {
-                                            color: hsla(0., 0., 0., 0.1 * delta),
-                                            offset: point(px(0.), px(8.)),
-                                            blur_radius: px(10.),
-                                            spread_radius: px(-6.),
-                                        },
-                                    ];
-                                    this.top(y + y_offset).shadow(shadow)
-                                },
-                            ),
+                            .with_animation("slide-down", animation.clone(), move |this, delta| {
+                                let y_offset = px(0.) + delta * px(30.);
+                                // This is equivalent to `shadow_xl` with an extra opacity.
+                                let shadow = vec![
+                                    BoxShadow {
+                                        color: hsla(0., 0., 0., 0.1 * delta),
+                                        offset: point(px(0.), px(20.)),
+                                        blur_radius: px(25.),
+                                        spread_radius: px(-5.),
+                                    },
+                                    BoxShadow {
+                                        color: hsla(0., 0., 0., 0.1 * delta),
+                                        offset: point(px(0.), px(8.)),
+                                        blur_radius: px(10.),
+                                        spread_radius: px(-6.),
+                                    },
+                                ];
+                                this.top(y + y_offset).shadow(shadow)
+                            }),
                     )
-                    .with_animation("fade-in", make_animation_config(), move |this, delta| {
-                        this.opacity(delta)
-                    }),
+                    .with_animation("fade-in", animation, move |this, delta| this.opacity(delta)),
             )
     }
 }
