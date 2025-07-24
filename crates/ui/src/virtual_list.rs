@@ -296,8 +296,6 @@ impl Element for VirtualList {
             Axis::Vertical => border.top + padding.top + border.bottom + padding.bottom,
         };
 
-        dbg!(&padding_width);
-
         let item_sizes = &layout.size_layout.sizes;
         let item_origins = &layout.size_layout.origins;
 

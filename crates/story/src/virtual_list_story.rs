@@ -30,7 +30,7 @@ const ITEM_SIZE: Size<Pixels> = size(px(100.), px(30.));
 impl VirtualListStory {
     fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
         let items = (0..5000).map(|i| format!("Item {}", i)).collect::<Vec<_>>();
-        let item_sizes = items.iter().map(|_| ITEM_SIZE.clone()).collect::<Vec<_>>();
+        let item_sizes = items.iter().map(|_| ITEM_SIZE).collect::<Vec<_>>();
 
         Self {
             focus_handle: cx.focus_handle(),
@@ -41,7 +41,7 @@ impl VirtualListStory {
             columns_count: 100,
             axis: ScrollbarAxis::Both,
             size_mode: 0,
-            visible_range: (0..0).into(),
+            visible_range: (0..0),
         }
     }
 
@@ -67,7 +67,7 @@ impl VirtualListStory {
             self.columns_count = 10;
         }
 
-        self.item_sizes = Rc::new(self.items.iter().map(|_| ITEM_SIZE.clone()).collect());
+        self.item_sizes = Rc::new(self.items.iter().map(|_| ITEM_SIZE).collect());
 
         self.scroll_state = ScrollbarState::default();
         cx.notify();
