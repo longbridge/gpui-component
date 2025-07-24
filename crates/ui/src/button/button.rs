@@ -891,13 +891,7 @@ impl ButtonVariant {
             ButtonVariant::Secondary => cx.theme().secondary.opacity(1.5),
             ButtonVariant::Custom(style) => style.color.opacity(0.15),
         };
-        let fg = match self {
-            ButtonVariant::Link | ButtonVariant::Text | ButtonVariant::Ghost => {
-                cx.theme().link.grayscale()
-            }
-            _ => cx.theme().secondary_foreground.opacity(0.5).grayscale(),
-        };
-
+        let fg = cx.theme().muted_foreground;
         let (bg, border) = if outline {
             (cx.theme().transparent, cx.theme().border.opacity(0.5))
         } else {
