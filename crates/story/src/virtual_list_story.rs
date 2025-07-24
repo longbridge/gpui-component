@@ -1,16 +1,16 @@
-use std::rc::Rc;
+use std::{ops::Range, rc::Rc};
 
 use gpui::{
-    div, px, size, App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement,
-    IntoElement, ParentElement, Pixels, Render, ScrollHandle, SharedString, Size, Styled, Window,
+    div, px, size, App, AppContext, Context, Div, Entity, FocusHandle, Focusable,
+    InteractiveElement, IntoElement, ParentElement, Pixels, Render, ScrollHandle, Size, Styled,
+    Window,
 };
 use gpui_component::{
     button::{Button, ButtonGroup},
     divider::Divider,
     h_flex,
-    label::Label,
     scroll::{Scrollbar, ScrollbarAxis, ScrollbarState},
-    v_flex, v_virtual_list, ActiveTheme as _, Selectable, StyledExt as _,
+    v_flex, v_virtual_list, ActiveTheme as _, Selectable,
 };
 
 pub struct VirtualListStory {
@@ -19,22 +19,18 @@ pub struct VirtualListStory {
     scroll_state: ScrollbarState,
     items: Vec<String>,
     item_sizes: Rc<Vec<Size<Pixels>>>,
-    test_width: Pixels,
+    columns_count: usize,
     axis: ScrollbarAxis,
     size_mode: usize,
-    message: SharedString,
+    visible_range: Range<usize>,
 }
 
-const ITEM_HEIGHT: Pixels = px(30.);
+const ITEM_SIZE: Size<Pixels> = size(px(100.), px(30.));
 
 impl VirtualListStory {
     fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
         let items = (0..5000).map(|i| format!("Item {}", i)).collect::<Vec<_>>();
-        let test_width = px(3000.);
-        let item_sizes = items
-            .iter()
-            .map(|_| size(test_width, ITEM_HEIGHT))
-            .collect::<Vec<_>>();
+        let item_sizes = items.iter().map(|_| ITEM_SIZE.clone()).collect::<Vec<_>>();
 
         Self {
             focus_handle: cx.focus_handle(),
@@ -42,10 +38,10 @@ impl VirtualListStory {
             scroll_state: ScrollbarState::default(),
             items,
             item_sizes: Rc::new(item_sizes),
-            test_width,
+            columns_count: 100,
             axis: ScrollbarAxis::Both,
             size_mode: 0,
-            message: SharedString::default(),
+            visible_range: (0..0).into(),
         }
     }
 
@@ -57,37 +53,28 @@ impl VirtualListStory {
         self.size_mode = n;
         if n == 0 {
             self.items = (0..5000).map(|i| format!("Item {}", i)).collect::<Vec<_>>();
-            self.test_width = px(3000.);
+            self.columns_count = 30;
         } else if n == 1 {
             self.items = (0..100).map(|i| format!("Item {}", i)).collect::<Vec<_>>();
-            self.test_width = px(10000.);
+            self.columns_count = 100;
         } else if n == 2 {
             self.items = (0..500000)
                 .map(|i| format!("Item {}", i))
                 .collect::<Vec<_>>();
-            self.test_width = px(10000.);
+            self.columns_count = 100;
         } else {
             self.items = (0..5).map(|i| format!("Item {}", i)).collect::<Vec<_>>();
-            self.test_width = px(10000.);
+            self.columns_count = 10;
         }
 
-        self.item_sizes = self
-            .items
-            .iter()
-            .map(|_| size(self.test_width, ITEM_HEIGHT))
-            .collect::<Vec<_>>()
-            .into();
+        self.item_sizes = Rc::new(self.items.iter().map(|_| ITEM_SIZE.clone()).collect());
+
         self.scroll_state = ScrollbarState::default();
         cx.notify();
     }
 
     pub fn change_axis(&mut self, axis: ScrollbarAxis, cx: &mut Context<Self>) {
         self.axis = axis;
-        cx.notify();
-    }
-
-    fn set_message(&mut self, msg: &str, cx: &mut Context<Self>) {
-        self.message = SharedString::from(msg.to_string());
         cx.notify();
     }
 
@@ -165,7 +152,7 @@ impl VirtualListStory {
                             })),
                     ),
             )
-            .child(Label::new(self.message.clone()))
+            .child(format!("visible_range: {:?}", self.visible_range))
     }
 }
 
@@ -196,7 +183,20 @@ impl Render for VirtualListStory {
         _: &mut gpui::Window,
         cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
-        let test_width = self.test_width;
+        let columns_count = self.columns_count;
+
+        fn render_item(cx: &App) -> Div {
+            div()
+                .flex()
+                .h_full()
+                .items_center()
+                .justify_center()
+                .text_sm()
+                .w(ITEM_SIZE.width)
+                .h(ITEM_SIZE.height)
+                .bg(cx.theme().secondary)
+        }
+
         v_flex()
             .size_full()
             .gap_4()
@@ -205,7 +205,7 @@ impl Render for VirtualListStory {
                 div().w_full().flex_1().min_h_64().child(
                     div().relative().size_full().child(
                         v_flex()
-                            .id("test-0")
+                            .id("list")
                             .relative()
                             .size_full()
                             .child(
@@ -214,45 +214,21 @@ impl Render for VirtualListStory {
                                     "items",
                                     self.item_sizes.clone(),
                                     move |story, visible_range, _, cx| {
-                                        story.set_message(
-                                            &format!("range: {:?}", visible_range,),
-                                            cx,
-                                        );
+                                        story.visible_range = visible_range.clone();
+
                                         visible_range
                                             .map(|ix| {
-                                                const ITEM_WIDTH: Pixels = px(100.);
-                                                let items_count = (story.test_width
-                                                    / (ITEM_WIDTH + px(4.)))
-                                                .ceil()
-                                                    as usize;
-
-                                                h_flex()
-                                                    .gap_1()
-                                                    .h(ITEM_HEIGHT)
-                                                    .w(test_width)
-                                                    .items_center()
-                                                    .debug_green()
-                                                    .children(
-                                                        (0..items_count)
-                                                            .map(|i| {
-                                                                div()
-                                                                    .flex()
-                                                                    .h_full()
-                                                                    .items_center()
-                                                                    .justify_center()
-                                                                    .text_sm()
-                                                                    .w(ITEM_WIDTH)
-                                                                    .bg(cx.theme().secondary)
-                                                                    .child(if i == 0 {
-                                                                        format!("{}", ix)
-                                                                    } else {
-                                                                        format!("{}", i)
-                                                                    })
-                                                            })
-                                                            .collect::<Vec<_>>(),
-                                                    )
+                                                h_flex().gap_1().items_center().children(
+                                                    (0..columns_count).map(|i| {
+                                                        render_item(cx).child(if i == 0 {
+                                                            format!("row: {}", ix)
+                                                        } else {
+                                                            format!("{}", i)
+                                                        })
+                                                    }),
+                                                )
                                             })
-                                            .collect::<Vec<_>>()
+                                            .collect()
                                     },
                                 )
                                 .track_scroll(&self.scroll_handle)

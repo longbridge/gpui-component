@@ -20,6 +20,8 @@ use gpui::{
 };
 use smallvec::SmallVec;
 
+use crate::StyledExt;
+
 /// Create a [`VirtualList`] in vertical direction.
 ///
 /// This is like `uniform_list` in GPUI, but support two axis.
@@ -86,6 +88,7 @@ where
         base: div()
             .id(id)
             .size_full()
+            .debug_green()
             .overflow_scroll()
             .track_scroll(&scroll_handle),
         scroll_handle,

@@ -1432,7 +1432,7 @@ dependencies = [
 [[package]]
 name = "collections"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#3e27fa1d92d084a3374691a83bd3ab5766b14ad8"
+source = "git+https://github.com/huacnlee/zed.git?branch=fix-update-bounds#bfeca04323f76bcf07bb67f7cd35b8bee3dc3455"
 dependencies = [
  "indexmap 2.9.0",
  "rustc-hash 2.1.0",
@@ -1990,7 +1990,7 @@ dependencies = [
 [[package]]
 name = "derive_refineable"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#3e27fa1d92d084a3374691a83bd3ab5766b14ad8"
+source = "git+https://github.com/huacnlee/zed.git?branch=fix-update-bounds#bfeca04323f76bcf07bb67f7cd35b8bee3dc3455"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3142,7 +3142,7 @@ dependencies = [
 [[package]]
 name = "gpui"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#3e27fa1d92d084a3374691a83bd3ab5766b14ad8"
+source = "git+https://github.com/huacnlee/zed.git?branch=fix-update-bounds#bfeca04323f76bcf07bb67f7cd35b8bee3dc3455"
 dependencies = [
  "anyhow",
  "as-raw-xcb-connection",
@@ -3327,7 +3327,7 @@ dependencies = [
 [[package]]
 name = "gpui_macros"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#3e27fa1d92d084a3374691a83bd3ab5766b14ad8"
+source = "git+https://github.com/huacnlee/zed.git?branch=fix-update-bounds#bfeca04323f76bcf07bb67f7cd35b8bee3dc3455"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -3597,7 +3597,7 @@ dependencies = [
 [[package]]
 name = "http_client"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#3e27fa1d92d084a3374691a83bd3ab5766b14ad8"
+source = "git+https://github.com/huacnlee/zed.git?branch=fix-update-bounds#bfeca04323f76bcf07bb67f7cd35b8bee3dc3455"
 dependencies = [
  "anyhow",
  "bytes",
@@ -3615,7 +3615,7 @@ dependencies = [
 [[package]]
 name = "http_client_tls"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#3e27fa1d92d084a3374691a83bd3ab5766b14ad8"
+source = "git+https://github.com/huacnlee/zed.git?branch=fix-update-bounds#bfeca04323f76bcf07bb67f7cd35b8bee3dc3455"
 dependencies = [
  "rustls",
  "rustls-platform-verifier",
@@ -4441,7 +4441,7 @@ dependencies = [
 [[package]]
 name = "media"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#3e27fa1d92d084a3374691a83bd3ab5766b14ad8"
+source = "git+https://github.com/huacnlee/zed.git?branch=fix-update-bounds#bfeca04323f76bcf07bb67f7cd35b8bee3dc3455"
 dependencies = [
  "anyhow",
  "bindgen 0.71.1",
@@ -6390,7 +6390,7 @@ dependencies = [
 [[package]]
 name = "refineable"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#3e27fa1d92d084a3374691a83bd3ab5766b14ad8"
+source = "git+https://github.com/huacnlee/zed.git?branch=fix-update-bounds#bfeca04323f76bcf07bb67f7cd35b8bee3dc3455"
 dependencies = [
  "derive_refineable",
  "workspace-hack",
@@ -6545,7 +6545,7 @@ dependencies = [
 [[package]]
 name = "reqwest_client"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#3e27fa1d92d084a3374691a83bd3ab5766b14ad8"
+source = "git+https://github.com/huacnlee/zed.git?branch=fix-update-bounds#bfeca04323f76bcf07bb67f7cd35b8bee3dc3455"
 dependencies = [
  "anyhow",
  "bytes",
@@ -7121,7 +7121,7 @@ checksum = "d369a96f978623eb3dc28807c4852d6cc617fed53da5d3c400feff1ef34a714a"
 [[package]]
 name = "semantic_version"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#3e27fa1d92d084a3374691a83bd3ab5766b14ad8"
+source = "git+https://github.com/huacnlee/zed.git?branch=fix-update-bounds#bfeca04323f76bcf07bb67f7cd35b8bee3dc3455"
 dependencies = [
  "anyhow",
  "serde",
@@ -7704,7 +7704,7 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 [[package]]
 name = "sum_tree"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#3e27fa1d92d084a3374691a83bd3ab5766b14ad8"
+source = "git+https://github.com/huacnlee/zed.git?branch=fix-update-bounds#bfeca04323f76bcf07bb67f7cd35b8bee3dc3455"
 dependencies = [
  "arrayvec",
  "log",
@@ -8931,7 +8931,7 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 [[package]]
 name = "util"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#3e27fa1d92d084a3374691a83bd3ab5766b14ad8"
+source = "git+https://github.com/huacnlee/zed.git?branch=fix-update-bounds#bfeca04323f76bcf07bb67f7cd35b8bee3dc3455"
 dependencies = [
  "anyhow",
  "async-fs 2.1.2",
