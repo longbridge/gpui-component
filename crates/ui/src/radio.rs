@@ -1,8 +1,11 @@
 use std::rc::Rc;
 
-use crate::{h_flex, text::Text, v_flex, ActiveTheme, AxisExt, IconName, StyledExt};
+use crate::{
+    checkbox::checkbox_check_icon, h_flex, text::Text, v_flex, ActiveTheme, AxisExt, Sizable, Size,
+    StyledExt,
+};
 use gpui::{
-    div, prelude::FluentBuilder, relative, svg, AnyElement, App, Axis, Div, ElementId,
+    div, prelude::FluentBuilder, relative, rems, AnyElement, App, Axis, Div, ElementId,
     InteractiveElement, IntoElement, ParentElement, RenderOnce, SharedString,
     StatefulInteractiveElement, StyleRefinement, Styled, Window,
 };
@@ -19,6 +22,7 @@ pub struct Radio {
     children: Vec<AnyElement>,
     checked: bool,
     disabled: bool,
+    size: Size,
     on_click: Option<Box<dyn Fn(&bool, &mut Window, &mut App) + 'static>>,
 }
 
@@ -32,6 +36,7 @@ impl Radio {
             children: Vec::new(),
             checked: false,
             disabled: false,
+            size: Size::default(),
             on_click: None,
         }
     }
@@ -57,6 +62,13 @@ impl Radio {
     }
 }
 
+impl Sizable for Radio {
+    fn with_size(mut self, size: impl Into<Size>) -> Self {
+        self.size = size.into();
+        self
+    }
+}
+
 impl Styled for Radio {
     fn style(&mut self) -> &mut gpui::StyleRefinement {
         &mut self.style
@@ -76,13 +88,16 @@ impl ParentElement for Radio {
 }
 
 impl RenderOnce for Radio {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let (border_color, bg) = if self.checked {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let checked = self.checked;
+        let disabled = self.disabled;
+
+        let (border_color, bg) = if checked {
             (cx.theme().primary, cx.theme().primary)
         } else {
             (cx.theme().input, cx.theme().input.opacity(0.3))
         };
-        let (border_color, bg) = if self.disabled {
+        let (border_color, bg) = if disabled {
             (border_color.opacity(0.5), bg.opacity(0.5))
         } else {
             (border_color, bg)
@@ -92,7 +107,7 @@ impl RenderOnce for Radio {
         div().child(
             self.base
                 .h_flex()
-                .id(self.id)
+                .id(self.id.clone())
                 .gap_x_2()
                 .text_color(cx.theme().foreground)
                 .items_start()
@@ -101,31 +116,25 @@ impl RenderOnce for Radio {
                 .child(
                     div()
                         .relative()
-                        .size_4()
+                        .map(|this| match self.size {
+                            Size::XSmall => this.size_3(),
+                            Size::Small => this.size_3p5(),
+                            Size::Medium => this.size_4(),
+                            Size::Large => this.size(rems(1.125)),
+                            _ => this.size_4(),
+                        })
                         .flex_shrink_0()
                         .rounded_full()
                         .border_1()
                         .border_color(border_color)
-                        .when(cx.theme().shadow && !self.disabled, |this| this.shadow_xs())
+                        .when(cx.theme().shadow && !disabled, |this| this.shadow_xs())
                         .map(|this| match self.checked {
                             false => this.bg(cx.theme().background),
                             _ => this.bg(bg),
                         })
-                        .child(
-                            svg()
-                                .absolute()
-                                .top_px()
-                                .left_px()
-                                .size_3()
-                                .text_color(bg)
-                                .when(self.checked, |this| {
-                                    this.text_color(cx.theme().primary_foreground)
-                                })
-                                .map(|this| match self.checked {
-                                    true => this.path(IconName::Check.path()),
-                                    false => this,
-                                }),
-                        ),
+                        .child(checkbox_check_icon(
+                            self.id, self.size, checked, disabled, window, cx,
+                        )),
                 )
                 .child(
                     v_flex()
