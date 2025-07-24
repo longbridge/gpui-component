@@ -1001,7 +1001,7 @@ where
                             .children(
                                 self.col_groups
                                     .iter()
-                                    .skip(left_columns_count)
+                                    .filter(|col| col.column.fixed == None)
                                     .enumerate()
                                     .map(|(col_ix, _)| {
                                         self.render_th(left_columns_count + col_ix, window, cx)
