@@ -122,6 +122,8 @@ impl VirtualList {
     }
 
     /// Specify for table.
+    ///
+    /// Table is special, because the `scroll_handle` is based on Table head (That is not a virtual list).
     pub(crate) fn with_scroll_handle(mut self, scroll_handle: &ScrollHandle) -> Self {
         self.base = div().id(self.id.clone()).size_full();
         self.scroll_handle = scroll_handle.clone();
@@ -292,8 +294,6 @@ impl Element for VirtualList {
             Axis::Horizontal => border.left + padding.left + border.right + padding.right,
             Axis::Vertical => border.top + padding.top + border.bottom + padding.bottom,
         };
-
-        dbg!(&padding_width);
 
         let item_sizes = &layout.size_layout.sizes;
         let item_origins = &layout.size_layout.origins;
