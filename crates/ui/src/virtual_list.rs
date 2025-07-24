@@ -88,7 +88,6 @@ where
         base: div()
             .id(id)
             .size_full()
-            .debug_green()
             .overflow_scroll()
             .track_scroll(&scroll_handle),
         scroll_handle,
