@@ -1,6 +1,5 @@
 use crate::{
-    h_flex, text::Text, tooltip::Tooltip, ActiveTheme, Colorize, Disableable, Side, Sizable, Size,
-    StyledExt,
+    h_flex, text::Text, tooltip::Tooltip, ActiveTheme, Disableable, Side, Sizable, Size, StyledExt,
 };
 use gpui::{
     div, prelude::FluentBuilder as _, px, Animation, AnimationExt as _, App, ElementId,
@@ -94,20 +93,18 @@ impl RenderOnce for Switch {
         let on_click = self.on_click.clone();
         let toggle_state = window.use_keyed_state(self.id.clone(), cx, |_, _| checked);
 
-        let (bg, toggle_bg) = match self.checked {
+        let (bg, toggle_bg) = match checked {
             true => (cx.theme().primary, cx.theme().background),
             false => (cx.theme().switch, cx.theme().background),
         };
 
-        let (bg, toggle_bg) = match self.disabled {
-            true => {
-                if self.checked {
-                    (cx.theme().muted.darken(0.05), toggle_bg.opacity(0.8))
-                } else {
-                    (cx.theme().muted, toggle_bg.opacity(0.8))
-                }
-            }
-            false => (bg, toggle_bg),
+        let (bg, toggle_bg) = if self.disabled {
+            (
+                if checked { bg.alpha(0.5) } else { bg },
+                toggle_bg.alpha(0.35),
+            )
+        } else {
+            (bg, toggle_bg)
         };
 
         let (bg_width, bg_height) = match self.size {
