@@ -53,8 +53,8 @@ impl Gallery {
                     StoryContainer::panel::<DropdownStory>(window, cx),
                     StoryContainer::panel::<FormStory>(window, cx),
                     StoryContainer::panel::<IconStory>(window, cx),
-                    StoryContainer::panel::<IndicatorStory>(window, cx),
                     StoryContainer::panel::<ImageStory>(window, cx),
+                    StoryContainer::panel::<IndicatorStory>(window, cx),
                     StoryContainer::panel::<InputStory>(window, cx),
                     StoryContainer::panel::<KbdStory>(window, cx),
                     StoryContainer::panel::<LabelStory>(window, cx),
@@ -78,6 +78,7 @@ impl Gallery {
                     StoryContainer::panel::<TagStory>(window, cx),
                     StoryContainer::panel::<TextareaStory>(window, cx),
                     StoryContainer::panel::<TooltipStory>(window, cx),
+                    StoryContainer::panel::<VirtualListStory>(window, cx),
                 ],
             ),
         ];

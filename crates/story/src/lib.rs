@@ -43,6 +43,7 @@ mod themes;
 mod title_bar;
 mod toggle_story;
 mod tooltip_story;
+mod virtual_list_story;
 mod webview_story;
 mod welcome_story;
 
@@ -100,6 +101,7 @@ pub use title_bar::AppTitleBar;
 pub use toggle_story::ToggleStory;
 pub use tooltip_story::TooltipStory;
 use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
+pub use virtual_list_story::VirtualListStory;
 pub use webview_story::WebViewStory;
 pub use welcome_story::WelcomeStory;
 
