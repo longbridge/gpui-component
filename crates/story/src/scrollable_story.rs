@@ -197,6 +197,7 @@ impl Render for ScrollableStory {
         _: &mut gpui::Window,
         cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
+        let test_width = self.test_width;
         v_flex()
             .size_full()
             .gap_4()
@@ -213,23 +214,27 @@ impl Render for ScrollableStory {
                                     cx.entity().clone(),
                                     "items",
                                     self.item_sizes.clone(),
-                                    move |story, visible_range, scroll_size, _, cx| {
+                                    move |story, visible_range, _, cx| {
                                         story.set_message(
-                                            &format!(
-                                                "range: {:?}, scroll_size: {}, {}",
-                                                visible_range,
-                                                scroll_size.width,
-                                                scroll_size.height
-                                            ),
+                                            &format!("range: {:?}", visible_range,),
                                             cx,
                                         );
                                         visible_range
                                             .map(|ix| {
+                                                const ITEM_WIDTH: Pixels = px(100.);
+                                                let items_count = (story.test_width
+                                                    / (ITEM_WIDTH + px(4.)))
+                                                .ceil()
+                                                    as usize;
+
                                                 h_flex()
-                                                    .h(ITEM_HEIGHT)
                                                     .gap_1()
+                                                    .h(ITEM_HEIGHT)
+                                                    .w(test_width)
+                                                    .items_center()
+                                                    .debug_green()
                                                     .children(
-                                                        (0..(story.test_width.0 as i32 / 100))
+                                                        (0..items_count)
                                                             .map(|i| {
                                                                 div()
                                                                     .flex()
@@ -237,7 +242,7 @@ impl Render for ScrollableStory {
                                                                     .items_center()
                                                                     .justify_center()
                                                                     .text_sm()
-                                                                    .w(px(100.))
+                                                                    .w(ITEM_WIDTH)
                                                                     .bg(cx.theme().secondary)
                                                                     .child(if i == 0 {
                                                                         format!("{}", ix)
@@ -247,17 +252,14 @@ impl Render for ScrollableStory {
                                                             })
                                                             .collect::<Vec<_>>(),
                                                     )
-                                                    .items_center()
                                             })
                                             .collect::<Vec<_>>()
                                     },
                                 )
                                 .track_scroll(&self.scroll_handle)
-                                // .p_4()
+                                .p_4()
                                 .border_1()
                                 .border_color(cx.theme().border)
-                                .debug_green()
-                                .v_flex()
                                 .gap_1(),
                             )
                             .child({

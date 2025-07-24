@@ -32,7 +32,7 @@ pub fn v_virtual_list<R, V>(
     view: Entity<V>,
     id: impl Into<ElementId>,
     item_sizes: Rc<Vec<Size<Pixels>>>,
-    f: impl 'static + Fn(&mut V, Range<usize>, Size<Pixels>, &mut Window, &mut Context<V>) -> Vec<R>,
+    f: impl 'static + Fn(&mut V, Range<usize>, &mut Window, &mut Context<V>) -> Vec<R>,
 ) -> VirtualList
 where
     R: IntoElement,
@@ -49,7 +49,7 @@ pub fn h_virtual_list<R, V>(
     view: Entity<V>,
     id: impl Into<ElementId>,
     item_sizes: Rc<Vec<Size<Pixels>>>,
-    f: impl 'static + Fn(&mut V, Range<usize>, Size<Pixels>, &mut Window, &mut Context<V>) -> Vec<R>,
+    f: impl 'static + Fn(&mut V, Range<usize>, &mut Window, &mut Context<V>) -> Vec<R>,
 ) -> VirtualList
 where
     R: IntoElement,
@@ -63,7 +63,7 @@ pub(crate) fn virtual_list<R, V>(
     id: impl Into<ElementId>,
     axis: Axis,
     item_sizes: Rc<Vec<Size<Pixels>>>,
-    f: impl 'static + Fn(&mut V, Range<usize>, Size<Pixels>, &mut Window, &mut Context<V>) -> Vec<R>,
+    f: impl 'static + Fn(&mut V, Range<usize>, &mut Window, &mut Context<V>) -> Vec<R>,
 ) -> VirtualList
 where
     R: IntoElement,
@@ -71,9 +71,9 @@ where
 {
     let id: ElementId = id.into();
     let scroll_handle = ScrollHandle::default();
-    let render_range = move |visible_range, content_size, window: &mut Window, cx: &mut App| {
+    let render_range = move |visible_range, window: &mut Window, cx: &mut App| {
         view.update(cx, |this, cx| {
-            f(this, visible_range, content_size, window, cx)
+            f(this, visible_range, window, cx)
                 .into_iter()
                 .map(|component| component.into_any_element())
                 .collect()
@@ -104,12 +104,7 @@ pub struct VirtualList {
     items_count: usize,
     item_sizes: Rc<Vec<Size<Pixels>>>,
     render_items: Box<
-        dyn for<'a> Fn(
-            Range<usize>,
-            Size<Pixels>,
-            &'a mut Window,
-            &'a mut App,
-        ) -> SmallVec<[AnyElement; 64]>,
+        dyn for<'a> Fn(Range<usize>, &'a mut Window, &'a mut App) -> SmallVec<[AnyElement; 64]>,
     >,
 }
 
@@ -143,7 +138,7 @@ impl VirtualList {
         // So we try to use the second item to measure, if there is no second item, use the first item.
         let item_ix = if self.items_count > 1 { 1 } else { 0 };
 
-        let mut items = (self.render_items)(item_ix..item_ix + 1, Size::default(), window, cx);
+        let mut items = (self.render_items)(item_ix..item_ix + 1, window, cx);
         let Some(mut item_to_measure) = items.pop() else {
             return Size::default();
         };
@@ -162,7 +157,7 @@ pub struct VirtualListFrameState {
 #[derive(Default, Clone)]
 pub struct ItemSizeLayout {
     items_sizes: Rc<Vec<Size<Pixels>>>,
-    content_size: Size<Pixels>,
+    content_size: Pixels,
     sizes: Vec<Pixels>,
     origins: Vec<Pixels>,
 }
@@ -194,18 +189,18 @@ impl Element for VirtualList {
         window: &mut Window,
         cx: &mut App,
     ) -> (gpui::LayoutId, Self::RequestLayoutState) {
+        let rem_size = window.rem_size();
         let style = self
             .base
             .interactivity()
             .compute_style(global_id, None, window, cx);
-        let font_size = window.text_style().font_size.to_pixels(window.rem_size());
+        let font_size = window.text_style().font_size.to_pixels(rem_size);
 
         // Including the gap between items for calculate the item size
-        let gap = match self.axis {
-            Axis::Horizontal => style.gap.width,
-            Axis::Vertical => style.gap.height,
-        }
-        .to_pixels(font_size.into(), window.rem_size());
+        let gap = style
+            .gap
+            .along(self.axis)
+            .to_pixels(font_size.into(), rem_size);
 
         let (layout_id, size_layout) = window.with_element_state(
             global_id.unwrap(),
@@ -246,14 +241,7 @@ impl Element for VirtualList {
                             }
                         })
                         .collect::<Vec<_>>();
-                    state.content_size = Size {
-                        width: px(self.item_sizes.iter().map(|size| size.width.0).sum::<f32>()),
-                        height: px(self
-                            .item_sizes
-                            .iter()
-                            .map(|size| size.height.0)
-                            .sum::<f32>()),
-                    };
+                    state.content_size = px(state.sizes.iter().map(|size| size.0).sum::<f32>());
                 }
 
                 let (layout_id, _) = self
@@ -282,6 +270,8 @@ impl Element for VirtualList {
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
+        let first_item_size = self.measure_item(window, cx);
+
         let style = self
             .base
             .interactivity()
@@ -291,31 +281,33 @@ impl Element for VirtualList {
             .padding
             .to_pixels(bounds.size.into(), window.rem_size());
 
-        let first_item_size = self.measure_item(window, cx);
-
-        let padded_bounds = Bounds::from_corners(
+        let container_with_padding_bounds = Bounds::from_corners(
             bounds.origin + point(border.left + padding.left, border.top + padding.top),
             bounds.bottom_right()
                 - point(border.right + padding.right, border.bottom + padding.bottom),
         );
 
         // Get border + padding pixel size
-        let padding_size = match self.axis {
+        let padding_width = match self.axis {
             Axis::Horizontal => border.left + padding.left + border.right + padding.right,
             Axis::Vertical => border.top + padding.top + border.bottom + padding.bottom,
         };
+
+        dbg!(&padding_width);
 
         let item_sizes = &layout.size_layout.sizes;
         let item_origins = &layout.size_layout.origins;
 
         let scroll_size = match self.axis {
             Axis::Horizontal => Size {
-                width: layout.size_layout.content_size.width + padding_size,
-                height: (first_item_size.height + padding_size).max(padded_bounds.size.height),
+                width: layout.size_layout.content_size + padding_width,
+                height: (first_item_size.height + padding_width)
+                    .max(container_with_padding_bounds.size.height),
             },
             Axis::Vertical => Size {
-                width: (first_item_size.width + padding_size).max(padded_bounds.size.width),
-                height: layout.size_layout.content_size.height + padding_size,
+                width: (first_item_size.width + padding_width)
+                    .max(container_with_padding_bounds.size.width),
+                height: layout.size_layout.content_size + padding_width,
             },
         };
 
@@ -416,7 +408,7 @@ impl Element for VirtualList {
                     let visible_range = first_visible_element_ix
                         ..cmp::min(last_visible_element_ix, self.items_count);
 
-                    let items = (self.render_items)(visible_range.clone(), scroll_size, window, cx);
+                    let items = (self.render_items)(visible_range.clone(), window, cx);
 
                     let content_mask = ContentMask { bounds };
                     window.with_content_mask(Some(content_mask), |window| {

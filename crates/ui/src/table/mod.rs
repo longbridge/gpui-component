@@ -1093,7 +1093,7 @@ where
                                 Axis::Horizontal,
                                 col_sizes,
                                 {
-                                    move |table, visible_range: Range<usize>, _, window, cx| {
+                                    move |table, visible_range: Range<usize>, window, cx| {
                                         table.update_visible_range_if_need(
                                             visible_range.clone(),
                                             Axis::Horizontal,
