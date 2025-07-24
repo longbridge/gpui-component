@@ -1,8 +1,9 @@
 use std::rc::Rc;
 
 use gpui::{
-    div, px, size, App, AppContext, Axis, Context, Entity, Focusable, InteractiveElement,
-    IntoElement, ParentElement, Pixels, Render, ScrollHandle, SharedString, Size, Styled, Window,
+    div, px, size, App, AppContext, Axis, Context, Entity, FocusHandle, Focusable,
+    InteractiveElement, IntoElement, ParentElement, Pixels, Render, ScrollHandle, SharedString,
+    Size, Styled, Window,
 };
 use gpui_component::{
     button::{Button, ButtonGroup},
@@ -14,9 +15,8 @@ use gpui_component::{
 };
 
 pub struct ScrollableStory {
-    focus_handle: gpui::FocusHandle,
+    focus_handle: FocusHandle,
     scroll_handle: ScrollHandle,
-    scroll_size: gpui::Size<Pixels>,
     scroll_state: ScrollbarState,
     items: Vec<String>,
     item_sizes: Rc<Vec<Size<Pixels>>>,
@@ -41,7 +41,6 @@ impl ScrollableStory {
             focus_handle: cx.focus_handle(),
             scroll_handle: ScrollHandle::new(),
             scroll_state: ScrollbarState::default(),
-            scroll_size: gpui::Size::default(),
             items,
             item_sizes: Rc::new(item_sizes),
             test_width,
@@ -214,12 +213,16 @@ impl Render for ScrollableStory {
                                     cx.entity().clone(),
                                     "items",
                                     self.item_sizes.clone(),
-                                    move |story, visible_range, content_size, _, cx| {
+                                    move |story, visible_range, scroll_size, _, cx| {
                                         story.set_message(
-                                            &format!("visible_range: {:?}", visible_range),
+                                            &format!(
+                                                "range: {:?}, scroll_size: {}, {}",
+                                                visible_range,
+                                                scroll_size.width,
+                                                scroll_size.height
+                                            ),
                                             cx,
                                         );
-                                        story.scroll_size = content_size;
                                         visible_range
                                             .map(|ix| {
                                                 h_flex()
@@ -250,9 +253,10 @@ impl Render for ScrollableStory {
                                     },
                                 )
                                 .track_scroll(&self.scroll_handle)
-                                .p_4()
+                                // .p_4()
                                 .border_1()
                                 .border_color(cx.theme().border)
+                                .debug_green()
                                 .v_flex()
                                 .gap_1(),
                             )

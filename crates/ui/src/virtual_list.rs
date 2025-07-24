@@ -101,7 +101,6 @@ pub struct VirtualList {
     axis: Axis,
     base: Stateful<Div>,
     scroll_handle: ScrollHandle,
-    // scroll_handle: ScrollHandle,
     items_count: usize,
     item_sizes: Rc<Vec<Size<Pixels>>>,
     render_items: Box<
@@ -163,7 +162,7 @@ pub struct VirtualListFrameState {
 #[derive(Default, Clone)]
 pub struct ItemSizeLayout {
     items_sizes: Rc<Vec<Size<Pixels>>>,
-    container_size: Size<Pixels>,
+    content_size: Size<Pixels>,
     sizes: Vec<Pixels>,
     origins: Vec<Pixels>,
 }
@@ -247,7 +246,7 @@ impl Element for VirtualList {
                             }
                         })
                         .collect::<Vec<_>>();
-                    state.container_size = Size {
+                    state.content_size = Size {
                         width: px(self.item_sizes.iter().map(|size| size.width.0).sum::<f32>()),
                         height: px(self
                             .item_sizes
@@ -309,14 +308,14 @@ impl Element for VirtualList {
         let item_sizes = &layout.size_layout.sizes;
         let item_origins = &layout.size_layout.origins;
 
-        let content_size = match self.axis {
+        let scroll_size = match self.axis {
             Axis::Horizontal => Size {
-                width: layout.size_layout.container_size.width + padding_size,
+                width: layout.size_layout.content_size.width + padding_size,
                 height: (first_item_size.height + padding_size).max(padded_bounds.size.height),
             },
             Axis::Vertical => Size {
                 width: (first_item_size.width + padding_size).max(padded_bounds.size.width),
-                height: layout.size_layout.container_size.height + padding_size,
+                height: layout.size_layout.content_size.height + padding_size,
             },
         };
 
@@ -324,7 +323,7 @@ impl Element for VirtualList {
             global_id,
             inspector_id,
             bounds,
-            content_size,
+            scroll_size,
             window,
             cx,
             |style, _, hitbox, window, cx| {
@@ -340,15 +339,9 @@ impl Element for VirtualList {
                 );
 
                 if self.items_count > 0 {
-                    let is_scrolled = match self.axis {
-                        Axis::Horizontal => !scroll_offset.x.is_zero(),
-                        Axis::Vertical => !scroll_offset.y.is_zero(),
-                    };
-
-                    let min_scroll_offset = match self.axis {
-                        Axis::Horizontal => padded_bounds.size.width - content_size.width,
-                        Axis::Vertical => padded_bounds.size.height - content_size.height,
-                    };
+                    let is_scrolled = !scroll_offset.along(self.axis).is_zero();
+                    let min_scroll_offset =
+                        padded_bounds.size.along(self.axis) - scroll_size.along(self.axis);
 
                     if is_scrolled {
                         match self.axis {
@@ -423,8 +416,7 @@ impl Element for VirtualList {
                     let visible_range = first_visible_element_ix
                         ..cmp::min(last_visible_element_ix, self.items_count);
 
-                    let items =
-                        (self.render_items)(visible_range.clone(), content_size, window, cx);
+                    let items = (self.render_items)(visible_range.clone(), scroll_size, window, cx);
 
                     let content_mask = ContentMask { bounds };
                     window.with_content_mask(Some(content_mask), |window| {
