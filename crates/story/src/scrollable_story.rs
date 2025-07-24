@@ -121,8 +121,7 @@ impl super::Story for ScrollableStory {
     }
 
     fn description() -> &'static str {
-        "Add vertical or horizontal, or both scrollbars to a container, \
-        and use `virtual_list` to render a large number of items."
+        "A scrollable container."
     }
 
     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
