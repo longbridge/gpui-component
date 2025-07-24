@@ -210,7 +210,7 @@ impl Render for Gallery {
                                     )
                                     .child(
                                         div()
-                                            .bg(cx.theme().secondary)
+                                            .bg(cx.theme().sidebar_accent)
                                             .px_1()
                                             .rounded_full()
                                             .flex_1()

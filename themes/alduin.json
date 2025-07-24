@@ -37,7 +37,7 @@
         "primary.background": "#458588",
         "primary.foreground": "#F0F0F0",
         "primary.hover.background": "#458588AA",
-        "scrollbar.background": "#282828",
+        "scrollbar.background": "#28282833",
         "scrollbar.thumb.background": "#504945",
         "secondary.background": "#282828",
         "secondary.active.background": "#322F2D",
