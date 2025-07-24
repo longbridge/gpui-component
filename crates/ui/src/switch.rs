@@ -7,7 +7,7 @@ use gpui::{
     InteractiveElement, IntoElement, ParentElement as _, RenderOnce, SharedString,
     StatefulInteractiveElement, StyleRefinement, Styled, Window,
 };
-use std::{cell::RefCell, rc::Rc, time::Duration};
+use std::{rc::Rc, time::Duration};
 
 /// A Switch element that can be toggled on or off.
 #[derive(IntoElement)]
