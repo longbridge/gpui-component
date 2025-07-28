@@ -3,9 +3,9 @@ use std::sync::Arc;
 use crate::{h_flex, ActiveTheme, Icon, IconName, Selectable, Sizable, Size, StyledExt};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    div, px, AnyElement, App, ClickEvent, Div, Edges, ElementId, Hsla, InteractiveElement,
-    IntoElement, ParentElement, Pixels, RenderOnce, SharedString, StatefulInteractiveElement,
-    Styled, Window,
+    div, px, relative, AnyElement, App, ClickEvent, Div, Edges, ElementId, Hsla,
+    InteractiveElement, IntoElement, ParentElement, Pixels, RenderOnce, SharedString,
+    StatefulInteractiveElement, Styled, Window,
 };
 
 #[derive(Debug, Clone, Default, Copy, PartialEq, Eq, Hash)]
@@ -67,12 +67,12 @@ impl TabVariant {
     fn inner_height(&self, size: Size) -> Pixels {
         match size {
             Size::XSmall => match self {
-                TabVariant::Tab | TabVariant::Outline | TabVariant::Pill => px(20.),
+                TabVariant::Tab | TabVariant::Outline | TabVariant::Pill => px(18.),
                 TabVariant::Segmented => px(16.),
                 TabVariant::Underline => px(20.),
             },
             Size::Small => match self {
-                TabVariant::Tab | TabVariant::Outline | TabVariant::Pill => px(24.),
+                TabVariant::Tab | TabVariant::Outline | TabVariant::Pill => px(22.),
                 TabVariant::Segmented => px(20.),
                 TabVariant::Underline => px(22.),
             },
@@ -620,7 +620,7 @@ impl RenderOnce for Tab {
             .child(
                 h_flex()
                     .h(inner_height)
-                    .line_height(inner_height)
+                    .line_height(relative(1.))
                     .items_center()
                     .justify_center()
                     .overflow_hidden()
