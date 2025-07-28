@@ -2,9 +2,9 @@ use std::time::Duration;
 
 use fake::Fake;
 use gpui::{
-    actions, div, prelude::FluentBuilder as _, px, App, AppContext, Context, ElementId, Entity,
-    FocusHandle, Focusable, InteractiveElement, IntoElement, ParentElement, Render, RenderOnce,
-    SharedString, Styled, Subscription, Task, Timer, Window,
+    actions, div, prelude::FluentBuilder as _, px, App, AppContext, Context, Edges, ElementId,
+    Entity, FocusHandle, Focusable, InteractiveElement, IntoElement, ParentElement, Render,
+    RenderOnce, SharedString, Styled, Subscription, Task, Timer, Window,
 };
 
 use gpui_component::{
@@ -48,7 +48,6 @@ impl Company {
 
 #[derive(IntoElement)]
 struct CompanyListItem {
-    id: ElementId,
     base: ListItem,
     ix: usize,
     company: Company,
@@ -57,9 +56,7 @@ struct CompanyListItem {
 
 impl CompanyListItem {
     pub fn new(id: impl Into<ElementId>, company: Company, ix: usize, selected: bool) -> Self {
-        let id: ElementId = id.into();
         CompanyListItem {
-            id: id.clone(),
             company,
             ix,
             base: ListItem::new(id),
@@ -69,10 +66,6 @@ impl CompanyListItem {
 }
 
 impl Selectable for CompanyListItem {
-    fn element_id(&self) -> &ElementId {
-        &self.id
-    }
-
     fn selected(mut self, selected: bool) -> Self {
         self.selected = selected;
         self
@@ -108,7 +101,6 @@ impl RenderOnce for CompanyListItem {
         self.base
             .px_2()
             .py_1()
-            .mx_2()
             .overflow_x_hidden()
             .bg(bg_color)
             .border_1()
@@ -308,10 +300,9 @@ impl ListStory {
             eof: false,
         };
 
-        let company_list = cx.new(|cx| List::new(delegate, window, cx));
-        // company_list.update(cx, |list, cx| {
-        //     list.set_selected_index(Some(3), cx);
-        // });
+        let company_list =
+            cx.new(|cx| List::new(delegate, window, cx).paddings(Edges::all(px(8.))));
+
         let _subscriptions =
             vec![
                 cx.subscribe(&company_list, |_, _, ev: &ListEvent, _| match ev {

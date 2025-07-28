@@ -1,9 +1,9 @@
 use gpui::{
     anchored, canvas, deferred, div, prelude::FluentBuilder, px, rems, AnyElement, App, AppContext,
-    Bounds, ClickEvent, Context, DismissEvent, ElementId, Empty, Entity, EventEmitter, FocusHandle,
-    Focusable, InteractiveElement, IntoElement, KeyBinding, Length, ParentElement, Pixels, Render,
-    RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Subscription,
-    Task, WeakEntity, Window,
+    Bounds, ClickEvent, Context, DismissEvent, Edges, ElementId, Empty, Entity, EventEmitter,
+    FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding, Length, ParentElement,
+    Pixels, Render, RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement, Styled,
+    Subscription, Task, WeakEntity, Window,
 };
 use rust_i18n::t;
 
@@ -353,6 +353,7 @@ where
         let list = cx.new(|cx| {
             let mut list = List::new(delegate, window, cx)
                 .max_h(rems(20.))
+                .paddings(Edges::all(px(4.)))
                 .reset_on_cancel(false);
             if !searchable {
                 list = list.no_query();
@@ -872,10 +873,6 @@ impl Disableable for DropdownListItem {
 }
 
 impl Selectable for DropdownListItem {
-    fn element_id(&self) -> &ElementId {
-        &self.id
-    }
-
     fn selected(mut self, selected: bool) -> Self {
         self.selected = selected;
         self
@@ -907,7 +904,6 @@ impl RenderOnce for DropdownListItem {
             .gap_x_1()
             .py_1()
             .px_2()
-            .mx_2()
             .rounded(cx.theme().radius)
             .text_base()
             .text_color(cx.theme().foreground)

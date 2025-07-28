@@ -533,10 +533,6 @@ impl ParentElement for Tab {
 }
 
 impl Selectable for Tab {
-    fn element_id(&self) -> &ElementId {
-        &self.id
-    }
-
     fn selected(mut self, selected: bool) -> Self {
         self.selected = selected;
         self

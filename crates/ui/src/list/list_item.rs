@@ -8,7 +8,6 @@ use smallvec::SmallVec;
 
 #[derive(IntoElement)]
 pub struct ListItem {
-    id: ElementId,
     base: Stateful<Div>,
     style: StyleRefinement,
     disabled: bool,
@@ -26,7 +25,6 @@ impl ListItem {
     pub fn new(id: impl Into<ElementId>) -> Self {
         let id: ElementId = id.into();
         Self {
-            id: id.clone(),
             base: h_flex().id(id),
             style: StyleRefinement::default(),
             disabled: false,
@@ -101,10 +99,6 @@ impl Disableable for ListItem {
 }
 
 impl Selectable for ListItem {
-    fn element_id(&self) -> &ElementId {
-        &self.id
-    }
-
     fn selected(mut self, selected: bool) -> Self {
         self.selected = selected;
         self
@@ -145,9 +139,7 @@ impl RenderOnce for ListItem {
             .relative()
             .gap_x_1()
             .py_1()
-            .px_2()
-            .mx_2()
-            .rounded(cx.theme().radius)
+            .px_3()
             .text_base()
             .text_color(cx.theme().foreground)
             .relative()
@@ -204,7 +196,6 @@ impl RenderOnce for ListItem {
                             })
                             .border_1()
                             .border_color(cx.theme().list_active_border)
-                            .rounded(cx.theme().radius)
                             .refine_style(&selected_style),
                     )
                 } else {

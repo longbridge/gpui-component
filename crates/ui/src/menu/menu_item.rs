@@ -67,10 +67,6 @@ impl Disableable for MenuItem {
 }
 
 impl Selectable for MenuItem {
-    fn element_id(&self) -> &ElementId {
-        &self.id
-    }
-
     fn selected(mut self, selected: bool) -> Self {
         self.selected = selected;
         self

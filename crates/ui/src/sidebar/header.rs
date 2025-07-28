@@ -1,13 +1,12 @@
 use gpui::{
-    prelude::FluentBuilder as _, Div, ElementId, InteractiveElement, IntoElement, ParentElement,
-    RenderOnce, SharedString, Styled,
+    prelude::FluentBuilder as _, Div, InteractiveElement, IntoElement, ParentElement, RenderOnce,
+    Styled,
 };
 
 use crate::{h_flex, popup_menu::PopupMenuExt, ActiveTheme as _, Collapsible, Selectable};
 
 #[derive(IntoElement)]
 pub struct SidebarHeader {
-    id: ElementId,
     base: Div,
     selected: bool,
     collapsed: bool,
@@ -16,7 +15,6 @@ pub struct SidebarHeader {
 impl SidebarHeader {
     pub fn new() -> Self {
         Self {
-            id: SharedString::from("sidebar-header").into(),
             base: h_flex().gap_2().w_full(),
             selected: false,
             collapsed: false,
@@ -27,10 +25,6 @@ impl Selectable for SidebarHeader {
     fn selected(mut self, selected: bool) -> Self {
         self.selected = selected;
         self
-    }
-
-    fn element_id(&self) -> &gpui::ElementId {
-        &self.id
     }
 
     fn is_selected(&self) -> bool {
@@ -58,11 +52,18 @@ impl Styled for SidebarHeader {
         self.base.style()
     }
 }
+
+impl InteractiveElement for SidebarHeader {
+    fn interactivity(&mut self) -> &mut gpui::Interactivity {
+        self.base.interactivity()
+    }
+}
+
 impl PopupMenuExt for SidebarHeader {}
 impl RenderOnce for SidebarHeader {
     fn render(self, _: &mut gpui::Window, cx: &mut gpui::App) -> impl gpui::IntoElement {
         h_flex()
-            .id(self.id)
+            .id("sidebar-header")
             .gap_2()
             .p_2()
             .w_full()

@@ -28,7 +28,7 @@ pub fn init(cx: &mut App) {
     ]);
 }
 
-pub trait PopupMenuExt: Styled + Selectable + IntoElement + 'static {
+pub trait PopupMenuExt: Styled + Selectable + InteractiveElement + IntoElement + 'static {
     /// Create a popup menu with the given items, anchored to the TopLeft corner
     fn popup_menu(
         self,
@@ -44,9 +44,9 @@ pub trait PopupMenuExt: Styled + Selectable + IntoElement + 'static {
         f: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
     ) -> Popover<PopupMenu> {
         let style = self.style().clone();
-        let element_id = self.element_id();
+        let id = self.interactivity().element_id.clone();
 
-        Popover::new(SharedString::from(format!("popup-menu:{:?}", element_id)))
+        Popover::new(SharedString::from(format!("popup-menu:{:?}", id)))
             .no_style()
             .trigger(self)
             .trigger_style(style)

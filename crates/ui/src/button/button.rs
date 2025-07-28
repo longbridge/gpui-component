@@ -7,7 +7,7 @@ use crate::{
 use gpui::{
     div, prelude::FluentBuilder as _, relative, Action, AnyElement, App, ClickEvent, Corners, Div,
     Edges, ElementId, Hsla, InteractiveElement, Interactivity, IntoElement, MouseButton,
-    ParentElement, Pixels, RenderOnce, SharedString, StatefulInteractiveElement as _,
+    ParentElement, Pixels, RenderOnce, SharedString, Stateful, StatefulInteractiveElement as _,
     StyleRefinement, Styled, Window,
 };
 
@@ -181,9 +181,8 @@ impl ButtonVariant {
 /// A Button element.
 #[derive(IntoElement)]
 pub struct Button {
-    base: Div,
+    base: Stateful<Div>,
     style: StyleRefinement,
-    id: ElementId,
     icon: Option<Icon>,
     label: Option<SharedString>,
     children: Vec<AnyElement>,
@@ -215,9 +214,8 @@ impl From<Button> for AnyElement {
 impl Button {
     pub fn new(id: impl Into<ElementId>) -> Self {
         Self {
-            base: div().flex_shrink_0(),
+            base: div().id(id.into()).flex_shrink_0(),
             style: StyleRefinement::default(),
-            id: id.into(),
             icon: None,
             label: None,
             disabled: false,
@@ -335,10 +333,6 @@ impl Disableable for Button {
 }
 
 impl Selectable for Button {
-    fn element_id(&self) -> &ElementId {
-        &self.id
-    }
-
     fn selected(mut self, selected: bool) -> Self {
         self.selected = selected;
         self
@@ -391,7 +385,6 @@ impl RenderOnce for Button {
         };
 
         self.base
-            .id(self.id)
             .flex_shrink_0()
             .cursor_default()
             .flex()
