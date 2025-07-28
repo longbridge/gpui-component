@@ -266,10 +266,12 @@ impl RenderOnce for Slider {
 
         div()
             .id(("slider", self.state.entity_id()))
+            .flex()
             .flex_1()
             .when(axis.is_vertical(), |this| {
-                this.flex().items_center().justify_center()
+                this.items_center().justify_center()
             })
+            .when(axis.is_horizontal(), |this| this.w_full())
             .child(
                 h_flex()
                     .when(!self.disabled, |this| {

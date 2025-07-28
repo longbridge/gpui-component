@@ -36,6 +36,7 @@ impl RenderOnce for Progress {
         });
 
         div()
+            .w_full()
             .relative()
             .h(px(self.height))
             .rounded(radius)
