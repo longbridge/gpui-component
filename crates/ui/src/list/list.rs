@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use crate::actions::{Cancel, Confirm, SelectNext, SelectPrev};
 use crate::input::InputState;
-use crate::{h_flex, Icon, Sizable as _};
+use crate::{h_flex, Icon, Selectable, Sizable as _};
 use crate::{
     input::{InputEvent, TextInput},
     scroll::{Scrollbar, ScrollbarState},
@@ -14,7 +14,7 @@ use gpui::{
     Focusable, InteractiveElement, IntoElement, KeyBinding, Length, ListSizingBehavior,
     MouseButton, ParentElement, Render, Styled, Task, UniformListScrollHandle, Window,
 };
-use gpui::{px, App, Context, EventEmitter, MouseDownEvent, ScrollStrategy, Subscription};
+use gpui::{App, Context, EventEmitter, MouseDownEvent, ScrollStrategy, Subscription};
 use rust_i18n::t;
 use smol::Timer;
 
@@ -44,7 +44,7 @@ pub enum ListEvent {
 /// A delegate for the List.
 #[allow(unused)]
 pub trait ListDelegate: Sized + 'static {
-    type Item: IntoElement;
+    type Item: Selectable + IntoElement;
 
     /// When Query Input change, this method will be called.
     /// You can perform search here.
@@ -163,7 +163,7 @@ pub struct List<D: ListDelegate> {
     scroll_state: ScrollbarState,
     pub(crate) size: Size,
     selected_index: Option<usize>,
-    right_clicked_index: Option<usize>,
+    mouse_right_clicked_index: Option<usize>,
     reset_on_cancel: bool,
     _search_task: Task<()>,
     _load_more_task: Task<()>,
@@ -190,7 +190,7 @@ where
             query_input: Some(query_input),
             last_query: None,
             selected_index: None,
-            right_clicked_index: None,
+            mouse_right_clicked_index: None,
             vertical_scroll_handle: UniformListScrollHandle::new(),
             scroll_state: ScrollbarState::default(),
             max_height: None,
@@ -500,31 +500,21 @@ where
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let selected = self.selected_index == Some(ix);
-        let right_clicked = self.right_clicked_index == Some(ix);
+        let mouse_right_clicked = self.mouse_right_clicked_index == Some(ix);
 
         div()
             .id("list-item")
             .w_full()
             .relative()
-            .children(self.delegate.render_item(ix, window, cx))
+            .children(self.delegate.render_item(ix, window, cx).map(|item| {
+                item.selected(selected)
+                    .secondary_selected(mouse_right_clicked)
+            }))
             .when(self.selectable, |this| {
-                this.when(selected || right_clicked, |this| {
-                    this.child(
-                        div()
-                            .absolute()
-                            .top(px(0.))
-                            .left(px(0.))
-                            .right(px(0.))
-                            .bottom(px(0.))
-                            .when(selected, |this| this.bg(cx.theme().list_active))
-                            .border_1()
-                            .border_color(cx.theme().list_active_border),
-                    )
-                })
-                .on_mouse_down(
+                this.on_mouse_down(
                     MouseButton::Left,
                     cx.listener(move |this, ev: &MouseDownEvent, window, cx| {
-                        this.right_clicked_index = None;
+                        this.mouse_right_clicked_index = None;
                         this.selected_index = Some(ix);
                         this.on_action_confirm(
                             &Confirm {
@@ -538,7 +528,7 @@ where
                 .on_mouse_down(
                     MouseButton::Right,
                     cx.listener(move |this, _, _, cx| {
-                        this.right_clicked_index = Some(ix);
+                        this.mouse_right_clicked_index = Some(ix);
                         cx.notify();
                     }),
                 )
@@ -668,9 +658,9 @@ where
                         }
                     })
                     // Click out to cancel right clicked row
-                    .when(self.right_clicked_index.is_some(), |this| {
+                    .when(self.mouse_right_clicked_index.is_some(), |this| {
                         this.on_mouse_down_out(cx.listener(|this, _, _, cx| {
-                            this.right_clicked_index = None;
+                            this.mouse_right_clicked_index = None;
                             cx.notify();
                         }))
                     })

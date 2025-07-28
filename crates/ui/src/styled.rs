@@ -346,6 +346,11 @@ pub trait Selectable: Sized {
 
     /// Returns true if the element is selected.
     fn is_selected(&self) -> bool;
+
+    /// Set is the element mouse right clicked, default do nothing.
+    fn secondary_selected(self, _: bool) -> Self {
+        self
+    }
 }
 
 /// A trait for defining element that can be disabled.

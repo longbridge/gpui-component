@@ -1,8 +1,8 @@
-use crate::{h_flex, ActiveTheme, Disableable, Icon, Selectable, Sizable as _};
+use crate::{h_flex, ActiveTheme, Disableable, Icon, Selectable, Sizable as _, StyledExt};
 use gpui::{
     div, prelude::FluentBuilder as _, AnyElement, App, ClickEvent, Div, ElementId,
     InteractiveElement, IntoElement, MouseButton, MouseMoveEvent, ParentElement, RenderOnce,
-    Stateful, StatefulInteractiveElement as _, Styled, Window,
+    Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled, Window,
 };
 use smallvec::SmallVec;
 
@@ -10,8 +10,10 @@ use smallvec::SmallVec;
 pub struct ListItem {
     id: ElementId,
     base: Stateful<Div>,
+    style: StyleRefinement,
     disabled: bool,
     selected: bool,
+    secondary_selected: bool,
     confirmed: bool,
     check_icon: Option<Icon>,
     on_click: Option<Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>>,
@@ -25,9 +27,11 @@ impl ListItem {
         let id: ElementId = id.into();
         Self {
             id: id.clone(),
-            base: h_flex().id(id).gap_x_1().py_1().px_2().text_base(),
+            base: h_flex().id(id),
+            style: StyleRefinement::default(),
             disabled: false,
             selected: false,
+            secondary_selected: false,
             confirmed: false,
             on_click: None,
             on_mouse_enter: None,
@@ -109,11 +113,16 @@ impl Selectable for ListItem {
     fn is_selected(&self) -> bool {
         self.selected
     }
+
+    fn secondary_selected(mut self, selected: bool) -> Self {
+        self.secondary_selected = selected;
+        self
+    }
 }
 
 impl Styled for ListItem {
     fn style(&mut self) -> &mut gpui::StyleRefinement {
-        self.base.style()
+        &mut self.style
     }
 }
 
@@ -127,11 +136,24 @@ impl RenderOnce for ListItem {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let is_active = self.confirmed || self.selected;
 
+        let corner_radii = self.style.corner_radii.clone();
+
+        let mut selected_style = StyleRefinement::default();
+        selected_style.corner_radii = corner_radii;
+
         self.base
+            .relative()
+            .gap_x_1()
+            .py_1()
+            .px_2()
+            .mx_2()
+            .rounded(cx.theme().radius)
+            .text_base()
             .text_color(cx.theme().foreground)
             .relative()
             .items_center()
             .justify_between()
+            .refine_style(&self.style)
             .when(!self.disabled, |this| {
                 this.when_some(self.on_click, |this, on_click| {
                     this.on_mouse_down(MouseButton::Left, move |_, _, cx| {
@@ -168,5 +190,26 @@ impl RenderOnce for ListItem {
                     }),
             )
             .when_some(self.suffix, |this, suffix| this.child(suffix(window, cx)))
+            .map(|this| {
+                if self.selected || self.secondary_selected {
+                    this.bg(cx.theme().accent).child(
+                        div()
+                            .absolute()
+                            .top_0()
+                            .left_0()
+                            .right_0()
+                            .bottom_0()
+                            .when(!self.secondary_selected, |this| {
+                                this.bg(cx.theme().list_active)
+                            })
+                            .border_1()
+                            .border_color(cx.theme().list_active_border)
+                            .rounded(cx.theme().radius)
+                            .refine_style(&selected_style),
+                    )
+                } else {
+                    this
+                }
+            })
     }
 }

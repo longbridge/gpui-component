@@ -2,9 +2,9 @@ use std::time::Duration;
 
 use fake::Fake;
 use gpui::{
-    actions, div, px, App, AppContext, Context, ElementId, Entity, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, ParentElement, Render, RenderOnce, SharedString, Styled,
-    Subscription, Task, Timer, Window,
+    actions, div, prelude::FluentBuilder as _, px, App, AppContext, Context, ElementId, Entity,
+    FocusHandle, Focusable, InteractiveElement, IntoElement, ParentElement, Render, RenderOnce,
+    SharedString, Styled, Subscription, Task, Timer, Window,
 };
 
 use gpui_component::{
@@ -13,7 +13,7 @@ use gpui_component::{
     h_flex,
     label::Label,
     list::{List, ListDelegate, ListEvent, ListItem},
-    v_flex, ActiveTheme, Sizable,
+    v_flex, ActiveTheme, Selectable, Sizable,
 };
 
 actions!(list_story, [SelectedCompany]);
@@ -48,6 +48,7 @@ impl Company {
 
 #[derive(IntoElement)]
 struct CompanyListItem {
+    id: ElementId,
     base: ListItem,
     ix: usize,
     company: Company,
@@ -56,12 +57,29 @@ struct CompanyListItem {
 
 impl CompanyListItem {
     pub fn new(id: impl Into<ElementId>, company: Company, ix: usize, selected: bool) -> Self {
+        let id: ElementId = id.into();
         CompanyListItem {
+            id: id.clone(),
             company,
             ix,
             base: ListItem::new(id),
             selected,
         }
+    }
+}
+
+impl Selectable for CompanyListItem {
+    fn element_id(&self) -> &ElementId {
+        &self.id
+    }
+
+    fn selected(mut self, selected: bool) -> Self {
+        self.selected = selected;
+        self
+    }
+
+    fn is_selected(&self) -> bool {
+        self.selected
     }
 }
 
@@ -88,10 +106,17 @@ impl RenderOnce for CompanyListItem {
         };
 
         self.base
-            .px_3()
+            .px_2()
             .py_1()
+            .mx_2()
             .overflow_x_hidden()
             .bg(bg_color)
+            .border_1()
+            .border_color(bg_color)
+            .when(self.selected, |this| {
+                this.border_color(cx.theme().list_active_border)
+            })
+            .rounded(cx.theme().radius)
             .child(
                 h_flex()
                     .items_center()

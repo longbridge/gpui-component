@@ -71,15 +71,11 @@ impl ListDelegate for ListItemDeletegate {
         _: &mut Context<List<Self>>,
     ) -> Option<Self::Item> {
         let confirmed = Some(ix) == self.confirmed_index;
-        let selected = Some(ix) == self.selected_index;
 
         if let Some(item) = self.matches.get(ix) {
             let list_item = ListItem::new(("item", ix))
                 .check_icon(IconName::Check)
                 .confirmed(confirmed)
-                .selected(selected)
-                .py_1()
-                .px_3()
                 .child(
                     h_flex()
                         .items_center()
