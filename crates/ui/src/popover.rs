@@ -29,7 +29,7 @@ impl PopoverContent {
         let focus_handle = cx.focus_handle();
 
         Self {
-            style: StyleRefinement::default().p_2(),
+            style: StyleRefinement::default(),
             focus_handle,
             content: Rc::new(content),
         }
@@ -52,6 +52,7 @@ impl Styled for PopoverContent {
 impl Render for PopoverContent {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
+            .p_2()
             .refine_style(&self.style)
             .track_focus(&self.focus_handle)
             .key_context(CONTEXT)
