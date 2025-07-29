@@ -930,6 +930,7 @@ impl RenderOnce for Calendar {
         });
 
         v_flex()
+            .id(("canlendar", self.state.entity_id()))
             .track_focus(&self.state.read(cx).focus_handle)
             .border_1()
             .border_color(cx.theme().border)

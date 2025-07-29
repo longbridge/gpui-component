@@ -13,6 +13,7 @@ pub struct CalendarStory {
     focus_handle: FocusHandle,
     calendar: Entity<CalendarState>,
     calendar_wide: Entity<CalendarState>,
+    calendar_with_disabled_matcher: Entity<CalendarState>,
 }
 
 impl super::Story for CalendarStory {
@@ -37,10 +38,13 @@ impl CalendarStory {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let calendar = cx.new(|cx| CalendarState::new(window, cx));
         let calendar_wide = cx.new(|cx| CalendarState::new(window, cx));
+        let calendar_with_disabled_matcher =
+            cx.new(|cx| CalendarState::new(window, cx).disabled_matcher(vec![0, 3, 6]));
 
         Self {
             calendar,
             calendar_wide,
+            calendar_with_disabled_matcher,
             focus_handle: cx.focus_handle(),
         }
     }
@@ -65,6 +69,11 @@ impl Render for CalendarStory {
                 section("With 3 Months")
                     .max_w_md()
                     .child(Calendar::new(&self.calendar_wide).number_of_months(3)),
+            )
+            .child(
+                section("With Disabled matcher (Sundays, Wednesdays, Saturdays)")
+                    .max_w_md()
+                    .child(Calendar::new(&self.calendar_with_disabled_matcher)),
             )
     }
 }
