@@ -723,22 +723,9 @@ impl InputState {
     /// Set with disabled mode.
     ///
     /// See also: [`Self::set_disabled`], [`Self::is_disabled`].
-    pub fn disabled(mut self, disabled: bool) -> Self {
+    pub(crate) fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self
-    }
-
-    /// Set the disabled state of the input field.
-    ///
-    /// See also: [`Self::disabled`], [`Self::is_disabled`].
-    pub fn set_disabled(&mut self, disabled: bool, _: &mut Window, cx: &mut Context<Self>) {
-        self.disabled = disabled;
-        cx.notify();
-    }
-
-    /// Return is the input field is disabled.
-    pub fn is_disabled(&self) -> bool {
-        self.disabled
     }
 
     /// Set with password masked state.

@@ -6,7 +6,7 @@ use gpui::{
 
 use crate::{
     button::{Button, ButtonVariants as _},
-    h_flex, ActiveTheme, IconName, Sizable, Size, StyleSized, StyledExt as _,
+    h_flex, ActiveTheme, Disableable, IconName, Sizable, Size, StyleSized, StyledExt as _,
 };
 
 use super::{InputState, TextInput};
@@ -30,6 +30,7 @@ pub struct NumberInput {
     prefix: Option<AnyElement>,
     suffix: Option<AnyElement>,
     appearance: bool,
+    disabled: bool,
 }
 
 impl NumberInput {
@@ -42,6 +43,7 @@ impl NumberInput {
             prefix: None,
             suffix: None,
             appearance: true,
+            disabled: false,
         }
     }
 
@@ -80,6 +82,13 @@ impl NumberInput {
     /// Set the appearance of the number input, if false will no border and background.
     pub fn appearance(mut self, appearance: bool) -> Self {
         self.appearance = appearance;
+        self
+    }
+}
+
+impl Disableable for NumberInput {
+    fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
         self
     }
 }
@@ -142,6 +151,7 @@ impl RenderOnce for NumberInput {
                     .border_1()
                     .rounded(cx.theme().radius)
             })
+            .when(self.disabled, |this| this.bg(cx.theme().muted))
             .when(focused, |this| this.focused_border(cx))
             .child(
                 Button::new("minus")
@@ -149,6 +159,7 @@ impl RenderOnce for NumberInput {
                     .with_size(self.size.smaller())
                     .icon(IconName::Minus)
                     .compact()
+                    .disabled(self.disabled)
                     .on_click({
                         let state = self.state.clone();
                         move |_, window, cx| {
@@ -159,6 +170,7 @@ impl RenderOnce for NumberInput {
             .child(
                 TextInput::new(&self.state)
                     .appearance(false)
+                    .disabled(self.disabled)
                     .px(px(2.))
                     .gap_0()
                     .when_some(self.prefix, |this, prefix| this.prefix(prefix))
@@ -170,6 +182,7 @@ impl RenderOnce for NumberInput {
                     .with_size(self.size.smaller())
                     .icon(IconName::Plus)
                     .compact()
+                    .disabled(self.disabled)
                     .on_click({
                         let state = self.state.clone();
                         move |_, window, cx| {

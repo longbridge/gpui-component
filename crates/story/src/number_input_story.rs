@@ -8,7 +8,7 @@ use crate::{section, Tab, TabPrev};
 use gpui_component::{
     button::{Button, ButtonVariants},
     input::{InputEvent, InputState, MaskPattern, NumberInput, NumberInputEvent, StepAction},
-    v_flex, ActiveTheme, FocusableCycle, IconName, Sizable,
+    v_flex, ActiveTheme, Disableable, FocusableCycle, IconName, Sizable,
 };
 
 const CONTEXT: &str = "NumberInputStory";
@@ -63,7 +63,6 @@ impl NumberInputStory {
             InputState::new(window, cx)
                 .placeholder("Number Input")
                 .default_value(number_input1_value.to_string())
-                .disabled(true)
         });
 
         let number_input2 = cx.new(|cx| {
@@ -92,8 +91,8 @@ impl NumberInputStory {
 
         let disabled_input = cx.new(|cx| {
             InputState::new(window, cx)
+                .default_value("100")
                 .placeholder("Disabled input")
-                .disabled(true)
         });
 
         let _subscriptions = vec![
@@ -252,7 +251,7 @@ impl Render for NumberInputStory {
             .child(
                 section("Disabled")
                     .max_w_md()
-                    .child(NumberInput::new(&self.disabled_input)),
+                    .child(NumberInput::new(&self.disabled_input).disabled(true)),
             )
             .child(
                 section("Small Size with suffix").max_w_md().child(
