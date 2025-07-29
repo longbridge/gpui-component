@@ -248,6 +248,7 @@ impl Matcher {
 
 #[derive(IntoElement)]
 pub struct Calendar {
+    id: ElementId,
     size: Size,
     state: Entity<CalendarState>,
     style: StyleRefinement,
@@ -508,6 +509,7 @@ impl Render for CalendarState {
 impl Calendar {
     pub fn new(state: &Entity<CalendarState>) -> Self {
         Self {
+            id: ("calendar", state.entity_id()).into(),
             size: Size::default(),
             state: state.clone(),
             style: StyleRefinement::default(),
@@ -930,7 +932,7 @@ impl RenderOnce for Calendar {
         });
 
         v_flex()
-            .id(("canlendar", self.state.entity_id()))
+            .id(self.id.clone())
             .track_focus(&self.state.read(cx).focus_handle)
             .border_1()
             .border_color(cx.theme().border)
