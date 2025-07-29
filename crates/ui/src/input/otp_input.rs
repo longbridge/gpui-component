@@ -6,7 +6,7 @@ use gpui::{
 };
 
 use super::{blink_cursor::BlinkCursor, InputEvent};
-use crate::{h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable, Size};
+use crate::{h_flex, v_flex, ActiveTheme, Disableable, Icon, IconName, Sizable, Size};
 
 pub struct OtpState {
     focus_handle: FocusHandle,
@@ -183,6 +183,7 @@ pub struct OtpInput {
     state: Entity<OtpState>,
     number_of_groups: usize,
     size: Size,
+    disabled: bool,
 }
 
 impl OtpInput {
@@ -192,6 +193,7 @@ impl OtpInput {
             state: state.clone(),
             number_of_groups: 2,
             size: Size::Medium,
+            disabled: false,
         }
     }
 
@@ -201,7 +203,12 @@ impl OtpInput {
         self
     }
 }
-
+impl Disableable for OtpInput {
+    fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+}
 impl Sizable for OtpInput {
     fn with_size(mut self, size: impl Into<crate::Size>) -> Self {
         self.size = size.into();
@@ -248,6 +255,10 @@ impl RenderOnce for OtpInput {
                     .border_1()
                     .border_color(cx.theme().input)
                     .bg(cx.theme().background)
+                    .when(self.disabled, |this| {
+                        this.bg(cx.theme().muted)
+                            .text_color(cx.theme().muted_foreground)
+                    })
                     .when(is_input_focused, |this| this.border_color(cx.theme().ring))
                     .when(cx.theme().shadow, |this| this.shadow_xs())
                     .items_center()
@@ -271,6 +282,9 @@ impl RenderOnce for OtpInput {
                                 this.child(
                                     Icon::new(IconName::Asterisk)
                                         .text_color(cx.theme().secondary_foreground)
+                                        .when(self.disabled, |this| {
+                                            this.text_color(cx.theme().muted_foreground)
+                                        })
                                         .with_size(text_size),
                                 )
                             } else {
@@ -294,7 +308,9 @@ impl RenderOnce for OtpInput {
         v_flex()
             .id(("otp-input", self.state.entity_id()))
             .track_focus(&self.state.read(cx).focus_handle)
-            .on_key_down(window.listener_for(&self.state, OtpState::on_key_down))
+            .when(!self.disabled, |this| {
+                this.on_key_down(window.listener_for(&self.state, OtpState::on_key_down))
+            })
             .items_center()
             .child(
                 h_flex().items_center().gap_5().children(

@@ -7,7 +7,7 @@ use gpui_component::{
     checkbox::Checkbox,
     h_flex,
     input::{InputEvent, OtpInput, OtpState},
-    v_flex, FocusableCycle, Sizable, StyledExt,
+    v_flex, Disableable as _, FocusableCycle, Sizable, StyledExt,
 };
 
 use crate::{section, Tab, TabPrev};
@@ -28,6 +28,7 @@ pub struct OtpInputStory {
     otp_state_small: Entity<OtpState>,
     otp_state_large: Entity<OtpState>,
     otp_state_sized: Entity<OtpState>,
+    otp_state_disabled: Entity<OtpState>,
 
     _subscriptions: Vec<Subscription>,
 }
@@ -88,6 +89,11 @@ impl OtpInputStory {
                     .masked(true)
                     .default_value("654321")
             }),
+            otp_state_disabled: cx.new(|cx| {
+                OtpState::new(6, window, cx)
+                    .masked(true)
+                    .default_value("123456")
+            }),
             _subscriptions,
         }
     }
@@ -102,17 +108,20 @@ impl OtpInputStory {
 
     fn toggle_opt_masked(&mut self, _: &bool, window: &mut Window, cx: &mut Context<Self>) {
         self.otp_masked = !self.otp_masked;
-        self.otp_state.update(cx, |input, cx| {
-            input.set_masked(self.otp_masked, window, cx)
+        self.otp_state.update(cx, |state, cx| {
+            state.set_masked(self.otp_masked, window, cx)
         });
-        self.otp_state_small.update(cx, |input, cx| {
-            input.set_masked(self.otp_masked, window, cx)
+        self.otp_state_small.update(cx, |state, cx| {
+            state.set_masked(self.otp_masked, window, cx)
         });
-        self.otp_state_large.update(cx, |input, cx| {
-            input.set_masked(self.otp_masked, window, cx)
+        self.otp_state_large.update(cx, |state, cx| {
+            state.set_masked(self.otp_masked, window, cx)
         });
-        self.otp_state_sized.update(cx, |input, cx| {
-            input.set_masked(self.otp_masked, window, cx)
+        self.otp_state_sized.update(cx, |state, cx| {
+            state.set_masked(self.otp_masked, window, cx)
+        });
+        self.otp_state_disabled.update(cx, |state, cx| {
+            state.set_masked(self.otp_masked, window, cx)
         });
     }
 }
@@ -161,6 +170,9 @@ impl Render for OtpInputStory {
                         .groups(1)
                         .with_size(px(55.)),
                 ),
+            )
+            .child(
+                section("Disabled").child(OtpInput::new(&self.otp_state_disabled).disabled(true)),
             )
     }
 }
