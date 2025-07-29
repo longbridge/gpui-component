@@ -520,7 +520,7 @@ impl Theme {
         apply_color!(tab_active, fallback = self.background);
         apply_color!(tab_active_foreground, fallback = self.foreground);
         apply_color!(tab_bar, fallback = self.background);
-        apply_color!(tab_bar_segmented, fallback = self.background);
+        apply_color!(tab_bar_segmented, fallback = self.secondary);
         apply_color!(tab_foreground, fallback = self.secondary_foreground);
         apply_color!(table, fallback = self.list);
         apply_color!(table_active, fallback = self.list_active);
