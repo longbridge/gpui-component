@@ -4,7 +4,7 @@ use fake::Fake;
 use gpui::{
     actions, div, prelude::FluentBuilder as _, px, App, AppContext, Context, Edges, ElementId,
     Entity, FocusHandle, Focusable, InteractiveElement, IntoElement, ParentElement, Render,
-    RenderOnce, SharedString, Styled, Subscription, Task, Timer, Window,
+    RenderOnce, ScrollStrategy, SharedString, Styled, Subscription, Task, Timer, Window,
 };
 
 use gpui_component::{
@@ -392,7 +392,24 @@ impl Render for ListStory {
                             .small()
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.company_list.update(cx, |list, cx| {
-                                    list.scroll_to_item(0, window, cx);
+                                    list.scroll_to_item(0, ScrollStrategy::Top, window, cx);
+                                    cx.notify();
+                                })
+                            })),
+                    )
+                    .child(
+                        Button::new("scroll-center")
+                            .outline()
+                            .child("Scroll to Center")
+                            .small()
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.company_list.update(cx, |list, cx| {
+                                    list.scroll_to_item(
+                                        list.delegate().items_count(cx) / 2,
+                                        ScrollStrategy::Center,
+                                        window,
+                                        cx,
+                                    );
                                 })
                             })),
                     )
@@ -405,6 +422,7 @@ impl Render for ListStory {
                                 this.company_list.update(cx, |list, cx| {
                                     list.scroll_to_item(
                                         list.delegate().items_count(cx) - 1,
+                                        ScrollStrategy::Top,
                                         window,
                                         cx,
                                     );
@@ -419,7 +437,12 @@ impl Render for ListStory {
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.company_list.update(cx, |list, cx| {
                                     if let Some(selected) = list.selected_index() {
-                                        list.scroll_to_item(selected, window, cx);
+                                        list.scroll_to_item(
+                                            selected,
+                                            ScrollStrategy::Top,
+                                            window,
+                                            cx,
+                                        );
                                     }
                                 })
                             })),
