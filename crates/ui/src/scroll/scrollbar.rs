@@ -10,7 +10,7 @@ use gpui::{
     fill, point, px, relative, size, App, Axis, BorderStyle, Bounds, ContentMask, Corner,
     CursorStyle, Edges, Element, GlobalElementId, Hitbox, HitboxBehavior, Hsla, InspectorElementId,
     IntoElement, LayoutId, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PaintQuad, Pixels, Point,
-    Position, ScrollHandle, ScrollWheelEvent, Size, Style, UniformListScrollHandle, Window,
+    Position, ScrollHandle, ScrollWheelEvent, Size, Style, Timer, UniformListScrollHandle, Window,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -105,6 +105,7 @@ pub struct ScrollbarStateInner {
     last_scroll_time: Option<Instant>,
     // Last update offset
     last_update: Instant,
+    idle_timer_scheduled: bool,
 }
 
 impl Default for ScrollbarState {
@@ -117,6 +118,7 @@ impl Default for ScrollbarState {
             last_scroll_offset: point(px(0.), px(0.)),
             last_scroll_time: None,
             last_update: Instant::now(),
+            idle_timer_scheduled: false,
         })))
     }
 }
@@ -188,6 +190,12 @@ impl ScrollbarStateInner {
     fn with_last_update(&self, t: Instant) -> Self {
         let mut state = *self;
         state.last_update = t;
+        state
+    }
+
+    fn with_idle_timer_scheduled(&self, scheduled: bool) -> Self {
+        let mut state = *self;
+        state.idle_timer_scheduled = scheduled;
         state
     }
 
@@ -557,25 +565,34 @@ impl Element for Scrollbar {
                     // Delay 2s to fade out the scrollbar thumb (in 1s)
                     if let Some(last_time) = state.get().last_scroll_time {
                         let elapsed = Instant::now().duration_since(last_time).as_secs_f32();
-                        if elapsed < FADE_OUT_DURATION {
-                            if is_hovered_on_bar {
-                                state.set(state.get().with_last_scroll_time(Some(Instant::now())));
-                                idle_state = if is_hovered_on_thumb {
-                                    Self::style_for_hovered_thumb(cx)
-                                } else {
-                                    Self::style_for_hovered_bar(cx)
-                                };
+                        if is_hovered_on_bar {
+                            state.set(state.get().with_last_scroll_time(Some(Instant::now())));
+                            idle_state = if is_hovered_on_thumb {
+                                Self::style_for_hovered_thumb(cx)
                             } else {
-                                if elapsed < FADE_OUT_DELAY {
-                                    idle_state.0 = cx.theme().scrollbar_thumb;
-                                } else {
-                                    // opacity = 1 - (x - 2)^10
-                                    let opacity = 1.0 - (elapsed - FADE_OUT_DELAY).powi(10);
-                                    idle_state.0 = cx.theme().scrollbar_thumb.opacity(opacity);
-                                };
+                                Self::style_for_hovered_bar(cx)
+                            };
+                        } else if elapsed < FADE_OUT_DELAY {
+                            idle_state.0 = cx.theme().scrollbar_thumb;
 
-                                window.request_animation_frame();
+                            if !state.get().idle_timer_scheduled {
+                                let state = state.clone();
+                                state.set(state.get().with_idle_timer_scheduled(true));
+                                let current_view = window.current_view();
+                                let next_delay = Duration::from_secs_f32(FADE_OUT_DELAY - elapsed);
+                                window
+                                    .spawn(cx, async move |cx| {
+                                        Timer::after(next_delay).await;
+                                        state.set(state.get().with_idle_timer_scheduled(false));
+                                        cx.update(|_, cx| cx.notify(current_view)).ok();
+                                    })
+                                    .detach();
                             }
+                        } else if elapsed < FADE_OUT_DURATION {
+                            let opacity = 1.0 - (elapsed - FADE_OUT_DELAY).powi(10);
+                            idle_state.0 = cx.theme().scrollbar_thumb.opacity(opacity);
+
+                            window.request_animation_frame();
                         }
                     }
 
