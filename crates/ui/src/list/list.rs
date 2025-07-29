@@ -308,9 +308,14 @@ where
     }
 
     /// Scroll to the item at the given index.
-    pub fn scroll_to_item(&mut self, ix: usize, _: &mut Window, cx: &mut Context<Self>) {
-        self.vertical_scroll_handle
-            .scroll_to_item(ix, ScrollStrategy::Top);
+    pub fn scroll_to_item(
+        &mut self,
+        ix: usize,
+        strategy: ScrollStrategy,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.vertical_scroll_handle.scroll_to_item(ix, strategy);
         cx.notify();
     }
 
