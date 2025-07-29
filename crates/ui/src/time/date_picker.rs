@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use chrono::NaiveDate;
 use gpui::{
     anchored, deferred, div, prelude::FluentBuilder as _, px, App, AppContext, Context, ElementId,
@@ -12,7 +14,8 @@ use crate::{
     button::{Button, ButtonVariants as _},
     h_flex,
     input::clear_button,
-    v_flex, ActiveTheme, Icon, IconName, Sizable, Size, StyleSized as _, StyledExt as _,
+    v_flex, ActiveTheme, Disableable, Icon, IconName, Sizable, Size, StyleSized as _,
+    StyledExt as _,
 };
 
 use super::calendar::{Calendar, CalendarEvent, CalendarState, Date, Matcher};
@@ -64,6 +67,7 @@ pub struct DatePickerState {
     calendar: Entity<CalendarState>,
     date_format: SharedString,
     number_of_months: usize,
+    disabled_matcher: Option<Rc<Matcher>>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -116,6 +120,7 @@ impl DatePickerState {
             open: false,
             date_format: "%Y/%m/%d".into(),
             number_of_months: 1,
+            disabled_matcher: None,
             _subscriptions,
         }
     }
@@ -154,15 +159,17 @@ impl DatePickerState {
         cx.notify();
     }
 
+    /// Set the disabled match for the calendar.
+    pub fn disabled_matcher(mut self, disabled: impl Into<Matcher>) -> Self {
+        self.disabled_matcher = Some(Rc::new(disabled.into()));
+        self
+    }
+
     /// Set the disabled matcher of the date picker.
-    pub fn set_disabled(
-        &mut self,
-        disabled: impl Into<Matcher>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.calendar.update(cx, |view, cx| {
-            view.set_disabled(disabled.into(), window, cx);
+    fn set_canlendar_disabled_matcher(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+        let matcher = self.disabled_matcher.clone();
+        self.calendar.update(cx, |state, _| {
+            state.disabled_matcher = matcher;
         });
     }
 
@@ -239,6 +246,7 @@ pub struct DatePicker {
     number_of_months: usize,
     presets: Option<Vec<DateRangePreset>>,
     appearance: bool,
+    disabled: bool,
 }
 
 impl Sizable for DatePicker {
@@ -256,6 +264,13 @@ impl Focusable for DatePicker {
 impl Styled for DatePicker {
     fn style(&mut self) -> &mut StyleRefinement {
         &mut self.style
+    }
+}
+
+impl Disableable for DatePicker {
+    fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
     }
 }
 
@@ -277,6 +292,7 @@ impl DatePicker {
             number_of_months: 2,
             presets: None,
             appearance: true,
+            disabled: false,
         }
     }
 
@@ -313,6 +329,10 @@ impl DatePicker {
 
 impl RenderOnce for DatePicker {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        self.state.update(cx, |state, cx| {
+            state.set_canlendar_disabled_matcher(window, cx);
+        });
+
         // This for keep focus border style, when click on the popup.
         let is_focused = self.focus_handle(cx).contains_focused(window, cx);
         let state = self.state.read(cx);
@@ -352,11 +372,15 @@ impl RenderOnce for DatePicker {
                             .rounded(cx.theme().radius)
                             .when(cx.theme().shadow, |this| this.shadow_xs())
                             .when(is_focused, |this| this.focused_border(cx))
+                            .when(self.disabled, |this| {
+                                this.bg(cx.theme().muted)
+                                    .text_color(cx.theme().muted_foreground)
+                            })
                     })
                     .overflow_hidden()
                     .input_text_size(self.size)
                     .input_size(self.size)
-                    .when(!state.open, |this| {
+                    .when(!state.open && !self.disabled, |this| {
                         this.on_click(
                             window.listener_for(&self.state, DatePickerState::toggle_calendar),
                         )
@@ -368,17 +392,19 @@ impl RenderOnce for DatePicker {
                             .justify_between()
                             .gap_1()
                             .child(div().w_full().overflow_hidden().child(display_title))
-                            .when(show_clean, |this| {
-                                this.child(clear_button(cx).on_click(
-                                    window.listener_for(&self.state, DatePickerState::clean),
-                                ))
-                            })
-                            .when(!show_clean, |this| {
-                                this.child(
-                                    Icon::new(IconName::Calendar)
-                                        .xsmall()
-                                        .text_color(cx.theme().muted_foreground),
-                                )
+                            .when(!self.disabled, |this| {
+                                this.when(show_clean, |this| {
+                                    this.child(clear_button(cx).on_click(
+                                        window.listener_for(&self.state, DatePickerState::clean),
+                                    ))
+                                })
+                                .when(!show_clean, |this| {
+                                    this.child(
+                                        Icon::new(IconName::Calendar)
+                                            .xsmall()
+                                            .text_color(cx.theme().muted_foreground),
+                                    )
+                                })
                             }),
                     ),
             )

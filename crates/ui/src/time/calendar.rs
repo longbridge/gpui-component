@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, rc::Rc};
 
 use chrono::{Datelike, Local, NaiveDate};
 use gpui::{
@@ -267,7 +267,7 @@ pub struct CalendarState {
     today: NaiveDate,
     /// Number of the months view to show.
     number_of_months: usize,
-    disabled: Option<Matcher>,
+    pub(crate) disabled_matcher: Option<Rc<Matcher>>,
 }
 
 impl CalendarState {
@@ -283,9 +283,27 @@ impl CalendarState {
             year_page: 0,
             today,
             number_of_months: 1,
-            disabled: None,
+            disabled_matcher: None,
         }
         .year_range((today.year() - 50, today.year() + 50))
+    }
+
+    /// Set the disabled matcher of the calendar state.
+    pub fn disabled_matcher(mut self, matcher: impl Into<Matcher>) -> Self {
+        self.disabled_matcher = Some(Rc::new(matcher.into()));
+        self
+    }
+
+    /// Set the disabled matcher of the calendar.
+    ///
+    /// The disabled matcher will be used to disable the days that match the matcher.
+    pub fn set_disabled_matcher(
+        &mut self,
+        disabled: impl Into<Matcher>,
+        _: &mut Window,
+        _: &mut Context<Self>,
+    ) {
+        self.disabled_matcher = Some(Rc::new(disabled.into()));
     }
 
     /// Set the date of the calendar.
@@ -295,9 +313,9 @@ impl CalendarState {
         let date = date.into();
 
         let invalid = self
-            .disabled
+            .disabled_matcher
             .as_ref()
-            .map_or(false, |disabled| disabled.date_matched(&date));
+            .map_or(false, |matcher| matcher.date_matched(&date));
 
         if invalid {
             return;
@@ -354,13 +372,6 @@ impl CalendarState {
             .position(|years| years.contains(&self.current_year))
             .unwrap_or(0) as i32;
         self
-    }
-
-    /// Set the disabled matcher of the calendar.
-    ///
-    /// The disabled matcher will be used to disable the days that match the matcher.
-    pub fn set_disabled(&mut self, disabled: Matcher, _: &mut Window, _: &mut Context<Self>) {
-        self.disabled = Some(disabled);
     }
 
     /// Get year and month by offset month.
@@ -527,7 +538,7 @@ impl Calendar {
         let date = *d;
         let is_today = *d == state.today;
         let disabled = state
-            .disabled
+            .disabled_matcher
             .as_ref()
             .map_or(false, |disabled| disabled.matched(&date));
 
@@ -914,8 +925,9 @@ impl RenderOnce for Calendar {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let view_mode = self.state.read(cx).view_mode;
         let number_of_months = self.number_of_months;
-        self.state
-            .update(cx, |state, _| state.number_of_months = number_of_months);
+        self.state.update(cx, |state, _| {
+            state.number_of_months = number_of_months;
+        });
 
         v_flex()
             .track_focus(&self.state.read(cx).focus_handle)
