@@ -71,6 +71,7 @@ pub use event::InteractiveElementExt;
 pub use focusable::FocusableCycle;
 #[cfg(any(feature = "inspector", debug_assertions))]
 pub use inspector::*;
+pub use list::IndexPath;
 pub use menu::{context_menu, popup_menu};
 pub use root::{ContextModal, Root};
 pub use styled::*;

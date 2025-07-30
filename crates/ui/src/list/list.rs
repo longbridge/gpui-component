@@ -1,4 +1,5 @@
 use std::ops::Range;
+use std::rc::Rc;
 use std::time::Duration;
 
 use crate::actions::{Cancel, Confirm, SelectNext, SelectPrev};
@@ -33,12 +34,46 @@ pub fn init(cx: &mut App) {
     ]);
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct IndexPath {
+    /// The section index.
+    pub section: usize,
+    /// The item index in the section.
+    pub row: usize,
+    /// The column index.
+    pub column: usize,
+}
+
+impl IndexPath {
+    /// Set the section for the index path.
+    pub fn section(mut self, section: usize) -> Self {
+        self.section = section;
+        self
+    }
+
+    /// Set the row for the index path.
+    pub fn row(mut self, row: usize) -> Self {
+        self.row = row;
+        self
+    }
+
+    /// Set the column for the index path.
+    pub fn column(mut self, column: usize) -> Self {
+        self.column = column;
+        self
+    }
+
+    pub(crate) fn is_eq_section_and_row(&self, index: IndexPath) -> bool {
+        self.section == index.section && self.row == index.row
+    }
+}
+
 #[derive(Clone)]
 pub enum ListEvent {
     /// Move to select item.
-    Select(usize),
+    Select(IndexPath),
     /// Click on item or pressed Enter.
-    Confirm(usize),
+    Confirm(IndexPath),
     /// Pressed ESC to deselect the item.
     Cancel,
 }
@@ -59,15 +94,20 @@ pub trait ListDelegate: Sized + 'static {
         Task::ready(())
     }
 
+    /// Return the number of sections in the list, default is 1.
+    fn sections_count(&self, cx: &App) -> usize {
+        1
+    }
+
     /// Return the number of items in the list.
-    fn items_count(&self, cx: &App) -> usize;
+    fn items_count(&self, section_ix: usize, cx: &App) -> usize;
 
     /// Render the item at the given index.
     ///
     /// Return None will skip the item.
     fn render_item(
         &self,
-        ix: usize,
+        ix: IndexPath,
         window: &mut Window,
         cx: &mut Context<List<Self>>,
     ) -> Option<Self::Item>;
@@ -116,7 +156,7 @@ pub trait ListDelegate: Sized + 'static {
     /// Set the selected index, just store the ix, don't confirm.
     fn set_selected_index(
         &mut self,
-        ix: Option<usize>,
+        ix: Option<IndexPath>,
         window: &mut Window,
         cx: &mut Context<List<Self>>,
     );
@@ -171,8 +211,11 @@ pub struct List<D: ListDelegate> {
     vertical_scroll_handle: UniformListScrollHandle,
     scroll_state: ScrollbarState,
     pub(crate) size: Size,
-    selected_index: Option<usize>,
-    mouse_right_clicked_index: Option<usize>,
+    /// Cache the sections and items.
+    cached_sections: Vec<usize>,
+    flatten_items: Rc<Vec<IndexPath>>,
+    selected_index: Option<IndexPath>,
+    mouse_right_clicked_index: Option<IndexPath>,
     reset_on_cancel: bool,
     _search_task: Task<()>,
     _load_more_task: Task<()>,
@@ -193,6 +236,8 @@ where
         Self {
             focus_handle: cx.focus_handle(),
             delegate,
+            cached_sections: vec![],
+            flatten_items: Rc::new(vec![]),
             query_input: Some(query_input),
             last_query: None,
             selected_index: None,
@@ -271,7 +316,7 @@ where
     /// this will also scroll to the selected item.
     fn _set_selected_index(
         &mut self,
-        ix: Option<usize>,
+        ix: Option<IndexPath>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -284,7 +329,7 @@ where
     /// this method will not scroll to the selected item.
     pub fn set_selected_index(
         &mut self,
-        ix: Option<usize>,
+        ix: Option<IndexPath>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -292,7 +337,7 @@ where
         self.delegate.set_selected_index(ix, window, cx);
     }
 
-    pub fn selected_index(&self) -> Option<usize> {
+    pub fn selected_index(&self) -> Option<IndexPath> {
         self.selected_index
     }
 
@@ -310,13 +355,19 @@ where
     /// Scroll to the item at the given index.
     pub fn scroll_to_item(
         &mut self,
-        ix: usize,
+        ix: IndexPath,
         strategy: ScrollStrategy,
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.vertical_scroll_handle.scroll_to_item(ix, strategy);
-        cx.notify();
+        if let Some(ix) = self
+            .flatten_items
+            .iter()
+            .position(|item| item.is_eq_section_and_row(ix))
+        {
+            self.vertical_scroll_handle.scroll_to_item(ix, strategy);
+            cx.notify();
+        }
     }
 
     /// Get scroll handle
@@ -326,9 +377,15 @@ where
 
     pub fn scroll_to_selected_item(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         if let Some(ix) = self.selected_index {
-            self.vertical_scroll_handle
-                .scroll_to_item(ix, ScrollStrategy::Top);
-            cx.notify();
+            if let Some(item_ix) = self
+                .flatten_items
+                .iter()
+                .position(|item| item.section == ix.section && item.row == ix.row)
+            {
+                self.vertical_scroll_handle
+                    .scroll_to_item(item_ix, ScrollStrategy::Top);
+                cx.notify();
+            }
         }
     }
 
@@ -355,8 +412,8 @@ where
                 self.set_querying(true, window, cx);
                 let search = self.delegate.perform_search(&text, window, cx);
 
-                if self.delegate.items_count(cx) > 0 {
-                    self._set_selected_index(Some(0), window, cx);
+                if self.flatten_items.len() > 0 {
+                    self._set_selected_index(Some(IndexPath::default()), window, cx);
                 } else {
                     self._set_selected_index(None, window, cx);
                 }
@@ -446,7 +503,7 @@ where
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.delegate.items_count(cx) == 0 {
+        if self.flatten_items.len() == 0 {
             return;
         }
 
@@ -461,7 +518,7 @@ where
         cx.notify();
     }
 
-    fn select_item(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
+    fn select_item(&mut self, ix: IndexPath, window: &mut Window, cx: &mut Context<Self>) {
         self.selected_index = Some(ix);
         self.delegate.set_selected_index(Some(ix), window, cx);
         self.scroll_to_selected_item(window, cx);
@@ -475,18 +532,25 @@ where
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let items_count = self.delegate.items_count(cx);
+        let items_count = self.flatten_items.len();
         if items_count == 0 {
             return;
         }
 
-        let mut selected_index = self.selected_index.unwrap_or(0);
-        if selected_index > 0 {
-            selected_index = selected_index.saturating_sub(1);
+        let selected_index = self.selected_index.unwrap_or(IndexPath::default());
+        let mut flatten_index = self
+            .flatten_items
+            .iter()
+            .position(|item| item.is_eq_section_and_row(selected_index))
+            .unwrap_or(0);
+
+        if flatten_index > 0 {
+            flatten_index = flatten_index.saturating_sub(1);
         } else {
-            selected_index = items_count.saturating_sub(1);
+            flatten_index = items_count.saturating_sub(1);
         }
-        self.select_item(selected_index, window, cx);
+        let index = self.flatten_items[flatten_index];
+        self.select_item(index, window, cx);
     }
 
     fn on_action_select_next(
@@ -495,35 +559,47 @@ where
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let items_count = self.delegate.items_count(cx);
+        let items_count = self.flatten_items.len();
         if items_count == 0 {
             return;
         }
 
-        let selected_index;
-        if let Some(ix) = self.selected_index {
+        let selected_index = self.selected_index.unwrap_or(IndexPath::default());
+        let selected_index = self
+            .flatten_items
+            .iter()
+            .position(|item| item.is_eq_section_and_row(selected_index));
+
+        let flatten_index;
+        if let Some(ix) = selected_index {
             if ix < items_count.saturating_sub(1) {
-                selected_index = ix + 1;
+                flatten_index = ix + 1;
             } else {
                 // When the last item is selected, select the first item.
-                selected_index = 0;
+                flatten_index = 0;
             }
         } else {
             // When no selected index, select the first item.
-            selected_index = 0;
+            flatten_index = 0;
         }
-
-        self.select_item(selected_index, window, cx);
+        let index = self.flatten_items[flatten_index];
+        self.select_item(index, window, cx);
     }
 
     fn render_list_item(
         &mut self,
-        ix: usize,
+        ix: IndexPath,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let selected = self.selected_index == Some(ix);
-        let mouse_right_clicked = self.mouse_right_clicked_index == Some(ix);
+        let selected = self
+            .selected_index
+            .map(|s| s.is_eq_section_and_row(ix))
+            .unwrap_or(false);
+        let mouse_right_clicked = self
+            .mouse_right_clicked_index
+            .map(|s| s.is_eq_section_and_row(ix))
+            .unwrap_or(false);
 
         div()
             .id("list-item")
@@ -578,27 +654,55 @@ where
             .when(items_count == 0, |this| {
                 this.child(self.delegate().render_empty(window, cx))
             })
-            .when(items_count > 0, |this| {
-                this.child(
-                    uniform_list(
-                        "uniform-list",
-                        items_count,
-                        cx.processor(move |list, visible_range: Range<usize>, window, cx| {
-                            list.load_more_if_need(items_count, visible_range.end, window, cx);
+            .when(items_count > 0, {
+                let flatten_items = self.flatten_items.clone();
+                |this| {
+                    this.child(
+                        uniform_list(
+                            "uniform-list",
+                            items_count,
+                            cx.processor(move |list, visible_range: Range<usize>, window, cx| {
+                                list.load_more_if_need(items_count, visible_range.end, window, cx);
 
-                            visible_range
-                                .map(|ix| list.render_list_item(ix, window, cx))
-                                .collect::<Vec<_>>()
-                        }),
+                                visible_range
+                                    .map(|ix| {
+                                        let index = flatten_items[ix];
+                                        list.render_list_item(index, window, cx)
+                                    })
+                                    .collect::<Vec<_>>()
+                            }),
+                        )
+                        .flex_grow()
+                        .paddings(self.paddings)
+                        .with_sizing_behavior(sizing_behavior)
+                        .track_scroll(self.vertical_scroll_handle.clone())
+                        .into_any_element(),
                     )
-                    .flex_grow()
-                    .paddings(self.paddings)
-                    .with_sizing_behavior(sizing_behavior)
-                    .track_scroll(self.vertical_scroll_handle.clone())
-                    .into_any_element(),
-                )
+                }
             })
             .children(self.render_scrollbar(window, cx))
+    }
+
+    fn prepare_items_if_needed(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+        let sections_count = self.delegate.sections_count(cx);
+        let mut new_sections = vec![];
+        for section_ix in 0..sections_count {
+            new_sections.push(self.delegate.items_count(section_ix, cx));
+        }
+        if new_sections == self.cached_sections {
+            return;
+        }
+
+        self.cached_sections = new_sections;
+        self.flatten_items = Rc::new(
+            (0..sections_count)
+                .flat_map(|section_ix| {
+                    (0..self.delegate.items_count(section_ix, cx))
+                        .map(move |row_ix| IndexPath::default().section(section_ix).row(row_ix))
+                        .collect::<Vec<_>>()
+                })
+                .collect(),
+        );
     }
 }
 
@@ -620,7 +724,9 @@ where
     D: ListDelegate,
 {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let items_count = self.delegate.items_count(cx);
+        self.prepare_items_if_needed(window, cx);
+
+        let items_count = self.flatten_items.len();
         let loading = self.delegate.loading(cx);
 
         let initial_view = if let Some(input) = &self.query_input {
