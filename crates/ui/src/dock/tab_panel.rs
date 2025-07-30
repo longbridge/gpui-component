@@ -606,7 +606,8 @@ impl TabPanel {
                 .line_height(rems(1.0))
                 .h(px(30.))
                 .py_2()
-                .px_3()
+                .pl_3()
+                .pr_2()
                 .when(left_dock_button.is_some(), |this| this.pl_2())
                 .when(right_dock_button.is_some(), |this| this.pr_2())
                 .when_some(title_style, |this, theme| {
