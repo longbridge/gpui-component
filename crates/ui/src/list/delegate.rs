@@ -40,6 +40,26 @@ pub trait ListDelegate: Sized + 'static {
         cx: &mut Context<List<Self>>,
     ) -> Option<Self::Item>;
 
+    /// Render the section header at the given index, default is None.
+    fn render_section_header(
+        &self,
+        section_ix: usize,
+        window: &mut Window,
+        cx: &mut Context<List<Self>>,
+    ) -> Option<impl IntoElement> {
+        None::<AnyElement>
+    }
+
+    /// Render the section footer at the given index, default is None.
+    fn render_section_footer(
+        &self,
+        section_ix: usize,
+        window: &mut Window,
+        cx: &mut Context<List<Self>>,
+    ) -> Option<impl IntoElement> {
+        None::<AnyElement>
+    }
+
     /// Return a Element to show when list is empty.
     fn render_empty(&self, window: &mut Window, cx: &mut Context<List<Self>>) -> impl IntoElement {
         h_flex()

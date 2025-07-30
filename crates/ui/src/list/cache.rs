@@ -4,15 +4,72 @@ use gpui::App;
 
 use crate::IndexPath;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RowEntry {
+    Entry(IndexPath),
+    SectionHeader(usize),
+    SectionFooter(usize),
+}
+
+impl RowEntry {
+    #[inline]
+    #[allow(unused)]
+    pub(crate) fn is_section_header(&self) -> bool {
+        matches!(self, RowEntry::SectionHeader(_))
+    }
+
+    pub(crate) fn eq_index_path(&self, path: &IndexPath) -> bool {
+        match self {
+            RowEntry::Entry(index_path) => index_path == path,
+            RowEntry::SectionHeader(_) | RowEntry::SectionFooter(_) => false,
+        }
+    }
+
+    pub(crate) fn index(&self) -> IndexPath {
+        match self {
+            RowEntry::Entry(index_path) => *index_path,
+            RowEntry::SectionHeader(ix) => IndexPath::default().section(*ix),
+            RowEntry::SectionFooter(ix) => IndexPath::default().section(*ix),
+        }
+    }
+
+    #[inline]
+    #[allow(unused)]
+    pub(crate) fn is_section_footer(&self) -> bool {
+        matches!(self, RowEntry::SectionFooter(_))
+    }
+
+    #[inline]
+    pub(crate) fn is_entry(&self) -> bool {
+        matches!(self, RowEntry::Entry(_))
+    }
+
+    #[inline]
+    #[allow(unused)]
+    pub(crate) fn section_ix(&self) -> Option<usize> {
+        match self {
+            RowEntry::SectionHeader(ix) | RowEntry::SectionFooter(ix) => Some(*ix),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Default, Clone)]
 pub(crate) struct RowsCache {
-    pub(crate) flatten_rows: Rc<Vec<IndexPath>>,
+    pub(crate) flatten_rows: Rc<Vec<RowEntry>>,
     pub(crate) sections: Rc<Vec<usize>>,
 }
 
 impl RowsCache {
-    pub(crate) fn get(&self, flatten_ix: usize) -> Option<IndexPath> {
+    pub(crate) fn get(&self, flatten_ix: usize) -> Option<RowEntry> {
         self.flatten_rows.get(flatten_ix).cloned()
+    }
+
+    pub(crate) fn get_index_path(&self, flatten_ix: usize) -> Option<IndexPath> {
+        self.flatten_rows
+            .get(flatten_ix)
+            .filter(|entry| entry.is_entry())
+            .map(|entry| entry.index())
     }
 
     /// Returns the number of flattened rows.
@@ -22,7 +79,7 @@ impl RowsCache {
 
     /// Returns the index of the given path in the flattened rows.
     pub(crate) fn position_of(&self, path: &IndexPath) -> Option<usize> {
-        self.flatten_rows.iter().position(|p| p == path)
+        self.flatten_rows.iter().position(|p| p.eq_index_path(path))
     }
 
     pub(crate) fn prepare_if_needed<F>(&mut self, sections_count: usize, cx: &App, rows_count_f: F)
@@ -43,9 +100,14 @@ impl RowsCache {
                 .iter()
                 .enumerate()
                 .flat_map(|(section_ix, items_count)| {
-                    (0..*items_count)
-                        .map(move |row_ix| IndexPath::default().section(section_ix).row(row_ix))
-                        .collect::<Vec<_>>()
+                    let mut items = vec![];
+                    items.push(RowEntry::SectionHeader(section_ix));
+                    for row_ix in 0..*items_count {
+                        let index = IndexPath::default().section(section_ix).row(row_ix);
+                        items.push(RowEntry::Entry(index));
+                    }
+                    items.push(RowEntry::SectionFooter(section_ix));
+                    items
                 })
                 .collect(),
         );
