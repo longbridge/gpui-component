@@ -6,8 +6,8 @@ use crate::{h_flex, ActiveTheme, IconName, Selectable, Sizable, Size, StyledExt}
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     div, Action, AnyElement, App, Corner, Div, Edges, ElementId, IntoElement, ParentElement,
-    RenderOnce, ScrollHandle, Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled,
-    Window,
+    Pixels, RenderOnce, ScrollHandle, Stateful, StatefulInteractiveElement as _, StyleRefinement,
+    Styled, Window,
 };
 use gpui::{px, InteractiveElement};
 use smallvec::SmallVec;
@@ -31,6 +31,8 @@ pub struct TabBar {
     size: Size,
     menu: bool,
     on_click: Option<Arc<dyn Fn(&usize, &mut Window, &mut App) + 'static>>,
+    /// Special for internal TabPanel to remove the top border.
+    tab_item_top_offset: Pixels,
 }
 
 impl TabBar {
@@ -48,6 +50,7 @@ impl TabBar {
             selected_index: None,
             on_click: None,
             menu: false,
+            tab_item_top_offset: px(0.),
         }
     }
 
@@ -88,8 +91,8 @@ impl TabBar {
     }
 
     /// Track the scroll of the TabBar
-    pub fn track_scroll(mut self, scroll_handle: ScrollHandle) -> Self {
-        self.scroll_handle = Some(scroll_handle);
+    pub fn track_scroll(mut self, scroll_handle: &ScrollHandle) -> Self {
+        self.scroll_handle = Some(scroll_handle.clone());
         self
     }
 
@@ -135,6 +138,11 @@ impl TabBar {
     /// When this is set, the children's on_click will be ignored.
     pub fn on_click(mut self, on_click: impl Fn(&usize, &mut Window, &mut App) + 'static) -> Self {
         self.on_click = Some(Arc::new(on_click));
+        self
+    }
+
+    pub(crate) fn tab_item_top_offset(mut self, offset: impl Into<Pixels>) -> Self {
+        self.tab_item_top_offset = offset.into();
         self
     }
 }
@@ -257,6 +265,7 @@ impl RenderOnce for TabBar {
                         item_labels.push((child.label.clone(), child.disabled));
                         child
                             .id(ix)
+                            .mt(self.tab_item_top_offset)
                             .with_variant(self.variant)
                             .with_size(self.size)
                             .when_some(self.selected_index, |this, selected_ix| {

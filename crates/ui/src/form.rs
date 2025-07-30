@@ -266,8 +266,8 @@ impl FormField {
     /// Set the focus handle for the form field.
     ///
     /// If not set, the form field will not be focusable.
-    pub fn track_focus(mut self, focus_handle: FocusHandle) -> Self {
-        self.focus_handle = Some(focus_handle);
+    pub fn track_focus(mut self, focus_handle: &FocusHandle) -> Self {
+        self.focus_handle = Some(focus_handle.clone());
         self
     }
 
