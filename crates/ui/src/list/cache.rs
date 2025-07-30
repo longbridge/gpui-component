@@ -56,17 +56,17 @@ impl RowEntry {
 
 #[derive(Default, Clone)]
 pub(crate) struct RowsCache {
-    pub(crate) flatten_rows: Rc<Vec<RowEntry>>,
+    pub(crate) entities: Rc<Vec<RowEntry>>,
     pub(crate) sections: Rc<Vec<usize>>,
 }
 
 impl RowsCache {
     pub(crate) fn get(&self, flatten_ix: usize) -> Option<RowEntry> {
-        self.flatten_rows.get(flatten_ix).cloned()
+        self.entities.get(flatten_ix).cloned()
     }
 
     pub(crate) fn get_index_path(&self, flatten_ix: usize) -> Option<IndexPath> {
-        self.flatten_rows
+        self.entities
             .get(flatten_ix)
             .filter(|entry| entry.is_entry())
             .map(|entry| entry.index())
@@ -74,12 +74,12 @@ impl RowsCache {
 
     /// Returns the number of flattened rows.
     pub(crate) fn len(&self) -> usize {
-        self.flatten_rows.len()
+        self.entities.len()
     }
 
     /// Returns the index of the given path in the flattened rows.
     pub(crate) fn position_of(&self, path: &IndexPath) -> Option<usize> {
-        self.flatten_rows.iter().position(|p| p.eq_index_path(path))
+        self.entities.iter().position(|p| p.eq_index_path(path))
     }
 
     pub(crate) fn prepare_if_needed<F>(&mut self, sections_count: usize, cx: &App, rows_count_f: F)
@@ -95,18 +95,21 @@ impl RowsCache {
         }
 
         self.sections = Rc::new(new_sections);
-        self.flatten_rows = Rc::new(
+        self.entities = Rc::new(
             self.sections
                 .iter()
                 .enumerate()
-                .flat_map(|(section_ix, items_count)| {
+                .flat_map(|(section, items_count)| {
                     let mut items = vec![];
-                    items.push(RowEntry::SectionHeader(section_ix));
-                    for row_ix in 0..*items_count {
-                        let index = IndexPath::default().section(section_ix).row(row_ix);
-                        items.push(RowEntry::Entry(index));
+                    items.push(RowEntry::SectionHeader(section));
+                    for row in 0..*items_count {
+                        items.push(RowEntry::Entry(IndexPath {
+                            section,
+                            row,
+                            ..Default::default()
+                        }));
                     }
-                    items.push(RowEntry::SectionFooter(section_ix));
+                    items.push(RowEntry::SectionFooter(section));
                     items
                 })
                 .collect(),
