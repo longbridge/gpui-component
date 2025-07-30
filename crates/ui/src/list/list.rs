@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use crate::actions::{Cancel, Confirm, SelectNext, SelectPrev};
 use crate::input::InputState;
-use crate::list::cache::RowsCache;
+use crate::list::cache::{RowEntry, RowsCache};
 use crate::list::ListDelegate;
 use crate::{
     input::{InputEvent, TextInput},
@@ -416,7 +416,7 @@ where
         } else {
             flatten_index = items_count.saturating_sub(1);
         }
-        if let Some(index) = self.rows_cache.get(flatten_index) {
+        if let Some(index) = self.rows_cache.get_index_path(flatten_index) {
             self.select_item(index, window, cx);
         }
     }
@@ -448,13 +448,13 @@ where
             // When no selected index, select the first item.
             flatten_index = 0;
         }
-        if let Some(index) = self.rows_cache.get(flatten_index) {
+        if let Some(index) = self.rows_cache.get_index_path(flatten_index) {
             self.select_item(index, window, cx);
         }
     }
 
     fn render_list_item(
-        &mut self,
+        &self,
         ix: IndexPath,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -533,8 +533,21 @@ where
 
                                 visible_range
                                     .flat_map(|ix| {
-                                        if let Some(index) = rows_cache.get(ix) {
-                                            Some(list.render_list_item(index, window, cx))
+                                        if let Some(entry) = rows_cache.get(ix) {
+                                            match entry {
+                                                RowEntry::Entry(index) => Some(
+                                                    list.render_list_item(index, window, cx)
+                                                        .into_any_element(),
+                                                ),
+                                                RowEntry::SectionHeader(section_ix) => list
+                                                    .delegate()
+                                                    .render_section_header(section_ix, window, cx)
+                                                    .map(|r| r.into_any_element()),
+                                                RowEntry::SectionFooter(section_ix) => list
+                                                    .delegate()
+                                                    .render_section_footer(section_ix, window, cx)
+                                                    .map(|r| r.into_any_element()),
+                                            }
                                         } else {
                                             None
                                         }
