@@ -90,7 +90,8 @@ impl DropdownStory {
             Country::new("Ecuador", "EC"),
         ];
 
-        let country_dropdown = cx.new(|cx| DropdownState::new(countries, Some(6), window, cx));
+        let country_dropdown = cx
+            .new(|cx| DropdownState::new(countries, Some(IndexPath::default().row(6)), window, cx));
         let appearance_dropdown = cx.new(|cx| {
             DropdownState::new(
                 vec![
@@ -100,7 +101,7 @@ impl DropdownStory {
                     "JP".into(),
                     "KR".into(),
                 ],
-                Some(0),
+                Some(IndexPath::default()),
                 window,
                 cx,
             )
@@ -139,7 +140,7 @@ impl DropdownStory {
                             "Cocoa".into(),
                             "WinUI".into(),
                         ],
-                        Some(0),
+                        Some(IndexPath::default()),
                         window,
                         cx,
                     )

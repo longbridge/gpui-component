@@ -5,7 +5,7 @@ use gpui_component::{
     h_flex,
     highlighter::{Language, LanguageConfig, LanguageRegistry},
     input::{InputEvent, InputState, Marker, TabSize, TextInput},
-    v_flex, ActiveTheme, ContextModal, IconName, Sizable,
+    v_flex, ActiveTheme, ContextModal, IconName, IndexPath, Sizable,
 };
 use story::Assets;
 
@@ -106,7 +106,7 @@ impl Example {
         let language_state = cx.new(|cx| {
             DropdownState::new(
                 LANGUAGES.iter().map(|s| s.0.name().into()).collect(),
-                Some(0),
+                Some(IndexPath::default()),
                 window,
                 cx,
             )
