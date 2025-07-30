@@ -12,8 +12,8 @@ use crate::{
     h_flex,
     input::clear_button,
     list::{List, ListDelegate},
-    v_flex, ActiveTheme, Disableable, Icon, IconName, Selectable, Sizable, Size, StyleSized,
-    StyledExt,
+    v_flex, ActiveTheme, Disableable, Icon, IconName, IndexPath, Selectable, Sizable, Size,
+    StyleSized, StyledExt,
 };
 
 #[derive(Clone)]
@@ -129,7 +129,7 @@ impl<T: DropdownItem> DropdownDelegate for Vec<T> {
 struct DropdownListDelegate<D: DropdownDelegate + 'static> {
     delegate: D,
     dropdown: WeakEntity<DropdownState<D>>,
-    selected_index: Option<usize>,
+    selected_index: Option<IndexPath>,
 }
 
 impl<D> ListDelegate for DropdownListDelegate<D>
@@ -138,13 +138,13 @@ where
 {
     type Item = DropdownListItem;
 
-    fn items_count(&self, _: &App) -> usize {
+    fn items_count(&self, _: usize, _: &App) -> usize {
         self.delegate.len()
     }
 
     fn render_item(
         &self,
-        ix: usize,
+        ix: IndexPath,
         _: &mut gpui::Window,
         cx: &mut gpui::Context<List<Self>>,
     ) -> Option<Self::Item> {
@@ -156,8 +156,8 @@ where
             .upgrade()
             .map_or(Size::Medium, |dropdown| dropdown.read(cx).size);
 
-        if let Some(item) = self.delegate.get(ix) {
-            let list_item = DropdownListItem::new(ix)
+        if let Some(item) = self.delegate.get(ix.row) {
+            let list_item = DropdownListItem::new(ix.row)
                 .selected(selected)
                 .with_size(size)
                 .child(div().whitespace_nowrap().child(item.title().to_string()));
@@ -180,7 +180,7 @@ where
     fn confirm(&mut self, _secondary: bool, window: &mut Window, cx: &mut Context<List<Self>>) {
         let selected_value = self
             .selected_index
-            .and_then(|ix| self.delegate.get(ix))
+            .and_then(|ix| self.delegate.get(ix.row))
             .map(|item| item.value().clone());
         let dropdown = self.dropdown.clone();
 
@@ -207,7 +207,7 @@ where
 
     fn set_selected_index(
         &mut self,
-        ix: Option<usize>,
+        ix: Option<IndexPath>,
         _: &mut Window,
         _: &mut Context<List<Self>>,
     ) {
@@ -345,7 +345,7 @@ where
         let delegate = DropdownListDelegate {
             delegate,
             dropdown: cx.entity().downgrade(),
-            selected_index,
+            selected_index: selected_index.map(|ix| IndexPath::default().row(ix)),
         };
 
         let searchable = delegate.delegate.can_search();
@@ -395,8 +395,9 @@ where
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let index = selected_index.map(|ix| IndexPath::default().row(ix));
         self.list.update(cx, |list, cx| {
-            list.set_selected_index(selected_index, window, cx);
+            list.set_selected_index(index, window, cx);
         });
         self.update_selected_value(window, cx);
     }
@@ -415,7 +416,7 @@ where
     }
 
     pub fn selected_index(&self, cx: &App) -> Option<usize> {
-        self.list.read(cx).selected_index()
+        self.list.read(cx).selected_index().map(|ix| ix.row)
     }
 
     fn update_selected_value(&mut self, _: &Window, cx: &App) {

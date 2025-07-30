@@ -13,7 +13,7 @@ use gpui_component::{
     h_flex,
     label::Label,
     list::{List, ListDelegate, ListEvent, ListItem},
-    v_flex, ActiveTheme, Selectable, Sizable,
+    v_flex, ActiveTheme, IndexPath, Selectable, Sizable,
 };
 
 actions!(list_story, [SelectedCompany]);
@@ -170,7 +170,7 @@ struct CompanyListDelegate {
 impl ListDelegate for CompanyListDelegate {
     type Item = CompanyListItem;
 
-    fn items_count(&self, _: &App) -> usize {
+    fn items_count(&self, _: usize, _: &App) -> usize {
         self.matched_companies.len()
     }
 
@@ -197,20 +197,21 @@ impl ListDelegate for CompanyListDelegate {
 
     fn set_selected_index(
         &mut self,
-        ix: Option<usize>,
+        ix: Option<IndexPath>,
         _: &mut Window,
         cx: &mut Context<List<Self>>,
     ) {
-        self.selected_index = ix;
+        self.selected_index = ix.map(|ix| ix.row);
         cx.notify();
     }
 
     fn render_item(
         &self,
-        ix: usize,
+        ix: IndexPath,
         _: &mut Window,
         _: &mut Context<List<Self>>,
     ) -> Option<Self::Item> {
+        let ix = ix.row;
         let selected = Some(ix) == self.selected_index || Some(ix) == self.confirmed_index;
         if let Some(company) = self.matched_companies.get(ix) {
             return Some(CompanyListItem::new(ix, company.clone(), ix, selected));
@@ -392,7 +393,12 @@ impl Render for ListStory {
                             .small()
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.company_list.update(cx, |list, cx| {
-                                    list.scroll_to_item(0, ScrollStrategy::Top, window, cx);
+                                    list.scroll_to_item(
+                                        IndexPath::default(),
+                                        ScrollStrategy::Top,
+                                        window,
+                                        cx,
+                                    );
                                     cx.notify();
                                 })
                             })),
@@ -405,7 +411,9 @@ impl Render for ListStory {
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.company_list.update(cx, |list, cx| {
                                     list.scroll_to_item(
-                                        list.delegate().items_count(cx) / 2,
+                                        IndexPath::default()
+                                            .section(0)
+                                            .row(list.delegate().items_count(0, cx) / 2),
                                         ScrollStrategy::Center,
                                         window,
                                         cx,
@@ -421,7 +429,9 @@ impl Render for ListStory {
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.company_list.update(cx, |list, cx| {
                                     list.scroll_to_item(
-                                        list.delegate().items_count(cx) - 1,
+                                        IndexPath::default().section(0).row(
+                                            list.delegate().items_count(0, cx).saturating_sub(1),
+                                        ),
                                         ScrollStrategy::Top,
                                         window,
                                         cx,
