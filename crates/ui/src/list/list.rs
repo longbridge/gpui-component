@@ -333,6 +333,8 @@ where
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // FIXME: Here need void sections items count.
+
         let threshold = self.delegate.load_more_threshold();
         // Securely handle subtract logic to prevent attempt
         // to subtract with overflow
@@ -533,23 +535,26 @@ where
 
                                 visible_range
                                     .flat_map(|ix| {
-                                        if let Some(entry) = rows_cache.get(ix) {
-                                            match entry {
-                                                RowEntry::Entry(index) => Some(
-                                                    list.render_list_item(index, window, cx)
-                                                        .into_any_element(),
-                                                ),
-                                                RowEntry::SectionHeader(section_ix) => list
-                                                    .delegate()
-                                                    .render_section_header(section_ix, window, cx)
-                                                    .map(|r| r.into_any_element()),
-                                                RowEntry::SectionFooter(section_ix) => list
-                                                    .delegate()
-                                                    .render_section_footer(section_ix, window, cx)
-                                                    .map(|r| r.into_any_element()),
-                                            }
-                                        } else {
-                                            None
+                                        let Some(entry) = rows_cache.get(ix) else {
+                                            return None;
+                                        };
+
+                                        // TODO: uniform_list must fixed item height.
+
+                                        match entry {
+                                            RowEntry::Entry(index) => Some(
+                                                list.render_list_item(index, window, cx)
+                                                    .into_any_element(),
+                                            ),
+                                            // RowEntry::SectionHeader(section_ix) => list
+                                            //     .delegate()
+                                            //     .render_section_header(section_ix, window, cx)
+                                            //     .map(|r| r.into_any_element()),
+                                            // RowEntry::SectionFooter(section_ix) => list
+                                            //     .delegate()
+                                            //     .render_section_footer(section_ix, window, cx)
+                                            //     .map(|r| r.into_any_element()),
+                                            _ => None,
                                         }
                                     })
                                     .collect::<Vec<_>>()
