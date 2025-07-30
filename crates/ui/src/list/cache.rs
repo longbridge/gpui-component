@@ -25,13 +25,13 @@ impl RowsCache {
         self.flatten_rows.iter().position(|p| p == path)
     }
 
-    pub(crate) fn prepare_if_needed<F>(&mut self, sections_count: usize, cx: &App, items_count: F)
+    pub(crate) fn prepare_if_needed<F>(&mut self, sections_count: usize, cx: &App, rows_count_f: F)
     where
         F: Fn(usize, &App) -> usize,
     {
         let mut new_sections = vec![];
         for section_ix in 0..sections_count {
-            new_sections.push(items_count(section_ix, cx));
+            new_sections.push(rows_count_f(section_ix, cx));
         }
         if new_sections == *self.sections {
             return;
