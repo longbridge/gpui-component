@@ -1,9 +1,9 @@
 use std::ops::Range;
-use std::rc::Rc;
 use std::time::Duration;
 
 use crate::actions::{Cancel, Confirm, SelectNext, SelectPrev};
 use crate::input::InputState;
+use crate::list::cache::RowsCache;
 use crate::{h_flex, Icon, Selectable, Sizable as _, StyledExt};
 use crate::{
     input::{InputEvent, TextInput},
@@ -211,9 +211,7 @@ pub struct List<D: ListDelegate> {
     vertical_scroll_handle: UniformListScrollHandle,
     scroll_state: ScrollbarState,
     pub(crate) size: Size,
-    /// Cache the sections and items.
-    cached_sections: Vec<usize>,
-    flatten_items: Rc<Vec<IndexPath>>,
+    rows_cache: RowsCache,
     selected_index: Option<IndexPath>,
     mouse_right_clicked_index: Option<IndexPath>,
     reset_on_cancel: bool,
@@ -236,8 +234,7 @@ where
         Self {
             focus_handle: cx.focus_handle(),
             delegate,
-            cached_sections: vec![],
-            flatten_items: Rc::new(vec![]),
+            rows_cache: RowsCache::default(),
             query_input: Some(query_input),
             last_query: None,
             selected_index: None,
@@ -360,11 +357,7 @@ where
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if let Some(ix) = self
-            .flatten_items
-            .iter()
-            .position(|item| item.is_eq_section_and_row(ix))
-        {
+        if let Some(ix) = self.rows_cache.position_of(&ix) {
             self.vertical_scroll_handle.scroll_to_item(ix, strategy);
             cx.notify();
         }
@@ -377,11 +370,7 @@ where
 
     pub fn scroll_to_selected_item(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         if let Some(ix) = self.selected_index {
-            if let Some(item_ix) = self
-                .flatten_items
-                .iter()
-                .position(|item| item.section == ix.section && item.row == ix.row)
-            {
+            if let Some(item_ix) = self.rows_cache.position_of(&ix) {
                 self.vertical_scroll_handle
                     .scroll_to_item(item_ix, ScrollStrategy::Top);
                 cx.notify();
@@ -412,7 +401,7 @@ where
                 self.set_querying(true, window, cx);
                 let search = self.delegate.perform_search(&text, window, cx);
 
-                if self.flatten_items.len() > 0 {
+                if self.rows_cache.len() > 0 {
                     self._set_selected_index(Some(IndexPath::default()), window, cx);
                 } else {
                     self._set_selected_index(None, window, cx);
@@ -503,7 +492,7 @@ where
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.flatten_items.len() == 0 {
+        if self.rows_cache.len() == 0 {
             return;
         }
 
@@ -532,25 +521,22 @@ where
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let items_count = self.flatten_items.len();
+        let items_count = self.rows_cache.len();
         if items_count == 0 {
             return;
         }
 
         let selected_index = self.selected_index.unwrap_or(IndexPath::default());
-        let mut flatten_index = self
-            .flatten_items
-            .iter()
-            .position(|item| item.is_eq_section_and_row(selected_index))
-            .unwrap_or(0);
+        let mut flatten_index = self.rows_cache.position_of(&selected_index).unwrap_or(0);
 
         if flatten_index > 0 {
             flatten_index = flatten_index.saturating_sub(1);
         } else {
             flatten_index = items_count.saturating_sub(1);
         }
-        let index = self.flatten_items[flatten_index];
-        self.select_item(index, window, cx);
+        if let Some(index) = self.rows_cache.get(flatten_index) {
+            self.select_item(index, window, cx);
+        }
     }
 
     fn on_action_select_next(
@@ -559,16 +545,14 @@ where
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let items_count = self.flatten_items.len();
+        let items_count = self.rows_cache.len();
         if items_count == 0 {
             return;
         }
 
-        let selected_index = self.selected_index.unwrap_or(IndexPath::default());
         let selected_index = self
-            .flatten_items
-            .iter()
-            .position(|item| item.is_eq_section_and_row(selected_index));
+            .selected_index
+            .and_then(|ix| self.rows_cache.position_of(&ix));
 
         let flatten_index;
         if let Some(ix) = selected_index {
@@ -582,8 +566,9 @@ where
             // When no selected index, select the first item.
             flatten_index = 0;
         }
-        let index = self.flatten_items[flatten_index];
-        self.select_item(index, window, cx);
+        if let Some(index) = self.rows_cache.get(flatten_index) {
+            self.select_item(index, window, cx);
+        }
     }
 
     fn render_list_item(
@@ -655,7 +640,7 @@ where
                 this.child(self.delegate().render_empty(window, cx))
             })
             .when(items_count > 0, {
-                let flatten_items = self.flatten_items.clone();
+                let rows_cache = self.rows_cache.clone();
                 |this| {
                     this.child(
                         uniform_list(
@@ -665,9 +650,12 @@ where
                                 list.load_more_if_need(items_count, visible_range.end, window, cx);
 
                                 visible_range
-                                    .map(|ix| {
-                                        let index = flatten_items[ix];
-                                        list.render_list_item(index, window, cx)
+                                    .flat_map(|ix| {
+                                        if let Some(index) = rows_cache.get(ix) {
+                                            Some(list.render_list_item(index, window, cx))
+                                        } else {
+                                            None
+                                        }
                                     })
                                     .collect::<Vec<_>>()
                             }),
@@ -685,24 +673,10 @@ where
 
     fn prepare_items_if_needed(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         let sections_count = self.delegate.sections_count(cx);
-        let mut new_sections = vec![];
-        for section_ix in 0..sections_count {
-            new_sections.push(self.delegate.items_count(section_ix, cx));
-        }
-        if new_sections == self.cached_sections {
-            return;
-        }
-
-        self.cached_sections = new_sections;
-        self.flatten_items = Rc::new(
-            (0..sections_count)
-                .flat_map(|section_ix| {
-                    (0..self.delegate.items_count(section_ix, cx))
-                        .map(move |row_ix| IndexPath::default().section(section_ix).row(row_ix))
-                        .collect::<Vec<_>>()
-                })
-                .collect(),
-        );
+        self.rows_cache
+            .prepare_if_needed(sections_count, cx, |section_ix, cx| {
+                self.delegate.items_count(section_ix, cx)
+            });
     }
 }
 
@@ -726,7 +700,7 @@ where
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.prepare_items_if_needed(window, cx);
 
-        let items_count = self.flatten_items.len();
+        let items_count = self.rows_cache.len();
         let loading = self.delegate.loading(cx);
 
         let initial_view = if let Some(input) = &self.query_input {
