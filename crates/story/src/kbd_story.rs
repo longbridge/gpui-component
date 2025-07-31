@@ -49,6 +49,8 @@ impl Render for KbdStory {
                     .gap_2()
                     .child(Kbd::new(Keystroke::parse("cmd-shift-p").unwrap()))
                     .child(Kbd::new(Keystroke::parse("cmd-ctrl-t").unwrap()))
+                    .child(Kbd::new(Keystroke::parse("cmd--").unwrap()))
+                    .child(Kbd::new(Keystroke::parse("cmd-+").unwrap()))
                     .child(Kbd::new(Keystroke::parse("escape").unwrap()))
                     .child(Kbd::new(Keystroke::parse("backspace").unwrap()))
                     .child(Kbd::new(Keystroke::parse("/").unwrap()))
