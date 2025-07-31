@@ -111,11 +111,11 @@ impl VirtualListScrollHandle {
         match strategy {
             ScrollStrategy::Center => {
                 if axis.is_vertical() {
-                    scroll_offset.y = container_bounds.size.height.half()
+                    scroll_offset.y = container_bounds.top() + container_bounds.size.height.half()
                         - bounds.top()
                         - bounds.size.height.half()
                 } else {
-                    scroll_offset.x = container_bounds.size.width.half()
+                    scroll_offset.x = container_bounds.left() + container_bounds.size.width.half()
                         - bounds.left()
                         - bounds.size.width.half()
                 }
