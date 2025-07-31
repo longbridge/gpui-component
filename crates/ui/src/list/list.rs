@@ -246,7 +246,7 @@ where
     }
 
     /// Get scroll handle
-    pub fn scroll_handle(&self) -> &ScrollHandle {
+    pub fn scroll_handle(&self) -> &VirtualListScrollHandle {
         &self.scroll_handle
     }
 
