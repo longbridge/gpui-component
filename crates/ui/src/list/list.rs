@@ -10,7 +10,7 @@ use crate::{
     scroll::{Scrollbar, ScrollbarState},
     v_flex, ActiveTheme, IconName, Size,
 };
-use crate::{v_virtual_list, Icon, Selectable, Sizable as _, StyledExt};
+use crate::{v_virtual_list, Icon, Selectable, Sizable as _, StyledExt, VirtualListScrollHandle};
 use gpui::{
     div, prelude::FluentBuilder, AppContext, Entity, FocusHandle, Focusable, InteractiveElement,
     IntoElement, KeyBinding, Length, MouseButton, ParentElement, Render, Styled, Task, Window,
@@ -90,7 +90,7 @@ pub struct List<D: ListDelegate> {
     selectable: bool,
     querying: bool,
     scrollbar_visible: bool,
-    scroll_handle: ScrollHandle,
+    scroll_handle: VirtualListScrollHandle,
     scroll_state: ScrollbarState,
     pub(crate) size: Size,
     rows_cache: RowsCache,
@@ -121,7 +121,7 @@ where
             last_query: None,
             selected_index: None,
             mouse_right_clicked_index: None,
-            scroll_handle: ScrollHandle::new(),
+            scroll_handle: VirtualListScrollHandle::new(),
             scroll_state: ScrollbarState::default(),
             max_height: None,
             scrollbar_visible: true,
@@ -240,7 +240,7 @@ where
         cx: &mut Context<Self>,
     ) {
         if let Some(ix) = self.rows_cache.position_of(&ix) {
-            self.scroll_handle.scroll_to_item(ix);
+            self.scroll_handle.scroll_to_item(ix, ScrollStrategy::Top);
             cx.notify();
         }
     }
@@ -253,8 +253,8 @@ where
     pub fn scroll_to_selected_item(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         if let Some(ix) = self.selected_index {
             if let Some(item_ix) = self.rows_cache.position_of(&ix) {
-                dbg!(self.scroll_handle.bounds_for_item(item_ix));
-                self.scroll_handle.scroll_to_item(item_ix);
+                self.scroll_handle
+                    .scroll_to_item(item_ix, ScrollStrategy::Top);
                 cx.notify();
             }
         }
@@ -293,7 +293,7 @@ where
                     search.await;
 
                     _ = this.update_in(window, |this, _, _| {
-                        this.scroll_handle.scroll_to_item(0);
+                        this.scroll_handle.scroll_to_item(0, ScrollStrategy::Top);
                         this.last_query = Some(text);
                     });
 
@@ -638,7 +638,6 @@ where
             .size_full()
             .relative()
             .overflow_hidden()
-            .debug_red()
             .when_some(self.query_input.clone(), |this, input| {
                 this.child(
                     div()
