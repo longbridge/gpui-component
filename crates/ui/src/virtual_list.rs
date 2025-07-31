@@ -127,15 +127,15 @@ impl VirtualListScrollHandle {
             _ => {
                 // Ref: https://github.com/zed-industries/zed/blob/0d145289e0867a8d5d63e5e1397a5ca69c9d49c3/crates/gpui/src/elements/div.rs#L3026
                 if axis.is_vertical() {
-                    if bounds.top() + scroll_offset.y < state.bounds.top() {
+                    if bounds.top() + scroll_offset.y < px(0.) {
                         scroll_offset.y = -bounds.top();
-                    } else if bounds.bottom() + scroll_offset.y > state.bounds.bottom() {
+                    } else if bounds.bottom() + scroll_offset.y > state.bounds.size.height {
                         scroll_offset.y = state.bounds.size.height - bounds.bottom();
                     }
                 } else {
-                    if bounds.left() + scroll_offset.x < state.bounds.left() {
+                    if bounds.left() + scroll_offset.x < px(0.) {
                         scroll_offset.x = -bounds.left();
-                    } else if bounds.right() + scroll_offset.x > state.bounds.right() {
+                    } else if bounds.right() + scroll_offset.x > state.bounds.size.width {
                         scroll_offset.x = state.bounds.size.width - bounds.right();
                     }
                 }
