@@ -13,8 +13,7 @@ use crate::{
 use crate::{v_virtual_list, Icon, Selectable, Sizable as _, StyledExt};
 use gpui::{
     div, prelude::FluentBuilder, AppContext, Entity, FocusHandle, Focusable, InteractiveElement,
-    IntoElement, KeyBinding, Length, ListSizingBehavior, MouseButton, ParentElement, Render,
-    Styled, Task, Window,
+    IntoElement, KeyBinding, Length, MouseButton, ParentElement, Render, Styled, Task, Window,
 };
 use gpui::{
     px, size, App, AvailableSpace, Context, Edges, EventEmitter, MouseDownEvent, Pixels,
@@ -91,7 +90,7 @@ pub struct List<D: ListDelegate> {
     selectable: bool,
     querying: bool,
     scrollbar_visible: bool,
-    vertical_scroll_handle: ScrollHandle,
+    scroll_handle: ScrollHandle,
     scroll_state: ScrollbarState,
     pub(crate) size: Size,
     rows_cache: RowsCache,
@@ -122,7 +121,7 @@ where
             last_query: None,
             selected_index: None,
             mouse_right_clicked_index: None,
-            vertical_scroll_handle: ScrollHandle::new(),
+            scroll_handle: ScrollHandle::new(),
             scroll_state: ScrollbarState::default(),
             max_height: None,
             scrollbar_visible: true,
@@ -228,7 +227,7 @@ where
 
         Some(Scrollbar::uniform_scroll(
             &self.scroll_state,
-            &self.vertical_scroll_handle,
+            &self.scroll_handle,
         ))
     }
 
@@ -241,21 +240,21 @@ where
         cx: &mut Context<Self>,
     ) {
         if let Some(ix) = self.rows_cache.position_of(&ix) {
-            dbg!(&ix);
-            self.vertical_scroll_handle.scroll_to_item(ix);
+            self.scroll_handle.scroll_to_item(ix);
             cx.notify();
         }
     }
 
     /// Get scroll handle
     pub fn scroll_handle(&self) -> &ScrollHandle {
-        &self.vertical_scroll_handle
+        &self.scroll_handle
     }
 
     pub fn scroll_to_selected_item(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         if let Some(ix) = self.selected_index {
             if let Some(item_ix) = self.rows_cache.position_of(&ix) {
-                self.vertical_scroll_handle.scroll_to_item(item_ix);
+                dbg!(self.scroll_handle.bounds_for_item(item_ix));
+                self.scroll_handle.scroll_to_item(item_ix);
                 cx.notify();
             }
         }
@@ -294,7 +293,7 @@ where
                     search.await;
 
                     _ = this.update_in(window, |this, _, _| {
-                        this.vertical_scroll_handle.scroll_to_item(0);
+                        this.scroll_handle.scroll_to_item(0);
                         this.last_query = Some(text);
                     });
 
@@ -552,9 +551,8 @@ where
                                     .collect::<Vec<_>>()
                             },
                         )
-                        .flex_grow()
                         .paddings(self.paddings)
-                        .track_scroll(&self.vertical_scroll_handle)
+                        .track_scroll(&self.scroll_handle)
                         .into_any_element(),
                     )
                 }
@@ -569,11 +567,11 @@ where
 
         // Meansure the item_height and section header/footer height.
         let available_space = size(AvailableSpace::MinContent, AvailableSpace::MinContent);
-        if let Some(el) = self.delegate.render_item(IndexPath::default(), window, cx) {
-            meansured_size.item_size =
-                el.into_any_element()
-                    .layout_as_root(available_space, window, cx);
-        };
+        meansured_size.item_size = self
+            .render_list_item(IndexPath::default(), window, cx)
+            .into_any_element()
+            .layout_as_root(available_space, window, cx);
+
         if let Some(el) = self
             .delegate
             .render_section_header(0, window, cx)
@@ -640,6 +638,7 @@ where
             .size_full()
             .relative()
             .overflow_hidden()
+            .debug_red()
             .when_some(self.query_input.clone(), |this, input| {
                 this.child(
                     div()
