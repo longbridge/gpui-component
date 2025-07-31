@@ -116,18 +116,30 @@ impl RenderOnce for CompanyListItem {
                     .gap_2()
                     .text_color(text_color)
                     .child(
-                        v_flex()
-                            .gap_1()
-                            .max_w(px(500.))
-                            .overflow_x_hidden()
-                            .flex_nowrap()
-                            .child(Label::new(self.company.name.clone()).whitespace_nowrap())
+                        h_flex()
+                            .gap_2()
                             .child(
-                                div().text_sm().overflow_x_hidden().child(
-                                    Label::new(self.company.industry.clone())
-                                        .whitespace_nowrap()
-                                        .text_color(text_color.opacity(0.5)),
-                                ),
+                                div()
+                                    .text_xs()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(format!("{}", self.ix)),
+                            )
+                            .child(
+                                v_flex()
+                                    .gap_1()
+                                    .max_w(px(500.))
+                                    .overflow_x_hidden()
+                                    .flex_nowrap()
+                                    .child(
+                                        Label::new(self.company.name.clone()).whitespace_nowrap(),
+                                    )
+                                    .child(
+                                        div().text_sm().overflow_x_hidden().child(
+                                            Label::new(self.company.industry.clone())
+                                                .whitespace_nowrap()
+                                                .text_color(text_color.opacity(0.5)),
+                                        ),
+                                    ),
                             ),
                     )
                     .child(

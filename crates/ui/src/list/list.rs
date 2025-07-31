@@ -16,8 +16,8 @@ use gpui::{
     IntoElement, KeyBinding, Length, MouseButton, ParentElement, Render, Styled, Task, Window,
 };
 use gpui::{
-    px, size, App, AvailableSpace, Context, Edges, EventEmitter, MouseDownEvent, Pixels,
-    ScrollHandle, ScrollStrategy, Subscription,
+    size, App, AvailableSpace, Context, Edges, EventEmitter, MouseDownEvent, Pixels,
+    ScrollStrategy, Subscription,
 };
 use rust_i18n::t;
 use smol::Timer;
