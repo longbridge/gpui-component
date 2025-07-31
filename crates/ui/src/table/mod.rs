@@ -10,10 +10,10 @@ use crate::{
     VirtualListScrollHandle,
 };
 use gpui::{
-    actions, canvas, div, point, prelude::FluentBuilder, px, uniform_list, App, AppContext, Axis,
-    Bounds, Context, Div, DragMoveEvent, Edges, EventEmitter, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, KeyBinding, ListSizingBehavior, MouseButton, MouseDownEvent,
-    ParentElement, Pixels, Point, Render, ScrollStrategy, ScrollWheelEvent, SharedString,
+    actions, canvas, div, prelude::FluentBuilder, px, uniform_list, App, AppContext, Axis, Bounds,
+    Context, Div, DragMoveEvent, Edges, EventEmitter, FocusHandle, Focusable, InteractiveElement,
+    IntoElement, KeyBinding, ListSizingBehavior, MouseButton, MouseDownEvent, ParentElement,
+    Pixels, Point, Render, ScrollStrategy, ScrollWheelEvent, SharedString,
     StatefulInteractiveElement as _, Styled, Task, UniformListScrollHandle, Window,
 };
 
@@ -270,6 +270,17 @@ where
         cx.notify();
     }
 
+    fn fixed_left_cols_count(&self) -> usize {
+        if !self.col_fixed {
+            return 0;
+        }
+
+        self.col_groups
+            .iter()
+            .filter(|col| col.column.fixed == Some(ColumnFixed::Left))
+            .count()
+    }
+
     /// Scroll to the row at the given index.
     pub fn scroll_to_row(&mut self, row_ix: usize, cx: &mut Context<Self>) {
         self.vertical_scroll_handle
@@ -279,6 +290,8 @@ where
 
     // Scroll to the column at the given index.
     pub fn scroll_to_col(&mut self, col_ix: usize, cx: &mut Context<Self>) {
+        let col_ix = col_ix.saturating_sub(self.fixed_left_cols_count());
+
         self.horizontal_scroll_handle
             .scroll_to_item(col_ix, ScrollStrategy::Top);
         cx.notify();
@@ -312,12 +325,7 @@ where
         self.selection_state = SelectionState::Column;
         self.selected_col = Some(col_ix);
         if let Some(col_ix) = self.selected_col {
-            self.horizontal_scroll_handle
-                .scroll_to_item(col_ix, ScrollStrategy::Top);
-            let offset = self.horizontal_scroll_handle.base_handle().offset();
-            self.horizontal_scroll_handle
-                .base_handle()
-                .set_offset(offset + point(self.fixed_head_cols_bounds.size.width, px(0.)));
+            self.scroll_to_col(col_ix, cx);
         }
         cx.emit(TableEvent::SelectColumn(col_ix));
         cx.notify();
