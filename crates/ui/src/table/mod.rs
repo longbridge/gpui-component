@@ -7,12 +7,13 @@ use crate::{
     popup_menu::PopupMenu,
     scroll::{self, ScrollableMask, Scrollbar, ScrollbarState},
     v_flex, ActiveTheme, Icon, IconName, Sizable, Size, StyleSized as _, StyledExt,
+    VirtualListScrollHandle,
 };
 use gpui::{
     actions, canvas, div, prelude::FluentBuilder, px, uniform_list, App, AppContext, Axis, Bounds,
     Context, Div, DragMoveEvent, Edges, EventEmitter, FocusHandle, Focusable, InteractiveElement,
     IntoElement, KeyBinding, ListSizingBehavior, MouseButton, MouseDownEvent, ParentElement,
-    Pixels, Point, Render, ScrollHandle, ScrollStrategy, ScrollWheelEvent, SharedString,
+    Pixels, Point, Render, ScrollStrategy, ScrollWheelEvent, SharedString,
     StatefulInteractiveElement as _, Styled, Task, UniformListScrollHandle, Window,
 };
 
@@ -103,7 +104,7 @@ pub struct Table<D: TableDelegate> {
 
     pub vertical_scroll_handle: UniformListScrollHandle,
     pub vertical_scroll_state: ScrollbarState,
-    pub horizontal_scroll_handle: ScrollHandle,
+    pub horizontal_scroll_handle: VirtualListScrollHandle,
     pub horizontal_scroll_state: ScrollbarState,
 
     scrollbar_visible: Edges<bool>,
@@ -137,7 +138,7 @@ where
             focus_handle: cx.focus_handle(),
             delegate,
             col_groups: Vec::new(),
-            horizontal_scroll_handle: ScrollHandle::new(),
+            horizontal_scroll_handle: VirtualListScrollHandle::new(),
             vertical_scroll_handle: UniformListScrollHandle::new(),
             vertical_scroll_state: ScrollbarState::default(),
             horizontal_scroll_state: ScrollbarState::default(),
@@ -277,11 +278,11 @@ where
     }
 
     // Scroll to the column at the given index.
-    // TODO: Fix scroll to selected col, this was not working after fixed col.
-    // pub fn scroll_to_col(&mut self, col_ix: usize, window: &mut Window, cx: &mut Context<Self>) {
-    //     self.horizontal_scroll_handle.scroll_to_item(col_ix);
-    //     cx.notify();
-    // }
+    pub fn scroll_to_col(&mut self, col_ix: usize, cx: &mut Context<Self>) {
+        self.horizontal_scroll_handle
+            .scroll_to_item(col_ix, ScrollStrategy::Top);
+        cx.notify();
+    }
 
     /// Returns the selected row index.
     pub fn selected_row(&self) -> Option<usize> {
@@ -311,10 +312,8 @@ where
         self.selection_state = SelectionState::Column;
         self.selected_col = Some(col_ix);
         if let Some(_col_ix) = self.selected_col {
-            // TODO: Fix scroll to selected col, this was not working after fixed col.
-            // if self.col_groups[col_ix].fixed.is_none() {
-            //     self.horizontal_scroll_handle.scroll_to_item(col_ix);
-            // }
+            self.horizontal_scroll_handle
+                .scroll_to_item(col_ix, ScrollStrategy::Top);
         }
         cx.emit(TableEvent::SelectColumn(col_ix));
         cx.notify();

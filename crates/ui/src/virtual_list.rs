@@ -10,15 +10,150 @@
 //! Unlike the `uniform_list`, the each item can have different size.
 //!
 //! This is useful for more complex layout, for example, a table with different row height.
-use std::{cmp, ops::Range, rc::Rc};
+use std::{
+    cell::RefCell,
+    cmp,
+    ops::{Deref, Range},
+    rc::Rc,
+};
 
 use gpui::{
     div, point, px, size, Along, AnyElement, App, AvailableSpace, Axis, Bounds, ContentMask,
-    Context, Div, Element, ElementId, Entity, GlobalElementId, Hitbox, InteractiveElement,
-    IntoElement, IsZero as _, Pixels, Render, ScrollHandle, Size, Stateful,
+    Context, Div, Element, ElementId, Entity, GlobalElementId, Half, Hitbox, InteractiveElement,
+    IntoElement, IsZero as _, Pixels, Point, Render, ScrollHandle, ScrollStrategy, Size, Stateful,
     StatefulInteractiveElement, StyleRefinement, Styled, Window,
 };
 use smallvec::SmallVec;
+
+use crate::{scroll::ScrollHandleOffsetable, AxisExt};
+
+struct VirtualListScrollHandleState {
+    axis: Axis,
+    items_bounds: Vec<Bounds<Pixels>>,
+    /// The bounds of the viewport.
+    bounds: Bounds<Pixels>,
+}
+
+#[derive(Clone)]
+pub struct VirtualListScrollHandle {
+    state: Rc<RefCell<VirtualListScrollHandleState>>,
+    base_handle: ScrollHandle,
+}
+
+impl From<ScrollHandle> for VirtualListScrollHandle {
+    fn from(handle: ScrollHandle) -> Self {
+        let mut this = VirtualListScrollHandle::new();
+        this.base_handle = handle;
+        this
+    }
+}
+
+impl AsRef<ScrollHandle> for VirtualListScrollHandle {
+    fn as_ref(&self) -> &ScrollHandle {
+        &self.base_handle
+    }
+}
+
+impl ScrollHandleOffsetable for VirtualListScrollHandle {
+    fn offset(&self) -> Point<Pixels> {
+        self.base_handle.offset()
+    }
+
+    fn set_offset(&self, offset: Point<Pixels>) {
+        self.base_handle.set_offset(offset);
+    }
+
+    fn content_size(&self) -> Size<Pixels> {
+        self.base_handle.content_size()
+    }
+}
+
+impl Deref for VirtualListScrollHandle {
+    type Target = ScrollHandle;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base_handle
+    }
+}
+
+impl VirtualListScrollHandle {
+    pub fn new() -> Self {
+        VirtualListScrollHandle {
+            state: Rc::new(RefCell::new(VirtualListScrollHandleState {
+                axis: Axis::Vertical,
+                items_bounds: vec![],
+                bounds: Bounds::default(),
+            })),
+            base_handle: ScrollHandle::default(),
+        }
+    }
+
+    pub fn base_handle(&self) -> &ScrollHandle {
+        &self.base_handle
+    }
+
+    fn set_items_bounds(&self, items_bounds: Vec<Bounds<Pixels>>) {
+        self.state.borrow_mut().items_bounds = items_bounds;
+    }
+
+    fn set_bounds(&self, bounds: Bounds<Pixels>) {
+        self.state.borrow_mut().bounds = bounds;
+    }
+
+    fn set_axis(&self, axis: Axis) {
+        self.state.borrow_mut().axis = axis;
+    }
+
+    /// Scroll to the item at the given index.
+    pub fn scroll_to_item(&self, ix: usize, strategy: ScrollStrategy) {
+        let state = self.state.borrow();
+        let Some(bounds) = state.items_bounds.get(ix) else {
+            return;
+        };
+
+        let axis = state.axis;
+        let mut scroll_offset = self.base_handle.offset();
+
+        match strategy {
+            ScrollStrategy::Center => {
+                if axis.is_vertical() {
+                    scroll_offset.y =
+                        state.bounds.size.height.half() - bounds.top() - bounds.size.height.half()
+                } else {
+                    scroll_offset.x =
+                        state.bounds.size.width.half() - bounds.left() - bounds.size.width.half()
+                }
+            }
+            _ => {
+                // Ref: https://github.com/zed-industries/zed/blob/0d145289e0867a8d5d63e5e1397a5ca69c9d49c3/crates/gpui/src/elements/div.rs#L3026
+                if axis.is_vertical() {
+                    if bounds.top() + scroll_offset.y < state.bounds.top() {
+                        scroll_offset.y = -bounds.top();
+                    } else if bounds.bottom() + scroll_offset.y > state.bounds.bottom() {
+                        scroll_offset.y = state.bounds.size.height - bounds.bottom();
+                    }
+                } else {
+                    if bounds.left() + scroll_offset.x < state.bounds.left() {
+                        scroll_offset.x = -bounds.left();
+                    } else if bounds.right() + scroll_offset.x > state.bounds.right() {
+                        scroll_offset.x = state.bounds.size.width - bounds.right();
+                    }
+                }
+            }
+        }
+
+        self.base_handle.set_offset(scroll_offset);
+    }
+
+    /// Scrolls to the bottom of the list.
+    pub fn scroll_to_bottom(&self) {
+        let state = self.state.borrow();
+        self.scroll_to_item(
+            state.items_bounds.len().saturating_sub(1),
+            ScrollStrategy::Top,
+        );
+    }
+}
 
 /// Create a [`VirtualList`] in vertical direction.
 ///
@@ -70,7 +205,7 @@ where
     V: Render,
 {
     let id: ElementId = id.into();
-    let scroll_handle = ScrollHandle::default();
+    let scroll_handle = VirtualListScrollHandle::new();
     let render_range = move |visible_range, window: &mut Window, cx: &mut App| {
         view.update(cx, |this, cx| {
             f(this, visible_range, window, cx)
@@ -100,7 +235,7 @@ pub struct VirtualList {
     id: ElementId,
     axis: Axis,
     base: Stateful<Div>,
-    scroll_handle: ScrollHandle,
+    scroll_handle: VirtualListScrollHandle,
     items_count: usize,
     item_sizes: Rc<Vec<Size<Pixels>>>,
     render_items: Box<
@@ -115,7 +250,7 @@ impl Styled for VirtualList {
 }
 
 impl VirtualList {
-    pub fn track_scroll(mut self, scroll_handle: &ScrollHandle) -> Self {
+    pub fn track_scroll(mut self, scroll_handle: &VirtualListScrollHandle) -> Self {
         self.base = self.base.track_scroll(&scroll_handle);
         self.scroll_handle = scroll_handle.clone();
         self
@@ -124,7 +259,7 @@ impl VirtualList {
     /// Specify for table.
     ///
     /// Table is special, because the `scroll_handle` is based on Table head (That is not a virtual list).
-    pub(crate) fn with_scroll_handle(mut self, scroll_handle: &ScrollHandle) -> Self {
+    pub(crate) fn with_scroll_handle(mut self, scroll_handle: &VirtualListScrollHandle) -> Self {
         self.base = div().id(self.id.clone()).size_full();
         self.scroll_handle = scroll_handle.clone();
         self
@@ -310,6 +445,29 @@ impl Element for VirtualList {
                 height: layout.size_layout.content_size + padding_width,
             },
         };
+
+        // Update scroll_handle with the item bounds
+        let items_bounds = item_origins
+            .iter()
+            .enumerate()
+            .map(|(i, &origin)| {
+                let item_size = item_sizes[i];
+
+                Bounds {
+                    origin: match self.axis {
+                        Axis::Horizontal => point(origin + padding.left, px(0.)),
+                        Axis::Vertical => point(px(0.), origin + padding.top),
+                    },
+                    size: match self.axis {
+                        Axis::Horizontal => size(item_size, bounds.size.height),
+                        Axis::Vertical => size(bounds.size.width, item_size),
+                    },
+                }
+            })
+            .collect::<Vec<_>>();
+        self.scroll_handle.set_axis(self.axis);
+        self.scroll_handle.set_items_bounds(items_bounds);
+        self.scroll_handle.set_bounds(bounds);
 
         self.base.interactivity().prepaint(
             global_id,

@@ -2,7 +2,7 @@ use std::{ops::Range, rc::Rc};
 
 use gpui::{
     div, px, size, App, AppContext, Context, Div, Entity, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, ParentElement, Pixels, Render, ScrollHandle, Size, Styled,
+    InteractiveElement, IntoElement, ParentElement, Pixels, Render, ScrollStrategy, Size, Styled,
     Window,
 };
 use gpui_component::{
@@ -10,12 +10,12 @@ use gpui_component::{
     divider::Divider,
     h_flex,
     scroll::{Scrollbar, ScrollbarAxis, ScrollbarState},
-    v_flex, v_virtual_list, ActiveTheme as _, Selectable,
+    v_flex, v_virtual_list, ActiveTheme as _, Selectable, Sizable, VirtualListScrollHandle,
 };
 
 pub struct VirtualListStory {
     focus_handle: FocusHandle,
-    scroll_handle: ScrollHandle,
+    scroll_handle: VirtualListScrollHandle,
     scroll_state: ScrollbarState,
     items: Vec<String>,
     item_sizes: Rc<Vec<Size<Pixels>>>,
@@ -34,7 +34,7 @@ impl VirtualListStory {
 
         Self {
             focus_handle: cx.focus_handle(),
-            scroll_handle: ScrollHandle::new(),
+            scroll_handle: VirtualListScrollHandle::new(),
             scroll_state: ScrollbarState::default(),
             items,
             item_sizes: Rc::new(item_sizes),
@@ -79,80 +79,125 @@ impl VirtualListStory {
     }
 
     fn render_buttons(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
-        h_flex()
+        v_flex()
             .gap_2()
-            .justify_between()
+            .child(
+                h_flex()
+                    .gap_2()
+                    .justify_between()
+                    .child(
+                        h_flex()
+                            .gap_2()
+                            .child(
+                                ButtonGroup::new("test-cases")
+                                    .outline()
+                                    .compact()
+                                    .child(
+                                        Button::new("test-0")
+                                            .label("Size 0")
+                                            .selected(self.size_mode == 0),
+                                    )
+                                    .child(
+                                        Button::new("test-1")
+                                            .label("Size 1")
+                                            .selected(self.size_mode == 1),
+                                    )
+                                    .child(
+                                        Button::new("test-2")
+                                            .label("Size 2")
+                                            .selected(self.size_mode == 2),
+                                    )
+                                    .child(
+                                        Button::new("test-3")
+                                            .label("Size 3")
+                                            .selected(self.size_mode == 3),
+                                    )
+                                    .on_click(cx.listener(|view, clicks: &Vec<usize>, _, cx| {
+                                        if clicks.contains(&0) {
+                                            view.change_test_cases(0, cx)
+                                        } else if clicks.contains(&1) {
+                                            view.change_test_cases(1, cx)
+                                        } else if clicks.contains(&2) {
+                                            view.change_test_cases(2, cx)
+                                        } else if clicks.contains(&3) {
+                                            view.change_test_cases(3, cx)
+                                        }
+                                    })),
+                            )
+                            .child(Divider::vertical().px_2())
+                            .child(
+                                ButtonGroup::new("scrollbars")
+                                    .outline()
+                                    .compact()
+                                    .child(
+                                        Button::new("test-axis-both")
+                                            .label("Both Scrollbar")
+                                            .selected(self.axis.is_both()),
+                                    )
+                                    .child(
+                                        Button::new("test-axis-vertical")
+                                            .label("Vertical")
+                                            .selected(self.axis.is_vertical()),
+                                    )
+                                    .child(
+                                        Button::new("test-axis-horizontal")
+                                            .label("Horizontal")
+                                            .selected(self.axis.is_horizontal()),
+                                    )
+                                    .on_click(cx.listener(|view, clicks: &Vec<usize>, _, cx| {
+                                        if clicks.contains(&0) {
+                                            view.change_axis(ScrollbarAxis::Both, cx)
+                                        } else if clicks.contains(&1) {
+                                            view.change_axis(ScrollbarAxis::Vertical, cx)
+                                        } else if clicks.contains(&2) {
+                                            view.change_axis(ScrollbarAxis::Horizontal, cx)
+                                        }
+                                    })),
+                            ),
+                    )
+                    .child(format!("visible_range: {:?}", self.visible_range)),
+            )
             .child(
                 h_flex()
                     .gap_2()
                     .child(
-                        ButtonGroup::new("test-cases")
+                        Button::new("scroll-to0")
+                            .small()
                             .outline()
-                            .compact()
-                            .child(
-                                Button::new("test-0")
-                                    .label("Size 0")
-                                    .selected(self.size_mode == 0),
-                            )
-                            .child(
-                                Button::new("test-1")
-                                    .label("Size 1")
-                                    .selected(self.size_mode == 1),
-                            )
-                            .child(
-                                Button::new("test-2")
-                                    .label("Size 2")
-                                    .selected(self.size_mode == 2),
-                            )
-                            .child(
-                                Button::new("test-3")
-                                    .label("Size 3")
-                                    .selected(self.size_mode == 3),
-                            )
-                            .on_click(cx.listener(|view, clicks: &Vec<usize>, _, cx| {
-                                if clicks.contains(&0) {
-                                    view.change_test_cases(0, cx)
-                                } else if clicks.contains(&1) {
-                                    view.change_test_cases(1, cx)
-                                } else if clicks.contains(&2) {
-                                    view.change_test_cases(2, cx)
-                                } else if clicks.contains(&3) {
-                                    view.change_test_cases(3, cx)
-                                }
+                            .label("Scroll to Top")
+                            .on_click(cx.listener(|this, _, _, _| {
+                                this.scroll_handle.scroll_to_item(0, ScrollStrategy::Top);
                             })),
                     )
-                    .child(Divider::vertical().px_2())
                     .child(
-                        ButtonGroup::new("scrollbars")
+                        Button::new("scroll-to1")
+                            .small()
                             .outline()
-                            .compact()
-                            .child(
-                                Button::new("test-axis-both")
-                                    .label("Both Scrollbar")
-                                    .selected(self.axis.is_both()),
-                            )
-                            .child(
-                                Button::new("test-axis-vertical")
-                                    .label("Vertical")
-                                    .selected(self.axis.is_vertical()),
-                            )
-                            .child(
-                                Button::new("test-axis-horizontal")
-                                    .label("Horizontal")
-                                    .selected(self.axis.is_horizontal()),
-                            )
-                            .on_click(cx.listener(|view, clicks: &Vec<usize>, _, cx| {
-                                if clicks.contains(&0) {
-                                    view.change_axis(ScrollbarAxis::Both, cx)
-                                } else if clicks.contains(&1) {
-                                    view.change_axis(ScrollbarAxis::Vertical, cx)
-                                } else if clicks.contains(&2) {
-                                    view.change_axis(ScrollbarAxis::Horizontal, cx)
-                                }
+                            .label("Scroll to 50")
+                            .on_click(cx.listener(|this, _, _, _| {
+                                this.scroll_handle.scroll_to_item(50, ScrollStrategy::Top);
+                            })),
+                    )
+                    .child(
+                        Button::new("scroll-to2")
+                            .small()
+                            .outline()
+                            .label("Scroll to 25 (center)")
+                            .on_click(cx.listener(|this, _, _, _| {
+                                this.scroll_handle
+                                    .scroll_to_item(25, ScrollStrategy::Center);
+                            })),
+                    )
+                    .child(
+                        Button::new("scroll-to-bottom")
+                            .small()
+                            .outline()
+                            .label("Scroll to Bottom")
+                            .on_click(cx.listener(|this, _, _, _| {
+                                this.scroll_handle.scroll_to_bottom();
                             })),
                     ),
             )
-            .child(format!("visible_range: {:?}", self.visible_range))
     }
 }
 
