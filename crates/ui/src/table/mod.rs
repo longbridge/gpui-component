@@ -10,10 +10,10 @@ use crate::{
     VirtualListScrollHandle,
 };
 use gpui::{
-    actions, canvas, div, prelude::FluentBuilder, px, uniform_list, App, AppContext, Axis, Bounds,
-    Context, Div, DragMoveEvent, Edges, EventEmitter, FocusHandle, Focusable, InteractiveElement,
-    IntoElement, KeyBinding, ListSizingBehavior, MouseButton, MouseDownEvent, ParentElement,
-    Pixels, Point, Render, ScrollStrategy, ScrollWheelEvent, SharedString,
+    actions, canvas, div, point, prelude::FluentBuilder, px, uniform_list, App, AppContext, Axis,
+    Bounds, Context, Div, DragMoveEvent, Edges, EventEmitter, FocusHandle, Focusable,
+    InteractiveElement, IntoElement, KeyBinding, ListSizingBehavior, MouseButton, MouseDownEvent,
+    ParentElement, Pixels, Point, Render, ScrollStrategy, ScrollWheelEvent, SharedString,
     StatefulInteractiveElement as _, Styled, Task, UniformListScrollHandle, Window,
 };
 
@@ -311,9 +311,13 @@ where
     pub fn set_selected_col(&mut self, col_ix: usize, cx: &mut Context<Self>) {
         self.selection_state = SelectionState::Column;
         self.selected_col = Some(col_ix);
-        if let Some(_col_ix) = self.selected_col {
+        if let Some(col_ix) = self.selected_col {
             self.horizontal_scroll_handle
                 .scroll_to_item(col_ix, ScrollStrategy::Top);
+            let offset = self.horizontal_scroll_handle.base_handle().offset();
+            self.horizontal_scroll_handle
+                .base_handle()
+                .set_offset(offset + point(self.fixed_head_cols_bounds.size.width, px(0.)));
         }
         cx.emit(TableEvent::SelectColumn(col_ix));
         cx.notify();
