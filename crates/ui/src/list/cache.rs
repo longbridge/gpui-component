@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use gpui::App;
+use gpui::{App, Pixels, Size};
 
 use crate::IndexPath;
 
@@ -9,6 +9,13 @@ pub(crate) enum RowEntry {
     Entry(IndexPath),
     SectionHeader(usize),
     SectionFooter(usize),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) struct MeansuredEntrySize {
+    pub(crate) item_size: Size<Pixels>,
+    pub(crate) section_header_size: Size<Pixels>,
+    pub(crate) section_footer_size: Size<Pixels>,
 }
 
 impl RowEntry {
@@ -58,6 +65,8 @@ impl RowEntry {
 pub(crate) struct RowsCache {
     pub(crate) entities: Rc<Vec<RowEntry>>,
     pub(crate) sections: Rc<Vec<usize>>,
+    pub(crate) item_sizes: Rc<Vec<Size<Pixels>>>,
+    meansured_size: MeansuredEntrySize,
 }
 
 impl RowsCache {
@@ -82,18 +91,28 @@ impl RowsCache {
         self.entities.iter().position(|p| p.eq_index_path(path))
     }
 
-    pub(crate) fn prepare_if_needed<F>(&mut self, sections_count: usize, cx: &App, rows_count_f: F)
-    where
+    pub(crate) fn prepare_if_needed<F>(
+        &mut self,
+        sections_count: usize,
+        meansured_size: MeansuredEntrySize,
+        cx: &App,
+        rows_count_f: F,
+    ) where
         F: Fn(usize, &App) -> usize,
     {
         let mut new_sections = vec![];
         for section_ix in 0..sections_count {
             new_sections.push(rows_count_f(section_ix, cx));
         }
-        if new_sections == *self.sections {
+
+        let need_update = new_sections != *self.sections || self.meansured_size != meansured_size;
+
+        if !need_update {
             return;
         }
 
+        let mut item_sizes = vec![];
+        self.meansured_size = meansured_size;
         self.sections = Rc::new(new_sections);
         self.entities = Rc::new(
             self.sections
@@ -102,17 +121,21 @@ impl RowsCache {
                 .flat_map(|(section, items_count)| {
                     let mut items = vec![];
                     items.push(RowEntry::SectionHeader(section));
+                    item_sizes.push(meansured_size.section_header_size);
                     for row in 0..*items_count {
                         items.push(RowEntry::Entry(IndexPath {
                             section,
                             row,
                             ..Default::default()
                         }));
+                        item_sizes.push(meansured_size.item_size);
                     }
                     items.push(RowEntry::SectionFooter(section));
+                    item_sizes.push(meansured_size.section_footer_size);
                     items
                 })
                 .collect(),
         );
+        self.item_sizes = Rc::new(item_sizes);
     }
 }

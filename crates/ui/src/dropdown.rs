@@ -148,8 +148,8 @@ where
     fn render_item(
         &self,
         ix: IndexPath,
-        _: &mut gpui::Window,
-        cx: &mut gpui::Context<List<Self>>,
+        _: &mut Window,
+        cx: &mut Context<List<Self>>,
     ) -> Option<Self::Item> {
         let selected = self
             .selected_index
