@@ -3,21 +3,22 @@ use std::time::Duration;
 
 use crate::actions::{Cancel, Confirm, SelectNext, SelectPrev};
 use crate::input::InputState;
-use crate::list::cache::{RowEntry, RowsCache};
+use crate::list::cache::{MeansuredEntrySize, RowEntry, RowsCache};
 use crate::list::ListDelegate;
 use crate::{
     input::{InputEvent, TextInput},
     scroll::{Scrollbar, ScrollbarState},
     v_flex, ActiveTheme, IconName, Size,
 };
-use crate::{Icon, Selectable, Sizable as _, StyledExt};
+use crate::{v_virtual_list, Icon, Selectable, Sizable as _, StyledExt};
 use gpui::{
-    div, prelude::FluentBuilder, uniform_list, AppContext, Entity, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, KeyBinding, Length, ListSizingBehavior, MouseButton,
-    ParentElement, Render, Styled, Task, UniformListScrollHandle, Window,
+    div, prelude::FluentBuilder, AppContext, Entity, FocusHandle, Focusable, InteractiveElement,
+    IntoElement, KeyBinding, Length, ListSizingBehavior, MouseButton, ParentElement, Render,
+    Styled, Task, Window,
 };
 use gpui::{
-    App, Context, Edges, EventEmitter, MouseDownEvent, Pixels, ScrollStrategy, Subscription,
+    px, size, App, AvailableSpace, Context, Edges, EventEmitter, MouseDownEvent, Pixels,
+    ScrollHandle, ScrollStrategy, Subscription,
 };
 use rust_i18n::t;
 use smol::Timer;
@@ -90,7 +91,7 @@ pub struct List<D: ListDelegate> {
     selectable: bool,
     querying: bool,
     scrollbar_visible: bool,
-    vertical_scroll_handle: UniformListScrollHandle,
+    vertical_scroll_handle: ScrollHandle,
     scroll_state: ScrollbarState,
     pub(crate) size: Size,
     rows_cache: RowsCache,
@@ -121,7 +122,7 @@ where
             last_query: None,
             selected_index: None,
             mouse_right_clicked_index: None,
-            vertical_scroll_handle: UniformListScrollHandle::new(),
+            vertical_scroll_handle: ScrollHandle::new(),
             scroll_state: ScrollbarState::default(),
             max_height: None,
             scrollbar_visible: true,
@@ -235,26 +236,26 @@ where
     pub fn scroll_to_item(
         &mut self,
         ix: IndexPath,
-        strategy: ScrollStrategy,
+        _strategy: ScrollStrategy,
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
         if let Some(ix) = self.rows_cache.position_of(&ix) {
-            self.vertical_scroll_handle.scroll_to_item(ix, strategy);
+            dbg!(&ix);
+            self.vertical_scroll_handle.scroll_to_item(ix);
             cx.notify();
         }
     }
 
     /// Get scroll handle
-    pub fn scroll_handle(&self) -> &UniformListScrollHandle {
+    pub fn scroll_handle(&self) -> &ScrollHandle {
         &self.vertical_scroll_handle
     }
 
     pub fn scroll_to_selected_item(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         if let Some(ix) = self.selected_index {
             if let Some(item_ix) = self.rows_cache.position_of(&ix) {
-                self.vertical_scroll_handle
-                    .scroll_to_item(item_ix, ScrollStrategy::Top);
+                self.vertical_scroll_handle.scroll_to_item(item_ix);
                 cx.notify();
             }
         }
@@ -293,8 +294,7 @@ where
                     search.await;
 
                     _ = this.update_in(window, |this, _, _| {
-                        this.vertical_scroll_handle
-                            .scroll_to_item(0, ScrollStrategy::Top);
+                        this.vertical_scroll_handle.scroll_to_item(0);
                         this.last_query = Some(text);
                     });
 
@@ -509,12 +509,6 @@ where
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let sizing_behavior = if self.max_height.is_some() {
-            ListSizingBehavior::Infer
-        } else {
-            ListSizingBehavior::Auto
-        };
-
         v_flex()
             .flex_grow()
             .relative()
@@ -527,10 +521,11 @@ where
                 let rows_cache = self.rows_cache.clone();
                 |this| {
                     this.child(
-                        uniform_list(
-                            "uniform-list",
-                            items_count,
-                            cx.processor(move |list, visible_range: Range<usize>, window, cx| {
+                        v_virtual_list(
+                            cx.entity().clone(),
+                            "virtual-list",
+                            rows_cache.item_sizes.clone(),
+                            move |list, visible_range: Range<usize>, window, cx| {
                                 list.load_more_if_need(items_count, visible_range.end, window, cx);
 
                                 visible_range
@@ -539,31 +534,27 @@ where
                                             return None;
                                         };
 
-                                        // TODO: uniform_list must fixed item height.
-
                                         match entry {
                                             RowEntry::Entry(index) => Some(
                                                 list.render_list_item(index, window, cx)
                                                     .into_any_element(),
                                             ),
-                                            // RowEntry::SectionHeader(section_ix) => list
-                                            //     .delegate()
-                                            //     .render_section_header(section_ix, window, cx)
-                                            //     .map(|r| r.into_any_element()),
-                                            // RowEntry::SectionFooter(section_ix) => list
-                                            //     .delegate()
-                                            //     .render_section_footer(section_ix, window, cx)
-                                            //     .map(|r| r.into_any_element()),
-                                            _ => None,
+                                            RowEntry::SectionHeader(section_ix) => list
+                                                .delegate()
+                                                .render_section_header(section_ix, window, cx)
+                                                .map(|r| r.into_any_element()),
+                                            RowEntry::SectionFooter(section_ix) => list
+                                                .delegate()
+                                                .render_section_footer(section_ix, window, cx)
+                                                .map(|r| r.into_any_element()),
                                         }
                                     })
                                     .collect::<Vec<_>>()
-                            }),
+                            },
                         )
                         .flex_grow()
                         .paddings(self.paddings)
-                        .with_sizing_behavior(sizing_behavior)
-                        .track_scroll(self.vertical_scroll_handle.clone())
+                        .track_scroll(&self.vertical_scroll_handle)
                         .into_any_element(),
                     )
                 }
@@ -571,10 +562,39 @@ where
             .children(self.render_scrollbar(window, cx))
     }
 
-    fn prepare_items_if_needed(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+    fn prepare_items_if_needed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let sections_count = self.delegate.sections_count(cx);
+
+        let mut meansured_size = MeansuredEntrySize::default();
+
+        // Meansure the item_height and section header/footer height.
+        let available_space = size(AvailableSpace::MinContent, AvailableSpace::MinContent);
+        if let Some(el) = self.delegate.render_item(IndexPath::default(), window, cx) {
+            meansured_size.item_size =
+                el.into_any_element()
+                    .layout_as_root(available_space, window, cx);
+        };
+        if let Some(el) = self
+            .delegate
+            .render_section_header(0, window, cx)
+            .map(|r| r.into_any_element())
+        {
+            meansured_size.section_header_size =
+                el.into_any_element()
+                    .layout_as_root(available_space, window, cx);
+        }
+        if let Some(el) = self
+            .delegate
+            .render_section_footer(0, window, cx)
+            .map(|r| r.into_any_element())
+        {
+            meansured_size.section_header_size =
+                el.into_any_element()
+                    .layout_as_root(available_space, window, cx);
+        }
+
         self.rows_cache
-            .prepare_if_needed(sections_count, cx, |section_ix, cx| {
+            .prepare_if_needed(sections_count, meansured_size, cx, |section_ix, cx| {
                 self.delegate.items_count(section_ix, cx)
             });
     }
