@@ -13,7 +13,7 @@ use gpui_component::{
     h_flex,
     input::{InputState, TextInput},
     switch::Switch,
-    v_flex, ActiveTheme, AxisExt, FocusableCycle, Selectable, Sizable, Size,
+    v_flex, ActiveTheme, AxisExt, FocusableCycle, IndexPath, Selectable, Sizable, Size,
 };
 
 pub struct FormStory {
@@ -60,7 +60,7 @@ impl FormStory {
                     "Ms.".to_string(),
                     "Dr.".to_string(),
                 ],
-                Some(0),
+                Some(IndexPath::default()),
                 window,
                 cx,
             )

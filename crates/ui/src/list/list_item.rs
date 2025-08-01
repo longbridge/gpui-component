@@ -6,9 +6,24 @@ use gpui::{
 };
 use smallvec::SmallVec;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+enum ListItemMode {
+    #[default]
+    Entry,
+    Separator,
+}
+
+impl ListItemMode {
+    #[inline]
+    fn is_separator(&self) -> bool {
+        matches!(self, ListItemMode::Separator)
+    }
+}
+
 #[derive(IntoElement)]
 pub struct ListItem {
     base: Stateful<Div>,
+    mode: ListItemMode,
     style: StyleRefinement,
     disabled: bool,
     selected: bool,
@@ -25,6 +40,7 @@ impl ListItem {
     pub fn new(id: impl Into<ElementId>) -> Self {
         let id: ElementId = id.into();
         Self {
+            mode: ListItemMode::Entry,
             base: h_flex().id(id),
             style: StyleRefinement::default(),
             disabled: false,
@@ -37,6 +53,12 @@ impl ListItem {
             suffix: None,
             children: SmallVec::new(),
         }
+    }
+
+    /// Set this list item to as a separator, it not able to be selected.
+    pub fn separator(mut self) -> Self {
+        self.mode = ListItemMode::Separator;
+        self
     }
 
     /// Set to show check icon, default is None.
@@ -135,6 +157,8 @@ impl RenderOnce for ListItem {
         let mut selected_style = StyleRefinement::default();
         selected_style.corner_radii = corner_radii;
 
+        let is_selectable = !(self.disabled || self.mode.is_separator());
+
         self.base
             .relative()
             .gap_x_1()
@@ -146,7 +170,7 @@ impl RenderOnce for ListItem {
             .items_center()
             .justify_between()
             .refine_style(&self.style)
-            .when(!self.disabled, |this| {
+            .when(is_selectable, |this| {
                 this.when_some(self.on_click, |this, on_click| {
                     this.on_mouse_down(MouseButton::Left, move |_, _, cx| {
                         cx.stop_propagation();
@@ -160,7 +184,7 @@ impl RenderOnce for ListItem {
                     this.hover(|this| this.bg(cx.theme().list_hover))
                 })
             })
-            .when(self.disabled, |this| {
+            .when(!is_selectable, |this| {
                 this.text_color(cx.theme().muted_foreground)
             })
             .child(
@@ -183,7 +207,7 @@ impl RenderOnce for ListItem {
             )
             .when_some(self.suffix, |this, suffix| this.child(suffix(window, cx)))
             .map(|this| {
-                if self.selected || self.secondary_selected {
+                if is_selectable && (self.selected || self.secondary_selected) {
                     this.bg(cx.theme().accent).child(
                         div()
                             .absolute()

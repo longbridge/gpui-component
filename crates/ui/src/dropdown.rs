@@ -12,8 +12,8 @@ use crate::{
     h_flex,
     input::clear_button,
     list::{List, ListDelegate},
-    v_flex, ActiveTheme, Disableable, Icon, IconName, Selectable, Sizable, Size, StyleSized,
-    StyledExt,
+    v_flex, ActiveTheme, Disableable, Icon, IconName, IndexPath, Selectable, Sizable, Size,
+    StyleSized, StyledExt,
 };
 
 #[derive(Clone)]
@@ -81,21 +81,22 @@ impl DropdownItem for SharedString {
 pub trait DropdownDelegate: Sized {
     type Item: DropdownItem;
 
-    fn len(&self) -> usize;
-
-    fn is_empty(&self) -> bool {
-        self.len() == 0
+    /// Returns the number of sections in the dropdown.
+    fn sections_count(&self) -> usize {
+        1
     }
 
-    fn get(&self, ix: usize) -> Option<&Self::Item>;
+    /// Returns the number of items in the given section.
+    fn items_count(&self, section_ix: usize) -> usize;
 
-    fn position<V>(&self, value: &V) -> Option<usize>
+    /// Returns the item at the given index path (Only section, row will be use).
+    fn get(&self, ix: IndexPath) -> Option<&Self::Item>;
+
+    /// Returns the index of the item with the given value, or None if not found.
+    fn position<V>(&self, _value: &V) -> Option<IndexPath>
     where
         Self::Item: DropdownItem<Value = V>,
-        V: PartialEq,
-    {
-        (0..self.len()).find(|&i| self.get(i).map_or(false, |item| item.value() == value))
-    }
+        V: PartialEq;
 
     fn can_search(&self) -> bool {
         false
@@ -109,27 +110,29 @@ pub trait DropdownDelegate: Sized {
 impl<T: DropdownItem> DropdownDelegate for Vec<T> {
     type Item = T;
 
-    fn len(&self) -> usize {
+    fn items_count(&self, _: usize) -> usize {
         self.len()
     }
 
-    fn get(&self, ix: usize) -> Option<&Self::Item> {
-        self.as_slice().get(ix)
+    fn get(&self, ix: IndexPath) -> Option<&Self::Item> {
+        self.as_slice().get(ix.row)
     }
 
-    fn position<V>(&self, value: &V) -> Option<usize>
+    fn position<V>(&self, value: &V) -> Option<IndexPath>
     where
         Self::Item: DropdownItem<Value = V>,
         V: PartialEq,
     {
-        self.iter().position(|v| v.value() == value)
+        self.iter()
+            .position(|v| v.value() == value)
+            .map(|ix| IndexPath::default().row(ix))
     }
 }
 
 struct DropdownListDelegate<D: DropdownDelegate + 'static> {
     delegate: D,
     dropdown: WeakEntity<DropdownState<D>>,
-    selected_index: Option<usize>,
+    selected_index: Option<IndexPath>,
 }
 
 impl<D> ListDelegate for DropdownListDelegate<D>
@@ -138,15 +141,15 @@ where
 {
     type Item = DropdownListItem;
 
-    fn items_count(&self, _: &App) -> usize {
-        self.delegate.len()
+    fn items_count(&self, section_ix: usize, _: &App) -> usize {
+        self.delegate.items_count(section_ix)
     }
 
     fn render_item(
         &self,
-        ix: usize,
-        _: &mut gpui::Window,
-        cx: &mut gpui::Context<List<Self>>,
+        ix: IndexPath,
+        _: &mut Window,
+        cx: &mut Context<List<Self>>,
     ) -> Option<Self::Item> {
         let selected = self
             .selected_index
@@ -157,7 +160,7 @@ where
             .map_or(Size::Medium, |dropdown| dropdown.read(cx).size);
 
         if let Some(item) = self.delegate.get(ix) {
-            let list_item = DropdownListItem::new(ix)
+            let list_item = DropdownListItem::new(ix.row)
                 .selected(selected)
                 .with_size(size)
                 .child(div().whitespace_nowrap().child(item.title().to_string()));
@@ -207,7 +210,7 @@ where
 
     fn set_selected_index(
         &mut self,
-        ix: Option<usize>,
+        ix: Option<IndexPath>,
         _: &mut Window,
         _: &mut Context<List<Self>>,
     ) {
@@ -293,22 +296,22 @@ impl<T: DropdownItem + Clone> From<Vec<T>> for SearchableVec<T> {
 impl<T: DropdownItem + Clone> DropdownDelegate for SearchableVec<T> {
     type Item = T;
 
-    fn len(&self) -> usize {
+    fn items_count(&self, _: usize) -> usize {
         self.matched_items.len()
     }
 
-    fn get(&self, ix: usize) -> Option<&Self::Item> {
+    fn get(&self, ix: IndexPath) -> Option<&Self::Item> {
         self.matched_items.get(ix)
     }
 
-    fn position<V>(&self, value: &V) -> Option<usize>
+    fn position<V>(&self, value: &V) -> Option<IndexPath>
     where
         Self::Item: DropdownItem<Value = V>,
         V: PartialEq,
     {
         for (ix, item) in self.matched_items.iter().enumerate() {
             if item.value() == value {
-                return Some(ix);
+                return Some(IndexPath::default().row(ix));
             }
         }
 
@@ -337,7 +340,7 @@ where
 {
     pub fn new(
         delegate: D,
-        selected_index: Option<usize>,
+        selected_index: Option<IndexPath>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -391,7 +394,7 @@ where
 
     pub fn set_selected_index(
         &mut self,
-        selected_index: Option<usize>,
+        selected_index: Option<IndexPath>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -414,7 +417,7 @@ where
         self.set_selected_index(selected_index, window, cx);
     }
 
-    pub fn selected_index(&self, cx: &App) -> Option<usize> {
+    pub fn selected_index(&self, cx: &App) -> Option<IndexPath> {
         self.list.read(cx).selected_index()
     }
 
