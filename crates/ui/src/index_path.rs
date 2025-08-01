@@ -1,4 +1,6 @@
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
+
+use gpui::ElementId;
 
 /// Represents an index path in a list, which consists of a section index,
 ///
@@ -11,6 +13,22 @@ pub struct IndexPath {
     pub row: usize,
     /// The column index.
     pub column: usize,
+}
+
+impl From<IndexPath> for ElementId {
+    fn from(path: IndexPath) -> Self {
+        ElementId::Name(format!("index-path({},{},{})", path.section, path.row, path.column).into())
+    }
+}
+
+impl Display for IndexPath {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "IndexPath(section: {}, row: {}, column: {})",
+            self.section, self.row, self.column
+        )
+    }
 }
 
 impl IndexPath {
@@ -51,8 +69,22 @@ impl IndexPath {
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
+
+    #[test]
+    fn test_into_element_id() {
+        let index_path = IndexPath::new(1, 2).column(3);
+        let element_id: ElementId = index_path.into();
+        assert_eq!(element_id.to_string(), "index-path(1,2,3)");
+    }
+
+    #[test]
+    fn test_display() {
+        assert_eq!(
+            format!("{}", IndexPath::new(1, 2).column(3)),
+            "IndexPath(section: 1, row: 2, column: 3)"
+        );
+    }
 
     #[test]
     fn test_index_path() {

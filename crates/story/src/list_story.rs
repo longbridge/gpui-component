@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{rc::Rc, time::Duration};
 
 use fake::Fake;
 use gpui::{
@@ -40,22 +40,23 @@ impl Company {
         self.prev_close_str = format!("{:.2}", self.prev_close).into();
         self
     }
-
-    fn random_update(&mut self) {
-        self.last_done = self.prev_close * (1.0 + (-0.2..0.2).fake::<f64>());
-    }
 }
 
 #[derive(IntoElement)]
 struct CompanyListItem {
     base: ListItem,
-    ix: usize,
-    company: Company,
+    ix: IndexPath,
+    company: Rc<Company>,
     selected: bool,
 }
 
 impl CompanyListItem {
-    pub fn new(id: impl Into<ElementId>, company: Company, ix: usize, selected: bool) -> Self {
+    pub fn new(
+        id: impl Into<ElementId>,
+        company: Rc<Company>,
+        ix: IndexPath,
+        selected: bool,
+    ) -> Self {
         CompanyListItem {
             company,
             ix,
@@ -92,7 +93,7 @@ impl RenderOnce for CompanyListItem {
 
         let bg_color = if self.selected {
             cx.theme().list_active
-        } else if self.ix % 2 == 0 {
+        } else if self.ix.row % 2 == 0 {
             cx.theme().list
         } else {
             cx.theme().list_even
@@ -116,31 +117,21 @@ impl RenderOnce for CompanyListItem {
                     .gap_2()
                     .text_color(text_color)
                     .child(
-                        h_flex()
-                            .gap_2()
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .text_color(cx.theme().muted_foreground)
-                                    .child(format!("{}", self.ix)),
-                            )
-                            .child(
-                                v_flex()
-                                    .gap_1()
-                                    .max_w(px(500.))
-                                    .overflow_x_hidden()
-                                    .flex_nowrap()
-                                    .child(
-                                        Label::new(self.company.name.clone()).whitespace_nowrap(),
-                                    )
-                                    .child(
-                                        div().text_sm().overflow_x_hidden().child(
-                                            Label::new(self.company.industry.clone())
-                                                .whitespace_nowrap()
-                                                .text_color(text_color.opacity(0.5)),
-                                        ),
+                        h_flex().gap_2().child(
+                            v_flex()
+                                .gap_1()
+                                .max_w(px(500.))
+                                .overflow_x_hidden()
+                                .flex_nowrap()
+                                .child(Label::new(self.company.name.clone()).whitespace_nowrap())
+                                .child(
+                                    div().text_sm().overflow_x_hidden().child(
+                                        Label::new(self.company.industry.clone())
+                                            .whitespace_nowrap()
+                                            .text_color(text_color.opacity(0.5)),
                                     ),
-                            ),
+                                ),
+                        ),
                     )
                     .child(
                         h_flex()
@@ -170,20 +161,67 @@ impl RenderOnce for CompanyListItem {
 }
 
 struct CompanyListDelegate {
-    companies: Vec<Company>,
-    matched_companies: Vec<Company>,
-    selected_index: Option<usize>,
-    confirmed_index: Option<usize>,
-    query: String,
+    industries: Vec<SharedString>,
+    _companies: Vec<Rc<Company>>,
+    matched_companies: Vec<Vec<Rc<Company>>>,
+    selected_index: Option<IndexPath>,
+    confirmed_index: Option<IndexPath>,
+    query: SharedString,
     loading: bool,
     eof: bool,
+}
+
+impl CompanyListDelegate {
+    fn prepare(&mut self, query: impl Into<SharedString>) {
+        self.query = query.into();
+        let companies: Vec<Rc<Company>> = self
+            ._companies
+            .iter()
+            .filter(|company| {
+                company
+                    .name
+                    .to_lowercase()
+                    .contains(&self.query.to_lowercase())
+            })
+            .cloned()
+            .collect();
+        for company in companies.into_iter() {
+            if let Some(ix) = self.industries.iter().position(|s| s == &company.industry) {
+                self.matched_companies[ix].push(company);
+            } else {
+                self.industries.push(company.industry.clone());
+                self.matched_companies.push(vec![company]);
+            }
+        }
+    }
+
+    fn extend_more(&mut self, len: usize) {
+        self._companies
+            .extend((0..len).map(|_| Rc::new(random_company())));
+        self.prepare("");
+    }
+
+    fn selected_company(&self) -> Option<Rc<Company>> {
+        let Some(ix) = self.selected_index else {
+            return None;
+        };
+
+        self.matched_companies
+            .get(ix.section)
+            .and_then(|c| c.get(ix.row))
+            .cloned()
+    }
 }
 
 impl ListDelegate for CompanyListDelegate {
     type Item = CompanyListItem;
 
-    fn items_count(&self, _: usize, _: &App) -> usize {
-        self.matched_companies.len()
+    fn sections_count(&self, _: &App) -> usize {
+        self.industries.len()
+    }
+
+    fn items_count(&self, section_ix: usize, _: &App) -> usize {
+        self.matched_companies[section_ix].len()
     }
 
     fn perform_search(
@@ -192,13 +230,7 @@ impl ListDelegate for CompanyListDelegate {
         _: &mut Window,
         _: &mut Context<List<Self>>,
     ) -> Task<()> {
-        self.query = query.to_string();
-        self.matched_companies = self
-            .companies
-            .iter()
-            .filter(|company| company.name.to_lowercase().contains(&query.to_lowercase()))
-            .cloned()
-            .collect();
+        self.prepare(query.to_owned());
         Task::ready(())
     }
 
@@ -213,8 +245,52 @@ impl ListDelegate for CompanyListDelegate {
         _: &mut Window,
         cx: &mut Context<List<Self>>,
     ) {
-        self.selected_index = ix.map(|ix| ix.row);
+        self.selected_index = ix;
         cx.notify();
+    }
+
+    fn render_section_header(
+        &self,
+        section_ix: usize,
+        _: &mut Window,
+        cx: &mut Context<List<Self>>,
+    ) -> Option<impl IntoElement> {
+        let Some(industry) = self.industries.get(section_ix) else {
+            return None;
+        };
+
+        Some(
+            div()
+                .py_2()
+                .px_2()
+                .text_sm()
+                .text_color(cx.theme().muted)
+                .child(industry.clone()),
+        )
+    }
+
+    fn render_section_footer(
+        &self,
+        section_ix: usize,
+        _: &mut Window,
+        cx: &mut Context<List<Self>>,
+    ) -> Option<impl IntoElement> {
+        let Some(_) = self.industries.get(section_ix) else {
+            return None;
+        };
+
+        Some(
+            div()
+                .pt_2()
+                .pb_5()
+                .px_2()
+                .text_xs()
+                .text_color(cx.theme().muted_foreground)
+                .child(format!(
+                    "Total {} items in section.",
+                    self.matched_companies[section_ix].len()
+                )),
+        )
     }
 
     fn render_item(
@@ -223,9 +299,8 @@ impl ListDelegate for CompanyListDelegate {
         _: &mut Window,
         _: &mut Context<List<Self>>,
     ) -> Option<Self::Item> {
-        let ix = ix.row;
         let selected = Some(ix) == self.selected_index || Some(ix) == self.confirmed_index;
-        if let Some(company) = self.matched_companies.get(ix) {
+        if let Some(company) = self.matched_companies[ix.section].get(ix.row) {
             return Some(CompanyListItem::new(ix, company.clone(), ix, selected));
         }
 
@@ -251,31 +326,19 @@ impl ListDelegate for CompanyListDelegate {
 
             _ = view.update_in(window, move |view, window, cx| {
                 let query = view.delegate().query.clone();
-                view.delegate_mut()
-                    .companies
-                    .extend((0..200).map(|_| random_company()));
+                view.delegate_mut().extend_more(200);
                 _ = view.delegate_mut().perform_search(&query, window, cx);
-                view.delegate_mut().eof = view.delegate().companies.len() >= 6000;
+                view.delegate_mut().eof = view.delegate()._companies.len() >= 6000;
             });
         })
         .detach();
     }
 }
 
-impl CompanyListDelegate {
-    fn selected_company(&self) -> Option<Company> {
-        let Some(ix) = self.selected_index else {
-            return None;
-        };
-
-        self.companies.get(ix).cloned()
-    }
-}
-
 pub struct ListStory {
     focus_handle: FocusHandle,
     company_list: Entity<List<CompanyListDelegate>>,
-    selected_company: Option<Company>,
+    selected_company: Option<Rc<Company>>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -299,19 +362,17 @@ impl ListStory {
     }
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let companies = (0..1_000)
-            .map(|_| random_company())
-            .collect::<Vec<Company>>();
-
-        let delegate = CompanyListDelegate {
-            matched_companies: companies.clone(),
-            companies,
-            selected_index: Some(0),
+        let mut delegate = CompanyListDelegate {
+            industries: vec![],
+            matched_companies: vec![vec![]],
+            _companies: vec![],
+            selected_index: Some(IndexPath::default()),
             confirmed_index: None,
-            query: "".to_string(),
+            query: "".into(),
             loading: false,
             eof: false,
         };
+        delegate.extend_more(1_000);
 
         let company_list =
             cx.new(|cx| List::new(delegate, window, cx).paddings(Edges::all(px(8.))));
@@ -337,11 +398,15 @@ impl ListStory {
                 this.company_list.update(cx, |picker, _| {
                     picker
                         .delegate_mut()
-                        .companies
+                        ._companies
                         .iter_mut()
                         .for_each(|company| {
-                            company.random_update();
+                            let mut new_company = random_company();
+                            new_company.name = company.name.clone();
+                            new_company.industry = company.industry.clone();
+                            *company = Rc::new(new_company);
                         });
+                    picker.delegate_mut().prepare("");
                 });
                 cx.notify();
             })

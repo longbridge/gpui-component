@@ -33,6 +33,8 @@ pub trait ListDelegate: Sized + 'static {
     /// Render the item at the given index.
     ///
     /// Return None will skip the item.
+    ///
+    /// NOTE: Every item should have same height.
     fn render_item(
         &self,
         ix: IndexPath,
@@ -41,6 +43,8 @@ pub trait ListDelegate: Sized + 'static {
     ) -> Option<Self::Item>;
 
     /// Render the section header at the given index, default is None.
+    ///
+    /// NOTE: Every header should have same height.
     fn render_section_header(
         &self,
         section_ix: usize,
@@ -51,6 +55,8 @@ pub trait ListDelegate: Sized + 'static {
     }
 
     /// Render the section footer at the given index, default is None.
+    ///
+    /// NOTE: Every footer should have same height.
     fn render_section_footer(
         &self,
         section_ix: usize,

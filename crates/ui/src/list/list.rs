@@ -18,7 +18,7 @@ use gpui::{
     IntoElement, KeyBinding, Length, MouseButton, ParentElement, Render, Styled, Task, Window,
 };
 use gpui::{
-    size, App, AvailableSpace, Context, Edges, EventEmitter, MouseDownEvent, Pixels,
+    px, size, App, AvailableSpace, Context, Edges, EventEmitter, MouseDownEvent, Pixels,
     ScrollStrategy, Subscription,
 };
 use rust_i18n::t;
@@ -204,6 +204,15 @@ where
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if ix.section == 0 && ix.row == 0 {
+            // If the item is the first item, scroll to the top.
+            let mut offset = self.scroll_handle.base_handle().offset();
+            offset.y = px(0.);
+            self.scroll_handle.base_handle().set_offset(offset);
+            cx.notify();
+            return;
+        }
+
         if let Some(ix) = self.rows_cache.position_of(&ix) {
             self.scroll_handle.scroll_to_item(ix, ScrollStrategy::Top);
             cx.notify();
@@ -522,7 +531,7 @@ where
             .render_section_footer(0, window, cx)
             .map(|r| r.into_any_element())
         {
-            meansured_size.section_header_size = el.layout_as_root(available_space, window, cx);
+            meansured_size.section_footer_size = el.layout_as_root(available_space, window, cx);
         }
 
         self.rows_cache
