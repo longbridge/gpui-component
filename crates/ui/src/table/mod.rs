@@ -1032,6 +1032,7 @@ where
         left_columns_count: usize,
         col_sizes: Rc<Vec<gpui::Size<Pixels>>>,
         columns_count: usize,
+        extra_rows_count: usize,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
@@ -1041,16 +1042,26 @@ where
         let view = cx.entity().clone();
 
         if row_ix < rows_count {
+            let is_last_row = row_ix == rows_count - 1;
+            let table_is_filled = extra_rows_count == 0;
+            let need_render_border = if is_last_row {
+                if table_is_filled {
+                    false
+                } else {
+                    !self.stripe
+                }
+            } else {
+                true
+            };
+
             self.delegate
                 .render_tr(row_ix, window, cx)
                 .h_flex()
                 .w_full()
                 .h(self.size.table_row_height())
-                .border_b_1()
-                .when(row_ix == rows_count, |this| {
-                    this.border_color(gpui::transparent_white())
+                .when(need_render_border, |this| {
+                    this.border_b_1().border_color(cx.theme().table_row_border)
                 })
-                .border_color(cx.theme().table_row_border)
                 .when(is_stripe_row, |this| this.bg(cx.theme().table_even))
                 .hover(|this| {
                     if is_selected || self.right_clicked_row == Some(row_ix) {
@@ -1149,7 +1160,7 @@ where
                                     .top(if row_ix == 0 { px(0.) } else { px(-1.) })
                                     .left(px(0.))
                                     .right(px(0.))
-                                    .bottom_0()
+                                    .bottom(px(-1.))
                                     .absolute()
                                     .bg(cx.theme().table_active)
                                     .border_1()
@@ -1165,7 +1176,7 @@ where
                             .top(if row_ix == 0 { px(0.) } else { px(-1.) })
                             .left(px(0.))
                             .right(px(0.))
-                            .bottom_0()
+                            .bottom(px(-1.))
                             .absolute()
                             .border_1()
                             .border_color(cx.theme().selection),
@@ -1204,10 +1215,6 @@ where
 
     /// Calculate the extra rows needed to fill the table empty space when `stripe` is true.
     fn calculate_extra_rows_needed(&self, rows_count: usize) -> usize {
-        if !self.stripe {
-            return 0;
-        }
-
         let mut extra_rows_needed = 0;
 
         let row_height = self.size.table_row_height();
@@ -1311,7 +1318,12 @@ where
             .count();
         let rows_count = self.delegate.rows_count(cx);
         let loading = self.delegate.loading(cx);
-        let extra_rows_needed = self.calculate_extra_rows_needed(rows_count);
+        let extra_rows_count = self.calculate_extra_rows_needed(rows_count);
+        let render_rows_count = if self.stripe {
+            rows_count + extra_rows_count
+        } else {
+            rows_count
+        };
 
         let inner_table = v_flex()
             .key_context("Table")
@@ -1349,7 +1361,7 @@ where
                         h_flex().id("table-body").flex_grow().size_full().child(
                             uniform_list(
                                 "table-uniform-list",
-                                rows_count + extra_rows_needed,
+                                render_rows_count,
                                 cx.processor(
                                     move |table, visible_range: Range<usize>, window, cx| {
                                         // We must calculate the col sizes here, because the col sizes
@@ -1399,6 +1411,7 @@ where
                                                 left_columns_count,
                                                 col_sizes.clone(),
                                                 columns_count,
+                                                extra_rows_count,
                                                 window,
                                                 cx,
                                             ));
