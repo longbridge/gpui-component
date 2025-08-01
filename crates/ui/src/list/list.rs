@@ -10,7 +10,9 @@ use crate::{
     scroll::{Scrollbar, ScrollbarState},
     v_flex, ActiveTheme, IconName, Size,
 };
-use crate::{v_virtual_list, Icon, Selectable, Sizable as _, StyledExt, VirtualListScrollHandle};
+use crate::{
+    v_virtual_list, Icon, IndexPath, Selectable, Sizable as _, StyledExt, VirtualListScrollHandle,
+};
 use gpui::{
     div, prelude::FluentBuilder, AppContext, Entity, FocusHandle, Focusable, InteractiveElement,
     IntoElement, KeyBinding, Length, MouseButton, ParentElement, Render, Styled, Task, Window,
@@ -31,43 +33,6 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("up", SelectPrev, context),
         KeyBinding::new("down", SelectNext, context),
     ]);
-}
-
-/// Represents an index path in a list, which consists of a section index,
-///
-/// The default values for section, row, and column are all set to 0.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct IndexPath {
-    /// The section index.
-    pub section: usize,
-    /// The item index in the section.
-    pub row: usize,
-    /// The column index.
-    pub column: usize,
-}
-
-impl IndexPath {
-    /// Set the section for the index path.
-    pub fn section(mut self, section: usize) -> Self {
-        self.section = section;
-        self
-    }
-
-    /// Set the row for the index path.
-    pub fn row(mut self, row: usize) -> Self {
-        self.row = row;
-        self
-    }
-
-    /// Set the column for the index path.
-    pub fn column(mut self, column: usize) -> Self {
-        self.column = column;
-        self
-    }
-
-    pub(crate) fn is_eq_section_and_row(&self, index: IndexPath) -> bool {
-        self.section == index.section && self.row == index.row
-    }
 }
 
 #[derive(Clone)]
@@ -404,22 +369,14 @@ where
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let items_count = self.rows_cache.len();
-        if items_count == 0 {
+        if self.rows_cache.len() == 0 {
             return;
         }
 
-        let selected_index = self.selected_index.unwrap_or(IndexPath::default());
-        let mut flatten_index = self.rows_cache.position_of(&selected_index).unwrap_or(0);
-
-        if flatten_index > 0 {
-            flatten_index = flatten_index.saturating_sub(1);
-        } else {
-            flatten_index = items_count.saturating_sub(1);
-        }
-        if let Some(index) = self.rows_cache.get_index_path(flatten_index) {
-            self.select_item(index, window, cx);
-        }
+        let prev_ix = self
+            .rows_cache
+            .prev(self.selected_index.unwrap_or(IndexPath::default()));
+        self.select_item(prev_ix, window, cx);
     }
 
     fn on_action_select_next(
@@ -428,30 +385,14 @@ where
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let items_count = self.rows_cache.len();
-        if items_count == 0 {
+        if self.rows_cache.len() == 0 {
             return;
         }
 
-        let selected_index = self
-            .selected_index
-            .and_then(|ix| self.rows_cache.position_of(&ix));
-
-        let flatten_index;
-        if let Some(ix) = selected_index {
-            if ix < items_count.saturating_sub(1) {
-                flatten_index = ix + 1;
-            } else {
-                // When the last item is selected, select the first item.
-                flatten_index = 0;
-            }
-        } else {
-            // When no selected index, select the first item.
-            flatten_index = 0;
-        }
-        if let Some(index) = self.rows_cache.get_index_path(flatten_index) {
-            self.select_item(index, window, cx);
-        }
+        let next_ix = self
+            .rows_cache
+            .next(self.selected_index.unwrap_or_default());
+        self.select_item(next_ix, window, cx);
     }
 
     fn render_list_item(
@@ -460,13 +401,10 @@ where
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let selected = self
-            .selected_index
-            .map(|s| s.is_eq_section_and_row(ix))
-            .unwrap_or(false);
+        let selected = self.selected_index.map(|s| s.eq_row(ix)).unwrap_or(false);
         let mouse_right_clicked = self
             .mouse_right_clicked_index
-            .map(|s| s.is_eq_section_and_row(ix))
+            .map(|s| s.eq_row(ix))
             .unwrap_or(false);
 
         div()
@@ -572,23 +510,19 @@ where
             .into_any_element()
             .layout_as_root(available_space, window, cx);
 
-        if let Some(el) = self
+        if let Some(mut el) = self
             .delegate
             .render_section_header(0, window, cx)
             .map(|r| r.into_any_element())
         {
-            meansured_size.section_header_size =
-                el.into_any_element()
-                    .layout_as_root(available_space, window, cx);
+            meansured_size.section_header_size = el.layout_as_root(available_space, window, cx);
         }
-        if let Some(el) = self
+        if let Some(mut el) = self
             .delegate
             .render_section_footer(0, window, cx)
             .map(|r| r.into_any_element())
         {
-            meansured_size.section_header_size =
-                el.into_any_element()
-                    .layout_as_root(available_space, window, cx);
+            meansured_size.section_header_size = el.layout_as_root(available_space, window, cx);
         }
 
         self.rows_cache
