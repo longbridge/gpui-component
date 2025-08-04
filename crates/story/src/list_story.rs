@@ -13,7 +13,7 @@ use gpui_component::{
     h_flex,
     label::Label,
     list::{List, ListDelegate, ListEvent, ListItem},
-    v_flex, ActiveTheme, IndexPath, Selectable, Sizable,
+    v_flex, ActiveTheme, Icon, IconName, IndexPath, Selectable, Sizable,
 };
 
 actions!(list_story, [SelectedCompany]);
@@ -123,14 +123,7 @@ impl RenderOnce for CompanyListItem {
                                 .max_w(px(500.))
                                 .overflow_x_hidden()
                                 .flex_nowrap()
-                                .child(Label::new(self.company.name.clone()).whitespace_nowrap())
-                                .child(
-                                    div().text_sm().overflow_x_hidden().child(
-                                        Label::new(self.company.industry.clone())
-                                            .whitespace_nowrap()
-                                            .text_color(text_color.opacity(0.5)),
-                                    ),
-                                ),
+                                .child(Label::new(self.company.name.clone()).whitespace_nowrap()),
                         ),
                     )
                     .child(
@@ -260,11 +253,13 @@ impl ListDelegate for CompanyListDelegate {
         };
 
         Some(
-            div()
-                .py_2()
+            h_flex()
+                .py_1()
                 .px_2()
+                .gap_2()
                 .text_sm()
                 .text_color(cx.theme().muted)
+                .child(Icon::new(IconName::Folder))
                 .child(industry.clone()),
         )
     }
@@ -281,7 +276,7 @@ impl ListDelegate for CompanyListDelegate {
 
         Some(
             div()
-                .pt_2()
+                .pt_1()
                 .pb_5()
                 .px_2()
                 .text_xs()
@@ -483,14 +478,12 @@ impl Render for ListStory {
                     .child(
                         Button::new("scroll-center")
                             .outline()
-                            .child("Scroll to Center")
+                            .child("Scroll to section 2")
                             .small()
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.company_list.update(cx, |list, cx| {
                                     list.scroll_to_item(
-                                        IndexPath::default()
-                                            .section(0)
-                                            .row(list.delegate().items_count(0, cx) / 2),
+                                        IndexPath::default().section(1).row(0),
                                         ScrollStrategy::Center,
                                         window,
                                         cx,
