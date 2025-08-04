@@ -505,9 +505,14 @@ impl Render for ListStory {
                             .small()
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.company_list.update(cx, |list, cx| {
+                                    let last_section =
+                                        list.delegate().sections_count(cx).saturating_sub(1);
+
                                     list.scroll_to_item(
-                                        IndexPath::default().section(0).row(
-                                            list.delegate().items_count(0, cx).saturating_sub(1),
+                                        IndexPath::default().section(last_section).row(
+                                            list.delegate()
+                                                .items_count(last_section, cx)
+                                                .saturating_sub(1),
                                         ),
                                         ScrollStrategy::Top,
                                         window,
