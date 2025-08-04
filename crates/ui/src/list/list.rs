@@ -458,6 +458,7 @@ where
         v_flex()
             .flex_grow()
             .relative()
+            .h_full()
             .when_some(self.max_height, |this, h| this.max_h(h))
             .overflow_hidden()
             .when(items_count == 0, |this| {

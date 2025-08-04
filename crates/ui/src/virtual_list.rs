@@ -18,14 +18,15 @@ use std::{
 };
 
 use gpui::{
-    div, point, px, size, Along, AnyElement, App, AvailableSpace, Axis, Bounds, ContentMask,
-    Context, Div, Element, ElementId, Entity, GlobalElementId, Half, Hitbox, InteractiveElement,
-    IntoElement, IsZero as _, Pixels, Point, Render, ScrollHandle, ScrollStrategy, Size, Stateful,
-    StatefulInteractiveElement, StyleRefinement, Styled, Window,
+    div, point, prelude::FluentBuilder as _, px, size, Along, AnyElement, App, AvailableSpace,
+    Axis, Bounds, ContentMask, Context, Div, Element, ElementId, Entity, GlobalElementId, Half,
+    Hitbox, InteractiveElement, IntoElement, IsZero as _, Pixels, Point, Render, ScrollHandle,
+    ScrollStrategy, Size, Stateful, StatefulInteractiveElement, Style, StyleRefinement, Styled,
+    Window,
 };
 use smallvec::SmallVec;
 
-use crate::{scroll::ScrollHandleOffsetable, AxisExt};
+use crate::{scroll::ScrollHandleOffsetable, AxisExt, StyledExt};
 
 struct VirtualListScrollHandleState {
     axis: Axis,
@@ -323,22 +324,21 @@ impl Element for VirtualList {
         cx: &mut App,
     ) -> (gpui::LayoutId, Self::RequestLayoutState) {
         let rem_size = window.rem_size();
+        let font_size = window.text_style().font_size.to_pixels(rem_size);
         let style = self
             .base
             .interactivity()
             .compute_style(global_id, None, window, cx);
-        let font_size = window.text_style().font_size.to_pixels(rem_size);
 
-        // Including the gap between items for calculate the item size
-        let gap = style
-            .gap
-            .along(self.axis)
-            .to_pixels(font_size.into(), rem_size);
-
-        let (layout_id, size_layout) = window.with_element_state(
-            global_id.unwrap(),
-            |state: Option<ItemSizeLayout>, window| {
+        let size_layout =
+            window.with_element_state(global_id.unwrap(), |state: Option<ItemSizeLayout>, _| {
                 let mut state = state.unwrap_or(ItemSizeLayout::default());
+
+                // Including the gap between items for calculate the item size
+                let gap = style
+                    .gap
+                    .along(self.axis)
+                    .to_pixels(font_size.into(), rem_size);
 
                 if state.items_sizes != self.item_sizes {
                     state.items_sizes = self.item_sizes.clone();
@@ -377,13 +377,23 @@ impl Element for VirtualList {
                     state.content_size = px(state.sizes.iter().map(|size| size.0).sum::<f32>());
                 }
 
-                let (layout_id, _) = self
-                    .base
-                    .request_layout(global_id, inspector_id, window, cx);
+                (state.clone(), state)
+            });
 
-                ((layout_id, state.clone()), state)
-            },
-        );
+        let (layout_id, _) = self
+            .base
+            .request_layout(global_id, inspector_id, window, cx);
+
+        let mut items_element = div()
+            .when(self.axis.is_horizontal(), |this| {
+                this.h_full().w(size_layout.content_size)
+            })
+            .when(self.axis.is_vertical(), |this| {
+                this.w_full().h(size_layout.content_size)
+            });
+        let (items_layout_id, _) =
+            items_element.request_layout(global_id, inspector_id, window, cx);
+        let layout_id = window.request_layout(style, vec![layout_id, items_layout_id], cx);
 
         (
             layout_id,
@@ -403,6 +413,7 @@ impl Element for VirtualList {
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
+        dbg!(&bounds);
         let first_item_size = self.measure_item(window, cx);
 
         let style = self
