@@ -324,10 +324,11 @@ where
         &self.vertical_scroll_handle
     }
 
-    pub fn scroll_to_selected_item(&mut self, _window: &mut Window, _cx: &mut Context<Self>) {
+    pub fn scroll_to_selected_item(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         if let Some(ix) = self.selected_index {
             self.vertical_scroll_handle
                 .scroll_to_item(ix, ScrollStrategy::Top);
+            cx.notify();
         }
     }
 

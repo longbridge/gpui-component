@@ -165,8 +165,9 @@ impl VirtualListStory {
                             .small()
                             .outline()
                             .label("Scroll to Top")
-                            .on_click(cx.listener(|this, _, _, _| {
+                            .on_click(cx.listener(|this, _, _, cx| {
                                 this.scroll_handle.scroll_to_item(0, ScrollStrategy::Top);
+                                cx.notify();
                             })),
                     )
                     .child(
@@ -174,8 +175,9 @@ impl VirtualListStory {
                             .small()
                             .outline()
                             .label("Scroll to 50")
-                            .on_click(cx.listener(|this, _, _, _| {
+                            .on_click(cx.listener(|this, _, _, cx| {
                                 this.scroll_handle.scroll_to_item(50, ScrollStrategy::Top);
+                                cx.notify();
                             })),
                     )
                     .child(
@@ -183,9 +185,10 @@ impl VirtualListStory {
                             .small()
                             .outline()
                             .label("Scroll to 25 (center)")
-                            .on_click(cx.listener(|this, _, _, _| {
+                            .on_click(cx.listener(|this, _, _, cx| {
                                 this.scroll_handle
                                     .scroll_to_item(25, ScrollStrategy::Center);
+                                cx.notify();
                             })),
                     )
                     .child(
@@ -193,8 +196,9 @@ impl VirtualListStory {
                             .small()
                             .outline()
                             .label("Scroll to Bottom")
-                            .on_click(cx.listener(|this, _, _, _| {
+                            .on_click(cx.listener(|this, _, _, cx| {
                                 this.scroll_handle.scroll_to_bottom();
+                                cx.notify();
                             })),
                     ),
             )
