@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use crate::actions::{Cancel, Confirm, SelectNext, SelectPrev};
 use crate::input::InputState;
-use crate::list::cache::{MeansuredEntrySize, RowEntry, RowsCache};
+use crate::list::cache::{MeasuredEntrySize, RowEntry, RowsCache};
 use crate::list::ListDelegate;
 use crate::{
     input::{InputEvent, TextInput},
@@ -510,11 +510,11 @@ where
     fn prepare_items_if_needed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let sections_count = self.delegate.sections_count(cx);
 
-        let mut meansured_size = MeansuredEntrySize::default();
+        let mut measured_size = MeasuredEntrySize::default();
 
-        // Meansure the item_height and section header/footer height.
+        // Measure the item_height and section header/footer height.
         let available_space = size(AvailableSpace::MinContent, AvailableSpace::MinContent);
-        meansured_size.item_size = self
+        measured_size.item_size = self
             .render_list_item(IndexPath::default(), window, cx)
             .into_any_element()
             .layout_as_root(available_space, window, cx);
@@ -524,18 +524,18 @@ where
             .render_section_header(0, window, cx)
             .map(|r| r.into_any_element())
         {
-            meansured_size.section_header_size = el.layout_as_root(available_space, window, cx);
+            measured_size.section_header_size = el.layout_as_root(available_space, window, cx);
         }
         if let Some(mut el) = self
             .delegate
             .render_section_footer(0, window, cx)
             .map(|r| r.into_any_element())
         {
-            meansured_size.section_footer_size = el.layout_as_root(available_space, window, cx);
+            measured_size.section_footer_size = el.layout_as_root(available_space, window, cx);
         }
 
         self.rows_cache
-            .prepare_if_needed(sections_count, meansured_size, cx, |section_ix, cx| {
+            .prepare_if_needed(sections_count, measured_size, cx, |section_ix, cx| {
                 self.delegate.items_count(section_ix, cx)
             });
     }

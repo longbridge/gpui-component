@@ -12,7 +12,7 @@ pub(crate) enum RowEntry {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub(crate) struct MeansuredEntrySize {
+pub(crate) struct MeasuredEntrySize {
     pub(crate) item_size: Size<Pixels>,
     pub(crate) section_header_size: Size<Pixels>,
     pub(crate) section_footer_size: Size<Pixels>,
@@ -68,7 +68,7 @@ pub(crate) struct RowsCache {
     /// The sections, the item is number of rows in each section.
     pub(crate) sections: Rc<Vec<usize>>,
     pub(crate) item_sizes: Rc<Vec<Size<Pixels>>>,
-    meansured_size: MeansuredEntrySize,
+    measured_size: MeasuredEntrySize,
 }
 
 impl RowsCache {
@@ -140,7 +140,7 @@ impl RowsCache {
     pub(crate) fn prepare_if_needed<F>(
         &mut self,
         sections_count: usize,
-        meansured_size: MeansuredEntrySize,
+        measured_size: MeasuredEntrySize,
         cx: &App,
         rows_count_f: F,
     ) where
@@ -151,14 +151,14 @@ impl RowsCache {
             new_sections.push(rows_count_f(section_ix, cx));
         }
 
-        let need_update = new_sections != *self.sections || self.meansured_size != meansured_size;
+        let need_update = new_sections != *self.sections || self.measured_size != measured_size;
 
         if !need_update {
             return;
         }
 
         let mut item_sizes = vec![];
-        self.meansured_size = meansured_size;
+        self.measured_size = measured_size;
         self.sections = Rc::new(new_sections);
         self.entities = Rc::new(
             self.sections
@@ -167,17 +167,17 @@ impl RowsCache {
                 .flat_map(|(section, items_count)| {
                     let mut items = vec![];
                     items.push(RowEntry::SectionHeader(section));
-                    item_sizes.push(meansured_size.section_header_size);
+                    item_sizes.push(measured_size.section_header_size);
                     for row in 0..*items_count {
                         items.push(RowEntry::Entry(IndexPath {
                             section,
                             row,
                             ..Default::default()
                         }));
-                        item_sizes.push(meansured_size.item_size);
+                        item_sizes.push(measured_size.item_size);
                     }
                     items.push(RowEntry::SectionFooter(section));
-                    item_sizes.push(meansured_size.section_footer_size);
+                    item_sizes.push(measured_size.section_footer_size);
                     items
                 })
                 .collect(),
