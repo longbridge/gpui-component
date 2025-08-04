@@ -475,12 +475,12 @@ where
                                 list.load_more_if_need(items_count, visible_range.end, window, cx);
 
                                 visible_range
-                                    .flat_map(|ix| {
+                                    .map(|ix| {
                                         let Some(entry) = rows_cache.get(ix) else {
-                                            return None;
+                                            return div();
                                         };
 
-                                        match entry {
+                                        div().children(match entry {
                                             RowEntry::Entry(index) => Some(
                                                 list.render_list_item(index, window, cx)
                                                     .into_any_element(),
@@ -493,7 +493,7 @@ where
                                                 .delegate()
                                                 .render_section_footer(section_ix, window, cx)
                                                 .map(|r| r.into_any_element()),
-                                        }
+                                        })
                                     })
                                     .collect::<Vec<_>>()
                             },
