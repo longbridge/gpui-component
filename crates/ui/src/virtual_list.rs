@@ -301,6 +301,7 @@ pub struct ItemSizeLayout {
     content_size: Pixels,
     sizes: Vec<Pixels>,
     origins: Vec<Pixels>,
+    last_layout_bounds: Bounds<Pixels>,
 }
 
 impl IntoElement for VirtualList {
@@ -394,15 +395,16 @@ impl Element for VirtualList {
                 );
 
                 let axis = self.axis;
-
                 let layout_id =
                     match self.sizing_behavior {
                         ListSizingBehavior::Infer => {
                             window.with_text_style(style.text_style().cloned(), |window| {
+                                let size_layout = size_layout.clone();
+
                                 window.request_measured_layout(style, {
-                                    let size_layout = size_layout.clone();
-                                    move |known_dimensions, available_space, _window, _cx| {
+                                    move |known_dimensions, available_space, _, _| {
                                         let mut size = Size::default();
+
                                         // If axis is horizontal, we use the width of the content size as height.
                                         // If axis is vertical, we use the height of the content size as width.
                                         let max_item_width = size_layout
@@ -490,25 +492,28 @@ impl Element for VirtualList {
         // dbg!(&bounds);
         let first_item_size = self.measure_item(window, cx);
 
+        layout.size_layout.last_layout_bounds = bounds;
+
         let style = self
             .base
             .interactivity()
             .compute_style(global_id, None, window, cx);
-        let border = style.border_widths.to_pixels(window.rem_size());
-        let padding = style
+        let border_widths = style.border_widths.to_pixels(window.rem_size());
+        let paddings = style
             .padding
             .to_pixels(bounds.size.into(), window.rem_size());
 
-        let container_with_padding_bounds = Bounds::from_corners(
-            bounds.origin + point(border.left + padding.left, border.top + padding.top),
-            bounds.bottom_right()
-                - point(border.right + padding.right, border.bottom + padding.bottom),
-        );
-
         // Get border + padding pixel size
-        let padding_width = match self.axis {
-            Axis::Horizontal => border.left + padding.left + border.right + padding.right,
-            Axis::Vertical => border.top + padding.top + border.bottom + padding.bottom,
+        let padding_size = match self.sizing_behavior {
+            ListSizingBehavior::Infer => px(0.),
+            ListSizingBehavior::Auto => match self.axis {
+                Axis::Horizontal => {
+                    border_widths.left + paddings.left + border_widths.right + paddings.right
+                }
+                Axis::Vertical => {
+                    border_widths.top + paddings.top + border_widths.bottom + paddings.bottom
+                }
+            },
         };
 
         let item_sizes = &layout.size_layout.sizes;
@@ -516,14 +521,12 @@ impl Element for VirtualList {
 
         let scroll_size = match self.axis {
             Axis::Horizontal => Size {
-                width: layout.size_layout.content_size + padding_width,
-                height: (first_item_size.height + padding_width)
-                    .max(container_with_padding_bounds.size.height),
+                width: layout.size_layout.content_size + padding_size,
+                height: (first_item_size.height + padding_size).max(bounds.size.height),
             },
             Axis::Vertical => Size {
-                width: (first_item_size.width + padding_width)
-                    .max(container_with_padding_bounds.size.width),
-                height: layout.size_layout.content_size + padding_width,
+                width: (first_item_size.width + padding_size).max(bounds.size.width + padding_size),
+                height: layout.size_layout.content_size + padding_size,
             },
         };
 
@@ -536,8 +539,8 @@ impl Element for VirtualList {
 
                 Bounds {
                     origin: match self.axis {
-                        Axis::Horizontal => point(bounds.left() + origin + padding.left, px(0.)),
-                        Axis::Vertical => point(px(0.), bounds.top() + origin + padding.top),
+                        Axis::Horizontal => point(bounds.left() + origin + paddings.left, px(0.)),
+                        Axis::Vertical => point(px(0.), bounds.top() + origin + paddings.top),
                     },
                     size: match self.axis {
                         Axis::Horizontal => size(item_size, bounds.size.height),
