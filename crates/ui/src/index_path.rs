@@ -34,10 +34,11 @@ impl Display for IndexPath {
 impl IndexPath {
     /// Create a new index path with the specified section and row.
     ///
+    /// The `section` is set to 0 by default.
     /// The `column` is set to 0 by default.
-    pub fn new(section: usize, row: usize) -> Self {
+    pub fn new(row: usize) -> Self {
         IndexPath {
-            section,
+            section: 0,
             row,
             ..Default::default()
         }
@@ -73,7 +74,7 @@ mod tests {
 
     #[test]
     fn test_into_element_id() {
-        let index_path = IndexPath::new(1, 2).column(3);
+        let index_path = IndexPath::new(2).section(1).column(3);
         let element_id: ElementId = index_path.into();
         assert_eq!(element_id.to_string(), "index-path(1,2,3)");
     }
@@ -81,7 +82,7 @@ mod tests {
     #[test]
     fn test_display() {
         assert_eq!(
-            format!("{}", IndexPath::new(1, 2).column(3)),
+            format!("{}", IndexPath::new(2).row(1).column(3)),
             "IndexPath(section: 1, row: 2, column: 3)"
         );
     }

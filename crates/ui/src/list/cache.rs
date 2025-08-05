@@ -218,19 +218,58 @@ mod tests {
         //  row 2
         row_cache.sections = Rc::new(vec![2, 4, 3]);
 
-        assert_eq!(row_cache.next(IndexPath::new(0, 0)), IndexPath::new(0, 1));
-        assert_eq!(row_cache.next(IndexPath::new(0, 1)), IndexPath::new(1, 0));
-        assert_eq!(row_cache.next(IndexPath::new(1, 0)), IndexPath::new(1, 1));
-        assert_eq!(row_cache.next(IndexPath::new(1, 3)), IndexPath::new(2, 0));
-        assert_eq!(row_cache.next(IndexPath::new(2, 0)), IndexPath::new(2, 1));
-        assert_eq!(row_cache.next(IndexPath::new(2, 1)), IndexPath::new(2, 2));
-        assert_eq!(row_cache.next(IndexPath::new(2, 2)), IndexPath::new(0, 0));
+        assert_eq!(
+            row_cache.next(IndexPath::new(0).section(0)),
+            IndexPath::new(1).section(0)
+        );
+        assert_eq!(
+            row_cache.next(IndexPath::new(1).section(0)),
+            IndexPath::new(0).section(1)
+        );
+        assert_eq!(
+            row_cache.next(IndexPath::new(0).section(1)),
+            IndexPath::new(1).section(1)
+        );
+        assert_eq!(
+            row_cache.next(IndexPath::new(3).section(1)),
+            IndexPath::new(0).section(2)
+        );
+        assert_eq!(
+            row_cache.next(IndexPath::new(0).section(2)),
+            IndexPath::new(1).section(2)
+        );
+        assert_eq!(
+            row_cache.next(IndexPath::new(1).section(2)),
+            IndexPath::new(2).section(2)
+        );
+        assert_eq!(
+            row_cache.next(IndexPath::new(2).section(2)),
+            IndexPath::new(0).section(0)
+        );
 
-        assert_eq!(row_cache.prev(IndexPath::new(0, 0)), IndexPath::new(2, 2));
-        assert_eq!(row_cache.prev(IndexPath::new(0, 1)), IndexPath::new(0, 0));
-        assert_eq!(row_cache.prev(IndexPath::new(1, 0)), IndexPath::new(0, 1));
-        assert_eq!(row_cache.prev(IndexPath::new(1, 1)), IndexPath::new(1, 0));
-        assert_eq!(row_cache.prev(IndexPath::new(1, 3)), IndexPath::new(1, 2));
-        assert_eq!(row_cache.prev(IndexPath::new(2, 0)), IndexPath::new(1, 3));
+        assert_eq!(
+            row_cache.prev(IndexPath::new(0).section(0)),
+            IndexPath::new(2).section(2)
+        );
+        assert_eq!(
+            row_cache.prev(IndexPath::new(1).section(0)),
+            IndexPath::new(0).section(0)
+        );
+        assert_eq!(
+            row_cache.prev(IndexPath::new(0).section(1)),
+            IndexPath::new(1).section(0)
+        );
+        assert_eq!(
+            row_cache.prev(IndexPath::new(1).section(1)),
+            IndexPath::new(0).section(1)
+        );
+        assert_eq!(
+            row_cache.prev(IndexPath::new(3).section(1)),
+            IndexPath::new(2).section(1)
+        );
+        assert_eq!(
+            row_cache.prev(IndexPath::new(0).section(2)),
+            IndexPath::new(3).section(1)
+        );
     }
 }
