@@ -191,7 +191,7 @@ impl CompanyListDelegate {
     fn extend_more(&mut self, len: usize) {
         self._companies
             .extend((0..len).map(|_| Rc::new(random_company())));
-        self.prepare("");
+        self.prepare(self.query.clone());
     }
 
     fn selected_company(&self) -> Option<Rc<Company>> {
@@ -315,6 +315,8 @@ impl ListDelegate for CompanyListDelegate {
     }
 
     fn load_more(&mut self, window: &mut Window, cx: &mut Context<List<Self>>) {
+        // TODO: The load more here will broken the scroll position,
+        // because the extends will creates some new industries to make some new sections.
         cx.spawn_in(window, async move |view, window| {
             // Simulate network request, delay 1s to load data.
             Timer::after(Duration::from_secs(1)).await;
@@ -367,7 +369,7 @@ impl ListStory {
             loading: false,
             eof: false,
         };
-        delegate.extend_more(1_000);
+        delegate.extend_more(100);
 
         let company_list =
             cx.new(|cx| List::new(delegate, window, cx).paddings(Edges::all(px(8.))));
