@@ -317,7 +317,7 @@ impl<T: Clone> SearchableVec<T> {
     }
 }
 
-impl<T: DropdownItem> SearchableVec<T> {
+impl<T: Clone> SearchableVec<T> {
     pub fn new(items: impl Into<Vec<T>>) -> Self {
         let items = items.into();
         Self {
@@ -336,8 +336,8 @@ impl<T: DropdownItem> From<Vec<T>> for SearchableVec<T> {
     }
 }
 
-impl DropdownDelegate for SearchableVec<SharedString> {
-    type Item = SharedString;
+impl<I: DropdownItem> DropdownDelegate for SearchableVec<I> {
+    type Item = I;
 
     fn items_count(&self, _: usize) -> usize {
         self.matched_items.len()
@@ -449,25 +449,25 @@ pub struct DropdownItemGroup<I: DropdownItem> {
     pub items: Vec<I>,
 }
 
-impl<I> DropdownItem for DropdownItemGroup<I>
-where
-    I: DropdownItem,
-{
-    type Value = SharedString;
+// impl<I> DropdownItem for DropdownItemGroup<I>
+// where
+//     I: DropdownItem,
+// {
+//     type Value = SharedString;
 
-    fn title(&self) -> SharedString {
-        self.title.clone()
-    }
+//     fn title(&self) -> SharedString {
+//         self.title.clone()
+//     }
 
-    fn value(&self) -> &Self::Value {
-        &self.title
-    }
+//     fn value(&self) -> &Self::Value {
+//         &self.title
+//     }
 
-    fn matches(&self, query: &str) -> bool {
-        self.title.to_lowercase().contains(&query.to_lowercase())
-            || self.items.iter().any(|item| item.matches(query))
-    }
-}
+//     fn matches(&self, query: &str) -> bool {
+//         self.title.to_lowercase().contains(&query.to_lowercase())
+//             || self.items.iter().any(|item| item.matches(query))
+//     }
+// }
 
 impl<I> DropdownItemGroup<I>
 where
@@ -483,6 +483,11 @@ where
     pub fn items(mut self, items: impl IntoIterator<Item = I>) -> Self {
         self.items = items.into_iter().collect();
         self
+    }
+
+    fn matches(&self, query: &str) -> bool {
+        self.title.to_lowercase().contains(&query.to_lowercase())
+            || self.items.iter().any(|item| item.matches(query))
     }
 }
 
