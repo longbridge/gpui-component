@@ -18,15 +18,14 @@ use std::{
 };
 
 use gpui::{
-    div, point, prelude::FluentBuilder as _, px, size, Along, AnyElement, App, AvailableSpace,
-    Axis, Bounds, ContentMask, Context, Div, Element, ElementId, Entity, GlobalElementId, Half,
-    Hitbox, InteractiveElement, IntoElement, IsZero as _, Pixels, Point, Render, ScrollHandle,
-    ScrollStrategy, Size, Stateful, StatefulInteractiveElement, Style, StyleRefinement, Styled,
-    Window,
+    div, point, px, size, Along, AnyElement, App, AvailableSpace, Axis, Bounds, ContentMask,
+    Context, Div, Element, ElementId, Entity, GlobalElementId, Half, Hitbox, InteractiveElement,
+    IntoElement, IsZero as _, ListSizingBehavior, Pixels, Point, Render, ScrollHandle,
+    ScrollStrategy, Size, Stateful, StatefulInteractiveElement, StyleRefinement, Styled, Window,
 };
 use smallvec::SmallVec;
 
-use crate::{scroll::ScrollHandleOffsetable, AxisExt, StyledExt};
+use crate::{scroll::ScrollHandleOffsetable, AxisExt};
 
 struct VirtualListScrollHandleState {
     axis: Axis,
@@ -224,6 +223,7 @@ where
         items_count: item_sizes.len(),
         item_sizes,
         render_items: Box::new(render_range),
+        sizing_behavior: ListSizingBehavior::default(),
     }
 }
 
@@ -238,6 +238,7 @@ pub struct VirtualList {
     render_items: Box<
         dyn for<'a> Fn(Range<usize>, &'a mut Window, &'a mut App) -> SmallVec<[AnyElement; 64]>,
     >,
+    sizing_behavior: ListSizingBehavior,
 }
 
 impl Styled for VirtualList {
@@ -250,6 +251,12 @@ impl VirtualList {
     pub fn track_scroll(mut self, scroll_handle: &VirtualListScrollHandle) -> Self {
         self.base = self.base.track_scroll(&scroll_handle);
         self.scroll_handle = scroll_handle.clone();
+        self
+    }
+
+    /// Set the sizing behavior for the list.
+    pub fn with_sizing_behavior(mut self, behavior: ListSizingBehavior) -> Self {
+        self.sizing_behavior = behavior;
         self
     }
 
@@ -325,75 +332,142 @@ impl Element for VirtualList {
     ) -> (gpui::LayoutId, Self::RequestLayoutState) {
         let rem_size = window.rem_size();
         let font_size = window.text_style().font_size.to_pixels(rem_size);
-        let style = self
-            .base
-            .interactivity()
-            .compute_style(global_id, None, window, cx);
+        let mut size_layout = ItemSizeLayout::default();
 
-        let size_layout =
-            window.with_element_state(global_id.unwrap(), |state: Option<ItemSizeLayout>, _| {
-                let mut state = state.unwrap_or(ItemSizeLayout::default());
+        let layout_id = self.base.interactivity().request_layout(
+            global_id,
+            inspector_id,
+            window,
+            cx,
+            |style, window, cx| {
+                size_layout = window.with_element_state(
+                    global_id.unwrap(),
+                    |state: Option<ItemSizeLayout>, _| {
+                        let mut state = state.unwrap_or(ItemSizeLayout::default());
 
-                // Including the gap between items for calculate the item size
-                let gap = style
-                    .gap
-                    .along(self.axis)
-                    .to_pixels(font_size.into(), rem_size);
+                        // Including the gap between items for calculate the item size
+                        let gap = style
+                            .gap
+                            .along(self.axis)
+                            .to_pixels(font_size.into(), rem_size);
 
-                if state.items_sizes != self.item_sizes {
-                    state.items_sizes = self.item_sizes.clone();
-                    // Prepare each item's size by axis
-                    state.sizes = self
-                        .item_sizes
-                        .iter()
-                        .enumerate()
-                        .map(|(i, size)| {
-                            let size = size.along(self.axis);
-                            if i + 1 == self.items_count {
-                                size
-                            } else {
-                                size + gap
-                            }
-                        })
-                        .collect::<Vec<_>>();
+                        if state.items_sizes != self.item_sizes {
+                            state.items_sizes = self.item_sizes.clone();
+                            // Prepare each item's size by axis
+                            state.sizes = self
+                                .item_sizes
+                                .iter()
+                                .enumerate()
+                                .map(|(i, size)| {
+                                    let size = size.along(self.axis);
+                                    if i + 1 == self.items_count {
+                                        size
+                                    } else {
+                                        size + gap
+                                    }
+                                })
+                                .collect::<Vec<_>>();
 
-                    // Prepare each item's origin by axis
-                    state.origins = state
-                        .sizes
-                        .iter()
-                        .scan(px(0.), |cumulative, size| match self.axis {
-                            Axis::Horizontal => {
-                                let x = *cumulative;
-                                *cumulative += *size;
-                                Some(x)
-                            }
-                            Axis::Vertical => {
-                                let y = *cumulative;
-                                *cumulative += *size;
-                                Some(y)
-                            }
-                        })
-                        .collect::<Vec<_>>();
-                    state.content_size = px(state.sizes.iter().map(|size| size.0).sum::<f32>());
-                }
+                            // Prepare each item's origin by axis
+                            state.origins = state
+                                .sizes
+                                .iter()
+                                .scan(px(0.), |cumulative, size| match self.axis {
+                                    Axis::Horizontal => {
+                                        let x = *cumulative;
+                                        *cumulative += *size;
+                                        Some(x)
+                                    }
+                                    Axis::Vertical => {
+                                        let y = *cumulative;
+                                        *cumulative += *size;
+                                        Some(y)
+                                    }
+                                })
+                                .collect::<Vec<_>>();
+                            state.content_size =
+                                px(state.sizes.iter().map(|size| size.0).sum::<f32>());
+                        }
 
-                (state.clone(), state)
-            });
+                        (state.clone(), state)
+                    },
+                );
 
-        let (layout_id, _) = self
-            .base
-            .request_layout(global_id, inspector_id, window, cx);
+                let axis = self.axis;
 
-        let mut items_element = div()
-            .when(self.axis.is_horizontal(), |this| {
-                this.h_full().w(size_layout.content_size)
-            })
-            .when(self.axis.is_vertical(), |this| {
-                this.w_full().h(size_layout.content_size)
-            });
-        let (items_layout_id, _) =
-            items_element.request_layout(global_id, inspector_id, window, cx);
-        let layout_id = window.request_layout(style, vec![layout_id, items_layout_id], cx);
+                let layout_id =
+                    match self.sizing_behavior {
+                        ListSizingBehavior::Infer => {
+                            window.with_text_style(style.text_style().cloned(), |window| {
+                                window.request_measured_layout(style, {
+                                    let size_layout = size_layout.clone();
+                                    move |known_dimensions, available_space, _window, _cx| {
+                                        let mut size = Size::default();
+                                        // If axis is horizontal, we use the width of the content size as height.
+                                        // If axis is vertical, we use the height of the content size as width.
+                                        let max_item_width = size_layout
+                                            .items_sizes
+                                            .iter()
+                                            .map(|size| size.width)
+                                            .max()
+                                            .unwrap_or(px(0.));
+                                        let max_item_height = size_layout
+                                            .items_sizes
+                                            .iter()
+                                            .map(|size| size.height)
+                                            .max()
+                                            .unwrap_or(px(0.));
+
+                                        if axis.is_horizontal() {
+                                            size.width = known_dimensions.width.unwrap_or(
+                                                match available_space.width {
+                                                    AvailableSpace::Definite(x) => x,
+                                                    AvailableSpace::MinContent
+                                                    | AvailableSpace::MaxContent => {
+                                                        size_layout.content_size
+                                                    }
+                                                },
+                                            );
+                                            size.height = known_dimensions.width.unwrap_or(
+                                                match available_space.height {
+                                                    AvailableSpace::Definite(x) => x,
+                                                    AvailableSpace::MinContent
+                                                    | AvailableSpace::MaxContent => max_item_height,
+                                                },
+                                            );
+                                        } else {
+                                            size.width = known_dimensions.width.unwrap_or(
+                                                match available_space.width {
+                                                    AvailableSpace::Definite(x) => x,
+                                                    AvailableSpace::MinContent
+                                                    | AvailableSpace::MaxContent => max_item_width,
+                                                },
+                                            );
+                                            size.height = known_dimensions.height.unwrap_or(
+                                                match available_space.height {
+                                                    AvailableSpace::Definite(x) => x,
+                                                    AvailableSpace::MinContent
+                                                    | AvailableSpace::MaxContent => {
+                                                        size_layout.content_size
+                                                    }
+                                                },
+                                            );
+                                        }
+
+                                        size
+                                    }
+                                })
+                            })
+                        }
+                        ListSizingBehavior::Auto => window
+                            .with_text_style(style.text_style().cloned(), |window| {
+                                window.request_layout(style, None, cx)
+                            }),
+                    };
+
+                layout_id
+            },
+        );
 
         (
             layout_id,
@@ -413,7 +487,7 @@ impl Element for VirtualList {
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
-        dbg!(&bounds);
+        // dbg!(&bounds);
         let first_item_size = self.measure_item(window, cx);
 
         let style = self

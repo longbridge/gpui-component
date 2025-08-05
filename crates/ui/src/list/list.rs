@@ -18,8 +18,8 @@ use gpui::{
     IntoElement, KeyBinding, Length, MouseButton, ParentElement, Render, Styled, Task, Window,
 };
 use gpui::{
-    px, size, App, AvailableSpace, Context, Edges, EventEmitter, MouseDownEvent, Pixels,
-    ScrollStrategy, Subscription,
+    px, size, App, AvailableSpace, Context, Edges, EventEmitter, ListSizingBehavior,
+    MouseDownEvent, Pixels, ScrollStrategy, Subscription,
 };
 use rust_i18n::t;
 use smol::Timer;
@@ -475,6 +475,10 @@ where
                             move |list, visible_range: Range<usize>, window, cx| {
                                 list.load_more_if_need(items_count, visible_range.end, window, cx);
 
+                                // NOTE: Here the v_virtual_list whould not able to have gap_y,
+                                // because the section header, footer is always have rendered as a empty child item,
+                                // even the delegate give a None result.
+
                                 visible_range
                                     .map(|ix| {
                                         let Some(entry) = rows_cache.get(ix) else {
@@ -500,6 +504,9 @@ where
                             },
                         )
                         .paddings(self.paddings)
+                        .when(self.max_height.is_some(), |this| {
+                            this.with_sizing_behavior(ListSizingBehavior::Infer)
+                        })
                         .track_scroll(&self.scroll_handle)
                         .into_any_element(),
                     )
