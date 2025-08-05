@@ -325,7 +325,7 @@ impl Element for VirtualList {
             |style, window, cx| {
                 size_layout = window.with_element_state(
                     global_id.unwrap(),
-                    |state: Option<ItemSizeLayout>, window| {
+                    |state: Option<ItemSizeLayout>, _window| {
                         let mut state = state.unwrap_or(ItemSizeLayout::default());
 
                         // Including the gap between items for calculate the item size
