@@ -432,11 +432,7 @@ impl<I: DropdownItem> DropdownDelegate for SearchableVec<DropdownItemGroup<I>> {
             .filter(|item| item.matches(&query))
             .cloned()
             .map(|mut item| {
-                item.items = item
-                    .items
-                    .into_iter()
-                    .filter(|item| item.matches(&query))
-                    .collect();
+                item.items.retain(|item| item.matches(&query));
                 item
             })
             .collect();
