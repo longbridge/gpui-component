@@ -475,7 +475,7 @@ where
                             move |list, visible_range: Range<usize>, window, cx| {
                                 list.load_more_if_need(items_count, visible_range.end, window, cx);
 
-                                // NOTE: Here the v_virtual_list whould not able to have gap_y,
+                                // NOTE: Here the v_virtual_list would not able to have gap_y,
                                 // because the section header, footer is always have rendered as a empty child item,
                                 // even the delegate give a None result.
 
