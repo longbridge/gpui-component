@@ -82,7 +82,7 @@ mod tests {
     #[test]
     fn test_display() {
         assert_eq!(
-            format!("{}", IndexPath::new(2).row(1).column(3)),
+            format!("{}", IndexPath::new(2).section(1).column(3)),
             "IndexPath(section: 1, row: 2, column: 3)"
         );
     }
