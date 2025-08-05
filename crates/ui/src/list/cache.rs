@@ -65,9 +65,10 @@ impl RowEntry {
 #[derive(Default, Clone)]
 pub(crate) struct RowsCache {
     pub(crate) entities: Rc<Vec<RowEntry>>,
+    pub(crate) items_count: usize,
     /// The sections, the item is number of rows in each section.
     pub(crate) sections: Rc<Vec<usize>>,
-    pub(crate) item_sizes: Rc<Vec<Size<Pixels>>>,
+    pub(crate) entries_sizes: Rc<Vec<Size<Pixels>>>,
     measured_size: MeasuredEntrySize,
 }
 
@@ -76,9 +77,14 @@ impl RowsCache {
         self.entities.get(flatten_ix).cloned()
     }
 
-    /// Returns the number of flattened rows.
+    /// Returns the number of flattened rows (Includes header, item, footer).
     pub fn len(&self) -> usize {
         self.entities.len()
+    }
+
+    /// Return the number of items in the cache.
+    pub(crate) fn items_count(&self) -> usize {
+        self.items_count
     }
 
     /// Returns the index of the  Entry with given path in the flattened rows.
@@ -157,7 +163,8 @@ impl RowsCache {
             return;
         }
 
-        let mut item_sizes = vec![];
+        let mut entries_sizes = vec![];
+        let mut total_items_count = 0;
         self.measured_size = measured_size;
         self.sections = Rc::new(new_sections);
         self.entities = Rc::new(
@@ -165,24 +172,26 @@ impl RowsCache {
                 .iter()
                 .enumerate()
                 .flat_map(|(section, items_count)| {
-                    let mut items = vec![];
-                    items.push(RowEntry::SectionHeader(section));
-                    item_sizes.push(measured_size.section_header_size);
+                    total_items_count += items_count;
+                    let mut children = vec![];
+                    children.push(RowEntry::SectionHeader(section));
+                    entries_sizes.push(measured_size.section_header_size);
                     for row in 0..*items_count {
-                        items.push(RowEntry::Entry(IndexPath {
+                        children.push(RowEntry::Entry(IndexPath {
                             section,
                             row,
                             ..Default::default()
                         }));
-                        item_sizes.push(measured_size.item_size);
+                        entries_sizes.push(measured_size.item_size);
                     }
-                    items.push(RowEntry::SectionFooter(section));
-                    item_sizes.push(measured_size.section_footer_size);
-                    items
+                    children.push(RowEntry::SectionFooter(section));
+                    entries_sizes.push(measured_size.section_footer_size);
+                    children
                 })
                 .collect(),
         );
-        self.item_sizes = Rc::new(item_sizes);
+        self.entries_sizes = Rc::new(entries_sizes);
+        self.items_count = total_items_count;
     }
 }
 

@@ -306,7 +306,7 @@ impl ListDelegate for CompanyListDelegate {
         self.loading
     }
 
-    fn can_load_more(&self, _: &App) -> bool {
+    fn is_eof(&self, _: &App) -> bool {
         return !self.loading && !self.eof;
     }
 

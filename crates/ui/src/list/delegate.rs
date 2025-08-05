@@ -127,17 +127,17 @@ pub trait ListDelegate: Sized + 'static {
     /// Return true to enable load more data when scrolling to the bottom.
     ///
     /// Default: true
-    fn can_load_more(&self, cx: &App) -> bool {
+    fn is_eof(&self, cx: &App) -> bool {
         true
     }
 
-    /// Returns a threshold value (n rows), of course,
+    /// Returns a threshold value (n entities), of course,
     /// when scrolling to the bottom, the remaining number of rows
     /// triggers `load_more`.
     ///
     /// This should smaller than the total number of first load rows.
     ///
-    /// Default: 20 rows
+    /// Default: 20 entities (section header, footer and row)
     fn load_more_threshold(&self) -> usize {
         20
     }

@@ -301,7 +301,7 @@ where
     /// visible range is near the end.
     fn load_more_if_need(
         &mut self,
-        items_count: usize,
+        entities_count: usize,
         visible_end: usize,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -311,8 +311,8 @@ where
         let threshold = self.delegate.load_more_threshold();
         // Securely handle subtract logic to prevent attempt
         // to subtract with overflow
-        if visible_end >= items_count.saturating_sub(threshold) {
-            if !self.delegate.can_load_more(cx) {
+        if visible_end >= entities_count.saturating_sub(threshold) {
+            if !self.delegate.is_eof(cx) {
                 return;
             }
 
@@ -452,6 +452,7 @@ where
     fn render_items(
         &mut self,
         items_count: usize,
+        entities_count: usize,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
@@ -471,9 +472,14 @@ where
                         v_virtual_list(
                             cx.entity().clone(),
                             "virtual-list",
-                            rows_cache.item_sizes.clone(),
+                            rows_cache.entries_sizes.clone(),
                             move |list, visible_range: Range<usize>, window, cx| {
-                                list.load_more_if_need(items_count, visible_range.end, window, cx);
+                                list.load_more_if_need(
+                                    entities_count,
+                                    visible_range.end,
+                                    window,
+                                    cx,
+                                );
 
                                 // NOTE: Here the v_virtual_list would not able to have gap_y,
                                 // because the section header, footer is always have rendered as a empty child item,
@@ -569,7 +575,8 @@ where
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.prepare_items_if_needed(window, cx);
 
-        let items_count = self.rows_cache.len();
+        let items_count = self.rows_cache.items_count();
+        let entities_count = self.rows_cache.len();
         let loading = self.delegate.loading(cx);
 
         let initial_view = if let Some(input) = &self.query_input {
@@ -623,7 +630,7 @@ where
                         if let Some(view) = initial_view {
                             this.child(view)
                         } else {
-                            this.child(self.render_items(items_count, window, cx))
+                            this.child(self.render_items(items_count, entities_count, window, cx))
                         }
                     })
                     // Click out to cancel right clicked row
