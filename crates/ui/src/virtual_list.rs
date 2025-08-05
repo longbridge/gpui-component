@@ -372,11 +372,17 @@ impl Element for VirtualList {
                             state.content_size = if self.axis.is_horizontal() {
                                 Size {
                                     width: px(state.sizes.iter().map(|size| size.0).sum::<f32>()),
-                                    height: state.items_sizes[0].height,
+                                    height: state
+                                        .items_sizes
+                                        .get(0)
+                                        .map_or(px(0.), |size| size.height),
                                 }
                             } else {
                                 Size {
-                                    width: state.items_sizes[0].width,
+                                    width: state
+                                        .items_sizes
+                                        .get(0)
+                                        .map_or(px(0.), |size| size.width),
                                     height: px(state.sizes.iter().map(|size| size.0).sum::<f32>()),
                                 }
                             };
