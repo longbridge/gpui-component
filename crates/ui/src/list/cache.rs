@@ -78,7 +78,7 @@ impl RowsCache {
     }
 
     /// Returns the number of flattened rows (Includes header, item, footer).
-    pub fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         self.entities.len()
     }
 
@@ -100,8 +100,8 @@ impl RowsCache {
     }
 
     /// Returns the rows count in the given section, if the section does not exist, returns 0.
-    pub(crate) fn rows_count(&self, section_ix: usize) -> usize {
-        self.sections.get(section_ix).cloned().unwrap_or(0)
+    pub(crate) fn rows_count(&self, section: usize) -> usize {
+        self.sections.get(section).cloned().unwrap_or(0)
     }
 
     /// Return prev row, if the row is the first in the first section, goes to the last row.

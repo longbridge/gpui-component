@@ -27,8 +27,8 @@ pub trait ListDelegate: Sized + 'static {
         1
     }
 
-    /// Return the number of items in the list.
-    fn items_count(&self, section_ix: usize, cx: &App) -> usize;
+    /// Return the number of items in the section at the given index.
+    fn items_count(&self, section: usize, cx: &App) -> usize;
 
     /// Render the item at the given index.
     ///
@@ -47,7 +47,7 @@ pub trait ListDelegate: Sized + 'static {
     /// NOTE: Every header should have same height.
     fn render_section_header(
         &self,
-        section_ix: usize,
+        section: usize,
         window: &mut Window,
         cx: &mut Context<List<Self>>,
     ) -> Option<impl IntoElement> {
@@ -59,7 +59,7 @@ pub trait ListDelegate: Sized + 'static {
     /// NOTE: Every footer should have same height.
     fn render_section_footer(
         &self,
-        section_ix: usize,
+        section: usize,
         window: &mut Window,
         cx: &mut Context<List<Self>>,
     ) -> Option<impl IntoElement> {

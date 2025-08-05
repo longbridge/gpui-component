@@ -213,8 +213,8 @@ impl ListDelegate for CompanyListDelegate {
         self.industries.len()
     }
 
-    fn items_count(&self, section_ix: usize, _: &App) -> usize {
-        self.matched_companies[section_ix].len()
+    fn items_count(&self, section: usize, _: &App) -> usize {
+        self.matched_companies[section].len()
     }
 
     fn perform_search(
@@ -244,11 +244,11 @@ impl ListDelegate for CompanyListDelegate {
 
     fn render_section_header(
         &self,
-        section_ix: usize,
+        section: usize,
         _: &mut Window,
         cx: &mut Context<List<Self>>,
     ) -> Option<impl IntoElement> {
-        let Some(industry) = self.industries.get(section_ix) else {
+        let Some(industry) = self.industries.get(section) else {
             return None;
         };
 
@@ -266,11 +266,11 @@ impl ListDelegate for CompanyListDelegate {
 
     fn render_section_footer(
         &self,
-        section_ix: usize,
+        section: usize,
         _: &mut Window,
         cx: &mut Context<List<Self>>,
     ) -> Option<impl IntoElement> {
-        let Some(_) = self.industries.get(section_ix) else {
+        let Some(_) = self.industries.get(section) else {
             return None;
         };
 
@@ -283,7 +283,7 @@ impl ListDelegate for CompanyListDelegate {
                 .text_color(cx.theme().muted_foreground)
                 .child(format!(
                     "Total {} items in section.",
-                    self.matched_companies[section_ix].len()
+                    self.matched_companies[section].len()
                 )),
         )
     }

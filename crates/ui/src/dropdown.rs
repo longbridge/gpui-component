@@ -90,12 +90,13 @@ pub trait DropdownDelegate: Sized {
         1
     }
 
-    fn section(&self, _section_ix: usize) -> Option<AnyElement> {
+    /// Returns the section header element for the given section index.
+    fn section(&self, _section: usize) -> Option<AnyElement> {
         return None;
     }
 
     /// Returns the number of items in the given section.
-    fn items_count(&self, section_ix: usize) -> usize;
+    fn items_count(&self, section: usize) -> usize;
 
     /// Returns the item at the given index path (Only section, row will be use).
     fn item(&self, ix: IndexPath) -> Option<&Self::Item>;
@@ -153,18 +154,18 @@ where
         self.delegate.sections_count(cx)
     }
 
-    fn items_count(&self, section_ix: usize, _: &App) -> usize {
-        self.delegate.items_count(section_ix)
+    fn items_count(&self, section: usize, _: &App) -> usize {
+        self.delegate.items_count(section)
     }
 
     fn render_section_header(
         &self,
-        section_ix: usize,
+        section: usize,
         _: &mut Window,
         cx: &mut Context<List<Self>>,
     ) -> Option<impl IntoElement> {
         let dropdown = self.dropdown.upgrade()?.read(cx);
-        let Some(item) = self.delegate.section(section_ix) else {
+        let Some(item) = self.delegate.section(section) else {
             return None;
         };
 
@@ -383,16 +384,16 @@ impl<I: DropdownItem> DropdownDelegate for SearchableVec<DropdownItemGroup<I>> {
         self.matched_items.len()
     }
 
-    fn items_count(&self, section_ix: usize) -> usize {
+    fn items_count(&self, section: usize) -> usize {
         self.matched_items
-            .get(section_ix)
+            .get(section)
             .map_or(0, |group| group.items.len())
     }
 
-    fn section(&self, section_ix: usize) -> Option<AnyElement> {
+    fn section(&self, section: usize) -> Option<AnyElement> {
         Some(
             self.matched_items
-                .get(section_ix)?
+                .get(section)?
                 .title
                 .clone()
                 .into_any_element(),
