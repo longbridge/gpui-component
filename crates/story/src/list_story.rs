@@ -254,7 +254,7 @@ impl ListDelegate for CompanyListDelegate {
 
         Some(
             h_flex()
-                .py_1()
+                .pb_1()
                 .px_2()
                 .gap_2()
                 .text_sm()

@@ -268,24 +268,6 @@ impl VirtualList {
         self.scroll_handle = scroll_handle.clone();
         self
     }
-
-    /// Measure first item to get the size.
-    fn measure_item(&self, window: &mut Window, cx: &mut App) -> Size<Pixels> {
-        if self.items_count == 0 {
-            return Size::default();
-        }
-
-        // Avoid use first item to measure, because in most cases, this first item many complex.
-        // So we try to use the second item to measure, if there is no second item, use the first item.
-        let item_ix = if self.items_count > 1 { 1 } else { 0 };
-
-        let mut items = (self.render_items)(item_ix..item_ix + 1, window, cx);
-        let Some(mut item_to_measure) = items.pop() else {
-            return Size::default();
-        };
-        let available_space = size(AvailableSpace::MinContent, AvailableSpace::MinContent);
-        item_to_measure.layout_as_root(available_space, window, cx)
-    }
 }
 
 /// Frame state used by the [VirtualItem].
@@ -298,7 +280,7 @@ pub struct VirtualListFrameState {
 #[derive(Default, Clone)]
 pub struct ItemSizeLayout {
     items_sizes: Rc<Vec<Size<Pixels>>>,
-    content_size: Pixels,
+    content_size: Size<Pixels>,
     sizes: Vec<Pixels>,
     origins: Vec<Pixels>,
     last_layout_bounds: Bounds<Pixels>,
@@ -343,7 +325,7 @@ impl Element for VirtualList {
             |style, window, cx| {
                 size_layout = window.with_element_state(
                     global_id.unwrap(),
-                    |state: Option<ItemSizeLayout>, _| {
+                    |state: Option<ItemSizeLayout>, window| {
                         let mut state = state.unwrap_or(ItemSizeLayout::default());
 
                         // Including the gap between items for calculate the item size
@@ -386,8 +368,18 @@ impl Element for VirtualList {
                                     }
                                 })
                                 .collect::<Vec<_>>();
-                            state.content_size =
-                                px(state.sizes.iter().map(|size| size.0).sum::<f32>());
+
+                            state.content_size = if self.axis.is_horizontal() {
+                                Size {
+                                    width: px(state.sizes.iter().map(|size| size.0).sum::<f32>()),
+                                    height: state.items_sizes[0].height,
+                                }
+                            } else {
+                                Size {
+                                    width: state.items_sizes[0].width,
+                                    height: px(state.sizes.iter().map(|size| size.0).sum::<f32>()),
+                                }
+                            };
                         }
 
                         (state.clone(), state)
@@ -404,29 +396,13 @@ impl Element for VirtualList {
                                 window.request_measured_layout(style, {
                                     move |known_dimensions, available_space, _, _| {
                                         let mut size = Size::default();
-
-                                        // If axis is horizontal, we use the width of the content size as height.
-                                        // If axis is vertical, we use the height of the content size as width.
-                                        let max_item_width = size_layout
-                                            .items_sizes
-                                            .iter()
-                                            .map(|size| size.width)
-                                            .max()
-                                            .unwrap_or(px(0.));
-                                        let max_item_height = size_layout
-                                            .items_sizes
-                                            .iter()
-                                            .map(|size| size.height)
-                                            .max()
-                                            .unwrap_or(px(0.));
-
                                         if axis.is_horizontal() {
                                             size.width = known_dimensions.width.unwrap_or(
                                                 match available_space.width {
                                                     AvailableSpace::Definite(x) => x,
                                                     AvailableSpace::MinContent
                                                     | AvailableSpace::MaxContent => {
-                                                        size_layout.content_size
+                                                        size_layout.content_size.width
                                                     }
                                                 },
                                             );
@@ -434,7 +410,9 @@ impl Element for VirtualList {
                                                 match available_space.height {
                                                     AvailableSpace::Definite(x) => x,
                                                     AvailableSpace::MinContent
-                                                    | AvailableSpace::MaxContent => max_item_height,
+                                                    | AvailableSpace::MaxContent => {
+                                                        size_layout.content_size.height
+                                                    }
                                                 },
                                             );
                                         } else {
@@ -442,7 +420,9 @@ impl Element for VirtualList {
                                                 match available_space.width {
                                                     AvailableSpace::Definite(x) => x,
                                                     AvailableSpace::MinContent
-                                                    | AvailableSpace::MaxContent => max_item_width,
+                                                    | AvailableSpace::MaxContent => {
+                                                        size_layout.content_size.width
+                                                    }
                                                 },
                                             );
                                             size.height = known_dimensions.height.unwrap_or(
@@ -450,7 +430,7 @@ impl Element for VirtualList {
                                                     AvailableSpace::Definite(x) => x,
                                                     AvailableSpace::MinContent
                                                     | AvailableSpace::MaxContent => {
-                                                        size_layout.content_size
+                                                        size_layout.content_size.height
                                                     }
                                                 },
                                             );
@@ -489,9 +469,6 @@ impl Element for VirtualList {
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
-        // dbg!(&bounds);
-        let first_item_size = self.measure_item(window, cx);
-
         layout.size_layout.last_layout_bounds = bounds;
 
         let style = self
@@ -503,32 +480,8 @@ impl Element for VirtualList {
             .padding
             .to_pixels(bounds.size.into(), window.rem_size());
 
-        // Get border + padding pixel size
-        let padding_size = match self.sizing_behavior {
-            ListSizingBehavior::Infer => px(0.),
-            ListSizingBehavior::Auto => match self.axis {
-                Axis::Horizontal => {
-                    border_widths.left + paddings.left + border_widths.right + paddings.right
-                }
-                Axis::Vertical => {
-                    border_widths.top + paddings.top + border_widths.bottom + paddings.bottom
-                }
-            },
-        };
-
         let item_sizes = &layout.size_layout.sizes;
         let item_origins = &layout.size_layout.origins;
-
-        let scroll_size = match self.axis {
-            Axis::Horizontal => Size {
-                width: layout.size_layout.content_size + padding_size,
-                height: (first_item_size.height + padding_size).max(bounds.size.height),
-            },
-            Axis::Vertical => Size {
-                width: (first_item_size.width + padding_size).max(bounds.size.width + padding_size),
-                height: layout.size_layout.content_size + padding_size,
-            },
-        };
 
         // Update scroll_handle with the item bounds
         let items_bounds = item_origins
@@ -539,8 +492,8 @@ impl Element for VirtualList {
 
                 Bounds {
                     origin: match self.axis {
-                        Axis::Horizontal => point(bounds.left() + origin + paddings.left, px(0.)),
-                        Axis::Vertical => point(px(0.), bounds.top() + origin + paddings.top),
+                        Axis::Horizontal => point(bounds.left() + origin, px(0.)),
+                        Axis::Vertical => point(px(0.), bounds.top() + origin),
                     },
                     size: match self.axis {
                         Axis::Horizontal => size(item_size, bounds.size.height),
@@ -556,25 +509,29 @@ impl Element for VirtualList {
             global_id,
             inspector_id,
             bounds,
-            scroll_size,
+            layout.size_layout.content_size,
             window,
             cx,
-            |style, _, hitbox, window, cx| {
+            |_style, _, hitbox, window, cx| {
                 let mut scroll_offset = self.scroll_handle.offset();
-                let border = style.border_widths.to_pixels(window.rem_size());
-                let padding = style
-                    .padding
-                    .to_pixels(bounds.size.into(), window.rem_size());
 
                 let padded_bounds = Bounds::from_corners(
-                    bounds.origin + point(border.left + padding.left, border.top),
-                    bounds.bottom_right() - point(border.right + padding.right, border.bottom),
+                    bounds.origin
+                        + point(
+                            border_widths.left + paddings.left,
+                            border_widths.top + paddings.top,
+                        ),
+                    bounds.bottom_right()
+                        - point(
+                            border_widths.right + paddings.right,
+                            border_widths.bottom + paddings.bottom,
+                        ),
                 );
 
                 if self.items_count > 0 {
                     let is_scrolled = !scroll_offset.along(self.axis).is_zero();
-                    let min_scroll_offset =
-                        padded_bounds.size.along(self.axis) - scroll_size.along(self.axis);
+                    let min_scroll_offset = padded_bounds.size.along(self.axis)
+                        - layout.size_layout.content_size.along(self.axis);
 
                     if is_scrolled {
                         match self.axis {
@@ -594,7 +551,7 @@ impl Element for VirtualList {
                             let mut first_visible_element_ix = 0;
                             for (i, &size) in item_sizes.iter().enumerate() {
                                 cumulative_size += size;
-                                if cumulative_size > -(scroll_offset.x + padding.left) {
+                                if cumulative_size > -(scroll_offset.x + paddings.left) {
                                     first_visible_element_ix = i;
                                     break;
                                 }
@@ -621,7 +578,7 @@ impl Element for VirtualList {
                             let mut first_visible_element_ix = 0;
                             for (i, &size) in item_sizes.iter().enumerate() {
                                 cumulative_size += size;
-                                if cumulative_size > -(scroll_offset.y + padding.top) {
+                                if cumulative_size > -(scroll_offset.y + paddings.top) {
                                     first_visible_element_ix = i;
                                     break;
                                 }
@@ -657,17 +614,11 @@ impl Element for VirtualList {
                             let item_origin = match self.axis {
                                 Axis::Horizontal => {
                                     padded_bounds.origin
-                                        + point(
-                                            item_origins[ix] + scroll_offset.x,
-                                            padding.top + scroll_offset.y,
-                                        )
+                                        + point(item_origins[ix] + scroll_offset.x, scroll_offset.y)
                                 }
                                 Axis::Vertical => {
                                     padded_bounds.origin
-                                        + point(
-                                            scroll_offset.x,
-                                            padding.top + item_origins[ix] + scroll_offset.y,
-                                        )
+                                        + point(scroll_offset.x, item_origins[ix] + scroll_offset.y)
                                 }
                             };
 
