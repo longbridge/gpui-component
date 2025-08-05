@@ -7591,6 +7591,7 @@ dependencies = [
  "gpui",
  "gpui-component",
  "gtk",
+ "itertools 0.14.0",
  "rand 0.8.5",
  "raw-window-handle",
  "regex",

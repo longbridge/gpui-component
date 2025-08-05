@@ -42,7 +42,7 @@ pub fn init(cx: &mut App) {
 }
 
 /// A trait for items that can be displayed in a dropdown.
-pub trait DropdownItem {
+pub trait DropdownItem: Clone {
     type Value: Clone;
     fn title(&self) -> SharedString;
     /// Customize the display title used to selected item in Dropdown Input.
@@ -52,6 +52,10 @@ pub trait DropdownItem {
         None
     }
     fn value(&self) -> &Self::Value;
+    /// Check if the item matches the query for search, default is to match the title.
+    fn matches(&self, query: &str) -> bool {
+        self.title().to_lowercase().contains(&query.to_lowercase())
+    }
 }
 
 impl DropdownItem for String {
@@ -82,15 +86,19 @@ pub trait DropdownDelegate: Sized {
     type Item: DropdownItem;
 
     /// Returns the number of sections in the dropdown.
-    fn sections_count(&self) -> usize {
+    fn sections_count(&self, _: &App) -> usize {
         1
+    }
+
+    fn section(&self, _section_ix: usize) -> Option<AnyElement> {
+        return None;
     }
 
     /// Returns the number of items in the given section.
     fn items_count(&self, section_ix: usize) -> usize;
 
     /// Returns the item at the given index path (Only section, row will be use).
-    fn get(&self, ix: IndexPath) -> Option<&Self::Item>;
+    fn item(&self, ix: IndexPath) -> Option<&Self::Item>;
 
     /// Returns the index of the item with the given value, or None if not found.
     fn position<V>(&self, _value: &V) -> Option<IndexPath>
@@ -114,7 +122,7 @@ impl<T: DropdownItem> DropdownDelegate for Vec<T> {
         self.len()
     }
 
-    fn get(&self, ix: IndexPath) -> Option<&Self::Item> {
+    fn item(&self, ix: IndexPath) -> Option<&Self::Item> {
         self.as_slice().get(ix.row)
     }
 
@@ -141,8 +149,34 @@ where
 {
     type Item = DropdownListItem;
 
+    fn sections_count(&self, cx: &App) -> usize {
+        self.delegate.sections_count(cx)
+    }
+
     fn items_count(&self, section_ix: usize, _: &App) -> usize {
         self.delegate.items_count(section_ix)
+    }
+
+    fn render_section_header(
+        &self,
+        section_ix: usize,
+        _: &mut Window,
+        cx: &mut Context<List<Self>>,
+    ) -> Option<impl IntoElement> {
+        let dropdown = self.dropdown.upgrade()?.read(cx);
+        let Some(item) = self.delegate.section(section_ix) else {
+            return None;
+        };
+
+        return Some(
+            div()
+                .py_0p5()
+                .px_2()
+                .list_size(dropdown.size)
+                .text_sm()
+                .text_color(cx.theme().muted_foreground)
+                .child(item),
+        );
     }
 
     fn render_item(
@@ -159,7 +193,7 @@ where
             .upgrade()
             .map_or(Size::Medium, |dropdown| dropdown.read(cx).size);
 
-        if let Some(item) = self.delegate.get(ix) {
+        if let Some(item) = self.delegate.item(ix) {
             let list_item = DropdownListItem::new(ix.row)
                 .selected(selected)
                 .with_size(size)
@@ -183,7 +217,7 @@ where
     fn confirm(&mut self, _secondary: bool, window: &mut Window, cx: &mut Context<List<Self>>) {
         let selected_value = self
             .selected_index
-            .and_then(|ix| self.delegate.get(ix))
+            .and_then(|ix| self.delegate.item(ix))
             .map(|item| item.value().clone());
         let dropdown = self.dropdown.clone();
 
@@ -269,12 +303,20 @@ pub struct Dropdown<D: DropdownDelegate + 'static> {
     appearance: bool,
 }
 
+#[derive(Debug, Clone)]
 pub struct SearchableVec<T> {
     items: Vec<T>,
     matched_items: Vec<T>,
 }
 
-impl<T: DropdownItem + Clone> SearchableVec<T> {
+impl<T: Clone> SearchableVec<T> {
+    pub fn push(&mut self, item: T) {
+        self.items.push(item.clone());
+        self.matched_items.push(item);
+    }
+}
+
+impl<T: DropdownItem> SearchableVec<T> {
     pub fn new(items: impl Into<Vec<T>>) -> Self {
         let items = items.into();
         Self {
@@ -284,7 +326,7 @@ impl<T: DropdownItem + Clone> SearchableVec<T> {
     }
 }
 
-impl<T: DropdownItem + Clone> From<Vec<T>> for SearchableVec<T> {
+impl<T: DropdownItem> From<Vec<T>> for SearchableVec<T> {
     fn from(items: Vec<T>) -> Self {
         Self {
             items: items.clone(),
@@ -293,15 +335,15 @@ impl<T: DropdownItem + Clone> From<Vec<T>> for SearchableVec<T> {
     }
 }
 
-impl<T: DropdownItem + Clone> DropdownDelegate for SearchableVec<T> {
-    type Item = T;
+impl DropdownDelegate for SearchableVec<SharedString> {
+    type Item = SharedString;
 
     fn items_count(&self, _: usize) -> usize {
         self.matched_items.len()
     }
 
-    fn get(&self, ix: IndexPath) -> Option<&Self::Item> {
-        self.matched_items.get(ix)
+    fn item(&self, ix: IndexPath) -> Option<&Self::Item> {
+        self.matched_items.get(ix.row)
     }
 
     fn position<V>(&self, value: &V) -> Option<IndexPath>
@@ -331,6 +373,119 @@ impl<T: DropdownItem + Clone> DropdownDelegate for SearchableVec<T> {
             .collect();
 
         Task::ready(())
+    }
+}
+
+impl<I: DropdownItem> DropdownDelegate for SearchableVec<DropdownItemGroup<I>> {
+    type Item = I;
+
+    fn sections_count(&self, _: &App) -> usize {
+        self.matched_items.len()
+    }
+
+    fn items_count(&self, section_ix: usize) -> usize {
+        self.matched_items
+            .get(section_ix)
+            .map_or(0, |group| group.items.len())
+    }
+
+    fn section(&self, section_ix: usize) -> Option<AnyElement> {
+        Some(
+            self.matched_items
+                .get(section_ix)?
+                .title
+                .clone()
+                .into_any_element(),
+        )
+    }
+
+    fn item(&self, ix: IndexPath) -> Option<&Self::Item> {
+        let section = self.matched_items.get(ix.section)?;
+
+        section.items.get(ix.row)
+    }
+
+    fn position<V>(&self, value: &V) -> Option<IndexPath>
+    where
+        Self::Item: DropdownItem<Value = V>,
+        V: PartialEq,
+    {
+        for (ix, group) in self.matched_items.iter().enumerate() {
+            for (row_ix, item) in group.items.iter().enumerate() {
+                if item.value() == value {
+                    return Some(IndexPath::default().section(ix).row(row_ix));
+                }
+            }
+        }
+
+        None
+    }
+
+    fn searchable(&self) -> bool {
+        true
+    }
+
+    fn perform_search(&mut self, query: &str, _window: &mut Window, _: &mut App) -> Task<()> {
+        self.matched_items = self
+            .items
+            .iter()
+            .filter(|item| item.matches(&query))
+            .cloned()
+            .map(|mut item| {
+                item.items = item
+                    .items
+                    .into_iter()
+                    .filter(|item| item.matches(&query))
+                    .collect();
+                item
+            })
+            .collect();
+
+        Task::ready(())
+    }
+}
+
+/// A group of dropdown items with a title.
+#[derive(Debug, Clone)]
+pub struct DropdownItemGroup<I: DropdownItem> {
+    pub title: SharedString,
+    pub items: Vec<I>,
+}
+
+impl<I> DropdownItem for DropdownItemGroup<I>
+where
+    I: DropdownItem,
+{
+    type Value = SharedString;
+
+    fn title(&self) -> SharedString {
+        self.title.clone()
+    }
+
+    fn value(&self) -> &Self::Value {
+        &self.title
+    }
+
+    fn matches(&self, query: &str) -> bool {
+        self.title.to_lowercase().contains(&query.to_lowercase())
+            || self.items.iter().any(|item| item.matches(query))
+    }
+}
+
+impl<I> DropdownItemGroup<I>
+where
+    I: DropdownItem,
+{
+    pub fn new(title: impl Into<SharedString>) -> Self {
+        Self {
+            title: title.into(),
+            items: vec![],
+        }
+    }
+
+    pub fn items(mut self, items: impl IntoIterator<Item = I>) -> Self {
+        self.items = items.into_iter().collect();
+        self
     }
 }
 
@@ -424,7 +579,7 @@ where
     fn update_selected_value(&mut self, _: &Window, cx: &App) {
         self.selected_value = self
             .selected_index(cx)
-            .and_then(|ix| self.list.read(cx).delegate().delegate.get(ix))
+            .and_then(|ix| self.list.read(cx).delegate().delegate.item(ix))
             .map(|item| item.value().clone());
     }
 
@@ -616,7 +771,7 @@ where
             .read(cx)
             .delegate()
             .delegate
-            .get(*selected_index)
+            .item(*selected_index)
             .map(|item| {
                 if let Some(el) = item.display_title() {
                     el
