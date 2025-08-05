@@ -34,6 +34,7 @@ pub struct Drawer {
     content: Div,
     margin_top: Pixels,
     overlay: bool,
+    overlay_closable: bool,
 }
 
 impl Drawer {
@@ -48,6 +49,7 @@ impl Drawer {
             content: v_flex().px_4().py_3(),
             margin_top: TITLE_BAR_HEIGHT,
             overlay: true,
+            overlay_closable: true,
             on_close: Rc::new(|_, _, _| {}),
         }
     }
@@ -87,6 +89,12 @@ impl Drawer {
     /// Set whether the drawer should have an overlay, default is `true`.
     pub fn overlay(mut self, overlay: bool) -> Self {
         self.overlay = overlay;
+        self
+    }
+
+    /// Set whether the drawer should be closable by clicking the overlay, default is `true`.
+    pub fn overlay_closable(mut self, overlay_closable: bool) -> Self {
+        self.overlay_closable = overlay_closable;
         self
     }
 
@@ -136,7 +144,7 @@ impl RenderOnce for Drawer {
                     .w(size.width)
                     .h(size.height - titlebar_height)
                     .bg(overlay_color(self.overlay, cx))
-                    .when(self.overlay, |this| {
+                    .when(self.overlay_closable, |this| {
                         this.on_mouse_down(MouseButton::Left, {
                             let on_close = self.on_close.clone();
                             move |_, window, cx| {
@@ -184,7 +192,8 @@ impl RenderOnce for Drawer {
                                 // TitleBar
                                 h_flex()
                                     .justify_between()
-                                    .px_4()
+                                    .pl_4()
+                                    .pr_3()
                                     .py_2()
                                     .w_full()
                                     .font_semibold()

@@ -294,10 +294,12 @@ impl DrawerStory {
         };
 
         let overlay = self.modal_overlay;
+        let overlay_closable = self.overlay_closable;
         let input1 = self.input1.clone();
         let date = self.date.clone();
         window.open_drawer_at(placement, cx, move |this, _, cx| {
             this.overlay(overlay)
+                .overlay_closable(overlay_closable)
                 .size(px(400.))
                 .title("Drawer Title")
                 .gap_4()
