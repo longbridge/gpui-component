@@ -98,7 +98,7 @@ pub trait DropdownDelegate: Sized {
         Self::Item: DropdownItem<Value = V>,
         V: PartialEq;
 
-    fn can_search(&self) -> bool {
+    fn searchable(&self) -> bool {
         false
     }
 
@@ -318,7 +318,7 @@ impl<T: DropdownItem + Clone> DropdownDelegate for SearchableVec<T> {
         None
     }
 
-    fn can_search(&self) -> bool {
+    fn searchable(&self) -> bool {
         true
     }
 
@@ -351,7 +351,7 @@ where
             selected_index,
         };
 
-        let searchable = delegate.delegate.can_search();
+        let searchable = delegate.delegate.searchable();
 
         let list = cx.new(|cx| {
             let mut list = List::new(delegate, window, cx)
