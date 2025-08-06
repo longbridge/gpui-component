@@ -1,6 +1,7 @@
 mod event;
 mod focusable;
 mod icon;
+mod index_path;
 #[cfg(any(feature = "inspector", debug_assertions))]
 mod inspector;
 mod kbd;
@@ -69,6 +70,7 @@ pub use wry;
 pub use crate::Disableable;
 pub use event::InteractiveElementExt;
 pub use focusable::FocusableCycle;
+pub use index_path::IndexPath;
 #[cfg(any(feature = "inspector", debug_assertions))]
 pub use inspector::*;
 pub use menu::{context_menu, popup_menu};

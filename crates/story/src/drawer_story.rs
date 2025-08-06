@@ -17,7 +17,7 @@ use gpui_component::{
     list::{List, ListDelegate, ListItem},
     v_flex,
     webview::WebView,
-    wry, ActiveTheme as _, ContextModal as _, Icon, IconName, Placement,
+    wry, ActiveTheme as _, ContextModal as _, Icon, IconName, IndexPath, Placement,
 };
 
 use crate::TestAction;
@@ -34,7 +34,7 @@ pub struct ListItemDeletegate {
 impl ListDelegate for ListItemDeletegate {
     type Item = ListItem;
 
-    fn items_count(&self, _: &App) -> usize {
+    fn items_count(&self, _: usize, _: &App) -> usize {
         self.matches.len()
     }
 
@@ -66,14 +66,14 @@ impl ListDelegate for ListItemDeletegate {
 
     fn render_item(
         &self,
-        ix: usize,
+        ix: IndexPath,
         _: &mut Window,
         _: &mut Context<List<Self>>,
     ) -> Option<Self::Item> {
-        let confirmed = Some(ix) == self.confirmed_index;
+        let confirmed = Some(ix.row) == self.confirmed_index;
 
-        if let Some(item) = self.matches.get(ix) {
-            let list_item = ListItem::new(("item", ix))
+        if let Some(item) = self.matches.get(ix.row) {
+            let list_item = ListItem::new(("item", ix.row))
                 .check_icon(IconName::Check)
                 .confirmed(confirmed)
                 .child(
@@ -137,11 +137,11 @@ impl ListDelegate for ListItemDeletegate {
 
     fn set_selected_index(
         &mut self,
-        ix: Option<usize>,
+        ix: Option<IndexPath>,
         _: &mut Window,
         cx: &mut Context<List<Self>>,
     ) {
-        self.selected_index = ix;
+        self.selected_index = ix.map(|ix| ix.row);
 
         if let Some(_) = ix {
             cx.notify();
@@ -294,10 +294,12 @@ impl DrawerStory {
         };
 
         let overlay = self.modal_overlay;
+        let overlay_closable = self.overlay_closable;
         let input1 = self.input1.clone();
         let date = self.date.clone();
         window.open_drawer_at(placement, cx, move |this, _, cx| {
             this.overlay(overlay)
+                .overlay_closable(overlay_closable)
                 .size(px(400.))
                 .title("Drawer Title")
                 .gap_4()

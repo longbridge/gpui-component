@@ -4,8 +4,9 @@ use gpui::{
 };
 
 use gpui_component::{
+    h_flex,
     radio::{Radio, RadioGroup},
-    v_flex, ActiveTheme,
+    v_flex, ActiveTheme, Sizable,
 };
 
 use crate::section;
@@ -100,14 +101,41 @@ impl Render for RadioStory {
                 ),
             )
             .child(
+                section("Sizeable").child(
+                    h_flex()
+                        .h_full()
+                        .gap_x_4()
+                        .child(
+                            Radio::new("xsmall")
+                                .label("Small")
+                                .xsmall()
+                                .checked(self.radio_check2)
+                                .on_click(cx.listener(|this, v, _, _| {
+                                    this.radio_check2 = *v;
+                                })),
+                        )
+                        .child(
+                            Radio::new("large")
+                                .label("Large")
+                                .large()
+                                .checked(self.radio_check2)
+                                .on_click(cx.listener(|this, v, _, _| {
+                                    this.radio_check2 = *v;
+                                })),
+                        ),
+                ),
+            )
+            .child(
                 section("Radio Group").max_w_md().child(
-                    RadioGroup::horizontal("radio_group_1")
-                        .children(["One", "Two", "Three"])
-                        .selected_index(self.radio_group_checked)
-                        .on_change(cx.listener(|this, selected_ix: &usize, _, cx| {
-                            this.radio_group_checked = Some(*selected_ix);
-                            cx.notify();
-                        })),
+                    v_flex().child(
+                        RadioGroup::horizontal("radio_group_1")
+                            .children(["One", "Two", "Three"])
+                            .selected_index(self.radio_group_checked)
+                            .on_change(cx.listener(|this, selected_ix: &usize, _, cx| {
+                                this.radio_group_checked = Some(*selected_ix);
+                                cx.notify();
+                            })),
+                    ),
                 ),
             )
             .child(
