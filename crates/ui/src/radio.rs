@@ -112,6 +112,13 @@ impl RenderOnce for Radio {
                 .text_color(cx.theme().foreground)
                 .items_start()
                 .line_height(relative(1.))
+                .map(|this| match self.size {
+                    Size::XSmall => this.text_xs(),
+                    Size::Small => this.text_sm(),
+                    Size::Medium => this.text_base(),
+                    Size::Large => this.text_lg(),
+                    _ => this,
+                })
                 .refine_style(&self.style)
                 .child(
                     div()
