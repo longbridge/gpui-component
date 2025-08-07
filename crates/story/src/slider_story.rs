@@ -18,6 +18,7 @@ pub struct SliderStory {
     slider1_value: f32,
     slider2: Entity<SliderState>,
     slider2_value: f32,
+    slider3: Entity<SliderState>,
     slider_hsl: [Entity<SliderState>; 4],
     slider_hsl_value: Hsla,
     disabled: bool,
@@ -84,16 +85,24 @@ impl SliderStory {
             }),
         ];
 
+        let slider3 = cx.new(|_| {
+            SliderState::new()
+                .min(0.)
+                .max(100.)
+                .default_value(12.0..45.0)
+                .step(1.)
+        });
+
         let mut _subscritions = vec![
             cx.subscribe(&slider1, |this, _, event: &SliderEvent, cx| match event {
                 SliderEvent::Change(value) => {
-                    this.slider1_value = *value;
+                    this.slider1_value = value.start();
                     cx.notify();
                 }
             }),
             cx.subscribe(&slider2, |this, _, event: &SliderEvent, cx| match event {
                 SliderEvent::Change(value) => {
-                    this.slider2_value = *value;
+                    this.slider2_value = value.start();
                     cx.notify();
                 }
             }),
@@ -106,10 +115,10 @@ impl SliderStory {
                     cx.subscribe(slider, |this, _, event: &SliderEvent, cx| match event {
                         SliderEvent::Change(_) => {
                             this.slider_hsl_value = hsla(
-                                this.slider_hsl[0].read(cx).value(),
-                                this.slider_hsl[1].read(cx).value(),
-                                this.slider_hsl[2].read(cx).value(),
-                                this.slider_hsl[3].read(cx).value(),
+                                this.slider_hsl[0].read(cx).value().start(),
+                                this.slider_hsl[1].read(cx).value().start(),
+                                this.slider_hsl[2].read(cx).value().start(),
+                                this.slider_hsl[3].read(cx).value().start(),
                             );
                             cx.notify();
                         }
@@ -128,6 +137,7 @@ impl SliderStory {
             slider2_value: 0.,
             slider1,
             slider2,
+            slider3,
             slider_hsl,
             slider_hsl_value: gpui::red(),
             disabled: false,
@@ -164,23 +174,22 @@ impl Render for SliderStory {
                 section("Horizontal Slider")
                     .max_w_md()
                     .v_flex()
-                    .child(
-                        Slider::new(&self.slider1)
-                            .horizontal()
-                            .disabled(self.disabled),
-                    )
+                    .child(Slider::new(&self.slider1).disabled(self.disabled))
                     .child(format!("Value: {}", self.slider1_value)),
             )
             .child(
                 section("Slider (0 - 5)")
                     .max_w_md()
                     .v_flex()
-                    .child(
-                        Slider::new(&self.slider2)
-                            .horizontal()
-                            .disabled(self.disabled),
-                    )
+                    .child(Slider::new(&self.slider2).disabled(self.disabled))
                     .child(format!("Value: {}", self.slider2_value)),
+            )
+            .child(
+                section("Slider with Range")
+                    .max_w_md()
+                    .v_flex()
+                    .child(Slider::new(&self.slider3).disabled(self.disabled))
+                    .child(format!("Value: {}", self.slider3.read(cx).value())),
             )
             .child(
                 section(
