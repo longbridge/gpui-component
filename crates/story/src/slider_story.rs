@@ -213,13 +213,14 @@ impl Render for SliderStory {
                     .child(format!("Value: {}", self.slider3.read(cx).value())),
             )
             .child(
-                section("Vertial with Range")
+                section("Vertical with Range")
                     .max_w_md()
                     .v_flex()
                     .child(
                         Slider::new(&self.slider4)
                             .vertical()
                             .h(px(200.))
+                            .rounded(px(2.))
                             .disabled(self.disabled),
                     )
                     .child(format!("Value: {}", self.slider4.read(cx).value())),
