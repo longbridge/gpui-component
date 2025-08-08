@@ -556,7 +556,7 @@ where
         cx: &mut Context<Self>,
     ) {
         self.list.update(cx, |list, cx| {
-            list.set_selected_index(selected_index, window, cx);
+            list._set_selected_index(selected_index, window, cx);
         });
         self.update_selected_value(window, cx);
     }

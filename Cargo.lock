@@ -733,7 +733,7 @@ dependencies = [
  "bitflags 2.9.1",
  "cexpr",
  "clang-sys",
- "itertools 0.11.0",
+ "itertools 0.10.5",
  "lazy_static",
  "lazycell",
  "log",
@@ -756,7 +756,7 @@ dependencies = [
  "bitflags 2.9.1",
  "cexpr",
  "clang-sys",
- "itertools 0.11.0",
+ "itertools 0.10.5",
  "log",
  "prettyplease",
  "proc-macro2",
@@ -1432,7 +1432,7 @@ dependencies = [
 [[package]]
 name = "collections"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#5488398986487afa6e5b38ea55f768271117b18b"
+source = "git+https://github.com/zed-industries/zed.git#d6022dc87ceb2fd83ffbee062db82610901c8c7b"
 dependencies = [
  "indexmap 2.9.0",
  "rustc-hash 2.1.0",
@@ -1990,7 +1990,7 @@ dependencies = [
 [[package]]
 name = "derive_refineable"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#5488398986487afa6e5b38ea55f768271117b18b"
+source = "git+https://github.com/zed-industries/zed.git#d6022dc87ceb2fd83ffbee062db82610901c8c7b"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3142,7 +3142,7 @@ dependencies = [
 [[package]]
 name = "gpui"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#5488398986487afa6e5b38ea55f768271117b18b"
+source = "git+https://github.com/zed-industries/zed.git#d6022dc87ceb2fd83ffbee062db82610901c8c7b"
 dependencies = [
  "anyhow",
  "as-raw-xcb-connection",
@@ -3327,7 +3327,7 @@ dependencies = [
 [[package]]
 name = "gpui_macros"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#5488398986487afa6e5b38ea55f768271117b18b"
+source = "git+https://github.com/zed-industries/zed.git#d6022dc87ceb2fd83ffbee062db82610901c8c7b"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -3338,9 +3338,9 @@ dependencies = [
 
 [[package]]
 name = "grid"
-version = "0.17.0"
+version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "71b01d27060ad58be4663b9e4ac9e2d4806918e8876af8912afbddd1a91d5eaa"
+checksum = "12101ecc8225ea6d675bc70263074eab6169079621c2186fe0c66590b2df9681"
 
 [[package]]
 name = "gtk"
@@ -3597,7 +3597,7 @@ dependencies = [
 [[package]]
 name = "http_client"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#5488398986487afa6e5b38ea55f768271117b18b"
+source = "git+https://github.com/zed-industries/zed.git#d6022dc87ceb2fd83ffbee062db82610901c8c7b"
 dependencies = [
  "anyhow",
  "bytes",
@@ -3606,6 +3606,8 @@ dependencies = [
  "http",
  "http-body",
  "log",
+ "parking_lot",
+ "reqwest 0.12.15 (git+https://github.com/zed-industries/reqwest.git?rev=951c770a32f1998d6e999cef3e59e0013e6c4415)",
  "serde",
  "serde_json",
  "url",
@@ -3615,7 +3617,7 @@ dependencies = [
 [[package]]
 name = "http_client_tls"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#5488398986487afa6e5b38ea55f768271117b18b"
+source = "git+https://github.com/zed-industries/zed.git#d6022dc87ceb2fd83ffbee062db82610901c8c7b"
 dependencies = [
  "rustls",
  "rustls-platform-verifier",
@@ -4441,7 +4443,7 @@ dependencies = [
 [[package]]
 name = "media"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#5488398986487afa6e5b38ea55f768271117b18b"
+source = "git+https://github.com/zed-industries/zed.git#d6022dc87ceb2fd83ffbee062db82610901c8c7b"
 dependencies = [
  "anyhow",
  "bindgen 0.71.1",
@@ -4498,6 +4500,16 @@ name = "mime"
 version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6877bb514081ee2a7ff5ef9de3281f14a4dd4bceac4c09388074a6b5df8a139a"
+
+[[package]]
+name = "mime_guess"
+version = "2.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f7c44f8e672c00fe5308fa235f821cb4198414e1c77935c1ab6948d3fd78550e"
+dependencies = [
+ "mime",
+ "unicase",
+]
 
 [[package]]
 name = "minify-html"
@@ -6390,7 +6402,7 @@ dependencies = [
 [[package]]
 name = "refineable"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#5488398986487afa6e5b38ea55f768271117b18b"
+source = "git+https://github.com/zed-industries/zed.git#d6022dc87ceb2fd83ffbee062db82610901c8c7b"
 dependencies = [
  "derive_refineable",
  "workspace-hack",
@@ -6515,6 +6527,7 @@ dependencies = [
  "js-sys",
  "log",
  "mime",
+ "mime_guess",
  "once_cell",
  "percent-encoding",
  "pin-project-lite",
@@ -6545,7 +6558,7 @@ dependencies = [
 [[package]]
 name = "reqwest_client"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#5488398986487afa6e5b38ea55f768271117b18b"
+source = "git+https://github.com/zed-industries/zed.git#d6022dc87ceb2fd83ffbee062db82610901c8c7b"
 dependencies = [
  "anyhow",
  "bytes",
@@ -7121,7 +7134,7 @@ checksum = "d369a96f978623eb3dc28807c4852d6cc617fed53da5d3c400feff1ef34a714a"
 [[package]]
 name = "semantic_version"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#5488398986487afa6e5b38ea55f768271117b18b"
+source = "git+https://github.com/zed-industries/zed.git#d6022dc87ceb2fd83ffbee062db82610901c8c7b"
 dependencies = [
  "anyhow",
  "serde",
@@ -7705,7 +7718,7 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 [[package]]
 name = "sum_tree"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#5488398986487afa6e5b38ea55f768271117b18b"
+source = "git+https://github.com/zed-industries/zed.git#d6022dc87ceb2fd83ffbee062db82610901c8c7b"
 dependencies = [
  "arrayvec",
  "log",
@@ -7908,9 +7921,9 @@ dependencies = [
 
 [[package]]
 name = "taffy"
-version = "0.8.3"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7aaef0ac998e6527d6d0d5582f7e43953bb17221ac75bb8eb2fcc2db3396db1c"
+checksum = "a13e5d13f79d558b5d353a98072ca8ca0e99da429467804de959aa8c83c9a004"
 dependencies = [
  "arrayvec",
  "grid",
@@ -8932,7 +8945,7 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 [[package]]
 name = "util"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#5488398986487afa6e5b38ea55f768271117b18b"
+source = "git+https://github.com/zed-industries/zed.git#d6022dc87ceb2fd83ffbee062db82610901c8c7b"
 dependencies = [
  "anyhow",
  "async-fs 2.1.2",
