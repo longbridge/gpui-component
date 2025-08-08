@@ -1,11 +1,11 @@
 use std::ops::Range;
 
-use crate::{h_flex, tooltip::Tooltip, ActiveTheme, AxisExt};
+use crate::{h_flex, tooltip::Tooltip, ActiveTheme, AxisExt, StyledExt};
 use gpui::{
     canvas, div, prelude::FluentBuilder as _, px, Along, App, AppContext as _, Axis, Bounds,
     Context, DragMoveEvent, Empty, Entity, EntityId, EventEmitter, InteractiveElement, IntoElement,
     MouseButton, MouseDownEvent, ParentElement as _, Pixels, Point, Render, RenderOnce,
-    StatefulInteractiveElement as _, Styled, Window,
+    StatefulInteractiveElement as _, StyleRefinement, Styled, Window,
 };
 
 #[derive(Clone)]
@@ -260,6 +260,7 @@ impl Render for SliderState {
 pub struct Slider {
     state: Entity<SliderState>,
     axis: Axis,
+    style: StyleRefinement,
     disabled: bool,
 }
 
@@ -269,6 +270,7 @@ impl Slider {
         Self {
             axis: Axis::Horizontal,
             state: state.clone(),
+            style: StyleRefinement::default(),
             disabled: false,
         }
     }
@@ -358,6 +360,12 @@ impl Slider {
     }
 }
 
+impl Styled for Slider {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
 impl RenderOnce for Slider {
     fn render(self, window: &mut Window, cx: &mut gpui::App) -> impl IntoElement {
         let axis = self.axis;
@@ -371,10 +379,11 @@ impl RenderOnce for Slider {
             .id(("slider", self.state.entity_id()))
             .flex()
             .flex_1()
-            .when(axis.is_vertical(), |this| {
-                this.items_center().justify_center()
-            })
+            .items_center()
+            .justify_center()
+            .when(axis.is_vertical(), |this| this.h(px(120.)))
             .when(axis.is_horizontal(), |this| this.w_full())
+            .refine_style(&self.style)
             .child(
                 h_flex()
                     .when(!self.disabled, |this| {

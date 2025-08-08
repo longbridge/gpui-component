@@ -1,6 +1,6 @@
 use gpui::{
-    hsla, App, AppContext, Context, Entity, Focusable, Hsla, IntoElement, ParentElement, Render,
-    SharedString, Styled, Subscription, Window,
+    hsla, px, App, AppContext, Context, Entity, Focusable, Hsla, IntoElement, ParentElement,
+    Render, SharedString, Styled, Subscription, Window,
 };
 use gpui_component::{
     checkbox::Checkbox,
@@ -21,6 +21,7 @@ pub struct SliderStory {
     slider3: Entity<SliderState>,
     slider_hsl: [Entity<SliderState>; 4],
     slider_hsl_value: Hsla,
+    slider4: Entity<SliderState>,
     disabled: bool,
     _subscritions: Vec<Subscription>,
 }
@@ -93,6 +94,14 @@ impl SliderStory {
                 .step(1.)
         });
 
+        let slider4 = cx.new(|_| {
+            SliderState::new()
+                .min(0.)
+                .max(100.)
+                .default_value(0.0..360.0)
+                .step(1.)
+        });
+
         let mut _subscritions = vec![
             cx.subscribe(&slider1, |this, _, event: &SliderEvent, cx| match event {
                 SliderEvent::Change(value) => {
@@ -138,6 +147,7 @@ impl SliderStory {
             slider1,
             slider2,
             slider3,
+            slider4,
             slider_hsl,
             slider_hsl_value: gpui::red(),
             disabled: false,
@@ -185,11 +195,23 @@ impl Render for SliderStory {
                     .child(format!("Value: {}", self.slider2_value)),
             )
             .child(
-                section("Slider with Range")
+                section("Range Mode")
                     .max_w_md()
                     .v_flex()
                     .child(Slider::new(&self.slider3).disabled(self.disabled))
                     .child(format!("Value: {}", self.slider3.read(cx).value())),
+            )
+            .child(
+                section("Vertial with Range")
+                    .max_w_md()
+                    .v_flex()
+                    .child(
+                        Slider::new(&self.slider4)
+                            .vertical()
+                            .h(px(200.))
+                            .disabled(self.disabled),
+                    )
+                    .child(format!("Value: {}", self.slider4.read(cx).value())),
             )
             .child(
                 section(
