@@ -2,10 +2,10 @@ use std::ops::Range;
 
 use crate::{h_flex, tooltip::Tooltip, ActiveTheme, AxisExt, StyledExt};
 use gpui::{
-    canvas, div, prelude::FluentBuilder as _, px, Along, App, AppContext as _, Axis, Bounds,
-    Context, DragMoveEvent, Empty, Entity, EntityId, EventEmitter, InteractiveElement, IntoElement,
-    MouseButton, MouseDownEvent, ParentElement as _, Pixels, Point, Render, RenderOnce,
-    StatefulInteractiveElement as _, StyleRefinement, Styled, Window,
+    canvas, div, prelude::FluentBuilder as _, px, Along, App, AppContext as _, Axis, Background,
+    Bounds, Context, DragMoveEvent, Empty, Entity, EntityId, EventEmitter, Hsla,
+    InteractiveElement, IntoElement, MouseButton, MouseDownEvent, ParentElement as _, Pixels,
+    Point, Render, RenderOnce, StatefulInteractiveElement as _, StyleRefinement, Styled, Window,
 };
 
 #[derive(Clone)]
@@ -292,6 +292,8 @@ impl Slider {
         &self,
         start_pos: Pixels,
         is_start: bool,
+        bar_color: Background,
+        thumb_color: Hsla,
         window: &mut Window,
         cx: &mut App,
     ) -> impl gpui::IntoElement {
@@ -307,6 +309,29 @@ impl Slider {
 
         div()
             .id(id)
+            .absolute()
+            .when(axis.is_horizontal(), |this| {
+                this.top(px(-5.)).left(start_pos).ml(-px(8.))
+            })
+            .when(axis.is_vertical(), |this| {
+                this.bottom(start_pos).left(px(-5.)).mb(-px(8.))
+            })
+            .flex()
+            .items_center()
+            .justify_center()
+            .flex_shrink_0()
+            .rounded_full()
+            .bg(bar_color.opacity(0.8))
+            .when(cx.theme().shadow, |this| this.shadow_md())
+            .size_4()
+            .p(px(1.))
+            .child(
+                div()
+                    .flex_shrink_0()
+                    .size_full()
+                    .rounded_full()
+                    .bg(thumb_color),
+            )
             .on_mouse_down(MouseButton::Left, |_, _, cx| {
                 cx.stop_propagation();
             })
@@ -335,19 +360,6 @@ impl Slider {
                     }
                 },
             ))
-            .absolute()
-            .when(axis.is_horizontal(), |this| {
-                this.top(px(-5.)).left(start_pos).ml(-px(8.))
-            })
-            .when(axis.is_vertical(), |this| {
-                this.bottom(start_pos).left(px(-5.)).mb(-px(8.))
-            })
-            .size_4()
-            .rounded_full()
-            .border_1()
-            .border_color(cx.theme().slider_bar.opacity(0.9))
-            .when(cx.theme().shadow, |this| this.shadow_md())
-            .bg(cx.theme().slider_thumb)
             .tooltip(move |window, cx| {
                 Tooltip::new(format!(
                     "{}",
@@ -373,6 +385,19 @@ impl RenderOnce for Slider {
         let bar_start = state.percentage.start * bar_size;
         let bar_end = state.percentage.end * bar_size;
 
+        let bar_color = self
+            .style
+            .background
+            .clone()
+            .and_then(|bg| bg.color())
+            .unwrap_or(cx.theme().slider_bar.into());
+        let thumb_color = self
+            .style
+            .text
+            .clone()
+            .and_then(|text| text.color)
+            .unwrap_or_else(|| cx.theme().slider_thumb);
+
         div()
             .id(("slider", self.state.entity_id()))
             .flex()
@@ -382,6 +407,8 @@ impl RenderOnce for Slider {
             .when(axis.is_vertical(), |this| this.h(px(120.)))
             .when(axis.is_horizontal(), |this| this.w_full())
             .refine_style(&self.style)
+            .bg(cx.theme().transparent)
+            .text_color(cx.theme().foreground)
             .child(
                 h_flex()
                     .when(!self.disabled, |this| {
@@ -421,8 +448,8 @@ impl RenderOnce for Slider {
                             .relative()
                             .when(axis.is_horizontal(), |this| this.w_full().h_1p5())
                             .when(axis.is_vertical(), |this| this.h_full().w_1p5())
-                            .bg(cx.theme().slider_bar.opacity(0.2))
-                            .active(|this| this.bg(cx.theme().slider_bar.opacity(0.4)))
+                            .bg(bar_color.opacity(0.2))
+                            .active(|this| this.bg(bar_color.opacity(0.4)))
                             .rounded_full()
                             .child(
                                 div()
@@ -433,13 +460,27 @@ impl RenderOnce for Slider {
                                     .when(axis.is_vertical(), |this| {
                                         this.w_full().bottom(bar_start).top(bar_size - bar_end)
                                     })
-                                    .bg(cx.theme().slider_bar)
+                                    .bg(bar_color)
                                     .rounded_full(),
                             )
                             .when(is_range, |this| {
-                                this.child(self.render_thumb(bar_start, true, window, cx))
+                                this.child(self.render_thumb(
+                                    bar_start,
+                                    true,
+                                    bar_color,
+                                    thumb_color,
+                                    window,
+                                    cx,
+                                ))
                             })
-                            .child(self.render_thumb(bar_end, false, window, cx))
+                            .child(self.render_thumb(
+                                bar_end,
+                                false,
+                                bar_color,
+                                thumb_color,
+                                window,
+                                cx,
+                            ))
                             .child({
                                 let state = self.state.clone();
                                 canvas(

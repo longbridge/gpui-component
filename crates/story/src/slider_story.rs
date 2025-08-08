@@ -7,7 +7,7 @@ use gpui_component::{
     clipboard::Clipboard,
     h_flex,
     slider::{Slider, SliderEvent, SliderState},
-    v_flex, Colorize as _, ContextModal, StyledExt,
+    v_flex, ActiveTheme, Colorize as _, ContextModal, StyledExt,
 };
 
 use crate::section;
@@ -50,11 +50,17 @@ impl SliderStory {
             SliderState::new()
                 .min(-255.)
                 .max(255.)
-                .default_value(15.)
+                .default_value(75.)
                 .step(15.)
         });
 
-        let slider2 = cx.new(|_| SliderState::new().min(0.).max(5.).step(1.0));
+        let slider2 = cx.new(|_| {
+            SliderState::new()
+                .min(0.)
+                .max(5.)
+                .step(1.0)
+                .default_value(2.)
+        });
         let slider_hsl = [
             cx.new(|_| {
                 SliderState::new()
@@ -188,10 +194,15 @@ impl Render for SliderStory {
                     .child(format!("Value: {}", self.slider1_value)),
             )
             .child(
-                section("Slider (0 - 5)")
+                section("Slider (0 - 5) and with color")
                     .max_w_md()
                     .v_flex()
-                    .child(Slider::new(&self.slider2).disabled(self.disabled))
+                    .child(
+                        Slider::new(&self.slider2)
+                            .disabled(self.disabled)
+                            .bg(cx.theme().success)
+                            .text_color(cx.theme().success_foreground),
+                    )
                     .child(format!("Value: {}", self.slider2_value)),
             )
             .child(
