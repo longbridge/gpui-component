@@ -30,6 +30,8 @@ use crate::{scroll::ScrollHandleOffsetable, AxisExt};
 struct VirtualListScrollHandleState {
     axis: Axis,
     items_bounds: Vec<Bounds<Pixels>>,
+    /// The content bounds of the container (without the paddings and borders).
+    content_bounds: Bounds<Pixels>,
 }
 
 #[derive(Clone)]
@@ -80,6 +82,7 @@ impl VirtualListScrollHandle {
             state: Rc::new(RefCell::new(VirtualListScrollHandleState {
                 axis: Axis::Vertical,
                 items_bounds: vec![],
+                content_bounds: Bounds::default(),
             })),
             base_handle: ScrollHandle::default(),
         }
@@ -91,6 +94,10 @@ impl VirtualListScrollHandle {
 
     fn set_items_bounds(&self, items_bounds: Vec<Bounds<Pixels>>) {
         self.state.borrow_mut().items_bounds = items_bounds;
+    }
+
+    fn set_content_bounds(&self, bounds: Bounds<Pixels>) {
+        self.state.borrow_mut().content_bounds = bounds;
     }
 
     fn set_axis(&self, axis: Axis) {
@@ -105,17 +112,17 @@ impl VirtualListScrollHandle {
         };
 
         let axis = state.axis;
+        let content_bounds = state.content_bounds;
         let mut scroll_offset = self.base_handle.offset();
-        let container_bounds = self.base_handle().bounds();
 
         match strategy {
             ScrollStrategy::Center => {
                 if axis.is_vertical() {
-                    scroll_offset.y = container_bounds.top() + container_bounds.size.height.half()
+                    scroll_offset.y = content_bounds.top() + content_bounds.size.height.half()
                         - bounds.top()
                         - bounds.size.height.half()
                 } else {
-                    scroll_offset.x = container_bounds.left() + container_bounds.size.width.half()
+                    scroll_offset.x = content_bounds.left() + content_bounds.size.width.half()
                         - bounds.left()
                         - bounds.size.width.half()
                 }
@@ -123,16 +130,16 @@ impl VirtualListScrollHandle {
             _ => {
                 // Ref: https://github.com/zed-industries/zed/blob/0d145289e0867a8d5d63e5e1397a5ca69c9d49c3/crates/gpui/src/elements/div.rs#L3026
                 if axis.is_vertical() {
-                    if bounds.top() + scroll_offset.y < container_bounds.top() {
-                        scroll_offset.y = container_bounds.top() - bounds.top();
-                    } else if bounds.bottom() + scroll_offset.y > container_bounds.bottom() {
-                        scroll_offset.y = container_bounds.bottom() - bounds.bottom();
+                    if bounds.top() + scroll_offset.y < content_bounds.top() {
+                        scroll_offset.y = content_bounds.top() - bounds.top()
+                    } else if bounds.bottom() + scroll_offset.y > content_bounds.bottom() {
+                        scroll_offset.y = content_bounds.bottom() - bounds.bottom();
                     }
                 } else {
-                    if bounds.left() + scroll_offset.x < container_bounds.left() {
-                        scroll_offset.x = container_bounds.left() - bounds.left();
-                    } else if bounds.right() + scroll_offset.x > container_bounds.right() {
-                        scroll_offset.x = container_bounds.right() - bounds.right();
+                    if bounds.left() + scroll_offset.x < content_bounds.left() {
+                        scroll_offset.x = content_bounds.left() - bounds.left();
+                    } else if bounds.right() + scroll_offset.x > content_bounds.right() {
+                        scroll_offset.x = content_bounds.right() - bounds.right();
                     }
                 }
             }
@@ -489,6 +496,19 @@ impl Element for VirtualList {
         let item_sizes = &layout.size_layout.sizes;
         let item_origins = &layout.size_layout.origins;
 
+        let content_bounds = Bounds::from_corners(
+            bounds.origin
+                + point(
+                    border_widths.left + paddings.left,
+                    border_widths.top + paddings.top,
+                ),
+            bounds.bottom_right()
+                - point(
+                    border_widths.right + paddings.right,
+                    border_widths.bottom + paddings.bottom,
+                ),
+        );
+
         // Update scroll_handle with the item bounds
         let items_bounds = item_origins
             .iter()
@@ -498,18 +518,20 @@ impl Element for VirtualList {
 
                 Bounds {
                     origin: match self.axis {
-                        Axis::Horizontal => point(bounds.left() + origin, px(0.)),
-                        Axis::Vertical => point(px(0.), bounds.top() + origin),
+                        Axis::Horizontal => point(content_bounds.left() + origin, px(0.)),
+                        Axis::Vertical => point(px(0.), content_bounds.top() + origin),
                     },
                     size: match self.axis {
-                        Axis::Horizontal => size(item_size, bounds.size.height),
-                        Axis::Vertical => size(bounds.size.width, item_size),
+                        Axis::Horizontal => size(item_size, content_bounds.size.height),
+                        Axis::Vertical => size(content_bounds.size.width, item_size),
                     },
                 }
             })
             .collect::<Vec<_>>();
+
         self.scroll_handle.set_axis(self.axis);
         self.scroll_handle.set_items_bounds(items_bounds);
+        self.scroll_handle.set_content_bounds(content_bounds);
 
         self.base.interactivity().prepaint(
             global_id,
@@ -521,22 +543,9 @@ impl Element for VirtualList {
             |_style, _, hitbox, window, cx| {
                 let mut scroll_offset = self.scroll_handle.offset();
 
-                let padded_bounds = Bounds::from_corners(
-                    bounds.origin
-                        + point(
-                            border_widths.left + paddings.left,
-                            border_widths.top + paddings.top,
-                        ),
-                    bounds.bottom_right()
-                        - point(
-                            border_widths.right + paddings.right,
-                            border_widths.bottom + paddings.bottom,
-                        ),
-                );
-
                 if self.items_count > 0 {
                     let is_scrolled = !scroll_offset.along(self.axis).is_zero();
-                    let min_scroll_offset = padded_bounds.size.along(self.axis)
+                    let min_scroll_offset = content_bounds.size.along(self.axis)
                         - layout.size_layout.content_size.along(self.axis);
 
                     if is_scrolled {
@@ -567,7 +576,8 @@ impl Element for VirtualList {
                             let mut last_visible_element_ix = 0;
                             for (i, &size) in item_sizes.iter().enumerate() {
                                 cumulative_size += size;
-                                if cumulative_size > (-scroll_offset.x + padded_bounds.size.width) {
+                                if cumulative_size > (-scroll_offset.x + content_bounds.size.width)
+                                {
                                     last_visible_element_ix = i + 1;
                                     break;
                                 }
@@ -594,7 +604,7 @@ impl Element for VirtualList {
                             let mut last_visible_element_ix = 0;
                             for (i, &size) in item_sizes.iter().enumerate() {
                                 cumulative_size += size;
-                                if cumulative_size > (-scroll_offset.y + padded_bounds.size.height)
+                                if cumulative_size > (-scroll_offset.y + content_bounds.size.height)
                                 {
                                     last_visible_element_ix = i + 1;
                                     break;
@@ -619,11 +629,11 @@ impl Element for VirtualList {
                         for (mut item, ix) in items.into_iter().zip(visible_range.clone()) {
                             let item_origin = match self.axis {
                                 Axis::Horizontal => {
-                                    padded_bounds.origin
+                                    content_bounds.origin
                                         + point(item_origins[ix] + scroll_offset.x, scroll_offset.y)
                                 }
                                 Axis::Vertical => {
-                                    padded_bounds.origin
+                                    content_bounds.origin
                                         + point(scroll_offset.x, item_origins[ix] + scroll_offset.y)
                                 }
                             };
@@ -631,10 +641,10 @@ impl Element for VirtualList {
                             let available_space = match self.axis {
                                 Axis::Horizontal => size(
                                     AvailableSpace::Definite(item_sizes[ix]),
-                                    AvailableSpace::Definite(padded_bounds.size.height),
+                                    AvailableSpace::Definite(content_bounds.size.height),
                                 ),
                                 Axis::Vertical => size(
-                                    AvailableSpace::Definite(padded_bounds.size.width),
+                                    AvailableSpace::Definite(content_bounds.size.width),
                                     AvailableSpace::Definite(item_sizes[ix]),
                                 ),
                             };
