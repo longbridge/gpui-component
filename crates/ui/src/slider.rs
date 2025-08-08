@@ -288,6 +288,7 @@ impl Slider {
         self
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn render_thumb(
         &self,
         start_pos: Pixels,
