@@ -5,8 +5,8 @@ use crate::{
     ActiveTheme,
 };
 use gpui::{
-    div, point, px, App, Axis, BoxShadow, DefiniteLength, Div, Edges, Element, FocusHandle, Hsla,
-    Pixels, Refineable, StyleRefinement, Styled, Window,
+    div, point, px, App, Axis, BoxShadow, Corners, DefiniteLength, Div, Edges, Element,
+    FocusHandle, Hsla, Pixels, Refineable, StyleRefinement, Styled, Window,
 };
 use serde::{Deserialize, Serialize};
 
@@ -192,6 +192,14 @@ pub trait StyledExt: Styled + Sized {
             .border_color(cx.theme().border)
             .shadow_lg()
             .rounded(cx.theme().radius)
+    }
+
+    /// Set corner radii for the element.
+    fn corner_radii(self, radius: Corners<Pixels>) -> Self {
+        self.rounded_tl(radius.top_left)
+            .rounded_tr(radius.top_right)
+            .rounded_bl(radius.bottom_left)
+            .rounded_br(radius.bottom_right)
     }
 }
 
