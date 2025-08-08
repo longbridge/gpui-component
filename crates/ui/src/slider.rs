@@ -3,7 +3,7 @@ use std::ops::Range;
 use crate::{h_flex, tooltip::Tooltip, ActiveTheme, AxisExt, StyledExt};
 use gpui::{
     canvas, div, prelude::FluentBuilder as _, px, Along, App, AppContext as _, Axis, Background,
-    Bounds, Context, DragMoveEvent, Empty, Entity, EntityId, EventEmitter, Hsla,
+    Bounds, Context, Corners, DragMoveEvent, Empty, Entity, EntityId, EventEmitter, Hsla,
     InteractiveElement, IntoElement, MouseButton, MouseDownEvent, ParentElement as _, Pixels,
     Point, Render, RenderOnce, StatefulInteractiveElement as _, StyleRefinement, Styled, Window,
 };
@@ -294,6 +294,7 @@ impl Slider {
         is_start: bool,
         bar_color: Background,
         thumb_color: Hsla,
+        radius: Corners<Pixels>,
         window: &mut Window,
         cx: &mut App,
     ) -> impl gpui::IntoElement {
@@ -320,8 +321,11 @@ impl Slider {
             .items_center()
             .justify_center()
             .flex_shrink_0()
-            .rounded_full()
-            .bg(bar_color.opacity(0.8))
+            .rounded_tl(radius.top_left)
+            .rounded_tr(radius.top_right)
+            .rounded_bl(radius.bottom_left)
+            .rounded_br(radius.bottom_right)
+            .bg(bar_color.opacity(0.5))
             .when(cx.theme().shadow, |this| this.shadow_md())
             .size_4()
             .p(px(1.))
@@ -329,7 +333,10 @@ impl Slider {
                 div()
                     .flex_shrink_0()
                     .size_full()
-                    .rounded_full()
+                    .rounded_tl(radius.top_left)
+                    .rounded_tr(radius.top_right)
+                    .rounded_bl(radius.bottom_left)
+                    .rounded_br(radius.bottom_right)
                     .bg(thumb_color),
             )
             .on_mouse_down(MouseButton::Left, |_, _, cx| {
@@ -384,6 +391,7 @@ impl RenderOnce for Slider {
         let bar_size = state.bounds.size.along(axis);
         let bar_start = state.percentage.start * bar_size;
         let bar_end = state.percentage.end * bar_size;
+        let rem_size = window.rem_size();
 
         let bar_color = self
             .style
@@ -397,6 +405,26 @@ impl RenderOnce for Slider {
             .clone()
             .and_then(|text| text.color)
             .unwrap_or_else(|| cx.theme().slider_thumb);
+        let corner_radii = self.style.corner_radii.clone();
+        let default_radius = px(999.);
+        let radius = Corners {
+            top_left: corner_radii
+                .top_left
+                .map(|v| v.to_pixels(rem_size))
+                .unwrap_or(default_radius),
+            top_right: corner_radii
+                .top_right
+                .map(|v| v.to_pixels(rem_size))
+                .unwrap_or(default_radius),
+            bottom_left: corner_radii
+                .bottom_left
+                .map(|v| v.to_pixels(rem_size))
+                .unwrap_or(default_radius),
+            bottom_right: corner_radii
+                .bottom_right
+                .map(|v| v.to_pixels(rem_size))
+                .unwrap_or(default_radius),
+        };
 
         div()
             .id(("slider", self.state.entity_id()))
@@ -450,7 +478,10 @@ impl RenderOnce for Slider {
                             .when(axis.is_vertical(), |this| this.h_full().w_1p5())
                             .bg(bar_color.opacity(0.2))
                             .active(|this| this.bg(bar_color.opacity(0.4)))
-                            .rounded_full()
+                            .rounded_tl(radius.top_left)
+                            .rounded_tr(radius.top_right)
+                            .rounded_bl(radius.bottom_left)
+                            .rounded_br(radius.bottom_right)
                             .child(
                                 div()
                                     .absolute()
@@ -469,6 +500,7 @@ impl RenderOnce for Slider {
                                     true,
                                     bar_color,
                                     thumb_color,
+                                    radius,
                                     window,
                                     cx,
                                 ))
@@ -478,6 +510,7 @@ impl RenderOnce for Slider {
                                 false,
                                 bar_color,
                                 thumb_color,
+                                radius,
                                 window,
                                 cx,
                             ))
