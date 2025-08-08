@@ -204,12 +204,7 @@ impl RenderOnce for TabBar {
                     _ => px(12.),
                 };
 
-                let padding = Edges {
-                    left: gap,
-                    right: gap,
-                    ..Default::default()
-                };
-                (cx.theme().transparent, padding, gap)
+                (cx.theme().transparent, Edges::all(px(0.)), gap)
             }
         };
 
