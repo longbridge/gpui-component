@@ -548,6 +548,7 @@ impl Element for VirtualList {
                 scroll_to_item,
             );
         }
+        scroll_offset = scroll_offset.min(&point(px(0.), px(0.)));
 
         self.base.interactivity().prepaint(
             global_id,
