@@ -327,10 +327,7 @@ where
     }
 
     fn on_action_cancel(&mut self, _: &Cancel, window: &mut Window, cx: &mut Context<Self>) {
-        if self.selected_index.is_none() {
-            cx.propagate();
-        }
-
+        cx.propagate();
         if self.reset_on_cancel {
             self._set_selected_index(None, window, cx);
         }
