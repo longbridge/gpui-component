@@ -224,7 +224,6 @@ impl Render for SliderStory {
                         .child(
                             Slider::new(&self.slider_hsl[0])
                                 .vertical()
-                                .reverse()
                                 .disabled(self.disabled),
                         )
                         .child(
@@ -243,7 +242,6 @@ impl Render for SliderStory {
                         .child(
                             Slider::new(&self.slider_hsl[1])
                                 .vertical()
-                                .reverse()
                                 .disabled(self.disabled),
                         )
                         .child(
@@ -262,7 +260,6 @@ impl Render for SliderStory {
                         .child(
                             Slider::new(&self.slider_hsl[2])
                                 .vertical()
-                                .reverse()
                                 .disabled(self.disabled),
                         )
                         .child(
@@ -281,7 +278,6 @@ impl Render for SliderStory {
                         .child(
                             Slider::new(&self.slider_hsl[3])
                                 .vertical()
-                                .reverse()
                                 .disabled(self.disabled),
                         )
                         .child(

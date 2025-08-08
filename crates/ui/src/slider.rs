@@ -124,8 +124,10 @@ pub struct SliderState {
     max: f32,
     step: f32,
     value: SliderValue,
-    bounds: Bounds<Pixels>,
+    /// When is single value mode, only `end` is used, the start is always 0.0.
     percentage: Range<f32>,
+    /// The bounds of the slider after rendered.
+    bounds: Bounds<Pixels>,
 }
 
 impl SliderState {
@@ -188,8 +190,7 @@ impl SliderState {
         match self.value {
             SliderValue::Single(value) => {
                 let percentage = value.clamp(self.min, self.max) / self.max;
-
-                self.percentage = percentage..percentage;
+                self.percentage = 0.0..percentage;
             }
             SliderValue::Range(start, end) => {
                 let clamped_start = start.clamp(self.min, self.max);
@@ -203,7 +204,6 @@ impl SliderState {
     fn update_value_by_position(
         &mut self,
         axis: Axis,
-        reverse: bool,
         position: Point<Pixels>,
         is_start: bool,
         _: &mut Window,
@@ -214,25 +214,19 @@ impl SliderState {
         let max = self.max;
         let step = self.step;
 
-        let percentage = match axis {
-            Axis::Horizontal => {
-                if reverse {
-                    1. - (position.x - bounds.left()).clamp(px(0.), bounds.size.width)
-                        / bounds.size.width
-                } else {
-                    (position.x - bounds.left()).clamp(px(0.), bounds.size.width)
-                        / bounds.size.width
-                }
-            }
-            Axis::Vertical => {
-                if reverse {
-                    1. - (position.y - bounds.top()).clamp(px(0.), bounds.size.height)
-                        / bounds.size.height
-                } else {
-                    (position.y - bounds.top()).clamp(px(0.), bounds.size.height)
-                        / bounds.size.height
-                }
-            }
+        let pos = position.along(axis);
+        let start = bounds.origin.along(axis);
+        let total_size = bounds.size.along(axis);
+        let mut percentage = (pos - start).clamp(px(0.), total_size) / total_size;
+        if axis.is_vertical() {
+            // Invert the percentage for vertical sliders
+            percentage = 1.0 - percentage;
+        }
+
+        let percentage = if is_start {
+            percentage.clamp(0.0, self.percentage.end)
+        } else {
+            percentage.clamp(self.percentage.start, 1.0)
         };
 
         let value = match axis {
@@ -266,7 +260,6 @@ impl Render for SliderState {
 pub struct Slider {
     state: Entity<SliderState>,
     axis: Axis,
-    reverse: bool,
     disabled: bool,
 }
 
@@ -275,7 +268,6 @@ impl Slider {
     pub fn new(state: &Entity<SliderState>) -> Self {
         Self {
             axis: Axis::Horizontal,
-            reverse: false,
             state: state.clone(),
             disabled: false,
         }
@@ -293,12 +285,6 @@ impl Slider {
         self
     }
 
-    /// Set the reverse direction of the slider, default: false
-    pub fn reverse(mut self) -> Self {
-        self.reverse = true;
-        self
-    }
-
     /// Set the disabled state of the slider, default: false
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
@@ -307,7 +293,7 @@ impl Slider {
 
     fn render_thumb(
         &self,
-        thumb_bar_size: Pixels,
+        start_pos: Pixels,
         is_start: bool,
         window: &mut Window,
         cx: &mut App,
@@ -315,7 +301,6 @@ impl Slider {
         let state = self.state.read(cx);
         let entity_id = self.state.entity_id();
         let value = state.value;
-        let reverse = self.reverse;
         let axis = self.axis;
         let id = ("slider-thumb", is_start as u32);
 
@@ -341,7 +326,6 @@ impl Slider {
                             // set value by mouse position
                             view.update_value_by_position(
                                 axis,
-                                reverse,
                                 e.event.position,
                                 *is_start,
                                 window,
@@ -352,21 +336,11 @@ impl Slider {
                 },
             ))
             .absolute()
-            .map(|this| match reverse {
-                true => this
-                    .when(axis.is_horizontal(), |this| {
-                        this.bottom(px(-5.)).right(thumb_bar_size).mr(-px(8.))
-                    })
-                    .when(axis.is_vertical(), |this| {
-                        this.bottom(thumb_bar_size).right(px(-5.)).mb(-px(8.))
-                    }),
-                false => this
-                    .when(axis.is_horizontal(), |this| {
-                        this.top(px(-5.)).left(thumb_bar_size).ml(-px(8.))
-                    })
-                    .when(axis.is_vertical(), |this| {
-                        this.top(thumb_bar_size).left(px(-5.)).mt(-px(8.))
-                    }),
+            .when(axis.is_horizontal(), |this| {
+                this.top(px(-5.)).left(start_pos).ml(-px(8.))
+            })
+            .when(axis.is_vertical(), |this| {
+                this.bottom(start_pos).left(px(-5.)).mb(-px(8.))
             })
             .size_4()
             .rounded_full()
@@ -386,14 +360,12 @@ impl Slider {
 
 impl RenderOnce for Slider {
     fn render(self, window: &mut Window, cx: &mut gpui::App) -> impl IntoElement {
-        let state = self.state.read(cx);
         let axis = self.axis;
-        let reverse = self.reverse;
+        let state = self.state.read(cx);
         let is_range = state.value().is_range();
-
-        let thumb_bar_start = state.percentage.start * state.bounds.size.along(axis);
-        let thumb_bar_end = state.percentage.end * state.bounds.size.along(axis);
-        let thumb_bar_size = thumb_bar_end - thumb_bar_start;
+        let bar_size = state.bounds.size.along(axis);
+        let bar_start = state.percentage.start * bar_size;
+        let bar_end = state.percentage.end * bar_size;
 
         div()
             .id(("slider", self.state.entity_id()))
@@ -410,9 +382,17 @@ impl RenderOnce for Slider {
                             MouseButton::Left,
                             window.listener_for(
                                 &self.state,
-                                move |view, e: &MouseDownEvent, window, cx| {
-                                    view.update_value_by_position(
-                                        axis, reverse, e.position, true, window, cx,
+                                move |state, e: &MouseDownEvent, window, cx| {
+                                    let mut is_start = false;
+                                    if is_range {
+                                        let center = (bar_end - bar_start) / 2.0
+                                            + bar_start
+                                            + state.bounds.origin.along(axis);
+                                        is_start = e.position.along(axis) < center;
+                                    }
+
+                                    state.update_value_by_position(
+                                        axis, e.position, is_start, window, cx,
                                     )
                                 },
                             ),
@@ -433,25 +413,23 @@ impl RenderOnce for Slider {
                             .when(axis.is_vertical(), |this| this.h_full().w_1p5())
                             .bg(cx.theme().slider_bar.opacity(0.2))
                             .active(|this| this.bg(cx.theme().slider_bar.opacity(0.4)))
-                            .rounded(px(3.))
+                            .rounded_full()
                             .child(
                                 div()
                                     .absolute()
-                                    .when(!reverse, |this| this.top_0())
-                                    .when(reverse, |this| this.bottom_0())
                                     .when(axis.is_horizontal(), |this| {
-                                        this.h_full().left(thumb_bar_start).right(thumb_bar_end)
+                                        this.h_full().left(bar_start).right(bar_size - bar_end)
                                     })
                                     .when(axis.is_vertical(), |this| {
-                                        this.w_full().top(thumb_bar_start).bottom(thumb_bar_end)
+                                        this.w_full().bottom(bar_start).top(bar_size - bar_end)
                                     })
                                     .bg(cx.theme().slider_bar)
                                     .rounded_full(),
                             )
-                            .child(self.render_thumb(thumb_bar_size, true, window, cx))
                             .when(is_range, |this| {
-                                this.child(self.render_thumb(thumb_bar_size, false, window, cx))
+                                this.child(self.render_thumb(bar_start, true, window, cx))
                             })
+                            .child(self.render_thumb(bar_end, false, window, cx))
                             .child({
                                 let state = self.state.clone();
                                 canvas(
