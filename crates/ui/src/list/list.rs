@@ -60,7 +60,7 @@ pub struct List<D: ListDelegate> {
     pub(crate) size: Size,
     rows_cache: RowsCache,
     selected_index: Option<IndexPath>,
-    defered_scroll_to_index: Option<IndexPath>,
+    deferred_scroll_to_index: Option<IndexPath>,
     mouse_right_clicked_index: Option<IndexPath>,
     reset_on_cancel: bool,
     _search_task: Task<()>,
@@ -86,7 +86,7 @@ where
             query_input: Some(query_input),
             last_query: None,
             selected_index: None,
-            defered_scroll_to_index: None,
+            deferred_scroll_to_index: None,
             mouse_right_clicked_index: None,
             scroll_handle: VirtualListScrollHandle::new(),
             scroll_state: ScrollbarState::default(),
@@ -215,7 +215,7 @@ where
             return;
         }
 
-        self.defered_scroll_to_index = Some(ix);
+        self.deferred_scroll_to_index = Some(ix);
         cx.notify();
     }
 
@@ -226,7 +226,7 @@ where
 
     pub fn scroll_to_selected_item(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         if let Some(ix) = self.selected_index {
-            self.defered_scroll_to_index = Some(ix);
+            self.deferred_scroll_to_index = Some(ix);
             cx.notify();
         }
     }
@@ -573,7 +573,7 @@ where
         self.prepare_items_if_needed(window, cx);
 
         // Scroll to the selected item if it is set.
-        if let Some(ix) = self.defered_scroll_to_index.take() {
+        if let Some(ix) = self.deferred_scroll_to_index.take() {
             if let Some(item_ix) = self.rows_cache.position_of(&ix) {
                 self.scroll_handle
                     .scroll_to_item(item_ix, ScrollStrategy::Top);

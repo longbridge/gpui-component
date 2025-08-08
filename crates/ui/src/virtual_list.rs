@@ -232,7 +232,7 @@ impl VirtualList {
         self
     }
 
-    fn scroll_to_deffered_item(
+    fn scroll_to_deferred_item(
         &self,
         scroll_offset: Point<Pixels>,
         items_bounds: &[Bounds<Pixels>],
@@ -541,7 +541,7 @@ impl Element for VirtualList {
 
         let mut scroll_offset = self.scroll_handle.offset();
         if let Some(scroll_to_item) = scroll_state.deferred_scroll_to_item.take() {
-            scroll_offset = self.scroll_to_deffered_item(
+            scroll_offset = self.scroll_to_deferred_item(
                 scroll_offset,
                 &items_bounds,
                 &content_bounds,
