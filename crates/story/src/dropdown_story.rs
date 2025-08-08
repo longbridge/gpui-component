@@ -89,7 +89,7 @@ impl DropdownStory {
         let country_dropdown = cx.new(|cx| {
             DropdownState::new(
                 grouped_countries,
-                Some(IndexPath::default().row(1)),
+                Some(IndexPath::default().row(8).section(2)),
                 window,
                 cx,
             )

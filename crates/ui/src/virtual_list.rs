@@ -19,9 +19,10 @@ use std::{
 
 use gpui::{
     div, point, px, size, Along, AnyElement, App, AvailableSpace, Axis, Bounds, ContentMask,
-    Context, Div, Element, ElementId, Entity, GlobalElementId, Half, Hitbox, InteractiveElement,
-    IntoElement, IsZero as _, ListSizingBehavior, Pixels, Point, Render, ScrollHandle,
-    ScrollStrategy, Size, Stateful, StatefulInteractiveElement, StyleRefinement, Styled, Window,
+    Context, DeferredScrollToItem, Div, Element, ElementId, Entity, GlobalElementId, Half, Hitbox,
+    InteractiveElement, IntoElement, IsZero as _, ListSizingBehavior, Pixels, Point, Render,
+    ScrollHandle, ScrollStrategy, Size, Stateful, StatefulInteractiveElement, StyleRefinement,
+    Styled, Window,
 };
 use smallvec::SmallVec;
 
@@ -29,9 +30,8 @@ use crate::{scroll::ScrollHandleOffsetable, AxisExt};
 
 struct VirtualListScrollHandleState {
     axis: Axis,
-    items_bounds: Vec<Bounds<Pixels>>,
-    /// The content bounds of the container (without the paddings and borders).
-    content_bounds: Bounds<Pixels>,
+    items_count: usize,
+    pub deferred_scroll_to_item: Option<DeferredScrollToItem>,
 }
 
 #[derive(Clone)]
@@ -81,8 +81,8 @@ impl VirtualListScrollHandle {
         VirtualListScrollHandle {
             state: Rc::new(RefCell::new(VirtualListScrollHandleState {
                 axis: Axis::Vertical,
-                items_bounds: vec![],
-                content_bounds: Bounds::default(),
+                items_count: 0,
+                deferred_scroll_to_item: None,
             })),
             base_handle: ScrollHandle::default(),
         }
@@ -92,69 +92,25 @@ impl VirtualListScrollHandle {
         &self.base_handle
     }
 
-    fn set_items_bounds(&self, items_bounds: Vec<Bounds<Pixels>>) {
-        self.state.borrow_mut().items_bounds = items_bounds;
-    }
-
-    fn set_content_bounds(&self, bounds: Bounds<Pixels>) {
-        self.state.borrow_mut().content_bounds = bounds;
-    }
-
-    fn set_axis(&self, axis: Axis) {
-        self.state.borrow_mut().axis = axis;
-    }
-
     /// Scroll to the item at the given index.
     pub fn scroll_to_item(&self, ix: usize, strategy: ScrollStrategy) {
-        let state = self.state.borrow();
-        let Some(bounds) = state.items_bounds.get(ix) else {
-            return;
-        };
+        self.scroll_to_item_with_offset(ix, strategy, 0);
+    }
 
-        let axis = state.axis;
-        let content_bounds = state.content_bounds;
-        let mut scroll_offset = self.base_handle.offset();
-
-        match strategy {
-            ScrollStrategy::Center => {
-                if axis.is_vertical() {
-                    scroll_offset.y = content_bounds.top() + content_bounds.size.height.half()
-                        - bounds.top()
-                        - bounds.size.height.half()
-                } else {
-                    scroll_offset.x = content_bounds.left() + content_bounds.size.width.half()
-                        - bounds.left()
-                        - bounds.size.width.half()
-                }
-            }
-            _ => {
-                // Ref: https://github.com/zed-industries/zed/blob/0d145289e0867a8d5d63e5e1397a5ca69c9d49c3/crates/gpui/src/elements/div.rs#L3026
-                if axis.is_vertical() {
-                    if bounds.top() + scroll_offset.y < content_bounds.top() {
-                        scroll_offset.y = content_bounds.top() - bounds.top()
-                    } else if bounds.bottom() + scroll_offset.y > content_bounds.bottom() {
-                        scroll_offset.y = content_bounds.bottom() - bounds.bottom();
-                    }
-                } else {
-                    if bounds.left() + scroll_offset.x < content_bounds.left() {
-                        scroll_offset.x = content_bounds.left() - bounds.left();
-                    } else if bounds.right() + scroll_offset.x > content_bounds.right() {
-                        scroll_offset.x = content_bounds.right() - bounds.right();
-                    }
-                }
-            }
-        }
-
-        self.base_handle.set_offset(scroll_offset);
+    /// Scroll to the item at the given index, with an additional offset items.
+    fn scroll_to_item_with_offset(&self, ix: usize, strategy: ScrollStrategy, offset: usize) {
+        let mut state = self.state.borrow_mut();
+        state.deferred_scroll_to_item = Some(DeferredScrollToItem {
+            item_index: ix,
+            strategy,
+            offset,
+        });
     }
 
     /// Scrolls to the bottom of the list.
     pub fn scroll_to_bottom(&self) {
-        let state = self.state.borrow();
-        self.scroll_to_item(
-            state.items_bounds.len().saturating_sub(1),
-            ScrollStrategy::Top,
-        );
+        let items_count = self.state.borrow().items_count;
+        self.scroll_to_item(items_count.saturating_sub(1), ScrollStrategy::Top);
     }
 }
 
@@ -274,6 +230,54 @@ impl VirtualList {
         self.base = div().id(self.id.clone()).size_full();
         self.scroll_handle = scroll_handle.clone();
         self
+    }
+
+    fn scroll_to_deffered_item(
+        &self,
+        scroll_offset: Point<Pixels>,
+        items_bounds: &[Bounds<Pixels>],
+        content_bounds: &Bounds<Pixels>,
+        scroll_to_item: DeferredScrollToItem,
+    ) -> Point<Pixels> {
+        let Some(bounds) = items_bounds
+            .get(scroll_to_item.item_index + scroll_to_item.offset)
+            .cloned()
+        else {
+            return scroll_offset;
+        };
+
+        let mut scroll_offset = scroll_offset;
+        match scroll_to_item.strategy {
+            ScrollStrategy::Center => {
+                if self.axis.is_vertical() {
+                    scroll_offset.y = content_bounds.top() + content_bounds.size.height.half()
+                        - bounds.top()
+                        - bounds.size.height.half()
+                } else {
+                    scroll_offset.x = content_bounds.left() + content_bounds.size.width.half()
+                        - bounds.left()
+                        - bounds.size.width.half()
+                }
+            }
+            _ => {
+                // Ref: https://github.com/zed-industries/zed/blob/0d145289e0867a8d5d63e5e1397a5ca69c9d49c3/crates/gpui/src/elements/div.rs#L3026
+                if self.axis.is_vertical() {
+                    if bounds.top() + scroll_offset.y < content_bounds.top() {
+                        scroll_offset.y = content_bounds.top() - bounds.top()
+                    } else if bounds.bottom() + scroll_offset.y > content_bounds.bottom() {
+                        scroll_offset.y = content_bounds.bottom() - bounds.bottom();
+                    }
+                } else {
+                    if bounds.left() + scroll_offset.x < content_bounds.left() {
+                        scroll_offset.x = content_bounds.left() - bounds.left();
+                    } else if bounds.right() + scroll_offset.x > content_bounds.right() {
+                        scroll_offset.x = content_bounds.right() - bounds.right();
+                    }
+                }
+            }
+        }
+        self.scroll_handle.set_offset(scroll_offset);
+        scroll_offset
     }
 }
 
@@ -529,9 +533,21 @@ impl Element for VirtualList {
             })
             .collect::<Vec<_>>();
 
-        self.scroll_handle.set_axis(self.axis);
-        self.scroll_handle.set_items_bounds(items_bounds);
-        self.scroll_handle.set_content_bounds(content_bounds);
+        let axis = self.axis;
+
+        let mut scroll_state = self.scroll_handle.state.borrow_mut();
+        scroll_state.axis = axis;
+        scroll_state.items_count = self.items_count;
+
+        let mut scroll_offset = self.scroll_handle.offset();
+        if let Some(scroll_to_item) = scroll_state.deferred_scroll_to_item.take() {
+            scroll_offset = self.scroll_to_deffered_item(
+                scroll_offset,
+                &items_bounds,
+                &content_bounds,
+                scroll_to_item,
+            );
+        }
 
         self.base.interactivity().prepaint(
             global_id,
@@ -541,8 +557,6 @@ impl Element for VirtualList {
             window,
             cx,
             |_style, _, hitbox, window, cx| {
-                let mut scroll_offset = self.scroll_handle.offset();
-
                 if self.items_count > 0 {
                     let is_scrolled = !scroll_offset.along(self.axis).is_zero();
                     let min_scroll_offset = content_bounds.size.along(self.axis)
