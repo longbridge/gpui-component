@@ -97,8 +97,8 @@ impl SliderStory {
         let slider4 = cx.new(|_| {
             SliderState::new()
                 .min(0.)
-                .max(100.)
-                .default_value(0.0..360.0)
+                .max(360.)
+                .default_value(100.0..300.0)
                 .step(1.)
         });
 

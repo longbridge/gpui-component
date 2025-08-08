@@ -137,7 +137,7 @@ impl SliderState {
             max: 100.0,
             step: 1.0,
             value: SliderValue::default(),
-            percentage: (0.0..0.0).into(),
+            percentage: (0.0..0.0),
             bounds: Bounds::default(),
         }
     }
@@ -214,14 +214,13 @@ impl SliderState {
         let max = self.max;
         let step = self.step;
 
-        let pos = position.along(axis);
-        let start = bounds.origin.along(axis);
+        let inner_pos = if axis.is_horizontal() {
+            position.x - bounds.left()
+        } else {
+            bounds.bottom() - position.y
+        };
         let total_size = bounds.size.along(axis);
-        let mut percentage = (pos - start).clamp(px(0.), total_size) / total_size;
-        if axis.is_vertical() {
-            // Invert the percentage for vertical sliders
-            percentage = 1.0 - percentage;
-        }
+        let percentage = inner_pos.clamp(px(0.), total_size) / total_size;
 
         let percentage = if is_start {
             percentage.clamp(0.0, self.percentage.end)
@@ -229,11 +228,7 @@ impl SliderState {
             percentage.clamp(self.percentage.start, 1.0)
         };
 
-        let value = match axis {
-            Axis::Horizontal => min + (max - min) * percentage,
-            Axis::Vertical => max - (max - min) * percentage,
-        };
-
+        let value = min + (max - min) * percentage;
         let value = (value / step).round() * step;
 
         if is_start {
@@ -312,6 +307,9 @@ impl Slider {
 
         div()
             .id(id)
+            .on_mouse_down(MouseButton::Left, |_, _, cx| {
+                cx.stop_propagation();
+            })
             .on_drag(DragThumb((entity_id, is_start)), |drag, _, _, cx| {
                 cx.stop_propagation();
                 cx.new(|_| drag.clone())
@@ -394,10 +392,13 @@ impl RenderOnce for Slider {
                                 move |state, e: &MouseDownEvent, window, cx| {
                                     let mut is_start = false;
                                     if is_range {
-                                        let center = (bar_end - bar_start) / 2.0
-                                            + bar_start
-                                            + state.bounds.origin.along(axis);
-                                        is_start = e.position.along(axis) < center;
+                                        let inner_pos = if axis.is_horizontal() {
+                                            e.position.x - state.bounds.left()
+                                        } else {
+                                            state.bounds.bottom() - e.position.y
+                                        };
+                                        let center = (bar_end - bar_start) / 2.0 + bar_start;
+                                        is_start = inner_pos < center;
                                     }
 
                                     state.update_value_by_position(
