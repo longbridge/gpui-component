@@ -173,10 +173,9 @@ impl Render for SliderStory {
         let rgb = SharedString::from(self.slider_hsl_value.to_hex());
 
         v_flex()
-            .items_center()
             .gap_y_3()
             .child(
-                h_flex().justify_between().child(
+                h_flex().child(
                     Checkbox::new("disabled")
                         .checked(self.disabled)
                         .label("Disabled")
