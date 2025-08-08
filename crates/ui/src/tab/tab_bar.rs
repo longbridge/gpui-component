@@ -21,6 +21,7 @@ pub struct SelectTab(usize);
 #[derive(IntoElement)]
 pub struct TabBar {
     base: Stateful<Div>,
+    style: StyleRefinement,
     scroll_handle: Option<ScrollHandle>,
     prefix: Option<AnyElement>,
     suffix: Option<AnyElement>,
@@ -40,6 +41,7 @@ impl TabBar {
     pub fn new(id: impl Into<ElementId>) -> Self {
         Self {
             base: div().id(id).px(px(-1.)),
+            style: StyleRefinement::default(),
             children: SmallVec::new(),
             scroll_handle: None,
             prefix: None,
@@ -149,7 +151,7 @@ impl TabBar {
 
 impl Styled for TabBar {
     fn style(&mut self) -> &mut StyleRefinement {
-        self.base.style()
+        &mut self.style
     }
 }
 
@@ -246,6 +248,7 @@ impl RenderOnce for TabBar {
                 |this| this.rounded(cx.theme().radius),
             )
             .paddings(paddings)
+            .refine_style(&self.style)
             .when_some(self.prefix, |this, prefix| this.child(prefix))
             .child(
                 h_flex()
