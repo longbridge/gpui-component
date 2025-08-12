@@ -1,3 +1,5 @@
+use std::default;
+
 use gpui::{
     div, prelude::FluentBuilder, px, AnyElement, App, Div, Hsla, IntoElement, ParentElement,
     Pixels, Point, RenderOnce, StyleRefinement, Styled, Window,
@@ -5,10 +7,31 @@ use gpui::{
 
 use crate::{v_flex, ActiveTheme};
 
+#[derive(Default)]
+pub enum CrossLineAxis {
+    #[default]
+    Vertical,
+    Horizontal,
+    Both,
+}
+
+impl CrossLineAxis {
+    #[inline]
+    pub fn show_vertical(&self) -> bool {
+        matches!(self, CrossLineAxis::Vertical | CrossLineAxis::Both)
+    }
+
+    #[inline]
+    pub fn show_horizontal(&self) -> bool {
+        matches!(self, CrossLineAxis::Horizontal | CrossLineAxis::Both)
+    }
+}
+
 #[derive(IntoElement)]
 pub struct CrossLine {
     point: Point<Pixels>,
     height: Option<f32>,
+    direction: CrossLineAxis,
 }
 
 impl CrossLine {
@@ -16,7 +39,18 @@ impl CrossLine {
         Self {
             point,
             height: None,
+            direction: Default::default(),
         }
+    }
+
+    pub fn horizontal(mut self) -> Self {
+        self.direction = CrossLineAxis::Horizontal;
+        self
+    }
+
+    pub fn both(mut self) -> Self {
+        self.direction = CrossLineAxis::Both;
+        self
     }
 
     pub fn height(mut self, height: f32) -> Self {
@@ -38,30 +72,34 @@ impl RenderOnce for CrossLine {
             .absolute()
             .top_0()
             .left_0()
-            .child(
-                div()
-                    .absolute()
-                    .w(px(1.))
-                    .bg(cx.theme().border)
-                    .top_0()
-                    .left(self.point.x)
-                    .map(|this| {
-                        if let Some(height) = self.height {
-                            this.h(px(height))
-                        } else {
-                            this.h_full()
-                        }
-                    }),
-            )
-            .child(
-                div()
-                    .absolute()
-                    .w_full()
-                    .h(px(1.))
-                    .bg(cx.theme().border)
-                    .left_0()
-                    .top(self.point.y),
-            )
+            .when(self.direction.show_vertical(), |this| {
+                this.child(
+                    div()
+                        .absolute()
+                        .w(px(1.))
+                        .bg(cx.theme().border)
+                        .top_0()
+                        .left(self.point.x)
+                        .map(|this| {
+                            if let Some(height) = self.height {
+                                this.h(px(height))
+                            } else {
+                                this.h_full()
+                            }
+                        }),
+                )
+            })
+            .when(self.direction.show_horizontal(), |this| {
+                this.child(
+                    div()
+                        .absolute()
+                        .w_full()
+                        .h(px(1.))
+                        .bg(cx.theme().border)
+                        .left_0()
+                        .top(self.point.y),
+                )
+            })
     }
 }
 
