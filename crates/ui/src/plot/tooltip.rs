@@ -1,5 +1,3 @@
-use std::default;
-
 use gpui::{
     div, prelude::FluentBuilder, px, AnyElement, App, Div, Hsla, IntoElement, ParentElement,
     Pixels, Point, RenderOnce, StyleRefinement, Styled, Window,
