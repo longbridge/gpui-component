@@ -202,7 +202,7 @@ where
     pub fn scroll_to_item(
         &mut self,
         ix: IndexPath,
-        _strategy: ScrollStrategy,
+        strategy: ScrollStrategy,
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -215,7 +215,7 @@ where
             return;
         }
 
-        self.deferred_scroll_to_index = Some(ix);
+        self.scroll_handle.scroll_to_item(ix.row, strategy);
         cx.notify();
     }
 
@@ -224,10 +224,12 @@ where
         &self.scroll_handle
     }
 
-    pub fn scroll_to_selected_item(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+    pub fn scroll_to_selected_item(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         if let Some(ix) = self.selected_index {
-            self.deferred_scroll_to_index = Some(ix);
-            cx.notify();
+            if let Some(ix) = self.rows_cache.position_of(&ix) {
+                self.scroll_handle.scroll_to_item(ix, ScrollStrategy::Top);
+                cx.notify();
+            }
         }
     }
 
