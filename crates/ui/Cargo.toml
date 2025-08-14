@@ -1,12 +1,12 @@
 [package]
+name = "gpui-component"
 description = "UI components for building fantastic desktop application by using GPUI."
+version = "0.1.0"
 edition = "2021"
 homepage = "https://github.com/longbridge/gpui-component"
 keywords = ["GPUI", "application", "desktop", "ui"]
 license-file = "LICENSE-APACHE"
-name = "gpui-component"
 publish = true
-version = "0.1.0"
 
 [lib]
 doctest = false
@@ -53,7 +53,7 @@ markdown = "1.0.0-alpha.22"
 # HTML Parser
 html5ever = "0.27"
 markup5ever_rcdom = "0.3.0"
-minify-html = "0.15.0"
+simple-minify-html = "0.17.2"
 
 # Calendar
 chrono = "0.4.38"

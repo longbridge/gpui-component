@@ -83,9 +83,11 @@ pub(super) fn parse_html(source: &str) -> Result<element::Node, SharedString> {
 }
 
 fn cleanup_html(source: &str) -> Vec<u8> {
-    let mut cfg = minify_html::Cfg::default();
-    cfg.keep_closing_tags = true;
-    minify_html::minify(source.as_bytes(), &cfg)
+    let cfg = simple_minify_html::Cfg {
+        keep_closing_tags: true,
+        ..Default::default()
+    };
+    simple_minify_html::minify(&source.as_bytes(), Some(cfg)).to_vec()
 }
 
 #[derive(Clone)]
