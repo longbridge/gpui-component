@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use gpui::{Hsla, SharedString};
-use palette::FromColor as _;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -374,17 +373,7 @@ pub struct ThemeConfigColors {
 /// Try to parse HEX color, `#RRGGBB` or `#RRGGBBAA`
 fn try_parse_color(color: &str) -> Result<Hsla> {
     let rgba = gpui::Rgba::try_from(color)?;
-    let rgba = palette::rgb::Srgba::from_components((rgba.r, rgba.g, rgba.b, rgba.a));
-    let hsla = palette::Hsla::from_color(rgba);
-
-    let hsla = gpui::hsla(
-        hsla.hue.into_positive_degrees() / 360.,
-        hsla.saturation,
-        hsla.lightness,
-        hsla.alpha,
-    );
-
-    Ok(hsla)
+    Ok(rgba.into())
 }
 
 impl Theme {
