@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/macros",
+    "crates/hello_world",
     "crates/story",
     "crates/ui",
     "crates/wef",

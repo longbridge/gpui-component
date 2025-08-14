@@ -1,10 +1,9 @@
-use gpui::{App, FontWeight, HighlightStyle, Hsla};
+use gpui::{App, FontWeight, HighlightStyle, Hsla, SharedString};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::{collections::HashMap, ops::Deref, sync::LazyLock};
 
-use super::LanguageConfig;
 use crate::{
     highlighter::{languages, Language},
     ActiveTheme, Colorize, ThemeMode,
@@ -67,6 +66,36 @@ const DEFAULT_LIGHT: LazyLock<HighlightTheme> = LazyLock::new(|| {
     let json = include_str!("./themes/light.json");
     serde_json::from_str(json).unwrap()
 });
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LanguageConfig {
+    pub name: SharedString,
+    pub language: tree_sitter::Language,
+    pub injection_languages: Vec<SharedString>,
+    pub highlights: SharedString,
+    pub injections: SharedString,
+    pub locals: SharedString,
+}
+
+impl LanguageConfig {
+    pub fn new(
+        name: impl Into<SharedString>,
+        language: tree_sitter::Language,
+        injection_languages: Vec<SharedString>,
+        highlights: &str,
+        injections: &str,
+        locals: &str,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            language,
+            injection_languages,
+            highlights: SharedString::from(highlights.to_string()),
+            injections: SharedString::from(injections.to_string()),
+            locals: SharedString::from(locals.to_string()),
+        }
+    }
+}
 
 /// Theme for Tree-sitter Highlight
 ///

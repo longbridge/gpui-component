@@ -7,7 +7,7 @@ version = "0.1.0"
 [dependencies]
 anyhow.workspace = true
 gpui.workspace = true
-gpui-component = { workspace = true, features = ["webview"] }
+gpui-component = { workspace = true, features = ["webview", "tree-sitter-languages"] }
 
 chrono = "0.4"
 fake = { version = "2.10.0", features = ["dummy"] }

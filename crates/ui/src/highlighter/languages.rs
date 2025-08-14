@@ -1,7 +1,17 @@
 use gpui::SharedString;
 
+use crate::highlighter::LanguageConfig;
+
+#[cfg(not(feature = "tree-sitter-languages"))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, enum_iterator::Sequence)]
 pub enum Language {
+    Json,
+}
+
+#[cfg(feature = "tree-sitter-languages")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, enum_iterator::Sequence)]
+pub enum Language {
+    Json,
     Plain,
     Bash,
     C,
@@ -19,7 +29,6 @@ pub enum Language {
     Java,
     JavaScript,
     JsDoc,
-    Json,
     Make,
     Markdown,
     MarkdownInline,
@@ -37,35 +46,6 @@ pub enum Language {
     Zig,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LanguageConfig {
-    pub name: SharedString,
-    pub language: tree_sitter::Language,
-    pub injection_languages: Vec<SharedString>,
-    pub highlights: SharedString,
-    pub injections: SharedString,
-    pub locals: SharedString,
-}
-
-impl LanguageConfig {
-    pub fn new(
-        name: impl Into<SharedString>,
-        language: tree_sitter::Language,
-        injection_languages: Vec<SharedString>,
-        highlights: &str,
-        injections: &str,
-        locals: &str,
-    ) -> Self {
-        Self {
-            name: name.into(),
-            language,
-            injection_languages,
-            highlights: SharedString::from(highlights.to_string()),
-            injections: SharedString::from(injections.to_string()),
-            locals: SharedString::from(locals.to_string()),
-        }
-    }
-}
 impl From<Language> for SharedString {
     fn from(language: Language) -> Self {
         language.name().into()
@@ -78,6 +58,10 @@ impl Language {
     }
 
     pub fn name(&self) -> &'static str {
+        #[cfg(not(feature = "tree-sitter-languages"))]
+        return "json";
+
+        #[cfg(feature = "tree-sitter-languages")]
         match self {
             Self::Plain => "text",
             Self::Bash => "bash",
@@ -115,7 +99,12 @@ impl Language {
         }
     }
 
+    #[allow(unused)]
     pub fn from_str(s: &str) -> Self {
+        #[cfg(not(feature = "tree-sitter-languages"))]
+        return Self::Json;
+
+        #[cfg(feature = "tree-sitter-languages")]
         match s {
             "bash" | "sh" => Self::Bash,
             "c" => Self::C,
@@ -155,6 +144,10 @@ impl Language {
 
     #[allow(unused)]
     pub(super) fn injection_languages(&self) -> Vec<SharedString> {
+        #[cfg(not(feature = "tree-sitter-languages"))]
+        return vec![];
+
+        #[cfg(feature = "tree-sitter-languages")]
         match self {
             Self::Markdown => vec!["markdown-inline", "html", "toml", "yaml"],
             Self::MarkdownInline => vec![],
@@ -183,6 +176,17 @@ impl Language {
     ///
     /// (language, query, injection, locals)
     pub(super) fn config(&self) -> LanguageConfig {
+        #[cfg(not(feature = "tree-sitter-languages"))]
+        let (language, query, injection, locals) = match self {
+            Self::Json => (
+                tree_sitter_json::LANGUAGE,
+                include_str!("languages/json/highlights.scm"),
+                "",
+                "",
+            ),
+        };
+
+        #[cfg(feature = "tree-sitter-languages")]
         let (language, query, injection, locals) = match self {
             Self::Plain => (tree_sitter_json::LANGUAGE, "", "", ""),
             Self::Json => (
