@@ -258,7 +258,7 @@ impl ListDelegate for CompanyListDelegate {
                 .px_2()
                 .gap_2()
                 .text_sm()
-                .text_color(cx.theme().muted)
+                .text_color(cx.theme().muted_foreground)
                 .child(Icon::new(IconName::Folder))
                 .child(industry.clone()),
         )
