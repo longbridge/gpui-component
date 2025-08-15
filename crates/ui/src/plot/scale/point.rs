@@ -26,7 +26,7 @@ where
                 .into_option()
                 .map_or(0., |(min, max)| max - min);
 
-            range_diff / (len - 1) as f32
+            range_diff / (len as f32)
         };
 
         Self { domain, range_tick }
