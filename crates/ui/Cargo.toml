@@ -87,8 +87,6 @@ markdown = "1.0.0"
 # HTML Parser
 html5ever = "0.27"
 markup5ever_rcdom = "0.3.0"
-# For minifying HTML
-html5minify = "0.3"
 
 # Calendar
 chrono = "0.4.38"
