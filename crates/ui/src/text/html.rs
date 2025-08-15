@@ -13,7 +13,6 @@ use gpui::{
 use html5ever::tendril::TendrilSink;
 use html5ever::{local_name, parse_document, LocalName, ParseOpts};
 use markup5ever_rcdom::{Node, NodeData, RcDom};
-use regex::bytes::Regex;
 
 use crate::v_flex;
 
@@ -85,18 +84,14 @@ pub(super) fn parse_html(source: &str) -> Result<element::Node, SharedString> {
 
 // TODO: Find a better and light-weight HTML minifier
 fn cleanup_html(source: &str) -> Vec<u8> {
-    // Replace all \n to space
-    let re = Regex::new(r"\s*(<.+?>)\s*").unwrap();
-    let source: Vec<u8> = re.replace_all(source.as_bytes(), b" $1 ").into();
-
     let mut w = std::io::Cursor::new(vec![]);
-    let mut r = std::io::Cursor::new(source.clone());
-    let mut minify = html5minify::Minifier::new(&mut w);
+    let mut r = std::io::Cursor::new(source);
+    let mut minify = super::html5minify::Minifier::new(&mut w);
     minify.omit_doctype(true);
     if let Ok(()) = minify.minify(&mut r) {
         w.into_inner()
     } else {
-        source
+        source.bytes().collect()
     }
 }
 
