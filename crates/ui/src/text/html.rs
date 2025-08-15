@@ -91,7 +91,9 @@ fn cleanup_html(source: &str) -> Vec<u8> {
 
     let mut w = std::io::Cursor::new(vec![]);
     let mut r = std::io::Cursor::new(source.clone());
-    if let Ok(()) = html5minify::minify(&mut r, &mut w) {
+    let mut minify = html5minify::Minifier::new(&mut w);
+    minify.omit_doctype(true);
+    if let Ok(()) = minify.minify(&mut r) {
         w.into_inner()
     } else {
         source
@@ -791,7 +793,7 @@ mod tests {
         let cleaned = super::cleanup_html(html);
         assert_eq!(
             String::from_utf8(cleaned).unwrap(),
-            "<p>and <code>code</code> text</p>"
+            "<p>and <code>code</code> text"
         );
 
         let html = r#"<p>
@@ -802,7 +804,7 @@ mod tests {
         let cleaned = super::cleanup_html(html);
         assert_eq!(
             String::from_utf8(cleaned).unwrap(),
-            "<p>and <em> <code>code</code> <i>italic</i> </em> text</p>"
+            "<p>and <em><code>code</code> <i>italic</i></em> text"
         );
     }
 
@@ -838,7 +840,7 @@ mod tests {
         assert_eq!(
             node.to_markdown(),
             indoc::indoc! {r#"
-            and * code italic * text
+            and *code italic* text
 
             ![Example](https://example.com/image.png "Example Image")
 
