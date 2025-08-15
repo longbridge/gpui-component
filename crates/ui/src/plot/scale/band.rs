@@ -48,6 +48,17 @@ impl<T> ScaleBand<T> {
         self.padding_outer = padding_outer;
         self
     }
+
+    /// Get the ratio of the band.
+    fn ratio(&self) -> f32 {
+        1. + self.padding_inner / (self.domain.len() - 1) as f32
+    }
+
+    /// Get the average width of the band for display.
+    fn display_avg_width(&self) -> f32 {
+        let padding_outer_width = self.avg_width * self.padding_outer;
+        (self.range_diff - padding_outer_width * 2.) / self.domain.len() as f32
+    }
 }
 
 impl<T> Scale<T> for ScaleBand<T>
@@ -63,15 +74,29 @@ where
             return Some((self.range_diff - self.band_width()) / 2.);
         }
 
-        let ratio = 1. + self.padding_inner / (self.domain.len() - 1) as f32;
+        let avg_width = self.display_avg_width();
         let padding_outer_width = self.avg_width * self.padding_outer;
-        let avg_width = (self.range_diff - padding_outer_width * 2.) / self.domain.len() as f32;
-        Some(index as f32 * avg_width * ratio + padding_outer_width)
+        Some(index as f32 * avg_width * self.ratio() + padding_outer_width)
     }
 
     fn least_index(&self, tick: f32) -> usize {
-        let index = (tick / self.avg_width).round() as usize;
-        index.min(self.domain.len().saturating_sub(1))
+        if self.domain.is_empty() {
+            return 0;
+        }
+
+        let domain_len = self.domain.len();
+
+        // Handle single element case
+        if domain_len == 1 {
+            return 0;
+        }
+
+        let avg_width = self.display_avg_width();
+        let padding_outer_width = self.avg_width * self.padding_outer;
+        let adjusted_tick = tick - padding_outer_width;
+        let index = (adjusted_tick / (avg_width * self.ratio())).round() as i32;
+
+        (index.max(0) as usize).min(domain_len.saturating_sub(1))
     }
 }
 

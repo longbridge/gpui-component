@@ -43,6 +43,10 @@ where
     }
 
     fn least_index(&self, tick: f32) -> usize {
+        if self.domain.is_empty() {
+            return 0;
+        }
+
         let index = (tick / self.range_tick).round() as usize;
         index.min(self.domain.len().saturating_sub(1))
     }
