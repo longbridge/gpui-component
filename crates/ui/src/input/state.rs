@@ -262,6 +262,10 @@ pub struct InputState {
     pub(super) disabled: bool,
     pub(super) masked: bool,
     pub(super) clean_on_escape: bool,
+    /// Disable word wrap for multi-line input
+    pub(super) disable_word_wrap: bool,
+    /// Show horizontal scrollbar when text overflows
+    pub(super) show_horizontal_scrollbar: bool,
     pub(super) pattern: Option<regex::Regex>,
     pub(super) validate: Option<Box<dyn Fn(&str, &mut Context<Self>) -> bool + 'static>>,
     pub(crate) scroll_handle: ScrollHandle,
@@ -332,6 +336,8 @@ impl InputState {
             disabled: false,
             masked: false,
             clean_on_escape: false,
+            disable_word_wrap: false,
+            show_horizontal_scrollbar: false,
             loading: false,
             pattern: None,
             validate: None,
@@ -746,6 +752,18 @@ impl InputState {
     /// Set true to clear the input by pressing Escape key.
     pub fn clean_on_escape(mut self) -> Self {
         self.clean_on_escape = true;
+        self
+    }
+
+    /// Disable word wrap for multi-line input.
+    pub fn disable_word_wrap(mut self) -> Self {
+        self.disable_word_wrap = true;
+        self
+    }
+
+    /// Show horizontal scrollbar when text overflows.
+    pub fn show_horizontal_scrollbar(mut self) -> Self {
+        self.show_horizontal_scrollbar = true;
         self
     }
 
@@ -2096,8 +2114,12 @@ impl InputState {
 
         // Update text_wrapper wrap_width if changed.
         if wrap_width_changed {
-            self.text_wrapper
-                .set_wrap_width(Some(new_bounds.size.width), cx);
+            let wrap_width = if self.disable_word_wrap {
+                None // Use None to disable wrapping (will use Pixels::MAX)
+            } else {
+                Some(new_bounds.size.width)
+            };
+            self.text_wrapper.set_wrap_width(wrap_width, cx);
             self.mode.update_auto_grow(&self.text_wrapper);
         }
     }
