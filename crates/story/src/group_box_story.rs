@@ -9,7 +9,7 @@ use gpui_component::{
     group_box::GroupBox,
     radio::{Radio, RadioGroup},
     text::TextView,
-    v_flex, StyledExt,
+    v_flex, ActiveTheme as _, StyledExt,
 };
 
 use crate::section;
@@ -51,7 +51,7 @@ impl Focusable for GroupBoxStory {
 }
 
 impl Render for GroupBoxStory {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex().gap_6().child(
             v_flex()
                 .items_start()
@@ -80,6 +80,9 @@ impl Render for GroupBoxStory {
                     section("Custom style").w_128().child(
                         GroupBox::new()
                             .outline()
+                            .bg(cx.theme().secondary)
+                            .rounded_xl()
+                            .p_5()
                             .title("This is a custom style")
                             .title_style(StyleRefinement::default().font_semibold().line_height(relative(1.0)).px_3())
                             .content_style(
