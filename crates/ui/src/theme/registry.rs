@@ -1,16 +1,37 @@
-use crate::ThemeConfig;
-use crate::ThemeMode;
-use crate::ThemeSet;
 use anyhow::Result;
 use gpui::{App, Global, SharedString};
 use notify::Watcher as _;
 use std::{collections::HashMap, fs, path::PathBuf, rc::Rc};
+
+use crate::{Theme, ThemeConfig, ThemeMode, ThemeSet};
 
 const DEFAULT_THEME: &str = include_str!("../../../../themes/default.json");
 
 pub(super) fn init(cx: &mut App) {
     cx.set_global(ThemeRegistry::default());
     ThemeRegistry::global_mut(cx).init_default_themes();
+
+    // Observe changes to the theme registry to apply changes to the active theme
+    cx.observe_global::<ThemeRegistry>(|cx| {
+        tracing::info!("Reload active theme...");
+        let light_theme = Theme::global(cx).light_theme.name.clone();
+        let dark_theme = Theme::global(cx).dark_theme.name.clone();
+        if let Some(theme) = ThemeRegistry::global(cx)
+            .themes()
+            .get(&light_theme)
+            .cloned()
+        {
+            Theme::global_mut(cx).light_theme = theme;
+        }
+        if let Some(theme) = ThemeRegistry::global(cx).themes().get(&dark_theme).cloned() {
+            Theme::global_mut(cx).dark_theme = theme;
+        }
+        let mode = Theme::global(cx).mode;
+
+        Theme::change(mode, None, cx);
+        cx.refresh_windows();
+    })
+    .detach();
 }
 
 #[derive(Default, Debug)]
@@ -57,14 +78,29 @@ impl ThemeRegistry {
         Ok(())
     }
 
+    /// Returns a reference to the map of themes (including default themes).
+    pub fn themes(&self) -> &HashMap<SharedString, Rc<ThemeConfig>> {
+        &self.themes
+    }
+
+    /// Returns a sorted list of themes.
+    pub fn sorted_themes(&self) -> Vec<&Rc<ThemeConfig>> {
+        let mut themes = self.themes.values().collect::<Vec<_>>();
+        themes.sort_by(|a, b| a.is_default.cmp(&b.is_default).then(a.name.cmp(&b.name)));
+        themes
+    }
+
     /// Returns a reference to the map of default themes.
     pub fn default_themes(&self) -> &HashMap<ThemeMode, Rc<ThemeConfig>> {
         &self.default_themes
     }
 
-    /// Returns a reference to the map of themes (including default themes).
-    pub fn themes(&self) -> &HashMap<SharedString, Rc<ThemeConfig>> {
-        &self.themes
+    pub fn default_light_theme(&self) -> &Rc<ThemeConfig> {
+        &self.default_themes[&ThemeMode::Light]
+    }
+
+    pub fn default_dark_theme(&self) -> &Rc<ThemeConfig> {
+        &self.default_themes[&ThemeMode::Dark]
     }
 
     fn init_default_themes(&mut self) {
@@ -163,12 +199,7 @@ impl ThemeRegistry {
             }
         }
 
-        self.themes = self
-            .default_themes
-            .values()
-            .map(|v| (v.name.clone(), Rc::clone(v)))
-            .collect();
-
+        self.themes.clear();
         for theme in themes.iter() {
             if self.themes.contains_key(&theme.name) {
                 continue;

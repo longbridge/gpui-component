@@ -77,10 +77,6 @@ impl Render for ThemeSwitcher {
                     ThemeRegistry::global(cx).themes().get(&theme_name).cloned()
                 {
                     Theme::global_mut(cx).apply_config(&theme_config);
-                } else if theme_name == "default-light" {
-                    Theme::global_mut(cx).set_default_light();
-                } else if theme_name == "default-dark" {
-                    Theme::global_mut(cx).set_default_dark();
                 }
 
                 // Save AppState
@@ -101,25 +97,12 @@ impl Render for ThemeSwitcher {
                     .popup_menu({
                         let current_theme_id = self.current_theme_name.clone();
                         move |menu, _, cx| {
-                            let mut menu = menu
-                                .scrollable()
-                                .max_h(px(600.))
-                                .menu_with_check(
-                                    "Default Light",
-                                    current_theme_id == "default-light",
-                                    Box::new(SwitchTheme("default-light".into())),
-                                )
-                                .menu_with_check(
-                                    "Default Dark",
-                                    current_theme_id == "default-dark",
-                                    Box::new(SwitchTheme("default-dark".into())),
-                                );
+                            let mut menu = menu.scrollable().max_h(px(600.));
 
                             let mut names = ThemeRegistry::global(cx)
-                                .themes()
+                                .sorted_themes()
                                 .iter()
-                                .filter(|(_, theme)| !theme.is_default)
-                                .map(|(name, _)| name.clone())
+                                .map(|theme| theme.name.clone())
                                 .collect::<Vec<SharedString>>();
                             names.sort();
 

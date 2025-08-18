@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{rc::Rc, sync::Arc};
 
 use anyhow::Result;
 use gpui::{Hsla, SharedString};
@@ -383,7 +383,7 @@ fn try_parse_color(color: &str) -> Result<Hsla> {
 
 impl Theme {
     /// Apply the given theme configuration to the current theme.
-    pub fn apply_config(&mut self, config: &ThemeConfig) {
+    pub fn apply_config(&mut self, config: &Rc<ThemeConfig>) {
         let colors = config.colors.clone();
         let default_theme = if config.mode.is_dark() {
             ThemeColor::dark()
@@ -541,9 +541,9 @@ impl Theme {
         self.colors.table_active = self.colors.table_active.alpha(0.2);
 
         if config.mode.is_dark() {
-            self.dark_theme = self.colors;
+            self.dark_theme = config.clone();
         } else {
-            self.light_theme = self.colors;
+            self.light_theme = config.clone();
         }
 
         if let Some(style) = &config.highlight {
@@ -553,11 +553,6 @@ impl Theme {
                 style: style.clone(),
             });
             self.highlight_theme = highlight_theme.clone();
-            if config.mode.is_dark() {
-                self.dark_highlight_theme = highlight_theme;
-            } else {
-                self.light_highlight_theme = highlight_theme;
-            }
         }
     }
 }

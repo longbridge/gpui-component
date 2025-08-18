@@ -4,6 +4,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{
     ops::{Deref, DerefMut},
+    rc::Rc,
     sync::Arc,
 };
 
@@ -38,11 +39,9 @@ impl ActiveTheme for App {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct Theme {
     pub colors: ThemeColor,
-    pub light_theme: ThemeColor,
-    pub dark_theme: ThemeColor,
     pub highlight_theme: Arc<HighlightTheme>,
-    pub light_highlight_theme: Arc<HighlightTheme>,
-    pub dark_highlight_theme: Arc<HighlightTheme>,
+    pub light_theme: Rc<ThemeConfig>,
+    pub dark_theme: Rc<ThemeConfig>,
 
     pub mode: ThemeMode,
     pub font_family: SharedString,
@@ -102,21 +101,21 @@ impl Theme {
         self.mode.is_dark()
     }
 
-    /// Sets the theme to default light.
-    pub fn set_default_light(&mut self) {
-        self.light_theme = ThemeColor::light();
-        self.colors = ThemeColor::light();
-        self.light_highlight_theme = Arc::new(HighlightTheme::default_light());
-        self.highlight_theme = self.light_highlight_theme.clone();
-    }
+    // /// Sets the theme to default light.
+    // pub fn set_default_light(&mut self) {
+    //     self.light_theme = ThemeColor::light();
+    //     self.colors = ThemeColor::light();
+    //     self.light_highlight_theme = Arc::new(HighlightTheme::default_light());
+    //     self.highlight_theme = self.light_highlight_theme.clone();
+    // }
 
-    /// Sets the theme to default dark.
-    pub fn set_default_dark(&mut self) {
-        self.dark_theme = ThemeColor::dark();
-        self.colors = ThemeColor::dark();
-        self.dark_highlight_theme = Arc::new(HighlightTheme::default_dark());
-        self.highlight_theme = self.dark_highlight_theme.clone();
-    }
+    // /// Sets the theme to default dark.
+    // pub fn set_default_dark(&mut self) {
+    //     self.dark_theme = ThemeColor::dark();
+    //     self.colors = ThemeColor::dark();
+    //     self.dark_highlight_theme = Arc::new(HighlightTheme::default_dark());
+    //     self.highlight_theme = self.dark_highlight_theme.clone();
+    // }
 
     /// Sync the theme with the system appearance
     pub fn sync_system_appearance(window: Option<&mut Window>, cx: &mut App) {
@@ -147,18 +146,19 @@ impl Theme {
                 ThemeMode::Dark => ThemeColor::dark(),
             };
             let mut theme = Theme::from(colors);
-            theme.light_theme = ThemeColor::light();
-            theme.dark_theme = ThemeColor::dark();
+
+            theme.light_theme = ThemeRegistry::global(cx).default_light_theme().clone();
+            theme.dark_theme = ThemeRegistry::global(cx).default_dark_theme().clone();
             cx.set_global(theme);
         }
 
         let theme = cx.global_mut::<Theme>();
         theme.mode = mode;
-        theme.colors = if mode.is_dark() {
-            theme.dark_theme
+        if mode.is_dark() {
+            theme.apply_config(&theme.dark_theme.clone());
         } else {
-            theme.light_theme
-        };
+            theme.apply_config(&theme.light_theme.clone());
+        }
 
         if let Some(window) = window {
             window.refresh();
@@ -168,12 +168,8 @@ impl Theme {
 
 impl From<ThemeColor> for Theme {
     fn from(colors: ThemeColor) -> Self {
-        let mode = ThemeMode::default();
-        let light_highlight_theme = Arc::new(HighlightTheme::default_light());
-        let dark_highlight_theme = Arc::new(HighlightTheme::default_dark());
-
         Theme {
-            mode,
+            mode: ThemeMode::default(),
             transparent: Hsla::transparent_black(),
             font_size: px(16.),
             font_family: if cfg!(target_os = "macos") {
@@ -190,11 +186,9 @@ impl From<ThemeColor> for Theme {
             tile_grid_size: px(8.),
             tile_shadow: true,
             colors,
-            light_theme: ThemeColor::light(),
-            dark_theme: ThemeColor::dark(),
-            highlight_theme: light_highlight_theme.clone(),
-            light_highlight_theme: light_highlight_theme,
-            dark_highlight_theme: dark_highlight_theme,
+            light_theme: Rc::new(ThemeConfig::default()),
+            dark_theme: Rc::new(ThemeConfig::default()),
+            highlight_theme: Arc::new(HighlightTheme::default_light()),
         }
     }
 }
