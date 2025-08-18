@@ -709,7 +709,7 @@ dependencies = [
  "bitflags 2.9.1",
  "cexpr",
  "clang-sys",
- "itertools 0.12.1",
+ "itertools 0.11.0",
  "lazy_static",
  "lazycell",
  "log",
@@ -732,7 +732,7 @@ dependencies = [
  "bitflags 2.9.1",
  "cexpr",
  "clang-sys",
- "itertools 0.13.0",
+ "itertools 0.11.0",
  "log",
  "prettyplease",
  "proc-macro2",
@@ -1401,7 +1401,7 @@ dependencies = [
 [[package]]
 name = "collections"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#ffac8c512858789158d3c52d2cd50bca3a904f54"
+source = "git+https://github.com/zed-industries/zed.git#2dbc951058fe0b2325bca2452da330f2bafa34d7"
 dependencies = [
  "indexmap 2.10.0",
  "rustc-hash 2.1.1",
@@ -1870,7 +1870,7 @@ dependencies = [
 [[package]]
 name = "derive_refineable"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#ffac8c512858789158d3c52d2cd50bca3a904f54"
+source = "git+https://github.com/zed-industries/zed.git#2dbc951058fe0b2325bca2452da330f2bafa34d7"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3049,7 +3049,7 @@ dependencies = [
 [[package]]
 name = "gpui"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#ffac8c512858789158d3c52d2cd50bca3a904f54"
+source = "git+https://github.com/zed-industries/zed.git#2dbc951058fe0b2325bca2452da330f2bafa34d7"
 dependencies = [
  "anyhow",
  "as-raw-xcb-connection",
@@ -3232,7 +3232,7 @@ dependencies = [
 [[package]]
 name = "gpui_macros"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#ffac8c512858789158d3c52d2cd50bca3a904f54"
+source = "git+https://github.com/zed-industries/zed.git#2dbc951058fe0b2325bca2452da330f2bafa34d7"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -3501,7 +3501,7 @@ dependencies = [
 [[package]]
 name = "http_client"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#ffac8c512858789158d3c52d2cd50bca3a904f54"
+source = "git+https://github.com/zed-industries/zed.git#2dbc951058fe0b2325bca2452da330f2bafa34d7"
 dependencies = [
  "anyhow",
  "bytes",
@@ -3521,7 +3521,7 @@ dependencies = [
 [[package]]
 name = "http_client_tls"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#ffac8c512858789158d3c52d2cd50bca3a904f54"
+source = "git+https://github.com/zed-industries/zed.git#2dbc951058fe0b2325bca2452da330f2bafa34d7"
 dependencies = [
  "rustls",
  "rustls-platform-verifier",
@@ -3625,7 +3625,7 @@ dependencies = [
  "js-sys",
  "log",
  "wasm-bindgen",
- "windows-core 0.61.2",
+ "windows-core 0.58.0",
 ]
 
 [[package]]
@@ -4435,7 +4435,7 @@ dependencies = [
 [[package]]
 name = "media"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#ffac8c512858789158d3c52d2cd50bca3a904f54"
+source = "git+https://github.com/zed-industries/zed.git#2dbc951058fe0b2325bca2452da330f2bafa34d7"
 dependencies = [
  "anyhow",
  "bindgen 0.71.1",
@@ -4842,7 +4842,7 @@ version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77e878c846a8abae00dd069496dbe8751b16ac1c3d6bd2a7283a938e8228f90d"
 dependencies = [
- "proc-macro-crate 3.3.0",
+ "proc-macro-crate 1.3.1",
  "proc-macro2",
  "quote",
  "syn 2.0.105",
@@ -6289,7 +6289,7 @@ dependencies = [
 [[package]]
 name = "refineable"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#ffac8c512858789158d3c52d2cd50bca3a904f54"
+source = "git+https://github.com/zed-industries/zed.git#2dbc951058fe0b2325bca2452da330f2bafa34d7"
 dependencies = [
  "derive_refineable",
  "workspace-hack",
@@ -6442,7 +6442,7 @@ dependencies = [
 [[package]]
 name = "reqwest_client"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#ffac8c512858789158d3c52d2cd50bca3a904f54"
+source = "git+https://github.com/zed-industries/zed.git#2dbc951058fe0b2325bca2452da330f2bafa34d7"
 dependencies = [
  "anyhow",
  "bytes",
@@ -7019,7 +7019,7 @@ checksum = "0f7d95a54511e0c7be3f51e8867aa8cf35148d7b9445d44de2f943e2b206e749"
 [[package]]
 name = "semantic_version"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#ffac8c512858789158d3c52d2cd50bca3a904f54"
+source = "git+https://github.com/zed-industries/zed.git#2dbc951058fe0b2325bca2452da330f2bafa34d7"
 dependencies = [
  "anyhow",
  "serde",
@@ -7608,7 +7608,7 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 [[package]]
 name = "sum_tree"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#ffac8c512858789158d3c52d2cd50bca3a904f54"
+source = "git+https://github.com/zed-industries/zed.git#2dbc951058fe0b2325bca2452da330f2bafa34d7"
 dependencies = [
  "arrayvec",
  "log",
@@ -8918,7 +8918,7 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 [[package]]
 name = "util"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#ffac8c512858789158d3c52d2cd50bca3a904f54"
+source = "git+https://github.com/zed-industries/zed.git#2dbc951058fe0b2325bca2452da330f2bafa34d7"
 dependencies = [
  "anyhow",
  "async-fs 2.1.3",
@@ -10342,7 +10342,7 @@ checksum = "bec9e4a500ca8864c5b47b8b482a73d62e4237670e5b5f1d6b9e3cae50f28f2b"
 [[package]]
 name = "xim"
 version = "0.4.0"
-source = "git+https://github.com/XDeme1/xim-rs?rev=d50d461764c2213655cd9cf65a0ea94c70d3c4fd#d50d461764c2213655cd9cf65a0ea94c70d3c4fd"
+source = "git+https://github.com/zed-industries/xim-rs?rev=c0a70c1bd2ce197364216e5e818a2cb3adb99a8d#c0a70c1bd2ce197364216e5e818a2cb3adb99a8d"
 dependencies = [
  "ahash 0.8.12",
  "hashbrown 0.14.5",
@@ -10355,7 +10355,7 @@ dependencies = [
 [[package]]
 name = "xim-ctext"
 version = "0.3.0"
-source = "git+https://github.com/XDeme1/xim-rs?rev=d50d461764c2213655cd9cf65a0ea94c70d3c4fd#d50d461764c2213655cd9cf65a0ea94c70d3c4fd"
+source = "git+https://github.com/zed-industries/xim-rs?rev=c0a70c1bd2ce197364216e5e818a2cb3adb99a8d#c0a70c1bd2ce197364216e5e818a2cb3adb99a8d"
 dependencies = [
  "encoding_rs",
 ]
@@ -10363,7 +10363,7 @@ dependencies = [
 [[package]]
 name = "xim-parser"
 version = "0.2.1"
-source = "git+https://github.com/XDeme1/xim-rs?rev=d50d461764c2213655cd9cf65a0ea94c70d3c4fd#d50d461764c2213655cd9cf65a0ea94c70d3c4fd"
+source = "git+https://github.com/zed-industries/xim-rs?rev=c0a70c1bd2ce197364216e5e818a2cb3adb99a8d#c0a70c1bd2ce197364216e5e818a2cb3adb99a8d"
 dependencies = [
  "bitflags 2.9.1",
 ]

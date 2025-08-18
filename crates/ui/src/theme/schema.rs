@@ -67,12 +67,15 @@ pub struct ThemeConfigColors {
     /// Default border color
     #[serde(rename = "border")]
     pub border: Option<SharedString>,
-    /// Background color for Card.
-    #[serde(rename = "card.background")]
-    pub card: Option<SharedString>,
-    /// Text color for Card.
-    #[serde(rename = "card.foreground")]
-    pub card_foreground: Option<SharedString>,
+    /// Background color for GroupBox.
+    #[serde(rename = "group_box.background")]
+    pub group_box: Option<SharedString>,
+    /// Text color for GroupBox.
+    #[serde(rename = "group_box.foreground")]
+    pub group_box_foreground: Option<SharedString>,
+    /// Title text color for GroupBox.
+    #[serde(rename = "group_box.title.foreground")]
+    pub group_box_title_foreground: Option<SharedString>,
     /// Input caret color (Blinking cursor).
     #[serde(rename = "caret")]
     pub caret: Option<SharedString>,
@@ -446,8 +449,12 @@ impl Theme {
         apply_color!(accordion, fallback = self.background);
         apply_color!(accordion_active, fallback = self.accordion);
         apply_color!(accordion_hover, fallback = self.accordion);
-        apply_color!(card, fallback = self.background);
-        apply_color!(card_foreground, fallback = self.foreground);
+        apply_color!(group_box, fallback = self.secondary);
+        apply_color!(group_box_foreground, fallback = self.secondary_foreground);
+        apply_color!(
+            group_box_title_foreground,
+            fallback = self.secondary_foreground
+        );
         apply_color!(caret, fallback = self.primary);
         apply_color!(chart_1, fallback = self.blue.lighten(0.4));
         apply_color!(chart_2, fallback = self.blue.lighten(0.2));
