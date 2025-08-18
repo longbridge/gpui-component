@@ -9,7 +9,6 @@ use std::{collections::HashMap, fs, path::PathBuf, rc::Rc};
 const DEFAULT_THEME: &str = include_str!("../../../../themes/default.json");
 
 pub(super) fn init(cx: &mut App) {
-    tracing::info!("Init theme registry...");
     cx.set_global(ThemeRegistry::default());
     ThemeRegistry::global_mut(cx).init_default_themes();
 }
