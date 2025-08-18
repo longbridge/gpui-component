@@ -99,12 +99,11 @@ impl Render for ThemeSwitcher {
                         move |menu, _, cx| {
                             let mut menu = menu.scrollable().max_h(px(600.));
 
-                            let mut names = ThemeRegistry::global(cx)
+                            let names = ThemeRegistry::global(cx)
                                 .sorted_themes()
                                 .iter()
                                 .map(|theme| theme.name.clone())
                                 .collect::<Vec<SharedString>>();
-                            names.sort();
 
                             for theme_name in names {
                                 let is_selected = theme_name == current_theme_id;

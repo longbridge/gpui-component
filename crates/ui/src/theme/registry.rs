@@ -118,7 +118,12 @@ impl ThemeRegistry {
     /// Returns a sorted list of themes.
     pub fn sorted_themes(&self) -> Vec<&Rc<ThemeConfig>> {
         let mut themes = self.themes.values().collect::<Vec<_>>();
-        themes.sort_by(|a, b| a.is_default.cmp(&b.is_default).then(a.name.cmp(&b.name)));
+        // sort by is_default true first, then light first dark later, then by name case-insensitive
+        themes.sort_by(|a, b| {
+            b.is_default
+                .cmp(&a.is_default)
+                .then(a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+        });
         themes
     }
 
@@ -139,8 +144,7 @@ impl ThemeRegistry {
         let default_themes: Vec<ThemeConfig> = serde_json::from_str::<ThemeSet>(DEFAULT_THEME)
             .expect("failed to parse default theme.")
             .themes;
-        for mut theme in default_themes.into_iter() {
-            theme.is_default = true;
+        for theme in default_themes.into_iter() {
             if theme.mode.is_dark() {
                 self.default_themes.insert(ThemeMode::Dark, Rc::new(theme));
             } else {
