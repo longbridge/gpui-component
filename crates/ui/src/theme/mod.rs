@@ -62,7 +62,7 @@ pub struct Theme {
 
 impl Default for Theme {
     fn default() -> Self {
-        Self::from(ThemeColor::light())
+        Self::from(ThemeColor::default())
     }
 }
 
@@ -141,12 +141,7 @@ impl Theme {
     pub fn change(mode: impl Into<ThemeMode>, window: Option<&mut Window>, cx: &mut App) {
         let mode = mode.into();
         if !cx.has_global::<Theme>() {
-            let colors = match mode {
-                ThemeMode::Light => ThemeColor::light(),
-                ThemeMode::Dark => ThemeColor::dark(),
-            };
-            let mut theme = Theme::from(colors);
-
+            let mut theme = Theme::default();
             theme.light_theme = ThemeRegistry::global(cx).default_light_theme().clone();
             theme.dark_theme = ThemeRegistry::global(cx).default_dark_theme().clone();
             cx.set_global(theme);
@@ -188,7 +183,7 @@ impl From<ThemeColor> for Theme {
             colors,
             light_theme: Rc::new(ThemeConfig::default()),
             dark_theme: Rc::new(ThemeConfig::default()),
-            highlight_theme: Arc::new(HighlightTheme::default_light()),
+            highlight_theme: HighlightTheme::default_light(),
         }
     }
 }
