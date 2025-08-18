@@ -79,7 +79,7 @@ impl RenderOnce for GroupBox {
                 this.child(
                     div()
                         .px_4()
-                        .text_color(cx.theme().group_box_title_foreground)
+                        .text_color(cx.theme().group_box_foreground)
                         .line_height(relative(1.))
                         .refine_style(&self.title_style)
                         .child(title),

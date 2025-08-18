@@ -451,10 +451,6 @@ impl Theme {
         apply_color!(accordion_hover, fallback = self.accordion);
         apply_color!(group_box, fallback = self.secondary);
         apply_color!(group_box_foreground, fallback = self.secondary_foreground);
-        apply_color!(
-            group_box_title_foreground,
-            fallback = self.secondary_foreground
-        );
         apply_color!(caret, fallback = self.primary);
         apply_color!(chart_1, fallback = self.blue.lighten(0.4));
         apply_color!(chart_2, fallback = self.blue.lighten(0.2));

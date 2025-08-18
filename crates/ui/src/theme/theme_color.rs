@@ -23,8 +23,6 @@ pub struct ThemeColor {
     pub group_box: Hsla,
     /// Text color for GroupBox.
     pub group_box_foreground: Hsla,
-    /// Title color for GroupBox.
-    pub group_box_title_foreground: Hsla,
     /// Input caret color (Blinking cursor).
     pub caret: Hsla,
     /// Chart 1 color.
@@ -226,7 +224,6 @@ impl ThemeColor {
             border: neutral_200(),
             group_box: neutral_100(),
             group_box_foreground: neutral_900(),
-            group_box_title_foreground: neutral_900(),
             caret: neutral_950(),
             chart_1: blue_300(),
             chart_2: blue_500(),
@@ -338,7 +335,6 @@ impl ThemeColor {
             border: neutral_800(),
             group_box: neutral_900(),
             group_box_foreground: neutral_50(),
-            group_box_title_foreground: neutral_50(),
             caret: neutral_50(),
             chart_1: blue_300(),
             chart_2: blue_500(),
