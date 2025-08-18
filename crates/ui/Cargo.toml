@@ -59,6 +59,7 @@ smallvec.workspace = true
 smol.workspace = true
 tracing.workspace = true
 anyhow.workspace = true
+notify.workspace = true
 
 enum-iterator = "2.1.0"
 futures-util = "0.3.31"

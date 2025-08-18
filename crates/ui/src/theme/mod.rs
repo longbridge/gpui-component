@@ -8,13 +8,18 @@ use std::{
 };
 
 mod color;
+mod registry;
 mod schema;
 mod theme_color;
+
 pub use color::*;
+pub use registry::*;
 pub use schema::*;
 pub use theme_color::*;
 
 pub fn init(cx: &mut App) {
+    registry::init(cx);
+
     Theme::sync_system_appearance(None, cx);
     Theme::sync_scrollbar_appearance(cx);
 }

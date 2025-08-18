@@ -33,6 +33,7 @@ rust-i18n = "3"
 raw-window-handle = "0.6.2"
 smol = "1"
 tracing = "0.1.41"
+notify = "7.0.0"
 
 [workspace.dependencies.windows]
 features = ["Wdk", "Wdk_System", "Wdk_System_SystemServices"]

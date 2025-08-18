@@ -32,6 +32,8 @@ pub struct ThemeSet {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
 pub struct ThemeConfig {
+    /// Whether this theme is the default theme.
+    pub is_default: bool,
     /// The name of the theme.
     pub name: SharedString,
     /// The mode of the theme, default is light.
