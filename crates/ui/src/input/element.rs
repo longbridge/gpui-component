@@ -656,7 +656,7 @@ impl Element for TextElement {
             vec![run]
         };
 
-        let wrap_width = if multi_line {
+        let wrap_width = if multi_line && !state.disable_word_wrap {
             Some(bounds.size.width - line_number_width - RIGHT_MARGIN)
         } else {
             None
