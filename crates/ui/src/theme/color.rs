@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fmt::Display};
 
-use gpui::{hsla, Background, Hsla, SharedString};
+use gpui::{hsla, Hsla, SharedString};
 use serde::{de::Error, Deserialize, Deserializer};
 
 use anyhow::Result;
