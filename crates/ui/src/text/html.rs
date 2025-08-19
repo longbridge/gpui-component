@@ -152,7 +152,11 @@ impl HtmlState {
 
 impl RenderOnce for HtmlElement {
     fn render(self, window: &mut Window, cx: &mut gpui::App) -> impl IntoElement {
-        let state = window.use_keyed_state(self.id, cx, |_, _| HtmlState::default());
+        let state = window.use_keyed_state(
+            ElementId::Name(format!("{}-state", self.id.to_string()).into()),
+            cx,
+            |_, _| HtmlState::default(),
+        );
         state.update(cx, |state, _| {
             state.parse_if_needed(self.text.clone());
         });

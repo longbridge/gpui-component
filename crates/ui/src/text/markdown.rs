@@ -1,9 +1,6 @@
 use std::time::Instant;
 
-use gpui::{
-    div, prelude::FluentBuilder as _, AnyElement, App, Element, ElementId, IntoElement,
-    ParentElement, SharedString, Styled, Window,
-};
+use gpui::{App, ElementId, IntoElement, ParentElement, RenderOnce, SharedString, Styled, Window};
 use markdown::{
     mdast::{self, Node},
     ParseOptions,
@@ -25,7 +22,7 @@ use super::{
 /// to let us to display rich text in our application.
 ///
 /// See also [`super::TextView`]
-#[derive(Clone)]
+#[derive(Clone, IntoElement)]
 pub(super) struct MarkdownElement {
     id: ElementId,
     pub(super) text: SharedString,
@@ -86,83 +83,31 @@ impl MarkdownState {
     }
 }
 
-impl IntoElement for MarkdownElement {
-    type Element = Self;
-
-    fn into_element(self) -> Self::Element {
-        self
-    }
-}
-
-impl Element for MarkdownElement {
-    type RequestLayoutState = AnyElement;
-    type PrepaintState = ();
-
-    fn id(&self) -> Option<gpui::ElementId> {
-        Some(self.id.clone())
-    }
-
-    fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
-        None
-    }
-
-    fn request_layout(
-        &mut self,
-        id: Option<&gpui::GlobalElementId>,
-        _: Option<&gpui::InspectorElementId>,
-        window: &mut Window,
-        cx: &mut gpui::App,
-    ) -> (gpui::LayoutId, Self::RequestLayoutState) {
-        window.with_element_state(id.unwrap(), |state, window| {
-            let mut state: MarkdownState = state.unwrap_or_default();
+impl RenderOnce for MarkdownElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let state = window.use_keyed_state(
+            ElementId::Name(format!("{}-state", self.id.to_string()).into()),
+            cx,
+            |_, _| MarkdownState::default(),
+        );
+        state.update(cx, |state, cx| {
             state.parse_if_needed(self.text.clone(), &self.style, cx);
+        });
 
-            let root = state
-                .root
-                .clone()
-                .expect("BUG: root should not None, maybe parse_if_needed issue.");
+        let root = state
+            .read(cx)
+            .root
+            .clone()
+            .expect("BUG: root should not None, maybe parse_if_needed issue.");
 
-            let mut el = div()
-                .map(|this| match root {
-                    Ok(node) => this.child(node.render_root(&self.style, window, cx)),
-                    Err(err) => this.child(
-                        v_flex()
-                            .gap_1()
-                            .child("Error parsing Markdown")
-                            .child(err.to_string()),
-                    ),
-                })
-                .into_any_element();
-
-            let layout_id = el.request_layout(window, cx);
-
-            ((layout_id, el), state)
-        })
-    }
-
-    fn prepaint(
-        &mut self,
-        _: Option<&gpui::GlobalElementId>,
-        _: Option<&gpui::InspectorElementId>,
-        _: gpui::Bounds<gpui::Pixels>,
-        request_layout: &mut Self::RequestLayoutState,
-        window: &mut Window,
-        cx: &mut gpui::App,
-    ) -> Self::PrepaintState {
-        request_layout.prepaint(window, cx);
-    }
-
-    fn paint(
-        &mut self,
-        _: Option<&gpui::GlobalElementId>,
-        _: Option<&gpui::InspectorElementId>,
-        _: gpui::Bounds<gpui::Pixels>,
-        request_layout: &mut Self::RequestLayoutState,
-        _: &mut Self::PrepaintState,
-        window: &mut Window,
-        cx: &mut gpui::App,
-    ) {
-        request_layout.paint(window, cx);
+        match root {
+            Ok(root) => root.render_root(&self.style, window, cx).into_any_element(),
+            Err(err) => v_flex()
+                .gap_1()
+                .child("Error parsing Markdown")
+                .child(err.to_string())
+                .into_any_element(),
+        }
     }
 }
 

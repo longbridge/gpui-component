@@ -2,15 +2,13 @@ use std::{ops::Range, rc::Rc};
 
 use gpui::{
     div, img, prelude::FluentBuilder as _, px, relative, rems, AnyElement, App, DefiniteLength,
-    Div, ElementId, FontStyle, FontWeight, GlobalElementId, Half, HighlightStyle,
-    InteractiveElement as _, InteractiveText, IntoElement, Length, ObjectFit, ParentElement, Rems,
-    RenderOnce, SharedString, SharedUri, Styled, StyledImage as _, StyledText, Window,
+    Div, ElementId, FontStyle, FontWeight, Half, HighlightStyle, InteractiveElement as _,
+    InteractiveText, IntoElement, Length, ObjectFit, ParentElement, Rems, RenderOnce, SharedString,
+    SharedUri, Styled, StyledImage as _, StyledText, Window,
 };
 use markdown::mdast;
 
-use crate::{
-    h_flex, highlighter::SyntaxHighlighter, v_flex, ActiveTheme as _, Icon, IconName, StyledExt,
-};
+use crate::{h_flex, highlighter::SyntaxHighlighter, v_flex, ActiveTheme as _, Icon, IconName};
 
 use super::{utils::list_item_prefix, TextViewStyle};
 
@@ -541,61 +539,68 @@ impl Node {
 
         match item {
             Node::Table(table) => div()
-                .id("table")
-                .mb(rems(1.))
-                .w_full()
-                .border_1()
-                .border_color(cx.theme().border)
-                .rounded(cx.theme().radius)
-                .children({
-                    let mut rows = Vec::with_capacity(table.children.len());
-                    for (row_ix, row) in table.children.iter().enumerate() {
-                        rows.push(
-                            div()
-                                .id("row")
-                                .w_full()
-                                .when(row_ix < table.children.len() - 1, |this| this.border_b_1())
-                                .border_color(cx.theme().border)
-                                .flex()
-                                .flex_row()
-                                .children({
-                                    let mut cells = Vec::with_capacity(row.children.len());
-                                    for (ix, cell) in row.children.iter().enumerate() {
-                                        let align = table.column_align(ix);
-                                        let is_last_col = ix == row.children.len() - 1;
-                                        let len = col_lens
-                                            .get(ix)
-                                            .copied()
-                                            .unwrap_or(MAX_LENGTH)
-                                            .min(MAX_LENGTH);
+                .pb(rems(1.))
+                .child(
+                    div()
+                        .id("table")
+                        .w_full()
+                        .border_1()
+                        .border_color(cx.theme().border)
+                        .rounded(cx.theme().radius)
+                        .children({
+                            let mut rows = Vec::with_capacity(table.children.len());
+                            for (row_ix, row) in table.children.iter().enumerate() {
+                                rows.push(
+                                    div()
+                                        .id("row")
+                                        .w_full()
+                                        .when(row_ix < table.children.len() - 1, |this| {
+                                            this.border_b_1()
+                                        })
+                                        .border_color(cx.theme().border)
+                                        .flex()
+                                        .flex_row()
+                                        .children({
+                                            let mut cells = Vec::with_capacity(row.children.len());
+                                            for (ix, cell) in row.children.iter().enumerate() {
+                                                let align = table.column_align(ix);
+                                                let is_last_col = ix == row.children.len() - 1;
+                                                let len = col_lens
+                                                    .get(ix)
+                                                    .copied()
+                                                    .unwrap_or(MAX_LENGTH)
+                                                    .min(MAX_LENGTH);
 
-                                        cells.push(
-                                            div()
-                                                .id("cell")
-                                                .flex()
-                                                .when(align == ColumnumnAlign::Center, |this| {
-                                                    this.justify_center()
-                                                })
-                                                .when(align == ColumnumnAlign::Right, |this| {
-                                                    this.justify_end()
-                                                })
-                                                .w(Length::Definite(relative(len as f32)))
-                                                .px_2()
-                                                .py_1()
-                                                .when(!is_last_col, |this| {
-                                                    this.border_r_1()
-                                                        .border_color(cx.theme().border)
-                                                })
-                                                .truncate()
-                                                .child(cell.children.clone()),
-                                        )
-                                    }
-                                    cells
-                                }),
-                        )
-                    }
-                    rows
-                })
+                                                cells.push(
+                                                    div()
+                                                        .id("cell")
+                                                        .flex()
+                                                        .when(
+                                                            align == ColumnumnAlign::Center,
+                                                            |this| this.justify_center(),
+                                                        )
+                                                        .when(
+                                                            align == ColumnumnAlign::Right,
+                                                            |this| this.justify_end(),
+                                                        )
+                                                        .w(Length::Definite(relative(len as f32)))
+                                                        .px_2()
+                                                        .py_1()
+                                                        .when(!is_last_col, |this| {
+                                                            this.border_r_1()
+                                                                .border_color(cx.theme().border)
+                                                        })
+                                                        .truncate()
+                                                        .child(cell.children.clone()),
+                                                )
+                                            }
+                                            cells
+                                        }),
+                                )
+                            }
+                            rows
+                        }),
+                )
                 .into_any_element(),
             _ => div().into_any_element(),
         }
@@ -609,14 +614,19 @@ impl Node {
         cx: &mut App,
     ) -> AnyElement {
         div()
-            .mb(mb)
-            .p_3()
-            .rounded(cx.theme().radius)
-            .bg(cx.theme().accent)
-            .font_family("Menlo, Monaco, Consolas, monospace")
-            .text_size(rems(0.875))
-            .relative()
-            .child(StyledText::new(code_block.code.clone()).with_highlights(code_block.styles))
+            .pb(mb)
+            .child(
+                div()
+                    .p_3()
+                    .rounded(cx.theme().radius)
+                    .bg(cx.theme().accent)
+                    .font_family("Menlo, Monaco, Consolas, monospace")
+                    .text_size(rems(0.875))
+                    .relative()
+                    .child(
+                        StyledText::new(code_block.code.clone()).with_highlights(code_block.styles),
+                    ),
+            )
             .into_any_element()
     }
 
@@ -652,7 +662,6 @@ impl Node {
                     .into_any_element()
             }
         })
-        .debug_red()
         .size_full()
     }
 
@@ -682,7 +691,7 @@ impl Node {
                     })
                 })
                 .into_any_element(),
-            Node::Paragraph(paragraph) => div().mb(mb).child(paragraph).into_any_element(),
+            Node::Paragraph(paragraph) => div().pb(mb).child(paragraph).into_any_element(),
             Node::Heading { level, children } => {
                 let (text_size, font_weight) = match level {
                     1 => (rems(2.), FontWeight::BOLD),
@@ -696,31 +705,37 @@ impl Node {
 
                 let text_size = text_size.to_pixels(style.heading_base_font_size);
 
-                h_flex()
-                    .mb(rems(0.3))
-                    .whitespace_normal()
-                    .text_size(text_size)
-                    .font_weight(font_weight)
-                    .child(children)
+                div()
+                    .pb(mb)
+                    .child(
+                        h_flex()
+                            .whitespace_normal()
+                            .text_size(text_size)
+                            .font_weight(font_weight)
+                            .child(children),
+                    )
                     .into_any_element()
             }
             Node::Blockquote { children } => div()
-                .w_full()
-                .mb(mb)
-                .text_color(cx.theme().muted_foreground)
-                .border_l_3()
-                .border_color(cx.theme().secondary_active)
-                .px_4()
-                .children({
-                    let children_len = children.len();
-                    children.into_iter().enumerate().map(move |(index, c)| {
-                        let is_last_child = is_root && index == children_len - 1;
-                        c.render(None, false, is_last_child, style, window, cx)
-                    })
-                })
+                .pb(mb)
+                .child(
+                    div()
+                        .w_full()
+                        .text_color(cx.theme().muted_foreground)
+                        .border_l_3()
+                        .border_color(cx.theme().secondary_active)
+                        .px_4()
+                        .children({
+                            let children_len = children.len();
+                            children.into_iter().enumerate().map(move |(index, c)| {
+                                let is_last_child = is_root && index == children_len - 1;
+                                c.render(None, false, is_last_child, style, window, cx)
+                            })
+                        }),
+                )
                 .into_any_element(),
             Node::List { children, ordered } => v_flex()
-                .mb(mb)
+                .pb(mb)
                 .children({
                     let mut items = Vec::with_capacity(children.len());
                     let list_state = list_state.unwrap_or_default();
@@ -753,9 +768,8 @@ impl Node {
             }
             Node::Table { .. } => Self::render_table(&self, window, cx).into_any_element(),
             Node::Divider => div()
-                .bg(cx.theme().border)
-                .h(px(2.))
-                .mb(mb)
+                .pb(mb)
+                .child(div().bg(cx.theme().border).h(px(2.)))
                 .into_any_element(),
             Node::Break { .. } => div().into_any_element(),
             _ => {
