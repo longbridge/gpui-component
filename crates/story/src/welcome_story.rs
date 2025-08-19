@@ -1,5 +1,6 @@
 use gpui::{
-    App, AppContext, Context, Entity, FocusHandle, Focusable, ParentElement, Render, Styled, Window,
+    div, App, AppContext, Context, Entity, FocusHandle, Focusable, ParentElement, Render, Styled,
+    Window,
 };
 
 use gpui_component::{dock::PanelControl, text::TextView, v_flex};
@@ -52,7 +53,7 @@ impl Render for WelcomeStory {
         _: &mut gpui::Window,
         _cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
-        v_flex().size_full().p_4().gap_5().child(TextView::markdown(
+        div().size_full().p_4().child(TextView::markdown(
             "intro",
             include_str!("../../../README.md"),
         ))

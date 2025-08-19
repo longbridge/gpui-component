@@ -362,10 +362,10 @@ impl Render for ModalStory {
                                             .overlay(modal_overlay)
                                             .overlay_closable(overlay_closable)
                                             .title("Modal with scrollbar")
-                                            .child(TextView::markdown(
+                                            .child(div().size_full().child(TextView::markdown(
                                                 "markdown1",
                                                 include_str!("../../../README.md"),
-                                            ))
+                                            )))
                                     });
                                 })),
                         ),

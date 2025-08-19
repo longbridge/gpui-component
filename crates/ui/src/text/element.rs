@@ -8,7 +8,10 @@ use gpui::{
 };
 use markdown::mdast;
 
-use crate::{h_flex, highlighter::SyntaxHighlighter, v_flex, ActiveTheme as _, Icon, IconName};
+use crate::{
+    h_flex, highlighter::SyntaxHighlighter, scroll::ScrollbarAxis, v_flex, ActiveTheme as _, Icon,
+    IconName, StyledExt,
+};
 
 use super::{utils::list_item_prefix, TextViewStyle};
 
@@ -652,6 +655,9 @@ impl Node {
                 state.reset(items.len());
             }
         });
+
+        let container_size = state.read(cx).max_offset_for_scrollbar();
+        dbg!(container_size);
 
         gpui::list(state.read(cx).clone(), {
             let items = items.clone();
