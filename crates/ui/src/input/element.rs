@@ -344,6 +344,9 @@ impl TextElement {
         let mut line_top = px(0.);
         for (ix, line) in state.text_wrapper.lines.iter().enumerate() {
             line_top += line.height(line_height);
+            if ix < 2 {
+                dbg!(format!("{ix}, {line_top}"));
+            }
 
             if line_top < scroll_top {
                 visible_range.start = ix;

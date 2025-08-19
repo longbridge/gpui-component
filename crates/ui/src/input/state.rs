@@ -2096,8 +2096,8 @@ impl InputState {
 
         // Update text_wrapper wrap_width if changed.
         if wrap_width_changed {
-            self.text_wrapper
-                .set_wrap_width(Some(new_bounds.size.width), cx);
+            let wrap_width = new_bounds.size.width - self.line_number_width;
+            self.text_wrapper.set_wrap_width(Some(wrap_width), cx);
             self.mode.update_auto_grow(&self.text_wrapper);
         }
     }
