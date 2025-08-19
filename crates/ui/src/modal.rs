@@ -2,7 +2,7 @@ use std::{rc::Rc, time::Duration};
 
 use gpui::{
     anchored, div, hsla, point, prelude::FluentBuilder, px, relative, Animation, AnimationExt as _,
-    AnyElement, App, Axis, Bounds, BoxShadow, ClickEvent, Div, Edges, FocusHandle, Hsla,
+    AnyElement, App, Axis, Bounds, BoxShadow, ClickEvent, Div, Edges, Fill, FocusHandle, Hsla,
     InteractiveElement, IntoElement, KeyBinding, MouseButton, ParentElement, Pixels, Point,
     RenderOnce, SharedString, StyleRefinement, Styled, Window,
 };
@@ -374,6 +374,17 @@ impl RenderOnce for Modal {
         let animation = Animation::new(Duration::from_secs_f64(0.25))
             .with_easing(cubic_bezier(0.32, 0.72, 0., 1.));
 
+        let content_bg = div()
+            .size_full()
+            .absolute()
+            .top_0()
+            .left_0()
+            .right_0()
+            .bottom_0()
+            .refine_style(&self.style);
+        let mut style = self.style;
+        style.background = None;
+
         anchored()
             .position(point(window_paddings.left, window_paddings.top))
             .snap_to_window()
@@ -412,7 +423,7 @@ impl RenderOnce for Modal {
                             .pt(paddings.top)
                             .pb(paddings.bottom)
                             .gap(paddings.top.min(px(16.)))
-                            .refine_style(&self.style)
+                            .refine_style(&style)
                             .px_0()
                             .key_context(CONTEXT)
                             .track_focus(&self.focus_handle)
@@ -454,6 +465,7 @@ impl RenderOnce for Modal {
                             .top(y)
                             .w(self.width)
                             .when_some(self.max_width, |this, w| this.max_w(w))
+                            .child(content_bg)
                             .when_some(self.title, |this, title| {
                                 this.child(
                                     div()
