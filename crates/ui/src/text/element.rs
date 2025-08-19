@@ -1,14 +1,16 @@
-use std::ops::Range;
+use std::{ops::Range, rc::Rc};
 
 use gpui::{
     div, img, prelude::FluentBuilder as _, px, relative, rems, AnyElement, App, DefiniteLength,
-    Div, ElementId, FontStyle, FontWeight, Half, HighlightStyle, InteractiveElement as _,
-    InteractiveText, IntoElement, Length, ObjectFit, ParentElement, Rems, RenderOnce, SharedString,
-    SharedUri, Styled, StyledImage as _, StyledText, Window,
+    Div, ElementId, FontStyle, FontWeight, GlobalElementId, Half, HighlightStyle,
+    InteractiveElement as _, InteractiveText, IntoElement, Length, ObjectFit, ParentElement, Rems,
+    RenderOnce, SharedString, SharedUri, Styled, StyledImage as _, StyledText, Window,
 };
 use markdown::mdast;
 
-use crate::{h_flex, highlighter::SyntaxHighlighter, v_flex, ActiveTheme as _, Icon, IconName};
+use crate::{
+    h_flex, highlighter::SyntaxHighlighter, v_flex, ActiveTheme as _, Icon, IconName, StyledExt,
+};
 
 use super::{utils::list_item_prefix, TextViewStyle};
 
@@ -616,6 +618,42 @@ impl Node {
             .relative()
             .child(StyledText::new(code_block.code.clone()).with_highlights(code_block.styles))
             .into_any_element()
+    }
+
+    pub(crate) fn render_root(
+        self,
+        style: &TextViewStyle,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> impl IntoElement {
+        let items = Rc::new(match self {
+            Node::Root { children } => children.clone(),
+            _ => vec![],
+        });
+        let style = Rc::new(style.clone());
+
+        let state = window.use_keyed_state("text-view-list", cx, |_, _| {
+            gpui::ListState::new(0, gpui::ListAlignment::Top, px(100.))
+        });
+
+        state.update(cx, |state, _| {
+            if state.item_count() != items.len() {
+                tracing::trace!("element root items: {}", items.len());
+                state.reset(items.len());
+            }
+        });
+
+        gpui::list(state.read(cx).clone(), {
+            let items = items.clone();
+            let style = style.clone();
+            move |ix, window, cx| {
+                let node = items[ix].clone();
+                node.render(None, false, false, &style, window, cx)
+                    .into_any_element()
+            }
+        })
+        .debug_red()
+        .size_full()
     }
 
     pub(crate) fn render(
