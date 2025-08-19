@@ -182,8 +182,8 @@ where
             window_bounds: Some(WindowBounds::Windowed(window_bounds)),
             titlebar: Some(TitleBar::title_bar_options()),
             window_min_size: Some(gpui::Size {
-                width: px(640.),
-                height: px(480.),
+                width: px(480.),
+                height: px(320.),
             }),
             kind: WindowKind::Normal,
             #[cfg(target_os = "linux")]

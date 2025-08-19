@@ -6,15 +6,13 @@ use gpui::{App, Font, LineFragment, Pixels, SharedString};
 #[allow(unused)]
 pub(super) struct LineWrap {
     /// The number of soft wrapped lines of this line (Not include first line.)
+    ///
+    /// FIXME: Here in somecase, the `line_wrapper.wrap_line` has returned different
+    /// like the `window.text_system().shape_text`. So, this value may not equal
+    /// the actual rendered lines.
     pub(super) wrap_lines: usize,
     /// The range of the line text in the entire text.
     pub(super) range: Range<usize>,
-}
-
-impl LineWrap {
-    pub(super) fn height(&self, line_height: Pixels) -> Pixels {
-        line_height * (self.wrap_lines + 1)
-    }
 }
 
 /// Used to prepare the text with soft_wrap to be get lines to displayed in the TextArea
@@ -70,11 +68,14 @@ impl TextWrapper {
         let mut line_wrapper = cx
             .text_system()
             .line_wrapper(self.font.clone(), self.font_size);
-
         let mut prev_line_ix = 0;
         for line in text.split('\n') {
             let mut line_wraps = vec![];
             let mut prev_boundary_ix = 0;
+
+            if prev_line_ix + 1 == 9 {
+                dbg!(line);
+            }
 
             // Here only have wrapped line, if there is no wrap meet, the `line_wraps` result will empty.
             for boundary in line_wrapper.wrap_line(&[LineFragment::text(line)], wrap_width) {

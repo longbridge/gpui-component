@@ -338,21 +338,23 @@ impl TextElement {
             return 0..1;
         }
 
-        let scroll_top = -state.scroll_handle.offset().y;
-        let total_lines = state.text_wrapper.lines.len();
-        let mut visible_range = 0..total_lines;
-        let mut line_top = px(0.);
-        for (ix, line) in state.text_wrapper.lines.iter().enumerate() {
-            line_top += line.height(line_height);
-            if ix < 2 {
-                dbg!(format!("{ix}, {line_top}"));
-            }
+        let Some(last_layout) = state.last_layout.as_ref() else {
+            return 0..1;
+        };
 
-            if line_top < scroll_top {
+        let scroll_top = state.scroll_handle.offset().y;
+        let total_lines = last_layout.lines.len();
+
+        let mut visible_range = 0..total_lines;
+        let mut line_bottom = px(0.);
+        for (ix, line) in last_layout.lines.iter().enumerate() {
+            line_bottom += (line.wrap_boundaries.len() + 1) * line_height;
+
+            if line_bottom < -scroll_top {
                 visible_range.start = ix;
             }
 
-            if line_top > scroll_top + input_height {
+            if line_bottom + scroll_top >= input_height {
                 visible_range.end = (ix + 1).min(total_lines);
                 break;
             }
@@ -438,7 +440,6 @@ pub(super) struct PrepaintState {
     last_layout: LastLayout,
     /// The lines only contains the visible lines in the viewport, based on `visible_range`.
     line_numbers: Option<Vec<SmallVec<[WrappedLine; 1]>>>,
-    line_number_width: Pixels,
     /// Size of the scrollable area by entire lines.
     scroll_size: Size<Pixels>,
     cursor_bounds: Option<Bounds<Pixels>>,
@@ -660,7 +661,7 @@ impl Element for TextElement {
         };
 
         let wrap_width = if multi_line {
-            Some(bounds.size.width - line_number_width - RIGHT_MARGIN)
+            Some(bounds.size.width - line_number_width)
         } else {
             None
         };
@@ -799,10 +800,11 @@ impl Element for TextElement {
                 lines: Rc::new(lines),
                 line_height,
                 visible_range,
+                line_number_width,
+                wrap_width,
             },
             scroll_size,
             line_numbers,
-            line_number_width,
             cursor_bounds,
             cursor_scroll_offset,
             current_line_index,
@@ -918,7 +920,10 @@ impl Element for TextElement {
             .skip(visible_range.start)
             .take(visible_range.len())
         {
-            let p = point(origin.x + prepaint.line_number_width, origin.y + offset_y);
+            let p = point(
+                origin.x + prepaint.last_layout.line_number_width,
+                origin.y + offset_y,
+            );
             _ = line.paint(p, line_height, TextAlign::Left, None, window, cx);
             offset_y += line.size(line_height).height;
         }
@@ -937,7 +942,6 @@ impl Element for TextElement {
             state.set_input_bounds(input_bounds, cx);
             state.last_selected_range = Some(selected_range);
             state.scroll_size = prepaint.scroll_size;
-            state.line_number_width = prepaint.line_number_width;
             state
                 .scroll_handle
                 .set_offset(prepaint.cursor_scroll_offset);

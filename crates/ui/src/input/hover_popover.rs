@@ -34,7 +34,11 @@ impl DiagnosticPopover {
         let Some(range) = self.marker.range.as_ref() else {
             return None;
         };
-        let line_number_width = self.state.read(cx).line_number_width;
+        let Some(last_layout) = self.state.read(cx).last_layout.as_ref() else {
+            return None;
+        };
+
+        let line_number_width = last_layout.line_number_width;
 
         let (_, _, start_pos) = self
             .state
