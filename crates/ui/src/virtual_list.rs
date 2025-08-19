@@ -559,10 +559,16 @@ impl Element for VirtualList {
             cx,
             |_style, _, hitbox, window, cx| {
                 if self.items_count > 0 {
-                    let is_scrolled = !scroll_offset.along(self.axis).is_zero();
                     let min_scroll_offset = content_bounds.size.along(self.axis)
                         - layout.size_layout.content_size.along(self.axis);
 
+                    // Do not trigger scrolling if the content is smaller than the container.
+                    if min_scroll_offset.0 >= 0. {
+                        scroll_offset.x = px(0.);
+                        scroll_offset.y = px(0.);
+                    }
+
+                    let is_scrolled = !scroll_offset.along(self.axis).is_zero();
                     if is_scrolled {
                         match self.axis {
                             Axis::Horizontal if scroll_offset.x < min_scroll_offset => {
