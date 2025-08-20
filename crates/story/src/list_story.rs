@@ -528,17 +528,6 @@ impl Render for ListStory {
                             })),
                     )
                     .child(
-                        Button::new("scroll-to-selected")
-                            .outline()
-                            .child("Scroll to Selected")
-                            .small()
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.company_list.update(cx, |list, cx| {
-                                    list.scroll_to_selected_item(window, cx);
-                                })
-                            })),
-                    )
-                    .child(
                         Checkbox::new("loading")
                             .label("Loading")
                             .checked(self.company_list.read(cx).delegate().loading)
