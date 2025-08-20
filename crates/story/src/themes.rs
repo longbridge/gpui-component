@@ -25,15 +25,15 @@ pub fn init(cx: &mut App) {
     tracing::info!("Load themes...");
     if let Err(err) = ThemeRegistry::watch_dir(PathBuf::from("./themes"), cx, move |cx| {
         if let Ok(state) = serde_json::from_str::<State>(&json) {
-            tracing::info!("apply theme: {:?}", state.theme);
-            AppState::global_mut(cx).theme_name = Some(state.theme.clone());
-
             if let Some(theme) = ThemeRegistry::global(cx)
                 .themes()
                 .get(&state.theme)
                 .cloned()
             {
+                tracing::info!("apply theme: {:?}", state.theme);
+                AppState::global_mut(cx).theme_name = Some(state.theme.clone());
                 Theme::global_mut(cx).apply_config(&theme);
+                cx.refresh_windows();
             }
         }
     }) {
@@ -45,20 +45,11 @@ pub fn init(cx: &mut App) {
 #[action(namespace = themes, no_json)]
 struct SwitchTheme(SharedString);
 
-pub struct ThemeSwitcher {
-    current_theme_name: SharedString,
-}
+pub struct ThemeSwitcher {}
 
 impl ThemeSwitcher {
-    pub fn new(cx: &mut App) -> Self {
-        let theme_name = AppState::global(cx)
-            .theme_name
-            .clone()
-            .unwrap_or("default-light".into());
-
-        Self {
-            current_theme_name: theme_name,
-        }
+    pub fn new(_: &mut App) -> Self {
+        Self {}
     }
 }
 
@@ -68,22 +59,28 @@ impl Render for ThemeSwitcher {
         _: &mut gpui::Window,
         cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
+        let theme_name = AppState::global(cx)
+            .theme_name
+            .clone()
+            .unwrap_or("default-light".into());
+
         div()
             .id("theme-switcher")
-            .on_action(cx.listener(|this, switch: &SwitchTheme, _, cx| {
-                this.current_theme_name = switch.0.clone();
-                let theme_name = this.current_theme_name.clone();
+            .on_action(cx.listener(|_, switch: &SwitchTheme, _, cx| {
+                let theme_name = switch.0.clone();
+                // Save AppState
+                let mut state = State {
+                    theme: theme_name.clone(),
+                };
+
                 if let Some(theme_config) =
                     ThemeRegistry::global(cx).themes().get(&theme_name).cloned()
                 {
                     Theme::global_mut(cx).apply_config(&theme_config);
+                    state.theme = theme_config.name.clone();
+                    AppState::global_mut(cx).theme_name = Some(theme_name.clone());
                 }
 
-                // Save AppState
-                let state = State {
-                    theme: theme_name.clone(),
-                };
-                AppState::global_mut(cx).theme_name = Some(theme_name.clone());
                 let json = serde_json::to_string_pretty(&state).unwrap();
                 std::fs::write(STATE_FILE, json).unwrap();
 
@@ -95,7 +92,7 @@ impl Render for ThemeSwitcher {
                     .ghost()
                     .small()
                     .popup_menu({
-                        let current_theme_id = self.current_theme_name.clone();
+                        let current_theme_id = theme_name.clone();
                         move |menu, _, cx| {
                             let mut menu = menu.scrollable().max_h(px(600.));
 

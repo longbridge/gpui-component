@@ -619,7 +619,7 @@ impl Theme {
         if let Some(style) = &config.highlight {
             let highlight_theme = Arc::new(HighlightTheme {
                 name: config.name.to_string(),
-                appearance: self.mode,
+                appearance: config.mode,
                 style: style.clone(),
             });
             self.highlight_theme = highlight_theme.clone();
@@ -632,6 +632,7 @@ impl Theme {
         };
 
         self.colors.apply_config(&config, &default_theme);
+        self.mode = config.mode;
     }
 }
 
