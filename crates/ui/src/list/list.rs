@@ -215,7 +215,9 @@ where
             return;
         }
 
-        self.scroll_handle.scroll_to_item(ix.row, strategy);
+        if let Some(item_ix) = self.rows_cache.position_of(&ix) {
+            self.scroll_handle.scroll_to_item(item_ix, strategy);
+        }
         cx.notify();
     }
 
@@ -226,8 +228,9 @@ where
 
     pub fn scroll_to_selected_item(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         if let Some(ix) = self.selected_index {
-            if let Some(ix) = self.rows_cache.position_of(&ix) {
-                self.scroll_handle.scroll_to_item(ix, ScrollStrategy::Top);
+            if let Some(item_ix) = self.rows_cache.position_of(&ix) {
+                self.scroll_handle
+                    .scroll_to_item(item_ix, ScrollStrategy::Top);
                 cx.notify();
             }
         }
