@@ -30,7 +30,6 @@ pub fn init(cx: &mut App) {
                 .get(&state.theme)
                 .cloned()
             {
-                tracing::info!("apply theme: {:?}", state.theme);
                 AppState::global_mut(cx).theme_name = Some(state.theme.clone());
                 Theme::global_mut(cx).apply_config(&theme);
                 cx.refresh_windows();
