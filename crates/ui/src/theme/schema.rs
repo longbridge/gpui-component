@@ -509,7 +509,15 @@ impl ThemeColor {
         apply_color!(accordion, fallback = self.background);
         apply_color!(accordion_active, fallback = self.accordion);
         apply_color!(accordion_hover, fallback = self.accordion);
-        apply_color!(group_box, fallback = self.secondary);
+        apply_color!(
+            group_box,
+            fallback = self
+                .background
+                .blend(
+                    self.secondary
+                        .opacity(if config.mode.is_dark() { 0.3 } else { 0.4 })
+                )
+        );
         apply_color!(group_box_foreground, fallback = self.secondary_foreground);
         apply_color!(caret, fallback = self.primary);
         apply_color!(chart_1, fallback = self.blue.lighten(0.4));
