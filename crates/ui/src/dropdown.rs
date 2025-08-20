@@ -968,7 +968,7 @@ where
                             div()
                                 .occlude()
                                 .map(|this| match self.menu_width {
-                                    Length::Auto => this.w(bounds.size.width),
+                                    Length::Auto => this.w(bounds.size.width + px(2.)),
                                     Length::Definite(w) => this.w(w),
                                 })
                                 .child(
