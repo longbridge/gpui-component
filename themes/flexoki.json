@@ -257,6 +257,7 @@
         "popover.background": "#100F0F",
         "popover.foreground": "#CECDC3",
         "primary.background": "#24837B",
+        "primary.active.background": "#1d6862",
         "primary.foreground": "#FFFCF0",
         "info.background": "#205EA6",
         "scrollbar.background": "#100F0F00",

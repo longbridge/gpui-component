@@ -410,33 +410,98 @@ impl ThemeColor {
             };
         }
 
+        apply_color!(background);
+
         // Base colors for fallback
         apply_color!(red);
-        apply_color!(red_light, fallback = self.red.opacity(0.8));
+        apply_color!(
+            red_light,
+            fallback = self.background.blend(self.red.opacity(0.8))
+        );
         apply_color!(green);
-        apply_color!(green_light, fallback = self.green.opacity(0.8));
+        apply_color!(
+            green_light,
+            fallback = self.background.blend(self.green.opacity(0.8))
+        );
         apply_color!(blue);
-        apply_color!(blue_light, fallback = self.blue.opacity(0.8));
+        apply_color!(
+            blue_light,
+            fallback = self.background.blend(self.blue.opacity(0.8))
+        );
         apply_color!(magenta);
-        apply_color!(magenta_light, fallback = self.magenta.opacity(0.8));
+        apply_color!(
+            magenta_light,
+            fallback = self.background.blend(self.magenta.opacity(0.8))
+        );
         apply_color!(yellow);
-        apply_color!(yellow_light, fallback = self.yellow.opacity(0.8));
+        apply_color!(
+            yellow_light,
+            fallback = self.background.blend(self.yellow.opacity(0.8))
+        );
         apply_color!(cyan);
-        apply_color!(cyan_light, fallback = self.cyan.opacity(0.8));
+        apply_color!(
+            cyan_light,
+            fallback = self.background.blend(self.cyan.opacity(0.8))
+        );
 
-        apply_color!(background);
         apply_color!(border);
         apply_color!(foreground);
         apply_color!(muted);
-        apply_color!(muted_foreground, fallback = self.foreground.opacity(0.7));
+        apply_color!(
+            muted_foreground,
+            fallback = self.muted.blend(self.foreground.opacity(0.7))
+        );
+
+        // Button colors
+        let active_darken = if config.mode.is_dark() { 0.2 } else { 0.1 };
+        let hover_opacity = 0.9;
         apply_color!(primary);
-        apply_color!(primary_active, fallback = self.primary.darken(0.1));
         apply_color!(primary_foreground, fallback = self.foreground);
-        apply_color!(primary_hover, fallback = self.primary.opacity(0.9));
+        apply_color!(
+            primary_hover,
+            fallback = self.background.blend(self.primary.opacity(hover_opacity))
+        );
+        apply_color!(
+            primary_active,
+            fallback = self.primary.darken(active_darken)
+        );
         apply_color!(secondary);
-        apply_color!(secondary_active, fallback = self.secondary.darken(0.1));
         apply_color!(secondary_foreground, fallback = self.foreground);
-        apply_color!(secondary_hover, fallback = self.secondary.opacity(0.9));
+        apply_color!(
+            secondary_hover,
+            fallback = self.background.blend(self.secondary.opacity(hover_opacity))
+        );
+        apply_color!(
+            secondary_active,
+            fallback = self.secondary.darken(active_darken)
+        );
+        apply_color!(success, fallback = self.green);
+        apply_color!(success_foreground, fallback = self.primary_foreground);
+        apply_color!(
+            success_hover,
+            fallback = self.background.blend(self.success.opacity(hover_opacity))
+        );
+        apply_color!(
+            success_active,
+            fallback = self.success.darken(active_darken)
+        );
+        apply_color!(info, fallback = self.cyan);
+        apply_color!(info_foreground, fallback = self.primary_foreground);
+        apply_color!(
+            info_hover,
+            fallback = self.background.blend(self.info.opacity(hover_opacity))
+        );
+        apply_color!(info_active, fallback = self.info.darken(active_darken));
+        apply_color!(warning, fallback = self.yellow);
+        apply_color!(warning_foreground, fallback = self.primary_foreground);
+        apply_color!(
+            warning_hover,
+            fallback = self.background.blend(self.warning.opacity(0.9))
+        );
+        apply_color!(
+            warning_active,
+            fallback = self.background.blend(self.warning.darken(active_darken))
+        );
 
         // Other colors
         apply_color!(accent, fallback = self.secondary);
@@ -453,27 +518,35 @@ impl ThemeColor {
         apply_color!(chart_4, fallback = self.blue.darken(0.2));
         apply_color!(chart_5, fallback = self.blue.darken(0.4));
         apply_color!(danger, fallback = self.red);
-        apply_color!(danger_active, fallback = self.danger.darken(0.1));
+        apply_color!(danger_active, fallback = self.danger.darken(active_darken));
         apply_color!(danger_foreground, fallback = self.primary_foreground);
-        apply_color!(danger_hover, fallback = self.danger.opacity(0.9));
-        apply_color!(description_list_label, fallback = self.border.opacity(0.2));
+        apply_color!(
+            danger_hover,
+            fallback = self.background.blend(self.danger.opacity(0.9))
+        );
+        apply_color!(
+            description_list_label,
+            fallback = self.background.blend(self.border.opacity(0.2))
+        );
         apply_color!(
             description_list_label_foreground,
             fallback = self.secondary_foreground
         );
         apply_color!(drag_border, fallback = self.primary.opacity(0.65));
         apply_color!(drop_target, fallback = self.primary.opacity(0.2));
-        apply_color!(info, fallback = self.cyan);
-        apply_color!(info_active, fallback = self.info.darken(0.1));
-        apply_color!(info_foreground, fallback = self.primary_foreground);
-        apply_color!(info_hover, fallback = self.info.opacity(0.9));
         apply_color!(input, fallback = self.border);
         apply_color!(link, fallback = self.primary);
         apply_color!(link_active, fallback = self.link);
         apply_color!(link_hover, fallback = self.link);
         apply_color!(list, fallback = self.background);
-        apply_color!(list_active, fallback = self.primary.opacity(0.1));
-        apply_color!(list_active_border, fallback = self.primary.opacity(0.6));
+        apply_color!(
+            list_active,
+            fallback = self.background.blend(self.primary.opacity(0.1))
+        );
+        apply_color!(
+            list_active_border,
+            fallback = self.background.blend(self.primary.opacity(0.6))
+        );
         apply_color!(list_even, fallback = self.list);
         apply_color!(list_head, fallback = self.list);
         apply_color!(list_hover, fallback = self.secondary_hover);
@@ -498,10 +571,6 @@ impl ThemeColor {
         apply_color!(skeleton, fallback = self.secondary);
         apply_color!(slider_bar, fallback = self.primary);
         apply_color!(slider_thumb, fallback = self.primary_foreground);
-        apply_color!(success, fallback = self.green);
-        apply_color!(success_foreground, fallback = self.primary_foreground);
-        apply_color!(success_hover, fallback = self.success.opacity(0.9));
-        apply_color!(success_active, fallback = self.success.darken(0.1));
         apply_color!(switch, fallback = self.secondary);
         apply_color!(tab, fallback = self.background);
         apply_color!(tab_active, fallback = self.background);
@@ -520,10 +589,6 @@ impl ThemeColor {
         apply_color!(title_bar, fallback = self.background);
         apply_color!(title_bar_border, fallback = self.border);
         apply_color!(tiles, fallback = self.background);
-        apply_color!(warning, fallback = self.yellow);
-        apply_color!(warning_active, fallback = self.warning.darken(0.1));
-        apply_color!(warning_hover, fallback = self.warning.opacity(0.9));
-        apply_color!(warning_foreground, fallback = self.primary_foreground);
         apply_color!(overlay);
         apply_color!(window_border, fallback = self.border);
 

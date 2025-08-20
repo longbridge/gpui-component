@@ -1,152 +1,150 @@
 {
-    "$schema": "https://github.com/longbridge/gpui-component/raw/refs/heads/main/.theme-schema.json",
-    "name": "Harper",
-    "author": "iTerm2-Color-Schemes",
-    "url": "https://github.com/mbadolato/iTerm2-Color-Schemes",
-    "themes": [
-        {
-            "name": "Harper",
-            "mode": "dark",
-            "colors": {
-                "accent.background": "#18151B",
-                "accent.foreground": "#a8a49d",
-                "accordion.active.background": "#003a5b",
-                "accordion.hover.background": "#726E69",
-                "background": "#010101",
-                "border": "#333333",
-                "foreground": "#a8a49d",
-                "input.border": "#333333",
-                "list.active.background": "#B196C611",
-                "list.active.border": "#B196C644",
-                "list.even.background": "#18151B77",
-                "muted.background": "#333333",
-                "muted.foreground": "#726E69",
-                "panel.background": "#003a5b",
-                "popover.background": "#010101",
-                "popover.foreground": "#a8a49d",
-                "primary.active.background": "#B196C699",
-                "primary.background": "#B196C6",
-                "primary.foreground": "#000000",
-                "primary.hover.background": "#b89fcb",
-                "scrollbar.background": "#003a5b00",
-                "scrollbar.thumb.background": "#726E69",
-                "secondary.background": "#1b1b1b",
-                "secondary.active.background": "#1b1b1b99",
-                "secondary.foreground": "#A8A49D",
-                "secondary.hover.background": "#232323",
-                "tab.active.background": "#010101",
-                "tab.active.foreground": "#a8a49d",
-                "tab.foreground": "#787878",
-                "base.red": "#ff5874",
-                "base.red.light": "#ff587499",
-                "base.green": "#489e48",
-                "base.green.light": "#489e4899",
-                "base.blue": "#7fb5e1",
-                "base.blue.light": "#7fb5e199",
-                "base.cyan": "#bff5e5",
-                "base.cyan.light": "#bff5e599",
-                "base.magenta": "#b296c6",
-                "base.magenta.light": "#b296c699",
-                "base.yellow": "#f8b63f",
-                "base.yellow.light": "#f8b63f99"
-            },
-            "highlight": {
-                "editor.foreground": "#a8a49d",
-                "editor.background": "#010101",
-                "editor.active_line.background": "#18151B",
-                "editor.line_number": "#726E69",
-                "editor.active_line_number": "#a8a49d",
-                "conflict": "#ff5874",
-                "created": "#489e48",
-                "deleted": "#ff5874",
-                "error": "#ff5874",
-                "hidden": "#726E69",
-                "hint": "#7fb5e1",
-                "ignored": "#726E69",
-                "info": "#7fb5e1",
-                "modified": "#b296c6",
-                "predictive": "#726E69",
-                "renamed": "#b296c6",
-                "success": "#489e48",
-                "unreachable": "#726E69",
-                "warning": "#f8b63f",
-                "syntax": {
-                    "attribute": {
-                        "color": "#b296c6"
-                    },
-                    "boolean": {
-                        "color": "#f8b63f"
-                    },
-                    "comment": {
-                        "color": "#726E69",
-                        "font_style": "italic"
-                    },
-                    "comment.doc": {
-                        "color": "#726E69",
-                        "font_style": "italic"
-                    },
-                    "constant": {
-                        "color": "#f8b63f"
-                    },
-                    "constructor": {
-                        "color": "#b296c6"
-                    },
-                    "embedded": {
-                        "color": "#a8a49d"
-                    },
-                    "function": {
-                        "color": "#f8b63f"
-                    },
-                    "keyword": {
-                        "color": "#ff5874"
-                    },
-                    "link_text": {
-                        "color": "#7fb5e1",
-                        "font_style": "normal"
-                    },
-                    "link_uri": {
-                        "color": "#bff5e5",
-                        "font_style": "italic"
-                    },
-                    "number": {
-                        "color": "#ff5874"
-                    },
-                    "string": {
-                        "color": "#489e48"
-                    },
-                    "string.escape": {
-                        "color": "#489e48"
-                    },
-                    "string.regex": {
-                        "color": "#489e48"
-                    },
-                    "string.special": {
-                        "color": "#f8b63f"
-                    },
-                    "string.special.symbol": {
-                        "color": "#f8b63f"
-                    },
-                    "tag": {
-                        "color": "#b296c6"
-                    },
-                    "text.literal": {
-                        "color": "#f8b63f"
-                    },
-                    "title": {
-                        "color": "#b296c6",
-                        "font_weight": 600
-                    },
-                    "type": {
-                        "color": "#b296c6"
-                    },
-                    "property": {
-                        "color": "#a8a49d"
-                    },
-                    "variable.special": {
-                        "color": "#ff5874"
-                    }
-                }
-            }
+  "$schema": "https://github.com/longbridge/gpui-component/raw/refs/heads/main/.theme-schema.json",
+  "name": "Harper",
+  "author": "iTerm2-Color-Schemes",
+  "url": "https://github.com/mbadolato/iTerm2-Color-Schemes",
+  "themes": [
+    {
+      "name": "Harper",
+      "mode": "dark",
+      "colors": {
+        "accent.background": "#18151B",
+        "accent.foreground": "#a8a49d",
+        "accordion.active.background": "#003a5b",
+        "accordion.hover.background": "#726E69",
+        "background": "#010101",
+        "border": "#333333",
+        "foreground": "#a8a49d",
+        "input.border": "#333333",
+        "list.active.background": "#B196C611",
+        "list.active.border": "#B196C644",
+        "list.even.background": "#18151B77",
+        "muted.background": "#333333",
+        "muted.foreground": "#726E69",
+        "panel.background": "#003a5b",
+        "popover.background": "#010101",
+        "popover.foreground": "#a8a49d",
+        "primary.background": "#B196C6",
+        "primary.foreground": "#000000",
+        "scrollbar.background": "#003a5b00",
+        "scrollbar.thumb.background": "#726E69",
+        "secondary.background": "#1b1b1b",
+        "secondary.active.background": "#1b1b1b99",
+        "secondary.foreground": "#A8A49D",
+        "secondary.hover.background": "#232323",
+        "tab.active.background": "#010101",
+        "tab.active.foreground": "#a8a49d",
+        "tab.foreground": "#787878",
+        "base.red": "#ff5874",
+        "base.red.light": "#ff587499",
+        "base.green": "#489e48",
+        "base.green.light": "#489e4899",
+        "base.blue": "#7fb5e1",
+        "base.blue.light": "#7fb5e199",
+        "base.cyan": "#bff5e5",
+        "base.cyan.light": "#bff5e599",
+        "base.magenta": "#b296c6",
+        "base.magenta.light": "#b296c699",
+        "base.yellow": "#f8b63f",
+        "base.yellow.light": "#f8b63f99"
+      },
+      "highlight": {
+        "editor.foreground": "#a8a49d",
+        "editor.background": "#010101",
+        "editor.active_line.background": "#18151B",
+        "editor.line_number": "#726E69",
+        "editor.active_line_number": "#a8a49d",
+        "conflict": "#ff5874",
+        "created": "#489e48",
+        "deleted": "#ff5874",
+        "error": "#ff5874",
+        "hidden": "#726E69",
+        "hint": "#7fb5e1",
+        "ignored": "#726E69",
+        "info": "#7fb5e1",
+        "modified": "#b296c6",
+        "predictive": "#726E69",
+        "renamed": "#b296c6",
+        "success": "#489e48",
+        "unreachable": "#726E69",
+        "warning": "#f8b63f",
+        "syntax": {
+          "attribute": {
+            "color": "#b296c6"
+          },
+          "boolean": {
+            "color": "#f8b63f"
+          },
+          "comment": {
+            "color": "#726E69",
+            "font_style": "italic"
+          },
+          "comment.doc": {
+            "color": "#726E69",
+            "font_style": "italic"
+          },
+          "constant": {
+            "color": "#f8b63f"
+          },
+          "constructor": {
+            "color": "#b296c6"
+          },
+          "embedded": {
+            "color": "#a8a49d"
+          },
+          "function": {
+            "color": "#f8b63f"
+          },
+          "keyword": {
+            "color": "#ff5874"
+          },
+          "link_text": {
+            "color": "#7fb5e1",
+            "font_style": "normal"
+          },
+          "link_uri": {
+            "color": "#bff5e5",
+            "font_style": "italic"
+          },
+          "number": {
+            "color": "#ff5874"
+          },
+          "string": {
+            "color": "#489e48"
+          },
+          "string.escape": {
+            "color": "#489e48"
+          },
+          "string.regex": {
+            "color": "#489e48"
+          },
+          "string.special": {
+            "color": "#f8b63f"
+          },
+          "string.special.symbol": {
+            "color": "#f8b63f"
+          },
+          "tag": {
+            "color": "#b296c6"
+          },
+          "text.literal": {
+            "color": "#f8b63f"
+          },
+          "title": {
+            "color": "#b296c6",
+            "font_weight": 600
+          },
+          "type": {
+            "color": "#b296c6"
+          },
+          "property": {
+            "color": "#a8a49d"
+          },
+          "variable.special": {
+            "color": "#ff5874"
+          }
         }
-    ]
+      }
+    }
+  ]
 }

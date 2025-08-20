@@ -1,153 +1,150 @@
 {
-    "name": "Spaceduck",
-    "author": "Guillermo Rodriguez",
-    "url": "https://github.com/pineapplegiant/spaceduck",
-    "$schema": "https://github.com/longbridge/gpui-component/raw/refs/heads/main/.theme-schema.json",
-    "themes": [
-        {
-            "name": "Spaceduck",
-            "mode": "dark",
-            "colors": {
-                "accent.background": "#1c1d39",
-                "accent.foreground": "#ecf0c1",
-                "accordion.active.background": "#003a5b",
-                "accordion.hover.background": "#4b6479",
-                "background": "#0F111B",
-                "border": "#272C42",
-                "danger.background": "#e33400",
-                "foreground": "#ecf0c1",
-                "input.border": "#272C42",
-                "link.active.foreground": "#089CC5",
-                "link.foreground": "#089CC5",
-                "link.hover.foreground": "#089CC5",
-                "list.active.background": "#089CC511",
-                "list.active.border": "#089CC5",
-                "list.even.background": "#161928",
-                "muted.background": "#272C42",
-                "muted.foreground": "#4b6479",
-                "panel.background": "#003a5b",
-                "popover.background": "#0F111B",
-                "popover.foreground": "#ecf0c1",
-                "primary.active.background": "#0788ac",
-                "primary.background": "#089CC5",
-                "primary.foreground": "#ecf0c1",
-                "primary.hover.background": "#09afdd",
-                "scrollbar.background": "#003a5b00",
-                "scrollbar.thumb.background": "#4b6479",
-                "secondary.background": "#1a1b33",
-                "secondary.active.background": "#151529",
-                "secondary.foreground": "#a3a49d",
-                "secondary.hover.background": "#242547",
-                "tab.active.background": "#0F111B",
-                "tab.active.foreground": "#ecf0c1",
-                "tab.foreground": "#838182",
-                "title_bar.background": "#0F111B",
-                "title_bar.border": "#272C42",
-                "base.red": "#e33400",
-                "base.green": "#5ccc96",
-                "base.blue": "#00a3cc",
-                "base.cyan": "#089CC5",
-                "base.magenta": "#C86D8C",
-                "base.magenta.light": "#C86D8C33",
-                "base.yellow": "#f2ce00"
-            },
-            "highlight": {
-                "editor.foreground": "#ecf0c1",
-                "editor.background": "#0F111B",
-                "editor.active_line.background": "#1c1d39",
-                "editor.line_number": "#4b6479",
-                "editor.active_line_number": "#ecf0c1",
-                "conflict": "#e33400",
-                "created": "#5ccc96",
-                "deleted": "#e33400",
-                "error": "#e33400",
-                "hidden": "#4b6479",
-                "hint": "#C86D8C",
-                "ignored": "#4b6479",
-                "info": "#089CC5",
-                "modified": "#f2ce00",
-                "predictive": "#5D5945",
-                "renamed": "#089CC5",
-                "success": "#5ccc96",
-                "unreachable": "#4b6479",
-                "warning": "#f2ce00",
-                "syntax": {
-                    "attribute": {
-                        "color": "#f2ce00"
-                    },
-                    "boolean": {
-                        "color": "#f2ce00"
-                    },
-                    "comment": {
-                        "color": "#4b6479",
-                        "font_style": "italic"
-                    },
-                    "comment.doc": {
-                        "color": "#4b6479",
-                        "font_style": "italic"
-                    },
-                    "constant": {
-                        "color": "#e33400"
-                    },
-                    "constructor": {
-                        "color": "#5ccc96"
-                    },
-                    "embedded": {
-                        "color": "#ecf0c1"
-                    },
-                    "function": {
-                        "color": "#089CC5"
-                    },
-                    "keyword": {
-                        "color": "#C86D8C"
-                    },
-                    "link_text": {
-                        "color": "#089CC5",
-                        "font_style": "underline"
-                    },
-                    "link_uri": {
-                        "color": "#089CC5",
-                        "font_style": "italic"
-                    },
-                    "number": {
-                        "color": "#f2ce00"
-                    },
-                    "string": {
-                        "color": "#5ccc96"
-                    },
-                    "string.escape": {
-                        "color": "#5ccc96"
-                    },
-                    "string.regex": {
-                        "color": "#5ccc96"
-                    },
-                    "string.special": {
-                        "color": "#f2ce00"
-                    },
-                    "string.special.symbol": {
-                        "color": "#f2ce00"
-                    },
-                    "tag": {
-                        "color": "#C86D8C"
-                    },
-                    "text.literal": {
-                        "color": "#ecf0c1"
-                    },
-                    "title": {
-                        "color": "#f2ce00",
-                        "font_weight": 600
-                    },
-                    "type": {
-                        "color": "#089CC5"
-                    },
-                    "property": {
-                        "color": "#ecf0c1"
-                    },
-                    "variable.special": {
-                        "color": "#C86D8C"
-                    }
-                }
-            }
+  "name": "Spaceduck",
+  "author": "Guillermo Rodriguez",
+  "url": "https://github.com/pineapplegiant/spaceduck",
+  "$schema": "https://github.com/longbridge/gpui-component/raw/refs/heads/main/.theme-schema.json",
+  "themes": [
+    {
+      "name": "Spaceduck",
+      "mode": "dark",
+      "colors": {
+        "accent.background": "#1c1d39",
+        "accent.foreground": "#ecf0c1",
+        "accordion.active.background": "#003a5b",
+        "accordion.hover.background": "#4b6479",
+        "background": "#0F111B",
+        "border": "#272C42",
+        "foreground": "#ecf0c1",
+        "input.border": "#272C42",
+        "link.active.foreground": "#089CC5",
+        "link.foreground": "#089CC5",
+        "link.hover.foreground": "#089CC5",
+        "list.active.background": "#089CC511",
+        "list.active.border": "#089CC5",
+        "list.even.background": "#161928",
+        "muted.background": "#272C42",
+        "muted.foreground": "#4b6479",
+        "panel.background": "#003a5b",
+        "popover.background": "#0F111B",
+        "popover.foreground": "#ecf0c1",
+        "primary.background": "#089CC5",
+        "primary.foreground": "#ecf0c1",
+        "scrollbar.background": "#003a5b00",
+        "scrollbar.thumb.background": "#4b6479",
+        "secondary.background": "#1a1b33",
+        "secondary.active.background": "#151529",
+        "secondary.foreground": "#a3a49d",
+        "secondary.hover.background": "#242547",
+        "tab.active.background": "#0F111B",
+        "tab.active.foreground": "#ecf0c1",
+        "tab.foreground": "#838182",
+        "title_bar.background": "#0F111B",
+        "title_bar.border": "#272C42",
+        "base.red": "#e33400",
+        "base.green": "#5ccc96",
+        "base.blue": "#00a3cc",
+        "base.cyan": "#089CC5",
+        "base.magenta": "#C86D8C",
+        "base.magenta.light": "#C86D8C33",
+        "base.yellow": "#f2ce00"
+      },
+      "highlight": {
+        "editor.foreground": "#ecf0c1",
+        "editor.background": "#0F111B",
+        "editor.active_line.background": "#1c1d39",
+        "editor.line_number": "#4b6479",
+        "editor.active_line_number": "#ecf0c1",
+        "conflict": "#e33400",
+        "created": "#5ccc96",
+        "deleted": "#e33400",
+        "error": "#e33400",
+        "hidden": "#4b6479",
+        "hint": "#C86D8C",
+        "ignored": "#4b6479",
+        "info": "#089CC5",
+        "modified": "#f2ce00",
+        "predictive": "#5D5945",
+        "renamed": "#089CC5",
+        "success": "#5ccc96",
+        "unreachable": "#4b6479",
+        "warning": "#f2ce00",
+        "syntax": {
+          "attribute": {
+            "color": "#f2ce00"
+          },
+          "boolean": {
+            "color": "#f2ce00"
+          },
+          "comment": {
+            "color": "#4b6479",
+            "font_style": "italic"
+          },
+          "comment.doc": {
+            "color": "#4b6479",
+            "font_style": "italic"
+          },
+          "constant": {
+            "color": "#e33400"
+          },
+          "constructor": {
+            "color": "#5ccc96"
+          },
+          "embedded": {
+            "color": "#ecf0c1"
+          },
+          "function": {
+            "color": "#089CC5"
+          },
+          "keyword": {
+            "color": "#C86D8C"
+          },
+          "link_text": {
+            "color": "#089CC5",
+            "font_style": "underline"
+          },
+          "link_uri": {
+            "color": "#089CC5",
+            "font_style": "italic"
+          },
+          "number": {
+            "color": "#f2ce00"
+          },
+          "string": {
+            "color": "#5ccc96"
+          },
+          "string.escape": {
+            "color": "#5ccc96"
+          },
+          "string.regex": {
+            "color": "#5ccc96"
+          },
+          "string.special": {
+            "color": "#f2ce00"
+          },
+          "string.special.symbol": {
+            "color": "#f2ce00"
+          },
+          "tag": {
+            "color": "#C86D8C"
+          },
+          "text.literal": {
+            "color": "#ecf0c1"
+          },
+          "title": {
+            "color": "#f2ce00",
+            "font_weight": 600
+          },
+          "type": {
+            "color": "#089CC5"
+          },
+          "property": {
+            "color": "#ecf0c1"
+          },
+          "variable.special": {
+            "color": "#C86D8C"
+          }
         }
-    ]
+      }
+    }
+  ]
 }
