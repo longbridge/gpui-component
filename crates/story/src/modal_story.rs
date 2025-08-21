@@ -394,8 +394,8 @@ impl Render for ModalStory {
                                     window.open_modal(cx, move |modal, _, cx| {
                                         modal
                                             .rounded_lg()
-                                            .bg(cx.theme().green.alpha(0.2))
-                                            .text_color(cx.theme().foreground)
+                                            .bg(cx.theme().cyan)
+                                            .text_color(cx.theme().info_foreground)
                                             .title("Custom Modal Title")
                                             .child("This is a custom modal content.")
                                     });
