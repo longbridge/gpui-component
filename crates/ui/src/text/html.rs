@@ -511,6 +511,7 @@ fn parse_paragraph(
 
                 paragraph.set_image(ImageNode {
                     url: src.into(),
+                    link: None,
                     alt: alt.map(Into::into),
                     width,
                     height,
@@ -615,6 +616,7 @@ fn parse_node(node: &Rc<Node>, paragraph: &mut Paragraph) -> Option<element::Nod
                     span: None,
                     image: ImageNode {
                         url: src.into(),
+                        link: None,
                         title: title.map(Into::into),
                         alt: alt.map(Into::into),
                         width,
@@ -867,7 +869,8 @@ mod tests {
                     alt: Some("Example".to_string().into()),
                     width: Some(px(100.).into()),
                     height: Some(px(200.).into()),
-                    title: Some("Example Image".to_string().into())
+                    title: Some("Example Image".to_string().into()),
+                    ..Default::default()
                 }
             })
         );
@@ -883,7 +886,8 @@ mod tests {
                     alt: Some("Example".to_string().into()),
                     width: Some(relative(0.8)),
                     height: None,
-                    title: Some("Example Image".to_string().into())
+                    title: Some("Example Image".to_string().into()),
+                    ..Default::default()
                 }
             })
         );

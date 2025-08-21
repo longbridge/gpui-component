@@ -4,11 +4,14 @@ use gpui::{
     div, img, prelude::FluentBuilder as _, px, relative, rems, AnyElement, App, DefiniteLength,
     Div, ElementId, FontStyle, FontWeight, Half, HighlightStyle, InteractiveElement as _,
     InteractiveText, IntoElement, Length, ObjectFit, ParentElement, Rems, RenderOnce, SharedString,
-    SharedUri, Styled, StyledImage as _, StyledText, Window,
+    SharedUri, StatefulInteractiveElement, Styled, StyledImage as _, StyledText, Window,
 };
 use markdown::mdast;
 
-use crate::{h_flex, highlighter::SyntaxHighlighter, v_flex, ActiveTheme as _, Icon, IconName};
+use crate::{
+    h_flex, highlighter::SyntaxHighlighter, tooltip::Tooltip, v_flex, ActiveTheme as _, Icon,
+    IconName,
+};
 
 use super::{utils::list_item_prefix, TextViewStyle};
 
@@ -44,10 +47,20 @@ impl From<Span> for ElementId {
 #[derive(Debug, Default, Clone)]
 pub struct ImageNode {
     pub url: SharedUri,
+    pub link: Option<LinkMark>,
     pub title: Option<SharedString>,
     pub alt: Option<SharedString>,
     pub width: Option<DefiniteLength>,
     pub height: Option<DefiniteLength>,
+}
+
+impl ImageNode {
+    pub fn title(&self) -> String {
+        self.title
+            .clone()
+            .unwrap_or_else(|| self.alt.clone().unwrap_or_default())
+            .to_string()
+    }
 }
 
 impl PartialEq for ImageNode {
@@ -387,10 +400,20 @@ impl RenderOnce for Paragraph {
                     })
                     .into_any_element()
             }
-            Self::Image { image, .. } => img(image.url)
+            Self::Image { image, .. } => img(image.url.clone())
+                .id(ElementId::Name(image.url.to_string().into()))
                 .object_fit(ObjectFit::Contain)
                 .max_w(relative(1.))
                 .when_some(image.width, |this, width| this.w(width))
+                .when_some(image.link.clone(), |this, link| {
+                    let title = image.title();
+                    this.cursor_pointer()
+                        .tooltip(move |window, cx| Tooltip::new(title.clone()).build(window, cx))
+                        .on_click(move |_, _, cx| {
+                            cx.stop_propagation();
+                            cx.open_url(&link.url);
+                        })
+                })
                 .into_any_element(),
         }
     }

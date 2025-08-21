@@ -285,19 +285,31 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node) -> String {
             });
         }
         Node::Link(val) => {
+            let link_mark = Some(LinkMark {
+                url: val.url.clone().into(),
+                title: val.title.clone().map(|s| s.into()),
+            });
+
             let mut child_paragraph = Paragraph::default();
             for child in val.children.iter() {
                 text.push_str(&parse_paragraph(&mut child_paragraph, &child));
             }
+
+            match child_paragraph {
+                Paragraph::Image { mut image, .. } => {
+                    image.link = link_mark;
+                    paragraph.set_image(image);
+                    return text;
+                }
+                _ => {}
+            }
+
             paragraph.push(element::TextNode {
                 text: text.clone(),
                 marks: vec![(
                     0..text.len(),
                     InlineTextStyle {
-                        link: Some(LinkMark {
-                            url: val.url.clone().into(),
-                            title: val.title.clone().map(|s| s.into()),
-                        }),
+                        link: link_mark,
                         ..Default::default()
                     },
                 )],
