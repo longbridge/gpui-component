@@ -7,7 +7,9 @@ use gpui_component::{
     button::{Button, ButtonVariants},
     checkbox::Checkbox,
     group_box::GroupBox,
+    h_flex,
     radio::{Radio, RadioGroup},
+    switch::Switch,
     text::TextView,
     v_flex, ActiveTheme as _, StyledExt,
 };
@@ -24,7 +26,8 @@ impl super::Story for GroupBoxStory {
     }
 
     fn description() -> &'static str {
-        "A styled container element that with an optional title to groups related content together."
+        "A styled container element that with an optional title \
+        to groups related content together."
     }
 
     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
@@ -58,21 +61,57 @@ impl Render for GroupBoxStory {
                 .justify_center()
                 .gap_4()
                 .child(
-                    section("A simple GroupBox").w_128().child(
+                    section("Default Style").w_128().child(
                         GroupBox::new()
-                            .title(Checkbox::new("all").label("Subscribe All"))
+                            .child("Subscriptions")
+                            .child(Checkbox::new("all").label("All"))
                             .child(Checkbox::new("news-letter").label("News Letter"))
                             .child(Checkbox::new("account-activity").label("Account Activity"))
-                            .child(Button::new("ok").primary().label("Send Mail")),
+                            .child(Button::new("ok").primary().label("Update Subscriptions")),
                     ),
                 )
                 .child(
-                    section("Outline style").w_128().child(
-                        GroupBox::new().outline().title("Appearance").child(
-                            RadioGroup::vertical("theme")
-                                .child(Radio::new("light").label("Light"))
-                                .child(Radio::new("dark").label("Dark"))
-                                .child(Radio::new("system").label("System")),
+                    section("Fill Style").w_128().child(
+                        GroupBox::new()
+                            .id("activity")
+                            .fill()
+                            .title("Contributions & activity")
+                            .child(
+                                h_flex()
+                                    .justify_between()
+                                    .child("Make profile private and hide activity")
+                                    .child(Switch::new("toggle-0").checked(true)),
+                            )
+                            .child(
+                                h_flex()
+                                    .justify_between()
+                                    .child("Include private contributions on my profile")
+                                    .child(Switch::new("toggle-1").checked(false)),
+                            )
+                            .child(Button::new("btn-1").primary().label("Save")),
+                    ),
+                )
+                .child(
+                    section("Outline Style").w_128().child(
+                        GroupBox::new()
+                            .id("appearance")
+                            .outline()
+                            .title("Appearance")
+                            .child(
+                                RadioGroup::vertical("theme")
+                                    .child(Radio::new("light").label("Light"))
+                                    .child(Radio::new("dark").label("Dark"))
+                                    .child(Radio::new("system").label("System")),
+                            ),
+                    ),
+                )
+                .child(
+                    section("Without Title").w_128().child(
+                        GroupBox::new().outline().child(
+                            h_flex()
+                                .justify_between()
+                                .child("Make profile private and hide activity")
+                                .child(Switch::new("toggle-1").checked(true)),
                         ),
                     ),
                 )
@@ -84,16 +123,23 @@ impl Render for GroupBoxStory {
                             .rounded_xl()
                             .p_5()
                             .title("This is a custom style")
-                            .title_style(StyleRefinement::default().font_semibold().line_height(relative(1.0)).px_3())
+                            .title_style(
+                                StyleRefinement::default()
+                                    .font_semibold()
+                                    .line_height(relative(1.0))
+                                    .px_3(),
+                            )
                             .content_style(
-                                StyleRefinement::default().rounded_xl()
+                                StyleRefinement::default()
+                                    .rounded_xl()
                                     .py_3()
                                     .px_4()
-                                    .border_2()
+                                    .border_2(),
                             )
                             .child(TextView::markdown(
                                 "custom-style",
-                                "You can use `title_style` to customize the style of the title. \n \
+                                "You can use `title_style` to customize the style \
+                                of the title. \n \
                                 And any style in `GroupBox` will apply to the content container.",
                             )),
                     ),

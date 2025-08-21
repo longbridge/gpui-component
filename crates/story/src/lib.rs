@@ -408,7 +408,6 @@ impl RenderOnce for StorySection {
                     .gap_4()
                     .child(self.title),
             )
-            .title_style(StyleRefinement::default().px_2())
             .content_style(
                 StyleRefinement::default()
                     .rounded_lg()
