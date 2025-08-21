@@ -339,13 +339,7 @@ impl RenderOnce for Paragraph {
         let mut ix = 0;
         for text_node in children.into_iter() {
             let text_len = text_node.text.len();
-            let part = if text.len() == 0 {
-                // trim start for first text
-                text_node.text.trim_start()
-            } else {
-                text_node.text.as_str()
-            };
-            text.push_str(&part);
+            text.push_str(&text_node.text);
 
             if let Some(image) = &text_node.image {
                 if text.len() > 0 {
@@ -427,10 +421,7 @@ impl RenderOnce for Paragraph {
             child_nodes.push(inline_text(ix, text, links, highlights, window));
         }
 
-        div()
-            .flex()
-            .id(span.unwrap_or_default())
-            .children(child_nodes)
+        div().id(span.unwrap_or_default()).children(child_nodes)
     }
 }
 
