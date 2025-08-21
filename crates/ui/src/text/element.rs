@@ -78,19 +78,10 @@ pub struct TextNode {
     pub marks: Vec<(Range<usize>, InlineTextStyle)>,
 }
 
-#[derive(Debug, Clone, PartialEq, IntoElement)]
+#[derive(Debug, Default, Clone, PartialEq, IntoElement)]
 pub struct Paragraph {
     pub(super) span: Option<Span>,
     pub(super) children: Vec<TextNode>,
-}
-
-impl Default for Paragraph {
-    fn default() -> Self {
-        Self {
-            span: None,
-            children: vec![],
-        }
-    }
 }
 
 impl From<String> for Paragraph {
