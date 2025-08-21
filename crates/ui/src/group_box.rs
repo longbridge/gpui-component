@@ -108,8 +108,8 @@ impl RenderOnce for GroupBox {
         v_flex()
             .id(self.id.unwrap_or("group-box".into()))
             .size_full()
-            .when(has_paddings, |this| this.gap_2())
-            .when(!has_paddings, |this| this.gap_3())
+            .when(has_paddings, |this| this.gap_3())
+            .when(!has_paddings, |this| this.gap_4())
             .refine_style(&self.style)
             .when_some(self.title, |this, title| {
                 this.child(
@@ -126,7 +126,7 @@ impl RenderOnce for GroupBox {
                     .when_some(border, |this, border| this.border_color(border).border_1())
                     .text_color(cx.theme().group_box_foreground)
                     .when(has_paddings, |this| this.p_4())
-                    .gap_3()
+                    .gap_4()
                     .rounded(cx.theme().radius)
                     .refine_style(&self.content_style)
                     .children(self.children),
