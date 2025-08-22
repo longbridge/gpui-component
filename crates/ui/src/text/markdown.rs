@@ -9,11 +9,11 @@ use markdown::{
     ParseOptions,
 };
 
-use crate::v_flex;
+use crate::{text::element::TextNode, v_flex};
 
 use super::{
     element::{
-        self, CodeBlock, ImageNode, InlineTextStyle, LinkMark, Paragraph, Span, Table, TableRow,
+        self, CodeBlock, ImageNode, LinkMark, Paragraph, Span, Table, TableRow, TextNodeStyle,
     },
     html::parse_html,
     TextViewStyle,
@@ -228,65 +228,35 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node) -> String {
             for child in val.children.iter() {
                 text.push_str(&parse_paragraph(&mut child_paragraph, &child));
             }
-            paragraph.push(element::TextNode {
-                text: text.clone(),
-                image: None,
-                marks: vec![(
-                    0..text.len(),
-                    InlineTextStyle {
-                        italic: true,
-                        ..Default::default()
-                    },
-                )],
-            });
+            paragraph.push(
+                TextNode::new(&text)
+                    .marks(vec![(0..text.len(), TextNodeStyle::default().italic())]),
+            );
         }
         Node::Strong(val) => {
             let mut child_paragraph = Paragraph::default();
             for child in val.children.iter() {
                 text.push_str(&parse_paragraph(&mut child_paragraph, &child));
             }
-            paragraph.push(element::TextNode {
-                text: text.clone(),
-                image: None,
-                marks: vec![(
-                    0..text.len(),
-                    InlineTextStyle {
-                        bold: true,
-                        ..Default::default()
-                    },
-                )],
-            });
+            paragraph.push(
+                TextNode::new(&text).marks(vec![(0..text.len(), TextNodeStyle::default().bold())]),
+            );
         }
         Node::Delete(val) => {
             let mut child_paragraph = Paragraph::default();
             for child in val.children.iter() {
                 text.push_str(&parse_paragraph(&mut child_paragraph, &child));
             }
-            paragraph.push(element::TextNode {
-                text: text.clone(),
-                image: None,
-                marks: vec![(
-                    0..text.len(),
-                    InlineTextStyle {
-                        strikethrough: true,
-                        ..Default::default()
-                    },
-                )],
-            });
+            paragraph.push(TextNode::new(&text).marks(vec![(
+                0..text.len(),
+                TextNodeStyle::default().strikethrough(),
+            )]));
         }
         Node::InlineCode(val) => {
             text = val.value.clone();
-            paragraph.push(element::TextNode {
-                text: text.clone(),
-                image: None,
-                marks: vec![(
-                    0..text.len(),
-                    InlineTextStyle {
-                        code: true,
-                        ..Default::default()
-                    },
-                )],
-            });
+            paragraph.push(
+                TextNode::new(&text).marks(vec![(0..text.len(), TextNodeStyle::default().code())]),
+            );
         }
         Node::Link(val) => {
             let link_mark = Some(LinkMark {
@@ -308,7 +278,7 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node) -> String {
 
                 child.marks.push((
                     0..child.text.len(),
-                    InlineTextStyle {
+                    TextNodeStyle {
                         link: link_mark.clone(),
                         ..Default::default()
                     },
@@ -327,35 +297,20 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node) -> String {
         }
         Node::InlineMath(raw) => {
             text = raw.value.clone();
-            paragraph.push(element::TextNode {
-                text: text.clone(),
-                image: None,
-                marks: vec![(
-                    0..text.len(),
-                    InlineTextStyle {
-                        code: true,
-                        ..Default::default()
-                    },
-                )],
-            });
+            paragraph.push(
+                TextNode::new(&text).marks(vec![(0..text.len(), TextNodeStyle::default().code())]),
+            );
         }
         Node::MdxTextExpression(raw) => {
             text = raw.value.clone();
-            paragraph.push(element::TextNode {
-                text: text.clone(),
-                image: None,
-                marks: vec![(0..text.len(), InlineTextStyle::default())],
-            });
+            paragraph
+                .push(TextNode::new(&text).marks(vec![(0..text.len(), TextNodeStyle::default())]));
         }
         Node::Html(val) => match parse_html(&val.value) {
             Ok(el) => {
                 if el.is_break() {
                     text = "\n".to_owned();
-                    paragraph.push(element::TextNode {
-                        text: text.clone(),
-                        image: None,
-                        marks: vec![(0..text.len(), InlineTextStyle::default())],
-                    });
+                    paragraph.push(TextNode::new(&text));
                 } else {
                     if cfg!(debug_assertions) {
                         tracing::warn!("unsupported inline html tag: {:#?}", el);

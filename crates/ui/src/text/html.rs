@@ -17,7 +17,7 @@ use markup5ever_rcdom::{Node, NodeData, RcDom};
 use crate::v_flex;
 
 use super::element::{
-    self, ImageNode, InlineTextStyle, LinkMark, Paragraph, Table, TableRow, TextNode,
+    self, ImageNode, LinkMark, Paragraph, Table, TableRow, TextNode, TextNodeStyle,
 };
 use super::TextViewStyle;
 
@@ -374,16 +374,16 @@ fn trim_text(text: &str) -> String {
 fn parse_paragraph(
     paragraph: &mut Paragraph,
     node: &Rc<Node>,
-) -> (String, Vec<(Range<usize>, InlineTextStyle)>) {
+) -> (String, Vec<(Range<usize>, TextNodeStyle)>) {
     let mut text = String::new();
     let mut marks = vec![];
 
     /// Append new_text and new_marks to text and marks.
     fn merge_child_text(
         text: &mut String,
-        marks: &mut Vec<(Range<usize>, InlineTextStyle)>,
+        marks: &mut Vec<(Range<usize>, TextNodeStyle)>,
         new_text: &str,
-        new_marks: &[(Range<usize>, InlineTextStyle)],
+        new_marks: &[(Range<usize>, TextNodeStyle)],
     ) {
         let offset = text.len();
         text.push_str(new_text);
@@ -405,18 +405,8 @@ fn parse_paragraph(
                     let (child_text, child_marks) = parse_paragraph(&mut child_paragraph, &child);
                     merge_child_text(&mut text, &mut marks, &child_text, &child_marks);
                 }
-                marks.push((
-                    0..text.len(),
-                    InlineTextStyle {
-                        italic: true,
-                        ..Default::default()
-                    },
-                ));
-                paragraph.push(element::TextNode {
-                    text: text.clone(),
-                    image: None,
-                    marks: marks.clone(),
-                });
+                marks.push((0..text.len(), TextNodeStyle::default().italic()));
+                paragraph.push(TextNode::new(&text).marks(marks.clone()));
             }
             local_name!("strong") | local_name!("b") => {
                 let mut child_paragraph = Paragraph::default();
@@ -424,18 +414,8 @@ fn parse_paragraph(
                     let (child_text, child_marks) = parse_paragraph(&mut child_paragraph, &child);
                     merge_child_text(&mut text, &mut marks, &child_text, &child_marks);
                 }
-                marks.push((
-                    0..text.len(),
-                    InlineTextStyle {
-                        bold: true,
-                        ..Default::default()
-                    },
-                ));
-                paragraph.push(TextNode {
-                    text: text.clone(),
-                    image: None,
-                    marks: marks.clone(),
-                });
+                marks.push((0..text.len(), TextNodeStyle::default().bold()));
+                paragraph.push(TextNode::new(&text).marks(marks.clone()));
             }
             local_name!("del") | local_name!("s") => {
                 let mut child_paragraph = Paragraph::default();
@@ -443,18 +423,8 @@ fn parse_paragraph(
                     let (child_text, child_marks) = parse_paragraph(&mut child_paragraph, &child);
                     merge_child_text(&mut text, &mut marks, &child_text, &child_marks);
                 }
-                marks.push((
-                    0..text.len(),
-                    InlineTextStyle {
-                        strikethrough: true,
-                        ..Default::default()
-                    },
-                ));
-                paragraph.push(TextNode {
-                    text: text.clone(),
-                    image: None,
-                    marks: marks.clone(),
-                });
+                marks.push((0..text.len(), TextNodeStyle::default().strikethrough()));
+                paragraph.push(TextNode::new(&text).marks(marks.clone()));
             }
             local_name!("code") => {
                 let mut child_paragraph = Paragraph::default();
@@ -462,18 +432,8 @@ fn parse_paragraph(
                     let (child_text, child_marks) = parse_paragraph(&mut child_paragraph, &child);
                     merge_child_text(&mut text, &mut marks, &child_text, &child_marks);
                 }
-                marks.push((
-                    0..text.len(),
-                    InlineTextStyle {
-                        code: true,
-                        ..Default::default()
-                    },
-                ));
-                paragraph.push(TextNode {
-                    text: text.clone(),
-                    image: None,
-                    marks: marks.clone(),
-                });
+                marks.push((0..text.len(), TextNodeStyle::default().code()));
+                paragraph.push(TextNode::new(&text).marks(marks.clone()));
             }
             local_name!("a") => {
                 let mut child_paragraph = Paragraph::default();
@@ -484,21 +444,14 @@ fn parse_paragraph(
 
                 marks.push((
                     0..text.len(),
-                    InlineTextStyle {
-                        link: Some(LinkMark {
-                            url: attr_value(&attrs, local_name!("href"))
-                                .unwrap_or_default()
-                                .into(),
-                            title: attr_value(&attrs, local_name!("title")).map(Into::into),
-                        }),
-                        ..Default::default()
-                    },
+                    TextNodeStyle::default().link(LinkMark {
+                        url: attr_value(&attrs, local_name!("href"))
+                            .unwrap_or_default()
+                            .into(),
+                        title: attr_value(&attrs, local_name!("title")).map(Into::into),
+                    }),
                 ));
-                paragraph.push(TextNode {
-                    text: text.clone(),
-                    image: None,
-                    marks: marks.clone(),
-                });
+                paragraph.push(TextNode::new(&text).marks(marks.clone()));
             }
             local_name!("img") => {
                 let Some(src) = attr_value(attrs, local_name!("src")) else {
@@ -528,11 +481,7 @@ fn parse_paragraph(
                     let (child_text, child_marks) = parse_paragraph(&mut child_paragraph, &child);
                     merge_child_text(&mut text, &mut marks, &child_text, &child_marks);
                 }
-                paragraph.push(element::TextNode {
-                    text: text.clone(),
-                    image: None,
-                    marks: marks.clone(),
-                });
+                paragraph.push(TextNode::new(&text).marks(marks.clone()));
             }
         },
         _ => {
@@ -541,11 +490,7 @@ fn parse_paragraph(
                 let (child_text, child_marks) = parse_paragraph(&mut child_paragraph, &child);
                 merge_child_text(&mut text, &mut marks, &child_text, &child_marks);
             }
-            paragraph.push(TextNode {
-                text: text.clone(),
-                image: None,
-                marks: marks.clone(),
-            });
+            paragraph.push(TextNode::new(&text).marks(marks.clone()));
         }
     }
 
@@ -778,7 +723,7 @@ fn consume_paragraph(children: &mut Vec<element::Node>, paragraph: &mut Paragrap
 mod tests {
     use gpui::{px, relative};
 
-    use crate::text::element::{Node, Paragraph, TextNode};
+    use crate::text::element::{ImageNode, Node, Paragraph, TextNode};
 
     use super::trim_text;
 
@@ -866,18 +811,14 @@ mod tests {
             node,
             Node::Paragraph(Paragraph {
                 span: None,
-                children: vec![TextNode {
-                    text: String::new(),
-                    marks: vec![],
-                    image: Some(super::ImageNode {
-                        url: "https://example.com/image.png".to_string().into(),
-                        alt: Some("Example".to_string().into()),
-                        width: Some(px(100.).into()),
-                        height: Some(px(200.).into()),
-                        title: Some("Example Image".to_string().into()),
-                        ..Default::default()
-                    }),
-                }],
+                children: vec![TextNode::image(ImageNode {
+                    url: "https://example.com/image.png".to_string().into(),
+                    alt: Some("Example".to_string().into()),
+                    width: Some(px(100.).into()),
+                    height: Some(px(200.).into()),
+                    title: Some("Example Image".to_string().into()),
+                    ..Default::default()
+                })],
             })
         );
 
@@ -887,18 +828,14 @@ mod tests {
             node,
             Node::Paragraph(Paragraph {
                 span: None,
-                children: vec![TextNode {
-                    text: String::new(),
-                    marks: vec![],
-                    image: Some(super::ImageNode {
-                        url: "https://example.com/image.png".to_string().into(),
-                        alt: Some("Example".to_string().into()),
-                        width: Some(relative(0.8)),
-                        height: None,
-                        title: Some("Example Image".to_string().into()),
-                        ..Default::default()
-                    }),
-                }],
+                children: vec![TextNode::image(ImageNode {
+                    url: "https://example.com/image.png".to_string().into(),
+                    alt: Some("Example".to_string().into()),
+                    width: Some(relative(0.8)),
+                    height: None,
+                    title: Some("Example Image".to_string().into()),
+                    ..Default::default()
+                })],
             })
         );
     }

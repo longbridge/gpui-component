@@ -23,12 +23,39 @@ pub struct LinkMark {
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
-pub struct InlineTextStyle {
+pub struct TextNodeStyle {
     pub bold: bool,
     pub italic: bool,
     pub strikethrough: bool,
     pub code: bool,
     pub link: Option<LinkMark>,
+}
+
+impl TextNodeStyle {
+    pub fn bold(mut self) -> Self {
+        self.bold = true;
+        self
+    }
+
+    pub fn italic(mut self) -> Self {
+        self.italic = true;
+        self
+    }
+
+    pub fn strikethrough(mut self) -> Self {
+        self.strikethrough = true;
+        self
+    }
+
+    pub fn code(mut self) -> Self {
+        self.code = true;
+        self
+    }
+
+    pub fn link(mut self, link: impl Into<LinkMark>) -> Self {
+        self.link = Some(link.into());
+        self
+    }
 }
 
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
@@ -75,7 +102,28 @@ pub struct TextNode {
     pub text: String,
     pub image: Option<ImageNode>,
     /// The text styles, each tuple contains the range of the text and the style.
-    pub marks: Vec<(Range<usize>, InlineTextStyle)>,
+    pub marks: Vec<(Range<usize>, TextNodeStyle)>,
+}
+
+impl TextNode {
+    pub fn new(text: &str) -> Self {
+        Self {
+            text: text.to_string(),
+            image: None,
+            marks: vec![],
+        }
+    }
+
+    pub fn image(image: ImageNode) -> Self {
+        let mut this = Self::new("");
+        this.image = Some(image);
+        this
+    }
+
+    pub fn marks(mut self, marks: Vec<(Range<usize>, TextNodeStyle)>) -> Self {
+        self.marks = marks;
+        self
+    }
 }
 
 #[derive(Debug, Default, Clone, PartialEq, IntoElement)]
@@ -88,11 +136,7 @@ impl From<String> for Paragraph {
     fn from(value: String) -> Self {
         Self {
             span: None,
-            children: vec![TextNode {
-                text: value.clone(),
-                image: None,
-                marks: vec![],
-            }],
+            children: vec![TextNode::new(&value)],
         }
     }
 }
@@ -154,11 +198,8 @@ impl Paragraph {
     }
 
     pub fn push_str(&mut self, text: &str) {
-        self.children.push(TextNode {
-            text: text.to_string(),
-            image: None,
-            marks: vec![(0..text.len(), InlineTextStyle::default())],
-        });
+        self.children
+            .push(TextNode::new(&text).marks(vec![(0..text.len(), TextNodeStyle::default())]));
     }
 
     pub fn push(&mut self, text: TextNode) {
@@ -166,11 +207,7 @@ impl Paragraph {
     }
 
     pub fn push_image(&mut self, image: ImageNode) {
-        self.children.push(TextNode {
-            text: String::new(),
-            image: Some(image),
-            marks: vec![],
-        });
+        self.children.push(TextNode::image(image));
     }
 
     pub fn is_empty(&self) -> bool {
