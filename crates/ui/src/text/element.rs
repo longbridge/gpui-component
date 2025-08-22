@@ -9,8 +9,8 @@ use gpui::{
 use markdown::mdast;
 
 use crate::{
-    h_flex, highlighter::SyntaxHighlighter, tooltip::Tooltip, v_flex, ActiveTheme as _, Icon,
-    IconName,
+    h_flex, highlighter::SyntaxHighlighter, input::Selection, text::inline_text::InlineText,
+    tooltip::Tooltip, v_flex, ActiveTheme as _, Icon, IconName,
 };
 
 use super::{utils::list_item_prefix, TextViewStyle};
@@ -334,36 +334,41 @@ impl RenderOnce for Paragraph {
         let mut links: Vec<(Range<usize>, LinkMark)> = vec![];
         let mut offset = 0;
 
-        fn inline_text(
-            ix: usize,
-            text: String,
-            links: Vec<(Range<usize>, LinkMark)>,
-            highlights: Vec<(Range<usize>, HighlightStyle)>,
-            window: &Window,
-        ) -> AnyElement {
-            let text_style = window.text_style();
-            let styled_text =
-                StyledText::new(text).with_default_highlights(&text_style, highlights);
-            let link_ranges = links
-                .iter()
-                .map(|(range, _)| range.clone())
-                .collect::<Vec<_>>();
+        // fn inline_text(
+        //     ix: usize,
+        //     text: String,
+        //     links: Vec<(Range<usize>, LinkMark)>,
+        //     highlights: Vec<(Range<usize>, HighlightStyle)>,
+        //     window: &mut Window,
+        //     cx: &mut App,
+        // ) -> AnyElement {
+        //     let text_style = window.text_style();
+        //     let styled_text =
+        //         StyledText::new(text).with_default_highlights(&text_style, highlights);
+        //     let link_ranges = links
+        //         .iter()
+        //         .map(|(range, _)| range.clone())
+        //         .collect::<Vec<_>>();
 
-            InteractiveText::new(ix, styled_text)
-                .on_click(link_ranges, {
-                    let links = links.clone();
-                    move |ix, _, cx| {
-                        if let Some((_, link)) = &links.get(ix) {
-                            // Stop propagation to prevent the parent element from handling the event.
-                            //
-                            // For example the text in a checkbox label, click link need avoid toggle check state.
-                            cx.stop_propagation();
-                            cx.open_url(&link.url);
-                        }
-                    }
-                })
-                .into_any_element()
-        }
+        //     let state_id = ElementId::Name(format!("inline-text-{}", ix).into());
+        //     let selection_state = window.use_keyed_state(state_id, cx, |_, _| Selection::default());
+
+        //     InteractiveText::new(ix, styled_text)
+        //         .on_click(link_ranges, {
+        //             let links = links.clone();
+        //             move |ix, _, cx| {
+        //                 if let Some((_, link)) = &links.get(ix) {
+        //                     // Stop propagation to prevent the parent element from handling the event.
+        //                     //
+        //                     // For example the text in a checkbox label, click link need avoid toggle check state.
+        //                     cx.stop_propagation();
+        //                     cx.open_url(&link.url);
+        //                 }
+        //             }
+        //         })
+        //         .into_any_element()
+        // }
+
         let mut ix = 0;
         for text_node in children.into_iter() {
             let text_len = text_node.text.len();
@@ -371,13 +376,10 @@ impl RenderOnce for Paragraph {
 
             if let Some(image) = &text_node.image {
                 if text.len() > 0 {
-                    child_nodes.push(inline_text(
-                        ix,
-                        text.clone(),
-                        links.clone(),
-                        highlights.clone(),
-                        window,
-                    ));
+                    child_nodes.push(
+                        InlineText::new(ix, text.clone(), links.clone(), highlights.clone())
+                            .into_any_element(),
+                    );
                 }
                 child_nodes.push(
                     img(image.url.clone())
@@ -446,7 +448,7 @@ impl RenderOnce for Paragraph {
 
         if text.len() > 0 {
             // Add the last text node
-            child_nodes.push(inline_text(ix, text, links, highlights, window));
+            child_nodes.push(InlineText::new(ix, text, links, highlights).into_any_element());
         }
 
         div().id(span.unwrap_or_default()).children(child_nodes)
