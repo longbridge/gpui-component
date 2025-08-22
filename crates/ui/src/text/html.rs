@@ -257,13 +257,7 @@ fn style_attrs(attrs: &RefCell<Vec<html5ever::Attribute>>) -> HashMap<String, St
 /// When is percentage, it will be converted to relative length.
 /// Else, it will be converted to pixels.
 fn value_to_length(value: &str) -> Option<DefiniteLength> {
-    if value.ends_with("px") {
-        value
-            .trim_end_matches("px")
-            .parse()
-            .ok()
-            .map(|v| px(v).into())
-    } else if value.ends_with("%") {
+    if value.ends_with("%") {
         value
             .trim_end_matches("%")
             .parse::<f32>()
