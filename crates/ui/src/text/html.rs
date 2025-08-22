@@ -16,9 +16,7 @@ use markup5ever_rcdom::{Node, NodeData, RcDom};
 
 use crate::v_flex;
 
-use super::element::{
-    self, ImageNode, LinkMark, Paragraph, Table, TableRow, TextNode, TextNodeStyle,
-};
+use super::element::{self, ImageNode, LinkMark, Paragraph, Table, TableRow, TextMark, TextNode};
 use super::TextViewStyle;
 
 const BLOCK_ELEMENTS: [&str; 35] = [
@@ -374,16 +372,16 @@ fn trim_text(text: &str) -> String {
 fn parse_paragraph(
     paragraph: &mut Paragraph,
     node: &Rc<Node>,
-) -> (String, Vec<(Range<usize>, TextNodeStyle)>) {
+) -> (String, Vec<(Range<usize>, TextMark)>) {
     let mut text = String::new();
     let mut marks = vec![];
 
     /// Append new_text and new_marks to text and marks.
     fn merge_child_text(
         text: &mut String,
-        marks: &mut Vec<(Range<usize>, TextNodeStyle)>,
+        marks: &mut Vec<(Range<usize>, TextMark)>,
         new_text: &str,
-        new_marks: &[(Range<usize>, TextNodeStyle)],
+        new_marks: &[(Range<usize>, TextMark)],
     ) {
         let offset = text.len();
         text.push_str(new_text);
@@ -405,7 +403,7 @@ fn parse_paragraph(
                     let (child_text, child_marks) = parse_paragraph(&mut child_paragraph, &child);
                     merge_child_text(&mut text, &mut marks, &child_text, &child_marks);
                 }
-                marks.push((0..text.len(), TextNodeStyle::default().italic()));
+                marks.push((0..text.len(), TextMark::default().italic()));
                 paragraph.push(TextNode::new(&text).marks(marks.clone()));
             }
             local_name!("strong") | local_name!("b") => {
@@ -414,7 +412,7 @@ fn parse_paragraph(
                     let (child_text, child_marks) = parse_paragraph(&mut child_paragraph, &child);
                     merge_child_text(&mut text, &mut marks, &child_text, &child_marks);
                 }
-                marks.push((0..text.len(), TextNodeStyle::default().bold()));
+                marks.push((0..text.len(), TextMark::default().bold()));
                 paragraph.push(TextNode::new(&text).marks(marks.clone()));
             }
             local_name!("del") | local_name!("s") => {
@@ -423,7 +421,7 @@ fn parse_paragraph(
                     let (child_text, child_marks) = parse_paragraph(&mut child_paragraph, &child);
                     merge_child_text(&mut text, &mut marks, &child_text, &child_marks);
                 }
-                marks.push((0..text.len(), TextNodeStyle::default().strikethrough()));
+                marks.push((0..text.len(), TextMark::default().strikethrough()));
                 paragraph.push(TextNode::new(&text).marks(marks.clone()));
             }
             local_name!("code") => {
@@ -432,7 +430,7 @@ fn parse_paragraph(
                     let (child_text, child_marks) = parse_paragraph(&mut child_paragraph, &child);
                     merge_child_text(&mut text, &mut marks, &child_text, &child_marks);
                 }
-                marks.push((0..text.len(), TextNodeStyle::default().code()));
+                marks.push((0..text.len(), TextMark::default().code()));
                 paragraph.push(TextNode::new(&text).marks(marks.clone()));
             }
             local_name!("a") => {
@@ -444,7 +442,7 @@ fn parse_paragraph(
 
                 marks.push((
                     0..text.len(),
-                    TextNodeStyle::default().link(LinkMark {
+                    TextMark::default().link(LinkMark {
                         url: attr_value(&attrs, local_name!("href"))
                             .unwrap_or_default()
                             .into(),

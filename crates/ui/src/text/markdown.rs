@@ -12,9 +12,7 @@ use markdown::{
 use crate::{text::element::TextNode, v_flex};
 
 use super::{
-    element::{
-        self, CodeBlock, ImageNode, LinkMark, Paragraph, Span, Table, TableRow, TextNodeStyle,
-    },
+    element::{self, CodeBlock, ImageNode, LinkMark, Paragraph, Span, Table, TableRow, TextMark},
     html::parse_html,
     TextViewStyle,
 };
@@ -229,8 +227,7 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node) -> String {
                 text.push_str(&parse_paragraph(&mut child_paragraph, &child));
             }
             paragraph.push(
-                TextNode::new(&text)
-                    .marks(vec![(0..text.len(), TextNodeStyle::default().italic())]),
+                TextNode::new(&text).marks(vec![(0..text.len(), TextMark::default().italic())]),
             );
         }
         Node::Strong(val) => {
@@ -239,7 +236,7 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node) -> String {
                 text.push_str(&parse_paragraph(&mut child_paragraph, &child));
             }
             paragraph.push(
-                TextNode::new(&text).marks(vec![(0..text.len(), TextNodeStyle::default().bold())]),
+                TextNode::new(&text).marks(vec![(0..text.len(), TextMark::default().bold())]),
             );
         }
         Node::Delete(val) => {
@@ -247,15 +244,15 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node) -> String {
             for child in val.children.iter() {
                 text.push_str(&parse_paragraph(&mut child_paragraph, &child));
             }
-            paragraph.push(TextNode::new(&text).marks(vec![(
-                0..text.len(),
-                TextNodeStyle::default().strikethrough(),
-            )]));
+            paragraph.push(
+                TextNode::new(&text)
+                    .marks(vec![(0..text.len(), TextMark::default().strikethrough())]),
+            );
         }
         Node::InlineCode(val) => {
             text = val.value.clone();
             paragraph.push(
-                TextNode::new(&text).marks(vec![(0..text.len(), TextNodeStyle::default().code())]),
+                TextNode::new(&text).marks(vec![(0..text.len(), TextMark::default().code())]),
             );
         }
         Node::Link(val) => {
@@ -278,7 +275,7 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node) -> String {
 
                 child.marks.push((
                     0..child.text.len(),
-                    TextNodeStyle {
+                    TextMark {
                         link: link_mark.clone(),
                         ..Default::default()
                     },
@@ -298,13 +295,12 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node) -> String {
         Node::InlineMath(raw) => {
             text = raw.value.clone();
             paragraph.push(
-                TextNode::new(&text).marks(vec![(0..text.len(), TextNodeStyle::default().code())]),
+                TextNode::new(&text).marks(vec![(0..text.len(), TextMark::default().code())]),
             );
         }
         Node::MdxTextExpression(raw) => {
             text = raw.value.clone();
-            paragraph
-                .push(TextNode::new(&text).marks(vec![(0..text.len(), TextNodeStyle::default())]));
+            paragraph.push(TextNode::new(&text).marks(vec![(0..text.len(), TextMark::default())]));
         }
         Node::Html(val) => match parse_html(&val.value) {
             Ok(el) => {

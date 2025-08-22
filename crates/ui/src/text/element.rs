@@ -23,7 +23,7 @@ pub struct LinkMark {
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
-pub struct TextNodeStyle {
+pub struct TextMark {
     pub bold: bool,
     pub italic: bool,
     pub strikethrough: bool,
@@ -31,7 +31,7 @@ pub struct TextNodeStyle {
     pub link: Option<LinkMark>,
 }
 
-impl TextNodeStyle {
+impl TextMark {
     pub fn bold(mut self) -> Self {
         self.bold = true;
         self
@@ -102,7 +102,7 @@ pub struct TextNode {
     pub text: String,
     pub image: Option<ImageNode>,
     /// The text styles, each tuple contains the range of the text and the style.
-    pub marks: Vec<(Range<usize>, TextNodeStyle)>,
+    pub marks: Vec<(Range<usize>, TextMark)>,
 }
 
 impl TextNode {
@@ -120,7 +120,7 @@ impl TextNode {
         this
     }
 
-    pub fn marks(mut self, marks: Vec<(Range<usize>, TextNodeStyle)>) -> Self {
+    pub fn marks(mut self, marks: Vec<(Range<usize>, TextMark)>) -> Self {
         self.marks = marks;
         self
     }
@@ -199,7 +199,7 @@ impl Paragraph {
 
     pub fn push_str(&mut self, text: &str) {
         self.children
-            .push(TextNode::new(&text).marks(vec![(0..text.len(), TextNodeStyle::default())]));
+            .push(TextNode::new(&text).marks(vec![(0..text.len(), TextMark::default())]));
     }
 
     pub fn push(&mut self, text: TextNode) {
