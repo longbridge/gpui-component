@@ -242,14 +242,12 @@ fn style_attrs(attrs: &RefCell<Vec<html5ever::Attribute>>) -> HashMap<String, St
     };
 
     for decl in css_text.split(';') {
-        for rule in decl.split(':') {
-            let mut parts = rule.splitn(2, ':');
-            if let (Some(key), Some(value)) = (parts.next(), parts.next()) {
-                styles.insert(
-                    key.trim().to_lowercase().to_string(),
-                    value.trim().to_string(),
-                );
-            }
+        let mut parts = decl.splitn(2, ':');
+        if let (Some(key), Some(value)) = (parts.next(), parts.next()) {
+            styles.insert(
+                key.trim().to_lowercase().to_string(),
+                value.trim().to_string(),
+            );
         }
     }
 
