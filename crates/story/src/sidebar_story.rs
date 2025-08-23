@@ -1,13 +1,15 @@
 use std::collections::HashMap;
 
 use gpui::{
-    div, prelude::FluentBuilder, relative, Action, App, AppContext, ClickEvent, Context, Entity,
-    Focusable, IntoElement, ParentElement, Render, SharedString, Styled, Window,
+    actions, div, prelude::FluentBuilder, relative, Action, App, AppContext, ClickEvent, Context,
+    Entity, Focusable, InteractiveElement, IntoElement, ParentElement, Render, SharedString,
+    Styled, Window,
 };
 
 use gpui_component::{
     badge::Badge,
     breadcrumb::{Breadcrumb, BreadcrumbItem},
+    context_menu::ContextMenuExt,
     divider::Divider,
     h_flex,
     popup_menu::PopupMenuExt,
@@ -19,6 +21,8 @@ use gpui_component::{
     v_flex, ActiveTheme, Icon, IconName, Side, Sizable,
 };
 use serde::Deserialize;
+
+actions!(story, [ToggleSidebar]);
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = sidebar_story, no_json)]
@@ -52,6 +56,11 @@ impl SidebarStory {
             focus_handle: cx.focus_handle(),
             checked: false,
         }
+    }
+
+    fn on_toggle_sidebar_click(&mut self, _: &ToggleSidebar, _: &mut Window, cx: &mut Context<Self>) {
+        self.collapsed = !self.collapsed;
+        cx.notify()
     }
 
     fn render_content(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -243,6 +252,7 @@ impl Render for SidebarStory {
         ];
 
         h_flex()
+            .on_action(cx.listener(Self::on_toggle_sidebar_click))
             .rounded(cx.theme().radius)
             .border_1()
             .border_color(cx.theme().border)
@@ -312,6 +322,19 @@ impl Render for SidebarStory {
                             groups[0].iter().map(|item| {
                                 SidebarMenuItem::new(item.label())
                                     .icon(item.icon())
+                                    .context_menu({
+                                        move |this, _window, _cx| {
+                                            this.external_link_icon(false)
+                                                .menu("Toggle Sidebar", Box::new(ToggleSidebar))
+                                                .link(
+                                                    "About",
+                                                    "https://github.com/longbridge/gpui-component",
+                                                )
+                                                .separator()
+                                                .label("This is a label")
+                                                .separator()
+                                        }
+                                    })
                                     .active(self.active_items.contains_key(item))
                                     .children(item.items().into_iter().enumerate().map(
                                         |(ix, sub_item)| {
