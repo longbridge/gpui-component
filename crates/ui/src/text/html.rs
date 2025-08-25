@@ -7,8 +7,8 @@ use std::rc::Rc;
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    div, px, relative, AnyElement, DefiniteLength, Element, ElementId, IntoElement,
-    ParentElement as _, SharedString, Styled as _, Window,
+    div, px, relative, DefiniteLength, ElementId, IntoElement, ParentElement as _, RenderOnce,
+    SharedString, Styled as _, Window,
 };
 use html5ever::tendril::TendrilSink;
 use html5ever::{local_name, parse_document, LocalName, ParseOpts};
@@ -16,9 +16,7 @@ use markup5ever_rcdom::{Node, NodeData, RcDom};
 
 use crate::v_flex;
 
-use super::element::{
-    self, ImageNode, InlineTextStyle, LinkMark, Paragraph, Table, TableRow, TextNode,
-};
+use super::element::{self, ImageNode, LinkMark, Paragraph, Table, TableRow, TextMark, TextNode};
 use super::TextViewStyle;
 
 const BLOCK_ELEMENTS: [&str; 35] = [
@@ -95,7 +93,7 @@ fn cleanup_html(source: &str) -> Vec<u8> {
     }
 }
 
-#[derive(Clone)]
+#[derive(IntoElement, Clone)]
 pub(super) struct HtmlElement {
     id: ElementId,
     pub(super) text: SharedString,
@@ -143,83 +141,30 @@ impl HtmlState {
     }
 }
 
-impl IntoElement for HtmlElement {
-    type Element = Self;
+impl RenderOnce for HtmlElement {
+    fn render(self, window: &mut Window, cx: &mut gpui::App) -> impl IntoElement {
+        let state = window.use_keyed_state(self.id.clone(), cx, |_, _| HtmlState::default());
 
-    fn into_element(self) -> Self::Element {
-        self
-    }
-}
-
-impl Element for HtmlElement {
-    type RequestLayoutState = AnyElement;
-    type PrepaintState = ();
-
-    fn id(&self) -> Option<gpui::ElementId> {
-        Some(self.id.clone())
-    }
-
-    fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
-        None
-    }
-
-    fn request_layout(
-        &mut self,
-        id: Option<&gpui::GlobalElementId>,
-        _: Option<&gpui::InspectorElementId>,
-        window: &mut Window,
-        cx: &mut gpui::App,
-    ) -> (gpui::LayoutId, Self::RequestLayoutState) {
-        window.with_element_state(id.unwrap(), |state, window| {
-            let mut state: HtmlState = state.unwrap_or_default();
+        state.update(cx, |state, _| {
             state.parse_if_needed(self.text.clone());
+        });
 
-            let root = state
-                .root
-                .clone()
-                .expect("BUG: root should not None, maybe parse_if_needed issue.");
+        let root = state
+            .read(cx)
+            .root
+            .clone()
+            .unwrap_or_else(|| Err("Failed to parse markdown".into()));
 
-            let mut el = div()
-                .map(|this| match root {
-                    Ok(node) => this.child(node.render(None, true, true, &self.style, window, cx)),
-                    Err(err) => this.child(
-                        v_flex()
-                            .gap_1()
-                            .child("Error parsing HTML")
-                            .child(err.to_string()),
-                    ),
-                })
-                .into_any_element();
-
-            let layout_id = el.request_layout(window, cx);
-
-            ((layout_id, el), state)
+        tracing::info!("-------------- render HtmlElement");
+        div().map(|this| match root {
+            Ok(node) => this.child(node.render(None, true, true, &self.style, window, cx)),
+            Err(err) => this.child(
+                v_flex()
+                    .gap_1()
+                    .child("Error parsing HTML")
+                    .child(err.to_string()),
+            ),
         })
-    }
-
-    fn prepaint(
-        &mut self,
-        _: Option<&gpui::GlobalElementId>,
-        _: Option<&gpui::InspectorElementId>,
-        _: gpui::Bounds<gpui::Pixels>,
-        request_layout: &mut Self::RequestLayoutState,
-        window: &mut Window,
-        cx: &mut gpui::App,
-    ) -> Self::PrepaintState {
-        request_layout.prepaint(window, cx);
-    }
-
-    fn paint(
-        &mut self,
-        _: Option<&gpui::GlobalElementId>,
-        _: Option<&gpui::InspectorElementId>,
-        _: gpui::Bounds<gpui::Pixels>,
-        request_layout: &mut Self::RequestLayoutState,
-        _: &mut Self::PrepaintState,
-        window: &mut Window,
-        cx: &mut gpui::App,
-    ) {
-        request_layout.paint(window, cx);
     }
 }
 
@@ -259,13 +204,7 @@ fn style_attrs(attrs: &RefCell<Vec<html5ever::Attribute>>) -> HashMap<String, St
 /// When is percentage, it will be converted to relative length.
 /// Else, it will be converted to pixels.
 fn value_to_length(value: &str) -> Option<DefiniteLength> {
-    if value.ends_with("px") {
-        value
-            .trim_end_matches("px")
-            .parse()
-            .ok()
-            .map(|v| px(v).into())
-    } else if value.ends_with("%") {
+    if value.ends_with("%") {
         value
             .trim_end_matches("%")
             .parse::<f32>()
@@ -374,16 +313,16 @@ fn trim_text(text: &str) -> String {
 fn parse_paragraph(
     paragraph: &mut Paragraph,
     node: &Rc<Node>,
-) -> (String, Vec<(Range<usize>, InlineTextStyle)>) {
+) -> (String, Vec<(Range<usize>, TextMark)>) {
     let mut text = String::new();
     let mut marks = vec![];
 
     /// Append new_text and new_marks to text and marks.
     fn merge_child_text(
         text: &mut String,
-        marks: &mut Vec<(Range<usize>, InlineTextStyle)>,
+        marks: &mut Vec<(Range<usize>, TextMark)>,
         new_text: &str,
-        new_marks: &[(Range<usize>, InlineTextStyle)],
+        new_marks: &[(Range<usize>, TextMark)],
     ) {
         let offset = text.len();
         text.push_str(new_text);
@@ -405,18 +344,8 @@ fn parse_paragraph(
                     let (child_text, child_marks) = parse_paragraph(&mut child_paragraph, &child);
                     merge_child_text(&mut text, &mut marks, &child_text, &child_marks);
                 }
-                marks.push((
-                    0..text.len(),
-                    InlineTextStyle {
-                        italic: true,
-                        ..Default::default()
-                    },
-                ));
-                paragraph.push(element::TextNode {
-                    text: text.clone(),
-                    image: None,
-                    marks: marks.clone(),
-                });
+                marks.push((0..text.len(), TextMark::default().italic()));
+                paragraph.push(TextNode::new(&text).marks(marks.clone()));
             }
             local_name!("strong") | local_name!("b") => {
                 let mut child_paragraph = Paragraph::default();
@@ -424,18 +353,8 @@ fn parse_paragraph(
                     let (child_text, child_marks) = parse_paragraph(&mut child_paragraph, &child);
                     merge_child_text(&mut text, &mut marks, &child_text, &child_marks);
                 }
-                marks.push((
-                    0..text.len(),
-                    InlineTextStyle {
-                        bold: true,
-                        ..Default::default()
-                    },
-                ));
-                paragraph.push(TextNode {
-                    text: text.clone(),
-                    image: None,
-                    marks: marks.clone(),
-                });
+                marks.push((0..text.len(), TextMark::default().bold()));
+                paragraph.push(TextNode::new(&text).marks(marks.clone()));
             }
             local_name!("del") | local_name!("s") => {
                 let mut child_paragraph = Paragraph::default();
@@ -443,18 +362,8 @@ fn parse_paragraph(
                     let (child_text, child_marks) = parse_paragraph(&mut child_paragraph, &child);
                     merge_child_text(&mut text, &mut marks, &child_text, &child_marks);
                 }
-                marks.push((
-                    0..text.len(),
-                    InlineTextStyle {
-                        strikethrough: true,
-                        ..Default::default()
-                    },
-                ));
-                paragraph.push(TextNode {
-                    text: text.clone(),
-                    image: None,
-                    marks: marks.clone(),
-                });
+                marks.push((0..text.len(), TextMark::default().strikethrough()));
+                paragraph.push(TextNode::new(&text).marks(marks.clone()));
             }
             local_name!("code") => {
                 let mut child_paragraph = Paragraph::default();
@@ -462,18 +371,8 @@ fn parse_paragraph(
                     let (child_text, child_marks) = parse_paragraph(&mut child_paragraph, &child);
                     merge_child_text(&mut text, &mut marks, &child_text, &child_marks);
                 }
-                marks.push((
-                    0..text.len(),
-                    InlineTextStyle {
-                        code: true,
-                        ..Default::default()
-                    },
-                ));
-                paragraph.push(TextNode {
-                    text: text.clone(),
-                    image: None,
-                    marks: marks.clone(),
-                });
+                marks.push((0..text.len(), TextMark::default().code()));
+                paragraph.push(TextNode::new(&text).marks(marks.clone()));
             }
             local_name!("a") => {
                 let mut child_paragraph = Paragraph::default();
@@ -484,21 +383,14 @@ fn parse_paragraph(
 
                 marks.push((
                     0..text.len(),
-                    InlineTextStyle {
-                        link: Some(LinkMark {
-                            url: attr_value(&attrs, local_name!("href"))
-                                .unwrap_or_default()
-                                .into(),
-                            title: attr_value(&attrs, local_name!("title")).map(Into::into),
-                        }),
-                        ..Default::default()
-                    },
+                    TextMark::default().link(LinkMark {
+                        url: attr_value(&attrs, local_name!("href"))
+                            .unwrap_or_default()
+                            .into(),
+                        title: attr_value(&attrs, local_name!("title")).map(Into::into),
+                    }),
                 ));
-                paragraph.push(TextNode {
-                    text: text.clone(),
-                    image: None,
-                    marks: marks.clone(),
-                });
+                paragraph.push(TextNode::new(&text).marks(marks.clone()));
             }
             local_name!("img") => {
                 let Some(src) = attr_value(attrs, local_name!("src")) else {
@@ -528,11 +420,7 @@ fn parse_paragraph(
                     let (child_text, child_marks) = parse_paragraph(&mut child_paragraph, &child);
                     merge_child_text(&mut text, &mut marks, &child_text, &child_marks);
                 }
-                paragraph.push(element::TextNode {
-                    text: text.clone(),
-                    image: None,
-                    marks: marks.clone(),
-                });
+                paragraph.push(TextNode::new(&text).marks(marks.clone()));
             }
         },
         _ => {
@@ -541,11 +429,7 @@ fn parse_paragraph(
                 let (child_text, child_marks) = parse_paragraph(&mut child_paragraph, &child);
                 merge_child_text(&mut text, &mut marks, &child_text, &child_marks);
             }
-            paragraph.push(TextNode {
-                text: text.clone(),
-                image: None,
-                marks: marks.clone(),
-            });
+            paragraph.push(TextNode::new(&text).marks(marks.clone()));
         }
     }
 
@@ -778,7 +662,7 @@ fn consume_paragraph(children: &mut Vec<element::Node>, paragraph: &mut Paragrap
 mod tests {
     use gpui::{px, relative};
 
-    use crate::text::element::{Node, Paragraph, TextNode};
+    use crate::text::element::{ImageNode, Node, Paragraph, TextNode};
 
     use super::trim_text;
 
@@ -866,18 +750,15 @@ mod tests {
             node,
             Node::Paragraph(Paragraph {
                 span: None,
-                children: vec![TextNode {
-                    text: String::new(),
-                    marks: vec![],
-                    image: Some(super::ImageNode {
-                        url: "https://example.com/image.png".to_string().into(),
-                        alt: Some("Example".to_string().into()),
-                        width: Some(px(100.).into()),
-                        height: Some(px(200.).into()),
-                        title: Some("Example Image".to_string().into()),
-                        ..Default::default()
-                    }),
-                }],
+                children: vec![TextNode::image(ImageNode {
+                    url: "https://example.com/image.png".to_string().into(),
+                    alt: Some("Example".to_string().into()),
+                    width: Some(px(100.).into()),
+                    height: Some(px(200.).into()),
+                    title: Some("Example Image".to_string().into()),
+                    ..Default::default()
+                })],
+                ..Default::default()
             })
         );
 
@@ -887,18 +768,15 @@ mod tests {
             node,
             Node::Paragraph(Paragraph {
                 span: None,
-                children: vec![TextNode {
-                    text: String::new(),
-                    marks: vec![],
-                    image: Some(super::ImageNode {
-                        url: "https://example.com/image.png".to_string().into(),
-                        alt: Some("Example".to_string().into()),
-                        width: Some(relative(0.8)),
-                        height: None,
-                        title: Some("Example Image".to_string().into()),
-                        ..Default::default()
-                    }),
-                }],
+                children: vec![TextNode::image(ImageNode {
+                    url: "https://example.com/image.png".to_string().into(),
+                    alt: Some("Example".to_string().into()),
+                    width: Some(relative(0.8)),
+                    height: None,
+                    title: Some("Example Image".to_string().into()),
+                    ..Default::default()
+                })],
+                ..Default::default()
             })
         );
     }

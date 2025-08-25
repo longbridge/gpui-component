@@ -1,20 +1,21 @@
 use std::time::Instant;
 
 use gpui::{
-    div, prelude::FluentBuilder as _, AnyElement, App, Element, ElementId, IntoElement,
-    ParentElement, SharedString, Styled, Window,
+    div, prelude::FluentBuilder as _, App, ElementId, IntoElement, ParentElement, RenderOnce,
+    SharedString, Styled, Window,
 };
 use markdown::{
     mdast::{self, Node},
     ParseOptions,
 };
 
-use crate::v_flex;
+use crate::{
+    text::{element::TextNode, TextViewState},
+    v_flex,
+};
 
 use super::{
-    element::{
-        self, CodeBlock, ImageNode, InlineTextStyle, LinkMark, Paragraph, Span, Table, TableRow,
-    },
+    element::{self, CodeBlock, ImageNode, LinkMark, Paragraph, Span, Table, TableRow, TextMark},
     html::parse_html,
     TextViewStyle,
 };
@@ -25,7 +26,7 @@ use super::{
 /// to let us to display rich text in our application.
 ///
 /// See also [`super::TextView`]
-#[derive(Clone)]
+#[derive(IntoElement, Clone)]
 pub(super) struct MarkdownElement {
     id: ElementId,
     pub(super) text: SharedString,
@@ -59,6 +60,7 @@ pub struct MarkdownState {
     raw: SharedString,
     root: Option<Result<element::Node, SharedString>>,
     style: TextViewStyle,
+    text_view_state: TextViewState,
     _last_parsed: Option<Instant>,
 }
 
@@ -83,86 +85,33 @@ impl MarkdownState {
         // measure.end();
         self._last_parsed = Some(Instant::now());
         self.style = style.clone();
+        self.text_view_state.clear_selection();
     }
 }
 
-impl IntoElement for MarkdownElement {
-    type Element = Self;
+impl RenderOnce for MarkdownElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let state = window.use_keyed_state(self.id.clone(), cx, |_, _| MarkdownState::default());
 
-    fn into_element(self) -> Self::Element {
-        self
-    }
-}
-
-impl Element for MarkdownElement {
-    type RequestLayoutState = AnyElement;
-    type PrepaintState = ();
-
-    fn id(&self) -> Option<gpui::ElementId> {
-        Some(self.id.clone())
-    }
-
-    fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
-        None
-    }
-
-    fn request_layout(
-        &mut self,
-        id: Option<&gpui::GlobalElementId>,
-        _: Option<&gpui::InspectorElementId>,
-        window: &mut Window,
-        cx: &mut gpui::App,
-    ) -> (gpui::LayoutId, Self::RequestLayoutState) {
-        window.with_element_state(id.unwrap(), |state, window| {
-            let mut state: MarkdownState = state.unwrap_or_default();
+        state.update(cx, |state, cx| {
             state.parse_if_needed(self.text.clone(), &self.style, cx);
+        });
 
-            let root = state
-                .root
-                .clone()
-                .expect("BUG: root should not None, maybe parse_if_needed issue.");
+        let root = state
+            .read(cx)
+            .root
+            .clone()
+            .unwrap_or_else(|| Err("Failed to parse markdown".into()));
 
-            let mut el = div()
-                .map(|this| match root {
-                    Ok(node) => this.child(node.render(None, true, true, &self.style, window, cx)),
-                    Err(err) => this.child(
-                        v_flex()
-                            .gap_1()
-                            .child("Error parsing Markdown")
-                            .child(err.to_string()),
-                    ),
-                })
-                .into_any_element();
-
-            let layout_id = el.request_layout(window, cx);
-
-            ((layout_id, el), state)
+        div().map(|this| match root {
+            Ok(node) => this.child(node.render(None, true, true, &self.style, window, cx)),
+            Err(err) => this.child(
+                v_flex()
+                    .gap_1()
+                    .child("Error parsing Markdown")
+                    .child(err.to_string()),
+            ),
         })
-    }
-
-    fn prepaint(
-        &mut self,
-        _: Option<&gpui::GlobalElementId>,
-        _: Option<&gpui::InspectorElementId>,
-        _: gpui::Bounds<gpui::Pixels>,
-        request_layout: &mut Self::RequestLayoutState,
-        window: &mut Window,
-        cx: &mut gpui::App,
-    ) -> Self::PrepaintState {
-        request_layout.prepaint(window, cx);
-    }
-
-    fn paint(
-        &mut self,
-        _: Option<&gpui::GlobalElementId>,
-        _: Option<&gpui::InspectorElementId>,
-        _: gpui::Bounds<gpui::Pixels>,
-        request_layout: &mut Self::RequestLayoutState,
-        _: &mut Self::PrepaintState,
-        window: &mut Window,
-        cx: &mut gpui::App,
-    ) {
-        request_layout.paint(window, cx);
     }
 }
 
@@ -228,65 +177,34 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node) -> String {
             for child in val.children.iter() {
                 text.push_str(&parse_paragraph(&mut child_paragraph, &child));
             }
-            paragraph.push(element::TextNode {
-                text: text.clone(),
-                image: None,
-                marks: vec![(
-                    0..text.len(),
-                    InlineTextStyle {
-                        italic: true,
-                        ..Default::default()
-                    },
-                )],
-            });
+            paragraph.push(
+                TextNode::new(&text).marks(vec![(0..text.len(), TextMark::default().italic())]),
+            );
         }
         Node::Strong(val) => {
             let mut child_paragraph = Paragraph::default();
             for child in val.children.iter() {
                 text.push_str(&parse_paragraph(&mut child_paragraph, &child));
             }
-            paragraph.push(element::TextNode {
-                text: text.clone(),
-                image: None,
-                marks: vec![(
-                    0..text.len(),
-                    InlineTextStyle {
-                        bold: true,
-                        ..Default::default()
-                    },
-                )],
-            });
+            paragraph.push(
+                TextNode::new(&text).marks(vec![(0..text.len(), TextMark::default().bold())]),
+            );
         }
         Node::Delete(val) => {
             let mut child_paragraph = Paragraph::default();
             for child in val.children.iter() {
                 text.push_str(&parse_paragraph(&mut child_paragraph, &child));
             }
-            paragraph.push(element::TextNode {
-                text: text.clone(),
-                image: None,
-                marks: vec![(
-                    0..text.len(),
-                    InlineTextStyle {
-                        strikethrough: true,
-                        ..Default::default()
-                    },
-                )],
-            });
+            paragraph.push(
+                TextNode::new(&text)
+                    .marks(vec![(0..text.len(), TextMark::default().strikethrough())]),
+            );
         }
         Node::InlineCode(val) => {
             text = val.value.clone();
-            paragraph.push(element::TextNode {
-                text: text.clone(),
-                image: None,
-                marks: vec![(
-                    0..text.len(),
-                    InlineTextStyle {
-                        code: true,
-                        ..Default::default()
-                    },
-                )],
-            });
+            paragraph.push(
+                TextNode::new(&text).marks(vec![(0..text.len(), TextMark::default().code())]),
+            );
         }
         Node::Link(val) => {
             let link_mark = Some(LinkMark {
@@ -308,7 +226,7 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node) -> String {
 
                 child.marks.push((
                     0..child.text.len(),
-                    InlineTextStyle {
+                    TextMark {
                         link: link_mark.clone(),
                         ..Default::default()
                     },
@@ -327,35 +245,19 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node) -> String {
         }
         Node::InlineMath(raw) => {
             text = raw.value.clone();
-            paragraph.push(element::TextNode {
-                text: text.clone(),
-                image: None,
-                marks: vec![(
-                    0..text.len(),
-                    InlineTextStyle {
-                        code: true,
-                        ..Default::default()
-                    },
-                )],
-            });
+            paragraph.push(
+                TextNode::new(&text).marks(vec![(0..text.len(), TextMark::default().code())]),
+            );
         }
         Node::MdxTextExpression(raw) => {
             text = raw.value.clone();
-            paragraph.push(element::TextNode {
-                text: text.clone(),
-                image: None,
-                marks: vec![(0..text.len(), InlineTextStyle::default())],
-            });
+            paragraph.push(TextNode::new(&text).marks(vec![(0..text.len(), TextMark::default())]));
         }
         Node::Html(val) => match parse_html(&val.value) {
             Ok(el) => {
                 if el.is_break() {
                     text = "\n".to_owned();
-                    paragraph.push(element::TextNode {
-                        text: text.clone(),
-                        image: None,
-                        marks: vec![(0..text.len(), InlineTextStyle::default())],
-                    });
+                    paragraph.push(TextNode::new(&text));
                 } else {
                     if cfg!(debug_assertions) {
                         tracing::warn!("unsupported inline html tag: {:#?}", el);
