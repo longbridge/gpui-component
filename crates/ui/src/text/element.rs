@@ -1,4 +1,4 @@
-use std::{cell::RefCell, ops::Range, rc::Rc};
+use std::ops::Range;
 
 use gpui::{
     div, img, prelude::FluentBuilder as _, px, relative, rems, AnyElement, App, DefiniteLength,
@@ -11,7 +11,6 @@ use markdown::mdast;
 use crate::{
     h_flex,
     highlighter::SyntaxHighlighter,
-    input::Selection,
     text::inline_text::{InlineText, InlineTextState},
     tooltip::Tooltip,
     v_flex, ActiveTheme as _, Icon, IconName,
@@ -430,9 +429,11 @@ impl RenderOnce for Paragraph {
         }
 
         // Add the last text node
-        child_nodes.push(
-            InlineText::new(ix, text, links, highlights, self.state.clone()).into_any_element(),
-        );
+        if text.len() > 0 {
+            child_nodes.push(
+                InlineText::new(ix, text, links, highlights, self.state.clone()).into_any_element(),
+            );
+        }
 
         div().id(span.unwrap_or_default()).children(child_nodes)
     }

@@ -7,8 +7,8 @@ use std::rc::Rc;
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    div, px, relative, AnyElement, DefiniteLength, Element, ElementId, IntoElement,
-    ParentElement as _, SharedString, Styled as _, Window,
+    div, px, relative, DefiniteLength, ElementId, IntoElement, ParentElement as _, RenderOnce,
+    SharedString, Styled as _, Window,
 };
 use html5ever::tendril::TendrilSink;
 use html5ever::{local_name, parse_document, LocalName, ParseOpts};
@@ -93,7 +93,7 @@ fn cleanup_html(source: &str) -> Vec<u8> {
     }
 }
 
-#[derive(Clone)]
+#[derive(IntoElement, Clone)]
 pub(super) struct HtmlElement {
     id: ElementId,
     pub(super) text: SharedString,
@@ -141,83 +141,30 @@ impl HtmlState {
     }
 }
 
-impl IntoElement for HtmlElement {
-    type Element = Self;
+impl RenderOnce for HtmlElement {
+    fn render(self, window: &mut Window, cx: &mut gpui::App) -> impl IntoElement {
+        let state = window.use_keyed_state(self.id.clone(), cx, |_, _| HtmlState::default());
 
-    fn into_element(self) -> Self::Element {
-        self
-    }
-}
-
-impl Element for HtmlElement {
-    type RequestLayoutState = AnyElement;
-    type PrepaintState = ();
-
-    fn id(&self) -> Option<gpui::ElementId> {
-        Some(self.id.clone())
-    }
-
-    fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
-        None
-    }
-
-    fn request_layout(
-        &mut self,
-        id: Option<&gpui::GlobalElementId>,
-        _: Option<&gpui::InspectorElementId>,
-        window: &mut Window,
-        cx: &mut gpui::App,
-    ) -> (gpui::LayoutId, Self::RequestLayoutState) {
-        window.with_element_state(id.unwrap(), |state, window| {
-            let mut state: HtmlState = state.unwrap_or_default();
+        state.update(cx, |state, _| {
             state.parse_if_needed(self.text.clone());
+        });
 
-            let root = state
-                .root
-                .clone()
-                .expect("BUG: root should not None, maybe parse_if_needed issue.");
+        let root = state
+            .read(cx)
+            .root
+            .clone()
+            .unwrap_or_else(|| Err("Failed to parse markdown".into()));
 
-            let mut el = div()
-                .map(|this| match root {
-                    Ok(node) => this.child(node.render(None, true, true, &self.style, window, cx)),
-                    Err(err) => this.child(
-                        v_flex()
-                            .gap_1()
-                            .child("Error parsing HTML")
-                            .child(err.to_string()),
-                    ),
-                })
-                .into_any_element();
-
-            let layout_id = el.request_layout(window, cx);
-
-            ((layout_id, el), state)
+        tracing::info!("-------------- render HtmlElement");
+        div().map(|this| match root {
+            Ok(node) => this.child(node.render(None, true, true, &self.style, window, cx)),
+            Err(err) => this.child(
+                v_flex()
+                    .gap_1()
+                    .child("Error parsing HTML")
+                    .child(err.to_string()),
+            ),
         })
-    }
-
-    fn prepaint(
-        &mut self,
-        _: Option<&gpui::GlobalElementId>,
-        _: Option<&gpui::InspectorElementId>,
-        _: gpui::Bounds<gpui::Pixels>,
-        request_layout: &mut Self::RequestLayoutState,
-        window: &mut Window,
-        cx: &mut gpui::App,
-    ) -> Self::PrepaintState {
-        request_layout.prepaint(window, cx);
-    }
-
-    fn paint(
-        &mut self,
-        _: Option<&gpui::GlobalElementId>,
-        _: Option<&gpui::InspectorElementId>,
-        _: gpui::Bounds<gpui::Pixels>,
-        request_layout: &mut Self::RequestLayoutState,
-        _: &mut Self::PrepaintState,
-        window: &mut Window,
-        cx: &mut gpui::App,
-    ) {
-        request_layout.paint(window, cx);
     }
 }
 

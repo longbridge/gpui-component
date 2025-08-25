@@ -1,5 +1,6 @@
 mod event;
 mod focusable;
+mod global_state;
 mod icon;
 mod index_path;
 #[cfg(any(feature = "inspector", debug_assertions))]
@@ -97,6 +98,7 @@ rust_i18n::i18n!("locales", fallback = "en");
 /// You can initialize the UI module at your application's entry point.
 pub fn init(cx: &mut App) {
     theme::init(cx);
+    global_state::init(cx);
     #[cfg(any(feature = "inspector", debug_assertions))]
     inspector::init(cx);
     highlighter::init(cx);

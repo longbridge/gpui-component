@@ -1,51 +1,19 @@
-use std::{
-    cell::{Cell, RefCell},
-    ops::Range,
-    rc::Rc,
-};
+use std::{cell::Cell, ops::Range, rc::Rc};
 
 use gpui::{
-    point, px, quad, BorderStyle, Bounds, CursorStyle, Edges, Element, ElementId, HighlightStyle,
-    Hitbox, HitboxBehavior, IntoElement, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PathBuilder,
-    Pixels, Point, SharedString, StyledText, TextLayout, WrappedLine,
+    point, px, quad, App, BorderStyle, Bounds, CursorStyle, Edges, Element, ElementId,
+    GlobalElementId, HighlightStyle, Hitbox, HitboxBehavior, InspectorElementId, IntoElement,
+    LayoutId, MouseMoveEvent, MouseUpEvent, Pixels, Point, SharedString, StyledText, TextLayout,
+    Window,
 };
 
 use crate::{
-    input::{Cursor, Selection},
-    text::element::LinkMark,
-    ActiveTheme,
+    global_state::GlobalState, input::Selection, text::element::LinkMark, ActiveTheme, Root,
 };
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct InlineTextState {
     hovered_index: Rc<Cell<Option<usize>>>,
-    is_selection: Rc<Cell<bool>>,
-    selection: Rc<Cell<Option<Selection>>>,
-}
-
-impl InlineTextState {
-    fn start_selection(&self, index: usize) {
-        self.is_selection.set(true);
-        self.selection.set(Some(Selection {
-            start: Cursor::new(index),
-            end: Cursor::new(index),
-        }));
-    }
-
-    fn update_selection(&self, index: usize) {
-        if let Some(mut selection) = self.selection.get() {
-            selection.end = Cursor::new(index);
-            self.selection.set(Some(selection));
-        }
-    }
-
-    fn end_selection(&self) {
-        self.is_selection.set(false);
-    }
-
-    pub fn selection(&self) -> Option<Selection> {
-        self.selection.get()
-    }
 }
 
 pub(super) struct InlineText {
@@ -102,7 +70,7 @@ impl IntoElement for InlineText {
 
 impl Element for InlineText {
     type RequestLayoutState = ();
-    type PrepaintState = Hitbox;
+    type PrepaintState = (Option<Selection>, Hitbox);
 
     fn id(&self) -> Option<ElementId> {
         Some(self.id.clone())
@@ -114,11 +82,11 @@ impl Element for InlineText {
 
     fn request_layout(
         &mut self,
-        global_element_id: Option<&gpui::GlobalElementId>,
-        inspector_id: Option<&gpui::InspectorElementId>,
-        window: &mut gpui::Window,
-        cx: &mut gpui::App,
-    ) -> (gpui::LayoutId, Self::RequestLayoutState) {
+        global_element_id: Option<&GlobalElementId>,
+        inspector_id: Option<&InspectorElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (LayoutId, Self::RequestLayoutState) {
         let text_style = window.text_style();
 
         let mut runs = Vec::new();
@@ -149,50 +117,67 @@ impl Element for InlineText {
 
     fn prepaint(
         &mut self,
-        id: Option<&gpui::GlobalElementId>,
-        inspector_id: Option<&gpui::InspectorElementId>,
-        bounds: gpui::Bounds<gpui::Pixels>,
-        request_layout: &mut Self::RequestLayoutState,
-        window: &mut gpui::Window,
-        cx: &mut gpui::App,
+        id: Option<&GlobalElementId>,
+        inspector_id: Option<&InspectorElementId>,
+        bounds: Bounds<Pixels>,
+        _: &mut Self::RequestLayoutState,
+        window: &mut Window,
+        cx: &mut App,
     ) -> Self::PrepaintState {
         self.styled_text
-            .prepaint(id, inspector_id, bounds, request_layout, window, cx);
+            .prepaint(id, inspector_id, bounds, &mut (), window, cx);
 
         let hitbox = window.insert_hitbox(bounds, HitboxBehavior::Normal);
-        hitbox
+
+        (None, hitbox)
     }
 
     fn paint(
         &mut self,
-        global_id: Option<&gpui::GlobalElementId>,
-        _: Option<&gpui::InspectorElementId>,
+        global_id: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
         bounds: Bounds<Pixels>,
-        request_layout: &mut Self::RequestLayoutState,
+        _: &mut Self::RequestLayoutState,
         prepaint: &mut Self::PrepaintState,
-        window: &mut gpui::Window,
-        cx: &mut gpui::App,
+        window: &mut Window,
+        cx: &mut App,
     ) {
         let current_view = window.current_view();
-        let hitbox = prepaint.clone();
+        let (selection, hitbox) = prepaint;
+
         self.styled_text
-            .paint(global_id, None, bounds, request_layout, &mut (), window, cx);
+            .paint(global_id, None, bounds, &mut (), &mut (), window, cx);
         let text_layout = self.styled_text.layout().clone();
-        let is_selection = self.state.is_selection.get();
+
+        // layout selections
+        if let Some(text_view_state) = GlobalState::global(cx).text_view_state() {
+            let text_view_state = text_view_state.read(cx);
+            dbg!(&text_view_state);
+
+            if text_view_state.is_selection {
+                let selection_pos = text_view_state.selection_pos;
+            }
+        }
 
         // link cursor pointer
         let mouse_position = window.mouse_position();
         if let Some(_) = Self::link_for_position(&text_layout, &self.links, mouse_position) {
             window.set_cursor_style(CursorStyle::PointingHand, &hitbox);
         } else {
-            if is_selection {
-                window.set_cursor_style(CursorStyle::IBeam, &hitbox);
-            }
+            // if selection {
+            //     window.set_cursor_style(CursorStyle::IBeam, &hitbox);
+            // }
         }
 
-        if let Some(selection) = self.state.selection() {
-            let start_position = text_layout.position_for_index(selection.start.offset());
-            let end_position = text_layout.position_for_index(selection.end.offset());
+        if let Some(selection) = selection {
+            let mut start_offset = selection.start.offset();
+            let mut end_offset = selection.end.offset();
+            if end_offset < start_offset {
+                std::mem::swap(&mut start_offset, &mut end_offset);
+            }
+            let start_position = text_layout.position_for_index(start_offset);
+            let end_position = text_layout.position_for_index(end_offset);
+
             let line_height = text_layout.line_height();
             if let Some(start_position) = start_position {
                 if let Some(end_position) = end_position {
@@ -251,7 +236,7 @@ impl Element for InlineText {
             }
         }
 
-        // mouse move to notify update when hovering over different links
+        // mouse move
         window.on_mouse_event({
             let hitbox = hitbox.clone();
             let text_layout = text_layout.clone();
@@ -265,34 +250,9 @@ impl Element for InlineText {
 
                 let current = hovered_index.get();
                 let updated = text_layout.index_for_position(event.position).ok();
+                //  notify update when hovering over different links
                 if current != updated {
                     hovered_index.set(updated);
-                    cx.notify(current_view);
-                }
-
-                // update selection if in selection mode
-                if state.is_selection.get() {
-                    if let Ok(index) = text_layout.index_for_position(event.position) {
-                        state.update_selection(index);
-                        cx.notify(current_view);
-                    }
-                }
-            }
-        });
-
-        // mouse down to start selection
-        window.on_mouse_event({
-            let hitbox = hitbox.clone();
-            let text_layout = text_layout.clone();
-            let state = self.state.clone();
-
-            move |event: &MouseDownEvent, phase, window, cx| {
-                if !hitbox.is_hovered(window) || !phase.bubble() {
-                    return;
-                }
-
-                if let Ok(index) = text_layout.index_for_position(event.position) {
-                    state.start_selection(index);
                     cx.notify(current_view);
                 }
             }
@@ -305,11 +265,6 @@ impl Element for InlineText {
             let state = self.state.clone();
 
             move |event: &MouseUpEvent, phase, _, cx| {
-                if state.is_selection.get() {
-                    state.end_selection();
-                    cx.notify(current_view);
-                }
-
                 if !bounds.contains(&event.position) || !phase.bubble() {
                     return;
                 }
