@@ -1,8 +1,13 @@
-use std::{cell::RefCell, ops::Range, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    ops::Range,
+    rc::Rc,
+};
 
 use gpui::{
-    point, px, AnyElement, AvailableSpace, Element, ElementId, HighlightStyle, InteractiveText,
-    IntoElement, MouseDownEvent, Pixels, Point, SharedString, Size, StyledText, TextLayout,
+    point, px, AnyElement, AvailableSpace, Bounds, ContentMask, CursorStyle, Element, ElementId,
+    HighlightStyle, Hitbox, HitboxBehavior, InteractiveText, IntoElement, MouseDownEvent,
+    MouseMoveEvent, MouseUpEvent, Pixels, Point, SharedString, Size, StyledText, TextLayout,
     WhiteSpace, WrappedLine,
 };
 use smallvec::SmallVec;
@@ -12,7 +17,7 @@ use crate::{input::Selection, text::element::LinkMark};
 pub(super) struct InlineText {
     id: ElementId,
     text: SharedString,
-    links: Vec<(Range<usize>, LinkMark)>,
+    links: Rc<Vec<(Range<usize>, LinkMark)>>,
     highlights: Vec<(Range<usize>, HighlightStyle)>,
     styled_text: StyledText,
 }
@@ -28,15 +33,31 @@ impl InlineText {
         Self {
             id: id.into(),
             text: text.clone(),
-            links,
+            links: Rc::new(links),
             highlights,
             styled_text: StyledText::new(text),
         }
+    }
+
+    pub fn link_for_position(
+        layout: &TextLayout,
+        links: &Vec<(Range<usize>, LinkMark)>,
+        position: Point<Pixels>,
+    ) -> Option<LinkMark> {
+        if let Ok(offset) = layout.index_for_position(position) {
+            for (range, link) in links.iter() {
+                if range.contains(&offset) {
+                    return Some(link.clone());
+                }
+            }
+        }
+        None
     }
 }
 
 #[derive(Default, Clone)]
 pub struct InlineTextState {
+    hovered_index: Rc<Cell<Option<usize>>>,
     selection: Rc<RefCell<Selection>>,
 }
 
@@ -54,7 +75,7 @@ impl IntoElement for InlineText {
 
 impl Element for InlineText {
     type RequestLayoutState = ();
-    type PrepaintState = ();
+    type PrepaintState = Hitbox;
 
     fn id(&self) -> Option<ElementId> {
         Some(self.id.clone())
@@ -109,42 +130,70 @@ impl Element for InlineText {
         cx: &mut gpui::App,
     ) -> Self::PrepaintState {
         self.styled_text
-            .prepaint(id, inspector_id, bounds, request_layout, window, cx)
+            .prepaint(id, inspector_id, bounds, request_layout, window, cx);
+
+        let hitbox = window.insert_hitbox(bounds, HitboxBehavior::Normal);
+        hitbox
     }
 
     fn paint(
         &mut self,
         global_id: Option<&gpui::GlobalElementId>,
         _: Option<&gpui::InspectorElementId>,
-        bounds: gpui::Bounds<gpui::Pixels>,
+        bounds: Bounds<Pixels>,
         request_layout: &mut Self::RequestLayoutState,
         prepaint: &mut Self::PrepaintState,
         window: &mut gpui::Window,
         cx: &mut gpui::App,
     ) {
-        let line_height = window.line_height();
-        let origin = bounds.origin;
-        let last_layout = self.styled_text.layout();
+        let current_view = window.current_view();
+        let hitbox = prepaint.clone();
+        self.styled_text
+            .paint(global_id, None, bounds, request_layout, &mut (), window, cx);
+        let text_layout = self.styled_text.layout().clone();
 
-        self.styled_text.paint(
-            global_id,
-            None,
-            bounds,
-            request_layout,
-            prepaint,
-            window,
-            cx,
-        );
+        // link cursor pointer
+        let mouse_position = window.mouse_position();
+        if let Some(_) = Self::link_for_position(&text_layout, &self.links, mouse_position) {
+            window.set_cursor_style(CursorStyle::PointingHand, &hitbox);
+        }
 
         window.with_element_state(global_id.unwrap(), move |state, window| {
             let state: InlineTextState = state.unwrap_or_default();
 
-            window.on_mouse_event(move |event: &MouseDownEvent, phase, window, cx| {
-                if !bounds.contains(&event.position) || !phase.bubble() {
-                    return;
+            // mouse move to notify update when hovering over different links
+            window.on_mouse_event({
+                let hitbox = hitbox.clone();
+                let text_layout = text_layout.clone();
+                let hovered_index = state.hovered_index.clone();
+                move |event: &MouseMoveEvent, phase, window, cx| {
+                    if phase.bubble() && hitbox.is_hovered(window) {
+                        let current = hovered_index.get();
+                        let updated = text_layout.index_for_position(event.position).ok();
+                        if current != updated {
+                            hovered_index.set(updated);
+                            cx.notify(current_view);
+                        }
+                    }
                 }
+            });
 
-                let pos = event.position - bounds.origin;
+            // click
+            window.on_mouse_event({
+                let links = self.links.clone();
+                let text_layout = text_layout.clone();
+
+                move |event: &MouseUpEvent, phase, _, cx| {
+                    if !bounds.contains(&event.position) || !phase.bubble() {
+                        return;
+                    }
+
+                    if let Some(link) =
+                        Self::link_for_position(&text_layout, &links, event.position)
+                    {
+                        cx.open_url(&link.url);
+                    }
+                }
             });
 
             ((), state)
