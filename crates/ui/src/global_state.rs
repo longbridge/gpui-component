@@ -9,7 +9,7 @@ pub(crate) fn init(cx: &mut App) {
 impl Global for GlobalState {}
 
 pub(crate) struct GlobalState {
-    text_view_state_stack: Vec<Entity<TextViewState>>,
+    pub(crate) text_view_state_stack: Vec<Entity<TextViewState>>,
 }
 
 impl GlobalState {

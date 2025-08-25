@@ -1,12 +1,11 @@
 use std::sync::Arc;
 
 use gpui::{
-    canvas, div, prelude::FluentBuilder as _, px, rems, AnyElement, App, Bounds, Element,
-    ElementId, InteractiveElement as _, IntoElement, MouseButton, ParentElement as _, Pixels,
-    Point, Rems, RenderOnce, SharedString, Styled, Window,
+    px, rems, AnyElement, App, Bounds, Element, ElementId, IntoElement, MouseDownEvent,
+    MouseMoveEvent, MouseUpEvent, Pixels, Point, Rems, RenderOnce, SharedString, Window,
 };
 
-use crate::{global_state::GlobalState, highlighter::HighlightTheme, Root};
+use crate::{global_state::GlobalState, highlighter::HighlightTheme};
 
 use super::{html::HtmlElement, markdown::MarkdownElement};
 
@@ -41,14 +40,14 @@ impl RenderOnce for TextViewElement {
 /// - As a HTML viewer, we not support CSS, we only support basic HTML tags for used to as a content reader.
 ///
 /// See also [`MarkdownElement`], [`HtmlElement`]
-#[derive(IntoElement, Clone)]
+#[derive(Clone)]
 pub struct TextView {
     id: ElementId,
     element: TextViewElement,
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
-pub(crate) struct TextViewState {
+pub struct TextViewState {
     /// The bounds of the text view
     pub(crate) bounds: Bounds<Pixels>,
     /// The local (in TextView) position of the selection.
@@ -213,73 +212,131 @@ impl TextView {
     }
 }
 
-impl RenderOnce for TextView {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let view_id = window.current_view();
+impl IntoElement for TextView {
+    type Element = Self;
+
+    fn into_element(self) -> Self::Element {
+        self
+    }
+}
+
+impl Element for TextView {
+    type RequestLayoutState = AnyElement;
+    type PrepaintState = ();
+
+    fn id(&self) -> Option<ElementId> {
+        Some(self.id.clone())
+    }
+
+    fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
+        None
+    }
+
+    fn request_layout(
+        &mut self,
+        _: Option<&gpui::GlobalElementId>,
+        _: Option<&gpui::InspectorElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (gpui::LayoutId, Self::RequestLayoutState) {
+        let mut el = self.element.clone().into_any_element();
+        let layout_id = el.request_layout(window, cx);
+        (layout_id, el)
+    }
+
+    fn prepaint(
+        &mut self,
+        _: Option<&gpui::GlobalElementId>,
+        _: Option<&gpui::InspectorElementId>,
+        _: Bounds<Pixels>,
+        request_layout: &mut Self::RequestLayoutState,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Self::PrepaintState {
+        request_layout.prepaint(window, cx);
+    }
+
+    fn paint(
+        &mut self,
+        _: Option<&gpui::GlobalElementId>,
+        _: Option<&gpui::InspectorElementId>,
+        bounds: Bounds<Pixels>,
+        request_layout: &mut Self::RequestLayoutState,
+        _: &mut Self::PrepaintState,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let entity_id = window.current_view();
         let state = window.use_keyed_state(self.id.clone(), cx, |_, _| TextViewState::default());
         let is_selection = state.read(cx).is_selection;
 
-        GlobalState::global_mut(cx).with_text_view_state(state.clone(), |_| {
-            tracing::info!("-------------------- TextView element.");
-            div()
-                .id(self.id)
-                .relative()
-                .child(self.element)
-                .on_mouse_down(MouseButton::Left, {
-                    let state = state.clone();
-                    let view_id = view_id.clone();
-                    move |event, _, cx| {
-                        state.update(cx, |state, _| {
-                            state.start_selection(event.position);
-                        });
-                        cx.notify(view_id);
+        state.update(cx, |state, _| state.bounds = bounds);
+
+        GlobalState::global_mut(cx)
+            .text_view_state_stack
+            .push(state.clone());
+        request_layout.paint(window, cx);
+        GlobalState::global_mut(cx).text_view_state_stack.pop();
+
+        window.on_mouse_event({
+            let state = state.clone();
+            move |event: &MouseDownEvent, phase, _, cx| {
+                if !bounds.contains(&event.position) || !phase.bubble() {
+                    return;
+                }
+
+                state.update(cx, |state, _| {
+                    state.start_selection(event.position);
+                });
+                cx.notify(entity_id);
+            }
+        });
+
+        if is_selection {
+            // move to update end postion.
+            window.on_mouse_event({
+                let state = state.clone();
+                move |event: &MouseMoveEvent, phase, _, cx| {
+                    if !bounds.contains(&event.position) || !phase.bubble() {
+                        return;
                     }
-                })
-                .when(is_selection, |this| {
-                    this.on_mouse_move({
-                        let state = state.clone();
-                        let view_id = view_id.clone();
-                        move |event, _, cx| {
-                            if state.read(cx).is_selection {
-                                state.update(cx, |state, _| {
-                                    state.update_selection(event.position);
-                                });
-                                cx.notify(view_id);
-                            }
-                        }
-                    })
-                    .on_mouse_up(MouseButton::Left, {
-                        let state = state.clone();
-                        let view_id = view_id.clone();
-                        move |_, _, cx| {
-                            state.update(cx, |state, _| {
-                                state.end_selection();
-                            });
-                            cx.notify(view_id);
-                        }
-                    })
-                    .on_mouse_down_out({
-                        let state = state.clone();
-                        let view_id = view_id.clone();
-                        move |_, _, cx| {
-                            state.update(cx, |state, _| {
-                                state.clear_selection();
-                            });
-                            cx.notify(view_id);
-                        }
-                    })
-                })
-                .child(
-                    canvas(
-                        {
-                            let state = state.clone();
-                            move |bounds, _, cx| state.update(cx, |r, _| r.bounds = bounds)
-                        },
-                        |_, _, _, _| {},
-                    )
-                    .absolute()
-                    .size_full(),
-                )
-        })
+
+                    state.update(cx, |state, _| {
+                        state.update_selection(event.position);
+                    });
+                    cx.notify(entity_id);
+                }
+            });
+
+            // up to end selection
+            window.on_mouse_event({
+                let state = state.clone();
+                move |event: &MouseUpEvent, phase, _, cx| {
+                    if !bounds.contains(&event.position) || !phase.bubble() {
+                        return;
+                    }
+
+                    state.update(cx, |state, _| {
+                        state.end_selection();
+                    });
+                    cx.notify(entity_id);
+                }
+            });
+
+            // down outside to clear selection
+            window.on_mouse_event({
+                let state = state.clone();
+                move |event: &MouseDownEvent, phase, _, cx| {
+                    if bounds.contains(&event.position) || !phase.bubble() {
+                        return;
+                    }
+
+                    state.update(cx, |state, _| {
+                        state.clear_selection();
+                    });
+                    cx.notify(entity_id);
+                }
+            });
+        }
     }
 }

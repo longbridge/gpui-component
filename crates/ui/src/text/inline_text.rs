@@ -7,9 +7,7 @@ use gpui::{
     Window,
 };
 
-use crate::{
-    global_state::GlobalState, input::Selection, text::element::LinkMark, ActiveTheme, Root,
-};
+use crate::{global_state::GlobalState, input::Selection, text::element::LinkMark, ActiveTheme};
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct InlineTextState {
@@ -150,12 +148,24 @@ impl Element for InlineText {
         let text_layout = self.styled_text.layout().clone();
 
         // layout selections
+        let mut is_selection = false;
         if let Some(text_view_state) = GlobalState::global(cx).text_view_state() {
             let text_view_state = text_view_state.read(cx);
-            dbg!(&text_view_state);
-
             if text_view_state.is_selection {
-                let selection_pos = text_view_state.selection_pos;
+                let mut selection_bounds = Bounds::default();
+                if let Some(start_pos) = &text_view_state.selection_pos.0 {
+                    if let Some(end_pos) = &text_view_state.selection_pos.1 {
+                        selection_bounds = Bounds::from_corners(
+                            bounds.origin + *start_pos,
+                            bounds.origin + *end_pos,
+                        );
+                    }
+                }
+
+                if selection_bounds.is_contained_within(&bounds) {
+                    is_selection = true;
+                    dbg!(selection_bounds);
+                }
             }
         }
 
@@ -164,9 +174,9 @@ impl Element for InlineText {
         if let Some(_) = Self::link_for_position(&text_layout, &self.links, mouse_position) {
             window.set_cursor_style(CursorStyle::PointingHand, &hitbox);
         } else {
-            // if selection {
-            //     window.set_cursor_style(CursorStyle::IBeam, &hitbox);
-            // }
+            if is_selection {
+                window.set_cursor_style(CursorStyle::IBeam, &hitbox);
+            }
         }
 
         if let Some(selection) = selection {
