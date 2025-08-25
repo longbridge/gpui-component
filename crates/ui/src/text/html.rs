@@ -811,6 +811,7 @@ mod tests {
                     title: Some("Example Image".to_string().into()),
                     ..Default::default()
                 })],
+                ..Default::default()
             })
         );
 
@@ -828,6 +829,7 @@ mod tests {
                     title: Some("Example Image".to_string().into()),
                     ..Default::default()
                 })],
+                ..Default::default()
             })
         );
     }

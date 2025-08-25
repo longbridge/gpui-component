@@ -1,16 +1,20 @@
-use std::ops::Range;
+use std::{cell::RefCell, ops::Range, rc::Rc};
 
 use gpui::{
     div, img, prelude::FluentBuilder as _, px, relative, rems, AnyElement, App, DefiniteLength,
     Div, ElementId, FontStyle, FontWeight, Half, HighlightStyle, InteractiveElement as _,
-    InteractiveText, IntoElement, Length, ObjectFit, ParentElement, Rems, RenderOnce, SharedString,
-    SharedUri, StatefulInteractiveElement, Styled, StyledImage as _, StyledText, Window,
+    IntoElement, Length, ObjectFit, ParentElement, Rems, RenderOnce, SharedString, SharedUri,
+    StatefulInteractiveElement, Styled, StyledImage as _, StyledText, Window,
 };
 use markdown::mdast;
 
 use crate::{
-    h_flex, highlighter::SyntaxHighlighter, input::Selection, text::inline_text::InlineText,
-    tooltip::Tooltip, v_flex, ActiveTheme as _, Icon, IconName,
+    h_flex,
+    highlighter::SyntaxHighlighter,
+    input::Selection,
+    text::inline_text::{InlineText, InlineTextState},
+    tooltip::Tooltip,
+    v_flex, ActiveTheme as _, Icon, IconName,
 };
 
 use super::{utils::list_item_prefix, TextViewStyle};
@@ -103,6 +107,7 @@ pub struct TextNode {
     pub image: Option<ImageNode>,
     /// The text styles, each tuple contains the range of the text and the style.
     pub marks: Vec<(Range<usize>, TextMark)>,
+    state: InlineTextState,
 }
 
 impl TextNode {
@@ -111,6 +116,7 @@ impl TextNode {
             text: text.to_string(),
             image: None,
             marks: vec![],
+            state: InlineTextState::default(),
         }
     }
 
@@ -126,10 +132,15 @@ impl TextNode {
     }
 }
 
+/// The paragraph element, contains multiple text nodes.
+///
+/// Unlike other Element, this is clonable, because it is used in the Node AST.
+/// We are keep the selection state inside this AST Nodes.
 #[derive(Debug, Default, Clone, PartialEq, IntoElement)]
 pub struct Paragraph {
     pub(super) span: Option<Span>,
     pub(super) children: Vec<TextNode>,
+    pub(super) state: InlineTextState,
 }
 
 impl From<String> for Paragraph {
@@ -137,6 +148,7 @@ impl From<String> for Paragraph {
         Self {
             span: None,
             children: vec![TextNode::new(&value)],
+            state: InlineTextState::default(),
         }
     }
 }
@@ -323,7 +335,7 @@ impl Node {
 }
 
 impl RenderOnce for Paragraph {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let span = self.span;
         let children = self.children;
 
@@ -334,41 +346,6 @@ impl RenderOnce for Paragraph {
         let mut links: Vec<(Range<usize>, LinkMark)> = vec![];
         let mut offset = 0;
 
-        // fn inline_text(
-        //     ix: usize,
-        //     text: String,
-        //     links: Vec<(Range<usize>, LinkMark)>,
-        //     highlights: Vec<(Range<usize>, HighlightStyle)>,
-        //     window: &mut Window,
-        //     cx: &mut App,
-        // ) -> AnyElement {
-        //     let text_style = window.text_style();
-        //     let styled_text =
-        //         StyledText::new(text).with_default_highlights(&text_style, highlights);
-        //     let link_ranges = links
-        //         .iter()
-        //         .map(|(range, _)| range.clone())
-        //         .collect::<Vec<_>>();
-
-        //     let state_id = ElementId::Name(format!("inline-text-{}", ix).into());
-        //     let selection_state = window.use_keyed_state(state_id, cx, |_, _| Selection::default());
-
-        //     InteractiveText::new(ix, styled_text)
-        //         .on_click(link_ranges, {
-        //             let links = links.clone();
-        //             move |ix, _, cx| {
-        //                 if let Some((_, link)) = &links.get(ix) {
-        //                     // Stop propagation to prevent the parent element from handling the event.
-        //                     //
-        //                     // For example the text in a checkbox label, click link need avoid toggle check state.
-        //                     cx.stop_propagation();
-        //                     cx.open_url(&link.url);
-        //                 }
-        //             }
-        //         })
-        //         .into_any_element()
-        // }
-
         let mut ix = 0;
         for text_node in children.into_iter() {
             let text_len = text_node.text.len();
@@ -377,8 +354,14 @@ impl RenderOnce for Paragraph {
             if let Some(image) = &text_node.image {
                 if text.len() > 0 {
                     child_nodes.push(
-                        InlineText::new(ix, text.clone(), links.clone(), highlights.clone())
-                            .into_any_element(),
+                        InlineText::new(
+                            ix,
+                            text.clone(),
+                            links.clone(),
+                            highlights.clone(),
+                            text_node.state.clone(),
+                        )
+                        .into_any_element(),
                     );
                 }
                 child_nodes.push(
@@ -446,10 +429,10 @@ impl RenderOnce for Paragraph {
             ix += 1;
         }
 
-        if text.len() > 0 {
-            // Add the last text node
-            child_nodes.push(InlineText::new(ix, text, links, highlights).into_any_element());
-        }
+        // Add the last text node
+        child_nodes.push(
+            InlineText::new(ix, text, links, highlights, self.state.clone()).into_any_element(),
+        );
 
         div().id(span.unwrap_or_default()).children(child_nodes)
     }

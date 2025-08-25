@@ -5,20 +5,55 @@ use std::{
 };
 
 use gpui::{
-    point, px, AnyElement, AvailableSpace, Bounds, ContentMask, CursorStyle, Element, ElementId,
-    HighlightStyle, Hitbox, HitboxBehavior, InteractiveText, IntoElement, MouseDownEvent,
-    MouseMoveEvent, MouseUpEvent, Pixels, Point, SharedString, Size, StyledText, TextLayout,
-    WhiteSpace, WrappedLine,
+    point, px, quad, BorderStyle, Bounds, CursorStyle, Edges, Element, ElementId, HighlightStyle,
+    Hitbox, HitboxBehavior, IntoElement, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PathBuilder,
+    Pixels, Point, SharedString, StyledText, TextLayout, WrappedLine,
 };
-use smallvec::SmallVec;
 
-use crate::{input::Selection, text::element::LinkMark};
+use crate::{
+    input::{Cursor, Selection},
+    text::element::LinkMark,
+    ActiveTheme,
+};
+
+#[derive(Debug, Default, PartialEq, Clone)]
+pub struct InlineTextState {
+    hovered_index: Rc<Cell<Option<usize>>>,
+    is_selection: Rc<Cell<bool>>,
+    selection: Rc<Cell<Option<Selection>>>,
+}
+
+impl InlineTextState {
+    fn start_selection(&self, index: usize) {
+        self.is_selection.set(true);
+        self.selection.set(Some(Selection {
+            start: Cursor::new(index),
+            end: Cursor::new(index),
+        }));
+    }
+
+    fn update_selection(&self, index: usize) {
+        if let Some(mut selection) = self.selection.get() {
+            selection.end = Cursor::new(index);
+            self.selection.set(Some(selection));
+        }
+    }
+
+    fn end_selection(&self) {
+        self.is_selection.set(false);
+    }
+
+    pub fn selection(&self) -> Option<Selection> {
+        self.selection.get()
+    }
+}
 
 pub(super) struct InlineText {
     id: ElementId,
     text: SharedString,
     links: Rc<Vec<(Range<usize>, LinkMark)>>,
     highlights: Vec<(Range<usize>, HighlightStyle)>,
+    state: InlineTextState,
     styled_text: StyledText,
 }
 
@@ -28,6 +63,7 @@ impl InlineText {
         text: impl Into<SharedString>,
         links: Vec<(Range<usize>, LinkMark)>,
         highlights: Vec<(Range<usize>, HighlightStyle)>,
+        state: InlineTextState,
     ) -> Self {
         let text: SharedString = text.into();
         Self {
@@ -36,6 +72,7 @@ impl InlineText {
             links: Rc::new(links),
             highlights,
             styled_text: StyledText::new(text),
+            state,
         }
     }
 
@@ -53,16 +90,6 @@ impl InlineText {
         }
         None
     }
-}
-
-#[derive(Default, Clone)]
-pub struct InlineTextState {
-    hovered_index: Rc<Cell<Option<usize>>>,
-    selection: Rc<RefCell<Selection>>,
-}
-
-pub struct LastLayout {
-    lines: Rc<SmallVec<[WrappedLine; 1]>>,
 }
 
 impl IntoElement for InlineText {
@@ -151,52 +178,147 @@ impl Element for InlineText {
         self.styled_text
             .paint(global_id, None, bounds, request_layout, &mut (), window, cx);
         let text_layout = self.styled_text.layout().clone();
+        let is_selection = self.state.is_selection.get();
 
         // link cursor pointer
         let mouse_position = window.mouse_position();
         if let Some(_) = Self::link_for_position(&text_layout, &self.links, mouse_position) {
             window.set_cursor_style(CursorStyle::PointingHand, &hitbox);
+        } else {
+            if is_selection {
+                window.set_cursor_style(CursorStyle::IBeam, &hitbox);
+            }
         }
 
-        window.with_element_state(global_id.unwrap(), move |state, window| {
-            let state: InlineTextState = state.unwrap_or_default();
+        if let Some(selection) = self.state.selection() {
+            let start_position = text_layout.position_for_index(selection.start.offset());
+            let end_position = text_layout.position_for_index(selection.end.offset());
+            let line_height = text_layout.line_height();
+            if let Some(start_position) = start_position {
+                if let Some(end_position) = end_position {
+                    if start_position.y == end_position.y {
+                        window.paint_quad(quad(
+                            Bounds::from_corners(
+                                start_position,
+                                point(end_position.x, end_position.y + line_height),
+                            ),
+                            px(0.),
+                            cx.theme().selection,
+                            Edges::default(),
+                            gpui::transparent_black(),
+                            BorderStyle::default(),
+                        ));
+                    } else {
+                        window.paint_quad(quad(
+                            Bounds::from_corners(
+                                start_position,
+                                point(bounds.right(), start_position.y + line_height),
+                            ),
+                            px(0.),
+                            cx.theme().selection,
+                            Edges::default(),
+                            gpui::transparent_black(),
+                            BorderStyle::default(),
+                        ));
 
-            // mouse move to notify update when hovering over different links
-            window.on_mouse_event({
-                let hitbox = hitbox.clone();
-                let text_layout = text_layout.clone();
-                let hovered_index = state.hovered_index.clone();
-                move |event: &MouseMoveEvent, phase, window, cx| {
-                    if phase.bubble() && hitbox.is_hovered(window) {
-                        let current = hovered_index.get();
-                        let updated = text_layout.index_for_position(event.position).ok();
-                        if current != updated {
-                            hovered_index.set(updated);
-                            cx.notify(current_view);
+                        if end_position.y > start_position.y + line_height {
+                            window.paint_quad(quad(
+                                Bounds::from_corners(
+                                    point(bounds.left(), start_position.y + line_height),
+                                    point(bounds.right(), end_position.y),
+                                ),
+                                px(0.),
+                                cx.theme().selection,
+                                Edges::default(),
+                                gpui::transparent_black(),
+                                BorderStyle::default(),
+                            ));
                         }
+
+                        window.paint_quad(quad(
+                            Bounds::from_corners(
+                                point(bounds.left(), end_position.y),
+                                point(end_position.x, end_position.y + line_height),
+                            ),
+                            px(0.),
+                            cx.theme().selection,
+                            Edges::default(),
+                            gpui::transparent_black(),
+                            BorderStyle::default(),
+                        ));
                     }
                 }
-            });
+            }
+        }
 
-            // click
-            window.on_mouse_event({
-                let links = self.links.clone();
-                let text_layout = text_layout.clone();
+        // mouse move to notify update when hovering over different links
+        window.on_mouse_event({
+            let hitbox = hitbox.clone();
+            let text_layout = text_layout.clone();
+            let state = self.state.clone();
+            let hovered_index = state.hovered_index.clone();
 
-                move |event: &MouseUpEvent, phase, _, cx| {
-                    if !bounds.contains(&event.position) || !phase.bubble() {
-                        return;
-                    }
+            move |event: &MouseMoveEvent, phase, window, cx| {
+                if !phase.bubble() || !hitbox.is_hovered(window) {
+                    return;
+                }
 
-                    if let Some(link) =
-                        Self::link_for_position(&text_layout, &links, event.position)
-                    {
-                        cx.open_url(&link.url);
+                let current = hovered_index.get();
+                let updated = text_layout.index_for_position(event.position).ok();
+                if current != updated {
+                    hovered_index.set(updated);
+                    cx.notify(current_view);
+                }
+
+                // update selection if in selection mode
+                if state.is_selection.get() {
+                    if let Ok(index) = text_layout.index_for_position(event.position) {
+                        state.update_selection(index);
+                        cx.notify(current_view);
                     }
                 }
-            });
+            }
+        });
 
-            ((), state)
+        // mouse down to start selection
+        window.on_mouse_event({
+            let hitbox = hitbox.clone();
+            let text_layout = text_layout.clone();
+            let state = self.state.clone();
+
+            move |event: &MouseDownEvent, phase, window, cx| {
+                if !hitbox.is_hovered(window) || !phase.bubble() {
+                    return;
+                }
+
+                if let Ok(index) = text_layout.index_for_position(event.position) {
+                    state.start_selection(index);
+                    cx.notify(current_view);
+                }
+            }
+        });
+
+        // click
+        window.on_mouse_event({
+            let links = self.links.clone();
+            let text_layout = text_layout.clone();
+            let state = self.state.clone();
+
+            move |event: &MouseUpEvent, phase, _, cx| {
+                if state.is_selection.get() {
+                    state.end_selection();
+                    cx.notify(current_view);
+                }
+
+                if !bounds.contains(&event.position) || !phase.bubble() {
+                    return;
+                }
+
+                if let Some(link) = Self::link_for_position(&text_layout, &links, event.position) {
+                    cx.stop_propagation();
+                    cx.open_url(&link.url);
+                }
+            }
         });
     }
 }
