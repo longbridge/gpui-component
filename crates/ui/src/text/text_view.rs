@@ -430,11 +430,7 @@ impl Element for TextView {
             // move to update end postion.
             window.on_mouse_event({
                 let state = self.state.clone();
-                move |event: &MouseMoveEvent, phase, _, cx| {
-                    if !bounds.contains(&event.position) || !phase.bubble() {
-                        return;
-                    }
-
+                move |event: &MouseMoveEvent, _, _, cx| {
                     state.update(cx, |state, _| {
                         state.update_selection(event.position);
                     });
@@ -443,19 +439,17 @@ impl Element for TextView {
             });
 
             // up to end selection
-            window.on_mouse_event({
-                let state = self.state.clone();
-                move |event: &MouseUpEvent, phase, _, cx| {
-                    if !bounds.contains(&event.position) || !phase.bubble() {
-                        return;
+            if self.state.read(cx).has_selection() {
+                window.on_mouse_event({
+                    let state = self.state.clone();
+                    move |_: &MouseUpEvent, _, _, cx| {
+                        state.update(cx, |state, _| {
+                            state.end_selection();
+                        });
+                        cx.notify(entity_id);
                     }
-
-                    state.update(cx, |state, _| {
-                        state.end_selection();
-                    });
-                    cx.notify(entity_id);
-                }
-            });
+                });
+            }
         }
 
         if self.state.read(cx).has_selection() {
