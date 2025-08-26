@@ -1,13 +1,29 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 
 use gpui::{
-    px, rems, AnyElement, App, Bounds, Element, ElementId, IntoElement, MouseDownEvent,
-    MouseMoveEvent, MouseUpEvent, Pixels, Point, Rems, RenderOnce, SharedString, Window,
+    div, px, rems, AnyElement, App, Bounds, ClipboardItem, Element, ElementId, Entity, FocusHandle,
+    InteractiveElement, IntoElement, KeyBinding, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
+    ParentElement, Pixels, Point, Rems, RenderOnce, SharedString, Window,
 };
 
-use crate::{global_state::GlobalState, highlighter::HighlightTheme};
-
 use super::{html::HtmlElement, markdown::MarkdownElement};
+use crate::{
+    global_state::GlobalState,
+    highlighter::HighlightTheme,
+    input::{self},
+    text::element::{self},
+};
+
+const CONTEXT: &'static str = "TextView";
+
+pub(crate) fn init(cx: &mut App) {
+    cx.bind_keys(vec![
+        #[cfg(target_os = "macos")]
+        KeyBinding::new("cmd-c", input::Copy, Some(CONTEXT)),
+        #[cfg(not(target_os = "macos"))]
+        KeyBinding::new("ctrl-c", input::Copy, Some(CONTEXT)),
+    ]);
+}
 
 #[derive(IntoElement, Clone)]
 enum TextViewElement {
@@ -43,29 +59,86 @@ impl RenderOnce for TextViewElement {
 #[derive(Clone)]
 pub struct TextView {
     id: ElementId,
+    state: Entity<TextViewState>,
     element: TextViewElement,
 }
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Clone, PartialEq)]
 pub struct TextViewState {
+    raw: SharedString,
+    focus_handle: FocusHandle,
+    pub(super) root: Option<Result<element::Node, SharedString>>,
+    style: TextViewStyle,
+    _last_parsed: Option<Instant>,
+
     /// The bounds of the text view
     pub(crate) bounds: Bounds<Pixels>,
     /// The local (in TextView) position of the selection.
-    pub(crate) selection_pos: (Option<Point<Pixels>>, Option<Point<Pixels>>),
-    /// Is current in selection mode.
-    pub(crate) is_selection: bool,
+    selection_pos: (Option<Point<Pixels>>, Option<Point<Pixels>>),
+    /// Is current in selection.
+    is_selecting: bool,
 }
 
 impl TextViewState {
+    pub fn new(cx: &mut App) -> Self {
+        let focus_handle = cx.focus_handle();
+
+        Self {
+            raw: SharedString::default(),
+            focus_handle,
+            root: None,
+            style: TextViewStyle::default(),
+            _last_parsed: None,
+            bounds: Bounds::default(),
+            selection_pos: (None, None),
+            is_selecting: false,
+        }
+    }
+}
+
+impl TextViewState {
+    pub(super) fn parse_if_needed(
+        &mut self,
+        new_text: SharedString,
+        is_html: bool,
+        style: &TextViewStyle,
+        cx: &mut App,
+    ) {
+        let is_changed = self.raw != new_text || self.style != *style;
+
+        if self.root.is_some() && !is_changed {
+            return;
+        }
+
+        if let Some(last_parsed) = self._last_parsed {
+            if last_parsed.elapsed().as_millis() < 500 {
+                return;
+            }
+        }
+
+        self.raw = new_text;
+        // NOTE: About 100ms
+        // let measure = crate::Measure::new("parse_markdown");
+        self.root = Some(if is_html {
+            super::html::parse_html(&self.raw)
+        } else {
+            super::markdown::parse_markdown(&self.raw, &style, cx)
+        });
+        // measure.end();
+        self._last_parsed = Some(Instant::now());
+        self.style = style.clone();
+        self.clear_selection();
+    }
+
     pub(crate) fn clear_selection(&mut self) {
         self.selection_pos = (None, None);
-        self.is_selection = false;
+        self.is_selecting = false;
     }
 
     pub(crate) fn start_selection(&mut self, pos: Point<Pixels>) {
         let pos = pos - self.bounds.origin;
         self.selection_pos = (Some(pos), Some(pos));
-        self.is_selection = true;
+        self.is_selecting = true;
     }
 
     pub(crate) fn update_selection(&mut self, pos: Point<Pixels>) {
@@ -76,7 +149,40 @@ impl TextViewState {
     }
 
     pub(crate) fn end_selection(&mut self) {
-        self.is_selection = false;
+        self.is_selecting = false;
+    }
+
+    pub(crate) fn has_selection(&self) -> bool {
+        if let (Some(start), Some(end)) = self.selection_pos {
+            start != end
+        } else {
+            false
+        }
+    }
+
+    /// Return the position of the selection in window coordinates.
+    pub(crate) fn selection_position(&self) -> (Option<Point<Pixels>>, Option<Point<Pixels>>) {
+        if let (Some(start), Some(end)) = self.selection_pos {
+            let start = start + self.bounds.origin;
+            let end = end + self.bounds.origin;
+
+            // return in ordered
+            if start.x < end.x || start.y <= end.y {
+                return (Some(start), Some(end));
+            } else {
+                return (Some(end), Some(start));
+            }
+        } else {
+            (None, None)
+        }
+    }
+
+    pub fn selection_text(&self) -> Option<String> {
+        let Some(Ok(root)) = &self.root else {
+            return None;
+        };
+
+        Some(root.selected_text())
     }
 }
 
@@ -172,24 +278,35 @@ impl TextViewStyle {
 
 impl TextView {
     /// Create a new markdown text view.
-    pub fn markdown(id: impl Into<ElementId>, raw: impl Into<SharedString>) -> Self {
+    pub fn markdown(
+        id: impl Into<ElementId>,
+        raw: impl Into<SharedString>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Self {
         let id: ElementId = id.into();
-        let el_id = SharedString::from(format!("{}/markdown", id));
-
+        let state = window.use_keyed_state(id.clone(), cx, |_, cx| TextViewState::new(cx));
         Self {
             id,
-            element: TextViewElement::Markdown(MarkdownElement::new(el_id, raw)),
+            state: state.clone(),
+            element: TextViewElement::Markdown(MarkdownElement::new(raw, state)),
         }
     }
 
     /// Create a new html text view.
-    pub fn html(id: impl Into<ElementId>, raw: impl Into<SharedString>) -> Self {
+    pub fn html(
+        id: impl Into<ElementId>,
+        raw: impl Into<SharedString>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Self {
         let id: ElementId = id.into();
-        let el_id = SharedString::from(format!("{}/html", id));
+        let state = window.use_keyed_state(id.clone(), cx, |_, cx| TextViewState::new(cx));
 
         Self {
             id,
-            element: TextViewElement::Html(HtmlElement::new(el_id, raw)),
+            state: state.clone(),
+            element: TextViewElement::Html(HtmlElement::new(raw, state)),
         }
     }
 
@@ -209,6 +326,14 @@ impl TextView {
             TextViewElement::Html(el) => TextViewElement::Html(el.style(style)),
         };
         self
+    }
+
+    fn on_action_copy(state: &Entity<TextViewState>, cx: &mut App) {
+        let Some(selected_text) = state.read(cx).selection_text() else {
+            return;
+        };
+
+        cx.write_to_clipboard(ClipboardItem::new_string(selected_text));
     }
 }
 
@@ -239,7 +364,17 @@ impl Element for TextView {
         window: &mut Window,
         cx: &mut App,
     ) -> (gpui::LayoutId, Self::RequestLayoutState) {
-        let mut el = self.element.clone().into_any_element();
+        let mut el = div()
+            .key_context(CONTEXT)
+            .track_focus(&self.state.read(cx).focus_handle)
+            .on_action({
+                let state = self.state.clone();
+                move |_: &input::Copy, _, cx| {
+                    Self::on_action_copy(&state, cx);
+                }
+            })
+            .child(self.element.clone())
+            .into_any_element();
         let layout_id = el.request_layout(window, cx);
         (layout_id, el)
     }
@@ -267,19 +402,18 @@ impl Element for TextView {
         cx: &mut App,
     ) {
         let entity_id = window.current_view();
-        let state = window.use_keyed_state(self.id.clone(), cx, |_, _| TextViewState::default());
-        let is_selection = state.read(cx).is_selection;
+        let is_selecting = self.state.read(cx).is_selecting;
 
-        state.update(cx, |state, _| state.bounds = bounds);
+        self.state.update(cx, |state, _| state.bounds = bounds);
 
         GlobalState::global_mut(cx)
             .text_view_state_stack
-            .push(state.clone());
+            .push(self.state.clone());
         request_layout.paint(window, cx);
         GlobalState::global_mut(cx).text_view_state_stack.pop();
 
         window.on_mouse_event({
-            let state = state.clone();
+            let state = self.state.clone();
             move |event: &MouseDownEvent, phase, _, cx| {
                 if !bounds.contains(&event.position) || !phase.bubble() {
                     return;
@@ -292,10 +426,10 @@ impl Element for TextView {
             }
         });
 
-        if is_selection {
+        if is_selecting {
             // move to update end postion.
             window.on_mouse_event({
-                let state = state.clone();
+                let state = self.state.clone();
                 move |event: &MouseMoveEvent, phase, _, cx| {
                     if !bounds.contains(&event.position) || !phase.bubble() {
                         return;
@@ -310,7 +444,7 @@ impl Element for TextView {
 
             // up to end selection
             window.on_mouse_event({
-                let state = state.clone();
+                let state = self.state.clone();
                 move |event: &MouseUpEvent, phase, _, cx| {
                     if !bounds.contains(&event.position) || !phase.bubble() {
                         return;
@@ -322,12 +456,14 @@ impl Element for TextView {
                     cx.notify(entity_id);
                 }
             });
+        }
 
+        if self.state.read(cx).has_selection() {
             // down outside to clear selection
             window.on_mouse_event({
-                let state = state.clone();
-                move |event: &MouseDownEvent, phase, _, cx| {
-                    if bounds.contains(&event.position) || !phase.bubble() {
+                let state = self.state.clone();
+                move |event: &MouseDownEvent, _, _, cx| {
+                    if bounds.contains(&event.position) {
                         return;
                     }
 

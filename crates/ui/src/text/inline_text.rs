@@ -1,4 +1,4 @@
-use std::{cell::Cell, ops::Range, rc::Rc};
+use std::{cell::RefCell, ops::Range, rc::Rc};
 
 use gpui::{
     point, px, quad, App, BorderStyle, Bounds, CursorStyle, Edges, Element, ElementId,
@@ -7,11 +7,17 @@ use gpui::{
     Window,
 };
 
-use crate::{global_state::GlobalState, input::Selection, text::element::LinkMark, ActiveTheme};
+use crate::{
+    global_state::GlobalState,
+    input::{Cursor, Selection},
+    text::element::LinkMark,
+    ActiveTheme,
+};
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct InlineTextState {
-    hovered_index: Rc<Cell<Option<usize>>>,
+    hovered_index: Rc<RefCell<Option<usize>>>,
+    pub(super) selection: Rc<RefCell<Option<Selection>>>,
 }
 
 pub(super) struct InlineText {
@@ -68,7 +74,7 @@ impl IntoElement for InlineText {
 
 impl Element for InlineText {
     type RequestLayoutState = ();
-    type PrepaintState = (Option<Selection>, Hitbox);
+    type PrepaintState = Hitbox;
 
     fn id(&self) -> Option<ElementId> {
         Some(self.id.clone())
@@ -126,8 +132,7 @@ impl Element for InlineText {
             .prepaint(id, inspector_id, bounds, &mut (), window, cx);
 
         let hitbox = window.insert_hitbox(bounds, HitboxBehavior::Normal);
-
-        (None, hitbox)
+        hitbox
     }
 
     fn paint(
@@ -141,7 +146,10 @@ impl Element for InlineText {
         cx: &mut App,
     ) {
         let current_view = window.current_view();
-        let (selection, hitbox) = prepaint;
+        let hitbox = prepaint;
+        let line_height = window.line_height();
+
+        let state = self.state.clone();
 
         self.styled_text
             .paint(global_id, None, bounds, &mut (), &mut (), window, cx);
@@ -149,25 +157,90 @@ impl Element for InlineText {
 
         // layout selections
         let mut is_selection = false;
+        let mut selection = None;
         if let Some(text_view_state) = GlobalState::global(cx).text_view_state() {
             let text_view_state = text_view_state.read(cx);
-            if text_view_state.is_selection {
+            if text_view_state.has_selection() {
+                is_selection = true;
                 let mut selection_bounds = Bounds::default();
-                if let Some(start_pos) = &text_view_state.selection_pos.0 {
-                    if let Some(end_pos) = &text_view_state.selection_pos.1 {
-                        selection_bounds = Bounds::from_corners(
-                            bounds.origin + *start_pos,
-                            bounds.origin + *end_pos,
-                        );
+                let selection_position = text_view_state.selection_position();
+                if let Some(start_pos) = &selection_position.0 {
+                    if let Some(end_pos) = &selection_position.1 {
+                        selection_bounds = Bounds::from_corners(*start_pos, *end_pos);
                     }
                 }
 
-                if selection_bounds.is_contained_within(&bounds) {
-                    is_selection = true;
-                    dbg!(selection_bounds);
+                // Use for debug selection bounds
+                // window.paint_quad(PaintQuad {
+                //     bounds: selection_bounds,
+                //     background: cx.theme().blue.alpha(0.01).into(),
+                //     corner_radii: gpui::Corners::default(),
+                //     border_color: gpui::transparent_black(),
+                //     border_style: BorderStyle::default(),
+                //     border_widths: gpui::Edges::all(px(0.)),
+                // });
+
+                fn point_in_column_selection(
+                    pos: Point<Pixels>,
+                    selection_bounds: &Bounds<Pixels>,
+                    line_height: Pixels,
+                ) -> bool {
+                    let top = selection_bounds.top();
+                    let bottom = selection_bounds.bottom();
+                    let left = selection_bounds.left();
+                    let right = selection_bounds.right();
+
+                    // Out of the vertical bounds
+                    if pos.x < top || pos.y >= bottom {
+                        return false;
+                    }
+
+                    let single_line = (bottom - top) <= line_height;
+
+                    if single_line {
+                        // If it's a single line selection, just check horizontal bounds
+                        return pos.x >= left && pos.x <= right;
+                    }
+
+                    let is_first_line = pos.y + line_height >= top && pos.y < top + line_height;
+                    let is_last_line = pos.y >= bottom - line_height && pos.y < bottom;
+
+                    if is_first_line {
+                        // First line: from left to the end of the line
+                        return pos.x >= left;
+                    } else if is_last_line {
+                        // Last line: from the start of the line to right
+                        return pos.x <= right;
+                    } else {
+                        // Other lines in between: full line selection
+                        return pos.y >= top;
+                    }
+                }
+
+                for i in 0..self.text.len() {
+                    let Some(pos) = text_layout.position_for_index(i) else {
+                        continue;
+                    };
+
+                    if point_in_column_selection(pos, &selection_bounds, line_height) {
+                        if selection.is_none() {
+                            selection = Some((i, i + 1));
+                        }
+
+                        selection.as_mut().unwrap().1 = i + 1;
+                    }
                 }
             }
         }
+
+        *state.selection.borrow_mut() = if let Some(selection) = selection {
+            Some(Selection {
+                start: Cursor::new(selection.0),
+                end: Cursor::new(selection.1),
+            })
+        } else {
+            None
+        };
 
         // link cursor pointer
         let mouse_position = window.mouse_position();
@@ -179,7 +252,7 @@ impl Element for InlineText {
             }
         }
 
-        if let Some(selection) = selection {
+        if let Some(selection) = *state.selection.borrow() {
             let mut start_offset = selection.start.offset();
             let mut end_offset = selection.end.offset();
             if end_offset < start_offset {
@@ -250,19 +323,17 @@ impl Element for InlineText {
         window.on_mouse_event({
             let hitbox = hitbox.clone();
             let text_layout = text_layout.clone();
-            let state = self.state.clone();
             let hovered_index = state.hovered_index.clone();
-
             move |event: &MouseMoveEvent, phase, window, cx| {
                 if !phase.bubble() || !hitbox.is_hovered(window) {
                     return;
                 }
 
-                let current = hovered_index.get();
+                let current = *hovered_index.borrow();
                 let updated = text_layout.index_for_position(event.position).ok();
                 //  notify update when hovering over different links
                 if current != updated {
-                    hovered_index.set(updated);
+                    *hovered_index.borrow_mut() = updated;
                     cx.notify(current_view);
                 }
             }
@@ -272,7 +343,6 @@ impl Element for InlineText {
         window.on_mouse_event({
             let links = self.links.clone();
             let text_layout = text_layout.clone();
-            let state = self.state.clone();
 
             move |event: &MouseUpEvent, phase, _, cx| {
                 if !bounds.contains(&event.position) || !phase.bubble() {

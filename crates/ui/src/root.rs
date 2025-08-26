@@ -3,7 +3,6 @@ use crate::{
     input::InputState,
     modal::Modal,
     notification::{Notification, NotificationList},
-    text::TextViewState,
     window_border, ActiveTheme, Placement,
 };
 use gpui::{
@@ -11,7 +10,6 @@ use gpui::{
     Entity, FocusHandle, InteractiveElement, IntoElement, ParentElement as _, Render, Styled,
     Window,
 };
-use smallvec::SmallVec;
 use std::{any::TypeId, rc::Rc};
 
 /// Extension trait for [`WindowContext`] and [`ViewContext`] to add drawer functionality.

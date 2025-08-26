@@ -7,13 +7,14 @@ use std::rc::Rc;
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    div, px, relative, DefiniteLength, ElementId, IntoElement, ParentElement as _, RenderOnce,
+    div, px, relative, DefiniteLength, Entity, IntoElement, ParentElement as _, RenderOnce,
     SharedString, Styled as _, Window,
 };
 use html5ever::tendril::TendrilSink;
 use html5ever::{local_name, parse_document, LocalName, ParseOpts};
 use markup5ever_rcdom::{Node, NodeData, RcDom};
 
+use crate::text::TextViewState;
 use crate::v_flex;
 
 use super::element::{self, ImageNode, LinkMark, Paragraph, Table, TableRow, TextMark, TextNode};
@@ -95,16 +96,16 @@ fn cleanup_html(source: &str) -> Vec<u8> {
 
 #[derive(IntoElement, Clone)]
 pub(super) struct HtmlElement {
-    id: ElementId,
     pub(super) text: SharedString,
     style: TextViewStyle,
+    state: Entity<TextViewState>,
 }
 
 impl HtmlElement {
-    pub(super) fn new(id: impl Into<ElementId>, raw: impl Into<SharedString>) -> Self {
+    pub(super) fn new(raw: impl Into<SharedString>, state: Entity<TextViewState>) -> Self {
         Self {
-            id: id.into(),
             text: raw.into(),
+            state,
             style: TextViewStyle::default(),
         }
     }
@@ -122,40 +123,19 @@ impl HtmlElement {
     }
 }
 
-#[derive(Default)]
-pub struct HtmlState {
-    raw: SharedString,
-    root: Option<Result<element::Node, SharedString>>,
-}
-
-impl HtmlState {
-    fn parse_if_needed(&mut self, new_text: SharedString) {
-        let is_changed = self.raw != new_text;
-
-        if self.root.is_some() && !is_changed {
-            return;
-        }
-
-        self.raw = new_text;
-        self.root = Some(parse_html(&self.raw));
-    }
-}
-
 impl RenderOnce for HtmlElement {
     fn render(self, window: &mut Window, cx: &mut gpui::App) -> impl IntoElement {
-        let state = window.use_keyed_state(self.id.clone(), cx, |_, _| HtmlState::default());
-
-        state.update(cx, |state, _| {
-            state.parse_if_needed(self.text.clone());
+        self.state.update(cx, |state, cx| {
+            state.parse_if_needed(self.text.clone(), true, &TextViewStyle::default(), cx);
         });
 
-        let root = state
+        let root = self
+            .state
             .read(cx)
             .root
             .clone()
             .unwrap_or_else(|| Err("Failed to parse markdown".into()));
 
-        tracing::info!("-------------- render HtmlElement");
         div().map(|this| match root {
             Ok(node) => this.child(node.render(None, true, true, &self.style, window, cx)),
             Err(err) => this.child(

@@ -99,7 +99,7 @@ impl PartialEq for ImageNode {
     }
 }
 
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Default, Clone, Debug, PartialEq)]
 pub struct TextNode {
     /// The text content.
     pub text: String,
@@ -140,6 +140,21 @@ pub struct Paragraph {
     pub(super) span: Option<Span>,
     pub(super) children: Vec<TextNode>,
     pub(super) state: InlineTextState,
+}
+
+impl Paragraph {
+    pub(super) fn selected_text(&self) -> String {
+        let mut text = String::new();
+        for c in self.children.iter() {
+            dbg!(&c);
+            if let Some(selection) = *c.state.selection.borrow() {
+                dbg!(&selection);
+                text.push_str(&c.text[selection.start.offset()..selection.end.offset()]);
+            }
+        }
+
+        text
+    }
 }
 
 impl From<String> for Paragraph {
@@ -330,6 +345,50 @@ impl Node {
             }
             _ => self.clone(),
         }
+    }
+
+    pub(super) fn selected_text(&self) -> String {
+        let mut text = String::new();
+        match self {
+            Node::Root { children } => {
+                for c in children.iter() {
+                    text.push_str(&c.selected_text());
+                }
+            }
+            Node::Paragraph(paragraph) => {
+                text.push_str(&paragraph.selected_text());
+            }
+            Node::Heading { children, .. } => {
+                text.push_str(&children.selected_text());
+            }
+            Node::List { children, .. } => {
+                for c in children.iter() {
+                    text.push_str(&c.selected_text());
+                }
+            }
+            Node::ListItem { children, .. } => {
+                for c in children.iter() {
+                    text.push_str(&c.selected_text());
+                }
+            }
+            Node::Blockquote { children } => {
+                for c in children.iter() {
+                    text.push_str(&c.selected_text());
+                }
+            }
+            Node::Table(table) => {
+                for row in table.children.iter() {
+                    for cell in row.children.iter() {
+                        text.push_str(&cell.children.selected_text());
+                        text.push('\t');
+                    }
+                    text.push('\n');
+                }
+            }
+            Node::CodeBlock(_) | Node::Break { .. } | Node::Divider | Node::Unknown => {}
+        }
+
+        text
     }
 }
 

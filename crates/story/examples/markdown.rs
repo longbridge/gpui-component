@@ -46,7 +46,7 @@ impl Example {
 }
 
 impl Render for Example {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = if cx.theme().mode.is_dark() {
             HighlightTheme::default_dark()
         } else {
@@ -79,13 +79,17 @@ impl Render for Example {
                         .p_5()
                         .overflow_y_scroll()
                         .child(
-                            TextView::markdown("preview", self.input_state.read(cx).value()).style(
-                                TextViewStyle {
-                                    highlight_theme: theme.clone(),
-                                    is_dark,
-                                    ..Default::default()
-                                },
-                            ),
+                            TextView::markdown(
+                                "preview",
+                                self.input_state.read(cx).value().clone(),
+                                window,
+                                cx,
+                            )
+                            .style(TextViewStyle {
+                                highlight_theme: theme.clone(),
+                                is_dark,
+                                ..Default::default()
+                            }),
                         ),
                 ),
             )

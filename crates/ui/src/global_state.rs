@@ -1,4 +1,4 @@
-use gpui::{App, BorrowAppContext, Entity, Global};
+use gpui::{App, Entity, Global};
 
 use crate::text::TextViewState;
 
@@ -25,17 +25,6 @@ impl GlobalState {
 
     pub(crate) fn global_mut(cx: &mut App) -> &mut Self {
         cx.global_mut::<Self>()
-    }
-
-    pub(crate) fn with_text_view_state<R>(
-        &mut self,
-        state: Entity<TextViewState>,
-        f: impl FnOnce(&mut Self) -> R,
-    ) -> R {
-        self.text_view_state_stack.push(state);
-        let result = f(self);
-        self.text_view_state_stack.pop();
-        result
     }
 
     pub(crate) fn text_view_state(&self) -> Option<&Entity<TextViewState>> {

@@ -50,7 +50,7 @@ impl Example {
 }
 
 impl Render for Example {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         h_resizable("container", self.resizable_state.clone())
             .child(
                 resizable_panel().child(
@@ -74,7 +74,12 @@ impl Render for Example {
                         .size_full()
                         .p_5()
                         .overflow_y_scroll()
-                        .child(TextView::html("preview", self.input_state.read(cx).value())),
+                        .child(TextView::html(
+                            "preview",
+                            self.input_state.read(cx).value().clone(),
+                            window,
+                            cx,
+                        )),
                 ),
             )
     }

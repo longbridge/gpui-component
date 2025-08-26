@@ -1,7 +1,5 @@
-use std::time::Instant;
-
 use gpui::{
-    div, prelude::FluentBuilder as _, App, ElementId, IntoElement, ParentElement, RenderOnce,
+    div, prelude::FluentBuilder as _, App, Entity, IntoElement, ParentElement, RenderOnce,
     SharedString, Styled, Window,
 };
 use markdown::{
@@ -28,15 +26,15 @@ use super::{
 /// See also [`super::TextView`]
 #[derive(IntoElement, Clone)]
 pub(super) struct MarkdownElement {
-    id: ElementId,
     pub(super) text: SharedString,
     style: TextViewStyle,
+    state: Entity<TextViewState>,
 }
 
 impl MarkdownElement {
-    pub(super) fn new(id: impl Into<ElementId>, raw: impl Into<SharedString>) -> Self {
+    pub(super) fn new(raw: impl Into<SharedString>, state: Entity<TextViewState>) -> Self {
         Self {
-            id: id.into(),
+            state,
             text: raw.into(),
             style: TextViewStyle::default(),
         }
@@ -55,49 +53,14 @@ impl MarkdownElement {
     }
 }
 
-#[derive(Default)]
-pub struct MarkdownState {
-    raw: SharedString,
-    root: Option<Result<element::Node, SharedString>>,
-    style: TextViewStyle,
-    text_view_state: TextViewState,
-    _last_parsed: Option<Instant>,
-}
-
-impl MarkdownState {
-    fn parse_if_needed(&mut self, new_text: SharedString, style: &TextViewStyle, cx: &mut App) {
-        let is_changed = self.raw != new_text || self.style != *style;
-
-        if self.root.is_some() && !is_changed {
-            return;
-        }
-
-        if let Some(last_parsed) = self._last_parsed {
-            if last_parsed.elapsed().as_millis() < 500 {
-                return;
-            }
-        }
-
-        self.raw = new_text;
-        // NOTE: About 100ms
-        // let measure = crate::Measure::new("parse_markdown");
-        self.root = Some(parse_markdown(&self.raw, &style, cx));
-        // measure.end();
-        self._last_parsed = Some(Instant::now());
-        self.style = style.clone();
-        self.text_view_state.clear_selection();
-    }
-}
-
 impl RenderOnce for MarkdownElement {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let state = window.use_keyed_state(self.id.clone(), cx, |_, _| MarkdownState::default());
-
-        state.update(cx, |state, cx| {
-            state.parse_if_needed(self.text.clone(), &self.style, cx);
+        self.state.update(cx, |state, cx| {
+            state.parse_if_needed(self.text.clone(), false, &self.style, cx);
         });
 
-        let root = state
+        let root = self
+            .state
             .read(cx)
             .root
             .clone()
@@ -116,7 +79,7 @@ impl RenderOnce for MarkdownElement {
 }
 
 /// Parse Markdown into a tree of nodes.
-fn parse_markdown(
+pub(super) fn parse_markdown(
     raw: &str,
     style: &TextViewStyle,
     cx: &mut App,
