@@ -333,7 +333,7 @@ impl TextView {
             return;
         };
 
-        cx.write_to_clipboard(ClipboardItem::new_string(selected_text));
+        cx.write_to_clipboard(ClipboardItem::new_string(selected_text.trim().to_string()));
     }
 }
 

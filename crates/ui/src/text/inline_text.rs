@@ -17,6 +17,7 @@ use crate::{
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct InlineTextState {
     hovered_index: Rc<RefCell<Option<usize>>>,
+    pub(super) text: Rc<RefCell<SharedString>>,
     pub(super) selection: Rc<RefCell<Option<Selection>>>,
 }
 
@@ -32,12 +33,11 @@ pub(super) struct InlineText {
 impl InlineText {
     pub(super) fn new(
         id: impl Into<ElementId>,
-        text: impl Into<SharedString>,
+        text: SharedString,
         links: Vec<(Range<usize>, LinkMark)>,
         highlights: Vec<(Range<usize>, HighlightStyle)>,
         state: InlineTextState,
     ) -> Self {
-        let text: SharedString = text.into();
         Self {
             id: id.into(),
             text: text.clone(),
@@ -171,7 +171,7 @@ impl Element for InlineText {
                 }
 
                 // Use for debug selection bounds
-                // window.paint_quad(PaintQuad {
+                // window.paint_quad(gpui::PaintQuad {
                 //     bounds: selection_bounds,
                 //     background: cx.theme().blue.alpha(0.01).into(),
                 //     corner_radii: gpui::Corners::default(),
@@ -242,13 +242,13 @@ impl Element for InlineText {
             None
         };
 
-        // link cursor pointer
-        let mouse_position = window.mouse_position();
-        if let Some(_) = Self::link_for_position(&text_layout, &self.links, mouse_position) {
-            window.set_cursor_style(CursorStyle::PointingHand, &hitbox);
+        if is_selection {
+            window.set_cursor_style(CursorStyle::IBeam, &hitbox);
         } else {
-            if is_selection {
-                window.set_cursor_style(CursorStyle::IBeam, &hitbox);
+            // link cursor pointer
+            let mouse_position = window.mouse_position();
+            if let Some(_) = Self::link_for_position(&text_layout, &self.links, mouse_position) {
+                window.set_cursor_style(CursorStyle::PointingHand, &hitbox);
             }
         }
 
@@ -339,21 +339,25 @@ impl Element for InlineText {
             }
         });
 
-        // click
-        window.on_mouse_event({
-            let links = self.links.clone();
-            let text_layout = text_layout.clone();
+        if !is_selection {
+            // click
+            window.on_mouse_event({
+                let links = self.links.clone();
+                let text_layout = text_layout.clone();
 
-            move |event: &MouseUpEvent, phase, _, cx| {
-                if !bounds.contains(&event.position) || !phase.bubble() {
-                    return;
-                }
+                move |event: &MouseUpEvent, phase, _, cx| {
+                    if !bounds.contains(&event.position) || !phase.bubble() {
+                        return;
+                    }
 
-                if let Some(link) = Self::link_for_position(&text_layout, &links, event.position) {
-                    cx.stop_propagation();
-                    cx.open_url(&link.url);
+                    if let Some(link) =
+                        Self::link_for_position(&text_layout, &links, event.position)
+                    {
+                        cx.stop_propagation();
+                        cx.open_url(&link.url);
+                    }
                 }
-            }
-        });
+            });
+        }
     }
 }

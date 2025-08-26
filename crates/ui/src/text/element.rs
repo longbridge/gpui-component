@@ -146,13 +146,19 @@ impl Paragraph {
     pub(super) fn selected_text(&self) -> String {
         let mut text = String::new();
         for c in self.children.iter() {
-            dbg!(&c);
-            if let Some(selection) = *c.state.selection.borrow() {
-                dbg!(&selection);
-                text.push_str(&c.text[selection.start.offset()..selection.end.offset()]);
+            if let Some(selection) = c.state.selection.borrow().as_ref() {
+                let part_text = c.state.text.borrow().clone();
+                text.push_str(&part_text[selection.start.offset()..selection.end.offset()]);
             }
         }
+        if let Some(selection) = self.state.selection.borrow().as_ref() {
+            let all_text = self.state.text.borrow().clone();
+            text.push_str(&all_text[selection.start.offset()..selection.end.offset()]);
+        }
 
+        if !text.is_empty() {
+            text.push('\n');
+        }
         text
     }
 }
@@ -351,37 +357,77 @@ impl Node {
         let mut text = String::new();
         match self {
             Node::Root { children } => {
+                let mut block_text = String::new();
                 for c in children.iter() {
-                    text.push_str(&c.selected_text());
+                    block_text.push_str(&c.selected_text());
+                }
+                if !block_text.is_empty() {
+                    text.push_str(&block_text);
+                    text.push('\n');
                 }
             }
             Node::Paragraph(paragraph) => {
-                text.push_str(&paragraph.selected_text());
+                let mut block_text = String::new();
+                block_text.push_str(&paragraph.selected_text());
+                if !block_text.is_empty() {
+                    text.push_str(&block_text);
+                    text.push('\n');
+                }
             }
             Node::Heading { children, .. } => {
-                text.push_str(&children.selected_text());
+                let mut block_text = String::new();
+                block_text.push_str(&children.selected_text());
+                if !block_text.is_empty() {
+                    text.push_str(&block_text);
+                    text.push('\n');
+                }
             }
             Node::List { children, .. } => {
+                let mut block_text = String::new();
                 for c in children.iter() {
-                    text.push_str(&c.selected_text());
+                    block_text.push_str(&c.selected_text());
+                }
+                if !block_text.is_empty() {
+                    text.push_str(&block_text);
+                    text.push('\n');
                 }
             }
             Node::ListItem { children, .. } => {
+                let mut block_text = String::new();
                 for c in children.iter() {
-                    text.push_str(&c.selected_text());
+                    block_text.push_str(&c.selected_text());
+                }
+                if !block_text.is_empty() {
+                    text.push_str(&block_text);
+                    text.push('\n');
                 }
             }
             Node::Blockquote { children } => {
+                let mut block_text = String::new();
                 for c in children.iter() {
-                    text.push_str(&c.selected_text());
+                    block_text.push_str(&c.selected_text());
+                }
+
+                if !block_text.is_empty() {
+                    text.push_str(&block_text);
+                    text.push('\n');
                 }
             }
             Node::Table(table) => {
+                let mut block_text = String::new();
                 for row in table.children.iter() {
+                    let mut row_text = String::new();
                     for cell in row.children.iter() {
-                        text.push_str(&cell.children.selected_text());
-                        text.push('\t');
+                        row_text.push_str(&cell.children.selected_text());
                     }
+                    if !row_text.is_empty() {
+                        block_text.push_str(&row_text);
+                        block_text.push('\n');
+                    }
+                }
+
+                if !block_text.is_empty() {
+                    text.push_str(&block_text);
                     text.push('\n');
                 }
             }
@@ -411,10 +457,12 @@ impl RenderOnce for Paragraph {
 
             if let Some(image) = &text_node.image {
                 if text.len() > 0 {
+                    let text: SharedString = text.clone().into();
+                    *text_node.state.text.borrow_mut() = text.clone();
                     child_nodes.push(
                         InlineText::new(
                             ix,
-                            text.clone(),
+                            text,
                             links.clone(),
                             highlights.clone(),
                             text_node.state.clone(),
@@ -489,6 +537,9 @@ impl RenderOnce for Paragraph {
 
         // Add the last text node
         if text.len() > 0 {
+            let text: SharedString = text.into();
+            *self.state.text.borrow_mut() = text.clone();
+
             child_nodes.push(
                 InlineText::new(ix, text, links, highlights, self.state.clone()).into_any_element(),
             );
