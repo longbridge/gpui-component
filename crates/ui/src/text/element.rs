@@ -156,9 +156,6 @@ impl Paragraph {
             text.push_str(&all_text[selection.start.offset()..selection.end.offset()]);
         }
 
-        if !text.is_empty() {
-            text.push('\n');
-        }
         text
     }
 }
@@ -383,23 +380,13 @@ impl Node {
                 }
             }
             Node::List { children, .. } => {
-                let mut block_text = String::new();
                 for c in children.iter() {
-                    block_text.push_str(&c.selected_text());
-                }
-                if !block_text.is_empty() {
-                    text.push_str(&block_text);
-                    text.push('\n');
+                    text.push_str(&c.selected_text());
                 }
             }
             Node::ListItem { children, .. } => {
-                let mut block_text = String::new();
                 for c in children.iter() {
-                    block_text.push_str(&c.selected_text());
-                }
-                if !block_text.is_empty() {
-                    text.push_str(&block_text);
-                    text.push('\n');
+                    text.push_str(&c.selected_text());
                 }
             }
             Node::Blockquote { children } => {
@@ -416,12 +403,12 @@ impl Node {
             Node::Table(table) => {
                 let mut block_text = String::new();
                 for row in table.children.iter() {
-                    let mut row_text = String::new();
+                    let mut row_texts = vec![];
                     for cell in row.children.iter() {
-                        row_text.push_str(&cell.children.selected_text());
+                        row_texts.push(cell.children.selected_text());
                     }
-                    if !row_text.is_empty() {
-                        block_text.push_str(&row_text);
+                    if !row_texts.is_empty() {
+                        block_text.push_str(&row_texts.join(" "));
                         block_text.push('\n');
                     }
                 }

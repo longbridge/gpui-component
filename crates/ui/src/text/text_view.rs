@@ -61,6 +61,7 @@ pub struct TextView {
     id: ElementId,
     state: Entity<TextViewState>,
     element: TextViewElement,
+    selectable: bool,
 }
 
 #[derive(Clone, PartialEq)]
@@ -290,6 +291,7 @@ impl TextView {
             id,
             state: state.clone(),
             element: TextViewElement::Markdown(MarkdownElement::new(raw, state)),
+            selectable: true,
         }
     }
 
@@ -307,7 +309,14 @@ impl TextView {
             id,
             state: state.clone(),
             element: TextViewElement::Html(HtmlElement::new(raw, state)),
+            selectable: true,
         }
+    }
+
+    /// Set the text view to be selectable, default is true.
+    pub fn selectable(mut self, selectable: bool) -> Self {
+        self.selectable = selectable;
+        self
     }
 
     /// Set the source text of the text view.
@@ -412,61 +421,63 @@ impl Element for TextView {
         request_layout.paint(window, cx);
         GlobalState::global_mut(cx).text_view_state_stack.pop();
 
-        window.on_mouse_event({
-            let state = self.state.clone();
-            move |event: &MouseDownEvent, phase, _, cx| {
-                if !bounds.contains(&event.position) || !phase.bubble() {
-                    return;
-                }
-
-                state.update(cx, |state, _| {
-                    state.start_selection(event.position);
-                });
-                cx.notify(entity_id);
-            }
-        });
-
-        if is_selecting {
-            // move to update end position.
+        if self.selectable {
             window.on_mouse_event({
                 let state = self.state.clone();
-                move |event: &MouseMoveEvent, _, _, cx| {
+                move |event: &MouseDownEvent, phase, _, cx| {
+                    if !bounds.contains(&event.position) || !phase.bubble() {
+                        return;
+                    }
+
                     state.update(cx, |state, _| {
-                        state.update_selection(event.position);
+                        state.start_selection(event.position);
                     });
                     cx.notify(entity_id);
                 }
             });
 
-            // up to end selection
-            if self.state.read(cx).has_selection() {
+            if is_selecting {
+                // move to update end position.
                 window.on_mouse_event({
                     let state = self.state.clone();
-                    move |_: &MouseUpEvent, _, _, cx| {
+                    move |event: &MouseMoveEvent, _, _, cx| {
                         state.update(cx, |state, _| {
-                            state.end_selection();
+                            state.update_selection(event.position);
+                        });
+                        cx.notify(entity_id);
+                    }
+                });
+
+                // up to end selection
+                if self.state.read(cx).has_selection() {
+                    window.on_mouse_event({
+                        let state = self.state.clone();
+                        move |_: &MouseUpEvent, _, _, cx| {
+                            state.update(cx, |state, _| {
+                                state.end_selection();
+                            });
+                            cx.notify(entity_id);
+                        }
+                    });
+                }
+            }
+
+            if self.state.read(cx).has_selection() {
+                // down outside to clear selection
+                window.on_mouse_event({
+                    let state = self.state.clone();
+                    move |event: &MouseDownEvent, _, _, cx| {
+                        if bounds.contains(&event.position) {
+                            return;
+                        }
+
+                        state.update(cx, |state, _| {
+                            state.clear_selection();
                         });
                         cx.notify(entity_id);
                     }
                 });
             }
-        }
-
-        if self.state.read(cx).has_selection() {
-            // down outside to clear selection
-            window.on_mouse_event({
-                let state = self.state.clone();
-                move |event: &MouseDownEvent, _, _, cx| {
-                    if bounds.contains(&event.position) {
-                        return;
-                    }
-
-                    state.update(cx, |state, _| {
-                        state.clear_selection();
-                    });
-                    cx.notify(entity_id);
-                }
-            });
         }
     }
 }
