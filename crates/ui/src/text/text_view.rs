@@ -427,7 +427,7 @@ impl Element for TextView {
         });
 
         if is_selecting {
-            // move to update end postion.
+            // move to update end position.
             window.on_mouse_event({
                 let state = self.state.clone();
                 move |event: &MouseMoveEvent, _, _, cx| {

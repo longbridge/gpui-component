@@ -133,7 +133,7 @@ impl TextNode {
 
 /// The paragraph element, contains multiple text nodes.
 ///
-/// Unlike other Element, this is clonable, because it is used in the Node AST.
+/// Unlike other Element, this is cloneable, because it is used in the Node AST.
 /// We are keep the selection state inside this AST Nodes.
 #[derive(Debug, Default, Clone, PartialEq, IntoElement)]
 pub struct Paragraph {
