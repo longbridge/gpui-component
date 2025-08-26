@@ -217,18 +217,24 @@ impl Element for InlineText {
                     }
                 }
 
-                for i in 0..self.text.len() {
-                    let Some(pos) = text_layout.position_for_index(i) else {
+                let mut offset = 0;
+                let mut chars = self.text.chars().peekable();
+                while let Some(c) = chars.next() {
+                    let Some(pos) = text_layout.position_for_index(offset) else {
+                        offset += c.len_utf8();
                         continue;
                     };
 
                     if point_in_column_selection(pos, &selection_bounds, line_height) {
                         if selection.is_none() {
-                            selection = Some((i, i + 1));
+                            selection = Some((offset, offset));
                         }
 
-                        selection.as_mut().unwrap().1 = i + 1;
+                        let next_offset = offset + c.len_utf8();
+                        selection.as_mut().unwrap().1 = next_offset;
                     }
+
+                    offset += c.len_utf8();
                 }
             }
         }
