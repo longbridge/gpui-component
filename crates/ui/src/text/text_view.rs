@@ -190,7 +190,7 @@ impl TextViewState {
 #[derive(IntoElement, Clone)]
 pub enum Text {
     String(SharedString),
-    TextView(TextView),
+    TextView(Box<TextView>),
 }
 
 impl From<SharedString> for Text {
@@ -213,7 +213,7 @@ impl From<String> for Text {
 
 impl From<TextView> for Text {
     fn from(e: TextView) -> Self {
-        Self::TextView(e)
+        Self::TextView(Box::new(e))
     }
 }
 
@@ -224,7 +224,7 @@ impl Text {
     pub fn style(self, style: TextViewStyle) -> Self {
         match self {
             Self::String(s) => Self::String(s),
-            Self::TextView(e) => Self::TextView(e.style(style)),
+            Self::TextView(e) => Self::TextView(Box::new(e.style(style))),
         }
     }
 }

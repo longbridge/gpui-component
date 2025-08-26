@@ -99,12 +99,7 @@ impl Element for InlineText {
             if ix < range.start {
                 runs.push(text_style.clone().to_run(range.start - ix));
             }
-            runs.push(
-                text_style
-                    .clone()
-                    .highlight(highlight.clone())
-                    .to_run(range.len()),
-            );
+            runs.push(text_style.clone().highlight(*highlight).to_run(range.len()));
             ix = range.end;
         }
         if ix < self.text.len() {
