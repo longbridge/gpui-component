@@ -33,6 +33,7 @@ pub mod dock;
 pub mod drawer;
 pub mod dropdown;
 pub mod form;
+pub mod group_box;
 pub mod highlighter;
 pub mod history;
 pub mod indicator;

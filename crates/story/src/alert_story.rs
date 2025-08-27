@@ -140,7 +140,7 @@ impl Render for AlertStory {
                         .child(
                             Alert::warning(
                                 "warning-1",
-                                "This is a warning alert with icon and title.\n\
+                                "This is a warning alert with icon, but no title.\n\
                             This is second line of text to test is the line-height is correct.",
                             )
                             .with_size(self.size),

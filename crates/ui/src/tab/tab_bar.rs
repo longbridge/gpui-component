@@ -21,6 +21,7 @@ pub struct SelectTab(usize);
 #[derive(IntoElement)]
 pub struct TabBar {
     base: Stateful<Div>,
+    style: StyleRefinement,
     scroll_handle: Option<ScrollHandle>,
     prefix: Option<AnyElement>,
     suffix: Option<AnyElement>,
@@ -40,6 +41,7 @@ impl TabBar {
     pub fn new(id: impl Into<ElementId>) -> Self {
         Self {
             base: div().id(id).px(px(-1.)),
+            style: StyleRefinement::default(),
             children: SmallVec::new(),
             scroll_handle: None,
             prefix: None,
@@ -149,7 +151,7 @@ impl TabBar {
 
 impl Styled for TabBar {
     fn style(&mut self) -> &mut StyleRefinement {
-        self.base.style()
+        &mut self.style
     }
 }
 
@@ -182,8 +184,8 @@ impl RenderOnce for TabBar {
             }
             TabVariant::Segmented => {
                 let padding_x = match self.size {
-                    Size::XSmall => px(3.),
-                    Size::Small => px(3.),
+                    Size::XSmall => px(2.),
+                    Size::Small => px(2.),
                     Size::Large => px(6.),
                     _ => px(5.),
                 };
@@ -198,18 +200,13 @@ impl RenderOnce for TabBar {
             TabVariant::Underline => {
                 // This gap is same as the tab inner_paddings
                 let gap = match self.size {
-                    Size::XSmall => px(8.),
-                    Size::Small => px(10.),
-                    Size::Large => px(16.),
-                    _ => px(12.),
+                    Size::XSmall => px(10.),
+                    Size::Small => px(12.),
+                    Size::Large => px(20.),
+                    _ => px(16.),
                 };
 
-                let padding = Edges {
-                    left: gap,
-                    right: gap,
-                    ..Default::default()
-                };
-                (cx.theme().transparent, padding, gap)
+                (cx.theme().transparent, Edges::all(px(0.)), gap)
             }
         };
 
@@ -251,6 +248,7 @@ impl RenderOnce for TabBar {
                 |this| this.rounded(cx.theme().radius),
             )
             .paddings(paddings)
+            .refine_style(&self.style)
             .when_some(self.prefix, |this, prefix| this.child(prefix))
             .child(
                 h_flex()

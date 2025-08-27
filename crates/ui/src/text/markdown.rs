@@ -230,6 +230,7 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node) -> String {
             }
             paragraph.push(element::TextNode {
                 text: text.clone(),
+                image: None,
                 marks: vec![(
                     0..text.len(),
                     InlineTextStyle {
@@ -246,6 +247,7 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node) -> String {
             }
             paragraph.push(element::TextNode {
                 text: text.clone(),
+                image: None,
                 marks: vec![(
                     0..text.len(),
                     InlineTextStyle {
@@ -262,6 +264,7 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node) -> String {
             }
             paragraph.push(element::TextNode {
                 text: text.clone(),
+                image: None,
                 marks: vec![(
                     0..text.len(),
                     InlineTextStyle {
@@ -275,6 +278,7 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node) -> String {
             text = val.value.clone();
             paragraph.push(element::TextNode {
                 text: text.clone(),
+                image: None,
                 marks: vec![(
                     0..text.len(),
                     InlineTextStyle {
@@ -285,26 +289,36 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node) -> String {
             });
         }
         Node::Link(val) => {
+            let link_mark = Some(LinkMark {
+                url: val.url.clone().into(),
+                title: val.title.clone().map(|s| s.into()),
+            });
+
             let mut child_paragraph = Paragraph::default();
             for child in val.children.iter() {
                 text.push_str(&parse_paragraph(&mut child_paragraph, &child));
             }
-            paragraph.push(element::TextNode {
-                text: text.clone(),
-                marks: vec![(
-                    0..text.len(),
+
+            // FIXME: GPUI InteractiveText does not support inline images yet.
+            // So here we push images to the paragraph directly.
+            for child in child_paragraph.children.iter_mut() {
+                if let Some(image) = child.image.as_mut() {
+                    image.link = link_mark.clone();
+                }
+
+                child.marks.push((
+                    0..child.text.len(),
                     InlineTextStyle {
-                        link: Some(LinkMark {
-                            url: val.url.clone().into(),
-                            title: val.title.clone().map(|s| s.into()),
-                        }),
+                        link: link_mark.clone(),
                         ..Default::default()
                     },
-                )],
-            });
+                ));
+            }
+
+            paragraph.merge(&child_paragraph);
         }
         Node::Image(raw) => {
-            paragraph.set_image(ImageNode {
+            paragraph.push_image(ImageNode {
                 url: raw.url.clone().into(),
                 title: raw.title.clone().map(|t| t.into()),
                 alt: Some(raw.alt.clone().into()),
@@ -315,6 +329,7 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node) -> String {
             text = raw.value.clone();
             paragraph.push(element::TextNode {
                 text: text.clone(),
+                image: None,
                 marks: vec![(
                     0..text.len(),
                     InlineTextStyle {
@@ -328,6 +343,7 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node) -> String {
             text = raw.value.clone();
             paragraph.push(element::TextNode {
                 text: text.clone(),
+                image: None,
                 marks: vec![(0..text.len(), InlineTextStyle::default())],
             });
         }
@@ -337,6 +353,7 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node) -> String {
                     text = "\n".to_owned();
                     paragraph.push(element::TextNode {
                         text: text.clone(),
+                        image: None,
                         marks: vec![(0..text.len(), InlineTextStyle::default())],
                     });
                 } else {

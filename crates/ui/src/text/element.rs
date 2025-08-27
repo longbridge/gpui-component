@@ -4,11 +4,14 @@ use gpui::{
     div, img, prelude::FluentBuilder as _, px, relative, rems, AnyElement, App, DefiniteLength,
     Div, ElementId, FontStyle, FontWeight, Half, HighlightStyle, InteractiveElement as _,
     InteractiveText, IntoElement, Length, ObjectFit, ParentElement, Rems, RenderOnce, SharedString,
-    SharedUri, Styled, StyledImage as _, StyledText, Window,
+    SharedUri, StatefulInteractiveElement, Styled, StyledImage as _, StyledText, Window,
 };
 use markdown::mdast;
 
-use crate::{h_flex, highlighter::SyntaxHighlighter, v_flex, ActiveTheme as _, Icon, IconName};
+use crate::{
+    h_flex, highlighter::SyntaxHighlighter, tooltip::Tooltip, v_flex, ActiveTheme as _, Icon,
+    IconName,
+};
 
 use super::{utils::list_item_prefix, TextViewStyle};
 
@@ -44,10 +47,20 @@ impl From<Span> for ElementId {
 #[derive(Debug, Default, Clone)]
 pub struct ImageNode {
     pub url: SharedUri,
+    pub link: Option<LinkMark>,
     pub title: Option<SharedString>,
     pub alt: Option<SharedString>,
     pub width: Option<DefiniteLength>,
     pub height: Option<DefiniteLength>,
+}
+
+impl ImageNode {
+    pub fn title(&self) -> String {
+        self.title
+            .clone()
+            .unwrap_or_else(|| self.alt.clone().unwrap_or_default())
+            .to_string()
+    }
 }
 
 impl PartialEq for ImageNode {
@@ -60,37 +73,24 @@ impl PartialEq for ImageNode {
 pub struct TextNode {
     /// The text content.
     pub text: String,
+    pub image: Option<ImageNode>,
     /// The text styles, each tuple contains the range of the text and the style.
     pub marks: Vec<(Range<usize>, InlineTextStyle)>,
 }
 
-#[derive(Debug, Clone, PartialEq, IntoElement)]
-pub enum Paragraph {
-    Texts {
-        span: Option<Span>,
-        children: Vec<TextNode>,
-    },
-    Image {
-        span: Option<Span>,
-        image: ImageNode,
-    },
-}
-
-impl Default for Paragraph {
-    fn default() -> Self {
-        Self::Texts {
-            span: None,
-            children: vec![],
-        }
-    }
+#[derive(Debug, Default, Clone, PartialEq, IntoElement)]
+pub struct Paragraph {
+    pub(super) span: Option<Span>,
+    pub(super) children: Vec<TextNode>,
 }
 
 impl From<String> for Paragraph {
     fn from(value: String) -> Self {
-        Self::Texts {
+        Self {
             span: None,
             children: vec![TextNode {
                 text: value.clone(),
+                image: None,
                 marks: vec![],
             }],
         }
@@ -141,80 +141,60 @@ pub struct TableCell {
 
 impl Paragraph {
     pub fn clear(&mut self) {
-        match self {
-            Self::Texts { children, .. } => children.clear(),
-            Self::Image { .. } => *self = Self::default(),
-        }
+        self.span = None;
+        self.children.clear();
     }
 
     pub fn is_image(&self) -> bool {
-        matches!(self, Self::Image { .. })
+        false
     }
 
     pub fn set_span(&mut self, span: Span) {
-        match self {
-            Self::Texts { span: s, .. } => *s = Some(span),
-            Self::Image { span: s, .. } => *s = Some(span),
-        }
+        self.span = Some(span);
     }
 
     pub fn push_str(&mut self, text: &str) {
-        if let Self::Texts { children, .. } = self {
-            children.push(TextNode {
-                text: text.to_string(),
-                marks: vec![(0..text.len(), InlineTextStyle::default())],
-            });
-        }
+        self.children.push(TextNode {
+            text: text.to_string(),
+            image: None,
+            marks: vec![(0..text.len(), InlineTextStyle::default())],
+        });
     }
 
     pub fn push(&mut self, text: TextNode) {
-        if let Self::Texts { children, .. } = self {
-            children.push(text);
-        }
+        self.children.push(text);
     }
 
-    pub fn set_image(&mut self, image: ImageNode) {
-        *self = Self::Image { span: None, image };
+    pub fn push_image(&mut self, image: ImageNode) {
+        self.children.push(TextNode {
+            text: String::new(),
+            image: Some(image),
+            marks: vec![],
+        });
     }
 
     pub fn is_empty(&self) -> bool {
-        match self {
-            Self::Texts { .. } => self.text_len() == 0,
-            Self::Image { .. } => false,
-        }
+        self.children.is_empty()
+            || self
+                .children
+                .iter()
+                .all(|node| node.text.is_empty() && node.image.is_none())
     }
 
     /// Return length of children text.
     pub fn text_len(&self) -> usize {
-        match self {
-            Self::Texts { children, .. } => {
-                let mut len = 0;
-                for text_node in children.iter() {
-                    len = text_node.text.len().max(len);
-                }
-                len
-            }
-            Self::Image { .. } => 1,
-        }
+        self.children
+            .iter()
+            .map(|node| node.text.len())
+            .sum::<usize>()
     }
 
     /// Try to merge two paragraphs, if they are both text elements.
     ///
     /// - Returns `true` if other have merge into self.
     /// - Returns `false` if not able to merge.
-    pub fn try_merge(&mut self, other: &Self) -> bool {
-        if let Self::Texts { children, .. } = self {
-            if let Self::Texts {
-                children: other_children,
-                ..
-            } = other
-            {
-                children.extend(other_children.clone());
-                return true;
-            }
-        }
-
-        false
+    pub fn merge(&mut self, other: &Self) {
+        self.children.extend(other.children.clone());
     }
 }
 
@@ -307,92 +287,132 @@ impl Node {
 
 impl RenderOnce for Paragraph {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        match self {
-            Self::Texts { span, children } => {
-                let mut text = String::new();
-                let mut highlights: Vec<(Range<usize>, HighlightStyle)> = vec![];
-                let mut links: Vec<(Range<usize>, LinkMark)> = vec![];
-                let mut offset = 0;
+        let span = self.span;
+        let children = self.children;
 
-                for text_node in children.into_iter() {
-                    let text_len = text_node.text.len();
-                    let part = if text.len() == 0 {
-                        // trim start for first text
-                        text_node.text.trim_start()
-                    } else {
-                        text_node.text.as_str()
-                    };
-                    text.push_str(&part);
+        let mut child_nodes: Vec<AnyElement> = vec![];
 
-                    let mut node_highlights = vec![];
-                    for (range, style) in text_node.marks {
-                        let inner_range = (offset + range.start)..(offset + range.end);
+        let mut text = String::new();
+        let mut highlights: Vec<(Range<usize>, HighlightStyle)> = vec![];
+        let mut links: Vec<(Range<usize>, LinkMark)> = vec![];
+        let mut offset = 0;
 
-                        let mut highlight = HighlightStyle::default();
-                        if style.bold {
-                            highlight.font_weight = Some(FontWeight::BOLD);
+        fn inline_text(
+            ix: usize,
+            text: String,
+            links: Vec<(Range<usize>, LinkMark)>,
+            highlights: Vec<(Range<usize>, HighlightStyle)>,
+            window: &Window,
+        ) -> AnyElement {
+            let text_style = window.text_style();
+            let styled_text =
+                StyledText::new(text).with_default_highlights(&text_style, highlights);
+            let link_ranges = links
+                .iter()
+                .map(|(range, _)| range.clone())
+                .collect::<Vec<_>>();
+
+            InteractiveText::new(ix, styled_text)
+                .on_click(link_ranges, {
+                    let links = links.clone();
+                    move |ix, _, cx| {
+                        if let Some((_, link)) = &links.get(ix) {
+                            // Stop propagation to prevent the parent element from handling the event.
+                            //
+                            // For example the text in a checkbox label, click link need avoid toggle check state.
+                            cx.stop_propagation();
+                            cx.open_url(&link.url);
                         }
-                        if style.italic {
-                            highlight.font_style = Some(FontStyle::Italic);
-                        }
-                        if style.strikethrough {
-                            highlight.strikethrough = Some(gpui::StrikethroughStyle {
-                                thickness: gpui::px(1.),
-                                ..Default::default()
-                            });
-                        }
-                        if style.code {
-                            highlight.background_color = Some(cx.theme().accent);
-                        }
+                    }
+                })
+                .into_any_element()
+        }
+        let mut ix = 0;
+        for text_node in children.into_iter() {
+            let text_len = text_node.text.len();
+            text.push_str(&text_node.text);
 
-                        if let Some(link_mark) = style.link {
-                            highlight.color = Some(cx.theme().link);
-                            highlight.underline = Some(gpui::UnderlineStyle {
-                                thickness: gpui::px(1.),
-                                ..Default::default()
-                            });
+            if let Some(image) = &text_node.image {
+                if text.len() > 0 {
+                    child_nodes.push(inline_text(
+                        ix,
+                        text.clone(),
+                        links.clone(),
+                        highlights.clone(),
+                        window,
+                    ));
+                }
+                child_nodes.push(
+                    img(image.url.clone())
+                        .id(ix)
+                        .object_fit(ObjectFit::Contain)
+                        .max_w(relative(1.))
+                        .when_some(image.width, |this, width| this.w(width))
+                        .when_some(image.link.clone(), |this, link| {
+                            let title = image.title();
+                            this.cursor_pointer()
+                                .tooltip(move |window, cx| {
+                                    Tooltip::new(title.clone()).build(window, cx)
+                                })
+                                .on_click(move |_, _, cx| {
+                                    cx.stop_propagation();
+                                    cx.open_url(&link.url);
+                                })
+                        })
+                        .into_any_element(),
+                );
 
-                            links.push((inner_range.clone(), link_mark));
-                        }
+                text.clear();
+                links.clear();
+                highlights.clear();
+                offset = 0;
+            } else {
+                let mut node_highlights = vec![];
+                for (range, style) in text_node.marks {
+                    let inner_range = (offset + range.start)..(offset + range.end);
 
-                        node_highlights.push((inner_range, highlight));
+                    let mut highlight = HighlightStyle::default();
+                    if style.bold {
+                        highlight.font_weight = Some(FontWeight::BOLD);
+                    }
+                    if style.italic {
+                        highlight.font_style = Some(FontStyle::Italic);
+                    }
+                    if style.strikethrough {
+                        highlight.strikethrough = Some(gpui::StrikethroughStyle {
+                            thickness: gpui::px(1.),
+                            ..Default::default()
+                        });
+                    }
+                    if style.code {
+                        highlight.background_color = Some(cx.theme().accent);
                     }
 
-                    highlights = gpui::combine_highlights(highlights, node_highlights).collect();
+                    if let Some(link_mark) = style.link {
+                        highlight.color = Some(cx.theme().link);
+                        highlight.underline = Some(gpui::UnderlineStyle {
+                            thickness: gpui::px(1.),
+                            ..Default::default()
+                        });
 
-                    offset += text_len;
+                        links.push((inner_range.clone(), link_mark));
+                    }
+
+                    node_highlights.push((inner_range, highlight));
                 }
 
-                let text_style = window.text_style();
-                let element_id: ElementId = span.unwrap_or_default().into();
-                let styled_text =
-                    StyledText::new(text).with_default_highlights(&text_style, highlights);
-                let link_ranges = links
-                    .iter()
-                    .map(|(range, _)| range.clone())
-                    .collect::<Vec<_>>();
-
-                InteractiveText::new(element_id, styled_text)
-                    .on_click(link_ranges, {
-                        let links = links.clone();
-                        move |ix, _, cx| {
-                            if let Some((_, link)) = &links.get(ix) {
-                                // Stop propagation to prevent the parent element from handling the event.
-                                //
-                                // For example the text in a checkbox label, click link need avoid toggle check state.
-                                cx.stop_propagation();
-                                cx.open_url(&link.url);
-                            }
-                        }
-                    })
-                    .into_any_element()
+                highlights = gpui::combine_highlights(highlights, node_highlights).collect();
+                offset += text_len;
             }
-            Self::Image { image, .. } => img(image.url)
-                .object_fit(ObjectFit::Contain)
-                .max_w(relative(1.))
-                .when_some(image.width, |this, width| this.w(width))
-                .into_any_element(),
+            ix += 1;
         }
+
+        if text.len() > 0 {
+            // Add the last text node
+            child_nodes.push(inline_text(ix, text, links, highlights, window));
+        }
+
+        div().id(span.unwrap_or_default()).children(child_nodes)
     }
 }
 
@@ -733,41 +753,42 @@ impl Node {
 
 impl Paragraph {
     fn to_markdown(&self) -> String {
-        let mut text = match self {
-            Paragraph::Texts { children, .. } => children
-                .iter()
-                .map(|text_node| {
-                    let mut text = text_node.text.clone();
-                    for (range, style) in &text_node.marks {
-                        if style.bold {
-                            text = format!("**{}**", &text_node.text[range.clone()]);
-                        }
-                        if style.italic {
-                            text = format!("*{}*", &text_node.text[range.clone()]);
-                        }
-                        if style.strikethrough {
-                            text = format!("~~{}~~", &text_node.text[range.clone()]);
-                        }
-                        if style.code {
-                            text = format!("`{}`", &text_node.text[range.clone()]);
-                        }
-                        if let Some(link) = &style.link {
-                            text = format!("[{}]({})", &text_node.text[range.clone()], link.url);
-                        }
+        let mut text = self
+            .children
+            .iter()
+            .map(|text_node| {
+                let mut text = text_node.text.clone();
+                for (range, style) in &text_node.marks {
+                    if style.bold {
+                        text = format!("**{}**", &text_node.text[range.clone()]);
                     }
-                    text
-                })
-                .collect::<Vec<_>>()
-                .join(""),
-            Paragraph::Image { image, .. } => {
-                let alt = image.alt.clone().unwrap_or_default();
-                let title = image
-                    .title
-                    .clone()
-                    .map_or(String::new(), |t| format!(" \"{}\"", t));
-                format!("![{}]({}{})", alt, image.url, title)
-            }
-        };
+                    if style.italic {
+                        text = format!("*{}*", &text_node.text[range.clone()]);
+                    }
+                    if style.strikethrough {
+                        text = format!("~~{}~~", &text_node.text[range.clone()]);
+                    }
+                    if style.code {
+                        text = format!("`{}`", &text_node.text[range.clone()]);
+                    }
+                    if let Some(link) = &style.link {
+                        text = format!("[{}]({})", &text_node.text[range.clone()], link.url);
+                    }
+                }
+
+                if let Some(image) = &text_node.image {
+                    let alt = image.alt.clone().unwrap_or_default();
+                    let title = image
+                        .title
+                        .clone()
+                        .map_or(String::new(), |t| format!(" \"{}\"", t));
+                    text.push_str(&format!("![{}]({}{})", alt, image.url, title))
+                }
+
+                text
+            })
+            .collect::<Vec<_>>()
+            .join("");
 
         text.push_str("\n\n");
         text

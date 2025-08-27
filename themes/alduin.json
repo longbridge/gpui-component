@@ -1,154 +1,152 @@
 {
-  "$schema": "https://github.com/longbridge/gpui-component/raw/refs/heads/main/.theme-schema.json",
-  "name": "Alduin",
-  "author": "AlessandroYorba",
-  "url": "https://github.com/AlessandroYorba/Alduin",
-  "themes": [
-    {
-      "name": "Alduin",
-      "mode": "dark",
-      "colors": {
-        "accent.background": "#322F2D",
-        "accent.foreground": "#ebdbb2",
-        "accordion.active.background": "#504945",
-        "accordion.hover.background": "#665c54",
-        "background": "#1C1C1C",
-        "border": "#3a3a3a",
-        "card.background": "#282828",
-        "card.foreground": "#ebdbb2",
-        "danger.background": "#cc241d",
-        "danger.active.background": "#cc241d",
-        "danger.hover.background": "#fb4934",
-        "foreground": "#9E9E9E",
-        "input.border": "#504945",
-        "link.active.foreground": "#83a598",
-        "link.foreground": "#83a598",
-        "link.hover.foreground": "#83a598",
-        "list.active.background": "#26262622",
-        "list.active.border": "#9E9E9E",
-        "list.even.background": "#262626",
-        "list.head.background": "#1C1C1C",
-        "muted.background": "#3c3836",
-        "muted.foreground": "#878787",
-        "panel.background": "#282828",
-        "popover.background": "#141414",
-        "popover.foreground": "#ebdbb2",
-        "primary.active.background": "#45858899",
-        "primary.background": "#458588",
-        "primary.foreground": "#F0F0F0",
-        "primary.hover.background": "#458588AA",
-        "scrollbar.background": "#28282833",
-        "scrollbar.thumb.background": "#504945",
-        "secondary.background": "#282828",
-        "secondary.active.background": "#322F2D",
-        "secondary.foreground": "#9E9E9E",
-        "secondary.hover.background": "#26262699",
-        "tab.active.background": "#1C1C1C",
-        "tab.active.foreground": "#ebdbb2",
-        "tab.background": "#14141400",
-        "tab.foreground": "#848382",
-        "tab_bar.background": "#141414",
-        "table.row.border": "#50494570",
-        "title_bar.background": "#262626",
-        "title_bar.border": "#3a3a3a",
-        "base.blue": "#87afaf",
-        "base.cyan": "#878787",
-        "base.green": "#87875f",
-        "base.magenta": "#af8787",
-        "base.magenta.light": "#af878788",
-        "base.red": "#8b5f61",
-        "base.yellow": "#fed975"
-      },
-      "highlight": {
-        "editor.foreground": "#DDDDDD",
-        "editor.background": "#000000",
-        "editor.active_line.background": "#131313",
-        "editor.line_number": "#8F8F8F",
-        "editor.active_line_number": "#DDDDDD",
-        "conflict": "#D2602D",
-        "created": "#3f72e2",
-        "error.border": "#802207",
-        "hidden": "#9E9E9E",
-        "hint": "#b283f8",
-        "hint.border": "#3f0891",
-        "info.border": "#082190",
-        "modified": "#B0A878",
-        "predictive": "#5D5945",
-        "syntax": {
-          "attribute": {
-            "color": "#be9a52"
-          },
-          "boolean": {
-            "color": "#E1D797"
-          },
-          "comment": {
-            "color": "#9E9E9E"
-          },
-          "comment.doc": {
-            "color": "#9E9E9E"
-          },
-          "constant": {
-            "color": "#E1D797"
-          },
-          "constructor": {
-            "color": "#b5af9a"
-          },
-          "embedded": {
-            "color": "#CACCCA"
-          },
-          "function": {
-            "color": "#E1D797"
-          },
-          "keyword": {
-            "color": "#E19773"
-          },
-          "link_text": {
-            "color": "#A86D3B",
-            "font_style": "normal"
-          },
-          "link_uri": {
-            "color": "#6F6D66",
-            "font_style": "italic"
-          },
-          "number": {
-            "color": "#E19773"
-          },
-          "string": {
-            "color": "#76BA53"
-          },
-          "string.escape": {
-            "color": "#76BA53"
-          },
-          "string.regex": {
-            "color": "#76BA53"
-          },
-          "string.special": {
-            "color": "#E1D797"
-          },
-          "string.special.symbol": {
-            "color": "#E1D797"
-          },
-          "tag": {
-            "color": "#b5af9a"
-          },
-          "text.literal": {
-            "color": "#E1D797"
-          },
-          "title": {
-            "color": "#A76D3B",
-            "font_weight": 600
-          },
-          "type": {
-            "color": "#A86D3B"
-          },
-          "property": {
-            "color": "#CACCCA"
-          },
-          "variable.special": {
-            "color": "#E19773"
-          }
+    "$schema": "https://github.com/longbridge/gpui-component/raw/refs/heads/main/.theme-schema.json",
+    "name": "Alduin",
+    "author": "AlessandroYorba",
+    "url": "https://github.com/AlessandroYorba/Alduin",
+    "themes": [
+        {
+            "name": "Alduin",
+            "mode": "dark",
+            "colors": {
+                "accent.background": "#322F2D",
+                "accent.foreground": "#ebdbb2",
+                "accordion.active.background": "#504945",
+                "accordion.hover.background": "#665c54",
+                "background": "#1C1C1C",
+                "border": "#3a3a3a",
+                "danger.background": "#cc241d",
+                "danger.active.background": "#cc241d",
+                "danger.hover.background": "#fb4934",
+                "foreground": "#9E9E9E",
+                "input.border": "#504945",
+                "link.active.foreground": "#83a598",
+                "link.foreground": "#83a598",
+                "link.hover.foreground": "#83a598",
+                "list.active.background": "#26262622",
+                "list.active.border": "#9E9E9E",
+                "list.even.background": "#262626",
+                "list.head.background": "#1C1C1C",
+                "muted.background": "#3c3836",
+                "muted.foreground": "#878787",
+                "panel.background": "#282828",
+                "popover.background": "#141414",
+                "popover.foreground": "#ebdbb2",
+                "primary.active.background": "#45858899",
+                "primary.background": "#458588",
+                "primary.foreground": "#F0F0F0",
+                "primary.hover.background": "#458588AA",
+                "scrollbar.background": "#28282833",
+                "scrollbar.thumb.background": "#504945",
+                "secondary.background": "#282828",
+                "secondary.active.background": "#322F2D",
+                "secondary.foreground": "#9E9E9E",
+                "secondary.hover.background": "#26262699",
+                "tab.active.background": "#1C1C1C",
+                "tab.active.foreground": "#ebdbb2",
+                "tab.background": "#14141400",
+                "tab.foreground": "#848382",
+                "tab_bar.background": "#141414",
+                "table.row.border": "#50494570",
+                "title_bar.background": "#262626",
+                "title_bar.border": "#3a3a3a",
+                "base.blue": "#87afaf",
+                "base.cyan": "#878787",
+                "base.green": "#87875f",
+                "base.magenta": "#af8787",
+                "base.magenta.light": "#af878788",
+                "base.red": "#8b5f61",
+                "base.yellow": "#fed975"
+            },
+            "highlight": {
+                "editor.foreground": "#DDDDDD",
+                "editor.background": "#000000",
+                "editor.active_line.background": "#131313",
+                "editor.line_number": "#8F8F8F",
+                "editor.active_line_number": "#DDDDDD",
+                "conflict": "#D2602D",
+                "created": "#3f72e2",
+                "error.border": "#802207",
+                "hidden": "#9E9E9E",
+                "hint": "#b283f8",
+                "hint.border": "#3f0891",
+                "info.border": "#082190",
+                "modified": "#B0A878",
+                "predictive": "#5D5945",
+                "syntax": {
+                    "attribute": {
+                        "color": "#be9a52"
+                    },
+                    "boolean": {
+                        "color": "#E1D797"
+                    },
+                    "comment": {
+                        "color": "#9E9E9E"
+                    },
+                    "comment.doc": {
+                        "color": "#9E9E9E"
+                    },
+                    "constant": {
+                        "color": "#E1D797"
+                    },
+                    "constructor": {
+                        "color": "#b5af9a"
+                    },
+                    "embedded": {
+                        "color": "#CACCCA"
+                    },
+                    "function": {
+                        "color": "#E1D797"
+                    },
+                    "keyword": {
+                        "color": "#E19773"
+                    },
+                    "link_text": {
+                        "color": "#A86D3B",
+                        "font_style": "normal"
+                    },
+                    "link_uri": {
+                        "color": "#6F6D66",
+                        "font_style": "italic"
+                    },
+                    "number": {
+                        "color": "#E19773"
+                    },
+                    "string": {
+                        "color": "#76BA53"
+                    },
+                    "string.escape": {
+                        "color": "#76BA53"
+                    },
+                    "string.regex": {
+                        "color": "#76BA53"
+                    },
+                    "string.special": {
+                        "color": "#E1D797"
+                    },
+                    "string.special.symbol": {
+                        "color": "#E1D797"
+                    },
+                    "tag": {
+                        "color": "#b5af9a"
+                    },
+                    "text.literal": {
+                        "color": "#E1D797"
+                    },
+                    "title": {
+                        "color": "#A76D3B",
+                        "font_weight": 600
+                    },
+                    "type": {
+                        "color": "#A86D3B"
+                    },
+                    "property": {
+                        "color": "#CACCCA"
+                    },
+                    "variable.special": {
+                        "color": "#E19773"
+                    }
+                }
+            }
         }
-      }
-    }
-  ]
+    ]
 }

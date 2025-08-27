@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::sync::Arc;
 
 use gpui::{px, rems, App, ElementId, IntoElement, Pixels, Rems, RenderOnce, SharedString, Window};
 
@@ -88,7 +88,7 @@ pub struct TextViewStyle {
     /// Base font size for headings, default is 14px.
     pub heading_base_font_size: Pixels,
     /// Highlight theme for code blocks. Default: [`HighlightTheme::default_light()`]
-    pub highlight_theme: Rc<HighlightTheme>,
+    pub highlight_theme: Arc<HighlightTheme>,
     pub is_dark: bool,
 }
 
@@ -105,7 +105,7 @@ impl Default for TextViewStyle {
         Self {
             paragraph_gap: rems(1.),
             heading_base_font_size: px(14.),
-            highlight_theme: Rc::new(HighlightTheme::default_light().clone()),
+            highlight_theme: HighlightTheme::default_light().clone(),
             is_dark: false,
         }
     }

@@ -82,10 +82,17 @@ pub(super) fn parse_html(source: &str) -> Result<element::Node, SharedString> {
     Ok(node)
 }
 
+// TODO: Find a better and light-weight HTML minifier
 fn cleanup_html(source: &str) -> Vec<u8> {
-    let mut cfg = minify_html::Cfg::default();
-    cfg.keep_closing_tags = true;
-    minify_html::minify(source.as_bytes(), &cfg)
+    let mut w = std::io::Cursor::new(vec![]);
+    let mut r = std::io::Cursor::new(source);
+    let mut minify = super::html5minify::Minifier::new(&mut w);
+    minify.omit_doctype(true);
+    if let Ok(()) = minify.minify(&mut r) {
+        w.into_inner()
+    } else {
+        source.bytes().collect()
+    }
 }
 
 #[derive(Clone)]
@@ -235,14 +242,12 @@ fn style_attrs(attrs: &RefCell<Vec<html5ever::Attribute>>) -> HashMap<String, St
     };
 
     for decl in css_text.split(';') {
-        for rule in decl.split(':') {
-            let mut parts = rule.splitn(2, ':');
-            if let (Some(key), Some(value)) = (parts.next(), parts.next()) {
-                styles.insert(
-                    key.trim().to_lowercase().to_string(),
-                    value.trim().to_string(),
-                );
-            }
+        let mut parts = decl.splitn(2, ':');
+        if let (Some(key), Some(value)) = (parts.next(), parts.next()) {
+            styles.insert(
+                key.trim().to_lowercase().to_string(),
+                value.trim().to_string(),
+            );
         }
     }
 
@@ -409,6 +414,7 @@ fn parse_paragraph(
                 ));
                 paragraph.push(element::TextNode {
                     text: text.clone(),
+                    image: None,
                     marks: marks.clone(),
                 });
             }
@@ -427,6 +433,7 @@ fn parse_paragraph(
                 ));
                 paragraph.push(TextNode {
                     text: text.clone(),
+                    image: None,
                     marks: marks.clone(),
                 });
             }
@@ -445,6 +452,7 @@ fn parse_paragraph(
                 ));
                 paragraph.push(TextNode {
                     text: text.clone(),
+                    image: None,
                     marks: marks.clone(),
                 });
             }
@@ -463,6 +471,7 @@ fn parse_paragraph(
                 ));
                 paragraph.push(TextNode {
                     text: text.clone(),
+                    image: None,
                     marks: marks.clone(),
                 });
             }
@@ -487,6 +496,7 @@ fn parse_paragraph(
                 ));
                 paragraph.push(TextNode {
                     text: text.clone(),
+                    image: None,
                     marks: marks.clone(),
                 });
             }
@@ -502,8 +512,9 @@ fn parse_paragraph(
                 let title = attr_value(attrs, local_name!("title"));
                 let (width, height) = attr_width_height(attrs);
 
-                paragraph.set_image(ImageNode {
+                paragraph.push_image(ImageNode {
                     url: src.into(),
+                    link: None,
                     alt: alt.map(Into::into),
                     width,
                     height,
@@ -519,6 +530,7 @@ fn parse_paragraph(
                 }
                 paragraph.push(element::TextNode {
                     text: text.clone(),
+                    image: None,
                     marks: marks.clone(),
                 });
             }
@@ -531,6 +543,7 @@ fn parse_paragraph(
             }
             paragraph.push(TextNode {
                 text: text.clone(),
+                image: None,
                 marks: marks.clone(),
             });
         }
@@ -604,22 +617,21 @@ fn parse_node(node: &Rc<Node>, paragraph: &mut Paragraph) -> Option<element::Nod
                 let title = attr_value(&attrs, local_name!("title"));
                 let (width, height) = attr_width_height(&attrs);
 
-                let image = Paragraph::Image {
-                    span: None,
-                    image: ImageNode {
-                        url: src.into(),
-                        title: title.map(Into::into),
-                        alt: alt.map(Into::into),
-                        width,
-                        height,
-                    },
-                };
+                let mut paragraph = Paragraph::default();
+                paragraph.push_image(ImageNode {
+                    url: src.into(),
+                    link: None,
+                    title: title.map(Into::into),
+                    alt: alt.map(Into::into),
+                    width,
+                    height,
+                });
 
                 if children.len() > 0 {
-                    children.push(element::Node::Paragraph(image));
+                    children.push(element::Node::Paragraph(paragraph));
                     Some(element::Node::Root { children })
                 } else {
-                    Some(element::Node::Paragraph(image))
+                    Some(element::Node::Paragraph(paragraph))
                 }
             }
             local_name!("ul") | local_name!("ol") => {
@@ -640,9 +652,8 @@ fn parse_node(node: &Rc<Node>, paragraph: &mut Paragraph) -> Option<element::Nod
                         // If last child is paragraph, merge child
                         if let Some(last_child) = children.last_mut() {
                             if let element::Node::Paragraph(last_paragraph) = last_child {
-                                if last_paragraph.try_merge(&child_paragraph) {
-                                    continue;
-                                };
+                                last_paragraph.merge(&child_paragraph);
+                                continue;
                             }
                         }
 
@@ -767,7 +778,7 @@ fn consume_paragraph(children: &mut Vec<element::Node>, paragraph: &mut Paragrap
 mod tests {
     use gpui::{px, relative};
 
-    use crate::text::element::{Node, Paragraph};
+    use crate::text::element::{Node, Paragraph, TextNode};
 
     use super::trim_text;
 
@@ -781,7 +792,7 @@ mod tests {
         let cleaned = super::cleanup_html(html);
         assert_eq!(
             String::from_utf8(cleaned).unwrap(),
-            "<p>and <code>code</code> text</p>"
+            "<p>and <code>code</code> text"
         );
 
         let html = r#"<p>
@@ -792,7 +803,7 @@ mod tests {
         let cleaned = super::cleanup_html(html);
         assert_eq!(
             String::from_utf8(cleaned).unwrap(),
-            "<p>and <em> <code>code</code> <i>italic</i> </em> text</p>"
+            "<p>and <em><code>code</code> <i>italic</i></em> text"
         );
     }
 
@@ -828,7 +839,7 @@ mod tests {
         assert_eq!(
             node.to_markdown(),
             indoc::indoc! {r#"
-            and * code italic * text
+            and *code italic* text
 
             ![Example](https://example.com/image.png "Example Image")
 
@@ -853,15 +864,20 @@ mod tests {
         let node = super::parse_html(html).unwrap();
         assert_eq!(
             node,
-            Node::Paragraph(Paragraph::Image {
+            Node::Paragraph(Paragraph {
                 span: None,
-                image: super::ImageNode {
-                    url: "https://example.com/image.png".to_string().into(),
-                    alt: Some("Example".to_string().into()),
-                    width: Some(px(100.).into()),
-                    height: Some(px(200.).into()),
-                    title: Some("Example Image".to_string().into())
-                }
+                children: vec![TextNode {
+                    text: String::new(),
+                    marks: vec![],
+                    image: Some(super::ImageNode {
+                        url: "https://example.com/image.png".to_string().into(),
+                        alt: Some("Example".to_string().into()),
+                        width: Some(px(100.).into()),
+                        height: Some(px(200.).into()),
+                        title: Some("Example Image".to_string().into()),
+                        ..Default::default()
+                    }),
+                }],
             })
         );
 
@@ -869,15 +885,20 @@ mod tests {
         let node = super::parse_html(html).unwrap();
         assert_eq!(
             node,
-            Node::Paragraph(Paragraph::Image {
+            Node::Paragraph(Paragraph {
                 span: None,
-                image: super::ImageNode {
-                    url: "https://example.com/image.png".to_string().into(),
-                    alt: Some("Example".to_string().into()),
-                    width: Some(relative(0.8)),
-                    height: None,
-                    title: Some("Example Image".to_string().into())
-                }
+                children: vec![TextNode {
+                    text: String::new(),
+                    marks: vec![],
+                    image: Some(super::ImageNode {
+                        url: "https://example.com/image.png".to_string().into(),
+                        alt: Some("Example".to_string().into()),
+                        width: Some(relative(0.8)),
+                        height: None,
+                        title: Some("Example Image".to_string().into()),
+                        ..Default::default()
+                    }),
+                }],
             })
         );
     }

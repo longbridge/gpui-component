@@ -56,7 +56,10 @@ impl TabVariant {
                 TabVariant::Underline => px(30.),
                 _ => px(24.),
             },
-            Size::Large => px(36.),
+            Size::Large => match self {
+                TabVariant::Underline => px(44.),
+                _ => px(36.),
+            },
             _ => match self {
                 TabVariant::Underline => px(36.),
                 _ => px(32.),
@@ -100,7 +103,7 @@ impl TabVariant {
         };
 
         if matches!(self, TabVariant::Underline) {
-            padding_x = padding_x / 2.;
+            padding_x = px(0.);
         }
 
         Edges {

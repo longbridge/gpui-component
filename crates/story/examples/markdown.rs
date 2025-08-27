@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use gpui::*;
 use gpui_component::{
     highlighter::{HighlightTheme, Language},
@@ -83,7 +81,7 @@ impl Render for Example {
                         .child(
                             TextView::markdown("preview", self.input_state.read(cx).value()).style(
                                 TextViewStyle {
-                                    highlight_theme: Rc::new(theme.clone()),
+                                    highlight_theme: theme.clone(),
                                     is_dark,
                                     ..Default::default()
                                 },

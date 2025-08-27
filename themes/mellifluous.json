@@ -14,10 +14,7 @@
         "accordion.hover.background": "#d5d5d5",
         "background": "#E7E7E7",
         "border": "#CACACA",
-        "card.background": "#fafafa",
-        "card.foreground": "#383a42",
         "danger.active.background": "#e06c75",
-        "danger.foreground": "#21252b",
         "danger.hover.background": "#be5046",
         "foreground": "#383a42",
         "input.border": "#d5d5d5",
@@ -52,12 +49,11 @@
         "title_bar.border": "#CACACA",
         "base.red": "#C95954",
         "base.green": "#828040",
-        "base.yellow": "#cbaa89",
+        "base.yellow": "#c98f54",
         "base.blue": "#a8a1be",
         "base.magenta": "#b39fb0",
         "base.magenta.light": "#9C699588",
-        "base.cyan": "#c0af8c",
-        "success.background": "#71c738"
+        "base.cyan": "#54c981"
       },
       "highlight": {
         "editor.foreground": "#383a42",
@@ -169,9 +165,6 @@
         "border": "#444444",
         "card.background": "#282c34",
         "card.foreground": "#abb2bf",
-        "danger.active.background": "#e06c75",
-        "danger.foreground": "#21252b",
-        "danger.hover.background": "#be5046",
         "foreground": "#abb2bf",
         "input.border": "#444444",
         "link.active.foreground": "#5A6599",
@@ -204,11 +197,11 @@
         "title_bar.border": "#444444",
         "base.red": "#C95954",
         "base.green": "#828040",
-        "base.yellow": "#d19a66",
-        "base.blue": "#56b6c2",
+        "base.yellow": "#c98d54",
+        "base.blue": "#5481c9",
         "base.magenta": "#9C6995",
         "base.magenta.light": "#9C699577",
-        "base.cyan": "#74A39E"
+        "base.cyan": "#54c9bd"
       },
       "highlight": {
         "editor.foreground": "#abb2bf",

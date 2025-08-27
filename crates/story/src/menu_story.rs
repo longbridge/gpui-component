@@ -217,24 +217,43 @@ impl Render for MenuStory {
                     }),
             )
             .child(
-                section("Menu with scrollbar").child(
-                    Button::new("popup-menu-11112")
-                        .outline()
-                        .label("Scrollable Menu")
-                        .popup_menu_with_anchor(Corner::TopRight, move |this, _, _| {
-                            let mut this = this
-                                .scrollable()
-                                .max_h(px(300.))
-                                .label(format!("Total {} items", 100));
-                            for i in 0..100 {
-                                this = this.menu(
-                                    SharedString::from(format!("Item {}", i)),
-                                    Box::new(Info(i)),
-                                )
-                            }
-                            this.min_w(px(100.))
-                        }),
-                ),
+                section("Menu with scrollbar")
+                    .child(
+                        Button::new("popup-menu-scrollable-1")
+                            .outline()
+                            .label("Scrollable Menu (100 items)")
+                            .popup_menu_with_anchor(Corner::TopRight, move |this, _, _| {
+                                let mut this = this
+                                    .scrollable()
+                                    .max_h(px(300.))
+                                    .label(format!("Total {} items", 100));
+                                for i in 0..100 {
+                                    this = this.menu(
+                                        SharedString::from(format!("Item {}", i)),
+                                        Box::new(Info(i)),
+                                    )
+                                }
+                                this.min_w(px(100.))
+                            }),
+                    )
+                    .child(
+                        Button::new("popup-menu-scrollable-2")
+                            .outline()
+                            .label("Scrollable Menu (5 items)")
+                            .popup_menu_with_anchor(Corner::TopRight, move |this, _, _| {
+                                let mut this = this
+                                    .scrollable()
+                                    .max_h(px(300.))
+                                    .label(format!("Total {} items", 100));
+                                for i in 0..5 {
+                                    this = this.menu(
+                                        SharedString::from(format!("Item {}", i)),
+                                        Box::new(Info(i)),
+                                    )
+                                }
+                                this.min_w(px(100.))
+                            }),
+                    ),
             )
     }
 }
