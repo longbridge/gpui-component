@@ -133,25 +133,34 @@ impl TextViewState {
         self.clear_selection();
     }
 
-    pub(crate) fn clear_selection(&mut self) {
+    /// Save bounds and unselect if bounds changed.
+    fn update_bounds(&mut self, bounds: Bounds<Pixels>) {
+        let changed = self.bounds != bounds;
+        if changed {
+            self.clear_selection();
+        }
+        self.bounds = bounds;
+    }
+
+    fn clear_selection(&mut self) {
         self.selection_positions = (None, None);
         self.is_selecting = false;
     }
 
-    pub(crate) fn start_selection(&mut self, pos: Point<Pixels>) {
+    fn start_selection(&mut self, pos: Point<Pixels>) {
         let pos = pos - self.bounds.origin;
         self.selection_positions = (Some(pos), Some(pos));
         self.is_selecting = true;
     }
 
-    pub(crate) fn update_selection(&mut self, pos: Point<Pixels>) {
+    fn update_selection(&mut self, pos: Point<Pixels>) {
         let pos = pos - self.bounds.origin;
         if let (Some(start), Some(_)) = self.selection_positions {
             self.selection_positions = (Some(start), Some(pos))
         }
     }
 
-    pub(crate) fn end_selection(&mut self) {
+    fn end_selection(&mut self) {
         self.is_selecting = false;
     }
 
@@ -431,7 +440,8 @@ impl Element for TextView {
     ) {
         let entity_id = window.current_view();
 
-        self.state.update(cx, |state, _| state.bounds = bounds);
+        self.state
+            .update(cx, |state, _| state.update_bounds(bounds));
 
         GlobalState::global_mut(cx)
             .text_view_state_stack
