@@ -1,6 +1,6 @@
 use gpui::{
-    div, relative, Action, IntoElement, KeyContext, Keystroke, ParentElement as _, RenderOnce,
-    StyleRefinement, Styled, Window,
+    div, relative, Action, AsKeystroke, IntoElement, KeyContext, Keystroke, ParentElement as _,
+    RenderOnce, StyleRefinement, Styled, Window,
 };
 
 use crate::{ActiveTheme, StyledExt};
@@ -52,7 +52,7 @@ impl Kbd {
 
         bindings.first().and_then(|binding| {
             if let Some(key) = binding.keystrokes().first() {
-                Some(Self::new(key.clone()))
+                Some(Self::new(key.as_keystroke().clone()))
             } else {
                 None
             }
