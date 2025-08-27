@@ -100,7 +100,7 @@ impl PartialEq for ImageNode {
 }
 
 #[derive(Default, Clone, Debug, PartialEq)]
-pub(crate) struct TextNode {
+pub(crate) struct InlineNode {
     /// The text content.
     pub text: String,
     pub image: Option<ImageNode>,
@@ -109,7 +109,7 @@ pub(crate) struct TextNode {
     state: InlineState,
 }
 
-impl TextNode {
+impl InlineNode {
     pub(crate) fn new(text: &str) -> Self {
         Self {
             text: text.to_string(),
@@ -138,7 +138,7 @@ impl TextNode {
 #[derive(Debug, Default, Clone, PartialEq, IntoElement)]
 pub(crate) struct Paragraph {
     pub(super) span: Option<Span>,
-    pub(super) children: Vec<TextNode>,
+    pub(super) children: Vec<InlineNode>,
     pub(super) state: InlineState,
 }
 
@@ -164,7 +164,7 @@ impl From<String> for Paragraph {
     fn from(value: String) -> Self {
         Self {
             span: None,
-            children: vec![TextNode::new(&value)],
+            children: vec![InlineNode::new(&value)],
             state: InlineState::default(),
         }
     }
@@ -228,15 +228,15 @@ impl Paragraph {
 
     pub(crate) fn push_str(&mut self, text: &str) {
         self.children
-            .push(TextNode::new(&text).marks(vec![(0..text.len(), TextMark::default())]));
+            .push(InlineNode::new(&text).marks(vec![(0..text.len(), TextMark::default())]));
     }
 
-    pub(crate) fn push(&mut self, text: TextNode) {
+    pub(crate) fn push(&mut self, text: InlineNode) {
         self.children.push(text);
     }
 
     pub(crate) fn push_image(&mut self, image: ImageNode) {
-        self.children.push(TextNode::image(image));
+        self.children.push(InlineNode::image(image));
     }
 
     pub(crate) fn is_empty(&self) -> bool {
