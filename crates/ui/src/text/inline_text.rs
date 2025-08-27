@@ -183,7 +183,12 @@ impl Element for InlineText {
                         continue;
                     };
 
-                    if point_in_text_selection(pos, &selection_bounds, line_height) {
+                    let mut char_width = line_height.half();
+                    if let Some(next_pos) = text_layout.position_for_index(offset + 1) {
+                        char_width = next_pos.x - pos.x;
+                    }
+
+                    if point_in_text_selection(pos, char_width, &selection_bounds, line_height) {
                         if selection.is_none() {
                             selection = Some((offset, offset));
                         }
@@ -329,6 +334,7 @@ impl Element for InlineText {
 /// Check if a `pos` is within a `bounds`, considering multi-line selections.
 fn point_in_text_selection(
     pos: Point<Pixels>,
+    char_width: Pixels,
     bounds: &Bounds<Pixels>,
     line_height: Pixels,
 ) -> bool {
@@ -346,7 +352,7 @@ fn point_in_text_selection(
 
     if single_line {
         // If it's a single line selection, just check horizontal bounds
-        return pos.x >= left && pos.x <= right;
+        return pos.x + char_width.half() >= left && pos.x + char_width.half() <= right;
     }
 
     let real_y = pos.y + line_height.half();
@@ -356,10 +362,10 @@ fn point_in_text_selection(
 
     if is_first_line {
         // First line: from left to the end of the line
-        return pos.x >= left;
+        return pos.x + char_width.half() >= left;
     } else if is_last_line {
         // Last line: from the start of the line to right
-        return pos.x <= right;
+        return pos.x + char_width.half() <= right;
     } else {
         // Other lines in between: full line selection
         return true;
@@ -374,6 +380,7 @@ mod tests {
     #[test]
     fn test_point_in_text_selection() {
         let line_height = px(20.);
+        let char_width = px(10.);
         let bounds = Bounds {
             origin: point(px(50.), px(50.)),
             size: size(px(100.), px(100.)),
@@ -385,6 +392,7 @@ mod tests {
         // |-----------|
         assert!(point_in_text_selection(
             point(px(50.), px(40.)),
+            char_width,
             &bounds,
             line_height
         ));
@@ -395,6 +403,7 @@ mod tests {
         // |-----------|
         assert!(point_in_text_selection(
             point(px(50.), px(50.)),
+            char_width,
             &bounds,
             line_height
         ));
@@ -404,6 +413,7 @@ mod tests {
         //   |-----------|
         assert!(!point_in_text_selection(
             point(px(40.), px(50.)),
+            char_width,
             &bounds,
             line_height
         ));
@@ -413,6 +423,7 @@ mod tests {
         // |-----------|
         assert!(point_in_text_selection(
             point(px(160.), px(50.)),
+            char_width,
             &bounds,
             line_height
         ));
@@ -423,6 +434,7 @@ mod tests {
         // |-----------|
         assert!(point_in_text_selection(
             point(px(100.), px(70.)),
+            char_width,
             &bounds,
             line_height
         ));
@@ -432,6 +444,7 @@ mod tests {
         //   |-----------|
         assert!(point_in_text_selection(
             point(px(40.), px(70.)),
+            char_width,
             &bounds,
             line_height
         ));
@@ -441,6 +454,7 @@ mod tests {
         // |-----------|
         assert!(point_in_text_selection(
             point(px(160.), px(70.)),
+            char_width,
             &bounds,
             line_height
         ));
@@ -451,6 +465,7 @@ mod tests {
         // |------- p -|
         assert!(point_in_text_selection(
             point(px(100.), px(140.)),
+            char_width,
             &bounds,
             line_height
         ));
@@ -461,6 +476,7 @@ mod tests {
         // p |-----------|
         assert!(point_in_text_selection(
             point(px(40.), px(140.)),
+            char_width,
             &bounds,
             line_height
         ));
@@ -470,6 +486,7 @@ mod tests {
         // |-----------| p
         assert!(!point_in_text_selection(
             point(px(160.), px(140.)),
+            char_width,
             &bounds,
             line_height
         ));
@@ -481,6 +498,7 @@ mod tests {
         // |-----------|
         assert!(!point_in_text_selection(
             point(px(100.), px(20.)),
+            char_width,
             &bounds,
             line_height
         ));
@@ -491,6 +509,7 @@ mod tests {
         //       p
         assert!(!point_in_text_selection(
             point(px(100.), px(160.)),
+            char_width,
             &bounds,
             line_height
         ));
