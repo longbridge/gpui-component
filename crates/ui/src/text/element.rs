@@ -11,7 +11,7 @@ use markdown::mdast;
 use crate::{
     h_flex,
     highlighter::SyntaxHighlighter,
-    text::inline_text::{InlineText, InlineTextState},
+    text::inline::{Inline, InlineState},
     tooltip::Tooltip,
     v_flex, ActiveTheme as _, Icon, IconName,
 };
@@ -106,7 +106,7 @@ pub(crate) struct TextNode {
     pub image: Option<ImageNode>,
     /// The text styles, each tuple contains the range of the text and the style.
     pub marks: Vec<(Range<usize>, TextMark)>,
-    state: InlineTextState,
+    state: InlineState,
 }
 
 impl TextNode {
@@ -115,7 +115,7 @@ impl TextNode {
             text: text.to_string(),
             image: None,
             marks: vec![],
-            state: InlineTextState::default(),
+            state: InlineState::default(),
         }
     }
 
@@ -139,7 +139,7 @@ impl TextNode {
 pub(crate) struct Paragraph {
     pub(super) span: Option<Span>,
     pub(super) children: Vec<TextNode>,
-    pub(super) state: InlineTextState,
+    pub(super) state: InlineState,
 }
 
 impl Paragraph {
@@ -165,7 +165,7 @@ impl From<String> for Paragraph {
         Self {
             span: None,
             children: vec![TextNode::new(&value)],
-            state: InlineTextState::default(),
+            state: InlineState::default(),
         }
     }
 }
@@ -447,7 +447,7 @@ impl RenderOnce for Paragraph {
                     let text: SharedString = text.clone().into();
                     *text_node.state.text.borrow_mut() = text.clone();
                     child_nodes.push(
-                        InlineText::new(
+                        Inline::new(
                             ix,
                             text,
                             links.clone(),
@@ -528,7 +528,7 @@ impl RenderOnce for Paragraph {
             *self.state.text.borrow_mut() = text.clone();
 
             child_nodes.push(
-                InlineText::new(ix, text, links, highlights, self.state.clone()).into_any_element(),
+                Inline::new(ix, text, links, highlights, self.state.clone()).into_any_element(),
             );
         }
 

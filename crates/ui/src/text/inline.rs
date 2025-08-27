@@ -14,29 +14,32 @@ use crate::{
     ActiveTheme,
 };
 
+/// A inline element used to render a inline text and support selectable.
+///
+/// All text in TextView (including the CodeBlock) used this for text rendering.
+pub(super) struct Inline {
+    id: ElementId,
+    text: SharedString,
+    links: Rc<Vec<(Range<usize>, LinkMark)>>,
+    highlights: Vec<(Range<usize>, HighlightStyle)>,
+    state: InlineState,
+    styled_text: StyledText,
+}
+
 #[derive(Debug, Default, PartialEq, Clone)]
-pub(super) struct InlineTextState {
+pub(super) struct InlineState {
     hovered_index: Rc<RefCell<Option<usize>>>,
     pub(super) text: Rc<RefCell<SharedString>>,
     pub(super) selection: Rc<RefCell<Option<Selection>>>,
 }
 
-pub(super) struct InlineText {
-    id: ElementId,
-    text: SharedString,
-    links: Rc<Vec<(Range<usize>, LinkMark)>>,
-    highlights: Vec<(Range<usize>, HighlightStyle)>,
-    state: InlineTextState,
-    styled_text: StyledText,
-}
-
-impl InlineText {
+impl Inline {
     pub(super) fn new(
         id: impl Into<ElementId>,
         text: SharedString,
         links: Vec<(Range<usize>, LinkMark)>,
         highlights: Vec<(Range<usize>, HighlightStyle)>,
-        state: InlineTextState,
+        state: InlineState,
     ) -> Self {
         Self {
             id: id.into(),
@@ -48,6 +51,7 @@ impl InlineText {
         }
     }
 
+    /// Get link at given mouse position.
     fn link_for_position(
         layout: &TextLayout,
         links: &Vec<(Range<usize>, LinkMark)>,
@@ -126,6 +130,7 @@ impl InlineText {
         (true, selection)
     }
 
+    /// Paint the selection background.
     fn paint_selection(
         &self,
         selection: &Selection,
@@ -201,7 +206,7 @@ impl InlineText {
     }
 }
 
-impl IntoElement for InlineText {
+impl IntoElement for Inline {
     type Element = Self;
 
     fn into_element(self) -> Self::Element {
@@ -209,7 +214,7 @@ impl IntoElement for InlineText {
     }
 }
 
-impl Element for InlineText {
+impl Element for Inline {
     type RequestLayoutState = ();
     type PrepaintState = Hitbox;
 
