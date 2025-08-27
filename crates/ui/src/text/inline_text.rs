@@ -2,7 +2,7 @@ use std::{cell::RefCell, ops::Range, rc::Rc};
 
 use gpui::{
     point, px, quad, App, BorderStyle, Bounds, CursorStyle, Edges, Element, ElementId,
-    GlobalElementId, HighlightStyle, Hitbox, HitboxBehavior, InspectorElementId, IntoElement,
+    GlobalElementId, Half, HighlightStyle, Hitbox, HitboxBehavior, InspectorElementId, IntoElement,
     LayoutId, MouseMoveEvent, MouseUpEvent, Pixels, Point, SharedString, StyledText, TextLayout,
     Window,
 };
@@ -166,51 +166,14 @@ impl Element for InlineText {
                 }
 
                 // Use for debug selection bounds
-                // window.paint_quad(gpui::PaintQuad {
-                //     bounds: selection_bounds,
-                //     background: cx.theme().blue.alpha(0.01).into(),
-                //     corner_radii: gpui::Corners::default(),
-                //     border_color: gpui::transparent_black(),
-                //     border_style: BorderStyle::default(),
-                //     border_widths: gpui::Edges::all(px(0.)),
-                // });
-
-                fn point_in_column_selection(
-                    pos: Point<Pixels>,
-                    selection_bounds: &Bounds<Pixels>,
-                    line_height: Pixels,
-                ) -> bool {
-                    let top = selection_bounds.top();
-                    let bottom = selection_bounds.bottom();
-                    let left = selection_bounds.left();
-                    let right = selection_bounds.right();
-
-                    // Out of the vertical bounds
-                    if pos.x < top || pos.y >= bottom {
-                        return false;
-                    }
-
-                    let single_line = (bottom - top) <= line_height;
-
-                    if single_line {
-                        // If it's a single line selection, just check horizontal bounds
-                        return pos.x >= left && pos.x <= right;
-                    }
-
-                    let is_first_line = pos.y + line_height >= top && pos.y < top + line_height;
-                    let is_last_line = pos.y >= bottom - line_height && pos.y < bottom;
-
-                    if is_first_line {
-                        // First line: from left to the end of the line
-                        return pos.x >= left;
-                    } else if is_last_line {
-                        // Last line: from the start of the line to right
-                        return pos.x <= right;
-                    } else {
-                        // Other lines in between: full line selection
-                        return pos.y >= top;
-                    }
-                }
+                window.paint_quad(gpui::PaintQuad {
+                    bounds: selection_bounds,
+                    background: cx.theme().blue.alpha(0.01).into(),
+                    corner_radii: gpui::Corners::default(),
+                    border_color: gpui::transparent_black(),
+                    border_style: BorderStyle::default(),
+                    border_widths: gpui::Edges::all(px(0.)),
+                });
 
                 let mut offset = 0;
                 let mut chars = self.text.chars().peekable();
@@ -220,7 +183,7 @@ impl Element for InlineText {
                         continue;
                     };
 
-                    if point_in_column_selection(pos, &selection_bounds, line_height) {
+                    if point_in_text_selection(pos, &selection_bounds, line_height) {
                         if selection.is_none() {
                             selection = Some((offset, offset));
                         }
@@ -360,5 +323,176 @@ impl Element for InlineText {
                 }
             });
         }
+    }
+}
+
+/// Check if a `pos` is within a `bounds`, considering multi-line selections.
+fn point_in_text_selection(
+    pos: Point<Pixels>,
+    bounds: &Bounds<Pixels>,
+    line_height: Pixels,
+) -> bool {
+    let top = bounds.top();
+    let bottom = bounds.bottom();
+    let left = bounds.left();
+    let right = bounds.right();
+
+    // Out of the vertical bounds
+    if pos.y + line_height < top || pos.y >= bottom {
+        return false;
+    }
+
+    let single_line = (bottom - top) <= line_height;
+
+    if single_line {
+        // If it's a single line selection, just check horizontal bounds
+        return pos.x >= left && pos.x <= right;
+    }
+
+    let real_y = pos.y + line_height.half();
+
+    let is_first_line = real_y >= top && real_y < top + line_height;
+    let is_last_line = pos.y >= bottom - line_height && pos.y < bottom;
+
+    if is_first_line {
+        // First line: from left to the end of the line
+        return pos.x >= left;
+    } else if is_last_line {
+        // Last line: from the start of the line to right
+        return pos.x <= right;
+    } else {
+        // Other lines in between: full line selection
+        return true;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::point_in_text_selection;
+    use gpui::{point, px, size, Bounds};
+
+    #[test]
+    fn test_point_in_text_selection() {
+        let line_height = px(20.);
+        let bounds = Bounds {
+            origin: point(px(50.), px(50.)),
+            size: size(px(100.), px(100.)),
+        };
+
+        // First line but haft line height, true
+        // | p --------|
+        // | selection |
+        // |-----------|
+        assert!(point_in_text_selection(
+            point(px(50.), px(40.)),
+            &bounds,
+            line_height
+        ));
+
+        // First line in selection, true
+        // | p --------|
+        // | selection |
+        // |-----------|
+        assert!(point_in_text_selection(
+            point(px(50.), px(50.)),
+            &bounds,
+            line_height
+        ));
+        // First line, but left out of selection, false
+        // p |-----------|
+        //   | selection |
+        //   |-----------|
+        assert!(!point_in_text_selection(
+            point(px(40.), px(50.)),
+            &bounds,
+            line_height
+        ));
+        // First line but right out of selection, true
+        // |-----------| p
+        // | selection |
+        // |-----------|
+        assert!(point_in_text_selection(
+            point(px(160.), px(50.)),
+            &bounds,
+            line_height
+        ));
+
+        // Middle line in selection, true
+        // |-----------|
+        // |     p     |
+        // |-----------|
+        assert!(point_in_text_selection(
+            point(px(100.), px(70.)),
+            &bounds,
+            line_height
+        ));
+        // Middle line, but left out of selection, true
+        //   |-----------|
+        // p | selection |
+        //   |-----------|
+        assert!(point_in_text_selection(
+            point(px(40.), px(70.)),
+            &bounds,
+            line_height
+        ));
+        // Middle line, but right out of selection, true
+        // |-----------|
+        // | selection | p
+        // |-----------|
+        assert!(point_in_text_selection(
+            point(px(160.), px(70.)),
+            &bounds,
+            line_height
+        ));
+
+        // Last line in selection, true
+        // |-----------|
+        // | selection |
+        // |------- p -|
+        assert!(point_in_text_selection(
+            point(px(100.), px(140.)),
+            &bounds,
+            line_height
+        ));
+        // Last line, but left out of selection, true
+        //
+        //   |-----------|
+        //   | selection |
+        // p |-----------|
+        assert!(point_in_text_selection(
+            point(px(40.), px(140.)),
+            &bounds,
+            line_height
+        ));
+        // Last line, but right out of selection, false
+        // |-----------|
+        // | selection |
+        // |-----------| p
+        assert!(!point_in_text_selection(
+            point(px(160.), px(140.)),
+            &bounds,
+            line_height
+        ));
+
+        // Out of vertical bounds (top), false
+        //       p
+        // |-----------|
+        // | selection |
+        // |-----------|
+        assert!(!point_in_text_selection(
+            point(px(100.), px(20.)),
+            &bounds,
+            line_height
+        ));
+        // Out of vertical bounds (bottom), false
+        // |-----------|
+        // | selection |
+        // |-----------|
+        //       p
+        assert!(!point_in_text_selection(
+            point(px(100.), px(160.)),
+            &bounds,
+            line_height
+        ));
     }
 }
