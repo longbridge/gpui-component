@@ -390,7 +390,7 @@ impl Element for TextView {
             .read(cx)
             .focus_handle
             .as_ref()
-            .expect("FoucusHanle should init by TextViewState::new");
+            .expect("focus_handle should init by TextViewState::new");
 
         let mut el = div()
             .key_context(CONTEXT)
