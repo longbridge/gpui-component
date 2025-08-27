@@ -17,8 +17,10 @@ use markup5ever_rcdom::{Node, NodeData, RcDom};
 use crate::text::TextViewState;
 use crate::v_flex;
 
-use super::element::{self, ImageNode, LinkMark, Paragraph, Table, TableRow, TextMark, TextNode};
-use super::TextViewStyle;
+use crate::text::element::{
+    self, ImageNode, LinkMark, Paragraph, Table, TableRow, TextMark, TextNode,
+};
+use crate::text::TextViewStyle;
 
 const BLOCK_ELEMENTS: [&str; 35] = [
     "html",
@@ -58,7 +60,8 @@ const BLOCK_ELEMENTS: [&str; 35] = [
     "script",
 ];
 
-pub(super) fn parse_html(source: &str) -> Result<element::Node, SharedString> {
+/// Parse HTML into AST Node.
+pub(crate) fn parse(source: &str) -> Result<element::Node, SharedString> {
     let opts = ParseOpts {
         ..Default::default()
     };
@@ -95,14 +98,14 @@ fn cleanup_html(source: &str) -> Vec<u8> {
 }
 
 #[derive(IntoElement, Clone)]
-pub(super) struct HtmlElement {
+pub(crate) struct HtmlElement {
     pub(super) text: SharedString,
     style: TextViewStyle,
     state: Entity<TextViewState>,
 }
 
 impl HtmlElement {
-    pub(super) fn new(raw: impl Into<SharedString>, state: Entity<TextViewState>) -> Self {
+    pub(crate) fn new(raw: impl Into<SharedString>, state: Entity<TextViewState>) -> Self {
         Self {
             text: raw.into(),
             state,
@@ -679,7 +682,7 @@ mod tests {
     #[test]
     fn test_keep_spaces() {
         let html = r#"<p>and <code>code</code> text</p>"#;
-        let node = super::parse_html(html).unwrap();
+        let node = super::parse(html).unwrap();
         assert_eq!(node.to_markdown(), "and `code` text");
 
         let html = r#"
@@ -699,7 +702,7 @@ mod tests {
             </ul>
             </div>
         "#;
-        let node = super::parse_html(html).unwrap();
+        let node = super::parse(html).unwrap();
         assert_eq!(
             node.to_markdown(),
             indoc::indoc! {r#"
@@ -725,7 +728,7 @@ mod tests {
     #[test]
     fn test_image() {
         let html = r#"<img src="https://example.com/image.png" alt="Example" width="100" height="200" title="Example Image" />"#;
-        let node = super::parse_html(html).unwrap();
+        let node = super::parse(html).unwrap();
         assert_eq!(
             node,
             Node::Paragraph(Paragraph {
@@ -743,7 +746,7 @@ mod tests {
         );
 
         let html = r#"<img src="https://example.com/image.png" alt="Example" style="width: 80%" title="Example Image" />"#;
-        let node = super::parse_html(html).unwrap();
+        let node = super::parse(html).unwrap();
         assert_eq!(
             node,
             Node::Paragraph(Paragraph {

@@ -85,6 +85,7 @@ impl Render for Example {
                                 window,
                                 cx,
                             )
+                            .selectable()
                             .style(TextViewStyle {
                                 highlight_theme: theme.clone(),
                                 is_dark,

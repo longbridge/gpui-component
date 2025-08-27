@@ -15,7 +15,7 @@ use crate::{
 };
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct InlineTextState {
+pub(super) struct InlineTextState {
     hovered_index: Rc<RefCell<Option<usize>>>,
     pub(super) text: Rc<RefCell<SharedString>>,
     pub(super) selection: Rc<RefCell<Option<Selection>>>,
@@ -48,19 +48,156 @@ impl InlineText {
         }
     }
 
-    pub fn link_for_position(
+    fn link_for_position(
         layout: &TextLayout,
         links: &Vec<(Range<usize>, LinkMark)>,
         position: Point<Pixels>,
     ) -> Option<LinkMark> {
-        if let Ok(offset) = layout.index_for_position(position) {
-            for (range, link) in links.iter() {
-                if range.contains(&offset) {
-                    return Some(link.clone());
-                }
+        let offset = layout.index_for_position(position).ok()?;
+        for (range, link) in links.iter() {
+            if range.contains(&offset) {
+                return Some(link.clone());
             }
         }
+
         None
+    }
+
+    /// Paint selected bounds for debug.
+    #[allow(unused)]
+    fn paint_selected_bounds(&self, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut App) {
+        window.paint_quad(gpui::PaintQuad {
+            bounds,
+            background: cx.theme().blue.alpha(0.01).into(),
+            corner_radii: gpui::Corners::default(),
+            border_color: gpui::transparent_black(),
+            border_style: BorderStyle::default(),
+            border_widths: gpui::Edges::all(px(0.)),
+        });
+    }
+
+    fn layout_selections(
+        &self,
+        text_layout: &TextLayout,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (bool, Option<(usize, usize)>) {
+        let Some(text_view_state) = GlobalState::global(cx).text_view_state() else {
+            return (false, None);
+        };
+
+        let text_view_state = text_view_state.read(cx);
+        if !text_view_state.has_selection() {
+            return (false, None);
+        }
+
+        let line_height = window.line_height();
+        let selection_bounds = text_view_state.selection_bounds();
+
+        // Use for debug selection bounds
+        // self.paint_selected_bounds(selection_bounds, window, cx);
+
+        let mut selection = None;
+        let mut offset = 0;
+        let mut chars = self.text.chars().peekable();
+        while let Some(c) = chars.next() {
+            let Some(pos) = text_layout.position_for_index(offset) else {
+                offset += c.len_utf8();
+                continue;
+            };
+
+            let mut char_width = line_height.half();
+            if let Some(next_pos) = text_layout.position_for_index(offset + 1) {
+                char_width = next_pos.x - pos.x;
+            }
+
+            if point_in_text_selection(pos, char_width, &selection_bounds, line_height) {
+                if selection.is_none() {
+                    selection = Some((offset, offset));
+                }
+
+                let next_offset = offset + c.len_utf8();
+                selection.as_mut().unwrap().1 = next_offset;
+            }
+
+            offset += c.len_utf8();
+        }
+
+        (true, selection)
+    }
+
+    fn paint_selection(
+        &self,
+        selection: &Selection,
+        text_layout: &TextLayout,
+        bounds: &Bounds<Pixels>,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let mut start_offset = selection.start.offset();
+        let mut end_offset = selection.end.offset();
+        if end_offset < start_offset {
+            std::mem::swap(&mut start_offset, &mut end_offset);
+        }
+        let Some(start_position) = text_layout.position_for_index(start_offset) else {
+            return;
+        };
+        let Some(end_position) = text_layout.position_for_index(end_offset) else {
+            return;
+        };
+
+        let line_height = text_layout.line_height();
+        if start_position.y == end_position.y {
+            window.paint_quad(quad(
+                Bounds::from_corners(
+                    start_position,
+                    point(end_position.x, end_position.y + line_height),
+                ),
+                px(0.),
+                cx.theme().selection,
+                Edges::default(),
+                gpui::transparent_black(),
+                BorderStyle::default(),
+            ));
+        } else {
+            window.paint_quad(quad(
+                Bounds::from_corners(
+                    start_position,
+                    point(bounds.right(), start_position.y + line_height),
+                ),
+                px(0.),
+                cx.theme().selection,
+                Edges::default(),
+                gpui::transparent_black(),
+                BorderStyle::default(),
+            ));
+
+            if end_position.y > start_position.y + line_height {
+                window.paint_quad(quad(
+                    Bounds::from_corners(
+                        point(bounds.left(), start_position.y + line_height),
+                        point(bounds.right(), end_position.y),
+                    ),
+                    px(0.),
+                    cx.theme().selection,
+                    Edges::default(),
+                    gpui::transparent_black(),
+                    BorderStyle::default(),
+                ));
+            }
+
+            window.paint_quad(quad(
+                Bounds::from_corners(
+                    point(bounds.left(), end_position.y),
+                    point(end_position.x, end_position.y + line_height),
+                ),
+                px(0.),
+                cx.theme().selection,
+                Edges::default(),
+                gpui::transparent_black(),
+                BorderStyle::default(),
+            ));
+        }
     }
 }
 
@@ -142,8 +279,6 @@ impl Element for InlineText {
     ) {
         let current_view = window.current_view();
         let hitbox = prepaint;
-        let line_height = window.line_height();
-
         let state = self.state.clone();
 
         let text_layout = self.styled_text.layout().clone();
@@ -151,50 +286,7 @@ impl Element for InlineText {
             .paint(global_id, None, bounds, &mut (), &mut (), window, cx);
 
         // layout selections
-        let mut is_selection = false;
-        let mut selection = None;
-        if let Some(text_view_state) = GlobalState::global(cx).text_view_state() {
-            let text_view_state = text_view_state.read(cx);
-            if text_view_state.has_selection() {
-                is_selection = true;
-                let selection_bounds = text_view_state.selection_bounds();
-
-                // Use for debug selection bounds
-                window.paint_quad(gpui::PaintQuad {
-                    bounds: selection_bounds,
-                    background: cx.theme().blue.alpha(0.01).into(),
-                    corner_radii: gpui::Corners::default(),
-                    border_color: gpui::transparent_black(),
-                    border_style: BorderStyle::default(),
-                    border_widths: gpui::Edges::all(px(0.)),
-                });
-
-                let mut offset = 0;
-                let mut chars = self.text.chars().peekable();
-                while let Some(c) = chars.next() {
-                    let Some(pos) = text_layout.position_for_index(offset) else {
-                        offset += c.len_utf8();
-                        continue;
-                    };
-
-                    let mut char_width = line_height.half();
-                    if let Some(next_pos) = text_layout.position_for_index(offset + 1) {
-                        char_width = next_pos.x - pos.x;
-                    }
-
-                    if point_in_text_selection(pos, char_width, &selection_bounds, line_height) {
-                        if selection.is_none() {
-                            selection = Some((offset, offset));
-                        }
-
-                        let next_offset = offset + c.len_utf8();
-                        selection.as_mut().unwrap().1 = next_offset;
-                    }
-
-                    offset += c.len_utf8();
-                }
-            }
-        }
+        let (is_selection, selection) = self.layout_selections(&text_layout, window, cx);
 
         *state.selection.borrow_mut() = if let Some(selection) = selection {
             Some(Selection {
@@ -216,70 +308,7 @@ impl Element for InlineText {
         }
 
         if let Some(selection) = *state.selection.borrow() {
-            let mut start_offset = selection.start.offset();
-            let mut end_offset = selection.end.offset();
-            if end_offset < start_offset {
-                std::mem::swap(&mut start_offset, &mut end_offset);
-            }
-            let start_position = text_layout.position_for_index(start_offset);
-            let end_position = text_layout.position_for_index(end_offset);
-
-            let line_height = text_layout.line_height();
-            if let Some(start_position) = start_position {
-                if let Some(end_position) = end_position {
-                    if start_position.y == end_position.y {
-                        window.paint_quad(quad(
-                            Bounds::from_corners(
-                                start_position,
-                                point(end_position.x, end_position.y + line_height),
-                            ),
-                            px(0.),
-                            cx.theme().selection,
-                            Edges::default(),
-                            gpui::transparent_black(),
-                            BorderStyle::default(),
-                        ));
-                    } else {
-                        window.paint_quad(quad(
-                            Bounds::from_corners(
-                                start_position,
-                                point(bounds.right(), start_position.y + line_height),
-                            ),
-                            px(0.),
-                            cx.theme().selection,
-                            Edges::default(),
-                            gpui::transparent_black(),
-                            BorderStyle::default(),
-                        ));
-
-                        if end_position.y > start_position.y + line_height {
-                            window.paint_quad(quad(
-                                Bounds::from_corners(
-                                    point(bounds.left(), start_position.y + line_height),
-                                    point(bounds.right(), end_position.y),
-                                ),
-                                px(0.),
-                                cx.theme().selection,
-                                Edges::default(),
-                                gpui::transparent_black(),
-                                BorderStyle::default(),
-                            ));
-                        }
-
-                        window.paint_quad(quad(
-                            Bounds::from_corners(
-                                point(bounds.left(), end_position.y),
-                                point(end_position.x, end_position.y + line_height),
-                            ),
-                            px(0.),
-                            cx.theme().selection,
-                            Edges::default(),
-                            gpui::transparent_black(),
-                            BorderStyle::default(),
-                        ));
-                    }
-                }
-            }
+            self.paint_selection(&selection, &text_layout, &bounds, window, cx);
         }
 
         // mouse move, update hovered link

@@ -8,14 +8,14 @@ use markdown::{
 };
 
 use crate::{
-    text::{element::TextNode, TextViewState},
+    text::{
+        element::{
+            self, CodeBlock, ImageNode, LinkMark, Paragraph, Span, Table, TableRow, TextMark,
+            TextNode,
+        },
+        TextViewState, TextViewStyle,
+    },
     v_flex,
-};
-
-use super::{
-    element::{self, CodeBlock, ImageNode, LinkMark, Paragraph, Span, Table, TableRow, TextMark},
-    html::parse_html,
-    TextViewStyle,
 };
 
 /// Markdown GFM renderer
@@ -25,14 +25,14 @@ use super::{
 ///
 /// See also [`super::TextView`]
 #[derive(IntoElement, Clone)]
-pub(super) struct MarkdownElement {
+pub(crate) struct MarkdownElement {
     pub(super) text: SharedString,
     style: TextViewStyle,
     state: Entity<TextViewState>,
 }
 
 impl MarkdownElement {
-    pub(super) fn new(raw: impl Into<SharedString>, state: Entity<TextViewState>) -> Self {
+    pub(crate) fn new(raw: impl Into<SharedString>, state: Entity<TextViewState>) -> Self {
         Self {
             state,
             text: raw.into(),
@@ -79,7 +79,7 @@ impl RenderOnce for MarkdownElement {
 }
 
 /// Parse Markdown into a tree of nodes.
-pub(super) fn parse_markdown(
+pub(crate) fn parse(
     raw: &str,
     style: &TextViewStyle,
     cx: &mut App,
@@ -216,7 +216,7 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node) -> String {
             text = raw.value.clone();
             paragraph.push(TextNode::new(&text).marks(vec![(0..text.len(), TextMark::default())]));
         }
-        Node::Html(val) => match parse_html(&val.value) {
+        Node::Html(val) => match super::html::parse(&val.value) {
             Ok(el) => {
                 if el.is_break() {
                     text = "\n".to_owned();
@@ -315,7 +315,7 @@ fn ast_to_node(value: mdast::Node, style: &TextViewStyle, cx: &mut App) -> eleme
         Node::Math(val) => {
             element::Node::CodeBlock(CodeBlock::new(val.value.into(), None, style, cx))
         }
-        Node::Html(val) => match parse_html(&val.value) {
+        Node::Html(val) => match super::html::parse(&val.value) {
             Ok(el) => el,
             Err(err) => {
                 if cfg!(debug_assertions) {

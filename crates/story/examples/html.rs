@@ -74,12 +74,15 @@ impl Render for Example {
                         .size_full()
                         .p_5()
                         .overflow_y_scroll()
-                        .child(TextView::html(
-                            "preview",
-                            self.input_state.read(cx).value().clone(),
-                            window,
-                            cx,
-                        )),
+                        .child(
+                            TextView::html(
+                                "preview",
+                                self.input_state.read(cx).value().clone(),
+                                window,
+                                cx,
+                            )
+                            .selectable(),
+                        ),
                 ),
             )
     }

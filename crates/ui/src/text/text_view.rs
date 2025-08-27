@@ -2,11 +2,12 @@ use std::{sync::Arc, time::Instant};
 
 use gpui::{
     div, px, rems, AnyElement, App, Bounds, ClipboardItem, Element, ElementId, Entity, FocusHandle,
-    InteractiveElement, IntoElement, KeyBinding, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
-    ParentElement, Pixels, Point, Rems, RenderOnce, SharedString, Size, Window,
+    GlobalElementId, InspectorElementId, InteractiveElement, IntoElement, KeyBinding, LayoutId,
+    MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, Point, Rems, RenderOnce,
+    SharedString, Size, Window,
 };
 
-use super::{html::HtmlElement, markdown::MarkdownElement};
+use super::format::{html::HtmlElement, markdown::MarkdownElement};
 use crate::{
     global_state::GlobalState,
     highlighter::HighlightTheme,
@@ -65,19 +66,20 @@ pub struct TextView {
 }
 
 #[derive(Default, Clone, PartialEq)]
-pub struct TextViewState {
+pub(crate) struct TextViewState {
     raw: SharedString,
     focus_handle: Option<FocusHandle>,
-    pub(super) root: Option<Result<element::Node, SharedString>>,
     style: TextViewStyle,
-    _last_parsed: Option<Instant>,
 
     /// The bounds of the text view
     pub(crate) bounds: Bounds<Pixels>,
     /// The local (in TextView) position of the selection.
-    selection_pos: (Option<Point<Pixels>>, Option<Point<Pixels>>),
+    selection_positions: (Option<Point<Pixels>>, Option<Point<Pixels>>),
     /// Is current in selection.
     is_selecting: bool,
+
+    pub(super) root: Option<Result<element::Node, SharedString>>,
+    _last_parsed: Option<Instant>,
 }
 
 impl TextViewState {
@@ -91,7 +93,7 @@ impl TextViewState {
             style: TextViewStyle::default(),
             _last_parsed: None,
             bounds: Bounds::default(),
-            selection_pos: (None, None),
+            selection_positions: (None, None),
             is_selecting: false,
         }
     }
@@ -121,9 +123,9 @@ impl TextViewState {
         // NOTE: About 100ms
         // let measure = crate::Measure::new("parse_markdown");
         self.root = Some(if is_html {
-            super::html::parse_html(&self.raw)
+            super::format::html::parse(&self.raw)
         } else {
-            super::markdown::parse_markdown(&self.raw, &style, cx)
+            super::format::markdown::parse(&self.raw, &style, cx)
         });
         // measure.end();
         self._last_parsed = Some(Instant::now());
@@ -132,20 +134,20 @@ impl TextViewState {
     }
 
     pub(crate) fn clear_selection(&mut self) {
-        self.selection_pos = (None, None);
+        self.selection_positions = (None, None);
         self.is_selecting = false;
     }
 
     pub(crate) fn start_selection(&mut self, pos: Point<Pixels>) {
         let pos = pos - self.bounds.origin;
-        self.selection_pos = (Some(pos), Some(pos));
+        self.selection_positions = (Some(pos), Some(pos));
         self.is_selecting = true;
     }
 
     pub(crate) fn update_selection(&mut self, pos: Point<Pixels>) {
         let pos = pos - self.bounds.origin;
-        if let (Some(start), Some(_)) = self.selection_pos {
-            self.selection_pos = (Some(start), Some(pos))
+        if let (Some(start), Some(_)) = self.selection_positions {
+            self.selection_positions = (Some(start), Some(pos))
         }
     }
 
@@ -154,7 +156,7 @@ impl TextViewState {
     }
 
     pub(crate) fn has_selection(&self) -> bool {
-        if let (Some(start), Some(end)) = self.selection_pos {
+        if let (Some(start), Some(end)) = self.selection_positions {
             start != end
         } else {
             false
@@ -163,7 +165,7 @@ impl TextViewState {
 
     /// Return the bounds of the selection in window coordinates.
     pub(crate) fn selection_bounds(&self) -> Bounds<Pixels> {
-        if let (Some(start), Some(end)) = self.selection_pos {
+        if let (Some(start), Some(end)) = self.selection_positions {
             let start = start + self.bounds.origin;
             let end = end + self.bounds.origin;
 
@@ -182,7 +184,7 @@ impl TextViewState {
         Bounds::default()
     }
 
-    pub fn selection_text(&self) -> Option<String> {
+    fn selection_text(&self) -> Option<String> {
         let Some(Ok(root)) = &self.root else {
             return None;
         };
@@ -290,7 +292,10 @@ impl TextView {
         cx: &mut App,
     ) -> Self {
         let id: ElementId = id.into();
-        let state = window.use_keyed_state(id.clone(), cx, |_, cx| TextViewState::new(cx));
+        let state =
+            window.use_keyed_state(SharedString::from(format!("{}/state", id)), cx, |_, cx| {
+                TextViewState::new(cx)
+            });
         Self {
             id,
             state: state.clone(),
@@ -307,19 +312,22 @@ impl TextView {
         cx: &mut App,
     ) -> Self {
         let id: ElementId = id.into();
-        let state = window.use_keyed_state(id.clone(), cx, |_, cx| TextViewState::new(cx));
+        let state =
+            window.use_keyed_state(SharedString::from(format!("{}/state", id)), cx, |_, cx| {
+                TextViewState::new(cx)
+            });
 
         Self {
             id,
             state: state.clone(),
             element: TextViewElement::Html(HtmlElement::new(raw, state)),
-            selectable: true,
+            selectable: false,
         }
     }
 
-    /// Set the text view to be selectable, default is true.
-    pub fn selectable(mut self, selectable: bool) -> Self {
-        self.selectable = selectable;
+    /// Set the text view to be selectable, default is false.
+    pub fn selectable(mut self) -> Self {
+        self.selectable = true;
         self
     }
 
@@ -372,20 +380,21 @@ impl Element for TextView {
 
     fn request_layout(
         &mut self,
-        _: Option<&gpui::GlobalElementId>,
-        _: Option<&gpui::InspectorElementId>,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
         window: &mut Window,
         cx: &mut App,
-    ) -> (gpui::LayoutId, Self::RequestLayoutState) {
+    ) -> (LayoutId, Self::RequestLayoutState) {
+        let focus_handle = self
+            .state
+            .read(cx)
+            .focus_handle
+            .as_ref()
+            .expect("FoucusHanle should init by TextViewState::new");
+
         let mut el = div()
             .key_context(CONTEXT)
-            .track_focus(
-                self.state
-                    .read(cx)
-                    .focus_handle
-                    .as_ref()
-                    .expect("FoucusHanle should init by TextViewState::new"),
-            )
+            .track_focus(focus_handle)
             .on_action({
                 let state = self.state.clone();
                 move |_: &input::Copy, _, cx| {
@@ -400,8 +409,8 @@ impl Element for TextView {
 
     fn prepaint(
         &mut self,
-        _: Option<&gpui::GlobalElementId>,
-        _: Option<&gpui::InspectorElementId>,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
         _: Bounds<Pixels>,
         request_layout: &mut Self::RequestLayoutState,
         window: &mut Window,
@@ -412,8 +421,8 @@ impl Element for TextView {
 
     fn paint(
         &mut self,
-        _: Option<&gpui::GlobalElementId>,
-        _: Option<&gpui::InspectorElementId>,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
         bounds: Bounds<Pixels>,
         request_layout: &mut Self::RequestLayoutState,
         _: &mut Self::PrepaintState,
@@ -502,7 +511,7 @@ mod tests {
     fn test_text_view_state_selection_bounds() {
         assert_eq!(
             TextViewState {
-                selection_pos: (None, None),
+                selection_positions: (None, None),
                 ..Default::default()
             }
             .selection_bounds(),
@@ -510,7 +519,7 @@ mod tests {
         );
         assert_eq!(
             TextViewState {
-                selection_pos: (None, Some(point(px(10.), px(20.)))),
+                selection_positions: (None, Some(point(px(10.), px(20.)))),
                 ..Default::default()
             }
             .selection_bounds(),
@@ -518,7 +527,7 @@ mod tests {
         );
         assert_eq!(
             TextViewState {
-                selection_pos: (Some(point(px(10.), px(20.))), None),
+                selection_positions: (Some(point(px(10.), px(20.))), None),
                 ..Default::default()
             }
             .selection_bounds(),
@@ -532,7 +541,7 @@ mod tests {
         //         50,50
         assert_eq!(
             TextViewState {
-                selection_pos: (Some(point(px(10.), px(10.))), Some(point(px(50.), px(50.)))),
+                selection_positions: (Some(point(px(10.), px(10.))), Some(point(px(50.), px(50.)))),
                 ..Default::default()
             }
             .selection_bounds(),
@@ -548,7 +557,7 @@ mod tests {
         //         50,50 start
         assert_eq!(
             TextViewState {
-                selection_pos: (Some(point(px(50.), px(50.))), Some(point(px(10.), px(10.))),),
+                selection_positions: (Some(point(px(50.), px(50.))), Some(point(px(10.), px(10.))),),
                 ..Default::default()
             }
             .selection_bounds(),
@@ -564,7 +573,7 @@ mod tests {
         // 10,50
         assert_eq!(
             TextViewState {
-                selection_pos: (Some(point(px(50.), px(10.))), Some(point(px(10.), px(50.)))),
+                selection_positions: (Some(point(px(50.), px(10.))), Some(point(px(10.), px(50.)))),
                 ..Default::default()
             }
             .selection_bounds(),
@@ -580,7 +589,7 @@ mod tests {
         // 10,50 start
         assert_eq!(
             TextViewState {
-                selection_pos: (Some(point(px(10.), px(50.))), Some(point(px(50.), px(10.)))),
+                selection_positions: (Some(point(px(10.), px(50.))), Some(point(px(50.), px(10.)))),
                 ..Default::default()
             }
             .selection_bounds(),

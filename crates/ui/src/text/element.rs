@@ -100,7 +100,7 @@ impl PartialEq for ImageNode {
 }
 
 #[derive(Default, Clone, Debug, PartialEq)]
-pub struct TextNode {
+pub(crate) struct TextNode {
     /// The text content.
     pub text: String,
     pub image: Option<ImageNode>,
@@ -110,7 +110,7 @@ pub struct TextNode {
 }
 
 impl TextNode {
-    pub fn new(text: &str) -> Self {
+    pub(crate) fn new(text: &str) -> Self {
         Self {
             text: text.to_string(),
             image: None,
@@ -119,13 +119,13 @@ impl TextNode {
         }
     }
 
-    pub fn image(image: ImageNode) -> Self {
+    pub(crate) fn image(image: ImageNode) -> Self {
         let mut this = Self::new("");
         this.image = Some(image);
         this
     }
 
-    pub fn marks(mut self, marks: Vec<(Range<usize>, TextMark)>) -> Self {
+    pub(crate) fn marks(mut self, marks: Vec<(Range<usize>, TextMark)>) -> Self {
         self.marks = marks;
         self
     }
@@ -136,7 +136,7 @@ impl TextNode {
 /// Unlike other Element, this is cloneable, because it is used in the Node AST.
 /// We are keep the selection state inside this AST Nodes.
 #[derive(Debug, Default, Clone, PartialEq, IntoElement)]
-pub struct Paragraph {
+pub(crate) struct Paragraph {
     pub(super) span: Option<Span>,
     pub(super) children: Vec<TextNode>,
     pub(super) state: InlineTextState,
@@ -171,7 +171,7 @@ impl From<String> for Paragraph {
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
-pub struct Table {
+pub(crate) struct Table {
     pub children: Vec<TableRow>,
     pub column_aligns: Vec<ColumnumnAlign>,
 }
@@ -183,7 +183,7 @@ impl Table {
 }
 
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
-pub enum ColumnumnAlign {
+pub(super) enum ColumnumnAlign {
     #[default]
     Left,
     Center,
@@ -202,44 +202,44 @@ impl From<mdast::AlignKind> for ColumnumnAlign {
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
-pub struct TableRow {
+pub(crate) struct TableRow {
     pub children: Vec<TableCell>,
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
-pub struct TableCell {
+pub(crate) struct TableCell {
     pub children: Paragraph,
     pub width: Option<DefiniteLength>,
 }
 
 impl Paragraph {
-    pub fn clear(&mut self) {
+    pub(crate) fn clear(&mut self) {
         self.span = None;
         self.children.clear();
     }
 
-    pub fn is_image(&self) -> bool {
+    pub(crate) fn is_image(&self) -> bool {
         false
     }
 
-    pub fn set_span(&mut self, span: Span) {
+    pub(crate) fn set_span(&mut self, span: Span) {
         self.span = Some(span);
     }
 
-    pub fn push_str(&mut self, text: &str) {
+    pub(crate) fn push_str(&mut self, text: &str) {
         self.children
             .push(TextNode::new(&text).marks(vec![(0..text.len(), TextMark::default())]));
     }
 
-    pub fn push(&mut self, text: TextNode) {
+    pub(crate) fn push(&mut self, text: TextNode) {
         self.children.push(text);
     }
 
-    pub fn push_image(&mut self, image: ImageNode) {
+    pub(crate) fn push_image(&mut self, image: ImageNode) {
         self.children.push(TextNode::image(image));
     }
 
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.children.is_empty()
             || self
                 .children
@@ -248,7 +248,7 @@ impl Paragraph {
     }
 
     /// Return length of children text.
-    pub fn text_len(&self) -> usize {
+    pub(crate) fn text_len(&self) -> usize {
         self.children
             .iter()
             .map(|node| node.text.len())
@@ -259,20 +259,20 @@ impl Paragraph {
     ///
     /// - Returns `true` if other have merge into self.
     /// - Returns `false` if not able to merge.
-    pub fn merge(&mut self, other: &Self) {
+    pub(crate) fn merge(&mut self, other: &Self) {
         self.children.extend(other.children.clone());
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct CodeBlock {
+pub(crate) struct CodeBlock {
     code: SharedString,
     lang: Option<SharedString>,
     styles: Vec<(Range<usize>, HighlightStyle)>,
 }
 
 impl CodeBlock {
-    pub fn new(
+    pub(crate) fn new(
         code: SharedString,
         lang: Option<SharedString>,
         _: &TextViewStyle,
@@ -294,7 +294,7 @@ impl CodeBlock {
 /// https://ui.shadcn.com/docs/components/typography
 #[allow(unused)]
 #[derive(Debug, Clone, PartialEq)]
-pub enum Node {
+pub(crate) enum Node {
     Root {
         children: Vec<Node>,
     },
