@@ -146,9 +146,9 @@ impl Element for InlineText {
 
         let state = self.state.clone();
 
+        let text_layout = self.styled_text.layout().clone();
         self.styled_text
             .paint(global_id, None, bounds, &mut (), &mut (), window, cx);
-        let text_layout = self.styled_text.layout().clone();
 
         // layout selections
         let mut is_selection = false;
@@ -166,14 +166,14 @@ impl Element for InlineText {
                 }
 
                 // Use for debug selection bounds
-                window.paint_quad(gpui::PaintQuad {
-                    bounds: selection_bounds,
-                    background: cx.theme().blue.alpha(0.01).into(),
-                    corner_radii: gpui::Corners::default(),
-                    border_color: gpui::transparent_black(),
-                    border_style: BorderStyle::default(),
-                    border_widths: gpui::Edges::all(px(0.)),
-                });
+                // window.paint_quad(gpui::PaintQuad {
+                //     bounds: selection_bounds,
+                //     background: cx.theme().blue.alpha(0.01).into(),
+                //     corner_radii: gpui::Corners::default(),
+                //     border_color: gpui::transparent_black(),
+                //     border_style: BorderStyle::default(),
+                //     border_widths: gpui::Edges::all(px(0.)),
+                // });
 
                 let mut offset = 0;
                 let mut chars = self.text.chars().peekable();
@@ -283,7 +283,7 @@ impl Element for InlineText {
             }
         }
 
-        // mouse move
+        // mouse move, update hovered link
         window.on_mouse_event({
             let hitbox = hitbox.clone();
             let text_layout = text_layout.clone();
@@ -304,7 +304,7 @@ impl Element for InlineText {
         });
 
         if !is_selection {
-            // click
+            // click to open link
             window.on_mouse_event({
                 let links = self.links.clone();
                 let text_layout = text_layout.clone();

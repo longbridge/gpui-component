@@ -565,7 +565,7 @@ impl ThemeColor {
         apply_color!(scrollbar, fallback = self.background);
         apply_color!(scrollbar_thumb, fallback = self.accent);
         apply_color!(scrollbar_thumb_hover, fallback = self.scrollbar_thumb);
-        apply_color!(selection, fallback = self.primary.opacity(0.5));
+        apply_color!(selection, fallback = self.primary);
         apply_color!(sidebar, fallback = self.background);
         apply_color!(sidebar_accent, fallback = self.accent);
         apply_color!(sidebar_accent_foreground, fallback = self.accent_foreground);
@@ -605,6 +605,7 @@ impl ThemeColor {
         // Ensure opacity for list_active, table_active
         self.list_active = self.list_active.alpha(0.2);
         self.table_active = self.table_active.alpha(0.2);
+        self.selection = self.selection.alpha(0.3);
     }
 }
 

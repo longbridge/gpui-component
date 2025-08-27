@@ -411,7 +411,6 @@ impl Element for TextView {
         cx: &mut App,
     ) {
         let entity_id = window.current_view();
-        let is_selecting = self.state.read(cx).is_selecting;
 
         self.state.update(cx, |state, _| state.bounds = bounds);
 
@@ -422,6 +421,9 @@ impl Element for TextView {
         GlobalState::global_mut(cx).text_view_state_stack.pop();
 
         if self.selectable {
+            let is_selecting = self.state.read(cx).is_selecting;
+            let has_selection = self.state.read(cx).has_selection();
+
             window.on_mouse_event({
                 let state = self.state.clone();
                 move |event: &MouseDownEvent, phase, _, cx| {
@@ -449,20 +451,18 @@ impl Element for TextView {
                 });
 
                 // up to end selection
-                if self.state.read(cx).has_selection() {
-                    window.on_mouse_event({
-                        let state = self.state.clone();
-                        move |_: &MouseUpEvent, _, _, cx| {
-                            state.update(cx, |state, _| {
-                                state.end_selection();
-                            });
-                            cx.notify(entity_id);
-                        }
-                    });
-                }
+                window.on_mouse_event({
+                    let state = self.state.clone();
+                    move |_: &MouseUpEvent, _, _, cx| {
+                        state.update(cx, |state, _| {
+                            state.end_selection();
+                        });
+                        cx.notify(entity_id);
+                    }
+                });
             }
 
-            if self.state.read(cx).has_selection() {
+            if has_selection {
                 // down outside to clear selection
                 window.on_mouse_event({
                     let state = self.state.clone();

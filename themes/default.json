@@ -64,7 +64,7 @@
         "secondary.active.background": "#e5e5e5",
         "secondary.foreground": "#171717",
         "secondary.hover.background": "#f0f0f0",
-        "selection.background": "#bfdbfe",
+        "selection.background": "#55a0fc",
         "sidebar.background": "#fafafa",
         "sidebar.accent.background": "#e5e5e5",
         "sidebar.accent.foreground": "#171717",
