@@ -157,23 +157,17 @@ impl Element for InlineText {
             let text_view_state = text_view_state.read(cx);
             if text_view_state.has_selection() {
                 is_selection = true;
-                let mut selection_bounds = Bounds::default();
-                let selection_position = text_view_state.selection_position();
-                if let Some(start_pos) = &selection_position.0 {
-                    if let Some(end_pos) = &selection_position.1 {
-                        selection_bounds = Bounds::from_corners(*start_pos, *end_pos);
-                    }
-                }
+                let selection_bounds = text_view_state.selection_bounds();
 
                 // Use for debug selection bounds
-                // window.paint_quad(gpui::PaintQuad {
-                //     bounds: selection_bounds,
-                //     background: cx.theme().blue.alpha(0.01).into(),
-                //     corner_radii: gpui::Corners::default(),
-                //     border_color: gpui::transparent_black(),
-                //     border_style: BorderStyle::default(),
-                //     border_widths: gpui::Edges::all(px(0.)),
-                // });
+                window.paint_quad(gpui::PaintQuad {
+                    bounds: selection_bounds,
+                    background: cx.theme().blue.alpha(0.01).into(),
+                    corner_radii: gpui::Corners::default(),
+                    border_color: gpui::transparent_black(),
+                    border_style: BorderStyle::default(),
+                    border_widths: gpui::Edges::all(px(0.)),
+                });
 
                 let mut offset = 0;
                 let mut chars = self.text.chars().peekable();

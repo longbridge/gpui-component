@@ -3,7 +3,7 @@ use std::{sync::Arc, time::Instant};
 use gpui::{
     div, px, rems, AnyElement, App, Bounds, ClipboardItem, Element, ElementId, Entity, FocusHandle,
     InteractiveElement, IntoElement, KeyBinding, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
-    ParentElement, Pixels, Point, Rems, RenderOnce, SharedString, Window,
+    ParentElement, Pixels, Point, Rems, RenderOnce, SharedString, Size, Window,
 };
 
 use super::{html::HtmlElement, markdown::MarkdownElement};
@@ -64,10 +64,10 @@ pub struct TextView {
     selectable: bool,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Default, Clone, PartialEq)]
 pub struct TextViewState {
     raw: SharedString,
-    focus_handle: FocusHandle,
+    focus_handle: Option<FocusHandle>,
     pub(super) root: Option<Result<element::Node, SharedString>>,
     style: TextViewStyle,
     _last_parsed: Option<Instant>,
@@ -86,7 +86,7 @@ impl TextViewState {
 
         Self {
             raw: SharedString::default(),
-            focus_handle,
+            focus_handle: Some(focus_handle),
             root: None,
             style: TextViewStyle::default(),
             _last_parsed: None,
@@ -161,21 +161,25 @@ impl TextViewState {
         }
     }
 
-    /// Return the position of the selection in window coordinates.
-    pub(crate) fn selection_position(&self) -> (Option<Point<Pixels>>, Option<Point<Pixels>>) {
+    /// Return the bounds of the selection in window coordinates.
+    pub(crate) fn selection_bounds(&self) -> Bounds<Pixels> {
         if let (Some(start), Some(end)) = self.selection_pos {
             let start = start + self.bounds.origin;
             let end = end + self.bounds.origin;
 
-            // return in ordered
-            if start.x < end.x || start.y <= end.y {
-                return (Some(start), Some(end));
-            } else {
-                return (Some(end), Some(start));
-            }
-        } else {
-            (None, None)
+            let origin = Point {
+                x: start.x.min(end.x),
+                y: start.y.min(end.y),
+            };
+            let size = Size {
+                width: (start.x - end.x).abs(),
+                height: (start.y - end.y).abs(),
+            };
+
+            return Bounds { origin, size };
         }
+
+        Bounds::default()
     }
 
     pub fn selection_text(&self) -> Option<String> {
@@ -375,7 +379,13 @@ impl Element for TextView {
     ) -> (gpui::LayoutId, Self::RequestLayoutState) {
         let mut el = div()
             .key_context(CONTEXT)
-            .track_focus(&self.state.read(cx).focus_handle)
+            .track_focus(
+                self.state
+                    .read(cx)
+                    .focus_handle
+                    .as_ref()
+                    .expect("FoucusHanle should init by TextViewState::new"),
+            )
             .on_action({
                 let state = self.state.clone();
                 move |_: &input::Copy, _, cx| {
@@ -479,5 +489,105 @@ impl Element for TextView {
                 });
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use gpui::{point, px, size, Bounds};
+
+    use crate::text::TextViewState;
+
+    #[test]
+    fn test_text_view_state_selection_bounds() {
+        assert_eq!(
+            TextViewState {
+                selection_pos: (None, None),
+                ..Default::default()
+            }
+            .selection_bounds(),
+            Bounds::default()
+        );
+        assert_eq!(
+            TextViewState {
+                selection_pos: (None, Some(point(px(10.), px(20.)))),
+                ..Default::default()
+            }
+            .selection_bounds(),
+            Bounds::default()
+        );
+        assert_eq!(
+            TextViewState {
+                selection_pos: (Some(point(px(10.), px(20.))), None),
+                ..Default::default()
+            }
+            .selection_bounds(),
+            Bounds::default()
+        );
+
+        // 10,10 start
+        //   |------|
+        //   |      |
+        //   |------|
+        //         50,50
+        assert_eq!(
+            TextViewState {
+                selection_pos: (Some(point(px(10.), px(10.))), Some(point(px(50.), px(50.)))),
+                ..Default::default()
+            }
+            .selection_bounds(),
+            Bounds {
+                origin: point(px(10.), px(10.)),
+                size: size(px(40.), px(40.))
+            }
+        );
+        // 10,10
+        //   |------|
+        //   |      |
+        //   |------|
+        //         50,50 start
+        assert_eq!(
+            TextViewState {
+                selection_pos: (Some(point(px(50.), px(50.))), Some(point(px(10.), px(10.))),),
+                ..Default::default()
+            }
+            .selection_bounds(),
+            Bounds {
+                origin: point(px(10.), px(10.)),
+                size: size(px(40.), px(40.))
+            }
+        );
+        //        50,10 start
+        //   |------|
+        //   |      |
+        //   |------|
+        // 10,50
+        assert_eq!(
+            TextViewState {
+                selection_pos: (Some(point(px(50.), px(10.))), Some(point(px(10.), px(50.)))),
+                ..Default::default()
+            }
+            .selection_bounds(),
+            Bounds {
+                origin: point(px(10.), px(10.)),
+                size: size(px(40.), px(40.))
+            }
+        );
+        //        50,10
+        //   |------|
+        //   |      |
+        //   |------|
+        // 10,50 start
+        assert_eq!(
+            TextViewState {
+                selection_pos: (Some(point(px(10.), px(50.))), Some(point(px(50.), px(10.)))),
+                ..Default::default()
+            }
+            .selection_bounds(),
+            Bounds {
+                origin: point(px(10.), px(10.)),
+                size: size(px(40.), px(40.))
+            }
+        );
     }
 }
