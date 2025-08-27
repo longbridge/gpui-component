@@ -112,7 +112,9 @@ impl Inline {
 
             let mut char_width = line_height.half();
             if let Some(next_pos) = text_layout.position_for_index(offset + 1) {
-                char_width = next_pos.x - pos.x;
+                if next_pos.y == pos.y {
+                    char_width = next_pos.x - pos.x;
+                }
             }
 
             if point_in_text_selection(pos, char_width, &selection_bounds, line_height) {
@@ -377,25 +379,19 @@ fn point_in_text_selection(
     }
 
     let single_line = (bottom - top) <= line_height;
-
     if single_line {
         // If it's a single line selection, just check horizontal bounds
         return pos.x + char_width.half() >= left && pos.x + char_width.half() <= right;
     }
 
-    let real_y = pos.y + line_height.half();
+    let is_above = pos.y <= top;
+    let is_below = pos.y + line_height >= bottom;
 
-    let is_first_line = real_y >= top && real_y < top + line_height;
-    let is_last_line = pos.y >= bottom - line_height && pos.y < bottom;
-
-    if is_first_line {
-        // First line: from left to the end of the line
+    if is_above {
         return pos.x + char_width.half() >= left;
-    } else if is_last_line {
-        // Last line: from the start of the line to right
+    } else if is_below {
         return pos.x + char_width.half() <= right;
     } else {
-        // Other lines in between: full line selection
         return true;
     }
 }
