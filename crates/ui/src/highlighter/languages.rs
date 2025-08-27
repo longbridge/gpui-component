@@ -373,10 +373,11 @@ impl Language {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
+    #[cfg(feature = "tree-sitter-languages")]
     fn test_language_name() {
+        use super::*;
+
         assert_eq!(Language::MarkdownInline.name(), "markdown_inline");
         assert_eq!(Language::Markdown.name(), "markdown");
         assert_eq!(Language::Json.name(), "json");

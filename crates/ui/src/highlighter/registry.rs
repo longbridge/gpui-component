@@ -523,7 +523,7 @@ mod tests {
 
         registry.register(
             "foo",
-            &LanguageConfig::new("foo", tree_sitter_bash::LANGUAGE.into(), vec![], "", "", ""),
+            &LanguageConfig::new("foo", tree_sitter_json::LANGUAGE.into(), vec![], "", "", ""),
         );
 
         assert!(registry.language("foo").is_some());
