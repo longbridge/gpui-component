@@ -77,6 +77,7 @@ pub(crate) struct TextViewState {
     selection_positions: (Option<Point<Pixels>>, Option<Point<Pixels>>),
     /// Is current in selection.
     is_selecting: bool,
+    is_selectable: bool,
 
     pub(super) root: Option<Result<element::Node, SharedString>>,
     _last_parsed: Option<Instant>,
@@ -95,6 +96,7 @@ impl TextViewState {
             bounds: Bounds::default(),
             selection_positions: (None, None),
             is_selecting: false,
+            is_selectable: false,
         }
     }
 }
@@ -170,6 +172,10 @@ impl TextViewState {
         } else {
             false
         }
+    }
+
+    pub(crate) fn is_selectable(&self) -> bool {
+        self.is_selectable
     }
 
     /// Return the bounds of the selection in window coordinates.
@@ -439,9 +445,12 @@ impl Element for TextView {
         cx: &mut App,
     ) {
         let entity_id = window.current_view();
+        let is_selectable = self.selectable;
 
-        self.state
-            .update(cx, |state, _| state.update_bounds(bounds));
+        self.state.update(cx, |state, _| {
+            state.update_bounds(bounds);
+            state.is_selectable = is_selectable;
+        });
 
         GlobalState::global_mut(cx)
             .text_view_state_stack

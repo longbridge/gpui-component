@@ -438,21 +438,20 @@ impl RenderOnce for Paragraph {
         let mut offset = 0;
 
         let mut ix = 0;
-        for text_node in children.into_iter() {
-            let text_len = text_node.text.len();
-            text.push_str(&text_node.text);
+        for inline_node in children.into_iter() {
+            let text_len = inline_node.text.len();
+            text.push_str(&inline_node.text);
 
-            if let Some(image) = &text_node.image {
+            if let Some(image) = &inline_node.image {
                 if text.len() > 0 {
-                    let text: SharedString = text.clone().into();
-                    *text_node.state.text.borrow_mut() = text.clone();
+                    // Save actully rendered text for selected text to use.
+                    inline_node.state.set_text(text.clone().into());
                     child_nodes.push(
                         Inline::new(
                             ix,
-                            text,
+                            inline_node.state.clone(),
                             links.clone(),
                             highlights.clone(),
-                            text_node.state.clone(),
                         )
                         .into_any_element(),
                     );
@@ -483,7 +482,7 @@ impl RenderOnce for Paragraph {
                 offset = 0;
             } else {
                 let mut node_highlights = vec![];
-                for (range, style) in text_node.marks {
+                for (range, style) in inline_node.marks {
                     let inner_range = (offset + range.start)..(offset + range.end);
 
                     let mut highlight = HighlightStyle::default();
@@ -524,12 +523,10 @@ impl RenderOnce for Paragraph {
 
         // Add the last text node
         if text.len() > 0 {
-            let text: SharedString = text.into();
-            *self.state.text.borrow_mut() = text.clone();
-
-            child_nodes.push(
-                Inline::new(ix, text, links, highlights, self.state.clone()).into_any_element(),
-            );
+            // Save actully rendered text for selected text to use.
+            self.state.set_text(text.into());
+            child_nodes
+                .push(Inline::new(ix, self.state.clone(), links, highlights).into_any_element());
         }
 
         div().id(span.unwrap_or_default()).children(child_nodes)
@@ -558,6 +555,7 @@ impl Node {
                 spread,
                 checked,
             } => v_flex()
+                .id("li")
                 .when(spread, |this| this.child(div()))
                 .children({
                     let mut items: Vec<Div> = Vec::with_capacity(children.len());
@@ -747,6 +745,7 @@ impl Node {
         cx: &mut App,
     ) -> AnyElement {
         div()
+            .id("codeblock")
             .mb(mb)
             .p_3()
             .rounded(cx.theme().radius)
@@ -776,6 +775,7 @@ impl Node {
 
         match self {
             Node::Root { children } => div()
+                .id("div")
                 .children({
                     let children_len = children.len();
                     children.into_iter().enumerate().map(move |(index, c)| {
@@ -784,7 +784,7 @@ impl Node {
                     })
                 })
                 .into_any_element(),
-            Node::Paragraph(paragraph) => div().mb(mb).child(paragraph).into_any_element(),
+            Node::Paragraph(paragraph) => div().id("p").mb(mb).child(paragraph).into_any_element(),
             Node::Heading { level, children } => {
                 let (text_size, font_weight) = match level {
                     1 => (rems(2.), FontWeight::BOLD),
@@ -799,6 +799,7 @@ impl Node {
                 let text_size = text_size.to_pixels(style.heading_base_font_size);
 
                 h_flex()
+                    .id(("h", level as usize))
                     .mb(rems(0.3))
                     .whitespace_normal()
                     .text_size(text_size)
@@ -807,6 +808,7 @@ impl Node {
                     .into_any_element()
             }
             Node::Blockquote { children } => div()
+                .id("blockquote")
                 .w_full()
                 .mb(mb)
                 .text_color(cx.theme().muted_foreground)
@@ -822,6 +824,7 @@ impl Node {
                 })
                 .into_any_element(),
             Node::List { children, ordered } => v_flex()
+                .id(if ordered { "ol" } else { "ul" })
                 .mb(mb)
                 .children({
                     let mut items = Vec::with_capacity(children.len());
@@ -855,11 +858,12 @@ impl Node {
             }
             Node::Table { .. } => Self::render_table(&self, window, cx).into_any_element(),
             Node::Divider => div()
+                .id("divider")
                 .bg(cx.theme().border)
                 .h(px(2.))
                 .mb(mb)
                 .into_any_element(),
-            Node::Break { .. } => div().into_any_element(),
+            Node::Break { .. } => div().id("break").into_any_element(),
             _ => {
                 if cfg!(debug_assertions) {
                     tracing::warn!("unknown implementation: {:?}", self);

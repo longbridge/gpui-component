@@ -19,10 +19,10 @@ use crate::{
 /// All text in TextView (including the CodeBlock) used this for text rendering.
 pub(super) struct Inline {
     id: ElementId,
+    state: InlineState,
     text: SharedString,
     links: Rc<Vec<(Range<usize>, LinkMark)>>,
     highlights: Vec<(Range<usize>, HighlightStyle)>,
-    state: InlineState,
     styled_text: StyledText,
 }
 
@@ -33,19 +33,25 @@ pub(super) struct InlineState {
     pub(super) selection: Rc<RefCell<Option<Selection>>>,
 }
 
+impl InlineState {
+    pub(crate) fn set_text(&self, text: SharedString) {
+        *self.text.borrow_mut() = text.into();
+    }
+}
+
 impl Inline {
     pub(super) fn new(
         id: impl Into<ElementId>,
-        text: SharedString,
+        state: InlineState,
         links: Vec<(Range<usize>, LinkMark)>,
         highlights: Vec<(Range<usize>, HighlightStyle)>,
-        state: InlineState,
     ) -> Self {
+        let text = state.text.borrow().clone();
         Self {
             id: id.into(),
-            text: text.clone(),
             links: Rc::new(links),
             highlights,
+            text: text.clone(),
             styled_text: StyledText::new(text),
             state,
         }
@@ -85,14 +91,15 @@ impl Inline {
         text_layout: &TextLayout,
         window: &mut Window,
         cx: &mut App,
-    ) -> (bool, Option<(usize, usize)>) {
+    ) -> (bool, bool, Option<(usize, usize)>) {
         let Some(text_view_state) = GlobalState::global(cx).text_view_state() else {
-            return (false, None);
+            return (false, false, None);
         };
 
         let text_view_state = text_view_state.read(cx);
+        let is_selectable = text_view_state.is_selectable();
         if !text_view_state.has_selection() {
-            return (false, None);
+            return (is_selectable, false, None);
         }
 
         let line_height = window.line_height();
@@ -129,7 +136,7 @@ impl Inline {
             offset += c.len_utf8();
         }
 
-        (true, selection)
+        (true, true, selection)
     }
 
     /// Paint the selection background.
@@ -293,7 +300,8 @@ impl Element for Inline {
             .paint(global_id, None, bounds, &mut (), &mut (), window, cx);
 
         // layout selections
-        let (is_selection, selection) = self.layout_selections(&text_layout, window, cx);
+        let (is_selectable, is_selection, selection) =
+            self.layout_selections(&text_layout, window, cx);
 
         *state.selection.borrow_mut() = if let Some(selection) = selection {
             Some(Selection {
@@ -304,14 +312,14 @@ impl Element for Inline {
             None
         };
 
-        if is_selection {
+        if is_selection || is_selectable {
             window.set_cursor_style(CursorStyle::IBeam, &hitbox);
-        } else {
-            // link cursor pointer
-            let mouse_position = window.mouse_position();
-            if let Some(_) = Self::link_for_position(&text_layout, &self.links, mouse_position) {
-                window.set_cursor_style(CursorStyle::PointingHand, &hitbox);
-            }
+        }
+
+        // link cursor pointer
+        let mouse_position = window.mouse_position();
+        if let Some(_) = Self::link_for_position(&text_layout, &self.links, mouse_position) {
+            window.set_cursor_style(CursorStyle::PointingHand, &hitbox);
         }
 
         if let Some(selection) = *state.selection.borrow() {
