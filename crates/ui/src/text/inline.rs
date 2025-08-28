@@ -19,24 +19,27 @@ use crate::{
 /// All text in TextView (including the CodeBlock) used this for text rendering.
 pub(super) struct Inline {
     id: ElementId,
-    state: InlineState,
     text: SharedString,
     links: Rc<Vec<(Range<usize>, LinkMark)>>,
     highlights: Vec<(Range<usize>, HighlightStyle)>,
     styled_text: StyledText,
+
+    state: InlineState,
 }
 
 /// The inline text state, used RefCell to keep the selection state.
 #[derive(Debug, Default, PartialEq, Clone)]
 pub(super) struct InlineState {
     hovered_index: Rc<RefCell<Option<usize>>>,
+    /// The text that actully rendering, matched with selection.
     pub(super) text: Rc<RefCell<SharedString>>,
     pub(super) selection: Rc<RefCell<Option<Selection>>>,
 }
 
 impl InlineState {
+    /// Save actully rendered text for selected text to use.
     pub(crate) fn set_text(&self, text: SharedString) {
-        *self.text.borrow_mut() = text.into();
+        *self.text.borrow_mut() = text;
     }
 }
 

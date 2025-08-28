@@ -593,7 +593,7 @@ fn parse_node(node: &Rc<Node>, paragraph: &mut Paragraph) -> Option<node::Node> 
 
                     if paragraph.is_image() {
                         let image = paragraph.clone();
-                        paragraph.clear();
+                        paragraph.reset();
                         Some(node::Node::Paragraph(image))
                     } else {
                         None
@@ -630,7 +630,7 @@ fn consume_paragraph(children: &mut Vec<node::Node>, paragraph: &mut Paragraph) 
     }
 
     children.push(node::Node::Paragraph(paragraph.clone()));
-    paragraph.clear();
+    paragraph.reset();
 }
 
 #[cfg(test)]

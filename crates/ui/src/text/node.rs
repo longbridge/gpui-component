@@ -213,9 +213,10 @@ pub(crate) struct TableCell {
 }
 
 impl Paragraph {
-    pub(crate) fn clear(&mut self) {
+    pub(crate) fn reset(&mut self) {
         self.span = None;
         self.children.clear();
+        self.state = InlineState::default();
     }
 
     pub(crate) fn is_image(&self) -> bool {
@@ -364,7 +365,6 @@ impl Node {
             }
             Node::Paragraph(paragraph) => {
                 let mut block_text = String::new();
-                dbg!(&paragraph);
                 block_text.push_str(&paragraph.selected_text());
                 if !block_text.is_empty() {
                     text.push_str(&block_text);
@@ -444,7 +444,6 @@ impl Paragraph {
 
             if let Some(image) = &inline_node.image {
                 if text.len() > 0 {
-                    // Save actully rendered text for selected text to use.
                     inline_node.state.set_text(text.clone().into());
                     child_nodes.push(
                         Inline::new(
@@ -523,7 +522,6 @@ impl Paragraph {
 
         // Add the last text node
         if text.len() > 0 {
-            // Save actully rendered text for selected text to use.
             self.state.set_text(text.into());
             child_nodes
                 .push(Inline::new(ix, self.state.clone(), links, highlights).into_any_element());
