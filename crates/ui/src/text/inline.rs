@@ -31,13 +31,13 @@ pub(super) struct Inline {
 #[derive(Debug, Default, PartialEq, Clone)]
 pub(super) struct InlineState {
     hovered_index: Rc<RefCell<Option<usize>>>,
-    /// The text that actully rendering, matched with selection.
+    /// The text that actually rendering, matched with selection.
     pub(super) text: Rc<RefCell<SharedString>>,
     pub(super) selection: Rc<RefCell<Option<Selection>>>,
 }
 
 impl InlineState {
-    /// Save actully rendered text for selected text to use.
+    /// Save actually rendered text for selected text to use.
     pub(crate) fn set_text(&self, text: SharedString) {
         *self.text.borrow_mut() = text;
     }
