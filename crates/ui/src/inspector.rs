@@ -3,20 +3,21 @@ use std::cell::OnceCell;
 use gpui::{
     actions, div, prelude::FluentBuilder, px, AnyElement, App, AppContext as _, Context,
     DivInspectorState, Entity, Inspector, InspectorElementId, InteractiveElement as _, IntoElement,
-    KeyBinding, ParentElement as _, Render, SharedString, Styled, Window,
+    KeyBinding, ParentElement as _, Render, SharedString, StyleRefinement, Styled, Window,
 };
 
 use crate::{
+    alert::Alert,
     button::{Button, ButtonVariants},
     clipboard::Clipboard,
     description_list::DescriptionList,
     h_flex,
-    input::{InputState, TextInput},
+    input::{InputEvent, InputState, TextInput},
     link::Link,
     v_flex, ActiveTheme, IconName, Selectable, Sizable, TITLE_BAR_HEIGHT,
 };
 
-actions!(inspector, [ToggleInspector]);
+actions!(inspector, [ToggleInspector, ResetStyle]);
 
 /// Initialize the inspector and register the action to toggle it.
 pub fn init(cx: &mut App) {
@@ -43,7 +44,7 @@ pub fn init(cx: &mut App) {
     cx.register_inspector_element(move |id, state: &DivInspectorState, window, cx| {
         let el = inspector_el.get_or_init(|| cx.new(|cx| DivInspector::new(window, cx)));
         el.update(cx, |this, cx| {
-            this.set_inspector_state(id, state.clone(), cx);
+            this.update_inspected_element(id, state.clone(), window, cx);
             this.render(window, cx).into_any_element()
         })
     });
@@ -55,55 +56,103 @@ pub struct DivInspector {
     inspector_id: Option<InspectorElementId>,
     inspector_state: Option<DivInspectorState>,
     input_state: Entity<InputState>,
+    /// Error message for JSON style parsing
+    json_err: Option<SharedString>,
+    /// Initial style before any edits
+    initial_style: StyleRefinement,
 }
 
 impl DivInspector {
-    pub fn new(window: &mut Window, cx: &mut App) -> Self {
+    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let input_state = cx.new(|cx| {
             InputState::new(window, cx)
                 .code_editor("json")
                 .line_number(false)
-                .disabled(true)
         });
+
+        cx.subscribe_in(
+            &input_state,
+            window,
+            |this: &mut DivInspector, _, event: &InputEvent, window, cx| match event {
+                InputEvent::Change(new_style) => {
+                    this.edit_json(new_style, window, cx);
+                }
+                _ => {}
+            },
+        )
+        .detach();
 
         Self {
             inspector_id: None,
             inspector_state: None,
             input_state,
+            json_err: None,
+            initial_style: Default::default(),
         }
     }
 
-    pub fn set_inspector_state(
+    pub fn update_inspected_element(
         &mut self,
         inspector_id: InspectorElementId,
         state: DivInspectorState,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.inspector_id = Some(inspector_id);
+        // Skip updating if the inspector ID hasn't changed
+        if self.inspector_id.as_ref() == Some(&inspector_id) {
+            return;
+        }
+
+        self.initial_style = state.base_style.as_ref().clone();
+        self.input_state.update(cx, |input_state, cx| {
+            input_state.set_value(style_to_json(&self.initial_style), window, cx);
+        });
+        self.inspector_id = Some(inspector_id.clone());
         self.inspector_state = Some(state);
         cx.notify();
     }
+
+    fn edit_json(&mut self, new_style: &str, window: &mut Window, cx: &mut Context<Self>) {
+        match serde_json::from_str::<StyleRefinement>(new_style) {
+            Ok(style) => {
+                self.json_err = None;
+                window.with_inspector_state::<DivInspectorState, _>(
+                    self.inspector_id.as_ref(),
+                    cx,
+                    |state, _window| {
+                        if let Some(state) = state {
+                            *state.base_style = style;
+                        }
+                    },
+                );
+            }
+            Err(e) => {
+                let e = format!("{}", e);
+                self.json_err = Some(e.into());
+            }
+        }
+        window.refresh();
+    }
+
+    fn reset_style(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.input_state.update(cx, |input_state, cx| {
+            input_state.set_value(style_to_json(&self.initial_style), window, cx);
+        });
+        if let Some(state) = self.inspector_state.as_mut() {
+            *state.base_style = self.initial_style.clone();
+        }
+    }
+}
+
+fn style_to_json(style: &StyleRefinement) -> String {
+    serde_json::to_string_pretty(style).unwrap_or_else(|e| format!("{{ \"error\": \"{}\" }}", e))
 }
 
 impl Render for DivInspector {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let input_state = self.input_state.clone();
-        let last_styles = input_state.read(cx).value().clone();
-
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex().size_full().gap_3().text_sm().when_some(
-            self.inspector_state.clone(),
+            self.inspector_state.as_ref(),
             |this, state| {
-                let styles = serde_json::to_string_pretty(&state.base_style);
-                let styles: SharedString = match styles {
-                    Ok(json) => json,
-                    Err(e) => format!("{{ \"error\": \"{}\" }}", e),
-                }
-                .into();
-
-                if styles != last_styles {
-                    input_state.update(cx, |s, cx| s.set_value(styles.clone(), window, cx));
-                }
-
                 this.child(
                     DescriptionList::new()
                         .columns(1)
@@ -120,17 +169,31 @@ impl Render for DivInspector {
                         .gap_1()
                         .text_sm()
                         .text_color(cx.theme().description_list_label_foreground)
-                        .child("Styles")
+                        .child(
+                            h_flex()
+                                .gap_1()
+                                .child(div().flex_1().child("Styles"))
+                                .child({
+                                    Button::new("reset-style")
+                                        .label("Reset")
+                                        .small()
+                                        .ghost()
+                                        .on_click(cx.listener(|this, _, window, cx| {
+                                            this.reset_style(window, cx);
+                                        }))
+                                }),
+                        )
                         .child(
                             div()
                                 .flex_1()
                                 .w_full()
                                 .font_family("Monaco")
                                 .text_size(px(12.))
-                                .border_1()
-                                .border_color(cx.theme().border)
-                                .child(TextInput::new(&input_state).h_full().appearance(false)),
-                        ),
+                                .child(TextInput::new(&self.input_state).h_full()),
+                        )
+                        .when_some(self.json_err.clone(), |this, err| {
+                            this.child(Alert::error("inspector-error", err))
+                        }),
                 )
             },
         )
