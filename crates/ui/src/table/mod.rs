@@ -1045,7 +1045,9 @@ where
             let is_last_row = row_ix == rows_count - 1;
             let table_is_filled = extra_rows_count == 0;
             let need_render_border = if is_last_row {
-                if table_is_filled {
+                if is_selected {
+                    true
+                } else if table_is_filled {
                     false
                 } else {
                     !self.stripe
