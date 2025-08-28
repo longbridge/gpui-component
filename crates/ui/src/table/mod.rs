@@ -1054,15 +1054,18 @@ where
                 true
             };
 
-            self.delegate
-                .render_tr(row_ix, window, cx)
-                .h_flex()
+            let mut tr = self.delegate.render_tr(row_ix, window, cx);
+            let tr_has_bg = tr.style().background.is_some();
+
+            tr.h_flex()
                 .w_full()
                 .h(self.size.table_row_height())
                 .when(need_render_border, |this| {
                     this.border_b_1().border_color(cx.theme().table_row_border)
                 })
-                .when(is_stripe_row, |this| this.bg(cx.theme().table_even))
+                .when(is_stripe_row && !tr_has_bg, |this| {
+                    this.bg(cx.theme().table_even)
+                })
                 .hover(|this| {
                     if is_selected || self.right_clicked_row == Some(row_ix) {
                         this
