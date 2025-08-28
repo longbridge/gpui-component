@@ -1055,7 +1055,7 @@ where
             };
 
             let mut tr = self.delegate.render_tr(row_ix, window, cx);
-            let tr_has_bg = tr.style().background.is_some();
+            let style = tr.style().clone();
 
             tr.h_flex()
                 .w_full()
@@ -1063,9 +1063,8 @@ where
                 .when(need_render_border, |this| {
                     this.border_b_1().border_color(cx.theme().table_row_border)
                 })
-                .when(is_stripe_row && !tr_has_bg, |this| {
-                    this.bg(cx.theme().table_even)
-                })
+                .when(is_stripe_row, |this| this.bg(cx.theme().table_even))
+                .refine_style(&style)
                 .hover(|this| {
                     if is_selected || self.right_clicked_row == Some(row_ix) {
                         this
