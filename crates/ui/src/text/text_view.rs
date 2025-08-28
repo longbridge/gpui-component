@@ -137,8 +137,7 @@ impl TextViewState {
 
     /// Save bounds and unselect if bounds changed.
     fn update_bounds(&mut self, bounds: Bounds<Pixels>) {
-        let changed = self.bounds != bounds;
-        if changed {
+        if self.bounds.size != bounds.size {
             self.clear_selection();
         }
         self.bounds = bounds;
