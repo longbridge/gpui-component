@@ -3,7 +3,7 @@ use std::ops::Range;
 use gpui::{
     div, img, prelude::FluentBuilder as _, px, relative, rems, AnyElement, App, DefiniteLength,
     Div, ElementId, FontStyle, FontWeight, Half, HighlightStyle, InteractiveElement as _,
-    IntoElement, Length, ObjectFit, ParentElement, Rems, RenderOnce, SharedString, SharedUri,
+    IntoElement, Length, ObjectFit, ParentElement, Rems, SharedString, SharedUri,
     StatefulInteractiveElement, Styled, StyledImage as _, StyledText, Window,
 };
 use markdown::mdast;
@@ -136,7 +136,7 @@ impl InlineNode {
 ///
 /// Unlike other Element, this is cloneable, because it is used in the Node AST.
 /// We are keep the selection state inside this AST Nodes.
-#[derive(Debug, Default, Clone, PartialEq, IntoElement)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub(crate) struct Paragraph {
     pub(super) span: Option<Span>,
     pub(super) children: Vec<InlineNode>,
@@ -425,10 +425,10 @@ impl Node {
     }
 }
 
-impl RenderOnce for Paragraph {
-    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+impl Paragraph {
+    fn render(&self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let span = self.span;
-        let children = self.children;
+        let children = &self.children;
 
         let mut child_nodes: Vec<AnyElement> = vec![];
 
@@ -438,7 +438,7 @@ impl RenderOnce for Paragraph {
         let mut offset = 0;
 
         let mut ix = 0;
-        for inline_node in children.into_iter() {
+        for inline_node in children {
             let text_len = inline_node.text.len();
             text.push_str(&inline_node.text);
 
@@ -482,7 +482,7 @@ impl RenderOnce for Paragraph {
                 offset = 0;
             } else {
                 let mut node_highlights = vec![];
-                for (range, style) in inline_node.marks {
+                for (range, style) in &inline_node.marks {
                     let inner_range = (offset + range.start)..(offset + range.end);
 
                     let mut highlight = HighlightStyle::default();
@@ -502,14 +502,14 @@ impl RenderOnce for Paragraph {
                         highlight.background_color = Some(cx.theme().accent);
                     }
 
-                    if let Some(link_mark) = style.link {
+                    if let Some(link_mark) = &style.link {
                         highlight.color = Some(cx.theme().link);
                         highlight.underline = Some(gpui::UnderlineStyle {
                             thickness: gpui::px(1.),
                             ..Default::default()
                         });
 
-                        links.push((inner_range.clone(), link_mark));
+                        links.push((inner_range.clone(), link_mark.clone()));
                     }
 
                     node_highlights.push((inner_range, highlight));
@@ -542,7 +542,7 @@ pub(crate) struct ListState {
 
 impl Node {
     fn render_list_item(
-        item: Node,
+        item: &Node,
         ix: usize,
         state: ListState,
         text_view_style: &TextViewStyle,
@@ -556,7 +556,7 @@ impl Node {
                 checked,
             } => v_flex()
                 .id("li")
-                .when(spread, |this| this.child(div()))
+                .when(*spread, |this| this.child(div()))
                 .children({
                     let mut items: Vec<Div> = Vec::with_capacity(children.len());
                     for (child_ix, child) in children.iter().enumerate() {
@@ -602,7 +602,7 @@ impl Node {
                                                 state.depth,
                                             ))
                                         })
-                                        .when_some(checked, |this, checked| {
+                                        .when_some(*checked, |this, checked| {
                                             // Todo list checkbox
                                             this.child(
                                                 div()
@@ -652,7 +652,7 @@ impl Node {
         }
     }
 
-    fn render_table(item: &Node, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render_table(item: &Node, window: &mut Window, cx: &mut App) -> impl IntoElement {
         const DEFAULT_LENGTH: usize = 5;
         const MAX_LENGTH: usize = 150;
         let col_lens = match item {
@@ -723,7 +723,7 @@ impl Node {
                                                         .border_color(cx.theme().border)
                                                 })
                                                 .truncate()
-                                                .child(cell.children.clone()),
+                                                .child(cell.children.render(window, cx)),
                                         )
                                     }
                                     cells
@@ -738,7 +738,7 @@ impl Node {
     }
 
     fn render_codeblock(
-        code_block: CodeBlock,
+        code_block: &CodeBlock,
         mb: Rems,
         _: &TextViewStyle,
         _: &mut Window,
@@ -753,12 +753,14 @@ impl Node {
             .font_family("Menlo, Monaco, Consolas, monospace")
             .text_size(rems(0.875))
             .relative()
-            .child(StyledText::new(code_block.code.clone()).with_highlights(code_block.styles))
+            .child(
+                StyledText::new(code_block.code.clone()).with_highlights(code_block.styles.clone()),
+            )
             .into_any_element()
     }
 
     pub(crate) fn render(
-        self,
+        &self,
         list_state: Option<ListState>,
         is_root: bool,
         is_last_child: bool,
@@ -784,7 +786,11 @@ impl Node {
                     })
                 })
                 .into_any_element(),
-            Node::Paragraph(paragraph) => div().id("p").mb(mb).child(paragraph).into_any_element(),
+            Node::Paragraph(paragraph) => div()
+                .id("p")
+                .mb(mb)
+                .child(paragraph.render(window, cx))
+                .into_any_element(),
             Node::Heading { level, children } => {
                 let (text_size, font_weight) = match level {
                     1 => (rems(2.), FontWeight::BOLD),
@@ -799,12 +805,12 @@ impl Node {
                 let text_size = text_size.to_pixels(style.heading_base_font_size);
 
                 h_flex()
-                    .id(("h", level as usize))
+                    .id(("h", *level as usize))
                     .mb(rems(0.3))
                     .whitespace_normal()
                     .text_size(text_size)
                     .font_weight(font_weight)
-                    .child(children)
+                    .child(children.render(window, cx))
                     .into_any_element()
             }
             Node::Blockquote { children } => div()
@@ -824,7 +830,7 @@ impl Node {
                 })
                 .into_any_element(),
             Node::List { children, ordered } => v_flex()
-                .id(if ordered { "ol" } else { "ul" })
+                .id(if *ordered { "ol" } else { "ul" })
                 .mb(mb)
                 .children({
                     let mut items = Vec::with_capacity(children.len());
@@ -834,10 +840,10 @@ impl Node {
                         let is_item = item.is_list_item();
 
                         items.push(Self::render_list_item(
-                            item,
+                            &item,
                             ix,
                             ListState {
-                                ordered,
+                                ordered: *ordered,
                                 todo: list_state.todo,
                                 depth: list_state.depth,
                             },

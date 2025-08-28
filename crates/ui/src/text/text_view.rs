@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Instant};
+use std::{rc::Rc, sync::Arc, time::Instant};
 
 use gpui::{
     div, px, rems, AnyElement, App, Bounds, ClipboardItem, Element, ElementId, Entity, FocusHandle,
@@ -67,7 +67,7 @@ pub struct TextView {
 
 #[derive(Default, Clone, PartialEq)]
 pub(crate) struct TextViewState {
-    root: Option<Result<node::Node, SharedString>>,
+    root: Option<Result<Rc<node::Node>, SharedString>>,
 
     raw: SharedString,
     focus_handle: Option<FocusHandle>,
@@ -103,7 +103,7 @@ impl TextViewState {
 }
 
 impl TextViewState {
-    pub(super) fn root(&self) -> Result<node::Node, SharedString> {
+    pub(super) fn root(&self) -> Result<Rc<node::Node>, SharedString> {
         self.root
             .clone()
             .expect("The `root` should call `parse_if_needed` before to use.")
@@ -131,11 +131,14 @@ impl TextViewState {
         self.raw = new_text;
         // NOTE: About 100ms
         // let measure = crate::Measure::new("parse_markdown");
-        self.root = Some(if is_html {
-            super::format::html::parse(&self.raw)
-        } else {
-            super::format::markdown::parse(&self.raw, &style, cx)
-        });
+        self.root = Some(
+            if is_html {
+                super::format::html::parse(&self.raw)
+            } else {
+                super::format::markdown::parse(&self.raw, &style, cx)
+            }
+            .map(Rc::new),
+        );
         // measure.end();
         self._last_parsed = Some(Instant::now());
         self.style = style.clone();
