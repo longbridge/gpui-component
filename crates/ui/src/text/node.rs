@@ -4,7 +4,7 @@ use gpui::{
     div, img, prelude::FluentBuilder as _, px, relative, rems, AnyElement, App, DefiniteLength,
     Div, ElementId, FontStyle, FontWeight, Half, HighlightStyle, InteractiveElement as _,
     IntoElement, Length, ObjectFit, ParentElement, Rems, SharedString, SharedUri,
-    StatefulInteractiveElement, Styled, StyledImage as _, StyledText, Window,
+    StatefulInteractiveElement, Styled, StyledImage as _, Window,
 };
 use markdown::mdast;
 
@@ -268,9 +268,9 @@ impl Paragraph {
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct CodeBlock {
-    code: SharedString,
     lang: Option<SharedString>,
     styles: Vec<(Range<usize>, HighlightStyle)>,
+    state: InlineState,
 }
 
 impl CodeBlock {
@@ -288,7 +288,46 @@ impl CodeBlock {
             styles = highlighter.styles(&(0..code.len()), &theme);
         };
 
-        Self { code, lang, styles }
+        let state = InlineState::default();
+        state.set_text(code);
+
+        Self {
+            lang,
+            styles,
+            state,
+        }
+    }
+
+    fn code(&self) -> SharedString {
+        self.state.text.borrow().clone()
+    }
+
+    pub(super) fn selected_text(&self) -> String {
+        let mut text = String::new();
+        if let Some(selection) = self.state.selection.borrow().as_ref() {
+            let part_text = self.state.text.borrow().clone();
+            text.push_str(&part_text[selection.start.offset()..selection.end.offset()]);
+        }
+        text
+    }
+
+    fn render(&self, mb: Rems, _: &mut Window, cx: &mut App) -> AnyElement {
+        div()
+            .id("codeblock")
+            .mb(mb)
+            .p_3()
+            .rounded(cx.theme().radius)
+            .bg(cx.theme().accent)
+            .font_family("Menlo, Monaco, Consolas, monospace")
+            .text_size(rems(0.875))
+            .relative()
+            .child(Inline::new(
+                "code",
+                self.state.clone(),
+                vec![],
+                self.styles.clone(),
+            ))
+            .into_any_element()
     }
 }
 
@@ -418,7 +457,14 @@ impl Node {
                     text.push('\n');
                 }
             }
-            Node::CodeBlock(_) | Node::Break { .. } | Node::Divider | Node::Unknown => {}
+            Node::CodeBlock(code_block) => {
+                let block_text = code_block.selected_text();
+                if !block_text.is_empty() {
+                    text.push_str(&block_text);
+                    text.push('\n');
+                }
+            }
+            Node::Break { .. } | Node::Divider | Node::Unknown => {}
         }
 
         text
@@ -735,28 +781,6 @@ impl Node {
         }
     }
 
-    fn render_codeblock(
-        code_block: &CodeBlock,
-        mb: Rems,
-        _: &TextViewStyle,
-        _: &mut Window,
-        cx: &mut App,
-    ) -> AnyElement {
-        div()
-            .id("codeblock")
-            .mb(mb)
-            .p_3()
-            .rounded(cx.theme().radius)
-            .bg(cx.theme().accent)
-            .font_family("Menlo, Monaco, Consolas, monospace")
-            .text_size(rems(0.875))
-            .relative()
-            .child(
-                StyledText::new(code_block.code.clone()).with_highlights(code_block.styles.clone()),
-            )
-            .into_any_element()
-    }
-
     pub(crate) fn render(
         &self,
         list_state: Option<ListState>,
@@ -857,9 +881,7 @@ impl Node {
                     items
                 })
                 .into_any_element(),
-            Node::CodeBlock(code_block) => {
-                Self::render_codeblock(code_block, mb, style, window, cx)
-            }
+            Node::CodeBlock(code_block) => code_block.render(mb, window, cx),
             Node::Table { .. } => Self::render_table(&self, window, cx).into_any_element(),
             Node::Divider => div()
                 .id("divider")
@@ -992,7 +1014,7 @@ impl Node {
                 format!(
                     "```{}\n{}\n```",
                     code_block.lang.clone().unwrap_or_default(),
-                    code_block.code
+                    code_block.code()
                 )
             }
             Node::Table(table) => {
