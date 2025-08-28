@@ -102,17 +102,18 @@ impl PartialEq for ImageNode {
 #[derive(Default, Clone, Debug, PartialEq)]
 pub(crate) struct InlineNode {
     /// The text content.
-    pub text: String,
-    pub image: Option<ImageNode>,
+    pub(crate) text: SharedString,
+    pub(crate) image: Option<ImageNode>,
     /// The text styles, each tuple contains the range of the text and the style.
-    pub marks: Vec<(Range<usize>, TextMark)>,
+    pub(crate) marks: Vec<(Range<usize>, TextMark)>,
+
     state: InlineState,
 }
 
 impl InlineNode {
-    pub(crate) fn new(text: &str) -> Self {
+    pub(crate) fn new(text: impl Into<SharedString>) -> Self {
         Self {
-            text: text.to_string(),
+            text: text.into(),
             image: None,
             marks: vec![],
             state: InlineState::default(),
@@ -139,10 +140,19 @@ impl InlineNode {
 pub(crate) struct Paragraph {
     pub(super) span: Option<Span>,
     pub(super) children: Vec<InlineNode>,
-    pub(super) state: InlineState,
+
+    pub(crate) state: InlineState,
 }
 
 impl Paragraph {
+    pub(crate) fn new(text: String) -> Self {
+        Self {
+            span: None,
+            children: vec![InlineNode::new(&text)],
+            state: InlineState::default(),
+        }
+    }
+
     pub(super) fn selected_text(&self) -> String {
         let mut text = String::new();
         for c in self.children.iter() {
@@ -157,16 +167,6 @@ impl Paragraph {
         }
 
         text
-    }
-}
-
-impl From<String> for Paragraph {
-    fn from(value: String) -> Self {
-        Self {
-            span: None,
-            children: vec![InlineNode::new(&value)],
-            state: InlineState::default(),
-        }
     }
 }
 
@@ -227,8 +227,9 @@ impl Paragraph {
     }
 
     pub(crate) fn push_str(&mut self, text: &str) {
-        self.children
-            .push(InlineNode::new(&text).marks(vec![(0..text.len(), TextMark::default())]));
+        self.children.push(
+            InlineNode::new(text.to_string()).marks(vec![(0..text.len(), TextMark::default())]),
+        );
     }
 
     pub(crate) fn push(&mut self, text: InlineNode) {
@@ -290,9 +291,7 @@ impl CodeBlock {
     }
 }
 
-/// Ref:
-/// https://ui.shadcn.com/docs/components/typography
-#[allow(unused)]
+/// The AST Node of the rich text.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Node {
     Root {
@@ -365,6 +364,7 @@ impl Node {
             }
             Node::Paragraph(paragraph) => {
                 let mut block_text = String::new();
+                dbg!(&paragraph);
                 block_text.push_str(&paragraph.selected_text());
                 if !block_text.is_empty() {
                     text.push_str(&block_text);
@@ -881,7 +881,7 @@ impl Paragraph {
             .children
             .iter()
             .map(|text_node| {
-                let mut text = text_node.text.clone();
+                let mut text = text_node.text.to_string();
                 for (range, style) in &text_node.marks {
                     if style.bold {
                         text = format!("**{}**", &text_node.text[range.clone()]);

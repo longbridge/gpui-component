@@ -1,6 +1,6 @@
-mod element;
 mod format;
 mod inline;
+mod node;
 mod text_view;
 mod utils;
 

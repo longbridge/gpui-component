@@ -12,7 +12,7 @@ use crate::{
     global_state::GlobalState,
     highlighter::HighlightTheme,
     input::{self},
-    text::element::{self},
+    text::node::{self},
 };
 
 const CONTEXT: &'static str = "TextView";
@@ -67,19 +67,20 @@ pub struct TextView {
 
 #[derive(Default, Clone, PartialEq)]
 pub(crate) struct TextViewState {
+    root: Option<Result<node::Node, SharedString>>,
+
     raw: SharedString,
     focus_handle: Option<FocusHandle>,
     style: TextViewStyle,
 
     /// The bounds of the text view
-    pub(crate) bounds: Bounds<Pixels>,
+    bounds: Bounds<Pixels>,
     /// The local (in TextView) position of the selection.
     selection_positions: (Option<Point<Pixels>>, Option<Point<Pixels>>),
     /// Is current in selection.
     is_selecting: bool,
     is_selectable: bool,
 
-    pub(super) root: Option<Result<element::Node, SharedString>>,
     _last_parsed: Option<Instant>,
 }
 
@@ -102,6 +103,12 @@ impl TextViewState {
 }
 
 impl TextViewState {
+    pub(super) fn root(&self) -> Result<node::Node, SharedString> {
+        self.root
+            .clone()
+            .expect("The `root` should call `parse_if_needed` before to use.")
+    }
+
     pub(super) fn parse_if_needed(
         &mut self,
         new_text: SharedString,

@@ -10,7 +10,7 @@ use gpui::{
 use crate::{
     global_state::GlobalState,
     input::{Cursor, Selection},
-    text::element::LinkMark,
+    text::node::LinkMark,
     ActiveTheme,
 };
 
@@ -26,6 +26,7 @@ pub(super) struct Inline {
     styled_text: StyledText,
 }
 
+/// The inline text state, used RefCell to keep the selection state.
 #[derive(Debug, Default, PartialEq, Clone)]
 pub(super) struct InlineState {
     hovered_index: Rc<RefCell<Option<usize>>>,

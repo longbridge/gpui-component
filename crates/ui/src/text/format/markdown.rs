@@ -9,7 +9,7 @@ use markdown::{
 
 use crate::{
     text::{
-        element::{
+        node::{
             self, CodeBlock, ImageNode, InlineNode, LinkMark, Paragraph, Span, Table, TableRow,
             TextMark,
         },
@@ -59,13 +59,7 @@ impl RenderOnce for MarkdownElement {
             state.parse_if_needed(self.text.clone(), false, &self.style, cx);
         });
 
-        let root = self
-            .state
-            .read(cx)
-            .root
-            .clone()
-            .unwrap_or_else(|| Err("Failed to parse markdown".into()));
-
+        let root = self.state.read(cx).root();
         div().map(|this| match root {
             Ok(node) => this.child(node.render(None, true, true, &self.style, window, cx)),
             Err(err) => this.child(
@@ -83,7 +77,7 @@ pub(crate) fn parse(
     raw: &str,
     style: &TextViewStyle,
     cx: &mut App,
-) -> Result<element::Node, SharedString> {
+) -> Result<node::Node, SharedString> {
     markdown::to_mdast(&raw, &ParseOptions::gfm())
         .map(|n| ast_to_node(n, style, cx))
         .map_err(|e| e.to_string().into())
@@ -102,12 +96,12 @@ fn parse_table_row(table: &mut Table, node: &mdast::TableRow) {
     table.children.push(row);
 }
 
-fn parse_table_cell(row: &mut element::TableRow, node: &mdast::TableCell) {
+fn parse_table_cell(row: &mut node::TableRow, node: &mdast::TableCell) {
     let mut paragraph = Paragraph::default();
     node.children.iter().for_each(|c| {
         parse_paragraph(&mut paragraph, c);
     });
-    let table_cell = element::TableCell {
+    let table_cell = node::TableCell {
         children: paragraph,
         ..Default::default()
     };
@@ -246,7 +240,7 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node) -> String {
     text
 }
 
-fn ast_to_node(value: mdast::Node, style: &TextViewStyle, cx: &mut App) -> element::Node {
+fn ast_to_node(value: mdast::Node, style: &TextViewStyle, cx: &mut App) -> node::Node {
     match value {
         Node::Root(val) => {
             let children = val
@@ -254,7 +248,7 @@ fn ast_to_node(value: mdast::Node, style: &TextViewStyle, cx: &mut App) -> eleme
                 .into_iter()
                 .map(|c| ast_to_node(c, style, cx))
                 .collect();
-            element::Node::Root { children }
+            node::Node::Root { children }
         }
         Node::Paragraph(val) => {
             let mut paragraph = Paragraph::default();
@@ -262,7 +256,7 @@ fn ast_to_node(value: mdast::Node, style: &TextViewStyle, cx: &mut App) -> eleme
                 parse_paragraph(&mut paragraph, c);
             });
 
-            element::Node::Paragraph(paragraph)
+            node::Node::Paragraph(paragraph)
         }
         Node::Blockquote(val) => {
             let children = val
@@ -270,7 +264,7 @@ fn ast_to_node(value: mdast::Node, style: &TextViewStyle, cx: &mut App) -> eleme
                 .into_iter()
                 .map(|c| ast_to_node(c, style, cx))
                 .collect();
-            element::Node::Blockquote { children }
+            node::Node::Blockquote { children }
         }
         Node::List(list) => {
             let children = list
@@ -278,7 +272,7 @@ fn ast_to_node(value: mdast::Node, style: &TextViewStyle, cx: &mut App) -> eleme
                 .into_iter()
                 .map(|c| ast_to_node(c, style, cx))
                 .collect();
-            element::Node::List {
+            node::Node::List {
                 ordered: list.ordered,
                 children,
             }
@@ -289,14 +283,14 @@ fn ast_to_node(value: mdast::Node, style: &TextViewStyle, cx: &mut App) -> eleme
                 .into_iter()
                 .map(|c| ast_to_node(c, style, cx))
                 .collect();
-            element::Node::ListItem {
+            node::Node::ListItem {
                 children,
                 spread: val.spread,
                 checked: val.checked,
             }
         }
-        Node::Break(_) => element::Node::Break { html: false },
-        Node::Code(raw) => element::Node::CodeBlock(CodeBlock::new(
+        Node::Break(_) => node::Node::Break { html: false },
+        Node::Code(raw) => node::Node::CodeBlock(CodeBlock::new(
             raw.value.into(),
             raw.lang.map(|s| s.into()),
             style,
@@ -308,14 +302,12 @@ fn ast_to_node(value: mdast::Node, style: &TextViewStyle, cx: &mut App) -> eleme
                 parse_paragraph(&mut paragraph, c);
             });
 
-            element::Node::Heading {
+            node::Node::Heading {
                 level: val.depth,
                 children: paragraph,
             }
         }
-        Node::Math(val) => {
-            element::Node::CodeBlock(CodeBlock::new(val.value.into(), None, style, cx))
-        }
+        Node::Math(val) => node::Node::CodeBlock(CodeBlock::new(val.value.into(), None, style, cx)),
         Node::Html(val) => match super::html::parse(&val.value) {
             Ok(el) => el,
             Err(err) => {
@@ -323,22 +315,22 @@ fn ast_to_node(value: mdast::Node, style: &TextViewStyle, cx: &mut App) -> eleme
                     tracing::warn!("error parsing html: {:#?}", err);
                 }
 
-                element::Node::Paragraph(val.value.into())
+                node::Node::Paragraph(Paragraph::new(val.value))
             }
         },
-        Node::MdxFlowExpression(val) => element::Node::CodeBlock(CodeBlock::new(
+        Node::MdxFlowExpression(val) => node::Node::CodeBlock(CodeBlock::new(
             val.value.into(),
             Some("mdx".into()),
             style,
             cx,
         )),
-        Node::Yaml(val) => element::Node::CodeBlock(CodeBlock::new(
+        Node::Yaml(val) => node::Node::CodeBlock(CodeBlock::new(
             val.value.into(),
             Some("yml".into()),
             style,
             cx,
         )),
-        Node::Toml(val) => element::Node::CodeBlock(CodeBlock::new(
+        Node::Toml(val) => node::Node::CodeBlock(CodeBlock::new(
             val.value.into(),
             Some("toml".into()),
             style,
@@ -349,16 +341,16 @@ fn ast_to_node(value: mdast::Node, style: &TextViewStyle, cx: &mut App) -> eleme
             val.children.iter().for_each(|c| {
                 parse_paragraph(&mut paragraph, c);
             });
-            element::Node::Paragraph(paragraph)
+            node::Node::Paragraph(paragraph)
         }
         Node::MdxJsxFlowElement(val) => {
             let mut paragraph = Paragraph::default();
             val.children.iter().for_each(|c| {
                 parse_paragraph(&mut paragraph, c);
             });
-            element::Node::Paragraph(paragraph)
+            node::Node::Paragraph(paragraph)
         }
-        Node::ThematicBreak(_) => element::Node::Divider,
+        Node::ThematicBreak(_) => node::Node::Divider,
         Node::Table(val) => {
             let mut table = Table::default();
             table.column_aligns = val
@@ -373,13 +365,13 @@ fn ast_to_node(value: mdast::Node, style: &TextViewStyle, cx: &mut App) -> eleme
                 }
             });
 
-            element::Node::Table(table)
+            node::Node::Table(table)
         }
         _ => {
             if cfg!(debug_assertions) {
                 tracing::warn!("unsupported node: {:#?}", value);
             }
-            element::Node::Unknown
+            node::Node::Unknown
         }
     }
 }
