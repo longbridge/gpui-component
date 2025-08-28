@@ -324,7 +324,7 @@ impl TextView {
             id,
             state: state.clone(),
             element: TextViewElement::Markdown(MarkdownElement::new(raw, state)),
-            selectable: true,
+            selectable: false,
         }
     }
 
