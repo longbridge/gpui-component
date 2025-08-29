@@ -14,8 +14,6 @@ pub struct ThemeColor {
     pub accent_foreground: Hsla,
     /// Accordion background color.
     pub accordion: Hsla,
-    /// Accordion active background color.
-    pub accordion_active: Hsla,
     /// Accordion hover background color.
     pub accordion_hover: Hsla,
     /// Default background color.

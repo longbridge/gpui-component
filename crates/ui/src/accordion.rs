@@ -247,9 +247,7 @@ impl RenderOnce for AccordionItem {
                             })
                         })
                         .when(!self.bordered, |this| {
-                            this.border_b_1()
-                                .border_color(cx.theme().border)
-                                .rounded_t(cx.theme().radius)
+                            this.border_b_1().border_color(cx.theme().border)
                         })
                         .child(
                             h_flex()

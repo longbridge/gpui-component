@@ -57,9 +57,6 @@ pub struct ThemeConfigColors {
     /// Accordion background color.
     #[serde(rename = "accordion.background")]
     pub accordion: Option<SharedString>,
-    /// Accordion active background color.
-    #[serde(rename = "accordion.active.background")]
-    pub accordion_active: Option<SharedString>,
     /// Accordion hover background color.
     #[serde(rename = "accordion.hover.background")]
     pub accordion_hover: Option<SharedString>,
@@ -507,8 +504,7 @@ impl ThemeColor {
         apply_color!(accent, fallback = self.secondary);
         apply_color!(accent_foreground, fallback = self.secondary_foreground);
         apply_color!(accordion, fallback = self.background);
-        apply_color!(accordion_active, fallback = self.accordion);
-        apply_color!(accordion_hover, fallback = self.accordion);
+        apply_color!(accordion_hover, fallback = self.accent.opacity(0.8));
         apply_color!(
             group_box,
             fallback = self
