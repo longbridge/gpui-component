@@ -13,16 +13,10 @@ const SHADOW_SIZE: Pixels = Pixels(0.0);
 #[cfg(target_os = "linux")]
 const SHADOW_SIZE: Pixels = Pixels(12.0);
 const BORDER_SIZE: Pixels = Pixels(1.0);
-pub(crate) const BORDER_RADIUS: Pixels = Pixels(0.0);
-
-/// Create a new window border.
-pub fn window_border() -> WindowBorder {
-    WindowBorder::new()
-}
 
 /// Window border use to render a custom window border and shadow for Linux.
 #[derive(IntoElement, Default)]
-pub struct WindowBorder {
+pub(crate) struct WindowBorder {
     children: Vec<AnyElement>,
 }
 
@@ -115,10 +109,10 @@ impl RenderOnce for WindowBorder {
                         .absolute(),
                     )
                     .when(!(tiling.top || tiling.right), |div| {
-                        div.rounded_tr(BORDER_RADIUS)
+                        div.rounded_tr(cx.theme().radius_lg)
                     })
                     .when(!(tiling.top || tiling.left), |div| {
-                        div.rounded_tl(BORDER_RADIUS)
+                        div.rounded_tl(cx.theme().radius_lg)
                     })
                     .when(!tiling.top, |div| div.pt(SHADOW_SIZE))
                     .when(!tiling.bottom, |div| div.pb(SHADOW_SIZE))
@@ -142,10 +136,10 @@ impl RenderOnce for WindowBorder {
                         Decorations::Client { tiling } => div
                             // .border_color(cx.theme().window_border)
                             .when(!(tiling.top || tiling.right), |div| {
-                                div.rounded_tr(BORDER_RADIUS)
+                                div.rounded_tr(cx.theme().radius_lg)
                             })
                             .when(!(tiling.top || tiling.left), |div| {
-                                div.rounded_tl(BORDER_RADIUS)
+                                div.rounded_tl(cx.theme().radius_lg)
                             })
                             .border_color(cx.theme().window_border)
                             .when(!tiling.top, |div| div.border_t(BORDER_SIZE))
