@@ -10,8 +10,6 @@
       "colors": {
         "accent.background": "#1c1d39",
         "accent.foreground": "#ecf0c1",
-        "accordion.active.background": "#003a5b",
-        "accordion.hover.background": "#4b6479",
         "background": "#0F111B",
         "border": "#272C42",
         "foreground": "#ecf0c1",

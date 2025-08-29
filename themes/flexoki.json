@@ -238,10 +238,8 @@
       "name": "Flexoki Dark",
       "mode": "dark",
       "colors": {
-        "accent.background": "#343331",
+        "accent.background": "#1f1d1c",
         "accent.foreground": "#CECDC3",
-        "accordion.active.background": "#282726",
-        "accordion.hover.background": "#343331",
         "background": "#100F0F",
         "border": "#282726",
         "ring": "#AD8301",

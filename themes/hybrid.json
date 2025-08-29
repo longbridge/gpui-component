@@ -8,10 +8,8 @@
       "name": "Hybrid Light",
       "mode": "light",
       "colors": {
-        "accent.background": "#D4E2E2",
+        "accent.background": "#d3d8da",
         "accent.foreground": "#1c1c1c",
-        "accordion.active.background": "#d3d3d3",
-        "accordion.hover.background": "#c0c0c0",
         "background": "#E4E4E4",
         "border": "#CACACA",
         "danger.background": "#ff5f5f",
@@ -155,10 +153,8 @@
       "name": "Hybrid Dark",
       "mode": "dark",
       "colors": {
-        "accent.background": "#313E40",
+        "accent.background": "#292f30",
         "accent.foreground": "#e8e8e8",
-        "accordion.active.background": "#1c1c1c",
-        "accordion.hover.background": "#3a3a3a",
         "background": "#1D1F21",
         "border": "#34373c",
         "card.background": "#1D1F21",
