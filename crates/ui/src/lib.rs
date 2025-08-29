@@ -9,7 +9,6 @@ mod kbd;
 mod menu;
 mod root;
 mod styled;
-mod svg_img;
 mod time;
 mod title_bar;
 mod virtual_list;
@@ -85,7 +84,6 @@ pub use window_border::{window_border, window_paddings, WindowBorder};
 
 pub use icon::*;
 pub use kbd::*;
-pub use svg_img::*;
 pub use theme::*;
 
 use std::ops::Deref;
