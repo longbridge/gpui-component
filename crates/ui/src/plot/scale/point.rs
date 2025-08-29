@@ -9,7 +9,6 @@ use super::Scale;
 pub struct ScalePoint<T> {
     domain: Vec<T>,
     range_tick: f32,
-    least_index_range_tick: f32,
 }
 
 impl<T> ScalePoint<T>
@@ -18,8 +17,8 @@ where
 {
     pub fn new(domain: Vec<T>, range: Vec<f32>) -> Self {
         let len = domain.len();
-        let (range_tick, least_index_range_tick) = if len.is_zero() {
-            (0., 0.)
+        let range_tick = if len.is_zero() {
+            0.
         } else {
             let range_diff = range
                 .iter()
@@ -28,20 +27,13 @@ where
                 .map_or(0., |(min, max)| max - min);
 
             if len == 1 {
-                (range_diff, range_diff)
+                range_diff
             } else {
-                (
-                    range_diff / len.saturating_sub(1) as f32,
-                    range_diff / len as f32,
-                )
+                range_diff / len.saturating_sub(1) as f32
             }
         };
 
-        Self {
-            domain,
-            range_tick,
-            least_index_range_tick,
-        }
+        Self { domain, range_tick }
     }
 }
 
@@ -63,7 +55,7 @@ where
             return 0;
         }
 
-        let index = (tick / self.least_index_range_tick).round() as usize;
+        let index = (tick / self.range_tick).round() as usize;
         index.min(self.domain.len().saturating_sub(1))
     }
 }
