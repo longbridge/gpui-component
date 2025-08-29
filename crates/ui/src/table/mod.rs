@@ -378,8 +378,16 @@ where
         self.set_selected_col(col_ix, cx)
     }
 
+    fn has_selection(&self) -> bool {
+        self.selected_row.is_some() || self.selected_col.is_some()
+    }
+
     fn action_cancel(&mut self, _: &Cancel, _: &mut Window, cx: &mut Context<Self>) {
-        self.clear_selection(cx);
+        if self.has_selection() {
+            self.clear_selection(cx);
+            return;
+        }
+        cx.propagate();
     }
 
     fn action_select_prev(&mut self, _: &SelectPrev, _: &mut Window, cx: &mut Context<Self>) {
