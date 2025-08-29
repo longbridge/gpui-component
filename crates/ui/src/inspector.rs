@@ -1,9 +1,10 @@
-use std::cell::OnceCell;
+use std::{cell::OnceCell, collections::HashMap, fmt::Write as _, sync::OnceLock};
 
 use gpui::{
-    actions, div, prelude::FluentBuilder, px, AnyElement, App, AppContext as _, Context,
-    DivInspectorState, Entity, Inspector, InspectorElementId, InteractiveElement as _, IntoElement,
-    KeyBinding, ParentElement as _, Render, SharedString, StyleRefinement, Styled, Window,
+    actions, div, inspector_reflection::FunctionReflection, prelude::FluentBuilder, px,
+    styled_reflection, AnyElement, App, AppContext, Context, DivInspectorState, Entity, Inspector,
+    InspectorElementId, InteractiveElement as _, IntoElement, KeyBinding, ParentElement as _,
+    Refineable as _, Render, SharedString, StyleRefinement, Styled, Window,
 };
 
 use crate::{
@@ -12,9 +13,10 @@ use crate::{
     clipboard::Clipboard,
     description_list::DescriptionList,
     h_flex,
-    input::{InputEvent, InputState, TextInput},
+    input::{InputEvent, InputState, TabSize, TextInput},
     link::Link,
-    v_flex, ActiveTheme, IconName, Selectable, Sizable, TITLE_BAR_HEIGHT,
+    popover::{Popover, PopoverContent},
+    styled_ext_reflection, v_flex, ActiveTheme, IconName, Selectable, Sizable, TITLE_BAR_HEIGHT,
 };
 
 actions!(inspector, [ToggleInspector, ResetStyle]);
@@ -55,23 +57,39 @@ pub fn init(cx: &mut App) {
 pub struct DivInspector {
     inspector_id: Option<InspectorElementId>,
     inspector_state: Option<DivInspectorState>,
-    input_state: Entity<InputState>,
+    json_input_state: Entity<InputState>,
+    rust_input_state: Entity<InputState>,
+    ignore_json_edit: bool,
+    ignore_rust_edit: bool,
     /// Error message for JSON style parsing
     json_err: Option<SharedString>,
+    /// Error message for Rust style parsing
+    rust_err: Option<SharedString>,
     /// Initial style before any edits
     initial_style: StyleRefinement,
+    /// Style that could not be converted to Rust
+    unconvertible_style: StyleRefinement,
 }
 
 impl DivInspector {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let input_state = cx.new(|cx| {
+        let json_input_state = cx.new(|cx| {
             InputState::new(window, cx)
                 .code_editor("json")
                 .line_number(false)
         });
+        let rust_input_state = cx.new(|cx| {
+            InputState::new(window, cx)
+                .code_editor("rust")
+                .line_number(false)
+                .tab_size(TabSize {
+                    tab_size: 4,
+                    hard_tabs: false,
+                })
+        });
 
         cx.subscribe_in(
-            &input_state,
+            &json_input_state,
             window,
             |this: &mut DivInspector, _, event: &InputEvent, window, cx| match event {
                 InputEvent::Change(new_style) => {
@@ -81,13 +99,29 @@ impl DivInspector {
             },
         )
         .detach();
+        cx.subscribe_in(
+            &rust_input_state,
+            window,
+            |this: &mut DivInspector, _, event: &InputEvent, window, cx| match event {
+                InputEvent::Change(new_style) => {
+                    this.edit_rust(new_style, window, cx);
+                }
+                _ => {}
+            },
+        )
+        .detach();
 
         Self {
             inspector_id: None,
             inspector_state: None,
-            input_state,
+            json_input_state,
+            rust_input_state,
+            ignore_json_edit: false,
+            ignore_rust_edit: false,
             json_err: None,
+            rust_err: None,
             initial_style: Default::default(),
+            unconvertible_style: Default::default(),
         }
     }
 
@@ -103,49 +137,205 @@ impl DivInspector {
             return;
         }
 
-        self.initial_style = state.base_style.as_ref().clone();
-        self.input_state.update(cx, |input_state, cx| {
-            input_state.set_value(style_to_json(&self.initial_style), window, cx);
-        });
-        self.inspector_id = Some(inspector_id.clone());
+        let initial_style = state.base_style.as_ref();
+        self.initial_style = initial_style.clone();
+        self.ignore_json_edit = true;
+        self.update_json_from_style(initial_style, window, cx);
+        self.ignore_rust_edit = true;
+        let rust_style = self.update_rust_from_style(initial_style, window, cx);
+        self.unconvertible_style = initial_style.subtract(&rust_style);
+        self.inspector_id = Some(inspector_id);
         self.inspector_state = Some(state);
         cx.notify();
     }
 
     fn edit_json(&mut self, new_style: &str, window: &mut Window, cx: &mut Context<Self>) {
+        if self.ignore_json_edit {
+            self.ignore_json_edit = false;
+            return;
+        }
+
         match serde_json::from_str::<StyleRefinement>(new_style) {
             Ok(style) => {
                 self.json_err = None;
-                window.with_inspector_state::<DivInspectorState, _>(
-                    self.inspector_id.as_ref(),
-                    cx,
-                    |state, _window| {
-                        if let Some(state) = state {
-                            *state.base_style = style;
-                        }
-                    },
-                );
+                self.rust_err = None;
+                self.ignore_rust_edit = true;
+                let rust_style = self.update_rust_from_style(&style, window, cx);
+                self.unconvertible_style = style.subtract(&rust_style);
+                self.update_element_style(style, window, cx);
             }
             Err(e) => {
                 let e = format!("{}", e);
                 self.json_err = Some(e.into());
+                window.refresh();
             }
         }
+    }
+
+    fn edit_rust(&mut self, new_style: &str, window: &mut Window, cx: &mut Context<Self>) {
+        if self.ignore_rust_edit {
+            self.ignore_rust_edit = false;
+            return;
+        }
+
+        let style = self.unconvertible_style.clone();
+        let (style, err) = rust_to_style(style, new_style);
+        self.rust_err = err.map(SharedString::from);
+        self.json_err = None;
+        self.ignore_json_edit = true;
+        self.update_json_from_style(&style, window, cx);
+        self.update_element_style(style, window, cx);
+    }
+
+    fn update_element_style(
+        &self,
+        style: StyleRefinement,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        window.with_inspector_state::<DivInspectorState, _>(
+            self.inspector_id.as_ref(),
+            cx,
+            |state, _window| {
+                if let Some(state) = state {
+                    *state.base_style = style;
+                }
+            },
+        );
         window.refresh();
     }
 
     fn reset_style(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.input_state.update(cx, |input_state, cx| {
-            input_state.set_value(style_to_json(&self.initial_style), window, cx);
-        });
+        self.ignore_json_edit = true;
+        self.update_json_from_style(&self.initial_style, window, cx);
+        self.ignore_rust_edit = true;
+        let rust_style = self.update_rust_from_style(&self.initial_style, window, cx);
+        self.unconvertible_style = self.initial_style.subtract(&rust_style);
         if let Some(state) = self.inspector_state.as_mut() {
             *state.base_style = self.initial_style.clone();
         }
+    }
+
+    fn update_json_from_style(
+        &self,
+        style: &StyleRefinement,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.json_input_state.update(cx, |state, cx| {
+            state.set_value(style_to_json(style), window, cx);
+        });
+    }
+
+    fn update_rust_from_style(
+        &self,
+        style: &StyleRefinement,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> StyleRefinement {
+        self.rust_input_state.update(cx, |state, cx| {
+            let (rust_code, rust_style) = style_to_rust(style);
+            state.set_value(rust_code, window, cx);
+            rust_style
+        })
+    }
+
+    fn rust_add_method(&mut self, method: &str, cx: &mut impl AppContext) {
+        // TODO
     }
 }
 
 fn style_to_json(style: &StyleRefinement) -> String {
     serde_json::to_string_pretty(style).unwrap_or_else(|e| format!("{{ \"error\": \"{}\" }}", e))
+}
+
+struct StyleMethods {
+    table: Vec<(Box<StyleRefinement>, FunctionReflection<StyleRefinement>)>,
+    map: HashMap<&'static str, FunctionReflection<StyleRefinement>>,
+}
+
+impl StyleMethods {
+    fn get() -> &'static Self {
+        static STYLE_METHODS: OnceLock<StyleMethods> = OnceLock::new();
+        STYLE_METHODS.get_or_init(|| {
+            let table: Vec<_> = [
+                styled_ext_reflection::methods::<StyleRefinement>(),
+                styled_reflection::methods::<StyleRefinement>(),
+            ]
+            .into_iter()
+            .flatten()
+            .map(|method| (Box::new(method.invoke(StyleRefinement::default())), method))
+            .collect();
+            let map = table
+                .iter()
+                .map(|(_, method)| (method.name, method.clone()))
+                .collect();
+            Self { table, map }
+        })
+    }
+}
+
+fn style_to_rust(input_style: &StyleRefinement) -> (String, StyleRefinement) {
+    let methods: Vec<_> = StyleMethods::get()
+        .table
+        .iter()
+        .filter_map(|(style, method)| {
+            if input_style.is_superset_of(style) {
+                Some(method)
+            } else {
+                None
+            }
+        })
+        .collect();
+    let mut code = "fn build() -> Div {\n    div()\n".to_string();
+    let mut style = StyleRefinement::default();
+    for method in methods {
+        let before_invoke = style.clone();
+        style = method.invoke(style);
+        if style != before_invoke {
+            _ = write!(code, "        .{}()\n", method.name);
+        }
+    }
+    code.push_str("}");
+    (code, style)
+}
+
+fn rust_to_style(
+    mut style: StyleRefinement,
+    rust_code: &str,
+) -> (StyleRefinement, Option<SharedString>) {
+    let Some(begin) = rust_code.find("div()").map(|i| i + "div()".len()) else {
+        return (style, Some("Could not find `div()` in the code".into()));
+    };
+    let Some(end) = rust_code.rfind("}") else {
+        return (style, Some("Could not find `}` in the code".into()));
+    };
+    if begin >= end {
+        return (
+            style,
+            Some("Could not find valid method calls after div()".into()),
+        );
+    }
+    let methods_str = &rust_code[begin..end];
+
+    let mut err = String::new();
+    let methods = methods_str
+        .split('.')
+        .filter_map(|s| s.trim().rfind('(').map(|end: usize| s[..end].trim()));
+    let style_methods = StyleMethods::get();
+    for method in methods {
+        match style_methods.map.get(method) {
+            Some(method_reflection) => style = method_reflection.invoke(style),
+            None => _ = write!(err, "Unknown method: {method}\n"),
+        }
+    }
+
+    let err = if err.is_empty() {
+        None
+    } else {
+        Some(err.into())
+    };
+    (style, err)
 }
 
 impl Render for DivInspector {
@@ -166,38 +356,79 @@ impl Render for DivInspector {
                     v_flex()
                         .w_full()
                         .flex_1()
-                        .gap_1()
+                        .gap_2()
                         .text_sm()
                         .text_color(cx.theme().description_list_label_foreground)
                         .child(
                             h_flex()
-                                .gap_1()
-                                .child(div().flex_1().child("Styles"))
-                                .child({
-                                    Button::new("reset-style")
+                                .gap_2()
+                                .child(div().flex_1().child("Rust Styles"))
+                                .child(
+                                    Popover::new("inspector-rust-add")
+                                        .trigger(
+                                            Button::new("inspector-rust-add-button")
+                                                .label("Add...")
+                                                .xsmall()
+                                                .ghost(),
+                                        )
+                                        .content(render_rust_add_method),
+                                )
+                                .child(
+                                    Button::new("inspector-reset-style-1")
                                         .label("Reset")
-                                        .small()
+                                        .xsmall()
                                         .ghost()
                                         .on_click(cx.listener(|this, _, window, cx| {
                                             this.reset_style(window, cx);
-                                        }))
+                                        })),
+                                ),
+                        )
+                        .child(
+                            v_flex()
+                                .h_1_3()
+                                .flex_grow()
+                                .gap_1()
+                                .font_family("Monaco")
+                                .text_size(px(12.))
+                                .child(TextInput::new(&self.rust_input_state).h_full())
+                                .when_some(self.rust_err.clone(), |this, err| {
+                                    this.child(Alert::error("inspector-rust-error", err).text_xs())
                                 }),
                         )
                         .child(
-                            div()
-                                .flex_1()
-                                .w_full()
+                            h_flex()
+                                .gap_2()
+                                .child(div().flex_1().child("JSON Styles"))
+                                .child(
+                                    Button::new("inspector-reset-style-2")
+                                        .label("Reset")
+                                        .xsmall()
+                                        .ghost()
+                                        .on_click(cx.listener(|this, _, window, cx| {
+                                            this.reset_style(window, cx);
+                                        })),
+                                ),
+                        )
+                        .child(
+                            v_flex()
+                                .h_2_3()
+                                .flex_grow()
+                                .gap_1()
                                 .font_family("Monaco")
                                 .text_size(px(12.))
-                                .child(TextInput::new(&self.input_state).h_full()),
-                        )
-                        .when_some(self.json_err.clone(), |this, err| {
-                            this.child(Alert::error("inspector-error", err))
-                        }),
+                                .child(TextInput::new(&self.json_input_state).h_full())
+                                .when_some(self.json_err.clone(), |this, err| {
+                                    this.child(Alert::error("inspector-json-error", err).text_xs())
+                                }),
+                        ),
                 )
             },
         )
     }
+}
+
+fn render_rust_add_method(window: &mut Window, cx: &mut App) -> Entity<PopoverContent> {
+    cx.new(|cx| PopoverContent::new(window, cx, |_, _| div().child("TODO").into_any_element()))
 }
 
 fn render_inspector(
@@ -224,7 +455,7 @@ fn render_inspector(
                 .gap_2()
                 .h(TITLE_BAR_HEIGHT)
                 .line_height(TITLE_BAR_HEIGHT)
-                .overflow_hidden()
+                .overflow_x_hidden()
                 .px_2()
                 .border_b_1()
                 .border_color(cx.theme().title_bar_border)

@@ -3149,6 +3149,7 @@ dependencies = [
  "enum-iterator",
  "gpui",
  "gpui-component-macros",
+ "gpui_macros",
  "html5ever 0.27.0",
  "indoc",
  "itertools 0.13.0",
