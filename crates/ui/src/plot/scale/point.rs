@@ -27,7 +27,14 @@ where
                 .into_option()
                 .map_or(0., |(min, max)| max - min);
 
-            (range_diff / (len - 1) as f32, range_diff / len as f32)
+            if len == 1 {
+                (range_diff, range_diff)
+            } else {
+                (
+                    range_diff / len.saturating_sub(1) as f32,
+                    range_diff / len as f32,
+                )
+            }
         };
 
         Self {
@@ -43,8 +50,12 @@ where
     T: PartialEq,
 {
     fn tick(&self, value: &T) -> Option<f32> {
-        let index = self.domain.iter().position(|v| v == value)?;
-        Some(index as f32 * self.range_tick)
+        if self.domain.len() == 1 {
+            Some(self.range_tick / 2.)
+        } else {
+            let index = self.domain.iter().position(|v| v == value)?;
+            Some(index as f32 * self.range_tick)
+        }
     }
 
     fn least_index(&self, tick: f32) -> usize {
@@ -62,7 +73,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_scale_point_1() {
+    fn test_scale_point() {
         let scale = ScalePoint::new(vec![1, 2, 3], vec![0., 100.]);
         assert_eq!(scale.tick(&1), Some(0.));
         assert_eq!(scale.tick(&2), Some(50.));
@@ -70,7 +81,7 @@ mod tests {
     }
 
     #[test]
-    fn test_scale_point_2() {
+    fn test_scale_point_empty() {
         let scale = ScalePoint::new(vec![], vec![0., 100.]);
         assert_eq!(scale.tick(&1), None);
         assert_eq!(scale.tick(&2), None);
@@ -80,5 +91,11 @@ mod tests {
         assert_eq!(scale.tick(&1), Some(0.));
         assert_eq!(scale.tick(&2), Some(0.));
         assert_eq!(scale.tick(&3), Some(0.));
+    }
+
+    #[test]
+    fn test_scale_point_single() {
+        let scale = ScalePoint::new(vec![1], vec![0., 100.]);
+        assert_eq!(scale.tick(&1), Some(50.));
     }
 }
