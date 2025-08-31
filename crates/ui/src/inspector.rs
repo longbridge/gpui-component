@@ -12,10 +12,10 @@ use crate::{
     button::{Button, ButtonVariants},
     clipboard::Clipboard,
     description_list::DescriptionList,
+    dropdown::{Dropdown, DropdownState, SearchableVec},
     h_flex,
     input::{InputEvent, InputState, TabSize, TextInput},
     link::Link,
-    popover::{Popover, PopoverContent},
     styled_ext_reflection, v_flex, ActiveTheme, IconName, Selectable, Sizable, TITLE_BAR_HEIGHT,
 };
 
@@ -59,6 +59,7 @@ pub struct DivInspector {
     inspector_state: Option<DivInspectorState>,
     json_input_state: Entity<InputState>,
     rust_input_state: Entity<InputState>,
+    rust_dropdown: Entity<DropdownState<SearchableVec<SharedString>>>,
     ignore_json_edit: bool,
     ignore_rust_edit: bool,
     /// Error message for JSON style parsing
@@ -86,6 +87,22 @@ impl DivInspector {
                     tab_size: 4,
                     hard_tabs: false,
                 })
+        });
+        let rust_dropdown = cx.new(|cx| {
+            DropdownState::new(
+                SearchableVec::new({
+                    let mut methods: Vec<_> = StyleMethods::get()
+                        .table
+                        .iter()
+                        .map(|(_, method)| method.name.into())
+                        .collect();
+                    methods.sort();
+                    methods
+                }),
+                None,
+                window,
+                cx,
+            )
         });
 
         cx.subscribe_in(
@@ -116,6 +133,7 @@ impl DivInspector {
             inspector_state: None,
             json_input_state,
             rust_input_state,
+            rust_dropdown,
             ignore_json_edit: false,
             ignore_rust_edit: false,
             json_err: None,
@@ -240,8 +258,21 @@ impl DivInspector {
         })
     }
 
-    fn rust_add_method(&mut self, method: &str, cx: &mut impl AppContext) {
-        // TODO
+    fn rust_add_method(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(method) = self.rust_dropdown.read(cx).selected_value() {
+            let code = self.rust_input_state.read(cx).value();
+            let new_code = format!("        .{method}()\n");
+            let Some(insert_pos) = code.rfind('}') else {
+                self.rust_err = Some("Failed to add method: Could not find `}`".into());
+                return;
+            };
+            let code = format!("{}{}{}", &code[..insert_pos], new_code, &code[insert_pos..]);
+
+            self.ignore_rust_edit = false;
+            self.rust_input_state.update(cx, |state, cx| {
+                state.set_value(code, window, cx);
+            });
+        }
     }
 }
 
@@ -270,6 +301,7 @@ impl StyleMethods {
                 .iter()
                 .map(|(_, method)| (method.name, method.clone()))
                 .collect();
+
             Self { table, map }
         })
     }
@@ -305,10 +337,13 @@ fn rust_to_style(
     rust_code: &str,
 ) -> (StyleRefinement, Option<SharedString>) {
     let Some(begin) = rust_code.find("div()").map(|i| i + "div()".len()) else {
-        return (style, Some("Could not find `div()` in the code".into()));
+        return (
+            style,
+            Some("Failed to parse: Could not find `div()`".into()),
+        );
     };
     let Some(end) = rust_code.rfind("}") else {
-        return (style, Some("Could not find `}` in the code".into()));
+        return (style, Some("Failed to parse: Could not find `}`".into()));
     };
     if begin >= end {
         return (
@@ -357,27 +392,44 @@ impl Render for DivInspector {
                         .w_full()
                         .flex_1()
                         .gap_2()
-                        .text_sm()
                         .text_color(cx.theme().description_list_label_foreground)
                         .child(
                             h_flex()
                                 .gap_2()
-                                .child(div().flex_1().child("Rust Styles"))
+                                .child("Rust Styles")
                                 .child(
-                                    Popover::new("inspector-rust-add")
-                                        .trigger(
-                                            Button::new("inspector-rust-add-button")
-                                                .label("Add...")
-                                                .xsmall()
-                                                .ghost(),
+                                    h_flex()
+                                        .flex_1()
+                                        .border_1()
+                                        .border_color(cx.theme().input)
+                                        .rounded_lg()
+                                        .text_color(cx.theme().secondary_foreground)
+                                        .child(
+                                            div().pl_1().child(
+                                                Button::new("inspector-rust-add")
+                                                    .label("Add method:")
+                                                    .compact()
+                                                    .small()
+                                                    .ghost()
+                                                    .on_click(cx.listener(
+                                                        |this, _, window, cx| {
+                                                            this.rust_add_method(window, cx);
+                                                        },
+                                                    )),
+                                            ),
                                         )
-                                        .content(render_rust_add_method),
+                                        .child(
+                                            Dropdown::new(&self.rust_dropdown)
+                                                .icon(IconName::Search)
+                                                .appearance(false)
+                                                .text_sm(),
+                                        ),
                                 )
                                 .child(
-                                    Button::new("inspector-reset-style-1")
+                                    Button::new("inspector-reset-1")
                                         .label("Reset")
-                                        .xsmall()
-                                        .ghost()
+                                        .small()
+                                        .compact()
                                         .on_click(cx.listener(|this, _, window, cx| {
                                             this.reset_style(window, cx);
                                         })),
@@ -400,10 +452,10 @@ impl Render for DivInspector {
                                 .gap_2()
                                 .child(div().flex_1().child("JSON Styles"))
                                 .child(
-                                    Button::new("inspector-reset-style-2")
+                                    Button::new("inspector-reset-2")
                                         .label("Reset")
-                                        .xsmall()
-                                        .ghost()
+                                        .small()
+                                        .compact()
                                         .on_click(cx.listener(|this, _, window, cx| {
                                             this.reset_style(window, cx);
                                         })),
@@ -425,10 +477,6 @@ impl Render for DivInspector {
             },
         )
     }
-}
-
-fn render_rust_add_method(window: &mut Window, cx: &mut App) -> Entity<PopoverContent> {
-    cx.new(|cx| PopoverContent::new(window, cx, |_, _| div().child("TODO").into_any_element()))
 }
 
 fn render_inspector(
