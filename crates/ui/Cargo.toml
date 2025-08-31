@@ -13,7 +13,7 @@ doctest = false
 
 [features]
 decimal = ["dep:rust_decimal"]
-inspector = []
+inspector = ["gpui/inspector"]
 webview = ["dep:wry"]
 # For syntax highlighting in Markdown and CodeEditor.
 tree-sitter-languages = [
