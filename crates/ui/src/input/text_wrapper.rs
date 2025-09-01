@@ -64,7 +64,7 @@ impl TextWrapper {
 
         let mut wrapped_lines = vec![];
         let mut lines = vec![];
-        let wrap_width = self.wrap_width.unwrap_or(Pixels::MAX);
+        let wrap_width = self.wrap_width;
         let mut line_wrapper = cx
             .text_system()
             .line_wrapper(self.font.clone(), self.font_size);
@@ -74,7 +74,7 @@ impl TextWrapper {
             let mut prev_boundary_ix = 0;
 
             // If wrap_width is Pixels::MAX, skip wrapping to disable word wrap
-            if wrap_width != Pixels::MAX {
+            if let Some(wrap_width) = wrap_width {
                 // Here only have wrapped line, if there is no wrap meet, the `line_wraps` result will empty.
                 for boundary in line_wrapper.wrap_line(&[LineFragment::text(line)], wrap_width) {
                     line_wraps.push(prev_boundary_ix..boundary.ix);
