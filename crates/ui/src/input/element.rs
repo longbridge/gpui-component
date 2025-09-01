@@ -1,10 +1,10 @@
 use std::{ops::Range, rc::Rc};
 
 use gpui::{
-    fill, point, px, relative, size, App, Bounds, Corners, Element, ElementId, ElementInputHandler,
-    Entity, GlobalElementId, HighlightStyle, IntoElement, LayoutId, MouseButton, MouseMoveEvent,
-    Path, Pixels, Point, SharedString, Size, Style, TextAlign, TextRun, UnderlineStyle, Window,
-    WrappedLine,
+    fill, hash, point, px, relative, size, App, Bounds, Corners, Element, ElementId,
+    ElementInputHandler, Entity, GlobalElementId, HighlightStyle, IntoElement, LayoutId,
+    MouseButton, MouseMoveEvent, Path, Pixels, Point, SharedString, Size, Style, TextAlign,
+    TextRun, UnderlineStyle, Window, WrappedLine,
 };
 use smallvec::SmallVec;
 
@@ -611,70 +611,89 @@ impl Element for TextElement {
             strikethrough: None,
         };
 
-        let runs = if !is_empty {
-            if let Some((skipped_offset, highlight_styles)) = highlight_styles {
-                let mut runs = vec![];
-                if skipped_offset > 0 {
-                    runs.push(TextRun {
-                        len: skipped_offset,
-                        ..run.clone()
-                    });
-                }
-
-                runs.extend(highlight_styles.iter().map(|(range, style)| {
-                    let mut run = text_style.clone().highlight(*style).to_run(range.len());
-                    if let Some(marked_range) = &state.marked_range {
-                        if range.start >= marked_range.start && range.end <= marked_range.end {
-                            run.color = marked_run.color;
-                            run.strikethrough = marked_run.strikethrough;
-                            run.underline = marked_run.underline;
-                        }
-                    }
-
-                    run
-                }));
-
-                runs.into_iter().filter(|run| run.len > 0).collect()
-            } else {
-                vec![run]
-            }
-        } else if let Some(marked_range) = &state.marked_range {
-            // IME marked text
-            vec![
-                TextRun {
-                    len: marked_range.start.offset,
-                    ..run.clone()
-                },
-                TextRun {
-                    len: marked_range.end.offset - marked_range.start.offset,
-                    underline: marked_run.underline,
-                    ..run.clone()
-                },
-                TextRun {
-                    len: display_text.len() - marked_range.end.offset,
-                    ..run.clone()
-                },
-            ]
-            .into_iter()
-            .filter(|run| run.len > 0)
-            .collect()
-        } else {
-            vec![run]
-        };
-
         let wrap_width = if multi_line && state.soft_wrap {
             Some(bounds.size.width - line_number_width)
         } else {
             None
         };
 
-        // NOTE: If there have about 10K lines, this will take about 5~6ms.
-        // let measure = Measure::new("shape_text");
-        let lines = window
-            .text_system()
-            .shape_text(display_text, font_size, &runs, wrap_width, None)
-            .expect("failed to shape text");
-        // measure.end();
+        let cache_key = vec![
+            hash(&display_text),
+            hash(&font_size),
+            hash(&highlight_styles),
+        ];
+        let lines = {
+            if let Some(last_layout) = &state
+                .last_layout
+                .as_ref()
+                .filter(|l| l.cache_key == cache_key)
+            {
+                last_layout.lines.clone()
+            } else {
+                let runs = if !is_empty {
+                    if let Some((skipped_offset, highlight_styles)) = highlight_styles {
+                        let mut runs = vec![];
+                        if skipped_offset > 0 {
+                            runs.push(TextRun {
+                                len: skipped_offset,
+                                ..run.clone()
+                            });
+                        }
+
+                        runs.extend(highlight_styles.iter().map(|(range, style)| {
+                            let mut run = text_style.clone().highlight(*style).to_run(range.len());
+                            if let Some(marked_range) = &state.marked_range {
+                                if range.start >= marked_range.start
+                                    && range.end <= marked_range.end
+                                {
+                                    run.color = marked_run.color;
+                                    run.strikethrough = marked_run.strikethrough;
+                                    run.underline = marked_run.underline;
+                                }
+                            }
+
+                            run
+                        }));
+
+                        runs.into_iter().filter(|run| run.len > 0).collect()
+                    } else {
+                        vec![run]
+                    }
+                } else if let Some(marked_range) = &state.marked_range {
+                    // IME marked text
+                    vec![
+                        TextRun {
+                            len: marked_range.start.offset,
+                            ..run.clone()
+                        },
+                        TextRun {
+                            len: marked_range.end.offset - marked_range.start.offset,
+                            underline: marked_run.underline,
+                            ..run.clone()
+                        },
+                        TextRun {
+                            len: display_text.len() - marked_range.end.offset,
+                            ..run.clone()
+                        },
+                    ]
+                    .into_iter()
+                    .filter(|run| run.len > 0)
+                    .collect()
+                } else {
+                    vec![run]
+                };
+
+                // NOTE: If there have about 10K lines, this will take about 5~6ms.
+                // let measure = Measure::new("shape_text");
+                let lines = window
+                    .text_system()
+                    .shape_text(display_text, font_size, &runs, wrap_width, None)
+                    .expect("failed to shape text");
+                // measure.end();
+
+                Rc::new(lines)
+            }
+        };
 
         let mut max_line_width = px(0.);
         let mut total_wrapped_lines = 0;
@@ -799,7 +818,8 @@ impl Element for TextElement {
         PrepaintState {
             bounds,
             last_layout: LastLayout {
-                lines: Rc::new(lines),
+                cache_key,
+                lines: lines,
                 line_height,
                 visible_range,
                 line_number_width,

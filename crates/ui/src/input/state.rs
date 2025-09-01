@@ -216,6 +216,7 @@ pub fn init(cx: &mut App) {
 
 #[derive(Clone)]
 pub(super) struct LastLayout {
+    pub(super) cache_key: Vec<u64>,
     /// The last layout lines.
     pub(super) lines: Rc<SmallVec<[WrappedLine; 1]>>,
     /// The line_height of text layout, this will change will InputElement painted.
