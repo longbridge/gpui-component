@@ -16,7 +16,7 @@ use super::{mode::InputMode, InputState, LastLayout};
 
 pub(super) const RIGHT_MARGIN: Pixels = px(10.);
 const BOTTOM_MARGIN_ROWS: usize = 1;
-const LINE_NUMBER_MARGIN_RIGHT: Pixels = px(10.);
+pub(super) const LINE_NUMBER_RIGHT_MARGIN: Pixels = px(10.);
 
 pub(super) struct TextElement {
     state: Entity<InputState>,
@@ -584,7 +584,7 @@ impl Element for TextElement {
             )
             .unwrap();
         let line_number_width = if state.mode.line_number() {
-            empty_line_number.last().unwrap().width() + LINE_NUMBER_MARGIN_RIGHT
+            empty_line_number.last().unwrap().width() + LINE_NUMBER_RIGHT_MARGIN
         } else {
             px(0.)
         };

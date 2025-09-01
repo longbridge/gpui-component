@@ -8,6 +8,7 @@ use gpui::{
 use crate::button::{Button, ButtonVariants as _};
 use crate::indicator::Indicator;
 use crate::input::clear_button;
+use crate::input::element::LINE_NUMBER_RIGHT_MARGIN;
 use crate::scroll::Scrollbar;
 use crate::ActiveTheme;
 use crate::{h_flex, StyledExt};
@@ -301,7 +302,11 @@ impl RenderOnce for TextInput {
             .refine_style(&self.style)
             .when(state.mode.is_multi_line(), |this| {
                 if let Some(last_layout) = state.last_layout.as_ref() {
-                    let left = state.input_bounds.origin.x + last_layout.line_number_width;
+                    let left = last_layout.line_number_width - LINE_NUMBER_RIGHT_MARGIN;
+                    let scroll_size = gpui::Size {
+                        width: state.scroll_size.width - left,
+                        height: state.scroll_size.height,
+                    };
                     let scrollbar = if !state.soft_wrap {
                         Scrollbar::both(&state.scroll_state, &state.scroll_handle)
                     } else {
@@ -312,10 +317,10 @@ impl RenderOnce for TextInput {
                         div()
                             .absolute()
                             .top_0()
-                            .left(left)
+                            .left(state.input_bounds.origin.x + left)
                             .right(px(1.))
                             .bottom_0()
-                            .child(scrollbar.scroll_size(state.scroll_size)),
+                            .child(scrollbar.scroll_size(scroll_size)),
                     )
                 } else {
                     this
