@@ -675,7 +675,7 @@ impl Element for TextElement {
             .expect("failed to shape text");
         // measure.end();
 
-        let mut max_line_width = bounds.size.width;
+        let mut max_line_width = px(0.);
         let mut total_wrapped_lines = 0;
         for line in lines.iter() {
             // FIXME: The `shape_text` measured width is not stable, sometime will large, sometime small.
@@ -685,7 +685,7 @@ impl Element for TextElement {
         }
 
         let scroll_size = size(
-            if max_line_width > bounds.size.width {
+            if max_line_width + line_number_width + RIGHT_MARGIN > bounds.size.width {
                 max_line_width + line_number_width + RIGHT_MARGIN
             } else {
                 max_line_width
