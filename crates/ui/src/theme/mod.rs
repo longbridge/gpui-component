@@ -101,6 +101,15 @@ impl Theme {
         self.mode.is_dark()
     }
 
+    /// Returns the current theme name.
+    pub fn theme_name(&self) -> &SharedString {
+        if self.is_dark() {
+            &self.dark_theme.name
+        } else {
+            &self.light_theme.name
+        }
+    }
+
     // /// Sets the theme to default light.
     // pub fn set_default_light(&mut self) {
     //     self.light_theme = ThemeColor::light();

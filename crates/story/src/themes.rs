@@ -6,7 +6,7 @@ use gpui::{
 use gpui_component::{
     button::{Button, ButtonVariants},
     popup_menu::PopupMenuExt,
-    IconName, Sizable, Theme, ThemeRegistry,
+    ActiveTheme, IconName, Sizable, Theme, ThemeRegistry,
 };
 use serde::{Deserialize, Serialize};
 
@@ -38,6 +38,11 @@ pub fn init(cx: &mut App) {
     }) {
         tracing::error!("Failed to watch themes directory: {}", err);
     }
+
+    cx.observe_global::<Theme>(|cx| {
+        AppState::global_mut(cx).theme_name = Some(cx.theme().theme_name().into());
+    })
+    .detach();
 }
 
 #[derive(Action, Clone, PartialEq)]
