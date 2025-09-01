@@ -685,7 +685,11 @@ impl Element for TextElement {
         }
 
         let scroll_size = size(
-            max_line_width + line_number_width + RIGHT_MARGIN,
+            if max_line_width > bounds.size.width {
+                max_line_width + line_number_width + RIGHT_MARGIN
+            } else {
+                max_line_width
+            },
             (total_wrapped_lines as f32 * line_height).max(bounds.size.height),
         );
 
