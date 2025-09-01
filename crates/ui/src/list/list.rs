@@ -60,7 +60,7 @@ pub struct List<D: ListDelegate> {
     pub(crate) size: Size,
     rows_cache: RowsCache,
     selected_index: Option<IndexPath>,
-    deferred_scroll_to_index: Option<IndexPath>,
+    deferred_scroll_to_index: Option<(IndexPath, ScrollStrategy)>,
     mouse_right_clicked_index: Option<IndexPath>,
     reset_on_cancel: bool,
     _search_task: Task<()>,
@@ -202,7 +202,7 @@ where
     pub fn scroll_to_item(
         &mut self,
         ix: IndexPath,
-        _strategy: ScrollStrategy,
+        strategy: ScrollStrategy,
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -214,8 +214,7 @@ where
             cx.notify();
             return;
         }
-
-        self.deferred_scroll_to_index = Some(ix);
+        self.deferred_scroll_to_index = Some((ix, strategy));
         cx.notify();
     }
 
@@ -224,9 +223,9 @@ where
         &self.scroll_handle
     }
 
-    pub fn scroll_to_selected_item(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+    pub fn scroll_to_selected_item(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         if let Some(ix) = self.selected_index {
-            self.deferred_scroll_to_index = Some(ix);
+            self.deferred_scroll_to_index = Some((ix, ScrollStrategy::Top));
             cx.notify();
         }
     }
@@ -570,10 +569,9 @@ where
         self.prepare_items_if_needed(window, cx);
 
         // Scroll to the selected item if it is set.
-        if let Some(ix) = self.deferred_scroll_to_index.take() {
+        if let Some((ix, strategy)) = self.deferred_scroll_to_index.take() {
             if let Some(item_ix) = self.rows_cache.position_of(&ix) {
-                self.scroll_handle
-                    .scroll_to_item(item_ix, ScrollStrategy::Top);
+                self.scroll_handle.scroll_to_item(item_ix, strategy);
             }
         }
 

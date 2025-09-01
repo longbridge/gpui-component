@@ -222,6 +222,10 @@ pub(super) struct LastLayout {
     pub(super) line_height: Pixels,
     /// The visible range (no wrap) of lines in the viewport.
     pub(super) visible_range: Range<usize>,
+    /// The wrap width of text layout, this will change will InputElement painted.
+    pub(super) wrap_width: Option<Pixels>,
+    /// The line number width of text layout.
+    pub(super) line_number_width: Pixels,
 }
 
 impl Deref for LastLayout {
@@ -272,7 +276,6 @@ pub struct InputState {
     pub(super) scroll_state: ScrollbarState,
     /// The size of the scrollable content.
     pub(crate) scroll_size: gpui::Size<Pixels>,
-    pub(crate) line_number_width: Pixels,
 
     /// The mask pattern for formatting the input text
     pub(crate) mask_pattern: MaskPattern,
@@ -350,7 +353,6 @@ impl InputState {
             scroll_state: ScrollbarState::default(),
             scroll_size: gpui::size(px(0.), px(0.)),
             preferred_x_offset: None,
-            line_number_width: px(0.),
             placeholder: SharedString::default(),
             mask_pattern: MaskPattern::default(),
             diagnostic_popover: None,
@@ -1767,6 +1769,7 @@ impl InputState {
         };
 
         let line_height = last_layout.line_height;
+        let line_number_width = last_layout.line_number_width;
 
         // TIP: About the IBeam cursor
         //
@@ -1778,7 +1781,7 @@ impl InputState {
         //
         // - included the input padding.
         // - included the scroll offset.
-        let inner_position = position - bounds.origin - point(self.line_number_width, px(0.));
+        let inner_position = position - bounds.origin - point(line_number_width, px(0.));
 
         let mut index = 0;
         let mut y_offset = px(0.);
@@ -2113,14 +2116,18 @@ impl InputState {
         self.input_bounds = new_bounds;
 
         // Update text_wrapper wrap_width if changed.
-        if wrap_width_changed {
-            let wrap_width = if self.disable_word_wrap {
-                None // Use None to disable wrapping (will use Pixels::MAX)
-            } else {
-                Some(new_bounds.size.width)
-            };
-            self.text_wrapper.set_wrap_width(wrap_width, cx);
-            self.mode.update_auto_grow(&self.text_wrapper);
+        if let Some(last_layout) = self.last_layout.as_ref() {
+            if wrap_width_changed {
+                let wrap_width = if self.disable_word_wrap {
+                    None // Use None to disable wrapping (will use Pixels::MAX)
+                } else {
+                    last_layout.wrap_width
+                };
+
+                self.text_wrapper.set_wrap_width(wrap_width, cx);
+                self.mode.update_auto_grow(&self.text_wrapper);
+                cx.notify();
+            }
         }
     }
 
@@ -2278,11 +2285,12 @@ impl EntityInputHandler for InputState {
     ) -> Option<Bounds<Pixels>> {
         let last_layout = self.last_layout.as_ref()?;
         let line_height = last_layout.line_height;
+        let line_number_width = last_layout.line_number_width;
         let range = self.range_from_utf16(&range_utf16);
 
         let mut start_origin = None;
         let mut end_origin = None;
-        let line_number_origin = point(self.line_number_width, px(0.));
+        let line_number_origin = point(line_number_width, px(0.));
         let mut y_offset = px(0.);
         let mut index_offset = 0;
 

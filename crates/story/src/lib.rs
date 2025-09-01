@@ -14,6 +14,7 @@ mod description_list_story;
 mod drawer_story;
 mod dropdown_story;
 mod form_story;
+mod group_box_story;
 mod icon_story;
 mod image_story;
 mod indicator_story;
@@ -52,8 +53,8 @@ use gpui::{
     actions, div, prelude::FluentBuilder as _, px, rems, size, Action, AnyElement, AnyView, App,
     AppContext, Bounds, Context, Div, Entity, EventEmitter, Focusable, Global, Hsla,
     InteractiveElement, IntoElement, KeyBinding, Menu, MenuItem, ParentElement, Render, RenderOnce,
-    SharedString, StatefulInteractiveElement, Styled, Window, WindowBounds, WindowKind,
-    WindowOptions,
+    SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Window, WindowBounds,
+    WindowKind, WindowOptions,
 };
 
 pub use accordion_story::AccordionStory;
@@ -71,6 +72,7 @@ pub use description_list_story::DescriptionListStory;
 pub use drawer_story::DrawerStory;
 pub use dropdown_story::DropdownStory;
 pub use form_story::FormStory;
+pub use group_box_story::GroupBoxStory;
 pub use icon_story::IconStory;
 pub use image_story::ImageStory;
 pub use indicator_story::IndicatorStory;
@@ -109,6 +111,7 @@ use gpui_component::{
     button::Button,
     context_menu::ContextMenuExt,
     dock::{register_panel, Panel, PanelControl, PanelEvent, PanelInfo, PanelState, TitleStyle},
+    group_box::GroupBox,
     h_flex,
     notification::Notification,
     popup_menu::PopupMenu,
@@ -179,8 +182,8 @@ where
             window_bounds: Some(WindowBounds::Windowed(window_bounds)),
             titlebar: Some(TitleBar::title_bar_options()),
             window_min_size: Some(gpui::Size {
-                width: px(640.),
-                height: px(480.),
+                width: px(480.),
+                height: px(320.),
             }),
             kind: WindowKind::Normal,
             #[cfg(target_os = "linux")]
@@ -395,29 +398,24 @@ impl Styled for StorySection {
 }
 
 impl RenderOnce for StorySection {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        v_flex()
-            .gap_2()
-            .mb_5()
-            .w_full()
-            .child(
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        GroupBox::new()
+            .outline()
+            .title(
                 h_flex()
                     .justify_between()
                     .w_full()
                     .gap_4()
                     .child(self.title),
             )
-            .child(
-                v_flex()
-                    .p_4()
-                    .overflow_x_hidden()
-                    .border_1()
-                    .border_color(cx.theme().border)
+            .content_style(
+                StyleRefinement::default()
                     .rounded_lg()
+                    .overflow_x_hidden()
                     .items_center()
-                    .justify_center()
-                    .child(self.base.children(self.children)),
+                    .justify_center(),
             )
+            .child(self.base.children(self.children))
     }
 }
 

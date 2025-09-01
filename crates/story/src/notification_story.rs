@@ -169,10 +169,12 @@ impl Render for NotificationStory {
                         .label("Show Custom Notification")
                         .on_click(cx.listener(|_, _, window, cx| {
                             window.push_notification(
-                                Notification::new().content(|_, _| {
+                                Notification::new().content(|window, cx| {
                                     TextView::markdown(
                                         "notification-markdown",
                                         NOTIFICATION_MARKDOWN,
+                                        window,
+                                        cx,
                                     )
                                     .into_any_element()
                                 }),

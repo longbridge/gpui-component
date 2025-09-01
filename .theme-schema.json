@@ -106,10 +106,6 @@
           "description": "Accordion background color.",
           "type": ["string", "null"]
         },
-        "accordion.active.background": {
-          "description": "Accordion active background color.",
-          "type": ["string", "null"]
-        },
         "accordion.hover.background": {
           "description": "Accordion hover background color.",
           "type": ["string", "null"]

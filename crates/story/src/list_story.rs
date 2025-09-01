@@ -258,7 +258,7 @@ impl ListDelegate for CompanyListDelegate {
                 .px_2()
                 .gap_2()
                 .text_sm()
-                .text_color(cx.theme().muted)
+                .text_color(cx.theme().muted_foreground)
                 .child(Icon::new(IconName::Folder))
                 .child(industry.clone()),
         )
@@ -478,14 +478,25 @@ impl Render for ListStory {
                             })),
                     )
                     .child(
-                        Button::new("scroll-center")
+                        Button::new("scroll-selected")
                             .outline()
-                            .child("Scroll to section 2")
+                            .child("Scroll to selected")
+                            .small()
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.company_list.update(cx, |list, cx| {
+                                    list.scroll_to_selected_item(window, cx);
+                                })
+                            })),
+                    )
+                    .child(
+                        Button::new("scroll-to-item")
+                            .outline()
+                            .child("Scroll to (5, 1)")
                             .small()
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.company_list.update(cx, |list, cx| {
                                     list.scroll_to_item(
-                                        IndexPath::default().section(1).row(0),
+                                        IndexPath::new(1).section(5),
                                         ScrollStrategy::Center,
                                         window,
                                         cx,
@@ -513,24 +524,6 @@ impl Render for ListStory {
                                         window,
                                         cx,
                                     );
-                                })
-                            })),
-                    )
-                    .child(
-                        Button::new("scroll-to-selected")
-                            .outline()
-                            .child("Scroll to Selected")
-                            .small()
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.company_list.update(cx, |list, cx| {
-                                    if let Some(selected) = list.selected_index() {
-                                        list.scroll_to_item(
-                                            selected,
-                                            ScrollStrategy::Top,
-                                            window,
-                                            cx,
-                                        );
-                                    }
                                 })
                             })),
                     )

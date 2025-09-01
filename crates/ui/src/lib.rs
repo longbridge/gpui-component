@@ -1,5 +1,6 @@
 mod event;
 mod focusable;
+mod global_state;
 mod icon;
 mod index_path;
 #[cfg(any(feature = "inspector", debug_assertions))]
@@ -8,7 +9,6 @@ mod kbd;
 mod menu;
 mod root;
 mod styled;
-mod svg_img;
 mod time;
 mod title_bar;
 mod virtual_list;
@@ -33,6 +33,7 @@ pub mod dock;
 pub mod drawer;
 pub mod dropdown;
 pub mod form;
+pub mod group_box;
 pub mod highlighter;
 pub mod history;
 pub mod indicator;
@@ -83,7 +84,6 @@ pub use window_border::{window_border, window_paddings, WindowBorder};
 
 pub use icon::*;
 pub use kbd::*;
-pub use svg_img::*;
 pub use theme::*;
 
 use std::ops::Deref;
@@ -96,6 +96,7 @@ rust_i18n::i18n!("locales", fallback = "en");
 /// You can initialize the UI module at your application's entry point.
 pub fn init(cx: &mut App) {
     theme::init(cx);
+    global_state::init(cx);
     #[cfg(any(feature = "inspector", debug_assertions))]
     inspector::init(cx);
     highlighter::init(cx);
@@ -109,6 +110,7 @@ pub fn init(cx: &mut App) {
     popover::init(cx);
     menu::init(cx);
     table::init(cx);
+    text::init(cx);
 }
 
 #[inline]

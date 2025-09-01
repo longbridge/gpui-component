@@ -3,12 +3,18 @@ use std::ops::Range;
 use gpui::{
     div, img, prelude::FluentBuilder as _, px, relative, rems, AnyElement, App, DefiniteLength,
     Div, ElementId, FontStyle, FontWeight, Half, HighlightStyle, InteractiveElement as _,
-    InteractiveText, IntoElement, Length, ObjectFit, ParentElement, Rems, RenderOnce, SharedString,
-    SharedUri, Styled, StyledImage as _, StyledText, Window,
+    IntoElement, Length, ObjectFit, ParentElement, Rems, SharedString, SharedUri,
+    StatefulInteractiveElement, Styled, StyledImage as _, Window,
 };
 use markdown::mdast;
 
-use crate::{h_flex, highlighter::SyntaxHighlighter, v_flex, ActiveTheme as _, Icon, IconName};
+use crate::{
+    h_flex,
+    highlighter::SyntaxHighlighter,
+    text::inline::{Inline, InlineState},
+    tooltip::Tooltip,
+    v_flex, ActiveTheme as _, Icon, IconName,
+};
 
 use super::{utils::list_item_prefix, TextViewStyle};
 
@@ -20,12 +26,39 @@ pub struct LinkMark {
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
-pub struct InlineTextStyle {
+pub struct TextMark {
     pub bold: bool,
     pub italic: bool,
     pub strikethrough: bool,
     pub code: bool,
     pub link: Option<LinkMark>,
+}
+
+impl TextMark {
+    pub fn bold(mut self) -> Self {
+        self.bold = true;
+        self
+    }
+
+    pub fn italic(mut self) -> Self {
+        self.italic = true;
+        self
+    }
+
+    pub fn strikethrough(mut self) -> Self {
+        self.strikethrough = true;
+        self
+    }
+
+    pub fn code(mut self) -> Self {
+        self.code = true;
+        self
+    }
+
+    pub fn link(mut self, link: impl Into<LinkMark>) -> Self {
+        self.link = Some(link.into());
+        self
+    }
 }
 
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
@@ -44,10 +77,20 @@ impl From<Span> for ElementId {
 #[derive(Debug, Default, Clone)]
 pub struct ImageNode {
     pub url: SharedUri,
+    pub link: Option<LinkMark>,
     pub title: Option<SharedString>,
     pub alt: Option<SharedString>,
     pub width: Option<DefiniteLength>,
     pub height: Option<DefiniteLength>,
+}
+
+impl ImageNode {
+    pub fn title(&self) -> String {
+        self.title
+            .clone()
+            .unwrap_or_else(|| self.alt.clone().unwrap_or_default())
+            .to_string()
+    }
 }
 
 impl PartialEq for ImageNode {
@@ -56,49 +99,79 @@ impl PartialEq for ImageNode {
     }
 }
 
-#[derive(Debug, Default, Clone, PartialEq)]
-pub struct TextNode {
+#[derive(Default, Clone, Debug, PartialEq)]
+pub(crate) struct InlineNode {
     /// The text content.
-    pub text: String,
+    pub(crate) text: SharedString,
+    pub(crate) image: Option<ImageNode>,
     /// The text styles, each tuple contains the range of the text and the style.
-    pub marks: Vec<(Range<usize>, InlineTextStyle)>,
+    pub(crate) marks: Vec<(Range<usize>, TextMark)>,
+
+    state: InlineState,
 }
 
-#[derive(Debug, Clone, PartialEq, IntoElement)]
-pub enum Paragraph {
-    Texts {
-        span: Option<Span>,
-        children: Vec<TextNode>,
-    },
-    Image {
-        span: Option<Span>,
-        image: ImageNode,
-    },
-}
-
-impl Default for Paragraph {
-    fn default() -> Self {
-        Self::Texts {
-            span: None,
-            children: vec![],
+impl InlineNode {
+    pub(crate) fn new(text: impl Into<SharedString>) -> Self {
+        Self {
+            text: text.into(),
+            image: None,
+            marks: vec![],
+            state: InlineState::default(),
         }
+    }
+
+    pub(crate) fn image(image: ImageNode) -> Self {
+        let mut this = Self::new("");
+        this.image = Some(image);
+        this
+    }
+
+    pub(crate) fn marks(mut self, marks: Vec<(Range<usize>, TextMark)>) -> Self {
+        self.marks = marks;
+        self
     }
 }
 
-impl From<String> for Paragraph {
-    fn from(value: String) -> Self {
-        Self::Texts {
+/// The paragraph element, contains multiple text nodes.
+///
+/// Unlike other Element, this is cloneable, because it is used in the Node AST.
+/// We are keep the selection state inside this AST Nodes.
+#[derive(Debug, Default, Clone, PartialEq)]
+pub(crate) struct Paragraph {
+    pub(super) span: Option<Span>,
+    pub(super) children: Vec<InlineNode>,
+
+    pub(crate) state: InlineState,
+}
+
+impl Paragraph {
+    pub(crate) fn new(text: String) -> Self {
+        Self {
             span: None,
-            children: vec![TextNode {
-                text: value.clone(),
-                marks: vec![],
-            }],
+            children: vec![InlineNode::new(&text)],
+            state: InlineState::default(),
         }
+    }
+
+    pub(super) fn selected_text(&self) -> String {
+        let mut text = String::new();
+        for c in self.children.iter() {
+            if let Some(selection) = c.state.selection.borrow().as_ref() {
+                let part_text = c.state.text.borrow().clone();
+                text.push_str(&part_text[selection.start.offset()..selection.end.offset()]);
+            }
+        }
+        if let Some(selection) = self.state.selection.borrow().as_ref() {
+            let all_text = self.state.text.borrow().clone();
+            text.push_str(&all_text[selection.start.offset()..selection.end.offset()]);
+        }
+
+        text
     }
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
-pub struct Table {
+pub(crate) struct Table {
     pub children: Vec<TableRow>,
     pub column_aligns: Vec<ColumnumnAlign>,
 }
@@ -110,7 +183,7 @@ impl Table {
 }
 
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
-pub enum ColumnumnAlign {
+pub(super) enum ColumnumnAlign {
     #[default]
     Left,
     Center,
@@ -129,104 +202,79 @@ impl From<mdast::AlignKind> for ColumnumnAlign {
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
-pub struct TableRow {
+pub(crate) struct TableRow {
     pub children: Vec<TableCell>,
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
-pub struct TableCell {
+pub(crate) struct TableCell {
     pub children: Paragraph,
     pub width: Option<DefiniteLength>,
 }
 
 impl Paragraph {
-    pub fn clear(&mut self) {
-        match self {
-            Self::Texts { children, .. } => children.clear(),
-            Self::Image { .. } => *self = Self::default(),
-        }
+    pub(crate) fn reset(&mut self) {
+        self.span = None;
+        self.children.clear();
+        self.state = InlineState::default();
     }
 
-    pub fn is_image(&self) -> bool {
-        matches!(self, Self::Image { .. })
+    pub(crate) fn is_image(&self) -> bool {
+        false
     }
 
-    pub fn set_span(&mut self, span: Span) {
-        match self {
-            Self::Texts { span: s, .. } => *s = Some(span),
-            Self::Image { span: s, .. } => *s = Some(span),
-        }
+    pub(crate) fn set_span(&mut self, span: Span) {
+        self.span = Some(span);
     }
 
-    pub fn push_str(&mut self, text: &str) {
-        if let Self::Texts { children, .. } = self {
-            children.push(TextNode {
-                text: text.to_string(),
-                marks: vec![(0..text.len(), InlineTextStyle::default())],
-            });
-        }
+    pub(crate) fn push_str(&mut self, text: &str) {
+        self.children.push(
+            InlineNode::new(text.to_string()).marks(vec![(0..text.len(), TextMark::default())]),
+        );
     }
 
-    pub fn push(&mut self, text: TextNode) {
-        if let Self::Texts { children, .. } = self {
-            children.push(text);
-        }
+    pub(crate) fn push(&mut self, text: InlineNode) {
+        self.children.push(text);
     }
 
-    pub fn set_image(&mut self, image: ImageNode) {
-        *self = Self::Image { span: None, image };
+    pub(crate) fn push_image(&mut self, image: ImageNode) {
+        self.children.push(InlineNode::image(image));
     }
 
-    pub fn is_empty(&self) -> bool {
-        match self {
-            Self::Texts { .. } => self.text_len() == 0,
-            Self::Image { .. } => false,
-        }
+    pub(crate) fn is_empty(&self) -> bool {
+        self.children.is_empty()
+            || self
+                .children
+                .iter()
+                .all(|node| node.text.is_empty() && node.image.is_none())
     }
 
     /// Return length of children text.
-    pub fn text_len(&self) -> usize {
-        match self {
-            Self::Texts { children, .. } => {
-                let mut len = 0;
-                for text_node in children.iter() {
-                    len = text_node.text.len().max(len);
-                }
-                len
-            }
-            Self::Image { .. } => 1,
-        }
+    pub(crate) fn text_len(&self) -> usize {
+        self.children
+            .iter()
+            .map(|node| node.text.len())
+            .sum::<usize>()
     }
 
     /// Try to merge two paragraphs, if they are both text elements.
     ///
     /// - Returns `true` if other have merge into self.
     /// - Returns `false` if not able to merge.
-    pub fn try_merge(&mut self, other: &Self) -> bool {
-        if let Self::Texts { children, .. } = self {
-            if let Self::Texts {
-                children: other_children,
-                ..
-            } = other
-            {
-                children.extend(other_children.clone());
-                return true;
-            }
-        }
-
-        false
+    pub(crate) fn merge(&mut self, other: &Self) {
+        self.children.extend(other.children.clone());
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct CodeBlock {
-    code: SharedString,
+pub(crate) struct CodeBlock {
     lang: Option<SharedString>,
     styles: Vec<(Range<usize>, HighlightStyle)>,
+    state: InlineState,
 }
 
 impl CodeBlock {
-    pub fn new(
+    pub(crate) fn new(
         code: SharedString,
         lang: Option<SharedString>,
         _: &TextViewStyle,
@@ -240,15 +288,52 @@ impl CodeBlock {
             styles = highlighter.styles(&(0..code.len()), &theme);
         };
 
-        Self { code, lang, styles }
+        let state = InlineState::default();
+        state.set_text(code);
+
+        Self {
+            lang,
+            styles,
+            state,
+        }
+    }
+
+    fn code(&self) -> SharedString {
+        self.state.text.borrow().clone()
+    }
+
+    pub(super) fn selected_text(&self) -> String {
+        let mut text = String::new();
+        if let Some(selection) = self.state.selection.borrow().as_ref() {
+            let part_text = self.state.text.borrow().clone();
+            text.push_str(&part_text[selection.start.offset()..selection.end.offset()]);
+        }
+        text
+    }
+
+    fn render(&self, mb: Rems, _: &mut Window, cx: &mut App) -> AnyElement {
+        div()
+            .id("codeblock")
+            .mb(mb)
+            .p_3()
+            .rounded(cx.theme().radius)
+            .bg(cx.theme().accent)
+            .font_family("Menlo, Monaco, Consolas, monospace")
+            .text_size(rems(0.875))
+            .relative()
+            .child(Inline::new(
+                "code",
+                self.state.clone(),
+                vec![],
+                self.styles.clone(),
+            ))
+            .into_any_element()
     }
 }
 
-/// Ref:
-/// https://ui.shadcn.com/docs/components/typography
-#[allow(unused)]
+/// The AST Node of the rich text.
 #[derive(Debug, Clone, PartialEq)]
-pub enum Node {
+pub(crate) enum Node {
     Root {
         children: Vec<Node>,
     },
@@ -303,96 +388,192 @@ impl Node {
             _ => self.clone(),
         }
     }
-}
 
-impl RenderOnce for Paragraph {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    pub(super) fn selected_text(&self) -> String {
+        let mut text = String::new();
         match self {
-            Self::Texts { span, children } => {
-                let mut text = String::new();
-                let mut highlights: Vec<(Range<usize>, HighlightStyle)> = vec![];
-                let mut links: Vec<(Range<usize>, LinkMark)> = vec![];
-                let mut offset = 0;
-
-                for text_node in children.into_iter() {
-                    let text_len = text_node.text.len();
-                    let part = if text.len() == 0 {
-                        // trim start for first text
-                        text_node.text.trim_start()
-                    } else {
-                        text_node.text.as_str()
-                    };
-                    text.push_str(&part);
-
-                    let mut node_highlights = vec![];
-                    for (range, style) in text_node.marks {
-                        let inner_range = (offset + range.start)..(offset + range.end);
-
-                        let mut highlight = HighlightStyle::default();
-                        if style.bold {
-                            highlight.font_weight = Some(FontWeight::BOLD);
-                        }
-                        if style.italic {
-                            highlight.font_style = Some(FontStyle::Italic);
-                        }
-                        if style.strikethrough {
-                            highlight.strikethrough = Some(gpui::StrikethroughStyle {
-                                thickness: gpui::px(1.),
-                                ..Default::default()
-                            });
-                        }
-                        if style.code {
-                            highlight.background_color = Some(cx.theme().accent);
-                        }
-
-                        if let Some(link_mark) = style.link {
-                            highlight.color = Some(cx.theme().link);
-                            highlight.underline = Some(gpui::UnderlineStyle {
-                                thickness: gpui::px(1.),
-                                ..Default::default()
-                            });
-
-                            links.push((inner_range.clone(), link_mark));
-                        }
-
-                        node_highlights.push((inner_range, highlight));
-                    }
-
-                    highlights = gpui::combine_highlights(highlights, node_highlights).collect();
-
-                    offset += text_len;
+            Node::Root { children } => {
+                let mut block_text = String::new();
+                for c in children.iter() {
+                    block_text.push_str(&c.selected_text());
+                }
+                if !block_text.is_empty() {
+                    text.push_str(&block_text);
+                    text.push('\n');
+                }
+            }
+            Node::Paragraph(paragraph) => {
+                let mut block_text = String::new();
+                block_text.push_str(&paragraph.selected_text());
+                if !block_text.is_empty() {
+                    text.push_str(&block_text);
+                    text.push('\n');
+                }
+            }
+            Node::Heading { children, .. } => {
+                let mut block_text = String::new();
+                block_text.push_str(&children.selected_text());
+                if !block_text.is_empty() {
+                    text.push_str(&block_text);
+                    text.push('\n');
+                }
+            }
+            Node::List { children, .. } => {
+                for c in children.iter() {
+                    text.push_str(&c.selected_text());
+                }
+            }
+            Node::ListItem { children, .. } => {
+                for c in children.iter() {
+                    text.push_str(&c.selected_text());
+                }
+            }
+            Node::Blockquote { children } => {
+                let mut block_text = String::new();
+                for c in children.iter() {
+                    block_text.push_str(&c.selected_text());
                 }
 
-                let text_style = window.text_style();
-                let element_id: ElementId = span.unwrap_or_default().into();
-                let styled_text =
-                    StyledText::new(text).with_default_highlights(&text_style, highlights);
-                let link_ranges = links
-                    .iter()
-                    .map(|(range, _)| range.clone())
-                    .collect::<Vec<_>>();
-
-                InteractiveText::new(element_id, styled_text)
-                    .on_click(link_ranges, {
-                        let links = links.clone();
-                        move |ix, _, cx| {
-                            if let Some((_, link)) = &links.get(ix) {
-                                // Stop propagation to prevent the parent element from handling the event.
-                                //
-                                // For example the text in a checkbox label, click link need avoid toggle check state.
-                                cx.stop_propagation();
-                                cx.open_url(&link.url);
-                            }
-                        }
-                    })
-                    .into_any_element()
+                if !block_text.is_empty() {
+                    text.push_str(&block_text);
+                    text.push('\n');
+                }
             }
-            Self::Image { image, .. } => img(image.url)
-                .object_fit(ObjectFit::Contain)
-                .max_w(relative(1.))
-                .when_some(image.width, |this, width| this.w(width))
-                .into_any_element(),
+            Node::Table(table) => {
+                let mut block_text = String::new();
+                for row in table.children.iter() {
+                    let mut row_texts = vec![];
+                    for cell in row.children.iter() {
+                        row_texts.push(cell.children.selected_text());
+                    }
+                    if !row_texts.is_empty() {
+                        block_text.push_str(&row_texts.join(" "));
+                        block_text.push('\n');
+                    }
+                }
+
+                if !block_text.is_empty() {
+                    text.push_str(&block_text);
+                    text.push('\n');
+                }
+            }
+            Node::CodeBlock(code_block) => {
+                let block_text = code_block.selected_text();
+                if !block_text.is_empty() {
+                    text.push_str(&block_text);
+                    text.push('\n');
+                }
+            }
+            Node::Break { .. } | Node::Divider | Node::Unknown => {}
         }
+
+        text
+    }
+}
+
+impl Paragraph {
+    fn render(&self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let span = self.span;
+        let children = &self.children;
+
+        let mut child_nodes: Vec<AnyElement> = vec![];
+
+        let mut text = String::new();
+        let mut highlights: Vec<(Range<usize>, HighlightStyle)> = vec![];
+        let mut links: Vec<(Range<usize>, LinkMark)> = vec![];
+        let mut offset = 0;
+
+        let mut ix = 0;
+        for inline_node in children {
+            let text_len = inline_node.text.len();
+            text.push_str(&inline_node.text);
+
+            if let Some(image) = &inline_node.image {
+                if text.len() > 0 {
+                    inline_node.state.set_text(text.clone().into());
+                    child_nodes.push(
+                        Inline::new(
+                            ix,
+                            inline_node.state.clone(),
+                            links.clone(),
+                            highlights.clone(),
+                        )
+                        .into_any_element(),
+                    );
+                }
+                child_nodes.push(
+                    img(image.url.clone())
+                        .id(ix)
+                        .object_fit(ObjectFit::Contain)
+                        .max_w(relative(1.))
+                        .when_some(image.width, |this, width| this.w(width))
+                        .when_some(image.link.clone(), |this, link| {
+                            let title = image.title();
+                            this.cursor_pointer()
+                                .tooltip(move |window, cx| {
+                                    Tooltip::new(title.clone()).build(window, cx)
+                                })
+                                .on_click(move |_, _, cx| {
+                                    cx.stop_propagation();
+                                    cx.open_url(&link.url);
+                                })
+                        })
+                        .into_any_element(),
+                );
+
+                text.clear();
+                links.clear();
+                highlights.clear();
+                offset = 0;
+            } else {
+                let mut node_highlights = vec![];
+                for (range, style) in &inline_node.marks {
+                    let inner_range = (offset + range.start)..(offset + range.end);
+
+                    let mut highlight = HighlightStyle::default();
+                    if style.bold {
+                        highlight.font_weight = Some(FontWeight::BOLD);
+                    }
+                    if style.italic {
+                        highlight.font_style = Some(FontStyle::Italic);
+                    }
+                    if style.strikethrough {
+                        highlight.strikethrough = Some(gpui::StrikethroughStyle {
+                            thickness: gpui::px(1.),
+                            ..Default::default()
+                        });
+                    }
+                    if style.code {
+                        highlight.background_color = Some(cx.theme().accent);
+                    }
+
+                    if let Some(link_mark) = &style.link {
+                        highlight.color = Some(cx.theme().link);
+                        highlight.underline = Some(gpui::UnderlineStyle {
+                            thickness: gpui::px(1.),
+                            ..Default::default()
+                        });
+
+                        links.push((inner_range.clone(), link_mark.clone()));
+                    }
+
+                    node_highlights.push((inner_range, highlight));
+                }
+
+                highlights = gpui::combine_highlights(highlights, node_highlights).collect();
+                offset += text_len;
+            }
+            ix += 1;
+        }
+
+        // Add the last text node
+        if text.len() > 0 {
+            self.state.set_text(text.into());
+            child_nodes
+                .push(Inline::new(ix, self.state.clone(), links, highlights).into_any_element());
+        }
+
+        div().id(span.unwrap_or_default()).children(child_nodes)
     }
 }
 
@@ -405,7 +586,7 @@ pub(crate) struct ListState {
 
 impl Node {
     fn render_list_item(
-        item: Node,
+        item: &Node,
         ix: usize,
         state: ListState,
         text_view_style: &TextViewStyle,
@@ -418,7 +599,8 @@ impl Node {
                 spread,
                 checked,
             } => v_flex()
-                .when(spread, |this| this.child(div()))
+                .id("li")
+                .when(*spread, |this| this.child(div()))
                 .children({
                     let mut items: Vec<Div> = Vec::with_capacity(children.len());
                     for (child_ix, child) in children.iter().enumerate() {
@@ -464,7 +646,7 @@ impl Node {
                                                 state.depth,
                                             ))
                                         })
-                                        .when_some(checked, |this, checked| {
+                                        .when_some(*checked, |this, checked| {
                                             // Todo list checkbox
                                             this.child(
                                                 div()
@@ -514,7 +696,7 @@ impl Node {
         }
     }
 
-    fn render_table(item: &Node, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render_table(item: &Node, window: &mut Window, cx: &mut App) -> impl IntoElement {
         const DEFAULT_LENGTH: usize = 5;
         const MAX_LENGTH: usize = 150;
         let col_lens = match item {
@@ -585,7 +767,7 @@ impl Node {
                                                         .border_color(cx.theme().border)
                                                 })
                                                 .truncate()
-                                                .child(cell.children.clone()),
+                                                .child(cell.children.render(window, cx)),
                                         )
                                     }
                                     cells
@@ -599,27 +781,8 @@ impl Node {
         }
     }
 
-    fn render_codeblock(
-        code_block: CodeBlock,
-        mb: Rems,
-        _: &TextViewStyle,
-        _: &mut Window,
-        cx: &mut App,
-    ) -> AnyElement {
-        div()
-            .mb(mb)
-            .p_3()
-            .rounded(cx.theme().radius)
-            .bg(cx.theme().accent)
-            .font_family("Menlo, Monaco, Consolas, monospace")
-            .text_size(rems(0.875))
-            .relative()
-            .child(StyledText::new(code_block.code.clone()).with_highlights(code_block.styles))
-            .into_any_element()
-    }
-
     pub(crate) fn render(
-        self,
+        &self,
         list_state: Option<ListState>,
         is_root: bool,
         is_last_child: bool,
@@ -636,6 +799,7 @@ impl Node {
 
         match self {
             Node::Root { children } => div()
+                .id("div")
                 .children({
                     let children_len = children.len();
                     children.into_iter().enumerate().map(move |(index, c)| {
@@ -644,7 +808,11 @@ impl Node {
                     })
                 })
                 .into_any_element(),
-            Node::Paragraph(paragraph) => div().mb(mb).child(paragraph).into_any_element(),
+            Node::Paragraph(paragraph) => div()
+                .id("p")
+                .mb(mb)
+                .child(paragraph.render(window, cx))
+                .into_any_element(),
             Node::Heading { level, children } => {
                 let (text_size, font_weight) = match level {
                     1 => (rems(2.), FontWeight::BOLD),
@@ -659,14 +827,16 @@ impl Node {
                 let text_size = text_size.to_pixels(style.heading_base_font_size);
 
                 h_flex()
+                    .id(("h", *level as usize))
                     .mb(rems(0.3))
                     .whitespace_normal()
                     .text_size(text_size)
                     .font_weight(font_weight)
-                    .child(children)
+                    .child(children.render(window, cx))
                     .into_any_element()
             }
             Node::Blockquote { children } => div()
+                .id("blockquote")
                 .w_full()
                 .mb(mb)
                 .text_color(cx.theme().muted_foreground)
@@ -682,6 +852,7 @@ impl Node {
                 })
                 .into_any_element(),
             Node::List { children, ordered } => v_flex()
+                .id(if *ordered { "ol" } else { "ul" })
                 .mb(mb)
                 .children({
                     let mut items = Vec::with_capacity(children.len());
@@ -691,10 +862,10 @@ impl Node {
                         let is_item = item.is_list_item();
 
                         items.push(Self::render_list_item(
-                            item,
+                            &item,
                             ix,
                             ListState {
-                                ordered,
+                                ordered: *ordered,
                                 todo: list_state.todo,
                                 depth: list_state.depth,
                             },
@@ -710,16 +881,15 @@ impl Node {
                     items
                 })
                 .into_any_element(),
-            Node::CodeBlock(code_block) => {
-                Self::render_codeblock(code_block, mb, style, window, cx)
-            }
+            Node::CodeBlock(code_block) => code_block.render(mb, window, cx),
             Node::Table { .. } => Self::render_table(&self, window, cx).into_any_element(),
             Node::Divider => div()
+                .id("divider")
                 .bg(cx.theme().border)
                 .h(px(2.))
                 .mb(mb)
                 .into_any_element(),
-            Node::Break { .. } => div().into_any_element(),
+            Node::Break { .. } => div().id("break").into_any_element(),
             _ => {
                 if cfg!(debug_assertions) {
                     tracing::warn!("unknown implementation: {:?}", self);
@@ -733,41 +903,42 @@ impl Node {
 
 impl Paragraph {
     fn to_markdown(&self) -> String {
-        let mut text = match self {
-            Paragraph::Texts { children, .. } => children
-                .iter()
-                .map(|text_node| {
-                    let mut text = text_node.text.clone();
-                    for (range, style) in &text_node.marks {
-                        if style.bold {
-                            text = format!("**{}**", &text_node.text[range.clone()]);
-                        }
-                        if style.italic {
-                            text = format!("*{}*", &text_node.text[range.clone()]);
-                        }
-                        if style.strikethrough {
-                            text = format!("~~{}~~", &text_node.text[range.clone()]);
-                        }
-                        if style.code {
-                            text = format!("`{}`", &text_node.text[range.clone()]);
-                        }
-                        if let Some(link) = &style.link {
-                            text = format!("[{}]({})", &text_node.text[range.clone()], link.url);
-                        }
+        let mut text = self
+            .children
+            .iter()
+            .map(|text_node| {
+                let mut text = text_node.text.to_string();
+                for (range, style) in &text_node.marks {
+                    if style.bold {
+                        text = format!("**{}**", &text_node.text[range.clone()]);
                     }
-                    text
-                })
-                .collect::<Vec<_>>()
-                .join(""),
-            Paragraph::Image { image, .. } => {
-                let alt = image.alt.clone().unwrap_or_default();
-                let title = image
-                    .title
-                    .clone()
-                    .map_or(String::new(), |t| format!(" \"{}\"", t));
-                format!("![{}]({}{})", alt, image.url, title)
-            }
-        };
+                    if style.italic {
+                        text = format!("*{}*", &text_node.text[range.clone()]);
+                    }
+                    if style.strikethrough {
+                        text = format!("~~{}~~", &text_node.text[range.clone()]);
+                    }
+                    if style.code {
+                        text = format!("`{}`", &text_node.text[range.clone()]);
+                    }
+                    if let Some(link) = &style.link {
+                        text = format!("[{}]({})", &text_node.text[range.clone()], link.url);
+                    }
+                }
+
+                if let Some(image) = &text_node.image {
+                    let alt = image.alt.clone().unwrap_or_default();
+                    let title = image
+                        .title
+                        .clone()
+                        .map_or(String::new(), |t| format!(" \"{}\"", t));
+                    text.push_str(&format!("![{}]({}{})", alt, image.url, title))
+                }
+
+                text
+            })
+            .collect::<Vec<_>>()
+            .join("");
 
         text.push_str("\n\n");
         text
@@ -843,7 +1014,7 @@ impl Node {
                 format!(
                     "```{}\n{}\n```",
                     code_block.lang.clone().unwrap_or_default(),
-                    code_block.code
+                    code_block.code()
                 )
             }
             Node::Table(table) => {

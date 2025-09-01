@@ -1,5 +1,7 @@
 # Hello, **World**!
 
+Build Status [![Build Status](https://github.com/longbridge/gpui-component/actions/workflows/ci.yml/badge.svg)](https://github.com/longbridge/gpui-component/actions/workflows/ci.yml) of [GPUI Component](https://github.com/longbridge/gpui-component).
+
 This is first paragraph, there have **BOLD**, _italic_, and ~strikethrough~, `code` text.
 
 This is an additional demonstration paragraph in English demonstrating more content for [Markdown GFM](https://github.github.com/gfm/). It includes various stylistic elements and plain text.

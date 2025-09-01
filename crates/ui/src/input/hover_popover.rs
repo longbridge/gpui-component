@@ -34,7 +34,11 @@ impl DiagnosticPopover {
         let Some(range) = self.marker.range.as_ref() else {
             return None;
         };
-        let line_number_width = self.state.read(cx).line_number_width;
+        let Some(last_layout) = self.state.read(cx).last_layout.as_ref() else {
+            return None;
+        };
+
+        let line_number_width = last_layout.line_number_width;
 
         let (_, _, start_pos) = self
             .state
@@ -112,7 +116,7 @@ impl Render for DiagnosticPopover {
                 .border_color(border)
                 .rounded(cx.theme().radius)
                 .shadow_xs()
-                .child(TextView::markdown("message", message))
+                .child(TextView::markdown("message", message, window, cx))
                 .child(
                     canvas(
                         move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds),

@@ -62,7 +62,7 @@ impl Focusable for AlertStory {
 }
 
 impl Render for AlertStory {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .gap_4()
             .child(
@@ -109,6 +109,8 @@ impl Render for AlertStory {
                             "This is an alert with icon, title and description (in Markdown).\n\
                             - This is a **list** item.\n\
                             - This is another list item.",
+                            window,
+                            cx,
                         ),
                     )
                     .with_size(self.size)
@@ -140,7 +142,7 @@ impl Render for AlertStory {
                         .child(
                             Alert::warning(
                                 "warning-1",
-                                "This is a warning alert with icon and title.\n\
+                                "This is a warning alert with icon, but no title.\n\
                             This is second line of text to test is the line-height is correct.",
                             )
                             .with_size(self.size),
@@ -154,6 +156,8 @@ impl Render for AlertStory {
                             - Check your card details\n\
                             - Ensure sufficient funds\n\
                             - Verify billing address",
+                                    window,
+                                    cx,
                                 ),
                             )
                             .with_size(self.size)

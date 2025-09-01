@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use gpui::{
-    div, prelude::FluentBuilder as _, px, relative, rems, App, ClickEvent, ElementId, Empty, Hsla,
+    div, prelude::FluentBuilder as _, px, rems, App, ClickEvent, ElementId, Empty, Hsla,
     InteractiveElement, IntoElement, ParentElement as _, RenderOnce, SharedString,
     StatefulInteractiveElement, StyleRefinement, Styled, Window,
 };
@@ -9,7 +9,7 @@ use gpui::{
 use crate::{
     h_flex,
     text::{Text, TextViewStyle},
-    ActiveTheme as _, Icon, IconName, Sizable, Size, StyleSized, StyledExt,
+    ActiveTheme as _, Icon, IconName, Sizable, Size, StyledExt,
 };
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -179,8 +179,8 @@ impl RenderOnce for Alert {
         let (radius, padding_x, padding_y, gap) = match self.size {
             Size::XSmall => (cx.theme().radius, px(12.), px(6.), px(6.)),
             Size::Small => (cx.theme().radius, px(12.), px(8.), px(6.)),
-            Size::Large => (cx.theme().radius_lg, px(20.), px(16.), px(12.)),
-            _ => (cx.theme().radius_lg, px(16.), px(12.), px(12.)),
+            Size::Large => (cx.theme().radius_lg, px(20.), px(14.), px(12.)),
+            _ => (cx.theme().radius, px(16.), px(10.), px(12.)),
         };
 
         let color = self.variant.color(cx);
@@ -196,7 +196,7 @@ impl RenderOnce for Alert {
             .py(padding_y)
             .gap(gap)
             .justify_between()
-            .input_text_size(self.size.smaller())
+            .text_sm()
             .border_1()
             .border_color(border_color)
             .when(!self.banner, |this| this.rounded(radius).items_start())
@@ -205,25 +205,23 @@ impl RenderOnce for Alert {
                 div()
                     .flex()
                     .flex_1()
-                    .items_start()
                     .when(self.banner, |this| this.items_center())
                     .overflow_hidden()
                     .gap(gap)
-                    .child(self.icon)
+                    .child(
+                        div()
+                            .when(!self.banner, |this| this.mt(px(5.)))
+                            .child(self.icon),
+                    )
                     .child(
                         div()
                             .flex_1()
                             .overflow_hidden()
+                            .gap_3()
                             .when(!self.banner, |this| {
                                 this.when_some(self.title, |this, title| {
                                     this.child(
-                                        div()
-                                            .w_full()
-                                            .truncate()
-                                            .font_semibold()
-                                            .line_height(relative(1.))
-                                            .mb(rems(0.3))
-                                            .child(title),
+                                        div().w_full().truncate().font_semibold().child(title),
                                     )
                                 })
                             })

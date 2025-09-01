@@ -184,8 +184,8 @@ impl RenderOnce for TabBar {
             }
             TabVariant::Segmented => {
                 let padding_x = match self.size {
-                    Size::XSmall => px(3.),
-                    Size::Small => px(3.),
+                    Size::XSmall => px(2.),
+                    Size::Small => px(2.),
                     Size::Large => px(6.),
                     _ => px(5.),
                 };

@@ -347,7 +347,7 @@ impl Scrollbar {
     /// If you have very high CPU usage, consider reducing this value to improve performance.
     ///
     /// Available values: 30..120
-    pub fn max_fps(mut self, max_fps: usize) -> Self {
+    pub(crate) fn max_fps(mut self, max_fps: usize) -> Self {
         self.max_fps = max_fps.clamp(30, 120);
         self
     }
@@ -508,7 +508,6 @@ impl Element for Scrollbar {
             };
 
             // The horizontal scrollbar is set avoid overlapping with the vertical scrollbar, if the vertical scrollbar is visible.
-
             let margin_end = if has_both && !is_vertical {
                 THUMB_ACTIVE_WIDTH
             } else {
