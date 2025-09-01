@@ -569,7 +569,7 @@ impl Element for TextElement {
         let empty_line_number = window
             .text_system()
             .shape_text(
-                "0000".into(),
+                "++++".into(),
                 font_size,
                 &[TextRun {
                     len: 4,
@@ -662,7 +662,7 @@ impl Element for TextElement {
         };
 
         let wrap_width = if multi_line && state.soft_wrap {
-            Some(bounds.size.width - line_number_width - RIGHT_MARGIN)
+            Some(bounds.size.width - line_number_width)
         } else {
             None
         };
