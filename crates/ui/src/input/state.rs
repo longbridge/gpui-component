@@ -266,10 +266,7 @@ pub struct InputState {
     pub(super) disabled: bool,
     pub(super) masked: bool,
     pub(super) clean_on_escape: bool,
-    /// Disable word wrap for multi-line input
-    pub(super) disable_word_wrap: bool,
-    /// Show horizontal scrollbar when text overflows
-    pub(super) show_horizontal_scrollbar: bool,
+    pub(super) soft_wrap: bool,
     pub(super) pattern: Option<regex::Regex>,
     pub(super) validate: Option<Box<dyn Fn(&str, &mut Context<Self>) -> bool + 'static>>,
     pub(crate) scroll_handle: ScrollHandle,
@@ -339,8 +336,7 @@ impl InputState {
             disabled: false,
             masked: false,
             clean_on_escape: false,
-            disable_word_wrap: false,
-            show_horizontal_scrollbar: false,
+            soft_wrap: true,
             loading: false,
             pattern: None,
             validate: None,
@@ -757,16 +753,16 @@ impl InputState {
         self
     }
 
-    /// Disable word wrap for multi-line input.
-    pub fn disable_word_wrap(mut self) -> Self {
-        self.disable_word_wrap = true;
+    /// Set the soft wrap mode for multi-line input, default is true.
+    pub fn soft_wrap(mut self, wrap: bool) -> Self {
+        self.soft_wrap = wrap;
         self
     }
 
-    /// Show horizontal scrollbar when text overflows.
-    pub fn show_horizontal_scrollbar(mut self) -> Self {
-        self.show_horizontal_scrollbar = true;
-        self
+    /// Update the soft wrap mode for multi-line input, default is true.
+    pub fn set_soft_wrap(&mut self, wrap: bool, _: &mut Window, cx: &mut Context<Self>) {
+        self.soft_wrap = wrap;
+        cx.notify();
     }
 
     /// Set the regular expression pattern of the input field.
@@ -2118,8 +2114,9 @@ impl InputState {
         // Update text_wrapper wrap_width if changed.
         if let Some(last_layout) = self.last_layout.as_ref() {
             if wrap_width_changed {
-                let wrap_width = if self.disable_word_wrap {
-                    None // Use None to disable wrapping (will use Pixels::MAX)
+                let wrap_width = if !self.soft_wrap {
+                    // None to disable wrapping (will use Pixels::MAX)
+                    None
                 } else {
                     last_layout.wrap_width
                 };
