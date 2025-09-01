@@ -879,6 +879,7 @@ impl Element for TextElement {
 
         let active_line_color = cx.theme().highlight_theme.style.active_line;
 
+        // Paint active line
         let mut offset_y = px(0.);
         if let Some(line_numbers) = prepaint.line_numbers.as_ref() {
             offset_y += invisible_top_padding;
@@ -887,7 +888,7 @@ impl Element for TextElement {
             for (ix, lines) in line_numbers.iter().enumerate() {
                 let is_active = prepaint.current_line_index == Some(visible_range.start + ix);
                 for line in lines {
-                    let p = point(origin.x, origin.y + offset_y);
+                    let p = point(input_bounds.origin.x, origin.y + offset_y);
                     let line_size = line.size(line_height);
                     // Paint the current line background
                     if is_active {
@@ -898,7 +899,6 @@ impl Element for TextElement {
                             ));
                         }
                     }
-                    _ = line.paint(p, line_height, TextAlign::Left, None, window, cx);
                     offset_y += line_size.height;
                 }
             }
@@ -913,7 +913,6 @@ impl Element for TextElement {
 
         // Paint text
         let mut offset_y = mask_offset_y + invisible_top_padding;
-
         for line in prepaint
             .last_layout
             .iter()
@@ -926,6 +925,54 @@ impl Element for TextElement {
             );
             _ = line.paint(p, line_height, TextAlign::Left, None, window, cx);
             offset_y += line.size(line_height).height;
+        }
+
+        // Paint line numbers
+        let mut offset_y = px(0.);
+        if let Some(line_numbers) = prepaint.line_numbers.as_ref() {
+            offset_y += invisible_top_padding;
+
+            // Paint line number background
+            window.paint_quad(fill(
+                Bounds {
+                    origin: input_bounds.origin,
+                    size: size(
+                        prepaint.last_layout.line_number_width,
+                        input_bounds.size.height,
+                    ),
+                },
+                cx.theme()
+                    .highlight_theme
+                    .style
+                    .background
+                    .unwrap_or(cx.theme().input),
+            ));
+
+            // Each item is the normal lines.
+            for (ix, lines) in line_numbers.iter().enumerate() {
+                for line in lines {
+                    let p = point(input_bounds.origin.x, origin.y + offset_y);
+
+                    let is_active = prepaint.current_line_index == Some(visible_range.start + ix);
+                    let line_size = line.size(line_height);
+
+                    // paint active line number background
+                    if is_active {
+                        if let Some(bg_color) = active_line_color {
+                            window.paint_quad(fill(
+                                Bounds::new(
+                                    p,
+                                    size(prepaint.last_layout.line_number_width, line_height),
+                                ),
+                                bg_color,
+                            ));
+                        }
+                    }
+
+                    _ = line.paint(p, line_height, TextAlign::Left, None, window, cx);
+                    offset_y += line_size.height;
+                }
+            }
         }
 
         if focused {

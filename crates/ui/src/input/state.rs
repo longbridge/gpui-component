@@ -519,7 +519,7 @@ impl InputState {
 
     /// Called after moving the cursor. Updates preferred_x_offset if we know where the cursor now is.
     fn update_preferred_x_offset(&mut self, _cx: &mut Context<Self>) {
-        let (Some(_), Some(bounds)) = (&self.last_layout, &self.last_bounds) else {
+        let (Some(last_layout), Some(bounds)) = (&self.last_layout, &self.last_bounds) else {
             return;
         };
 
@@ -527,7 +527,7 @@ impl InputState {
         let (_, _, cursor_pos) = self.line_and_position_for_offset(self.cursor().offset);
 
         if let Some(pos) = cursor_pos {
-            self.preferred_x_offset = Some(pos.x + bounds.origin.x);
+            self.preferred_x_offset = Some(pos.x + bounds.origin.x + last_layout.line_number_width);
         }
     }
 
