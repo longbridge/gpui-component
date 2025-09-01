@@ -300,7 +300,8 @@ impl RenderOnce for TextInput {
             })
             .refine_style(&self.style)
             .when(state.mode.is_multi_line(), |this| {
-                if state.last_layout.is_some() {
+                if let Some(last_layout) = state.last_layout.as_ref() {
+                    let left = state.input_bounds.origin.x + last_layout.line_number_width;
                     let scrollbar = if !state.soft_wrap {
                         Scrollbar::both(&state.scroll_state, &state.scroll_handle)
                     } else {
@@ -311,7 +312,7 @@ impl RenderOnce for TextInput {
                         div()
                             .absolute()
                             .top_0()
-                            .left_0()
+                            .left(left)
                             .right(px(1.))
                             .bottom_0()
                             .child(scrollbar.scroll_size(state.scroll_size)),

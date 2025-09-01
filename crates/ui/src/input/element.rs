@@ -14,7 +14,7 @@ use crate::{
 
 use super::{mode::InputMode, InputState, LastLayout};
 
-const RIGHT_MARGIN: Pixels = px(5.);
+pub(super) const RIGHT_MARGIN: Pixels = px(10.);
 const BOTTOM_MARGIN_ROWS: usize = 1;
 const LINE_NUMBER_MARGIN_RIGHT: Pixels = px(10.);
 
@@ -129,16 +129,17 @@ impl TextElement {
             let selection_changed = state.last_selected_range != Some(selected_range);
 
             if cursor_moved || selection_changed {
-                scroll_offset.x =
-                    if scroll_offset.x + cursor_pos.x > (bounds.size.width - RIGHT_MARGIN) {
-                        // cursor is out of right
-                        bounds.size.width - RIGHT_MARGIN - cursor_pos.x
-                    } else if scroll_offset.x + cursor_pos.x < px(0.) {
-                        // cursor is out of left
-                        scroll_offset.x - cursor_pos.x
-                    } else {
-                        scroll_offset.x
-                    };
+                scroll_offset.x = if scroll_offset.x + cursor_pos.x
+                    > (bounds.size.width - line_number_width - RIGHT_MARGIN)
+                {
+                    // cursor is out of right
+                    bounds.size.width - line_number_width - RIGHT_MARGIN - cursor_pos.x
+                } else if scroll_offset.x + cursor_pos.x < px(0.) {
+                    // cursor is out of left
+                    scroll_offset.x - cursor_pos.x
+                } else {
+                    scroll_offset.x
+                };
                 scroll_offset.y = if scroll_offset.y + cursor_pos.y + line_height
                     > bounds.size.height - bottom_margin
                 {
@@ -568,7 +569,7 @@ impl Element for TextElement {
         let empty_line_number = window
             .text_system()
             .shape_text(
-                "++++".into(),
+                "0000".into(),
                 font_size,
                 &[TextRun {
                     len: 4,
@@ -661,7 +662,7 @@ impl Element for TextElement {
         };
 
         let wrap_width = if multi_line && state.soft_wrap {
-            Some(bounds.size.width - line_number_width)
+            Some(bounds.size.width - line_number_width - RIGHT_MARGIN)
         } else {
             None
         };
@@ -674,19 +675,15 @@ impl Element for TextElement {
             .expect("failed to shape text");
         // measure.end();
 
-        let total_wrapped_lines = lines
-            .iter()
-            .map(|line| {
-                // +1 is the first line, `wrap_boundaries` is the wrapped lines after the `\n`.
-                1 + line.wrap_boundaries.len()
-            })
-            .sum::<usize>();
+        let mut max_line_width = bounds.size.width;
+        let mut total_wrapped_lines = 0;
+        for line in lines.iter() {
+            // FIXME: The `shape_text` measured width is not stable, sometime will large, sometime small.
+            max_line_width = max_line_width.max(line.width());
+            // +1 is the first line, `wrap_boundaries` is the wrapped lines after the `\n`.
+            total_wrapped_lines += 1 + line.wrap_boundaries.len();
+        }
 
-        let max_line_width = lines
-            .iter()
-            .map(|line| line.width())
-            .max()
-            .unwrap_or(bounds.size.width);
         let scroll_size = size(
             max_line_width + line_number_width + RIGHT_MARGIN,
             (total_wrapped_lines as f32 * line_height).max(bounds.size.height),
@@ -927,6 +924,14 @@ impl Element for TextElement {
             offset_y += line.size(line_height).height;
         }
 
+        // Paint blinking cursor
+        if focused {
+            if let Some(mut cursor_bounds) = prepaint.cursor_bounds.take() {
+                cursor_bounds.origin.y += prepaint.cursor_scroll_offset.y;
+                window.paint_quad(fill(cursor_bounds, cx.theme().caret));
+            }
+        }
+
         // Paint line numbers
         let mut offset_y = px(0.);
         if let Some(line_numbers) = prepaint.line_numbers.as_ref() {
@@ -972,13 +977,6 @@ impl Element for TextElement {
                     _ = line.paint(p, line_height, TextAlign::Left, None, window, cx);
                     offset_y += line_size.height;
                 }
-            }
-        }
-
-        if focused {
-            if let Some(mut cursor_bounds) = prepaint.cursor_bounds.take() {
-                cursor_bounds.origin.y += prepaint.cursor_scroll_offset.y;
-                window.paint_quad(fill(cursor_bounds, cx.theme().caret));
             }
         }
 
