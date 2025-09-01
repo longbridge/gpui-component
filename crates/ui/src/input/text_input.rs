@@ -1,8 +1,8 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     div, px, relative, AnyElement, App, DefiniteLength, Entity, InteractiveElement as _,
-    IntoElement, MouseButton, ParentElement as _, Rems, RenderOnce, StyleRefinement, Styled,
-    Window,
+    IntoElement, IsZero, MouseButton, ParentElement as _, Rems, RenderOnce, StyleRefinement,
+    Styled, Window,
 };
 
 use crate::button::{Button, ButtonVariants as _};
@@ -302,11 +302,17 @@ impl RenderOnce for TextInput {
             .refine_style(&self.style)
             .when(state.mode.is_multi_line(), |this| {
                 if let Some(last_layout) = state.last_layout.as_ref() {
-                    let left = last_layout.line_number_width - LINE_NUMBER_RIGHT_MARGIN;
+                    let left = if last_layout.line_number_width.is_zero() {
+                        px(0.)
+                    } else {
+                        last_layout.line_number_width - LINE_NUMBER_RIGHT_MARGIN
+                    };
+
                     let scroll_size = gpui::Size {
                         width: state.scroll_size.width - left + RIGHT_MARGIN,
                         height: state.scroll_size.height,
                     };
+
                     let scrollbar = if !state.soft_wrap {
                         Scrollbar::both(&state.scroll_state, &state.scroll_handle)
                     } else {
@@ -317,7 +323,7 @@ impl RenderOnce for TextInput {
                         div()
                             .absolute()
                             .top_0()
-                            .left(state.input_bounds.origin.x + left)
+                            .left(left)
                             .right(px(1.))
                             .bottom_0()
                             .child(scrollbar.scroll_size(scroll_size)),

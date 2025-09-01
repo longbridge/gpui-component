@@ -224,7 +224,7 @@ pub(super) struct LastLayout {
     pub(super) visible_range: Range<usize>,
     /// The wrap width of text layout, this will change will InputElement painted.
     pub(super) wrap_width: Option<Pixels>,
-    /// The line number area width of text layout.
+    /// The line number area width of text layout, if not line number, this will be 0px.
     pub(super) line_number_width: Pixels,
 }
 
