@@ -5,7 +5,7 @@ use gpui_component::{
     h_flex,
     highlighter::{Language, LanguageConfig, LanguageRegistry},
     input::{InputEvent, InputState, Marker, TabSize, TextInput},
-    v_flex, ActiveTheme, ContextModal, IconName, IndexPath, Sizable,
+    v_flex, ActiveTheme, ContextModal, IconName, IndexPath, Selectable, Sizable,
 };
 use story::Assets;
 
@@ -30,6 +30,7 @@ pub struct Example {
     language: Lang,
     line_number: bool,
     need_update: bool,
+    soft_wrap: bool,
     _subscribes: Vec<Subscription>,
 }
 
@@ -99,6 +100,7 @@ impl Example {
                     tab_size: 4,
                     hard_tabs: false,
                 })
+                .soft_wrap(false)
                 .default_value(default_language.1)
                 .placeholder("Enter your code here...")
         });
@@ -140,6 +142,7 @@ impl Example {
             language: default_language.0,
             line_number: true,
             need_update: false,
+            soft_wrap: false,
             _subscribes,
         }
     }
@@ -220,6 +223,14 @@ impl Example {
                 })
         });
     }
+
+    fn toggle_soft_wrap(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
+        self.soft_wrap = !self.soft_wrap;
+        self.editor.update(cx, |state, cx| {
+            state.set_soft_wrap(self.soft_wrap, window, cx);
+        });
+        cx.notify();
+    }
 }
 
 impl Render for Example {
@@ -232,7 +243,6 @@ impl Render for Example {
                 .id("source")
                 .w_full()
                 .flex_1()
-                .gap_2()
                 .child(
                     TextInput::new(&self.editor)
                         .bordered(false)
@@ -272,7 +282,15 @@ impl Render for Example {
                                             });
                                             cx.notify();
                                         })),
-                                ),
+                                )
+                                .child({
+                                    Button::new("soft-wrap")
+                                        .ghost()
+                                        .xsmall()
+                                        .label("Soft Wrap")
+                                        .selected(self.soft_wrap)
+                                        .on_click(cx.listener(Self::toggle_soft_wrap))
+                                }),
                         )
                         .child({
                             let loc = self.editor.read(cx).line_column();
