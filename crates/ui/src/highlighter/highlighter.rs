@@ -248,6 +248,7 @@ impl SyntaxHighlighter {
 
     /// NOTE: 10K lines, about 180ms
     /// FIXME: To improve the performance when there more than 5K lines, use partial update.
+    /// Ref: https://github.com/longbridge/gpui-component/pull/1197
     fn build_styles(&mut self, cx: &mut App) {
         let Some(tree) = &self.old_tree else {
             return;
@@ -263,7 +264,6 @@ impl SyntaxHighlighter {
         self.cache.clear();
 
         let mut matches = query_cursor.matches(&query, root_node, source);
-
         while let Some(m) = matches.next() {
             // Ref:
             // https://github.com/tree-sitter/tree-sitter/blob/460118b4c82318b083b4d527c9c750426730f9c0/highlight/src/lib.rs#L556
@@ -272,10 +272,8 @@ impl SyntaxHighlighter {
                 if let Some(content_node) = content_node {
                     let styles = self.handle_injection(&language_name, content_node, source, cx);
                     for (node_range, highlight_name) in styles {
-                        self.cache.insert(
-                            node_range.start,
-                            (node_range, highlight_name.to_string().into()),
-                        );
+                        self.cache
+                            .insert(node_range.start, (node_range, highlight_name.into()));
                     }
                 }
 
