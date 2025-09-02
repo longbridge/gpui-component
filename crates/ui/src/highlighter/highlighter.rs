@@ -216,6 +216,7 @@ impl SyntaxHighlighter {
         let changed_len = new_text.len() as isize - selected_range.len() as isize;
 
         let new_tree = match &self.old_tree {
+            // NOTE: 10K lines, about 4.5ms
             None => self.parser.parse(full_text.as_ref(), None),
             Some(old) => {
                 let edit = InputEdit {
@@ -228,7 +229,6 @@ impl SyntaxHighlighter {
                 };
                 let mut old_cloned = old.clone();
                 old_cloned.edit(&edit);
-                // NOTE: 10K lines, about 4.5ms
                 self.parser.parse(full_text.as_ref(), Some(&old_cloned))
             }
         };
@@ -237,27 +237,18 @@ impl SyntaxHighlighter {
             return;
         };
 
-        let mut changed_ranges = None;
-        if let Some(old_tree) = &self.old_tree {
-            changed_ranges = Some(new_tree.changed_ranges(old_tree));
-        }
-
         // Update state
         self.old_tree = Some(new_tree);
         self.text = full_text.clone();
 
-        // let measure = Measure::new("build_styles");
-        self.build_styles(changed_ranges, changed_len, cx);
-        // measure.end();
+        let measure = crate::Measure::new("build_styles");
+        self.build_styles(cx);
+        measure.end();
     }
 
     /// NOTE: 10K lines, about 180ms
-    fn build_styles(
-        &mut self,
-        changed_ranges: Option<impl ExactSizeIterator<Item = tree_sitter::Range>>,
-        changed_len: isize,
-        cx: &mut App,
-    ) {
+    /// FIXME: To improve the performance when there more than 5K lines, use partial update.
+    fn build_styles(&mut self, cx: &mut App) {
         let Some(tree) = &self.old_tree else {
             return;
         };
@@ -268,75 +259,8 @@ impl SyntaxHighlighter {
 
         let source = self.text.as_bytes();
         let mut query_cursor = QueryCursor::new();
-        let mut root_node = tree.root_node();
-
-        // Incremental parsing to only update changed ranges.
-        if let Some(changed_ranges) = changed_ranges {
-            let mut total_range = (None, None);
-            for change_range in changed_ranges {
-                // dbg!(change_range);
-                if total_range.0.is_none() {
-                    total_range.0 = Some(change_range.start_byte);
-                }
-                if total_range.1.is_none() {
-                    total_range.1 = Some(change_range.end_byte);
-                }
-            }
-            let total_range = total_range.0.unwrap_or(0)..total_range.1.unwrap_or(0);
-
-            // println!("------- total_range: {:?}", total_range);
-
-            if total_range.len() == 0 {
-                return;
-            }
-
-            if let Some(node) =
-                root_node.descendant_for_byte_range(total_range.start, total_range.end)
-            {
-                root_node = node;
-            }
-
-            let byte_range = root_node.byte_range();
-
-            // let measure = Measure::new("update cache to change range offset");
-
-            // FIXME: If we delete 1 char in a node, that node will not highlighted.
-
-            // Remove the cache entries that are range is intersecting with the byte_range.
-            self.cache.retain(|_, (range, _)| {
-                if range.start < byte_range.end && range.end > byte_range.start {
-                    // Remove the item if it is intersecting with the byte_range.
-                    false
-                } else {
-                    // Keep the item if it is not intersecting with the byte_range.
-                    true
-                }
-            });
-
-            // Apply changed_len to reorder the cache to move the range offset
-            let mut old_cache: BTreeMap<usize, (Range<usize>, SharedString)> = BTreeMap::new();
-            std::mem::swap(&mut self.cache, &mut old_cache);
-
-            // NOTE: 10K lines, about 35ms
-            for (start, (old_range, highlight_name)) in old_cache.into_iter() {
-                if old_range.end >= byte_range.start {
-                    let new_range = Range {
-                        start: (old_range.start as isize + changed_len).max(0) as usize,
-                        end: (old_range.end as isize + changed_len).max(0) as usize,
-                    };
-
-                    if new_range.len() > 0 {
-                        self.cache
-                            .insert(new_range.start, (new_range, highlight_name));
-                    }
-                } else {
-                    self.cache.insert(start, (old_range, highlight_name));
-                }
-            }
-            // measure.end();
-        } else {
-            self.cache.clear();
-        }
+        let root_node = tree.root_node();
+        self.cache.clear();
 
         let mut matches = query_cursor.matches(&query, root_node, source);
 
