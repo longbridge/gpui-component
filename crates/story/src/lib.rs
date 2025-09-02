@@ -143,13 +143,11 @@ actions!(story, [TestAction, Tab, TabPrev]);
 
 pub struct AppState {
     pub invisible_panels: Entity<Vec<SharedString>>,
-    pub theme_name: Option<SharedString>,
 }
 impl AppState {
     fn init(cx: &mut App) {
         let state = Self {
             invisible_panels: cx.new(|_| Vec::new()),
-            theme_name: None,
         };
         cx.set_global::<AppState>(state);
     }

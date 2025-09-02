@@ -140,11 +140,11 @@ impl Theme {
 
     /// Sync the Scrollbar showing behavior with the system
     pub fn sync_scrollbar_appearance(cx: &mut App) {
-        if cx.should_auto_hide_scrollbars() {
-            cx.global_mut::<Theme>().scrollbar_show = ScrollbarShow::Scrolling;
+        Theme::global_mut(cx).scrollbar_show = if cx.should_auto_hide_scrollbars() {
+            ScrollbarShow::Scrolling
         } else {
-            cx.global_mut::<Theme>().scrollbar_show = ScrollbarShow::Hover;
-        }
+            ScrollbarShow::Hover
+        };
     }
 
     pub fn change(mode: impl Into<ThemeMode>, window: Option<&mut Window>, cx: &mut App) {
