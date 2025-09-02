@@ -1,7 +1,7 @@
 use std::rc::Rc;
 use std::{cell::RefCell, ops::Range};
 
-use gpui::{App, DefiniteLength, SharedString};
+use gpui::{App, SharedString};
 
 use crate::{highlighter::SyntaxHighlighter, input::marker::Marker};
 
@@ -41,7 +41,6 @@ pub enum InputMode {
     MultiLine {
         tab: TabSize,
         rows: usize,
-        height: Option<DefiniteLength>,
     },
     AutoGrow {
         rows: usize,
@@ -51,7 +50,6 @@ pub enum InputMode {
     CodeEditor {
         tab: TabSize,
         rows: usize,
-        height: Option<DefiniteLength>,
         /// Show line number
         line_number: bool,
         language: SharedString,
@@ -104,18 +102,6 @@ impl InputMode {
         }
     }
 
-    pub(super) fn set_height(&mut self, new_height: Option<DefiniteLength>) {
-        match self {
-            InputMode::MultiLine { height, .. } => {
-                *height = new_height;
-            }
-            InputMode::CodeEditor { height, .. } => {
-                *height = new_height;
-            }
-            _ => {}
-        }
-    }
-
     pub(super) fn update_auto_grow(&mut self, text_wrapper: &TextWrapper) {
         let wrapped_lines = text_wrapper.wrapped_lines.len();
         self.set_rows(wrapped_lines);
@@ -149,14 +135,6 @@ impl InputMode {
             InputMode::MultiLine { .. } | InputMode::CodeEditor { .. } => usize::MAX,
             InputMode::AutoGrow { max_rows, .. } => *max_rows,
             _ => 1,
-        }
-    }
-
-    pub(super) fn height(&self) -> Option<DefiniteLength> {
-        match self {
-            InputMode::MultiLine { height, .. } => *height,
-            InputMode::CodeEditor { height, .. } => *height,
-            _ => None,
         }
     }
 

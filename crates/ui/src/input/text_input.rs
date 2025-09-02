@@ -154,7 +154,6 @@ impl RenderOnce for TextInput {
         let font_size = window.text_style().font_size.to_pixels(window.rem_size());
 
         self.state.update(cx, |state, cx| {
-            state.mode.set_height(self.height);
             state.text_wrapper.set_font(font, font_size, cx);
             state.disabled = self.disabled;
         });
@@ -328,6 +327,7 @@ impl RenderOnce for TextInput {
                     let left = if last_layout.line_number_width.is_zero() {
                         px(0.)
                     } else {
+                        // Align left edge to the Line number.
                         paddings.left + last_layout.line_number_width - LINE_NUMBER_RIGHT_MARGIN
                     };
 

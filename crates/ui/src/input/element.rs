@@ -513,12 +513,13 @@ impl Element for TextElement {
         style.size.width = relative(1.).into();
         if state.mode.is_multi_line() {
             style.flex_grow = 1.0;
-            if let Some(h) = state.mode.height() {
-                style.size.height = h.into();
-                style.min_size.height = line_height.into();
+            style.size.height = relative(1.).into();
+            if state.mode.is_auto_grow() {
+                // Auto grow to let height match to rows, but not exceed max rows.
+                let rows = state.mode.max_rows().min(state.mode.rows());
+                style.min_size.height = (rows * line_height).into();
             } else {
-                style.size.height = relative(1.).into();
-                style.min_size.height = (state.mode.rows() * line_height).into();
+                style.min_size.height = line_height.into();
             }
         } else {
             // For single-line inputs, the minimum height should be the line height

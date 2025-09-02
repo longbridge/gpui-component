@@ -11,8 +11,8 @@ use std::rc::Rc;
 use unicode_segmentation::*;
 
 use gpui::{
-    actions, div, point, prelude::FluentBuilder as _, px, relative, App, AppContext, Bounds,
-    ClipboardItem, Context, Entity, EntityInputHandler, EventEmitter, FocusHandle, Focusable,
+    actions, div, point, prelude::FluentBuilder as _, px, App, AppContext, Bounds, ClipboardItem,
+    Context, Entity, EntityInputHandler, EventEmitter, FocusHandle, Focusable,
     InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent, MouseButton, MouseDownEvent,
     MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Render, ScrollHandle,
     ScrollWheelEvent, SharedString, Styled as _, Subscription, UTF16Selection, Window, WrappedLine,
@@ -362,7 +362,6 @@ impl InputState {
     pub fn multi_line(mut self) -> Self {
         self.mode = InputMode::MultiLine {
             rows: 2,
-            height: None,
             tab: TabSize::default(),
         };
         self
@@ -404,7 +403,6 @@ impl InputState {
             language,
             highlighter: Rc::new(RefCell::new(None)),
             line_number: true,
-            height: Some(relative(1.)),
             markers: Rc::new(vec![]),
         };
         self
