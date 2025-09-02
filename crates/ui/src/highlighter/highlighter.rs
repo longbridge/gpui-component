@@ -2,11 +2,8 @@ use super::HighlightTheme;
 use crate::highlighter::LanguageRegistry;
 use anyhow::{anyhow, Context, Result};
 use gpui::{App, HighlightStyle, SharedString};
-use indexset::BTreeMap;
-use std::{
-    collections::HashMap,
-    ops::{Bound, Range},
-};
+use std::{collections::HashMap, ops::Range};
+use sum_tree::Bias;
 use tree_sitter::{
     InputEdit, Node, Parser, Point, Query, QueryCursor, QueryMatch, StreamingIterator, Tree,
 };
@@ -83,13 +80,9 @@ impl sum_tree::Summary for HighlightSummary {
     fn add_summary(&mut self, _summary: &Self, _cx: &Self::Context) {}
 }
 
-impl<'a> sum_tree::Dimension<'a, HighlightSummary> for usize {
-    fn zero(_: &()) -> Self {
-        Default::default()
-    }
-
-    fn add_summary(&mut self, summary: &'a HighlightSummary, _: &()) {
-        *self = summary.range.start
+impl sum_tree::SeekTarget<'_, HighlightSummary, HighlightSummary> for Range<usize> {
+    fn cmp(&self, other: &HighlightSummary, _: &()) -> std::cmp::Ordering {
+        self.start.cmp(&other.range.start)
     }
 }
 
@@ -538,24 +531,14 @@ impl SyntaxHighlighter {
         //     println!("-- range: {:?}, style: {:?}", range, style);
         // }
         //
-        let mut cursor = self.cache.cursor::<usize>(&());
-        let highlights = cursor.slice(&range.start, sum_tree::Bias::Left);
+        let mut cursor = self.cache.cursor::<HighlightSummary>(&());
+        let items = cursor.slice(range, Bias::Left);
 
-        // let mut cursor = self.cache.
-        // // Move to the previous item if the current item is not the start of the range.
-        // // This is for case like JsDoc, where token may contains multiple lines.
-        // if cursor.key() != Some(&range.start) {
-        //     cursor.move_prev();
-        // }
-
-        for item in highlights.iter() {
+        let mut count = 0;
+        for item in items.iter() {
+            count += 1;
             let node_range = &item.range;
             let name = &item.name;
-
-            // Break loop if the node_range is out of the range
-            if node_range.start > range.end {
-                break;
-            }
 
             let mut node_range = node_range.start.max(range.start)..node_range.end.min(range.end);
             // Avoid start larger than end
@@ -573,9 +556,9 @@ impl SyntaxHighlighter {
                 node_range.clone(),
                 theme.style(name.as_ref()).unwrap_or_default(),
             ));
-
-            // cursor.move_next();
         }
+
+        dbg!(&count);
 
         // If the matched styles is empty, return a default range.
         if styles.len() == 0 {
