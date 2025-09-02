@@ -300,16 +300,39 @@ impl RenderOnce for TextInput {
                 )
             })
             .refine_style(&self.style)
-            .when(state.mode.is_multi_line(), |this| {
+            .when(state.mode.is_multi_line(), |mut this| {
+                let paddings = this.style().padding.clone();
+                let base_size = window.text_style().font_size;
+                let rem_size = window.rem_size();
+
+                let paddings = gpui::Edges {
+                    left: paddings
+                        .left
+                        .map(|v| v.to_pixels(base_size, rem_size))
+                        .unwrap_or(px(0.)),
+                    right: paddings
+                        .right
+                        .map(|v| v.to_pixels(base_size, rem_size))
+                        .unwrap_or(px(0.)),
+                    top: paddings
+                        .top
+                        .map(|v| v.to_pixels(base_size, rem_size))
+                        .unwrap_or(px(0.)),
+                    bottom: paddings
+                        .bottom
+                        .map(|v| v.to_pixels(base_size, rem_size))
+                        .unwrap_or(px(0.)),
+                };
+
                 if let Some(last_layout) = state.last_layout.as_ref() {
                     let left = if last_layout.line_number_width.is_zero() {
                         px(0.)
                     } else {
-                        last_layout.line_number_width - LINE_NUMBER_RIGHT_MARGIN
+                        paddings.left + last_layout.line_number_width - LINE_NUMBER_RIGHT_MARGIN
                     };
 
                     let scroll_size = gpui::Size {
-                        width: state.scroll_size.width - left + RIGHT_MARGIN,
+                        width: state.scroll_size.width - left + paddings.right + RIGHT_MARGIN,
                         height: state.scroll_size.height,
                     };
 
@@ -324,7 +347,7 @@ impl RenderOnce for TextInput {
                             .absolute()
                             .top_0()
                             .left(left)
-                            .right(px(1.))
+                            .right_0()
                             .bottom_0()
                             .child(scrollbar.scroll_size(scroll_size)),
                     )
