@@ -49,6 +49,7 @@ tree-sitter-languages = [
 
 [dependencies]
 gpui.workspace = true
+sum_tree.workspace = true
 gpui-component-macros.workspace = true
 rust-i18n.workspace = true
 schemars.workspace = true

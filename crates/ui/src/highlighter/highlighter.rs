@@ -39,7 +39,58 @@ pub struct SyntaxHighlighter {
     ///
     /// - The `key` is the `start` of the range.
     /// -The `value` is a tuple of the range (in the entire text) and the highlight name.
-    cache: BTreeMap<usize, (Range<usize>, SharedString)>,
+    cache: sum_tree::SumTree<HighlightItem>,
+}
+
+#[derive(Debug, Default, Clone)]
+struct HighlightSummary {
+    range: Range<usize>,
+}
+
+#[derive(Debug, Default, Clone)]
+struct HighlightItem {
+    range: Range<usize>,
+    /// The highlight name, like `function`, `string`, `comment`, etc.
+    name: SharedString,
+}
+
+impl HighlightItem {
+    pub fn new(range: Range<usize>, name: impl Into<SharedString>) -> Self {
+        Self {
+            range,
+            name: name.into(),
+        }
+    }
+}
+
+impl sum_tree::Item for HighlightItem {
+    type Summary = HighlightSummary;
+
+    fn summary(&self, _cx: &()) -> Self::Summary {
+        HighlightSummary {
+            range: self.range.clone(),
+        }
+    }
+}
+
+impl sum_tree::Summary for HighlightSummary {
+    type Context = ();
+
+    fn zero(_: &Self::Context) -> Self {
+        Default::default()
+    }
+
+    fn add_summary(&mut self, _summary: &Self, _cx: &Self::Context) {}
+}
+
+impl<'a> sum_tree::Dimension<'a, HighlightSummary> for usize {
+    fn zero(_: &()) -> Self {
+        Default::default()
+    }
+
+    fn add_summary(&mut self, summary: &'a HighlightSummary, _: &()) {
+        *self = summary.range.start
+    }
 }
 
 impl SyntaxHighlighter {
@@ -180,7 +231,7 @@ impl SyntaxHighlighter {
             parser,
             old_tree: None,
             text: SharedString::new(""),
-            cache: BTreeMap::new(),
+            cache: sum_tree::SumTree::new(&()),
             locals_pattern_index,
             highlights_pattern_index,
             non_local_variable_patterns,
@@ -261,7 +312,7 @@ impl SyntaxHighlighter {
         let source = self.text.as_bytes();
         let mut query_cursor = QueryCursor::new();
         let root_node = tree.root_node();
-        self.cache.clear();
+        self.cache = sum_tree::SumTree::new(&());
 
         let mut matches = query_cursor.matches(&query, root_node, source);
         while let Some(m) = matches.next() {
@@ -273,7 +324,8 @@ impl SyntaxHighlighter {
                     let styles = self.handle_injection(&language_name, content_node, source, cx);
                     for (node_range, highlight_name) in styles {
                         self.cache
-                            .insert(node_range.start, (node_range, highlight_name.into()));
+                            .push(HighlightItem::new(node_range.clone(), highlight_name), &());
+                        // .insert(node_range.start, (node_range, highlight_name.into()));
                     }
                 }
 
@@ -291,28 +343,34 @@ impl SyntaxHighlighter {
                 let highlight_name = SharedString::from(highlight_name.to_string());
 
                 // Merge near range and same highlight name
-                let last_item = self.cache.last_key_value().map(|kv| kv.1);
-                let last_range = last_item.map(|(range, _)| range).unwrap_or(&(0..0));
-                let last_highlight_name = last_item.map(|(_, name)| name.clone());
+                let last_item = self.cache.last();
+                let last_range = last_item.map(|item| &item.range).unwrap_or(&(0..0));
+                let last_highlight_name = last_item.map(|item| item.name.clone());
 
                 if last_range.end <= node_range.start
                     && last_highlight_name.as_ref() == Some(&highlight_name)
                 {
-                    self.cache.insert(
-                        last_range.start,
-                        (last_range.start..node_range.end, highlight_name.clone()),
+                    self.cache.push(
+                        HighlightItem::new(
+                            last_range.start..node_range.end,
+                            highlight_name.clone(),
+                        ),
+                        &(),
                     );
                 } else if last_range == &node_range {
                     // case:
                     // last_range: 213..220, last_highlight_name: Some("property")
                     // last_range: 213..220, last_highlight_name: Some("string")
-                    self.cache.insert(
-                        node_range.start,
-                        (node_range, last_highlight_name.unwrap_or(highlight_name)),
+                    self.cache.push(
+                        HighlightItem::new(
+                            node_range,
+                            last_highlight_name.unwrap_or(highlight_name),
+                        ),
+                        &(),
                     );
                 } else {
                     self.cache
-                        .insert(node_range.start, (node_range, highlight_name.clone()));
+                        .push(HighlightItem::new(node_range, highlight_name.clone()), &());
                 }
             }
         }
@@ -479,15 +537,21 @@ impl SyntaxHighlighter {
         // for (_, (range, style)) in self.cache.iter() {
         //     println!("-- range: {:?}, style: {:?}", range, style);
         // }
+        //
+        let mut cursor = self.cache.cursor::<usize>(&());
+        let highlights = cursor.slice(&range.start, sum_tree::Bias::Left);
 
-        let mut cursor = self.cache.lower_bound(Bound::Included(&range.start));
-        // Move to the previous item if the current item is not the start of the range.
-        // This is for case like JsDoc, where token may contains multiple lines.
-        if cursor.key() != Some(&range.start) {
-            cursor.move_prev();
-        }
+        // let mut cursor = self.cache.
+        // // Move to the previous item if the current item is not the start of the range.
+        // // This is for case like JsDoc, where token may contains multiple lines.
+        // if cursor.key() != Some(&range.start) {
+        //     cursor.move_prev();
+        // }
 
-        while let Some((node_range, name)) = cursor.value() {
+        for item in highlights.iter() {
+            let node_range = &item.range;
+            let name = &item.name;
+
             // Break loop if the node_range is out of the range
             if node_range.start > range.end {
                 break;
@@ -510,7 +574,7 @@ impl SyntaxHighlighter {
                 theme.style(name.as_ref()).unwrap_or_default(),
             ));
 
-            cursor.move_next();
+            // cursor.move_next();
         }
 
         // If the matched styles is empty, return a default range.
