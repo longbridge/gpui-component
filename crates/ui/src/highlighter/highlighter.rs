@@ -241,9 +241,9 @@ impl SyntaxHighlighter {
         self.old_tree = Some(new_tree);
         self.text = full_text.clone();
 
-        let measure = crate::Measure::new("build_styles");
+        // let measure = crate::Measure::new("build_styles");
         self.build_styles(cx);
-        measure.end();
+        // measure.end();
     }
 
     /// NOTE: 10K lines, about 180ms
