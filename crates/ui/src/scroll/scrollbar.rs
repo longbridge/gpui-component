@@ -514,7 +514,7 @@ impl Element for Scrollbar {
 
             // The horizontal scrollbar is set avoid overlapping with the vertical scrollbar, if the vertical scrollbar is visible.
             let margin_end = if has_both && !is_vertical {
-                THUMB_ACTIVE_WIDTH
+                WIDTH
             } else {
                 px(0.)
             };
