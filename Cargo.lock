@@ -2584,15 +2584,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ftree"
-version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ae0379499242d3b9355c5069b43b9417def8c9b09903b930db1fe49318dc9e9"
-dependencies = [
- "serde",
-]
-
-[[package]]
 name = "funty"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3159,7 +3150,6 @@ dependencies = [
  "gpui",
  "gpui-component-macros",
  "html5ever 0.27.0",
- "indexset",
  "indoc",
  "itertools 0.13.0",
  "markdown",
@@ -3848,15 +3838,6 @@ dependencies = [
  "equivalent",
  "hashbrown 0.15.5",
  "serde",
-]
-
-[[package]]
-name = "indexset"
-version = "0.12.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff794cab64c942437d60272e215f923d466b23dfa6c999cdd0cafe5b6d170805"
-dependencies = [
- "ftree",
 ]
 
 [[package]]

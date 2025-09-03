@@ -88,7 +88,6 @@ markup5ever_rcdom = "0.3.0"
 chrono = "0.4.38"
 
 # Code Editor
-indexset = "0.12.2"
 tree-sitter = "0.25.4"
 tree-sitter-json = "0.24.8"
 tree-sitter-bash = { version = "0.23.3", optional = true }
