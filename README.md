@@ -71,6 +71,7 @@ Check out [DEVELOPMENT.md](DEVELOPMENT.md) for more details.
 | --------------------- | ------------------------------ | --------- | --------------------- | ------------------------------ |
 | Language              | Rust                           | Rust      | Rust                  | C++/QML                        |
 | Core Render           | GPUI                           | wgpu      | wgpu                  | QT                             |
+| License               | Apache 2.0                     | MIT       | MIT/Apache 2.0        | Commercial                     |
 | Min Binary Size [^1]  | 12MB                           | 11MB      | 5M                    | 20MB [^2]                      |
 | Cross-Platform        | Yes                            | Yes       | Yes                   | Yes                            |
 | Documentation         | No                             | Simple    | Simple                | Good                           |
