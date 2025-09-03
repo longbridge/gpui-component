@@ -80,11 +80,11 @@ Check out [DEVELOPMENT.md](DEVELOPMENT.md) for more details.
 | WebView               | Partial                        | No        | No                    | Yes                            |
 | Virtual List          | Rows, Columns                  | Rows      | Rows                  | No                             |
 | Chart                 | Yes                            | No        | No                    | Yes                            |
-| Table (Large dataset) | Yes<br>(Virutal Rows, Columns) | No        | Yes<br>(Virtual Rows) | Yes<br>(Virutal Rows, Columns) |
+| Table (Large dataset) | Yes<br>(Virtual Rows, Columns) | No        | Yes<br>(Virtual Rows) | Yes<br>(Virtual Rows, Columns) |
 | Table Column Resize   | Yes                            | No        | Yes                   | Yes                            |
 | CodeEditor            | Simple                         | Simple    | Simple                | Basic API                      |
 | Dock Layout           | Yes                            | Yes       | Yes                   | Yes                            |
-| Syntax Highlight      | [Tree Sitter] _Flexable_       | [Syntect] | [Syntect]             | [QSyntaxHighlighter]           |
+| Syntax Highlight      | [Tree Sitter]                  | [Syntect] | [Syntect]             | [QSyntaxHighlighter]           |
 | Markdown Rendering    | Yes                            | Yes       | Basic                 | No                             |
 | Markdown mix HTML     | Yes                            | No        | No                    | No                             |
 | HTML Rendering        | Basic                          | No        | No                    | Yes                            |
