@@ -92,7 +92,7 @@ Check out [DEVELOPMENT.md](DEVELOPMENT.md) for more details.
 | Themes                | Yes                            | No        | No                    | No                             |
 | I18n                  | Yes                            | Yes       | Yes                   | Yes                            |
 
-> Please [submit an issue](https://github.com/longbridge/gpui-component/issues/new) or PR if any mistakes or outdated are found.
+> Please submit an issue or PR if any mistakes or outdated are found.
 
 [Tree Sitter]: https://tree-sitter.github.io/tree-sitter/
 [Syntect]: https://github.com/trishume/syntect
