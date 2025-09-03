@@ -67,7 +67,7 @@ Check out [DEVELOPMENT.md](DEVELOPMENT.md) for more details.
 
 ## Compare to others
 
-| Features              | GPUI Component                 | Iced      | Egui                  | Qt 6                           |
+| Features              | GPUI Component                 | [Iced]    | [egui]                | [QT 6]                         |
 | --------------------- | ------------------------------ | --------- | --------------------- | ------------------------------ |
 | Language              | Rust                           | Rust      | Rust                  | C++/QML                        |
 | Core Render           | GPUI                           | wgpu      | wgpu                  | QT                             |
@@ -94,6 +94,9 @@ Check out [DEVELOPMENT.md](DEVELOPMENT.md) for more details.
 
 > Please submit an issue or PR if any mistakes or outdated are found.
 
+[Iced]: https://github.com/iced-rs/iced
+[egui]: https://github.com/emilk/egui
+[QT 6]: https://www.qt.io/product/qt6
 [Tree Sitter]: https://tree-sitter.github.io/tree-sitter/
 [Syntect]: https://github.com/trishume/syntect
 [QSyntaxHighlighter]: https://doc.qt.io/qt-6/qsyntaxhighlighter.html
