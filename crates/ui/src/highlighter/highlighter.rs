@@ -2,7 +2,7 @@ use super::HighlightTheme;
 use crate::highlighter::LanguageRegistry;
 use anyhow::{anyhow, Context, Result};
 use gpui::{App, HighlightStyle, SharedString};
-use std::{collections::HashMap, ops::Range};
+use std::{collections::HashMap, ops::Range, usize};
 use sum_tree::Bias;
 use tree_sitter::{
     InputEdit, Node, Parser, Point, Query, QueryCursor, QueryMatch, StreamingIterator, Tree,
@@ -41,7 +41,11 @@ pub struct SyntaxHighlighter {
 
 #[derive(Debug, Default, Clone)]
 struct HighlightSummary {
-    range: Range<usize>,
+    count: usize,
+    start: usize,
+    end: usize,
+    min_start: usize,
+    max_end: usize,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -65,7 +69,11 @@ impl sum_tree::Item for HighlightItem {
 
     fn summary(&self, _cx: &()) -> Self::Summary {
         HighlightSummary {
-            range: self.range.clone(),
+            count: 1,
+            start: self.range.start,
+            end: self.range.end,
+            min_start: self.range.start,
+            max_end: self.range.end,
         }
     }
 }
@@ -74,17 +82,65 @@ impl sum_tree::Summary for HighlightSummary {
     type Context = ();
 
     fn zero(_: &Self::Context) -> Self {
+        HighlightSummary {
+            count: 1,
+            start: 0,
+            end: usize::MAX,
+            min_start: usize::MAX,
+            max_end: 0,
+        }
+    }
+
+    fn add_summary(&mut self, other: &Self, _: &Self::Context) {
+        if other.min_start < self.min_start {
+            self.min_start = other.min_start;
+        }
+        if other.max_end > self.max_end {
+            self.max_end = other.max_end;
+        }
+
+        self.start = other.start;
+        self.end = other.end;
+        self.count += other.count;
+    }
+}
+
+impl<'a> sum_tree::Dimension<'a, HighlightSummary> for usize {
+    fn zero(_: &()) -> Self {
+        0
+    }
+
+    fn add_summary(&mut self, summary: &'a HighlightSummary, _: &()) {
+        *self += summary.count;
+    }
+}
+
+impl<'a> sum_tree::Dimension<'a, HighlightSummary> for Range<usize> {
+    fn zero(_: &()) -> Self {
         Default::default()
     }
 
-    fn add_summary(&mut self, _summary: &Self, _cx: &Self::Context) {}
-}
-
-impl sum_tree::SeekTarget<'_, HighlightSummary, HighlightSummary> for Range<usize> {
-    fn cmp(&self, other: &HighlightSummary, _: &()) -> std::cmp::Ordering {
-        self.start.cmp(&other.range.start)
+    fn add_summary(&mut self, summary: &'a HighlightSummary, _: &()) {
+        self.start = summary.start;
+        self.end = summary.end;
     }
 }
+
+// impl sum_tree::SeekTarget<'_, HighlightSummary, Range<usize>> for Range<usize> {
+//     fn cmp(&self, other: &Self, _: &()) -> Ordering {
+//         if self.start < other.start {
+//             Ordering::Less
+//         } else if self.start > other.start {
+//             Ordering::Greater
+//         } else if self.end < other.end {
+//             Ordering::Less
+//         } else if self.end > other.end {
+//             Ordering::Greater
+//         } else {
+//             Ordering::Equal
+//         }
+//     }
+// }
 
 impl SyntaxHighlighter {
     /// Create a new SyntaxHighlighter for HTML.
@@ -526,17 +582,16 @@ impl SyntaxHighlighter {
         let start_offset = range.start;
         let mut last_range = start_offset..start_offset;
 
-        // NOTE: Iterate over the cache and print the range and style for each item.
-        // for (_, (range, style)) in self.cache.iter() {
-        //     println!("-- range: {:?}, style: {:?}", range, style);
-        // }
-        //
-        let mut cursor = self.cache.cursor::<HighlightSummary>(&());
-        let items = cursor.slice(range, Bias::Left);
+        let mut cursor = self.cache.cursor::<usize>(&());
+        let left_items = cursor.slice(&range.start, Bias::Left);
+        let mut filter = left_items.filter::<_, Range<usize>>(&(), move |sum| {
+            sum.max_end >= range.start && sum.min_start <= range.end
+        });
+        filter.next();
 
-        let mut count = 0;
-        for item in items.iter() {
-            count += 1;
+        // let mut count = 0;
+        while let Some(item) = filter.item() {
+            // count += 1;
             let node_range = &item.range;
             let name = &item.name;
 
@@ -556,9 +611,9 @@ impl SyntaxHighlighter {
                 node_range.clone(),
                 theme.style(name.as_ref()).unwrap_or_default(),
             ));
-        }
 
-        dbg!(&count);
+            filter.next();
+        }
 
         // If the matched styles is empty, return a default range.
         if styles.len() == 0 {
