@@ -78,8 +78,7 @@ Check out [DEVELOPMENT.md](DEVELOPMENT.md) for more details.
 | Web                   | No                             | Yes       | Yes                   | Yes                            |
 | UI Style              | Modern                         | Basic     | Basic                 | Basic                          |
 | CJK Support           | Good                           | Yes       | Bad                   | Yes                            |
-| WebView               | Partial                        | No        | No                    | Yes                            |
-| Virtual List          | Rows, Columns                  | Rows      | Rows                  | No                             |
+| Virtual List          | Rows, Columns                  | Unknown   | Rows                  | No                             |
 | Chart                 | Yes                            | No        | No                    | Yes                            |
 | Table (Large dataset) | Yes<br>(Virtual Rows, Columns) | No        | Yes<br>(Virtual Rows) | Yes<br>(Virtual Rows, Columns) |
 | Table Column Resize   | Yes                            | No        | Yes                   | Yes                            |
