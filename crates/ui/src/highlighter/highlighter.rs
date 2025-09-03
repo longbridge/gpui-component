@@ -1,9 +1,9 @@
 use super::HighlightTheme;
 use crate::highlighter::LanguageRegistry;
+
 use anyhow::{anyhow, Context, Result};
 use gpui::{App, HighlightStyle, SharedString};
 use std::{collections::HashMap, ops::Range, usize};
-use sum_tree::Bias;
 use tree_sitter::{
     InputEdit, Node, Parser, Point, Query, QueryCursor, QueryMatch, StreamingIterator, Tree,
 };
@@ -558,9 +558,9 @@ impl SyntaxHighlighter {
 
         let mut cursor = self.cache.cursor::<usize>(&());
         let bias = if start_offset == 0 {
-            Bias::Right
+            sum_tree::Bias::Right
         } else {
-            Bias::Left
+            sum_tree::Bias::Left
         };
 
         let left_items = cursor.slice(&start_offset, bias);
