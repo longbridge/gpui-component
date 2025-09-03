@@ -66,7 +66,6 @@ impl HighlightItem {
 
 impl sum_tree::Item for HighlightItem {
     type Summary = HighlightSummary;
-
     fn summary(&self, _cx: &()) -> Self::Summary {
         HighlightSummary {
             count: 1,
@@ -80,25 +79,19 @@ impl sum_tree::Item for HighlightItem {
 
 impl sum_tree::Summary for HighlightSummary {
     type Context = ();
-
     fn zero(_: &Self::Context) -> Self {
         HighlightSummary {
-            count: 1,
-            start: 0,
+            count: 0,
+            start: usize::MIN,
             end: usize::MAX,
             min_start: usize::MAX,
-            max_end: 0,
+            max_end: usize::MIN,
         }
     }
 
     fn add_summary(&mut self, other: &Self, _: &Self::Context) {
-        if other.min_start < self.min_start {
-            self.min_start = other.min_start;
-        }
-        if other.max_end > self.max_end {
-            self.max_end = other.max_end;
-        }
-
+        self.min_start = self.min_start.min(other.min_start);
+        self.max_end = self.max_end.max(other.max_end);
         self.start = other.start;
         self.end = other.end;
         self.count += other.count;
@@ -110,9 +103,7 @@ impl<'a> sum_tree::Dimension<'a, HighlightSummary> for usize {
         0
     }
 
-    fn add_summary(&mut self, summary: &'a HighlightSummary, _: &()) {
-        *self += summary.count;
-    }
+    fn add_summary(&mut self, _: &'a HighlightSummary, _: &()) {}
 }
 
 impl<'a> sum_tree::Dimension<'a, HighlightSummary> for Range<usize> {
@@ -125,22 +116,6 @@ impl<'a> sum_tree::Dimension<'a, HighlightSummary> for Range<usize> {
         self.end = summary.end;
     }
 }
-
-// impl sum_tree::SeekTarget<'_, HighlightSummary, Range<usize>> for Range<usize> {
-//     fn cmp(&self, other: &Self, _: &()) -> Ordering {
-//         if self.start < other.start {
-//             Ordering::Less
-//         } else if self.start > other.start {
-//             Ordering::Greater
-//         } else if self.end < other.end {
-//             Ordering::Less
-//         } else if self.end > other.end {
-//             Ordering::Greater
-//         } else {
-//             Ordering::Equal
-//         }
-//     }
-// }
 
 impl SyntaxHighlighter {
     /// Create a new SyntaxHighlighter for HTML.
@@ -580,23 +555,29 @@ impl SyntaxHighlighter {
     ) -> Vec<(Range<usize>, HighlightStyle)> {
         let mut styles = vec![];
         let start_offset = range.start;
-        let mut last_range = start_offset..start_offset;
 
         let mut cursor = self.cache.cursor::<usize>(&());
-        let left_items = cursor.slice(&range.start, Bias::Left);
+        let bias = if start_offset == 0 {
+            Bias::Right
+        } else {
+            Bias::Left
+        };
+
+        let left_items = cursor.slice(&start_offset, bias);
         let mut filter = left_items.filter::<_, Range<usize>>(&(), move |sum| {
-            sum.max_end >= range.start && sum.min_start <= range.end
+            range.start <= sum.max_end && range.end >= sum.min_start
         });
         filter.next();
 
-        // let mut count = 0;
+        let mut last_range = start_offset..start_offset;
+        // let mut iter_count = 0;
         while let Some(item) = filter.item() {
-            // count += 1;
+            // iter_count += 1;
             let node_range = &item.range;
             let name = &item.name;
 
-            let mut node_range = node_range.start.max(range.start)..node_range.end.min(range.end);
             // Avoid start larger than end
+            let mut node_range = node_range.start.max(range.start)..node_range.end.min(range.end);
             if node_range.start > node_range.end {
                 node_range.end = node_range.start;
             }
@@ -614,6 +595,7 @@ impl SyntaxHighlighter {
 
             filter.next();
         }
+        // dbg!(iter_count);
 
         // If the matched styles is empty, return a default range.
         if styles.len() == 0 {
