@@ -18,7 +18,7 @@ use crate::text::TextViewState;
 use crate::v_flex;
 
 use crate::text::node::{
-    self, ImageNode, InlineNode, LinkMark, Paragraph, Table, TableRow, TextMark,
+    self, ImageNode, InlineNode, LinkMark, NodeContext, Paragraph, Table, TableRow, TextMark,
 };
 use crate::text::TextViewStyle;
 
@@ -61,7 +61,7 @@ const BLOCK_ELEMENTS: [&str; 35] = [
 ];
 
 /// Parse HTML into AST Node.
-pub(crate) fn parse(source: &str) -> Result<node::Node, SharedString> {
+pub(crate) fn parse(source: &str, cx: &mut NodeContext) -> Result<node::Node, SharedString> {
     let opts = ParseOpts {
         ..Default::default()
     };
@@ -77,7 +77,8 @@ pub(crate) fn parse(source: &str) -> Result<node::Node, SharedString> {
 
     let mut paragraph = Paragraph::default();
     // NOTE: The outer paragraph is not used.
-    let node: node::Node = parse_node(&dom.document, &mut paragraph).unwrap_or(node::Node::Unknown);
+    let node: node::Node =
+        parse_node(&dom.document, &mut paragraph, cx).unwrap_or(node::Node::Unknown);
     let node = node.compact();
 
     Ok(node)
@@ -131,8 +132,10 @@ impl RenderOnce for HtmlElement {
         });
 
         let root = self.state.read(cx).root();
+        let node_cx = self.state.read(cx).node_cx.clone();
+
         div().map(|this| match root {
-            Ok(node) => this.child(node.render(None, true, true, &self.style, window, cx)),
+            Ok(node) => this.child(node.render(None, true, true, &node_cx, window, cx)),
             Err(err) => this.child(
                 v_flex()
                     .gap_1()
@@ -363,6 +366,7 @@ fn parse_paragraph(
                             .unwrap_or_default()
                             .into(),
                         title: attr_value(&attrs, local_name!("title")).map(Into::into),
+                        ..Default::default()
                     }),
                 ));
                 paragraph.push(InlineNode::new(&text).marks(marks.clone()));
@@ -411,7 +415,11 @@ fn parse_paragraph(
     (text, marks)
 }
 
-fn parse_node(node: &Rc<Node>, paragraph: &mut Paragraph) -> Option<node::Node> {
+fn parse_node(
+    node: &Rc<Node>,
+    paragraph: &mut Paragraph,
+    cx: &mut NodeContext,
+) -> Option<node::Node> {
     match node.data {
         NodeData::Text { ref contents } => {
             let text = contents.borrow().to_string();
@@ -495,7 +503,7 @@ fn parse_node(node: &Rc<Node>, paragraph: &mut Paragraph) -> Option<node::Node> 
             }
             local_name!("ul") | local_name!("ol") => {
                 let ordered = name.local == local_name!("ol");
-                let children = consume_children_nodes(node, paragraph);
+                let children = consume_children_nodes(node, paragraph, cx);
                 Some(node::Node::List { children, ordered })
             }
             local_name!("li") => {
@@ -504,7 +512,7 @@ fn parse_node(node: &Rc<Node>, paragraph: &mut Paragraph) -> Option<node::Node> 
 
                 for child in node.children.borrow().iter() {
                     let mut child_paragraph = Paragraph::default();
-                    if let Some(child_node) = parse_node(child, &mut child_paragraph) {
+                    if let Some(child_node) = parse_node(child, &mut child_paragraph, cx) {
                         children.push(child_node);
                     }
                     if child_paragraph.text_len() > 0 {
@@ -559,7 +567,7 @@ fn parse_node(node: &Rc<Node>, paragraph: &mut Paragraph) -> Option<node::Node> 
                 }
             }
             local_name!("blockquote") => {
-                let children = consume_children_nodes(node, paragraph);
+                let children = consume_children_nodes(node, paragraph, cx);
                 Some(node::Node::Blockquote { children })
             }
             local_name!("style") | local_name!("script") => None,
@@ -576,7 +584,7 @@ fn parse_node(node: &Rc<Node>, paragraph: &mut Paragraph) -> Option<node::Node> 
 
                     // Inner of the block element -- The "Inner text of block element"
                     for child in node.children.borrow().iter() {
-                        if let Some(child_node) = parse_node(child, paragraph) {
+                        if let Some(child_node) = parse_node(child, paragraph, cx) {
                             children.push(child_node);
                         }
                     }
@@ -602,7 +610,7 @@ fn parse_node(node: &Rc<Node>, paragraph: &mut Paragraph) -> Option<node::Node> 
             }
         },
         NodeData::Document => {
-            let children = consume_children_nodes(node, paragraph);
+            let children = consume_children_nodes(node, paragraph, cx);
             Some(node::Node::Root { children })
         }
         NodeData::Doctype { .. }
@@ -611,11 +619,15 @@ fn parse_node(node: &Rc<Node>, paragraph: &mut Paragraph) -> Option<node::Node> 
     }
 }
 
-fn consume_children_nodes(node: &Node, paragraph: &mut Paragraph) -> Vec<node::Node> {
+fn consume_children_nodes(
+    node: &Node,
+    paragraph: &mut Paragraph,
+    cx: &mut NodeContext,
+) -> Vec<node::Node> {
     let mut children = vec![];
     consume_paragraph(&mut children, paragraph);
     for child in node.children.borrow().iter() {
-        if let Some(child_node) = parse_node(child, paragraph) {
+        if let Some(child_node) = parse_node(child, paragraph, cx) {
             children.push(child_node);
         }
         consume_paragraph(&mut children, paragraph);
@@ -637,7 +649,7 @@ fn consume_paragraph(children: &mut Vec<node::Node>, paragraph: &mut Paragraph) 
 mod tests {
     use gpui::{px, relative};
 
-    use crate::text::node::{ImageNode, InlineNode, Node, Paragraph};
+    use crate::text::node::{ImageNode, InlineNode, Node, NodeContext, Paragraph};
 
     use super::trim_text;
 
@@ -674,7 +686,8 @@ mod tests {
     #[test]
     fn test_keep_spaces() {
         let html = r#"<p>and <code>code</code> text</p>"#;
-        let node = super::parse(html).unwrap();
+        let mut cx = NodeContext::default();
+        let node = super::parse(html, &mut cx).unwrap();
         assert_eq!(node.to_markdown(), "and `code` text");
 
         let html = r#"
@@ -694,7 +707,7 @@ mod tests {
             </ul>
             </div>
         "#;
-        let node = super::parse(html).unwrap();
+        let node = super::parse(html, &mut cx).unwrap();
         assert_eq!(
             node.to_markdown(),
             indoc::indoc! {r#"
@@ -720,7 +733,8 @@ mod tests {
     #[test]
     fn test_image() {
         let html = r#"<img src="https://example.com/image.png" alt="Example" width="100" height="200" title="Example Image" />"#;
-        let node = super::parse(html).unwrap();
+        let mut cx = NodeContext::default();
+        let node = super::parse(html, &mut cx).unwrap();
         assert_eq!(
             node,
             Node::Paragraph(Paragraph {
@@ -738,7 +752,7 @@ mod tests {
         );
 
         let html = r#"<img src="https://example.com/image.png" alt="Example" style="width: 80%" title="Example Image" />"#;
-        let node = super::parse(html).unwrap();
+        let node = super::parse(html, &mut cx).unwrap();
         assert_eq!(
             node,
             Node::Paragraph(Paragraph {

@@ -2,13 +2,19 @@
 
 Build Status [![Build Status](https://github.com/longbridge/gpui-component/actions/workflows/ci.yml/badge.svg)](https://github.com/longbridge/gpui-component/actions/workflows/ci.yml) of [GPUI Component](https://github.com/longbridge/gpui-component).
 
-This is first paragraph, there have **BOLD**, _italic_, and ~strikethrough~, `code` text.
+This is first paragraph, there have **BOLD**, _italic_, and ~strikethrough~, `code` text [^1] [^2].
 
-This is an additional demonstration paragraph in English demonstrating more content for [Markdown GFM](https://github.github.com/gfm/). It includes various stylistic elements and plain text.
+This is an additional demonstration paragraph in English demonstrating more content for [Markdown GFM]. It includes various stylistic elements and plain text.
 
 ![Img](https://miro.medium.com/v2/resize:fit:1400/format:webp/1*WgEz5f3n3lD7MfC7NeQGOA.jpeg)
 
-这是一个中文演示段落，用于展示更多的 [Markdown GFM](https://github.github.com/gfm/) 内容。您可以在此尝试使用使用**粗体**、*斜体*和`代码`等样式。これは日本語のデモ段落です。Markdown の多言語サポートを示すためのテキストが含まれています。例えば、、**ボールド**、_イタリック_、および`コード`のスタイルなどを試すことができます。
+这是一个中文演示段落，用于展示更多的 [Markdown GFM] 内容。您可以在此尝试使用使用**粗体**、*斜体*和`代码`等样式。これは日本語のデモ段落です。Markdown の多言語サポートを示すためのテキストが含まれています。例えば、、**ボールド**、_イタリック_、および`コード`のスタイルなどを試すことができます。
+
+[Markdown GFM]: https://github.github.com/gfm/
+
+[^1]: This is a footnote example.
+
+[^2]: Here is another footnote.
 
 ## Basic formatting
 

@@ -1,4 +1,4 @@
-use std::ops::Range;
+use std::{collections::HashMap, ops::Range};
 
 use gpui::{
     div, img, prelude::FluentBuilder as _, px, relative, rems, AnyElement, App, DefiniteLength,
@@ -22,6 +22,8 @@ use super::{utils::list_item_prefix, TextViewStyle};
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct LinkMark {
     pub url: SharedString,
+    /// Optional identifier for footnotes.
+    pub identifier: Option<SharedString>,
     pub title: Option<SharedString>,
 }
 
@@ -140,6 +142,10 @@ impl InlineNode {
 pub(crate) struct Paragraph {
     pub(super) span: Option<Span>,
     pub(super) children: Vec<InlineNode>,
+    /// The link references in this paragraph, used for reference links.
+    ///
+    /// The key is the identifier, the value is the url.
+    pub(super) link_refs: HashMap<SharedString, SharedString>,
 
     pub(crate) state: InlineState,
 }
@@ -149,6 +155,7 @@ impl Paragraph {
         Self {
             span: None,
             children: vec![InlineNode::new(&text)],
+            link_refs: HashMap::new(),
             state: InlineState::default(),
         }
     }
@@ -278,7 +285,7 @@ impl CodeBlock {
         code: SharedString,
         lang: Option<SharedString>,
         _: &TextViewStyle,
-        cx: &mut App,
+        cx: &App,
     ) -> Self {
         let theme = cx.theme().highlight_theme.clone();
         let mut styles = vec![];
@@ -331,6 +338,19 @@ impl CodeBlock {
     }
 }
 
+/// A context for rendering nodes, contains link references.
+#[derive(Default, Clone, PartialEq)]
+pub(crate) struct NodeContext {
+    pub(crate) link_refs: HashMap<SharedString, LinkMark>,
+    pub(crate) style: TextViewStyle,
+}
+
+impl NodeContext {
+    pub(super) fn add_ref(&mut self, identifier: SharedString, link: LinkMark) {
+        self.link_refs.insert(identifier, link);
+    }
+}
+
 /// The AST Node of the rich text.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Node {
@@ -362,6 +382,12 @@ pub(crate) enum Node {
         html: bool,
     },
     Divider,
+    /// Use for to_markdown get raw definition
+    Definition {
+        identifier: SharedString,
+        url: SharedString,
+        title: Option<SharedString>,
+    },
     Unknown,
 }
 
@@ -464,7 +490,7 @@ impl Node {
                     text.push('\n');
                 }
             }
-            Node::Break { .. } | Node::Divider | Node::Unknown => {}
+            Node::Definition { .. } | Node::Break { .. } | Node::Divider | Node::Unknown => {}
         }
 
         text
@@ -472,7 +498,12 @@ impl Node {
 }
 
 impl Paragraph {
-    fn render(&self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(
+        &self,
+        node_cx: &NodeContext,
+        _window: &mut Window,
+        cx: &mut App,
+    ) -> impl IntoElement {
         let span = self.span;
         let children = &self.children;
 
@@ -547,14 +578,21 @@ impl Paragraph {
                         highlight.background_color = Some(cx.theme().accent);
                     }
 
-                    if let Some(link_mark) = &style.link {
+                    if let Some(mut link_mark) = style.link.clone() {
                         highlight.color = Some(cx.theme().link);
                         highlight.underline = Some(gpui::UnderlineStyle {
                             thickness: gpui::px(1.),
                             ..Default::default()
                         });
 
-                        links.push((inner_range.clone(), link_mark.clone()));
+                        // convert link references, replace link
+                        if let Some(identifier) = link_mark.identifier.as_ref() {
+                            if let Some(mark) = node_cx.link_refs.get(identifier) {
+                                link_mark = mark.clone();
+                            }
+                        }
+
+                        links.push((inner_range.clone(), link_mark));
                     }
 
                     node_highlights.push((inner_range, highlight));
@@ -589,7 +627,7 @@ impl Node {
         item: &Node,
         ix: usize,
         state: ListState,
-        text_view_style: &TextViewStyle,
+        node_cx: &NodeContext,
         window: &mut Window,
         cx: &mut App,
     ) -> impl IntoElement {
@@ -617,7 +655,7 @@ impl Node {
                                     }),
                                     false,
                                     true,
-                                    text_view_style,
+                                    node_cx,
                                     window,
                                     cx,
                                 );
@@ -681,7 +719,7 @@ impl Node {
                                     }),
                                     true,
                                     true,
-                                    text_view_style,
+                                    node_cx,
                                     window,
                                     cx,
                                 )))
@@ -696,7 +734,12 @@ impl Node {
         }
     }
 
-    fn render_table(item: &Node, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render_table(
+        item: &Node,
+        node_cx: &NodeContext,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> impl IntoElement {
         const DEFAULT_LENGTH: usize = 5;
         const MAX_LENGTH: usize = 150;
         let col_lens = match item {
@@ -767,7 +810,7 @@ impl Node {
                                                         .border_color(cx.theme().border)
                                                 })
                                                 .truncate()
-                                                .child(cell.children.render(window, cx)),
+                                                .child(cell.children.render(node_cx, window, cx)),
                                         )
                                     }
                                     cells
@@ -786,7 +829,7 @@ impl Node {
         list_state: Option<ListState>,
         is_root: bool,
         is_last_child: bool,
-        style: &TextViewStyle,
+        node_cx: &NodeContext,
         window: &mut Window,
         cx: &mut App,
     ) -> impl IntoElement {
@@ -794,7 +837,7 @@ impl Node {
         let mb = if in_list || is_last_child {
             rems(0.)
         } else {
-            style.paragraph_gap
+            node_cx.style.paragraph_gap
         };
 
         match self {
@@ -804,14 +847,14 @@ impl Node {
                     let children_len = children.len();
                     children.into_iter().enumerate().map(move |(index, c)| {
                         let is_last_child = is_root && index == children_len - 1;
-                        c.render(None, false, is_last_child, style, window, cx)
+                        c.render(None, false, is_last_child, node_cx, window, cx)
                     })
                 })
                 .into_any_element(),
             Node::Paragraph(paragraph) => div()
                 .id("p")
                 .mb(mb)
-                .child(paragraph.render(window, cx))
+                .child(paragraph.render(node_cx, window, cx))
                 .into_any_element(),
             Node::Heading { level, children } => {
                 let (text_size, font_weight) = match level {
@@ -824,7 +867,7 @@ impl Node {
                     _ => (rems(1.), FontWeight::NORMAL),
                 };
 
-                let text_size = text_size.to_pixels(style.heading_base_font_size);
+                let text_size = text_size.to_pixels(node_cx.style.heading_base_font_size);
 
                 h_flex()
                     .id(("h", *level as usize))
@@ -832,7 +875,7 @@ impl Node {
                     .whitespace_normal()
                     .text_size(text_size)
                     .font_weight(font_weight)
-                    .child(children.render(window, cx))
+                    .child(children.render(node_cx, window, cx))
                     .into_any_element()
             }
             Node::Blockquote { children } => div()
@@ -847,7 +890,7 @@ impl Node {
                     let children_len = children.len();
                     children.into_iter().enumerate().map(move |(index, c)| {
                         let is_last_child = is_root && index == children_len - 1;
-                        c.render(None, false, is_last_child, style, window, cx)
+                        c.render(None, false, is_last_child, node_cx, window, cx)
                     })
                 })
                 .into_any_element(),
@@ -869,7 +912,7 @@ impl Node {
                                 todo: list_state.todo,
                                 depth: list_state.depth,
                             },
-                            style,
+                            node_cx,
                             window,
                             cx,
                         ));
@@ -882,7 +925,7 @@ impl Node {
                 })
                 .into_any_element(),
             Node::CodeBlock(code_block) => code_block.render(mb, window, cx),
-            Node::Table { .. } => Self::render_table(&self, window, cx).into_any_element(),
+            Node::Table { .. } => Self::render_table(&self, node_cx, window, cx).into_any_element(),
             Node::Divider => div()
                 .id("divider")
                 .bg(cx.theme().border)
@@ -890,6 +933,7 @@ impl Node {
                 .mb(mb)
                 .into_any_element(),
             Node::Break { .. } => div().id("break").into_any_element(),
+            Node::Unknown | Node::Definition { .. } => div().into_any_element(),
             _ => {
                 if cfg!(debug_assertions) {
                     tracing::warn!("unknown implementation: {:?}", self);
@@ -1065,6 +1109,17 @@ impl Node {
                 }
             }
             Node::Divider => "---".to_string(),
+            Node::Definition {
+                identifier,
+                url,
+                title,
+            } => {
+                if let Some(title) = title {
+                    format!("[{}]: {} \"{}\"", identifier, url, title)
+                } else {
+                    format!("[{}]: {}", identifier, url)
+                }
+            }
             Node::Unknown => "".to_string(),
         }
         .trim()
