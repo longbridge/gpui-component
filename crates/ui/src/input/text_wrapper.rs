@@ -110,7 +110,7 @@ impl TextWrapper {
         let line = self
             .lines
             .binary_search_by_key(&offset, |line| line.range.end)
-            .unwrap_or_else(|i| i.saturating_sub(1));
+            .unwrap_or_else(|i| i);
         let column = offset.saturating_sub(self.lines[line].range.start);
 
         (line + 1, column + 1).into()
