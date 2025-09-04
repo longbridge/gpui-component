@@ -1,10 +1,10 @@
 use std::{cell::OnceCell, collections::HashMap, fmt::Write as _, sync::OnceLock};
 
 use gpui::{
-    actions, div, inspector_reflection::FunctionReflection, prelude::FluentBuilder, px,
-    styled_reflection, AnyElement, App, AppContext, Context, DivInspectorState, Entity, Inspector,
-    InspectorElementId, InteractiveElement as _, IntoElement, KeyBinding, ParentElement as _,
-    Refineable as _, Render, SharedString, StyleRefinement, Styled, Window,
+    actions, div, inspector_reflection::FunctionReflection, prelude::FluentBuilder, px, AnyElement,
+    App, AppContext, Context, DivInspectorState, Entity, Inspector, InspectorElementId,
+    InteractiveElement as _, IntoElement, KeyBinding, ParentElement as _, Refineable as _, Render,
+    SharedString, StyleRefinement, Styled, Window,
 };
 
 use crate::{
@@ -16,10 +16,10 @@ use crate::{
     h_flex,
     input::{InputEvent, InputState, TabSize, TextInput},
     link::Link,
-    styled_ext_reflection, v_flex, ActiveTheme, IconName, Selectable, Sizable, TITLE_BAR_HEIGHT,
+    v_flex, ActiveTheme, IconName, Selectable, Sizable, TITLE_BAR_HEIGHT,
 };
 
-actions!(inspector, [ToggleInspector, ResetStyle]);
+actions!(inspector, [ToggleInspector]);
 
 /// Initialize the inspector and register the action to toggle it.
 pub fn init(cx: &mut App) {
@@ -68,21 +68,16 @@ pub struct DivInspector {
     rust_err: Option<SharedString>,
     /// Initial style before any edits
     initial_style: StyleRefinement,
-    /// Style that could not be converted to Rust
+    /// Part of the initial style that could not be converted to Rust code
     unconvertible_style: StyleRefinement,
 }
 
 impl DivInspector {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let json_input_state = cx.new(|cx| {
-            InputState::new(window, cx)
-                .code_editor("json")
-                .line_number(false)
-        });
+        let json_input_state = cx.new(|cx| InputState::new(window, cx).code_editor("json"));
         let rust_input_state = cx.new(|cx| {
             InputState::new(window, cx)
                 .code_editor("rust")
-                .line_number(false)
                 .tab_size(TabSize {
                     tab_size: 4,
                     hard_tabs: false,
@@ -167,20 +162,20 @@ impl DivInspector {
         cx.notify();
     }
 
-    fn edit_json(&mut self, new_style: &str, window: &mut Window, cx: &mut Context<Self>) {
+    fn edit_json(&mut self, code: &str, window: &mut Window, cx: &mut Context<Self>) {
         if self.ignore_json_edit {
             self.ignore_json_edit = false;
             return;
         }
 
-        match serde_json::from_str::<StyleRefinement>(new_style) {
-            Ok(style) => {
+        match serde_json::from_str::<StyleRefinement>(code) {
+            Ok(new_style) => {
                 self.json_err = None;
                 self.rust_err = None;
                 self.ignore_rust_edit = true;
-                let rust_style = self.update_rust_from_style(&style, window, cx);
-                self.unconvertible_style = style.subtract(&rust_style);
-                self.update_element_style(style, window, cx);
+                let rust_style = self.update_rust_from_style(&new_style, window, cx);
+                self.unconvertible_style = new_style.subtract(&rust_style);
+                self.update_element_style(new_style, window, cx);
             }
             Err(e) => {
                 let e = format!("{}", e);
@@ -190,19 +185,18 @@ impl DivInspector {
         }
     }
 
-    fn edit_rust(&mut self, new_style: &str, window: &mut Window, cx: &mut Context<Self>) {
+    fn edit_rust(&mut self, code: &str, window: &mut Window, cx: &mut Context<Self>) {
         if self.ignore_rust_edit {
             self.ignore_rust_edit = false;
             return;
         }
 
-        let style = self.unconvertible_style.clone();
-        let (style, err) = rust_to_style(style, new_style);
-        self.rust_err = err.map(SharedString::from);
+        let (new_style, err) = rust_to_style(self.unconvertible_style.clone(), code);
+        self.rust_err = err;
         self.json_err = None;
         self.ignore_json_edit = true;
-        self.update_json_from_style(&style, window, cx);
-        self.update_element_style(style, window, cx);
+        self.update_json_from_style(&new_style, window, cx);
+        self.update_element_style(new_style, window, cx);
     }
 
     fn update_element_style(
@@ -224,11 +218,11 @@ impl DivInspector {
     }
 
     fn reset_style(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.ignore_json_edit = true;
-        self.update_json_from_style(&self.initial_style, window, cx);
         self.ignore_rust_edit = true;
         let rust_style = self.update_rust_from_style(&self.initial_style, window, cx);
         self.unconvertible_style = self.initial_style.subtract(&rust_style);
+        self.ignore_json_edit = true;
+        self.update_json_from_style(&self.initial_style, window, cx);
         if let Some(state) = self.inspector_state.as_mut() {
             *state.base_style = self.initial_style.clone();
         }
@@ -271,6 +265,7 @@ impl DivInspector {
             self.ignore_rust_edit = false;
             self.rust_input_state.update(cx, |state, cx| {
                 state.set_value(code, window, cx);
+                // an edit event will be triggered, the style will be updated there
             });
         }
     }
@@ -290,8 +285,8 @@ impl StyleMethods {
         static STYLE_METHODS: OnceLock<StyleMethods> = OnceLock::new();
         STYLE_METHODS.get_or_init(|| {
             let table: Vec<_> = [
-                styled_ext_reflection::methods::<StyleRefinement>(),
-                styled_reflection::methods::<StyleRefinement>(),
+                crate::styled_ext_reflection::methods::<StyleRefinement>(),
+                gpui::styled_reflection::methods::<StyleRefinement>(),
             ]
             .into_iter()
             .flatten()
@@ -336,32 +331,27 @@ fn rust_to_style(
     mut style: StyleRefinement,
     rust_code: &str,
 ) -> (StyleRefinement, Option<SharedString>) {
+    // remove line comments
+    let rust_code = rust_code
+        .lines()
+        .map(|line| line.find("//").map_or(line, |i| &line[..i]).trim())
+        .collect::<Vec<_>>()
+        .concat();
+
     let Some(begin) = rust_code.find("div()").map(|i| i + "div()".len()) else {
-        return (
-            style,
-            Some("Failed to parse: Could not find `div()`".into()),
-        );
+        return (style, Some("Expected `div()`".into()));
     };
-    let Some(end) = rust_code.rfind("}") else {
-        return (style, Some("Failed to parse: Could not find `}`".into()));
-    };
-    if begin >= end {
-        return (
-            style,
-            Some("Could not find valid method calls after div()".into()),
-        );
-    }
-    let methods_str = &rust_code[begin..end];
 
     let mut err = String::new();
-    let methods = methods_str
-        .split('.')
-        .filter_map(|s| s.trim().rfind('(').map(|end: usize| s[..end].trim()));
+    let methods = rust_code[begin..]
+        .split(&['.', '(', ')', '{', '}'])
+        .filter(|s| !s.is_empty())
+        .map(str::trim);
     let style_methods = StyleMethods::get();
     for method in methods {
         match style_methods.map.get(method) {
             Some(method_reflection) => style = method_reflection.invoke(style),
-            None => _ = write!(err, "Unknown method: {method}\n"),
+            None => _ = writeln!(err, "Unknown method: {method}"),
         }
     }
 
@@ -411,6 +401,7 @@ impl Render for DivInspector {
                                                     .compact()
                                                     .small()
                                                     .ghost()
+                                                    .cursor_pointer()
                                                     .on_click(cx.listener(
                                                         |this, _, window, cx| {
                                                             this.rust_add_method(window, cx);
@@ -421,6 +412,7 @@ impl Render for DivInspector {
                                         .child(
                                             Dropdown::new(&self.rust_dropdown)
                                                 .icon(IconName::Search)
+                                                .cursor_pointer()
                                                 .appearance(false)
                                                 .text_sm(),
                                         ),
@@ -430,6 +422,7 @@ impl Render for DivInspector {
                                         .label("Reset")
                                         .small()
                                         .compact()
+                                        .cursor_pointer()
                                         .on_click(cx.listener(|this, _, window, cx| {
                                             this.reset_style(window, cx);
                                         })),
@@ -456,6 +449,7 @@ impl Render for DivInspector {
                                         .label("Reset")
                                         .small()
                                         .compact()
+                                        .cursor_pointer()
                                         .on_click(cx.listener(|this, _, window, cx| {
                                             this.reset_style(window, cx);
                                         })),
@@ -518,6 +512,7 @@ fn render_inspector(
                                 .selected(inspector.is_picking())
                                 .small()
                                 .ghost()
+                                .cursor_pointer()
                                 .on_click(cx.listener(|this, _, window, _| {
                                     this.start_picking();
                                     window.refresh();
@@ -530,6 +525,7 @@ fn render_inspector(
                         .icon(IconName::Close)
                         .small()
                         .ghost()
+                        .cursor_pointer()
                         .on_click(|_, window, cx| {
                             window.dispatch_action(Box::new(ToggleInspector), cx);
                         }),
