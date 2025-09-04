@@ -613,7 +613,8 @@ impl SyntaxHighlighter {
     }
 }
 
-/// To merge intersection ranges, let the subsequent range cover the previous overlapping range and split the previous range
+/// To merge intersection ranges, let the subsequent range cover
+/// the previous overlapping range and split the previous range.
 ///
 /// From:
 ///
@@ -644,7 +645,7 @@ pub(crate) fn unique_styles(
     }
 
     let boundaries: Vec<usize> = boundaries.into_iter().collect();
-    let mut result = Vec::new();
+    let mut result = Vec::with_capacity(boundaries.len().saturating_sub(1));
 
     // For each interval between boundaries, find the top-most style
     for i in 0..boundaries.len().saturating_sub(1) {
@@ -656,20 +657,20 @@ pub(crate) fn unique_styles(
         }
 
         // Find the last (top-most) style that covers this interval
-        let mut top_style: Option<HighlightStyle> = None;
+        let mut top_style: Option<&HighlightStyle> = None;
         for (range, style) in &styles {
             if range.start <= interval_start && interval_end <= range.end {
-                top_style = Some(style.clone());
+                top_style = Some(style);
             }
         }
 
         if let Some(style) = top_style {
-            result.push((interval_start..interval_end, style));
+            result.push((interval_start..interval_end, style.clone()));
         }
     }
 
     // Merge adjacent ranges with the same style, but not across significant boundaries
-    let mut merged: Vec<(Range<usize>, HighlightStyle)> = Vec::new();
+    let mut merged: Vec<(Range<usize>, HighlightStyle)> = Vec::with_capacity(result.len());
     for (range, style) in result {
         if let Some((last_range, last_style)) = merged.last_mut() {
             if last_range.end == range.start
