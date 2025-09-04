@@ -3,7 +3,11 @@ use crate::highlighter::LanguageRegistry;
 
 use anyhow::{anyhow, Context, Result};
 use gpui::{App, HighlightStyle, SharedString};
-use std::{collections::HashMap, ops::Range, usize};
+use std::{
+    collections::{BTreeSet, HashMap},
+    ops::Range,
+    usize,
+};
 use sum_tree::{Bias, SumTree};
 use tree_sitter::{
     InputEdit, Node, Parser, Point, Query, QueryCursor, QueryMatch, StreamingIterator, Tree,
@@ -581,7 +585,7 @@ impl SyntaxHighlighter {
                 start..node_range.end,
                 theme.style(name.as_ref()).unwrap_or_default(),
             ));
-            last_range = node_range.clone();
+            last_range = node_range;
 
             filter.next();
         }
@@ -609,81 +613,78 @@ impl SyntaxHighlighter {
     }
 }
 
-/// To merge intersection ranges
+/// To merge intersection ranges, let the subsequent range cover the previous overlapping range and split the previous range
 ///
-/// ```
-/// vec![
-///     (0..10, clean),
-///     (0..10, clean),
-///     (5..11, red),
-///     (10..15, green),
-///     (15..30, clean),
-///     (29..35, blue),
-///     (35..40, green),
-/// ];
-/// ```
+/// From:
 ///
-/// to
+/// AA
+///   BBB
+///    CCCCC
+///      DD
+///         EEEE
 ///
-/// ```
-/// vec![
-///   (0..5, clean),
-///   (5..10, red),
-///   (10..11, green),
-///   (11..15, green),
-///   (15..29, clean),
-///   (29..30, blue),
-///   (30..35, blue),
-///   (35..40, green),
-/// ];
-/// ```
+/// To:
+///
+/// AABCCDDCEEEE
 pub(crate) fn unique_styles(
     styles: Vec<(Range<usize>, HighlightStyle)>,
 ) -> Vec<(Range<usize>, HighlightStyle)> {
-    let mut result: Vec<(Range<usize>, HighlightStyle)> = vec![];
-    let mut current_range: Option<(Range<usize>, HighlightStyle)> = None;
+    if styles.is_empty() {
+        return styles;
+    }
 
-    for (range, style) in styles.into_iter() {
-        if range.is_empty() {
+    // Collect all boundary points and track which are "significant" (range endpoints)
+    let mut boundaries = BTreeSet::new();
+    let mut significant_boundaries = BTreeSet::new();
+
+    for (range, _) in &styles {
+        boundaries.insert(range.start);
+        boundaries.insert(range.end);
+        significant_boundaries.insert(range.end); // End points are significant for merging decisions
+    }
+
+    let boundaries: Vec<usize> = boundaries.into_iter().collect();
+    let mut result = Vec::new();
+
+    // For each interval between boundaries, find the top-most style
+    for i in 0..boundaries.len().saturating_sub(1) {
+        let interval_start = boundaries[i];
+        let interval_end = boundaries[i + 1];
+
+        if interval_start >= interval_end {
             continue;
         }
 
-        if let Some((last_range, last_style)) = current_range.as_mut() {
-            if last_style.color == style.color && range.start <= last_range.end {
-                // Merge overlapping or adjacent ranges with the same style
-                last_range.end = last_range.end.max(range.end);
-            } else if range.start < last_range.end {
-                // Split overlapping ranges with different styles
-                let overlap_start = range.start;
-                let overlap_end = last_range.end.min(range.end);
-
-                if overlap_start > last_range.start {
-                    result.push((last_range.start..overlap_start, *last_style));
-                }
-
-                result.push((overlap_start..overlap_end, style));
-
-                last_range.end = overlap_start;
-                if overlap_end < range.end {
-                    current_range = Some((overlap_end..range.end, style));
-                } else {
-                    current_range = None;
-                }
-            } else {
-                // Push the completed range and start a new one
-                result.push((last_range.clone(), *last_style));
-                current_range = Some((range, style));
+        // Find the last (top-most) style that covers this interval
+        let mut top_style: Option<HighlightStyle> = None;
+        for (range, style) in &styles {
+            if range.start <= interval_start && interval_end <= range.end {
+                top_style = Some(style.clone());
             }
-        } else {
-            current_range = Some((range, style));
+        }
+
+        if let Some(style) = top_style {
+            result.push((interval_start..interval_end, style));
         }
     }
 
-    if let Some((last_range, last_style)) = current_range {
-        result.push((last_range, last_style));
+    // Merge adjacent ranges with the same style, but not across significant boundaries
+    let mut merged: Vec<(Range<usize>, HighlightStyle)> = Vec::new();
+    for (range, style) in result {
+        if let Some((last_range, last_style)) = merged.last_mut() {
+            if last_range.end == range.start
+                && *last_style == style
+                && !significant_boundaries.contains(&range.start)
+            {
+                // Merge adjacent ranges with same style, but not across significant boundaries
+                last_range.end = range.end;
+                continue;
+            }
+        }
+        merged.push((range, style));
     }
 
-    result
+    merged
 }
 
 #[cfg(test)]
@@ -755,14 +756,15 @@ mod tests {
                 (0..10, clean),
                 (0..10, clean),
                 (5..11, red),
+                (0..6, clean),
                 (10..15, green),
                 (15..30, clean),
                 (29..35, blue),
                 (35..40, green),
             ],
             vec![
-                (0..5, clean),
-                (5..10, red),
+                (0..6, clean),
+                (6..10, red),
                 (10..11, green),
                 (11..15, green),
                 (15..29, clean),
