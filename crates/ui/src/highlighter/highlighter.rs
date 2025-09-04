@@ -576,11 +576,12 @@ impl SyntaxHighlighter {
                 styles.push((last_range.end..node_range.start, HighlightStyle::default()));
             }
 
-            last_range = node_range.clone();
+            let start = node_range.start.max(last_range.end);
             styles.push((
-                node_range.clone(),
+                start..node_range.end,
                 theme.style(name.as_ref()).unwrap_or_default(),
             ));
+            last_range = node_range.clone();
 
             filter.next();
         }
