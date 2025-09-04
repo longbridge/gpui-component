@@ -4,7 +4,7 @@ use crate::highlighter::LanguageRegistry;
 use anyhow::{anyhow, Context, Result};
 use gpui::{App, HighlightStyle, SharedString};
 use std::{collections::HashMap, ops::Range, usize};
-use sum_tree::SumTree;
+use sum_tree::{Bias, SumTree};
 use tree_sitter::{
     InputEdit, Node, Parser, Point, Query, QueryCursor, QueryMatch, StreamingIterator, Tree,
 };
@@ -274,35 +274,32 @@ impl SyntaxHighlighter {
     /// Uses incremental parsing, detects changed ranges, and caches unchanged results.
     pub fn update(
         &mut self,
-        selected_range: &Range<usize>,
+        edit: Option<InputEdit>,
+        // selected_range: &Range<usize>,
         full_text: &SharedString,
-        new_text: &str,
+        // new_text: &str,
         cx: &mut App,
     ) {
         if &self.text == full_text {
             return;
         }
 
-        // If insert a chart, this is 1.
-        // If backspace or delete, this is -1.
-        // If selected to delete, this is the length of the selected text.
-        let changed_len = new_text.len() as isize - selected_range.len() as isize;
-
         let new_tree = match &self.old_tree {
             // NOTE: 10K lines, about 4.5ms
             None => self.parser.parse(full_text.as_ref(), None),
             Some(old) => {
-                let edit = InputEdit {
-                    start_byte: selected_range.start,
-                    old_end_byte: selected_range.end,
-                    new_end_byte: (selected_range.end as isize + changed_len) as usize,
+                let edit = edit.unwrap_or(InputEdit {
+                    start_byte: 0,
+                    old_end_byte: 0,
+                    new_end_byte: 0,
                     start_position: Point::new(0, 0),
                     old_end_position: Point::new(0, 0),
                     new_end_position: Point::new(0, 0),
-                };
-                let mut old_cloned = old.clone();
-                old_cloned.edit(&edit);
-                self.parser.parse(full_text.as_ref(), Some(&old_cloned))
+                });
+
+                let mut old_tree = old.clone();
+                old_tree.edit(&edit);
+                self.parser.parse(full_text.as_ref(), Some(&old_tree))
             }
         };
 
@@ -332,10 +329,13 @@ impl SyntaxHighlighter {
         };
 
         let source = self.text.as_bytes();
-        let mut query_cursor = QueryCursor::new();
         let root_node = tree.root_node();
-        self.cache = sum_tree::SumTree::new(&());
 
+        // Remove the changed items from the cache.
+        let new_cache = sum_tree::SumTree::new(&());
+        self.cache = new_cache;
+
+        let mut query_cursor = QueryCursor::new();
         let mut matches = query_cursor.matches(&query, root_node, source);
         while let Some(m) = matches.next() {
             // Ref:
@@ -556,9 +556,9 @@ impl SyntaxHighlighter {
 
         let mut cursor = self.cache.cursor::<usize>(&());
         let bias = if start_offset == 0 {
-            sum_tree::Bias::Right
+            Bias::Right
         } else {
-            sum_tree::Bias::Left
+            Bias::Left
         };
 
         let left_items = cursor.slice(&start_offset, bias);
