@@ -272,14 +272,7 @@ impl SyntaxHighlighter {
 
     /// Highlight the given text, returning a map from byte ranges to highlight captures.
     /// Uses incremental parsing, detects changed ranges, and caches unchanged results.
-    pub fn update(
-        &mut self,
-        edit: Option<InputEdit>,
-        // selected_range: &Range<usize>,
-        full_text: &SharedString,
-        // new_text: &str,
-        cx: &mut App,
-    ) {
+    pub fn update(&mut self, edit: Option<InputEdit>, full_text: &SharedString, cx: &mut App) {
         if &self.text == full_text {
             return;
         }
@@ -340,15 +333,13 @@ impl SyntaxHighlighter {
         while let Some(m) = matches.next() {
             // Ref:
             // https://github.com/tree-sitter/tree-sitter/blob/460118b4c82318b083b4d527c9c750426730f9c0/highlight/src/lib.rs#L556
-            let (language_name, content_node, _) = self.injection_for_match(None, query, m, source);
-            if let Some(language_name) = language_name {
-                if let Some(content_node) = content_node {
-                    let styles = self.handle_injection(&language_name, content_node, source, cx);
-                    for (node_range, highlight_name) in styles {
-                        self.cache
-                            .push(HighlightItem::new(node_range.clone(), highlight_name), &());
-                        // .insert(node_range.start, (node_range, highlight_name.into()));
-                    }
+            if let (Some(language_name), Some(content_node), _) =
+                self.injection_for_match(None, query, m, source)
+            {
+                let styles = self.handle_injection(&language_name, content_node, source, cx);
+                for (node_range, highlight_name) in styles {
+                    self.cache
+                        .push(HighlightItem::new(node_range.clone(), highlight_name), &());
                 }
 
                 continue;
