@@ -4,6 +4,7 @@ use crate::highlighter::LanguageRegistry;
 use anyhow::{anyhow, Context, Result};
 use gpui::{App, HighlightStyle, SharedString};
 use std::{collections::HashMap, ops::Range, usize};
+use sum_tree::SumTree;
 use tree_sitter::{
     InputEdit, Node, Parser, Point, Query, QueryCursor, QueryMatch, StreamingIterator, Tree,
 };
@@ -31,12 +32,7 @@ pub struct SyntaxHighlighter {
     local_ref_capture_index: Option<u32>,
 
     /// Cache of highlight, the range is offset of the token in the tree.
-    ///
-    /// The BTreeMap is ordered by the range in the entire text.
-    ///
-    /// - The `key` is the `start` of the range.
-    /// -The `value` is a tuple of the range (in the entire text) and the highlight name.
-    cache: sum_tree::SumTree<HighlightItem>,
+    cache: SumTree<HighlightItem>,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -48,8 +44,10 @@ struct HighlightSummary {
     max_end: usize,
 }
 
+/// The highlight item, the range is offset of the token in the tree.
 #[derive(Debug, Default, Clone)]
 struct HighlightItem {
+    /// The byte range of the highlight in the text.
     range: Range<usize>,
     /// The highlight name, like `function`, `string`, `comment`, etc.
     name: SharedString,
