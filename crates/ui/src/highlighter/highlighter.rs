@@ -276,7 +276,7 @@ impl SyntaxHighlighter {
 
     /// Highlight the given text, returning a map from byte ranges to highlight captures.
     /// Uses incremental parsing, detects changed ranges, and caches unchanged results.
-    pub fn update(&mut self, edit: Option<InputEdit>, full_text: &SharedString, cx: &mut App) {
+    pub fn update(&mut self, edit: Option<InputEdit>, full_text: &SharedString, cx: &App) {
         if &self.text == full_text {
             return;
         }
