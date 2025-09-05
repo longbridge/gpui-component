@@ -42,12 +42,10 @@ pub struct SyntaxHighlighter {
 }
 
 struct TextProvider<'a>(&'a Rope);
-
 impl<'a> tree_sitter::TextProvider<&'a [u8]> for TextProvider<'a> {
     type I = Chunks<'a, u8>;
 
     fn text(&mut self, node: tree_sitter::Node) -> Self::I {
-        // create rust chunk
         let slice = self.0.byte_slice(node.start_byte()..node.end_byte());
         slice.as_str().unwrap_or_default().as_bytes().chunks(64)
     }
@@ -496,7 +494,6 @@ impl SyntaxHighlighter {
         parent_name: Option<SharedString>,
         query: &'a Query,
         query_match: &QueryMatch<'a, 'a>,
-        // source: &'a [u8],
     ) -> (Option<SharedString>, Option<Node<'a>>, bool) {
         let content_capture_index = self.injection_content_capture_index;
         // let language_capture_index = self.injection_language_capture_index;
