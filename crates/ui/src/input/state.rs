@@ -807,7 +807,7 @@ impl InputState {
 
     /// Return the value without mask.
     pub fn unmask_value(&self) -> String {
-        self.mask_pattern.unmask(&self.text.to_string()).into()
+        self.mask_pattern.unmask(&self.text.to_string())
     }
 
     /// Return the (1-based) line and column of the cursor.
