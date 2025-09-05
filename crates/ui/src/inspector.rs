@@ -198,8 +198,7 @@ impl DivInspector {
                 self.update_element_style(new_style, window, cx);
             }
             Err(e) => {
-                let e = format!("{}", e);
-                self.json_state.error = Some(e.into());
+                self.json_state.error = Some(e.to_string().trim_end().to_string().into());
                 window.refresh();
             }
         }
@@ -378,7 +377,7 @@ fn rust_to_style(
     let err = if err.is_empty() {
         None
     } else {
-        Some(err.into())
+        Some(err.trim_end().to_string().into())
     };
     (style, err)
 }
