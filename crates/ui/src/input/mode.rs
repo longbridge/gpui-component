@@ -2,6 +2,7 @@ use std::rc::Rc;
 use std::{cell::RefCell, ops::Range};
 
 use gpui::{App, SharedString};
+use ropey::Rope;
 use tree_sitter::{InputEdit, Point};
 
 use crate::{highlighter::SyntaxHighlighter, input::marker::Marker};
@@ -161,7 +162,7 @@ impl InputMode {
     pub(super) fn update_highlighter(
         &mut self,
         selected_range: &Range<usize>,
-        full_text: &SharedString,
+        text: &Rope,
         new_text: &str,
         text_wrapper: &TextWrapper,
         force: bool,
@@ -207,7 +208,7 @@ impl InputMode {
                     new_end_position: Point::new(0, 0),
                 };
 
-                highlighter.update(Some(edit), full_text, cx);
+                highlighter.update(Some(edit), text, cx);
             }
             _ => {}
         }

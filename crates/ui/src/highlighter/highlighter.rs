@@ -3,6 +3,7 @@ use crate::highlighter::LanguageRegistry;
 
 use anyhow::{anyhow, Context, Result};
 use gpui::{App, HighlightStyle, SharedString};
+use ropey::Rope;
 use std::{
     collections::{BTreeSet, HashMap},
     ops::Range,
@@ -22,7 +23,7 @@ pub struct SyntaxHighlighter {
     injection_queries: HashMap<SharedString, Query>,
     parser: Parser,
     old_tree: Option<Tree>,
-    text: SharedString,
+    text: Rope,
 
     locals_pattern_index: usize,
     highlights_pattern_index: usize,
@@ -256,7 +257,7 @@ impl SyntaxHighlighter {
             injection_queries,
             parser,
             old_tree: None,
-            text: SharedString::new(""),
+            text: Rope::new(),
             cache: sum_tree::SumTree::new(&()),
             locals_pattern_index,
             highlights_pattern_index,
@@ -271,19 +272,30 @@ impl SyntaxHighlighter {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.text.is_empty()
+        self.text.len_bytes() == 0
     }
 
     /// Highlight the given text, returning a map from byte ranges to highlight captures.
     /// Uses incremental parsing, detects changed ranges, and caches unchanged results.
-    pub fn update(&mut self, edit: Option<InputEdit>, full_text: &SharedString, cx: &App) {
-        if &self.text == full_text {
+    pub fn update(&mut self, edit: Option<InputEdit>, text: &Rope, cx: &App) {
+        if &self.text == text {
             return;
         }
 
         let new_tree = match &self.old_tree {
             // NOTE: 10K lines, about 4.5ms
-            None => self.parser.parse(full_text.as_ref(), None),
+            None => self.parser.parse_with_options(
+                &mut |boff, _| {
+                    if boff >= text.len_bytes() {
+                        ""
+                    } else {
+                        let (ch, cb, _, _) = text.chunk_at_byte(boff);
+                        &ch[boff - cb..]
+                    }
+                },
+                None,
+                None,
+            ),
             Some(old) => {
                 let edit = edit.unwrap_or(InputEdit {
                     start_byte: 0,
@@ -296,7 +308,18 @@ impl SyntaxHighlighter {
 
                 let mut old_tree = old.clone();
                 old_tree.edit(&edit);
-                self.parser.parse(full_text.as_ref(), Some(&old_tree))
+                self.parser.parse_with_options(
+                    &mut |boff, _| {
+                        if boff >= text.len_bytes() {
+                            ""
+                        } else {
+                            let (ch, cb, _, _) = text.chunk_at_byte(boff);
+                            &ch[boff - cb..]
+                        }
+                    },
+                    Some(&old_tree),
+                    None,
+                )
             }
         };
 
@@ -306,7 +329,7 @@ impl SyntaxHighlighter {
 
         // Update state
         self.old_tree = Some(new_tree);
-        self.text = full_text.clone();
+        self.text = text.clone();
 
         // let measure = crate::Measure::new("build_styles");
         self.build_styles(cx);
@@ -325,7 +348,7 @@ impl SyntaxHighlighter {
             return;
         };
 
-        let source = self.text.as_bytes();
+        let source = self.text.to_string();
         let root_node = tree.root_node();
 
         // Remove the changed items from the cache.
@@ -333,14 +356,15 @@ impl SyntaxHighlighter {
         self.cache = new_cache;
 
         let mut query_cursor = QueryCursor::new();
-        let mut matches = query_cursor.matches(&query, root_node, source);
+        let mut matches = query_cursor.matches(&query, root_node, source.as_bytes());
         while let Some(m) = matches.next() {
             // Ref:
             // https://github.com/tree-sitter/tree-sitter/blob/460118b4c82318b083b4d527c9c750426730f9c0/highlight/src/lib.rs#L556
             if let (Some(language_name), Some(content_node), _) =
-                self.injection_for_match(None, query, m, source)
+                self.injection_for_match(None, query, m, source.as_bytes())
             {
-                let styles = self.handle_injection(&language_name, content_node, source, cx);
+                let styles =
+                    self.handle_injection(&language_name, content_node, source.as_bytes(), cx);
                 for (node_range, highlight_name) in styles {
                     self.cache
                         .push(HighlightItem::new(node_range.clone(), highlight_name), &());

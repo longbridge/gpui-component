@@ -1,7 +1,8 @@
 use std::ops::Range;
 
 use crate::input::LineColumn;
-use gpui::{App, Font, LineFragment, Pixels, SharedString};
+use gpui::{App, Font, LineFragment, Pixels};
+use ropey::Rope;
 
 #[allow(unused)]
 pub(super) struct LineWrap {
@@ -19,7 +20,7 @@ pub(super) struct LineWrap {
 ///
 /// After use lines to calculate the scroll size of the TextArea
 pub(super) struct TextWrapper {
-    pub(super) text: SharedString,
+    pub(super) text: Rope,
     /// The wrapped lines, value is start and end index of the line.
     pub(super) wrapped_lines: Vec<Range<usize>>,
     /// The lines by split \n
@@ -34,7 +35,7 @@ pub(super) struct TextWrapper {
 impl TextWrapper {
     pub(super) fn new(font: Font, font_size: Pixels, wrap_width: Option<Pixels>) -> Self {
         Self {
-            text: SharedString::default(),
+            text: Rope::new(),
             font,
             font_size,
             wrap_width,
@@ -57,7 +58,7 @@ impl TextWrapper {
     /// Update the text wrapper and recalculate the wrapped lines.
     ///
     /// If the `text` is the same as the current text, do nothing.
-    pub(super) fn update(&mut self, text: &SharedString, force: bool, cx: &mut App) {
+    pub(super) fn update(&mut self, text: &Rope, force: bool, cx: &mut App) {
         if &self.text == text && !force {
             return;
         }
@@ -69,7 +70,9 @@ impl TextWrapper {
             .text_system()
             .line_wrapper(self.font.clone(), self.font_size);
         let mut prev_line_ix = 0;
-        for line in text.split('\n') {
+
+        // FIXME: here may need use from Rope
+        for line in text.to_string().split('\n') {
             let mut line_wraps = vec![];
             let mut prev_boundary_ix = 0;
 
@@ -128,7 +131,7 @@ impl TextWrapper {
 
         let line = line.saturating_sub(1);
         if line >= self.lines.len() {
-            return Some(self.text.len());
+            return Some(self.text.len_bytes());
         }
 
         let Some(line_wrap) = &self.lines.get(line) else {

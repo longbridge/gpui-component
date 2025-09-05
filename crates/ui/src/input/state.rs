@@ -3,6 +3,7 @@
 //! Based on the `Input` example from the `gpui` crate.
 //! https://github.com/zed-industries/zed/blob/main/crates/gpui/examples/input.rs
 use gpui::Action;
+use ropey::{Rope, RopeSlice};
 use serde::Deserialize;
 use smallvec::SmallVec;
 use std::cell::RefCell;
@@ -240,7 +241,7 @@ impl Deref for LastLayout {
 pub struct InputState {
     pub(super) focus_handle: FocusHandle,
     pub(super) mode: InputMode,
-    pub(super) text: SharedString,
+    pub(super) text: Rope,
     pub(super) text_wrapper: TextWrapper,
     pub(super) history: History<Change>,
     pub(super) blink_cursor: Entity<BlinkCursor>,
@@ -647,7 +648,7 @@ impl InputState {
             prev_lines_offset += line.len() + 1;
         }
 
-        let new_offset = (prev_lines_offset + new_local_index).min(self.text.len());
+        let new_offset = (prev_lines_offset + new_local_index).min(self.text.len_bytes());
         let new_cursor = Cursor::new(new_offset);
         self.selected_range = (new_cursor..new_cursor).into();
         self.pause_blink_cursor(cx);
@@ -673,7 +674,7 @@ impl InputState {
         // Ensure cursor to start when set text
         if self.mode.is_single_line() {
             self.selected_range =
-                (Cursor::new(self.text.len())..Cursor::new(self.text.len())).into();
+                (Cursor::new(self.text.len_bytes())..Cursor::new(self.text.len_bytes())).into();
         } else {
             self.selected_range = (Cursor::new(0)..Cursor::new(0)).into();
         }
@@ -793,24 +794,34 @@ impl InputState {
 
     /// Set the default value of the input field.
     pub fn default_value(mut self, value: impl Into<SharedString>) -> Self {
-        self.text = value.into();
+        let text: SharedString = value.into();
+        self.text = Rope::from_str(text.as_str());
         self.text_wrapper.text = self.text.clone();
         self
     }
 
     /// Return the value of the input field.
-    pub fn value(&self) -> &SharedString {
-        &self.text
+    pub fn value(&self) -> String {
+        self.text.to_string()
     }
 
     /// Return the value without mask.
-    pub fn unmask_value(&self) -> SharedString {
-        self.mask_pattern.unmask(&self.text).into()
+    pub fn unmask_value(&self) -> String {
+        self.mask_pattern.unmask(&self.text.to_string()).into()
     }
 
     /// Return the (1-based) line and column of the cursor.
     pub fn line_column(&self) -> LineColumn {
-        self.text_wrapper.line_column(self.cursor().offset)
+        let line_ix = self.text.byte_to_line(self.cursor().offset);
+        let column_ix = self
+            .cursor()
+            .offset
+            .saturating_sub(self.text.line_to_byte(line_ix));
+
+        LineColumn {
+            line: line_ix + 1,
+            column: column_ix + 1,
+        }
     }
 
     /// Set (1-based) line and column of the cursor.
@@ -976,7 +987,7 @@ impl InputState {
         if self.mode.is_single_line() {
             return;
         }
-        let offset = (self.end_of_line(window, cx) + 1).min(self.text.len());
+        let offset = (self.end_of_line(window, cx) + 1).min(self.text.len_bytes());
         self.select_to(Cursor::new(self.next_boundary(offset)), window, cx);
     }
 
@@ -987,7 +998,7 @@ impl InputState {
         cx: &mut Context<Self>,
     ) {
         self.move_to(Cursor::new(0), window, cx);
-        self.select_to(Cursor::new(self.text.len()), window, cx)
+        self.select_to(Cursor::new(self.text.len_bytes()), window, cx)
     }
 
     pub(super) fn home(&mut self, _: &MoveHome, window: &mut Window, cx: &mut Context<Self>) {
@@ -1017,7 +1028,7 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let end = self.text.len();
+        let end = self.text.len_bytes();
         self.move_to(Cursor::new(end), window, cx);
     }
 
@@ -1056,7 +1067,7 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let end = self.text.len();
+        let end = self.text.len_bytes();
         self.select_to(Cursor::new(end), window, cx);
     }
 
@@ -1103,7 +1114,10 @@ impl InputState {
     /// Return the start offset of the previous word.
     fn previous_start_of_word(&mut self) -> usize {
         let offset = self.selected_range.start.offset;
-        let prev_str = self.text_for_range_utf8(0..offset);
+        let prev_str = self
+            .text_for_range_utf8(0..offset)
+            .as_str()
+            .unwrap_or_default();
         UnicodeSegmentation::split_word_bound_indices(prev_str)
             .filter(|(_, s)| !s.trim_start().is_empty())
             .next_back()
@@ -1114,11 +1128,14 @@ impl InputState {
     /// Return the next end offset of the next word.
     fn next_end_of_word(&mut self) -> usize {
         let offset = self.cursor().offset;
-        let next_str = self.text_for_range_utf8(offset..self.text.len());
+        let next_str = self
+            .text_for_range_utf8(offset..self.text.len_bytes())
+            .as_str()
+            .unwrap_or_default();
         UnicodeSegmentation::split_word_bound_indices(next_str)
             .find(|(_, s)| !s.trim_start().is_empty())
             .map(|(i, s)| offset + i + s.len())
-            .unwrap_or(self.text.len())
+            .unwrap_or(self.text.len_bytes())
     }
 
     /// Get start of line
@@ -1166,8 +1183,11 @@ impl InputState {
     /// Get end of line
     fn end_of_line(&mut self, window: &mut Window, cx: &mut Context<Self>) -> usize {
         if self.mode.is_single_line() {
-            return self.text.len();
+            return self.text.len_bytes();
         }
+
+        // let line = self.text.byte_to_line(self.cursor().offset);
+        // let offset = self.text.line_to_byte(line) + self.text.line(line).len_bytes();
 
         let offset = self.next_boundary(self.cursor().offset);
         // ignore if offset is "\n"
@@ -1186,7 +1206,7 @@ impl InputState {
 
         let line = self
             .text_for_range(
-                self.range_to_utf16(&(offset..self.text.len())),
+                self.range_to_utf16(&(offset..self.text.len_bytes())),
                 &mut None,
                 window,
                 cx,
@@ -1194,7 +1214,7 @@ impl InputState {
             .unwrap_or_default()
             .find('\n')
             .map(|i| i + offset)
-            .unwrap_or(self.text.len());
+            .unwrap_or(self.text.len_bytes());
         line
     }
 
@@ -1293,7 +1313,7 @@ impl InputState {
     ) {
         let mut offset = self.end_of_line(window, cx);
         if offset == self.cursor().offset {
-            offset = (offset + 1).clamp(0, self.text.len());
+            offset = (offset + 1).clamp(0, self.text.len_bytes());
         }
         self.replace_text_in_range(
             Some(self.range_to_utf16(&(self.cursor().offset..offset))),
@@ -1502,7 +1522,9 @@ impl InputState {
             let start_offset = self.selected_range.start;
             let offset = self.start_of_line_of_selection(window, cx);
             if self
-                .text_for_range_utf8(offset..self.text.len())
+                .text_for_range_utf8(offset..self.text.len_bytes())
+                .as_str()
+                .unwrap_or("")
                 .starts_with(tab_indent.as_ref())
             {
                 self.replace_text_in_range(
@@ -1723,7 +1745,7 @@ impl InputState {
     ///
     /// Ensure the offset use self.next_boundary or self.previous_boundary to get the correct offset.
     fn move_to(&mut self, cursor: Cursor, _: &mut Window, cx: &mut Context<Self>) {
-        let cursor = Cursor::new(cursor.offset.clamp(0, self.text.len()));
+        let cursor = Cursor::new(cursor.offset.clamp(0, self.text.len_bytes()));
         self.selected_range = (cursor..cursor).into();
         self.pause_blink_cursor(cx);
         self.update_preferred_x_offset(cx);
@@ -1752,7 +1774,7 @@ impl InputState {
         _cx: &App,
     ) -> usize {
         // If the text is empty, always return 0
-        if self.text.is_empty() {
+        if self.text.len_bytes() == 0 {
             return 0;
         }
 
@@ -1817,8 +1839,8 @@ impl InputState {
             index += 1;
         }
 
-        if index > self.text.len() {
-            self.text.len()
+        if index > self.text.len_bytes() {
+            self.text.len_bytes()
         } else {
             index
         }
@@ -1851,7 +1873,7 @@ impl InputState {
     ///
     /// Ensure the offset use self.next_boundary or self.previous_boundary to get the correct offset.
     fn select_to(&mut self, offset: Cursor, _: &mut Window, cx: &mut Context<Self>) {
-        let offset = offset.clamp(0, self.text.len());
+        let offset = offset.clamp(0, self.text.len_bytes());
         if self.selection_reversed {
             self.selected_range.start = Cursor::new(offset)
         } else {
@@ -1896,7 +1918,7 @@ impl InputState {
             .unwrap_or_default();
         let next_text = self
             .text_for_range(
-                self.range_to_utf16(&(end..self.text.len())),
+                self.range_to_utf16(&(end..self.text.len_bytes())),
                 &mut None,
                 window,
                 cx,
@@ -1980,18 +2002,24 @@ impl InputState {
     }
 
     fn previous_boundary(&self, offset: usize) -> usize {
-        self.text
-            .grapheme_indices(true)
-            .rev()
-            .find_map(|(idx, _)| (idx < offset).then_some(idx))
-            .unwrap_or(0)
+        let char_ix = self.text.byte_to_char(offset).saturating_sub(1);
+        self.text.char_to_byte(char_ix)
+
+        // self.text
+        //     .grapheme_indices(true)
+        //     .rev()
+        //     .find_map(|(idx, _)| (idx < offset).then_some(idx))
+        //     .unwrap_or(0)
     }
 
     fn next_boundary(&self, offset: usize) -> usize {
-        self.text
-            .grapheme_indices(true)
-            .find_map(|(idx, _)| (idx > offset).then_some(idx))
-            .unwrap_or(self.text.len())
+        let char_ix = self.text.byte_to_char(offset) + 1;
+        self.text.char_to_byte(char_ix).min(self.text.len_bytes())
+
+        // self.text
+        //     .grapheme_indices(true)
+        //     .find_map(|(idx, _)| (idx > offset).then_some(idx))
+        //     .unwrap_or(self.text.len())
     }
 
     /// Returns the true to let InputElement to render cursor, when Input is focused and current BlinkCursor is visible.
@@ -2034,7 +2062,7 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.text.is_empty() {
+        if self.text.len_bytes() == 0 {
             return;
         }
 
@@ -2126,9 +2154,9 @@ impl InputState {
         }
     }
 
-    fn text_for_range_utf8(&mut self, range: impl Into<Range<usize>>) -> &str {
+    fn text_for_range_utf8(&'_ self, range: impl Into<Range<usize>>) -> RopeSlice<'_> {
         let range = self.range_from_utf16(&self.range_to_utf16(&range.into()));
-        &self.text[range]
+        self.text.byte_slice(range)
     }
 }
 
@@ -2142,7 +2170,7 @@ impl EntityInputHandler for InputState {
     ) -> Option<String> {
         let range = self.range_from_utf16(&range_utf16);
         adjusted_range.replace(self.range_to_utf16(&range));
-        Some(self.text[range].to_string())
+        Some(self.text.byte_slice(range).to_string())
     }
 
     fn selected_text_range(
@@ -2191,10 +2219,12 @@ impl EntityInputHandler for InputState {
             .or(self.marked_range.map(|range| range.into()))
             .unwrap_or(self.selected_range.into());
 
-        let pending_text: SharedString = (self.text_for_range_utf8(0..range.start).to_owned()
+        let pending_text: SharedString = (self.text_for_range_utf8(0..range.start).to_string()
             + new_text
-            + self.text_for_range_utf8(range.end..self.text.len()))
-        .into();
+            + &self
+                .text_for_range_utf8(range.end..self.text.len_bytes())
+                .to_string())
+            .into();
         // Check if the new text is valid
         if !self.is_valid_input(&pending_text, cx) {
             return;
@@ -2205,7 +2235,7 @@ impl EntityInputHandler for InputState {
         let new_offset = (range.start + new_text_len).min(mask_text.len());
 
         self.push_history(&range, &new_text, window, cx);
-        self.text = mask_text.clone();
+        self.text = Rope::from_str(&mask_text);
 
         self.mode.clear_markers();
         self.text_wrapper.update(&self.text, false, cx);
@@ -2216,7 +2246,7 @@ impl EntityInputHandler for InputState {
         self.update_preferred_x_offset(cx);
         self.update_scroll_offset(None, cx);
         self.mode.update_auto_grow(&self.text_wrapper);
-        cx.emit(InputEvent::Change(self.unmask_value()));
+        cx.emit(InputEvent::Change(self.unmask_value().into()));
         cx.notify();
     }
 
@@ -2238,16 +2268,18 @@ impl EntityInputHandler for InputState {
             .map(|range_utf16| self.range_from_utf16(range_utf16))
             .or(self.marked_range.map(|range| range.into()))
             .unwrap_or(self.selected_range.into());
-        let pending_text: SharedString = (self.text_for_range_utf8(0..range.start).to_owned()
+        let pending_text: SharedString = (self.text_for_range_utf8(0..range.start).to_string()
             + new_text
-            + self.text_for_range_utf8(range.end..self.text.len()))
-        .into();
+            + &self
+                .text_for_range_utf8(range.end..self.text.len_bytes())
+                .to_string())
+            .into();
         if !self.is_valid_input(&pending_text, cx) {
             return;
         }
 
         self.push_history(&range, new_text, window, cx);
-        self.text = pending_text;
+        self.text = Rope::from_str(&pending_text);
         self.mode.clear_markers();
         self.text_wrapper.update(&self.text, false, cx);
         self.mode
@@ -2266,7 +2298,7 @@ impl EntityInputHandler for InputState {
                 .into();
         }
         self.mode.update_auto_grow(&self.text_wrapper);
-        cx.emit(InputEvent::Change(self.unmask_value()));
+        cx.emit(InputEvent::Change(self.unmask_value().into()));
         cx.notify();
     }
 
