@@ -1,5 +1,5 @@
 use super::HighlightTheme;
-use crate::highlighter::LanguageRegistry;
+use crate::{highlighter::LanguageRegistry, Measure};
 
 use anyhow::{anyhow, Context, Result};
 use gpui::{App, HighlightStyle, SharedString};
@@ -281,22 +281,45 @@ impl SyntaxHighlighter {
             return;
         }
 
+        let mut incr_update = false;
+        let mut changed_ranges = vec![];
+        let edit = edit.unwrap_or(InputEdit {
+            start_byte: 0,
+            old_end_byte: self.text.len(),
+            new_end_byte: full_text.len(),
+            start_position: Point::new(0, 0),
+            old_end_position: Point::new(0, 0),
+            new_end_position: Point::new(0, 0),
+        });
+
         let new_tree = match &self.old_tree {
             // NOTE: 10K lines, about 4.5ms
             None => self.parser.parse(full_text.as_ref(), None),
             Some(old) => {
-                let edit = edit.unwrap_or(InputEdit {
-                    start_byte: 0,
-                    old_end_byte: 0,
-                    new_end_byte: 0,
-                    start_position: Point::new(0, 0),
-                    old_end_position: Point::new(0, 0),
-                    new_end_position: Point::new(0, 0),
-                });
+                incr_update = true;
+                let mut old = old.clone();
+                old.edit(&edit);
 
-                let mut old_tree = old.clone();
-                old_tree.edit(&edit);
-                self.parser.parse(full_text.as_ref(), Some(&old_tree))
+                let new_tree = self
+                    .parser
+                    .parse(full_text.as_ref(), Some(&old))
+                    .and_then(|new| {
+                        for range in old.changed_ranges(&new) {
+                            changed_ranges.push(range.start_byte..range.end_byte);
+                        }
+
+                        if changed_ranges.len() == 0 {
+                            const RANGE_THRESHOLD: usize = 50;
+                            changed_ranges.push(
+                                edit.start_byte.saturating_sub(RANGE_THRESHOLD)
+                                    ..(edit.new_end_byte + RANGE_THRESHOLD).min(full_text.len()),
+                            );
+                        }
+
+                        Some(new)
+                    });
+
+                new_tree
             }
         };
 
@@ -308,94 +331,143 @@ impl SyntaxHighlighter {
         self.old_tree = Some(new_tree);
         self.text = full_text.clone();
 
-        // let measure = crate::Measure::new("build_styles");
-        self.build_styles(cx);
-        // measure.end();
+        // Build styles incrementally with edit information
+        let measure = Measure::new("build_style");
+        if incr_update {
+            self.build_changed_styles(&changed_ranges, &edit, cx);
+        } else {
+            self.build_full_style(cx);
+        }
+        measure.end();
     }
 
-    /// NOTE: 10K lines, about 180ms
-    /// FIXME: To improve the performance when there more than 5K lines, use partial update.
-    /// Ref: https://github.com/longbridge/gpui-component/pull/1197
-    fn build_styles(&mut self, cx: &App) {
+    fn build_changed_styles(
+        &mut self,
+        changed_ranges: &[Range<usize>],
+        edit: &InputEdit,
+        cx: &App,
+    ) {
+        let root_node = self
+            .old_tree
+            .as_ref()
+            .expect("old_tree should be Some here")
+            .root_node();
+
+        // Calculate the offset change from the edit
+        let offset_delta = edit.new_end_byte as i64 - edit.old_end_byte as i64;
+        let edit_start = edit.start_byte;
+        dbg!(changed_ranges, offset_delta);
+
+        let mut new_cache = SumTree::new(&());
+        for item in self.cache.iter() {
+            if item.range.end <= edit_start {
+                // Keep the before items
+                new_cache.push(item.clone(), &());
+            } else if item.range.start >= edit_start {
+                // Keep the after items, but change they range with offset_delta
+                let new_start = (item.range.start as i64 + offset_delta).max(0) as usize;
+                let new_end = (item.range.end as i64 + offset_delta).max(0) as usize;
+
+                new_cache.push(HighlightItem::new(new_start..new_end, &item.name), &());
+            }
+        }
+
+        self.cache = new_cache;
+        let mut highlights = Vec::new();
+        let mut query_cursor = QueryCursor::new();
+
+        for changed_range in changed_ranges {
+            self.collect_highlights_in_range(
+                &mut highlights,
+                &mut query_cursor,
+                root_node,
+                changed_range,
+                cx,
+            );
+        }
+
+        highlights.sort_by_key(|item| item.range.start);
+        for highlight in highlights {
+            self.cache.push(highlight, &());
+        }
+    }
+
+    fn build_full_style(&mut self, cx: &App) {
         let Some(tree) = &self.old_tree else {
             return;
         };
 
+        let root_node = tree.root_node();
+        let full_range = 0..self.text.len();
+
+        // Clear cache and rebuild
+        self.cache = SumTree::new(&());
+
+        let mut highlights = Vec::new();
+        let mut query_cursor = QueryCursor::new();
+
+        self.collect_highlights_in_range(
+            &mut highlights,
+            &mut query_cursor,
+            root_node,
+            &full_range,
+            cx,
+        );
+
+        highlights.sort_by_key(|item| item.range.start);
+        for highlight in highlights {
+            self.cache.push(highlight, &());
+        }
+    }
+
+    /// Collect highlights within a specific range
+    fn collect_highlights_in_range(
+        &self,
+        highlights: &mut Vec<HighlightItem>,
+        query_cursor: &mut QueryCursor,
+        root_node: Node,
+        range: &Range<usize>,
+        cx: &App,
+    ) {
         let Some(query) = &self.query else {
             return;
         };
 
         let source = self.text.as_bytes();
-        let root_node = tree.root_node();
 
-        // Remove the changed items from the cache.
-        let new_cache = sum_tree::SumTree::new(&());
-        self.cache = new_cache;
+        // Set the cursor range to limit query to the specified range
+        query_cursor.set_byte_range(range.clone());
 
-        let mut query_cursor = QueryCursor::new();
-        let mut matches = query_cursor.matches(&query, root_node, source);
+        let mut matches = query_cursor.matches(query, root_node, source);
         while let Some(m) = matches.next() {
-            // Ref:
-            // https://github.com/tree-sitter/tree-sitter/blob/460118b4c82318b083b4d527c9c750426730f9c0/highlight/src/lib.rs#L556
+            // Handle injections
             if let (Some(language_name), Some(content_node), _) =
                 self.injection_for_match(None, query, m, source)
             {
                 let styles = self.handle_injection(&language_name, content_node, source, cx);
                 for (node_range, highlight_name) in styles {
-                    self.cache
-                        .push(HighlightItem::new(node_range.clone(), highlight_name), &());
+                    // Only include highlights that intersect with our target range
+                    if node_range.start < range.end && node_range.end > range.start {
+                        highlights.push(HighlightItem::new(node_range, highlight_name));
+                    }
                 }
-
                 continue;
             }
 
+            // Handle regular captures
             for cap in m.captures {
                 let node = cap.node;
-
-                let Some(highlight_name) = query.capture_names().get(cap.index as usize) else {
-                    continue;
-                };
-
                 let node_range: Range<usize> = node.start_byte()..node.end_byte();
-                let highlight_name = SharedString::from(highlight_name.to_string());
 
-                // Merge near range and same highlight name
-                let last_item = self.cache.last();
-                let last_range = last_item.map(|item| &item.range).unwrap_or(&(0..0));
-                let last_highlight_name = last_item.map(|item| item.name.clone());
-
-                if last_range.end <= node_range.start
-                    && last_highlight_name.as_ref() == Some(&highlight_name)
-                {
-                    self.cache.push(
-                        HighlightItem::new(
-                            last_range.start..node_range.end,
-                            highlight_name.clone(),
-                        ),
-                        &(),
-                    );
-                } else if last_range == &node_range {
-                    // case:
-                    // last_range: 213..220, last_highlight_name: Some("property")
-                    // last_range: 213..220, last_highlight_name: Some("string")
-                    self.cache.push(
-                        HighlightItem::new(
-                            node_range,
-                            last_highlight_name.unwrap_or(highlight_name),
-                        ),
-                        &(),
-                    );
-                } else {
-                    self.cache
-                        .push(HighlightItem::new(node_range, highlight_name.clone()), &());
+                // Only include highlights that intersect with our target range
+                if node_range.start < range.end && node_range.end > range.start {
+                    if let Some(highlight_name) = query.capture_names().get(cap.index as usize) {
+                        let highlight_name = SharedString::from(highlight_name.to_string());
+                        highlights.push(HighlightItem::new(node_range, highlight_name));
+                    }
                 }
             }
         }
-
-        // DO NOT REMOVE THIS PRINT, it's useful for debugging
-        // for item in self.cache.iter() {
-        //     println!("item: {:?}", item);
-        // }
     }
 
     /// TODO: Use incremental parsing to handle the injection.
