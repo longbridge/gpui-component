@@ -567,8 +567,13 @@ impl InputState {
 
         let line_ix = self.text.byte_to_line(offset);
         let new_line_ix = line_ix.saturating_add_signed(move_lines);
-        let line = self.text.line(new_line_ix);
-        let line_start_offset = self.text.line_to_byte(new_line_ix);
+        let Some(line) = self.text.get_line(new_line_ix) else {
+            return;
+        };
+        let Ok(line_start_offset) = self.text.try_line_to_byte(new_line_ix) else {
+            return;
+        };
+
         let new_column = self
             .preferred_column
             .unwrap_or_default()
