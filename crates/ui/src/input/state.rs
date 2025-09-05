@@ -33,7 +33,7 @@ use super::{
 };
 use crate::input::hover_popover::DiagnosticPopover;
 use crate::input::marker::Marker;
-use crate::input::{Cursor, LineColumn, Selection};
+use crate::input::{Cursor, LineColumn, RopeExt, Selection};
 use crate::{history::History, scroll::ScrollbarState, Root};
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
@@ -813,10 +813,7 @@ impl InputState {
     /// Return the (1-based) line and column of the cursor.
     pub fn line_column(&self) -> LineColumn {
         let offset = self.cursor().offset;
-        let line_ix = self.text.byte_to_line(offset);
-        let line_offset = offset.saturating_sub(self.text.line_to_byte(line_ix));
-        let line = self.text.line(line_ix);
-        let column_ix = line.byte_to_char(line_offset);
+        let (line_ix, column_ix) = self.text.line_column(offset);
 
         LineColumn {
             line: line_ix + 1,
@@ -843,9 +840,7 @@ impl InputState {
     ) {
         let line_ix = line.saturating_sub(1);
         let column_ix = column.unwrap_or(1).saturating_sub(1);
-
-        let line = self.text.line(line_ix);
-        let offset = self.text.line_to_byte(line_ix) + line.char_to_byte(column_ix);
+        let offset = self.text.line_column_to_byte(line_ix, column_ix);
 
         self.move_to(Cursor::new(offset), window, cx);
     }
@@ -2241,7 +2236,7 @@ impl EntityInputHandler for InputState {
         self.mode.clear_markers();
         self.text_wrapper.update(&self.text, false, cx);
         self.mode
-            .update_highlighter(&range, &self.text, &new_text, &self.text_wrapper, true, cx);
+            .update_highlighter(&range, &self.text, &new_text, true, cx);
         self.selected_range = (new_offset..new_offset).into();
         self.marked_range.take();
         self.update_preferred_x_offset(cx);
@@ -2284,7 +2279,7 @@ impl EntityInputHandler for InputState {
         self.mode.clear_markers();
         self.text_wrapper.update(&self.text, false, cx);
         self.mode
-            .update_highlighter(&range, &self.text, &new_text, &self.text_wrapper, true, cx);
+            .update_highlighter(&range, &self.text, &new_text, true, cx);
         if new_text.is_empty() {
             // Cancel selection, when cancel IME input.
             self.selected_range = (range.start..range.start).into();
@@ -2390,7 +2385,7 @@ impl Render for InputState {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.text_wrapper.update(&self.text, false, cx);
         self.mode
-            .update_highlighter(&(0..0), &self.text, "", &self.text_wrapper, false, cx);
+            .update_highlighter(&(0..0), &self.text, "", false, cx);
 
         div()
             .id("input-state")

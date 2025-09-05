@@ -5,6 +5,7 @@ use gpui::{App, SharedString};
 use ropey::Rope;
 use tree_sitter::{InputEdit, Point};
 
+use crate::input::RopeExt as _;
 use crate::{highlighter::SyntaxHighlighter, input::marker::Marker};
 
 use super::text_wrapper::TextWrapper;
@@ -164,7 +165,6 @@ impl InputMode {
         selected_range: &Range<usize>,
         text: &Rope,
         new_text: &str,
-        text_wrapper: &TextWrapper,
         force: bool,
         cx: &mut App,
     ) {
@@ -188,6 +188,10 @@ impl InputMode {
                     return;
                 };
 
+                // When full text changed, the selected_range may be out of bound (The before version).
+                let mut selected_range = selected_range.clone();
+                selected_range.end = selected_range.end.min(text.len_bytes());
+
                 // If insert a chart, this is 1.
                 // If backspace or delete, this is -1.
                 // If selected to delete, this is the length of the selected text.
@@ -195,17 +199,17 @@ impl InputMode {
                 let changed_len = new_text.len() as isize - selected_range.len() as isize;
                 let new_end = (selected_range.end as isize + changed_len) as usize;
 
-                // let start_pos = text_wrapper.line_column(selected_range.start);
-                // let old_end_pos = text_wrapper.line_column(selected_range.end);
-                // let new_end_pos = text_wrapper.line_column(new_end);
+                let start_pos = text.line_column(selected_range.start);
+                let old_end_pos = text.line_column(selected_range.end);
+                let new_end_pos = text.line_column(new_end);
 
                 let edit = InputEdit {
                     start_byte: selected_range.start,
                     old_end_byte: selected_range.end,
                     new_end_byte: new_end,
-                    start_position: Point::new(0, 0),
-                    old_end_position: Point::new(0, 0),
-                    new_end_position: Point::new(0, 0),
+                    start_position: Point::new(start_pos.0, start_pos.1),
+                    old_end_position: Point::new(old_end_pos.0, old_end_pos.1),
+                    new_end_position: Point::new(new_end_pos.0, new_end_pos.1),
                 };
 
                 highlighter.update(Some(edit), text, cx);

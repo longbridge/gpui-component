@@ -15,7 +15,7 @@ pub(super) struct LineWrap {
     pub(super) range: Range<usize>,
 }
 
-/// Used to prepare the text with soft_wrap to be get lines to displayed in the TextArea
+/// Used to prepare the text with soft wrap to be get lines to displayed in the TextArea
 ///
 /// After use lines to calculate the scroll size of the TextArea
 pub(super) struct TextWrapper {
