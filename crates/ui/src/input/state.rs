@@ -517,9 +517,9 @@ impl InputState {
     }
 
     /// Called after moving the cursor. Updates preferred_column if we know where the cursor now is.
-    fn update_preferred_column(&mut self, _cx: &mut Context<Self>) {
-        let colum_ix = self.text.line_column(self.cursor().offset).1;
-        self.preferred_column = Some(colum_ix);
+    fn update_preferred_column(&mut self) {
+        let column_ix = self.text.line_column(self.cursor().offset).1;
+        self.preferred_column = Some(column_ix);
     }
 
     /// Find which line and sub-line the given offset belongs to, along with the position within that sub-line.
@@ -1669,7 +1669,7 @@ impl InputState {
         let cursor = Cursor::new(cursor.offset.clamp(0, self.text.len_bytes()));
         self.selected_range = (cursor..cursor).into();
         self.pause_blink_cursor(cx);
-        self.update_preferred_column(cx);
+        self.update_preferred_column();
         cx.notify()
     }
 
@@ -1816,7 +1816,7 @@ impl InputState {
             }
         }
         if self.selected_range.is_empty() {
-            self.update_preferred_column(cx);
+            self.update_preferred_column();
         }
         cx.notify()
     }
@@ -2164,10 +2164,10 @@ impl EntityInputHandler for InputState {
             .update_highlighter(&range, &self.text, &new_text, true, cx);
         self.selected_range = (new_offset..new_offset).into();
         self.marked_range.take();
-        self.update_preferred_column(cx);
+        self.update_preferred_column();
         self.update_scroll_offset(None, cx);
         self.mode.update_auto_grow(&self.text_wrapper);
-        cx.emit(InputEvent::Change(self.unmask_value().into()));
+        cx.emit(InputEvent::Change(self.unmask_value()));
         cx.notify();
     }
 
@@ -2219,7 +2219,7 @@ impl EntityInputHandler for InputState {
                 .into();
         }
         self.mode.update_auto_grow(&self.text_wrapper);
-        cx.emit(InputEvent::Change(self.unmask_value().into()));
+        cx.emit(InputEvent::Change(self.unmask_value()));
         cx.notify();
     }
 

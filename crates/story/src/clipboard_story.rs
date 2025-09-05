@@ -78,7 +78,7 @@ impl Render for ClipboardStory {
                         Clipboard::new("clipboard2")
                             .value_fn({
                                 let state = self.url_state.clone();
-                                move |_, cx| state.read(cx).value().into()
+                                move |_, cx| state.read(cx).value()
                             })
                             .on_copied(|value, window, cx| {
                                 window.push_notification(format!("Copied value: {}", value), cx)
