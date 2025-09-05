@@ -801,13 +801,13 @@ impl InputState {
     }
 
     /// Return the value of the input field.
-    pub fn value(&self) -> String {
-        self.text.to_string()
+    pub fn value(&self) -> SharedString {
+        SharedString::new(self.text.slice(..).as_str().unwrap_or_default())
     }
 
     /// Return the value without mask.
-    pub fn unmask_value(&self) -> String {
-        self.mask_pattern.unmask(&self.text.to_string())
+    pub fn unmask_value(&self) -> SharedString {
+        self.mask_pattern.unmask(&self.text.to_string()).into()
     }
 
     /// Return the (1-based) line and column of the cursor.
