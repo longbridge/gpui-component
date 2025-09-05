@@ -812,11 +812,11 @@ impl InputState {
 
     /// Return the (1-based) line and column of the cursor.
     pub fn line_column(&self) -> LineColumn {
-        let line_ix = self.text.byte_to_line(self.cursor().offset);
-        let column_ix = self
-            .cursor()
-            .offset
-            .saturating_sub(self.text.line_to_byte(line_ix));
+        let offset = self.cursor().offset;
+        let line_ix = self.text.byte_to_line(offset);
+        let line_offset = offset.saturating_sub(self.text.line_to_byte(line_ix));
+        let line = self.text.line(line_ix);
+        let column_ix = line.byte_to_char(line_offset);
 
         LineColumn {
             line: line_ix + 1,
@@ -841,12 +841,13 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if let Some(offset) = self
-            .text_wrapper
-            .offset_for_line_column(line, column.unwrap_or(1))
-        {
-            self.move_to(Cursor::new(offset), window, cx);
-        }
+        let line_ix = line.saturating_sub(1);
+        let column_ix = column.unwrap_or(1).saturating_sub(1);
+
+        let line = self.text.line(line_ix);
+        let offset = self.text.line_to_byte(line_ix) + line.char_to_byte(column_ix);
+
+        self.move_to(Cursor::new(offset), window, cx);
     }
 
     /// Focus the input field.
