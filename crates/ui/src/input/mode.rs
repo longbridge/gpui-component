@@ -2,6 +2,7 @@ use std::rc::Rc;
 use std::{cell::RefCell, ops::Range};
 
 use gpui::{App, SharedString};
+use tree_sitter::{InputEdit, Point};
 
 use crate::{highlighter::SyntaxHighlighter, input::marker::Marker};
 
@@ -162,6 +163,8 @@ impl InputMode {
         selected_range: &Range<usize>,
         full_text: &SharedString,
         new_text: &str,
+        text_wrapper: &TextWrapper,
+        force: bool,
         cx: &mut App,
     ) {
         match &self {
@@ -170,15 +173,41 @@ impl InputMode {
                 highlighter,
                 ..
             } => {
+                if !force && highlighter.borrow().is_some() {
+                    return;
+                }
+
                 let mut highlighter = highlighter.borrow_mut();
                 if highlighter.is_none() {
                     let new_highlighter = SyntaxHighlighter::new(language, cx);
                     highlighter.replace(new_highlighter);
                 }
 
-                if let Some(highlighter) = highlighter.as_mut() {
-                    highlighter.update(selected_range, full_text, new_text, cx);
-                }
+                let Some(highlighter) = highlighter.as_mut() else {
+                    return;
+                };
+
+                // If insert a chart, this is 1.
+                // If backspace or delete, this is -1.
+                // If selected to delete, this is the length of the selected text.
+                // let changed_len = new_text.len() as isize - selected_range.len() as isize;
+                let changed_len = new_text.len() as isize - selected_range.len() as isize;
+                let new_end = (selected_range.end as isize + changed_len) as usize;
+
+                // let start_pos = text_wrapper.line_column(selected_range.start);
+                // let old_end_pos = text_wrapper.line_column(selected_range.end);
+                // let new_end_pos = text_wrapper.line_column(new_end);
+
+                let edit = InputEdit {
+                    start_byte: selected_range.start,
+                    old_end_byte: selected_range.end,
+                    new_end_byte: new_end,
+                    start_position: Point::new(0, 0),
+                    old_end_position: Point::new(0, 0),
+                    new_end_position: Point::new(0, 0),
+                };
+
+                highlighter.update(Some(edit), full_text, cx);
             }
             _ => {}
         }

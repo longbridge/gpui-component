@@ -2206,10 +2206,11 @@ impl EntityInputHandler for InputState {
 
         self.push_history(&range, &new_text, window, cx);
         self.text = mask_text.clone();
-        self.mode
-            .update_highlighter(&range, &self.text, &new_text, cx);
+
         self.mode.clear_markers();
         self.text_wrapper.update(&self.text, false, cx);
+        self.mode
+            .update_highlighter(&range, &self.text, &new_text, &self.text_wrapper, true, cx);
         self.selected_range = (new_offset..new_offset).into();
         self.marked_range.take();
         self.update_preferred_x_offset(cx);
@@ -2247,10 +2248,10 @@ impl EntityInputHandler for InputState {
 
         self.push_history(&range, new_text, window, cx);
         self.text = pending_text;
-        self.mode
-            .update_highlighter(&range, &self.text, &new_text, cx);
         self.mode.clear_markers();
         self.text_wrapper.update(&self.text, false, cx);
+        self.mode
+            .update_highlighter(&range, &self.text, &new_text, &self.text_wrapper, true, cx);
         if new_text.is_empty() {
             // Cancel selection, when cancel IME input.
             self.selected_range = (range.start..range.start).into();
@@ -2355,7 +2356,8 @@ impl Focusable for InputState {
 impl Render for InputState {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.text_wrapper.update(&self.text, false, cx);
-        self.mode.update_highlighter(&(0..0), &self.text, "", cx);
+        self.mode
+            .update_highlighter(&(0..0), &self.text, "", &self.text_wrapper, false, cx);
 
         div()
             .id("input-state")

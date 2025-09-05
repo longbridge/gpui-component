@@ -175,6 +175,15 @@ impl From<(usize, usize)> for LineColumn {
     }
 }
 
+impl From<LineColumn> for tree_sitter::Point {
+    fn from(value: LineColumn) -> Self {
+        Self {
+            row: value.line.saturating_sub(1),
+            column: value.column.saturating_sub(1),
+        }
+    }
+}
+
 impl fmt::Display for LineColumn {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}:{}", self.line, self.column)

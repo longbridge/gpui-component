@@ -3,7 +3,12 @@ use crate::highlighter::LanguageRegistry;
 
 use anyhow::{anyhow, Context, Result};
 use gpui::{App, HighlightStyle, SharedString};
-use std::{collections::HashMap, ops::Range, usize};
+use std::{
+    collections::{BTreeSet, HashMap},
+    ops::Range,
+    usize,
+};
+use sum_tree::{Bias, SumTree};
 use tree_sitter::{
     InputEdit, Node, Parser, Point, Query, QueryCursor, QueryMatch, StreamingIterator, Tree,
 };
@@ -31,12 +36,7 @@ pub struct SyntaxHighlighter {
     local_ref_capture_index: Option<u32>,
 
     /// Cache of highlight, the range is offset of the token in the tree.
-    ///
-    /// The BTreeMap is ordered by the range in the entire text.
-    ///
-    /// - The `key` is the `start` of the range.
-    /// -The `value` is a tuple of the range (in the entire text) and the highlight name.
-    cache: sum_tree::SumTree<HighlightItem>,
+    cache: SumTree<HighlightItem>,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -48,8 +48,10 @@ struct HighlightSummary {
     max_end: usize,
 }
 
+/// The highlight item, the range is offset of the token in the tree.
 #[derive(Debug, Default, Clone)]
 struct HighlightItem {
+    /// The byte range of the highlight in the text.
     range: Range<usize>,
     /// The highlight name, like `function`, `string`, `comment`, etc.
     name: SharedString,
@@ -274,37 +276,27 @@ impl SyntaxHighlighter {
 
     /// Highlight the given text, returning a map from byte ranges to highlight captures.
     /// Uses incremental parsing, detects changed ranges, and caches unchanged results.
-    pub fn update(
-        &mut self,
-        selected_range: &Range<usize>,
-        full_text: &SharedString,
-        new_text: &str,
-        cx: &App,
-    ) {
+    pub fn update(&mut self, edit: Option<InputEdit>, full_text: &SharedString, cx: &App) {
         if &self.text == full_text {
             return;
         }
-
-        // If insert a chart, this is 1.
-        // If backspace or delete, this is -1.
-        // If selected to delete, this is the length of the selected text.
-        let changed_len = new_text.len() as isize - selected_range.len() as isize;
 
         let new_tree = match &self.old_tree {
             // NOTE: 10K lines, about 4.5ms
             None => self.parser.parse(full_text.as_ref(), None),
             Some(old) => {
-                let edit = InputEdit {
-                    start_byte: selected_range.start,
-                    old_end_byte: selected_range.end,
-                    new_end_byte: (selected_range.end as isize + changed_len) as usize,
+                let edit = edit.unwrap_or(InputEdit {
+                    start_byte: 0,
+                    old_end_byte: 0,
+                    new_end_byte: 0,
                     start_position: Point::new(0, 0),
                     old_end_position: Point::new(0, 0),
                     new_end_position: Point::new(0, 0),
-                };
-                let mut old_cloned = old.clone();
-                old_cloned.edit(&edit);
-                self.parser.parse(full_text.as_ref(), Some(&old_cloned))
+                });
+
+                let mut old_tree = old.clone();
+                old_tree.edit(&edit);
+                self.parser.parse(full_text.as_ref(), Some(&old_tree))
             }
         };
 
@@ -334,23 +326,24 @@ impl SyntaxHighlighter {
         };
 
         let source = self.text.as_bytes();
-        let mut query_cursor = QueryCursor::new();
         let root_node = tree.root_node();
-        self.cache = sum_tree::SumTree::new(&());
 
+        // Remove the changed items from the cache.
+        let new_cache = sum_tree::SumTree::new(&());
+        self.cache = new_cache;
+
+        let mut query_cursor = QueryCursor::new();
         let mut matches = query_cursor.matches(&query, root_node, source);
         while let Some(m) = matches.next() {
             // Ref:
             // https://github.com/tree-sitter/tree-sitter/blob/460118b4c82318b083b4d527c9c750426730f9c0/highlight/src/lib.rs#L556
-            let (language_name, content_node, _) = self.injection_for_match(None, query, m, source);
-            if let Some(language_name) = language_name {
-                if let Some(content_node) = content_node {
-                    let styles = self.handle_injection(&language_name, content_node, source, cx);
-                    for (node_range, highlight_name) in styles {
-                        self.cache
-                            .push(HighlightItem::new(node_range.clone(), highlight_name), &());
-                        // .insert(node_range.start, (node_range, highlight_name.into()));
-                    }
+            if let (Some(language_name), Some(content_node), _) =
+                self.injection_for_match(None, query, m, source)
+            {
+                let styles = self.handle_injection(&language_name, content_node, source, cx);
+                for (node_range, highlight_name) in styles {
+                    self.cache
+                        .push(HighlightItem::new(node_range.clone(), highlight_name), &());
                 }
 
                 continue;
@@ -558,9 +551,9 @@ impl SyntaxHighlighter {
 
         let mut cursor = self.cache.cursor::<usize>(&());
         let bias = if start_offset == 0 {
-            sum_tree::Bias::Right
+            Bias::Right
         } else {
-            sum_tree::Bias::Left
+            Bias::Left
         };
 
         let left_items = cursor.slice(&start_offset, bias);
@@ -587,11 +580,12 @@ impl SyntaxHighlighter {
                 styles.push((last_range.end..node_range.start, HighlightStyle::default()));
             }
 
-            last_range = node_range.clone();
+            let start = node_range.start.max(last_range.end);
             styles.push((
-                node_range.clone(),
+                start..node_range.end,
                 theme.style(name.as_ref()).unwrap_or_default(),
             ));
+            last_range = node_range;
 
             filter.next();
         }
@@ -619,81 +613,79 @@ impl SyntaxHighlighter {
     }
 }
 
-/// To merge intersection ranges
+/// To merge intersection ranges, let the subsequent range cover
+/// the previous overlapping range and split the previous range.
 ///
-/// ```
-/// vec![
-///     (0..10, clean),
-///     (0..10, clean),
-///     (5..11, red),
-///     (10..15, green),
-///     (15..30, clean),
-///     (29..35, blue),
-///     (35..40, green),
-/// ];
-/// ```
+/// From:
 ///
-/// to
+/// AA
+///   BBB
+///    CCCCC
+///      DD
+///         EEEE
 ///
-/// ```
-/// vec![
-///   (0..5, clean),
-///   (5..10, red),
-///   (10..11, green),
-///   (11..15, green),
-///   (15..29, clean),
-///   (29..30, blue),
-///   (30..35, blue),
-///   (35..40, green),
-/// ];
-/// ```
+/// To:
+///
+/// AABCCDDCEEEE
 pub(crate) fn unique_styles(
     styles: Vec<(Range<usize>, HighlightStyle)>,
 ) -> Vec<(Range<usize>, HighlightStyle)> {
-    let mut result: Vec<(Range<usize>, HighlightStyle)> = vec![];
-    let mut current_range: Option<(Range<usize>, HighlightStyle)> = None;
+    if styles.is_empty() {
+        return styles;
+    }
 
-    for (range, style) in styles.into_iter() {
-        if range.is_empty() {
+    // Collect all boundary points and track which are "significant" (range endpoints)
+    let mut boundaries = BTreeSet::new();
+    let mut significant_boundaries = BTreeSet::new();
+
+    for (range, _) in &styles {
+        boundaries.insert(range.start);
+        boundaries.insert(range.end);
+        significant_boundaries.insert(range.end); // End points are significant for merging decisions
+    }
+
+    let boundaries: Vec<usize> = boundaries.into_iter().collect();
+    let mut result = Vec::with_capacity(boundaries.len().saturating_sub(1));
+
+    // For each interval between boundaries, find the top-most style
+    for i in 0..boundaries.len().saturating_sub(1) {
+        let interval_start = boundaries[i];
+        let interval_end = boundaries[i + 1];
+
+        if interval_start >= interval_end {
             continue;
         }
 
-        if let Some((last_range, last_style)) = current_range.as_mut() {
-            if last_style.color == style.color && range.start <= last_range.end {
-                // Merge overlapping or adjacent ranges with the same style
-                last_range.end = last_range.end.max(range.end);
-            } else if range.start < last_range.end {
-                // Split overlapping ranges with different styles
-                let overlap_start = range.start;
-                let overlap_end = last_range.end.min(range.end);
-
-                if overlap_start > last_range.start {
-                    result.push((last_range.start..overlap_start, *last_style));
-                }
-
-                result.push((overlap_start..overlap_end, style));
-
-                last_range.end = overlap_start;
-                if overlap_end < range.end {
-                    current_range = Some((overlap_end..range.end, style));
-                } else {
-                    current_range = None;
-                }
-            } else {
-                // Push the completed range and start a new one
-                result.push((last_range.clone(), *last_style));
-                current_range = Some((range, style));
+        // Find the last (top-most) style that covers this interval
+        let mut top_style: Option<&HighlightStyle> = None;
+        for (range, style) in &styles {
+            if range.start <= interval_start && interval_end <= range.end {
+                top_style = Some(style);
             }
-        } else {
-            current_range = Some((range, style));
+        }
+
+        if let Some(style) = top_style {
+            result.push((interval_start..interval_end, *style));
         }
     }
 
-    if let Some((last_range, last_style)) = current_range {
-        result.push((last_range, last_style));
+    // Merge adjacent ranges with the same style, but not across significant boundaries
+    let mut merged: Vec<(Range<usize>, HighlightStyle)> = Vec::with_capacity(result.len());
+    for (range, style) in result {
+        if let Some((last_range, last_style)) = merged.last_mut() {
+            if last_range.end == range.start
+                && *last_style == style
+                && !significant_boundaries.contains(&range.start)
+            {
+                // Merge adjacent ranges with same style, but not across significant boundaries
+                last_range.end = range.end;
+                continue;
+            }
+        }
+        merged.push((range, style));
     }
 
-    result
+    merged
 }
 
 #[cfg(test)]
@@ -765,14 +757,15 @@ mod tests {
                 (0..10, clean),
                 (0..10, clean),
                 (5..11, red),
+                (0..6, clean),
                 (10..15, green),
                 (15..30, clean),
                 (29..35, blue),
                 (35..40, green),
             ],
             vec![
-                (0..5, clean),
-                (5..10, red),
+                (0..6, clean),
+                (6..10, red),
                 (10..11, green),
                 (11..15, green),
                 (15..29, clean),
