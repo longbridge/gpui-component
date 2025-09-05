@@ -7,6 +7,7 @@ use ropey::Rope;
 use std::{
     collections::{BTreeSet, HashMap},
     ops::Range,
+    slice::Chunks,
     usize,
 };
 use sum_tree::{Bias, SumTree};
@@ -38,6 +39,18 @@ pub struct SyntaxHighlighter {
 
     /// Cache of highlight, the range is offset of the token in the tree.
     cache: SumTree<HighlightItem>,
+}
+
+struct TextProvider<'a>(&'a Rope);
+
+impl<'a> tree_sitter::TextProvider<&'a [u8]> for TextProvider<'a> {
+    type I = Chunks<'a, u8>;
+
+    fn text(&mut self, node: tree_sitter::Node) -> Self::I {
+        // create rust chunk
+        let slice = self.0.byte_slice(node.start_byte()..node.end_byte());
+        slice.as_str().unwrap_or_default().as_bytes().chunks(64)
+    }
 }
 
 #[derive(Debug, Default, Clone)]
@@ -282,50 +295,39 @@ impl SyntaxHighlighter {
             return;
         }
 
-        let new_tree = match &self.old_tree {
-            // NOTE: 10K lines, about 4.5ms
-            None => self.parser.parse_with_options(
-                &mut |boff, _| {
-                    if boff >= text.len_bytes() {
-                        ""
-                    } else {
-                        let (ch, cb, _, _) = text.chunk_at_byte(boff);
-                        &ch[boff - cb..]
-                    }
-                },
-                None,
-                None,
-            ),
-            Some(old) => {
-                let edit = edit.unwrap_or(InputEdit {
-                    start_byte: 0,
-                    old_end_byte: 0,
-                    new_end_byte: 0,
-                    start_position: Point::new(0, 0),
-                    old_end_position: Point::new(0, 0),
-                    new_end_position: Point::new(0, 0),
-                });
+        let edit = edit.unwrap_or(InputEdit {
+            start_byte: 0,
+            old_end_byte: 0,
+            new_end_byte: text.len_bytes(),
+            start_position: Point::new(0, 0),
+            old_end_position: Point::new(0, 0),
+            new_end_position: Point::new(0, 0),
+        });
 
-                let mut old_tree = old.clone();
-                old_tree.edit(&edit);
-                self.parser.parse_with_options(
-                    &mut |boff, _| {
-                        if boff >= text.len_bytes() {
-                            ""
-                        } else {
-                            let (ch, cb, _, _) = text.chunk_at_byte(boff);
-                            &ch[boff - cb..]
-                        }
-                    },
-                    Some(&old_tree),
-                    None,
-                )
-            }
-        };
+        let mut old_tree = self
+            .old_tree
+            .take()
+            .unwrap_or(self.parser.parse("", None).unwrap());
+        old_tree.edit(&edit);
+
+        let new_tree = self.parser.parse_with_options(
+            &mut |offset, _| {
+                if offset >= text.len_bytes() {
+                    ""
+                } else {
+                    let (chunk, chunk_byte_ix, _, _) = text.chunk_at_byte(offset);
+                    &chunk[offset - chunk_byte_ix..]
+                }
+            },
+            Some(&old_tree),
+            None,
+        );
 
         let Some(new_tree) = new_tree else {
             return;
         };
+
+        // let changed_ranges = new_tree.changed_ranges(&old_tree);
 
         // Update state
         self.old_tree = Some(new_tree);
@@ -348,23 +350,24 @@ impl SyntaxHighlighter {
             return;
         };
 
-        let source = self.text.to_string();
         let root_node = tree.root_node();
 
         // Remove the changed items from the cache.
         let new_cache = sum_tree::SumTree::new(&());
         self.cache = new_cache;
 
-        let mut query_cursor = QueryCursor::new();
-        let mut matches = query_cursor.matches(&query, root_node, source.as_bytes());
-        while let Some(m) = matches.next() {
+        let source = self.text.clone();
+
+        let mut cursor = QueryCursor::new();
+        let mut matches = cursor.matches(&query, root_node, TextProvider(&source));
+
+        while let Some(query_match) = matches.next() {
             // Ref:
             // https://github.com/tree-sitter/tree-sitter/blob/460118b4c82318b083b4d527c9c750426730f9c0/highlight/src/lib.rs#L556
             if let (Some(language_name), Some(content_node), _) =
-                self.injection_for_match(None, query, m, source.as_bytes())
+                self.injection_for_match(None, query, query_match)
             {
-                let styles =
-                    self.handle_injection(&language_name, content_node, source.as_bytes(), cx);
+                let styles = self.handle_injection(&language_name, content_node, cx);
                 for (node_range, highlight_name) in styles {
                     self.cache
                         .push(HighlightItem::new(node_range.clone(), highlight_name), &());
@@ -373,7 +376,7 @@ impl SyntaxHighlighter {
                 continue;
             }
 
-            for cap in m.captures {
+            for cap in query_match.captures {
                 let node = cap.node;
 
                 let Some(highlight_name) = query.capture_names().get(cap.index as usize) else {
@@ -427,7 +430,6 @@ impl SyntaxHighlighter {
         &self,
         injection_language: &str,
         node: Node,
-        source: &[u8],
         cx: &App,
     ) -> Vec<(Range<usize>, String)> {
         let start_offset = node.start_byte();
@@ -436,10 +438,12 @@ impl SyntaxHighlighter {
         let Some(query) = &self.injection_queries.get(injection_language) else {
             return cache;
         };
-        let Some(content) = source.get(node.start_byte()..node.end_byte()) else {
-            return cache;
-        };
-        if content.is_empty() {
+
+        let content = self
+            .text
+            .byte_slice(node.start_byte()..node.end_byte())
+            .to_string();
+        if content.len() == 0 {
             return cache;
         };
         let Some(config) = LanguageRegistry::global(cx).language(injection_language) else {
@@ -449,12 +453,12 @@ impl SyntaxHighlighter {
         if parser.set_language(&config.language).is_err() {
             return cache;
         }
-        let Some(tree) = parser.parse(content, None) else {
+        let Some(tree) = parser.parse(content.as_bytes(), None) else {
             return cache;
         };
 
         let mut query_cursor = QueryCursor::new();
-        let mut matches = query_cursor.matches(query, tree.root_node(), content);
+        let mut matches = query_cursor.matches(query, tree.root_node(), content.as_bytes());
 
         let mut last_end = start_offset;
         while let Some(m) = matches.next() {
@@ -493,24 +497,17 @@ impl SyntaxHighlighter {
         parent_name: Option<SharedString>,
         query: &'a Query,
         query_match: &QueryMatch<'a, 'a>,
-        source: &'a [u8],
+        // source: &'a [u8],
     ) -> (Option<SharedString>, Option<Node<'a>>, bool) {
         let content_capture_index = self.injection_content_capture_index;
-        let language_capture_index = self.injection_language_capture_index;
+        // let language_capture_index = self.injection_language_capture_index;
 
         let mut language_name: Option<SharedString> = None;
         let mut content_node = None;
 
         for capture in query_match.captures {
             let index = Some(capture.index);
-            if index == language_capture_index {
-                language_name = capture
-                    .node
-                    .utf8_text(source)
-                    .ok()
-                    .map(ToString::to_string)
-                    .map(SharedString::from);
-            } else if index == content_capture_index {
+            if index == content_capture_index {
                 content_node = Some(capture.node);
             }
         }
