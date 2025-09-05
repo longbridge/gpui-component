@@ -665,7 +665,7 @@ pub(crate) fn unique_styles(
         }
 
         if let Some(style) = top_style {
-            result.push((interval_start..interval_end, style.clone()));
+            result.push((interval_start..interval_end, *style));
         }
     }
 
