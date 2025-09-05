@@ -365,8 +365,8 @@ fn rust_to_style(
     let mut err = String::new();
     let methods = rust_code[begin..]
         .split(&['.', '(', ')', '{', '}'])
-        .filter(|s| !s.is_empty())
-        .map(str::trim);
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
     let style_methods = StyleMethods::get();
     for method in methods {
         match style_methods.map.get(method) {
