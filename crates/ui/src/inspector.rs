@@ -4,7 +4,7 @@ use gpui::{
     actions, div, inspector_reflection::FunctionReflection, prelude::FluentBuilder, px, AnyElement,
     App, AppContext, Context, DivInspectorState, Entity, Inspector, InspectorElementId,
     InteractiveElement as _, IntoElement, KeyBinding, ParentElement as _, Refineable as _, Render,
-    SharedString, StyleRefinement, Styled, Window,
+    SharedString, StyleRefinement, Styled, Subscription, Window,
 };
 
 use crate::{
@@ -54,35 +54,46 @@ pub fn init(cx: &mut App) {
     cx.set_inspector_renderer(Box::new(render_inspector));
 }
 
+struct EditorState {
+    /// The input state for the editor.
+    state: Entity<InputState>,
+    /// Error to display from parsing the input, or if serialization errors somehow occur.
+    error: Option<SharedString>,
+    /// Whether the editor is currently being edited.
+    editing: bool,
+}
+
 pub struct DivInspector {
     inspector_id: Option<InspectorElementId>,
     inspector_state: Option<DivInspectorState>,
-    json_input_state: Entity<InputState>,
-    rust_input_state: Entity<InputState>,
     rust_dropdown: Entity<DropdownState<SearchableVec<SharedString>>>,
-    ignore_json_edit: bool,
-    ignore_rust_edit: bool,
-    /// Error message for JSON style parsing
-    json_err: Option<SharedString>,
-    /// Error message for Rust style parsing
-    rust_err: Option<SharedString>,
+    rust_state: EditorState,
+    json_state: EditorState,
     /// Initial style before any edits
     initial_style: StyleRefinement,
     /// Part of the initial style that could not be converted to Rust code
     unconvertible_style: StyleRefinement,
+    _subscriptions: Vec<Subscription>,
 }
 
 impl DivInspector {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let json_input_state = cx.new(|cx| InputState::new(window, cx).code_editor("json"));
+        let json_input_state = cx.new(|cx| {
+            InputState::new(window, cx)
+                .code_editor("json")
+                .line_number(false)
+        });
+
         let rust_input_state = cx.new(|cx| {
             InputState::new(window, cx)
                 .code_editor("rust")
+                .line_number(false)
                 .tab_size(TabSize {
                     tab_size: 4,
                     hard_tabs: false,
                 })
         });
+
         let rust_dropdown = cx.new(|cx| {
             DropdownState::new(
                 SearchableVec::new({
@@ -100,41 +111,50 @@ impl DivInspector {
             )
         });
 
-        cx.subscribe_in(
-            &json_input_state,
-            window,
-            |this: &mut DivInspector, _, event: &InputEvent, window, cx| match event {
-                InputEvent::Change(new_style) => {
-                    this.edit_json(new_style, window, cx);
-                }
-                _ => {}
-            },
-        )
-        .detach();
-        cx.subscribe_in(
-            &rust_input_state,
-            window,
-            |this: &mut DivInspector, _, event: &InputEvent, window, cx| match event {
-                InputEvent::Change(new_style) => {
-                    this.edit_rust(new_style, window, cx);
-                }
-                _ => {}
-            },
-        )
-        .detach();
+        let _subscriptions = vec![
+            cx.subscribe_in(
+                &json_input_state,
+                window,
+                |this: &mut DivInspector, _, event: &InputEvent, window, cx| match event {
+                    InputEvent::Change(new_style) => {
+                        this.edit_json(new_style, window, cx);
+                    }
+                    _ => {}
+                },
+            ),
+            cx.subscribe_in(
+                &rust_input_state,
+                window,
+                |this: &mut DivInspector, _, event: &InputEvent, window, cx| match event {
+                    InputEvent::Change(new_style) => {
+                        this.edit_rust(new_style, window, cx);
+                    }
+                    _ => {}
+                },
+            ),
+        ];
+
+        let rust_state = EditorState {
+            state: rust_input_state,
+            error: None,
+            editing: false,
+        };
+
+        let json_state = EditorState {
+            state: json_input_state,
+            error: None,
+            editing: false,
+        };
 
         Self {
             inspector_id: None,
             inspector_state: None,
-            json_input_state,
-            rust_input_state,
             rust_dropdown,
-            ignore_json_edit: false,
-            ignore_rust_edit: false,
-            json_err: None,
-            rust_err: None,
+            rust_state,
+            json_state,
             initial_style: Default::default(),
             unconvertible_style: Default::default(),
+            _subscriptions,
         }
     }
 
@@ -152,9 +172,9 @@ impl DivInspector {
 
         let initial_style = state.base_style.as_ref();
         self.initial_style = initial_style.clone();
-        self.ignore_json_edit = true;
+        self.json_state.editing = false;
         self.update_json_from_style(initial_style, window, cx);
-        self.ignore_rust_edit = true;
+        self.rust_state.editing = false;
         let rust_style = self.update_rust_from_style(initial_style, window, cx);
         self.unconvertible_style = initial_style.subtract(&rust_style);
         self.inspector_id = Some(inspector_id);
@@ -163,38 +183,38 @@ impl DivInspector {
     }
 
     fn edit_json(&mut self, code: &str, window: &mut Window, cx: &mut Context<Self>) {
-        if self.ignore_json_edit {
-            self.ignore_json_edit = false;
+        if !self.json_state.editing {
+            self.json_state.editing = true;
             return;
         }
 
         match serde_json::from_str::<StyleRefinement>(code) {
             Ok(new_style) => {
-                self.json_err = None;
-                self.rust_err = None;
-                self.ignore_rust_edit = true;
+                self.json_state.error = None;
+                self.rust_state.error = None;
+                self.rust_state.editing = false;
                 let rust_style = self.update_rust_from_style(&new_style, window, cx);
                 self.unconvertible_style = new_style.subtract(&rust_style);
                 self.update_element_style(new_style, window, cx);
             }
             Err(e) => {
                 let e = format!("{}", e);
-                self.json_err = Some(e.into());
+                self.json_state.error = Some(e.into());
                 window.refresh();
             }
         }
     }
 
     fn edit_rust(&mut self, code: &str, window: &mut Window, cx: &mut Context<Self>) {
-        if self.ignore_rust_edit {
-            self.ignore_rust_edit = false;
+        if !self.rust_state.editing {
+            self.rust_state.editing = true;
             return;
         }
 
         let (new_style, err) = rust_to_style(self.unconvertible_style.clone(), code);
-        self.rust_err = err;
-        self.json_err = None;
-        self.ignore_json_edit = true;
+        self.rust_state.error = err;
+        self.json_state.error = None;
+        self.json_state.editing = false;
         self.update_json_from_style(&new_style, window, cx);
         self.update_element_style(new_style, window, cx);
     }
@@ -218,10 +238,10 @@ impl DivInspector {
     }
 
     fn reset_style(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.ignore_rust_edit = true;
+        self.rust_state.editing = false;
         let rust_style = self.update_rust_from_style(&self.initial_style, window, cx);
         self.unconvertible_style = self.initial_style.subtract(&rust_style);
-        self.ignore_json_edit = true;
+        self.json_state.editing = false;
         self.update_json_from_style(&self.initial_style, window, cx);
         if let Some(state) = self.inspector_state.as_mut() {
             *state.base_style = self.initial_style.clone();
@@ -234,7 +254,7 @@ impl DivInspector {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.json_input_state.update(cx, |state, cx| {
+        self.json_state.state.update(cx, |state, cx| {
             state.set_value(style_to_json(style), window, cx);
         });
     }
@@ -245,25 +265,25 @@ impl DivInspector {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> StyleRefinement {
-        self.rust_input_state.update(cx, |state, cx| {
+        self.rust_state.state.update(cx, |state, cx| {
             let (rust_code, rust_style) = style_to_rust(style);
             state.set_value(rust_code, window, cx);
             rust_style
         })
     }
 
-    fn rust_add_method(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    fn rust_add_style(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(method) = self.rust_dropdown.read(cx).selected_value() {
-            let code = self.rust_input_state.read(cx).value();
+            let code = self.rust_state.state.read(cx).value();
             let new_code = format!("        .{method}()\n");
             let Some(insert_pos) = code.rfind('}') else {
-                self.rust_err = Some("Failed to add method: Could not find `}`".into());
+                self.rust_state.error = Some("Failed to add method: Could not find `}`".into());
                 return;
             };
             let code = format!("{}{}{}", &code[..insert_pos], new_code, &code[insert_pos..]);
 
-            self.ignore_rust_edit = false;
-            self.rust_input_state.update(cx, |state, cx| {
+            self.rust_state.editing = true;
+            self.rust_state.state.update(cx, |state, cx| {
                 state.set_value(code, window, cx);
                 // an edit event will be triggered, the style will be updated there
             });
@@ -365,7 +385,7 @@ fn rust_to_style(
 
 impl Render for DivInspector {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        v_flex().size_full().gap_3().text_sm().when_some(
+        v_flex().size_full().gap_y_4().text_sm().when_some(
             self.inspector_state.as_ref(),
             |this, state| {
                 this.child(
@@ -379,92 +399,69 @@ impl Render for DivInspector {
                 )
                 .child(
                     v_flex()
-                        .w_full()
                         .flex_1()
-                        .gap_2()
-                        .text_color(cx.theme().description_list_label_foreground)
+                        .gap_y_3()
                         .child(
-                            h_flex()
-                                .gap_2()
-                                .child("Rust Styles")
-                                .child(
-                                    h_flex()
-                                        .flex_1()
-                                        .border_1()
-                                        .border_color(cx.theme().input)
-                                        .rounded_lg()
-                                        .text_color(cx.theme().secondary_foreground)
-                                        .child(
-                                            div().pl_1().child(
-                                                Button::new("inspector-rust-add")
-                                                    .label("Add method:")
-                                                    .compact()
-                                                    .small()
-                                                    .ghost()
-                                                    .cursor_pointer()
-                                                    .on_click(cx.listener(
-                                                        |this, _, window, cx| {
-                                                            this.rust_add_method(window, cx);
-                                                        },
-                                                    )),
-                                            ),
-                                        )
-                                        .child(
-                                            Dropdown::new(&self.rust_dropdown)
-                                                .icon(IconName::Search)
-                                                .cursor_pointer()
-                                                .appearance(false)
-                                                .text_sm(),
+                            v_flex().gap_y_2().child("Rust Styles").child(
+                                h_flex()
+                                    .gap_x_2()
+                                    .child(
+                                        Dropdown::new(&self.rust_dropdown)
+                                            .icon(IconName::Search)
+                                            .small()
+                                            .cleanable()
+                                            .flex_1(),
+                                    )
+                                    .child(Button::new("rust-add").label("Add").small().on_click(
+                                        cx.listener(|this, _, window, cx| {
+                                            this.rust_add_style(window, cx);
+                                        }),
+                                    ))
+                                    .child(
+                                        Button::new("rust-reset").label("Reset").small().on_click(
+                                            cx.listener(|this, _, window, cx| {
+                                                this.reset_style(window, cx);
+                                            }),
                                         ),
-                                )
-                                .child(
-                                    Button::new("inspector-reset-1")
-                                        .label("Reset")
-                                        .small()
-                                        .compact()
-                                        .cursor_pointer()
-                                        .on_click(cx.listener(|this, _, window, cx| {
-                                            this.reset_style(window, cx);
-                                        })),
-                                ),
+                                    ),
+                            ),
                         )
                         .child(
                             v_flex()
-                                .h_1_3()
-                                .flex_grow()
-                                .gap_1()
+                                .flex_1()
+                                .gap_y_1()
                                 .font_family("Monaco")
                                 .text_size(px(12.))
-                                .child(TextInput::new(&self.rust_input_state).h_full())
-                                .when_some(self.rust_err.clone(), |this, err| {
-                                    this.child(Alert::error("inspector-rust-error", err).text_xs())
+                                .child(TextInput::new(&self.rust_state.state).h_full())
+                                .when_some(self.rust_state.error.clone(), |this, err| {
+                                    this.child(Alert::error("rust-error", err).text_xs())
                                 }),
-                        )
+                        ),
+                )
+                .child(
+                    v_flex()
+                        .gap_y_3()
+                        .h_3_5()
+                        .flex_shrink_0()
                         .child(
                             h_flex()
-                                .gap_2()
+                                .gap_x_2()
                                 .child(div().flex_1().child("JSON Styles"))
-                                .child(
-                                    Button::new("inspector-reset-2")
-                                        .label("Reset")
-                                        .small()
-                                        .compact()
-                                        .cursor_pointer()
-                                        .on_click(cx.listener(|this, _, window, cx| {
-                                            this.reset_style(window, cx);
-                                        })),
-                                ),
+                                .child(Button::new("json-reset").label("Reset").small().on_click(
+                                    cx.listener(|this, _, window, cx| {
+                                        this.reset_style(window, cx);
+                                    }),
+                                )),
                         )
                         .child(
                             v_flex()
-                                .h_2_3()
-                                .flex_grow()
-                                .gap_1()
+                                .flex_1()
+                                .gap_y_1()
                                 .font_family("Monaco")
                                 .text_size(px(12.))
-                                .child(TextInput::new(&self.json_input_state).h_full())
-                                .when_some(self.json_err.clone(), |this, err| {
-                                    this.child(Alert::error("inspector-json-error", err).text_xs())
+                                .child(TextInput::new(&self.json_state.state).h_full())
+                                .when_some(self.json_state.error.clone(), |this, err| {
+                                    this.child(Alert::error("json-error", err).text_xs())
                                 }),
                         ),
                 )
