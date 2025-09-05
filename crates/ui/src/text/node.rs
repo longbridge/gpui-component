@@ -298,7 +298,6 @@ impl CodeBlock {
 
         let state = InlineState::default();
         state.set_text(code);
-
         Self {
             lang,
             styles,

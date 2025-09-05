@@ -330,34 +330,124 @@ impl SyntaxHighlighter {
             return;
         };
 
-        // let changed_ranges = new_tree.changed_ranges(&old_tree);
+        let changed_ranges = new_tree
+            .changed_ranges(&old_tree)
+            .map(|r| r.start_byte..r.end_byte)
+            .collect::<Vec<_>>();
 
         // Update state
         self.old_tree = Some(new_tree);
         self.text = text.clone();
 
-        // let measure = crate::Measure::new("build_styles");
-        self.build_styles(cx);
-        // measure.end();
+        // Build styles incrementally with edit information
+        let measure = crate::Measure::new("build_style");
+        if true {
+            self.build_changed_styles(&changed_ranges, &edit, cx);
+        } else {
+            self.build_full_style(cx);
+        }
+        measure.end();
     }
 
-    /// NOTE: 10K lines, about 180ms
-    /// FIXME: To improve the performance when there more than 5K lines, use partial update.
-    /// Ref: https://github.com/longbridge/gpui-component/pull/1197
-    fn build_styles(&mut self, cx: &App) {
+    fn build_changed_styles(
+        &mut self,
+        changed_ranges: &[Range<usize>],
+        edit: &InputEdit,
+        cx: &App,
+    ) {
+        let root_node = self
+            .old_tree
+            .as_ref()
+            .expect("old_tree should be Some here")
+            .root_node();
+
+        // Calculate the offset change from the edit
+        let offset_delta = edit.new_end_byte as i64 - edit.old_end_byte as i64;
+        let edit_start = edit.start_byte;
+        dbg!(changed_ranges, offset_delta);
+
+        let mut new_cache = SumTree::new(&());
+        for item in self.cache.iter() {
+            if item.range.end <= edit_start {
+                // Keep the before items
+                new_cache.push(item.clone(), &());
+            } else if item.range.start >= edit_start {
+                // Keep the after items, but change they range with offset_delta
+                let new_start = (item.range.start as i64 + offset_delta).max(0) as usize;
+                let new_end = (item.range.end as i64 + offset_delta).max(0) as usize;
+
+                new_cache.push(HighlightItem::new(new_start..new_end, &item.name), &());
+            }
+        }
+
+        self.cache = new_cache;
+        let mut highlights = Vec::new();
+        let mut query_cursor = QueryCursor::new();
+
+        for changed_range in changed_ranges {
+            self.collect_highlights_in_range(
+                &mut highlights,
+                &mut query_cursor,
+                root_node,
+                changed_range,
+                cx,
+            );
+        }
+
+        highlights.sort_by_key(|item| item.range.start);
+        for highlight in highlights {
+            self.cache.push(highlight, &());
+        }
+    }
+
+    fn build_full_style(&mut self, cx: &App) {
         let Some(tree) = &self.old_tree else {
             return;
         };
 
+        let root_node = tree.root_node();
+        let full_range = 0..self.text.len();
+
+        // Clear cache and rebuild
+        self.cache = SumTree::new(&());
+
+        let mut highlights = Vec::new();
+        let mut query_cursor = QueryCursor::new();
+
+        self.collect_highlights_in_range(
+            &mut highlights,
+            &mut query_cursor,
+            root_node,
+            &full_range,
+            cx,
+        );
+
+        highlights.sort_by_key(|item| item.range.start);
+        for highlight in highlights {
+            self.cache.push(highlight, &());
+        }
+    }
+
+    /// Collect highlights within a specific range
+    fn collect_highlights_in_range(
+        &self,
+        highlights: &mut Vec<HighlightItem>,
+        query_cursor: &mut QueryCursor,
+        root_node: Node,
+        range: &Range<usize>,
+        cx: &App,
+    ) {
         let Some(query) = &self.query else {
+            return;
+        };
+        let Some(tree) = &self.old_tree else {
             return;
         };
 
         let root_node = tree.root_node();
 
-        // Remove the changed items from the cache.
-        let new_cache = sum_tree::SumTree::new(&());
-        self.cache = new_cache;
+        // Set the cursor range to limit query to the specified range
+        query_cursor.set_byte_range(range.clone());
 
         let source = self.text.clone();
 
@@ -372,60 +462,27 @@ impl SyntaxHighlighter {
             {
                 let styles = self.handle_injection(&language_name, content_node, cx);
                 for (node_range, highlight_name) in styles {
-                    self.cache
-                        .push(HighlightItem::new(node_range.clone(), highlight_name), &());
+                    // Only include highlights that intersect with our target range
+                    if node_range.start < range.end && node_range.end > range.start {
+                        highlights.push(HighlightItem::new(node_range, highlight_name));
+                    }
                 }
-
                 continue;
             }
 
             for cap in query_match.captures {
                 let node = cap.node;
-
-                let Some(highlight_name) = query.capture_names().get(cap.index as usize) else {
-                    continue;
-                };
-
                 let node_range: Range<usize> = node.start_byte()..node.end_byte();
-                let highlight_name = SharedString::from(highlight_name.to_string());
 
-                // Merge near range and same highlight name
-                let last_item = self.cache.last();
-                let last_range = last_item.map(|item| &item.range).unwrap_or(&(0..0));
-                let last_highlight_name = last_item.map(|item| item.name.clone());
-
-                if last_range.end <= node_range.start
-                    && last_highlight_name.as_ref() == Some(&highlight_name)
-                {
-                    self.cache.push(
-                        HighlightItem::new(
-                            last_range.start..node_range.end,
-                            highlight_name.clone(),
-                        ),
-                        &(),
-                    );
-                } else if last_range == &node_range {
-                    // case:
-                    // last_range: 213..220, last_highlight_name: Some("property")
-                    // last_range: 213..220, last_highlight_name: Some("string")
-                    self.cache.push(
-                        HighlightItem::new(
-                            node_range,
-                            last_highlight_name.unwrap_or(highlight_name),
-                        ),
-                        &(),
-                    );
-                } else {
-                    self.cache
-                        .push(HighlightItem::new(node_range, highlight_name.clone()), &());
+                // Only include highlights that intersect with our target range
+                if node_range.start < range.end && node_range.end > range.start {
+                    if let Some(highlight_name) = query.capture_names().get(cap.index as usize) {
+                        let highlight_name = SharedString::from(highlight_name.to_string());
+                        highlights.push(HighlightItem::new(node_range, highlight_name));
+                    }
                 }
             }
         }
-
-        // DO NOT REMOVE THIS PRINT, it's useful for debugging
-        // for item in self.cache.iter() {
-        //     println!("item: {:?}", item);
-        // }
     }
 
     /// TODO: Use incremental parsing to handle the injection.
