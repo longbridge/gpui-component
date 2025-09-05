@@ -439,11 +439,8 @@ impl SyntaxHighlighter {
             return cache;
         };
 
-        let content = self
-            .text
-            .byte_slice(node.start_byte()..node.end_byte())
-            .to_string();
-        if content.len() == 0 {
+        let content = self.text.byte_slice(node.start_byte()..node.end_byte());
+        if content.len_bytes() == 0 {
             return cache;
         };
         let Some(config) = LanguageRegistry::global(cx).language(injection_language) else {
@@ -453,12 +450,14 @@ impl SyntaxHighlighter {
         if parser.set_language(&config.language).is_err() {
             return cache;
         }
-        let Some(tree) = parser.parse(content.as_bytes(), None) else {
+
+        let source = content.as_str().unwrap_or_default().as_bytes();
+        let Some(tree) = parser.parse(source, None) else {
             return cache;
         };
 
         let mut query_cursor = QueryCursor::new();
-        let mut matches = query_cursor.matches(query, tree.root_node(), content.as_bytes());
+        let mut matches = query_cursor.matches(query, tree.root_node(), source);
 
         let mut last_end = start_offset;
         while let Some(m) = matches.next() {
