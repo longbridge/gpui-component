@@ -391,10 +391,9 @@ impl TextElement {
                 let mut skipped_offset = 0;
                 let mut styles = vec![];
 
-                // TODO: To check the \r is keep in the line bytes.
+                // The Rope line has includes `\n` and `\r`.
                 for (ix, line) in state.text.lines().enumerate() {
-                    // +1 for last `\n`.
-                    let line_len = line.len_bytes() + 1;
+                    let line_len = line.len_bytes();
                     if ix < visible_range.start {
                         offset += line_len;
                         skipped_offset = offset;
