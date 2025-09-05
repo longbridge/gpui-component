@@ -316,7 +316,7 @@ impl SyntaxHighlighter {
     /// NOTE: 10K lines, about 180ms
     /// FIXME: To improve the performance when there more than 5K lines, use partial update.
     /// Ref: https://github.com/longbridge/gpui-component/pull/1197
-    fn build_styles(&mut self, cx: &mut App) {
+    fn build_styles(&mut self, cx: &App) {
         let Some(tree) = &self.old_tree else {
             return;
         };

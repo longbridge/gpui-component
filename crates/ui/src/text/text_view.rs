@@ -12,7 +12,7 @@ use crate::{
     global_state::GlobalState,
     highlighter::HighlightTheme,
     input::{self},
-    text::node::{self},
+    text::node::{self, NodeContext},
 };
 
 const CONTEXT: &'static str = "TextView";
@@ -68,10 +68,10 @@ pub struct TextView {
 #[derive(Default, Clone, PartialEq)]
 pub(crate) struct TextViewState {
     root: Option<Result<Rc<node::Node>, SharedString>>,
+    pub(crate) node_cx: Rc<node::NodeContext>,
 
     raw: SharedString,
     focus_handle: Option<FocusHandle>,
-    style: TextViewStyle,
 
     /// The bounds of the text view
     bounds: Bounds<Pixels>,
@@ -92,7 +92,7 @@ impl TextViewState {
             raw: SharedString::default(),
             focus_handle: Some(focus_handle),
             root: None,
-            style: TextViewStyle::default(),
+            node_cx: Rc::new(NodeContext::default()),
             _last_parsed: None,
             bounds: Bounds::default(),
             selection_positions: (None, None),
@@ -116,7 +116,7 @@ impl TextViewState {
         style: &TextViewStyle,
         cx: &mut App,
     ) {
-        let is_changed = self.raw != new_text || self.style != *style;
+        let is_changed = self.raw != new_text || self.node_cx.style != *style;
 
         if self.root.is_some() && !is_changed {
             return;
@@ -128,20 +128,22 @@ impl TextViewState {
             }
         }
 
+        let mut node_cx = NodeContext::default();
+        node_cx.style = style.clone();
         self.raw = new_text;
         // NOTE: About 100ms
         // let measure = crate::Measure::new("parse_markdown");
         self.root = Some(
             if is_html {
-                super::format::html::parse(&self.raw)
+                super::format::html::parse(&self.raw, &mut node_cx)
             } else {
-                super::format::markdown::parse(&self.raw, &style, cx)
+                super::format::markdown::parse(&self.raw, &style, &mut node_cx, cx)
             }
             .map(Rc::new),
         );
+        self.node_cx = Rc::new(node_cx);
         // measure.end();
         self._last_parsed = Some(Instant::now());
-        self.style = style.clone();
         self.clear_selection();
     }
 
