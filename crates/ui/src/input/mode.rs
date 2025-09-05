@@ -194,10 +194,6 @@ impl InputMode {
                 let changed_len = new_text.len() as isize - selected_range.len() as isize;
                 let new_end = (selected_range.end as isize + changed_len) as usize;
 
-                // let start_pos = text_wrapper.line_column(selected_range.start);
-                // let old_end_pos = text_wrapper.line_column(selected_range.end);
-                // let new_end_pos = text_wrapper.line_column(new_end);
-
                 let edit = InputEdit {
                     start_byte: selected_range.start,
                     old_end_byte: selected_range.end,
