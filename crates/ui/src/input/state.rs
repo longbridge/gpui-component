@@ -283,7 +283,7 @@ pub struct InputState {
     diagnostic_popover: Option<Entity<DiagnosticPopover>>,
 
     /// To remember the horizontal column (x-coordinate) of the cursor position for keep column for move up/down.
-    preferred_x_offset: Option<Pixels>,
+    preferred_column: Option<usize>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -349,7 +349,7 @@ impl InputState {
             scroll_handle: ScrollHandle::new(),
             scroll_state: ScrollbarState::default(),
             scroll_size: gpui::size(px(0.), px(0.)),
-            preferred_x_offset: None,
+            preferred_column: None,
             placeholder: SharedString::default(),
             mask_pattern: MaskPattern::default(),
             diagnostic_popover: None,
@@ -516,18 +516,10 @@ impl InputState {
         cx.notify();
     }
 
-    /// Called after moving the cursor. Updates preferred_x_offset if we know where the cursor now is.
-    fn update_preferred_x_offset(&mut self, _cx: &mut Context<Self>) {
-        let (Some(_), Some(bounds)) = (&self.last_layout, &self.last_bounds) else {
-            return;
-        };
-
-        // Find which line and sub-line the cursor is on and its position
-        let (_, _, cursor_pos) = self.line_and_position_for_offset(self.cursor().offset);
-
-        if let Some(pos) = cursor_pos {
-            self.preferred_x_offset = Some(pos.x + bounds.origin.x);
-        }
+    /// Called after moving the cursor. Updates preferred_column if we know where the cursor now is.
+    fn update_preferred_column(&mut self, _cx: &mut Context<Self>) {
+        let colum_ix = self.text.line_column(self.cursor().offset).1;
+        self.preferred_column = Some(colum_ix);
     }
 
     /// Find which line and sub-line the given offset belongs to, along with the position within that sub-line.
@@ -570,90 +562,23 @@ impl InputState {
             return;
         }
 
-        let (Some(last_layout), Some(bounds)) = (&self.last_layout, &self.last_bounds) else {
-            return;
-        };
-
         let offset = self.cursor().offset;
-        let preferred_x_offset = self.preferred_x_offset;
-        let line_height = last_layout.line_height;
-        let (current_line, current_sub_line, current_pos) =
-            self.line_and_position_for_offset(offset);
+        let was_preferred_column = self.preferred_column;
 
-        let Some(current_pos) = current_pos else {
-            return;
-        };
+        let line_ix = self.text.byte_to_line(offset);
+        let new_line_ix = line_ix.saturating_add_signed(move_lines);
+        let line = self.text.line(new_line_ix);
+        let line_start_offset = self.text.line_to_byte(new_line_ix);
+        let new_column = self
+            .preferred_column
+            .unwrap_or_default()
+            .min(line.len_bytes().saturating_sub(1));
+        let new_offset = line_start_offset + new_column;
 
-        let current_x = self
-            .preferred_x_offset
-            .unwrap_or_else(|| current_pos.x + bounds.origin.x);
-
-        let mut new_line = current_line;
-        let mut new_sub_line = current_sub_line as i32;
-        new_sub_line += if move_lines > 0 { 1 } else { -1 };
-
-        // Handle moving above the first line
-        if move_lines < 0 && current_line == 0 && new_sub_line < 0 {
-            // Move cursor to the beginning of the text
-            self.move_to(Cursor::new(0), window, cx);
-            self.preferred_x_offset = preferred_x_offset;
-            return;
-        }
-
-        if new_sub_line < 0 {
-            new_line = new_line
-                .saturating_add_signed(move_lines)
-                .max(0)
-                .min(last_layout.lines.len().saturating_sub(1));
-            new_sub_line = last_layout.lines[new_line].wrap_boundaries.len() as i32;
-        } else {
-            let max_sub_line = last_layout.lines[current_line].wrap_boundaries.len() as i32;
-            if new_sub_line > max_sub_line {
-                if new_line < last_layout.lines.len() - 1 {
-                    new_line = new_line
-                        .saturating_add_signed(move_lines)
-                        .max(0)
-                        .min(last_layout.lines.len().saturating_sub(1));
-                    new_sub_line = 0;
-                } else {
-                    new_sub_line = max_sub_line;
-                }
-            }
-        }
-
-        // If after adjustment, still at the same position, do not proceed
-        if new_line == current_line && new_sub_line == current_sub_line as i32 {
-            return;
-        }
-
-        let target_line = &last_layout.lines[new_line];
-        let line_x = current_x - bounds.origin.x;
-        let target_sub_line = new_sub_line as usize;
-
-        let approx_pos = point(line_x, px(target_sub_line as f32 * line_height.0));
-        let index_res = target_line.index_for_position(approx_pos, line_height);
-
-        let new_local_index = match index_res {
-            Ok(i) => i,
-            Err(i) => i,
-        };
-
-        let mut prev_lines_offset = 0;
-        for (_, line) in last_layout
-            .lines
-            .iter()
-            .enumerate()
-            .take_while(|(i, _)| *i < new_line)
-        {
-            prev_lines_offset += line.len() + 1;
-        }
-
-        let new_offset = (prev_lines_offset + new_local_index).min(self.text.len_bytes());
-        let new_cursor = Cursor::new(new_offset);
-        self.selected_range = (new_cursor..new_cursor).into();
         self.pause_blink_cursor(cx);
+        self.move_to(Cursor::new(new_offset), window, cx);
         // Set back the preferred_x_offset
-        self.preferred_x_offset = preferred_x_offset;
+        self.preferred_column = was_preferred_column;
         cx.notify();
     }
 
@@ -1744,7 +1669,7 @@ impl InputState {
         let cursor = Cursor::new(cursor.offset.clamp(0, self.text.len_bytes()));
         self.selected_range = (cursor..cursor).into();
         self.pause_blink_cursor(cx);
-        self.update_preferred_x_offset(cx);
+        self.update_preferred_column(cx);
         cx.notify()
     }
 
@@ -1891,7 +1816,7 @@ impl InputState {
             }
         }
         if self.selected_range.is_empty() {
-            self.update_preferred_x_offset(cx);
+            self.update_preferred_column(cx);
         }
         cx.notify()
     }
@@ -2239,7 +2164,7 @@ impl EntityInputHandler for InputState {
             .update_highlighter(&range, &self.text, &new_text, true, cx);
         self.selected_range = (new_offset..new_offset).into();
         self.marked_range.take();
-        self.update_preferred_x_offset(cx);
+        self.update_preferred_column(cx);
         self.update_scroll_offset(None, cx);
         self.mode.update_auto_grow(&self.text_wrapper);
         cx.emit(InputEvent::Change(self.unmask_value().into()));
