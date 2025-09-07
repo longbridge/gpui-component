@@ -1,7 +1,7 @@
 use std::ops::Range;
 
 use gpui::{App, Font, LineFragment, Pixels};
-use ropey::Rope;
+use rope::Rope;
 
 #[allow(unused)]
 pub(super) struct LineWrap {
@@ -58,7 +58,7 @@ impl TextWrapper {
     ///
     /// If the `text` is the same as the current text, do nothing.
     pub(super) fn update(&mut self, text: &Rope, force: bool, cx: &mut App) {
-        if &self.text == text && !force {
+        if self.text.summary() == text.summary() && !force {
             return;
         }
 

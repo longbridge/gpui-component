@@ -174,10 +174,8 @@ impl RenderOnce for TextInput {
 
         let prefix = self.prefix;
         let suffix = self.suffix;
-        let show_clear_button = self.cleanable
-            && !state.loading
-            && state.text.len_bytes() > 0
-            && state.mode.is_single_line();
+        let show_clear_button =
+            self.cleanable && !state.loading && state.text.len() > 0 && state.mode.is_single_line();
         let has_suffix = suffix.is_some() || state.loading || self.mask_toggle || show_clear_button;
 
         div()

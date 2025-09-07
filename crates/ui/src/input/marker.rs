@@ -44,7 +44,7 @@ impl Marker {
             return;
         };
 
-        let start_line_str = state.text.byte_slice(start_line.range.clone());
+        let start_line_str = state.text.slice(start_line.range.clone());
 
         let Some(end_line) = state
             .text_wrapper
@@ -53,7 +53,7 @@ impl Marker {
         else {
             return;
         };
-        let end_line_str = state.text.byte_slice(end_line.range.clone());
+        let end_line_str = state.text.slice(end_line.range.clone());
 
         let start_byte = start_line.range.start
             + start_line_str

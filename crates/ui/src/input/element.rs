@@ -387,33 +387,27 @@ impl TextElement {
                     return None;
                 };
 
-                let mut offset = 0;
-                let mut skipped_offset = 0;
+                let mut offset = visible_range.start;
                 let mut styles = vec![];
 
                 // The Rope line has includes `\n` and `\r`.
-                for (ix, line) in state.text.lines().enumerate() {
-                    let line_len = line.len_bytes();
-                    if ix < visible_range.start {
-                        offset += line_len;
-                        skipped_offset = offset;
-                        continue;
-                    }
-                    if ix > visible_range.end {
-                        break;
-                    }
-
-                    let range = offset..offset + line_len;
+                while let Some(line) = state
+                    .text
+                    .slice(visible_range.clone())
+                    .chunks()
+                    .lines()
+                    .next()
+                {
+                    let range = offset..offset + line.len();
                     let line_styles = highlighter.styles(&range, &theme);
                     styles = gpui::combine_highlights(styles, line_styles).collect();
-
                     offset = range.end;
                 }
 
                 let mut marker_styles = vec![];
                 for marker in markers.iter() {
                     if let Some(range) = &marker.range {
-                        if range.start < skipped_offset {
+                        if range.start < offset {
                             continue;
                         }
 
@@ -429,7 +423,7 @@ impl TextElement {
 
                 styles = gpui::combine_highlights(marker_styles, styles).collect();
 
-                Some((skipped_offset, styles))
+                Some((offset, styles))
             }
             _ => None,
         })
@@ -547,7 +541,7 @@ impl Element for TextElement {
         let state = self.state.read(cx);
         let multi_line = state.mode.is_multi_line();
         let text = state.text.clone();
-        let is_empty = text.len_bytes() == 0;
+        let is_empty = text.len() == 0;
         let placeholder = self.placeholder.clone();
         let style = window.text_style();
         let font_size = style.font_size.to_pixels(window.rem_size());
@@ -556,7 +550,10 @@ impl Element for TextElement {
         let (display_text, text_color) = if is_empty {
             (placeholder, cx.theme().muted_foreground)
         } else if state.masked {
-            ("*".repeat(text.len_chars()).into(), cx.theme().foreground)
+            (
+                "*".repeat(text.chars().count()).into(),
+                cx.theme().foreground,
+            )
         } else {
             (text.to_string().into(), cx.theme().foreground)
         };

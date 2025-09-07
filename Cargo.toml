@@ -17,6 +17,7 @@ resolver = "2"
 [workspace.dependencies]
 gpui = { git = "https://github.com/zed-industries/zed.git" }
 gpui_macros = { git = "https://github.com/zed-industries/zed.git" }
+rope = { git = "https://github.com/zed-industries/zed.git" }
 reqwest_client = { git = "https://github.com/zed-industries/zed.git" }
 sum_tree = { git = "https://github.com/zed-industries/zed.git" }
 gpui-component = { path = "crates/ui" }

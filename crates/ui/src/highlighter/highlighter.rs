@@ -3,11 +3,11 @@ use crate::highlighter::LanguageRegistry;
 
 use anyhow::{anyhow, Context, Result};
 use gpui::{App, HighlightStyle, SharedString};
-use ropey::Rope;
+
+use rope::Rope;
 use std::{
     collections::{BTreeSet, HashMap},
     ops::Range,
-    slice::Chunks,
     usize,
 };
 use sum_tree::{Bias, SumTree};
@@ -42,12 +42,20 @@ pub struct SyntaxHighlighter {
 }
 
 struct TextProvider<'a>(&'a Rope);
+struct ByteChunks<'a>(rope::Chunks<'a>);
 impl<'a> tree_sitter::TextProvider<&'a [u8]> for TextProvider<'a> {
-    type I = Chunks<'a, u8>;
+    type I = ByteChunks<'a>;
 
     fn text(&mut self, node: tree_sitter::Node) -> Self::I {
-        let slice = self.0.byte_slice(node.start_byte()..node.end_byte());
-        slice.as_str().unwrap_or_default().as_bytes().chunks(64)
+        ByteChunks(self.0.chunks_in_range(node.byte_range()))
+    }
+}
+
+impl<'a> Iterator for ByteChunks<'a> {
+    type Item = &'a [u8];
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next().map(str::as_bytes)
     }
 }
 
@@ -283,20 +291,20 @@ impl SyntaxHighlighter {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.text.len_bytes() == 0
+        self.text.len() == 0
     }
 
     /// Highlight the given text, returning a map from byte ranges to highlight captures.
     /// Uses incremental parsing, detects changed ranges, and caches unchanged results.
     pub fn update(&mut self, edit: Option<InputEdit>, text: &Rope, cx: &App) {
-        if &self.text == text {
+        if self.text.summary() == text.summary() {
             return;
         }
 
         let edit = edit.unwrap_or(InputEdit {
             start_byte: 0,
             old_end_byte: 0,
-            new_end_byte: text.len_bytes(),
+            new_end_byte: text.len(),
             start_position: Point::new(0, 0),
             old_end_position: Point::new(0, 0),
             new_end_position: Point::new(0, 0),
@@ -308,14 +316,11 @@ impl SyntaxHighlighter {
             .unwrap_or(self.parser.parse("", None).unwrap());
         old_tree.edit(&edit);
 
+        let mut chunks = text.chunks();
         let new_tree = self.parser.parse_with_options(
-            &mut |offset, _| {
-                if offset >= text.len_bytes() {
-                    ""
-                } else {
-                    let (chunk, chunk_byte_ix, _, _) = text.chunk_at_byte(offset);
-                    &chunk[offset - chunk_byte_ix..]
-                }
+            &mut move |offset, _| {
+                chunks.seek(offset);
+                chunks.next().unwrap_or("").as_bytes()
             },
             Some(&old_tree),
             None,
@@ -437,8 +442,9 @@ impl SyntaxHighlighter {
             return cache;
         };
 
-        let content = self.text.byte_slice(node.start_byte()..node.end_byte());
-        if content.len_bytes() == 0 {
+        // FIXME: Avoid to_string.
+        let content = self.text.slice(node.byte_range()).to_string();
+        if content.len() == 0 {
             return cache;
         };
         let Some(config) = LanguageRegistry::global(cx).language(injection_language) else {
@@ -449,7 +455,7 @@ impl SyntaxHighlighter {
             return cache;
         }
 
-        let source = content.as_str().unwrap_or_default().as_bytes();
+        let source = content.as_bytes();
         let Some(tree) = parser.parse(source, None) else {
             return cache;
         };
