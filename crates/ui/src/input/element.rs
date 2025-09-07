@@ -387,27 +387,38 @@ impl TextElement {
                     return None;
                 };
 
-                let mut offset = visible_range.start;
+                let mut offset = 0;
+                let mut skipped_offset = 0;
                 let mut styles = vec![];
 
-                // The Rope line has includes `\n` and `\r`.
-                while let Some(line) = state
-                    .text
-                    .slice(visible_range.clone())
-                    .chunks()
-                    .lines()
-                    .next()
-                {
-                    let range = offset..offset + line.len();
+                // The Rope line has not includes `\n`.
+                let mut lines = state.text.chunks().lines();
+                let mut ix = 0;
+                while let Some(line) = lines.next() {
+                    // +1 for `\n`
+                    let line_len = line.len() + 1;
+                    if ix < visible_range.start {
+                        ix += 1;
+                        offset += line_len;
+                        skipped_offset = offset;
+                        continue;
+                    }
+                    if ix > visible_range.end {
+                        break;
+                    }
+
+                    let range = offset..offset + line_len;
                     let line_styles = highlighter.styles(&range, &theme);
                     styles = gpui::combine_highlights(styles, line_styles).collect();
+
+                    ix += 1;
                     offset = range.end;
                 }
 
                 let mut marker_styles = vec![];
                 for marker in markers.iter() {
                     if let Some(range) = &marker.range {
-                        if range.start < offset {
+                        if range.start < skipped_offset {
                             continue;
                         }
 
@@ -423,7 +434,7 @@ impl TextElement {
 
                 styles = gpui::combine_highlights(marker_styles, styles).collect();
 
-                Some((offset, styles))
+                Some((skipped_offset, styles))
             }
             _ => None,
         })
