@@ -1044,11 +1044,10 @@ impl InputState {
     /// Return the start offset of the previous word.
     fn previous_start_of_word(&mut self) -> usize {
         let offset = self.selected_range.start.offset;
-        let row = self.text.offset_to_point(offset).row;
-        let start_of_line_offset = self.text.point_to_offset(rope::Point::new(row, 0));
-        let part = self.text.slice(start_of_line_offset..offset).to_string();
+        // FIXME: Avoid to_string
+        let left_part = self.text.slice(0..offset).to_string();
 
-        UnicodeSegmentation::split_word_bound_indices(part.as_str())
+        UnicodeSegmentation::split_word_bound_indices(left_part.as_str())
             .filter(|(_, s)| !s.trim_start().is_empty())
             .next_back()
             .map(|(i, _)| i)
@@ -1058,14 +1057,9 @@ impl InputState {
     /// Return the next end offset of the next word.
     fn next_end_of_word(&mut self) -> usize {
         let offset = self.cursor().offset;
-        let next_row = self.text.offset_to_point(offset).row + 1;
-        let start_of_next_line_offset = self.text.point_to_offset(rope::Point::new(next_row, 0));
-        let next_str = self
-            .text
-            .slice(offset..start_of_next_line_offset)
-            .to_string();
+        let right_part = self.text.slice(offset..self.text.len()).to_string();
 
-        UnicodeSegmentation::split_word_bound_indices(next_str.as_str())
+        UnicodeSegmentation::split_word_bound_indices(right_part.as_str())
             .find(|(_, s)| !s.trim_start().is_empty())
             .map(|(i, s)| offset + i + s.len())
             .unwrap_or(self.text.len())
