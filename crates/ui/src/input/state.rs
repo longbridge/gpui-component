@@ -744,7 +744,7 @@ impl InputState {
 
         LineColumn {
             line: point.row as usize + 1,
-            column: point.row as usize + 1,
+            column: point.column as usize + 1,
         }
     }
 
@@ -765,8 +765,13 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let line_ix = line.saturating_sub(1);
-        let column_ix = column.unwrap_or(1).saturating_sub(1);
+        let max_point = self.text.max_point();
+        let line_ix = line.saturating_sub(1).min(max_point.row as usize);
+        let column_ix = column
+            .unwrap_or(1)
+            .saturating_sub(1)
+            .min(self.text.line_len(line_ix as u32) as usize);
+
         let offset = self
             .text
             .point_to_offset(rope::Point::new(line_ix as u32, column_ix as u32));
