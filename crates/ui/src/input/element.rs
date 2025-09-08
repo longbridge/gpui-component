@@ -359,11 +359,11 @@ impl TextElement {
         let mut visible_range = 0..total_lines;
         let mut line_bottom = px(0.);
         for (ix, line) in state.text_wrapper.lines.iter().enumerate() {
-            let wraped_height = (line.wrap_lines + 1) * line_height;
-            line_bottom += wraped_height;
+            let wrapped_height = (line.wrap_lines + 1) * line_height;
+            line_bottom += wrapped_height;
 
             if line_bottom < -scroll_top {
-                visible_top = line_bottom - wraped_height;
+                visible_top = line_bottom - wrapped_height;
                 visible_range.start = ix;
             }
 
