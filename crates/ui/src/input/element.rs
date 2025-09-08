@@ -673,13 +673,11 @@ impl Element for TextElement {
             None
         };
 
-        // NOTE: If there have about 10K lines, this will take about 5~6ms.
-        // let measure = Measure::new("shape_text");
+        // NOTE: Here 50 lines about 150µs
+        // let measure = crate::Measure::new("shape_text");
         let visible_text = display_text
-            .lines()
-            .skip(visible_range.start)
-            .take(visible_range.len())
-            .join("\n");
+            .slice_rows(visible_range.start as u32..visible_range.end as u32)
+            .to_string();
 
         let lines = window
             .text_system()
