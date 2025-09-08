@@ -348,6 +348,8 @@ impl TextElement {
         line_height: Pixels,
         input_height: Pixels,
     ) -> (Range<usize>, Pixels) {
+        // Add extra rows to avoid showing empty space when scroll to bottom.
+        let extra_rows = 2;
         let mut visible_top = px(0.);
         if state.mode.is_single_line() {
             return (0..1, visible_top);
@@ -368,7 +370,7 @@ impl TextElement {
             }
 
             if line_bottom + scroll_top >= input_height {
-                visible_range.end = (ix + 1).min(total_lines);
+                visible_range.end = (ix + extra_rows).min(total_lines);
                 break;
             }
         }
