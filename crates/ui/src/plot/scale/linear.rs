@@ -8,9 +8,9 @@ use super::{sealed::Sealed, Scale};
 #[derive(Clone)]
 pub struct ScaleLinear<T> {
     domain_len: usize,
-    domain_min: T,
+    domain_start: T,
     domain_diff: T,
-    range_min: f32,
+    range_start: f32,
     range_diff: f32,
 }
 
@@ -19,24 +19,34 @@ where
     T: Copy + PartialOrd + Num + ToPrimitive + Sealed,
 {
     pub fn new(domain: Vec<T>, range: Vec<f32>) -> Self {
-        let (domain_min, domain_max) = domain
+        let (domain_start, domain_end) = domain
             .iter()
             .minmax()
             .into_option()
             .map_or((T::zero(), T::zero()), |(min, max)| (*min, *max));
 
-        let (range_min, range_max) = range
-            .iter()
-            .minmax()
-            .into_option()
-            .map_or((0., 0.), |(min, max)| (*min, *max));
+        let (range_start, range_end) =
+            range
+                .iter()
+                .minmax()
+                .into_option()
+                .map_or((0., 0.), |(min, max)| {
+                    let min_pos = range.iter().position(|&x| x == *min).unwrap_or(0);
+                    let max_pos = range.iter().position(|&x| x == *max).unwrap_or(0);
+
+                    if min_pos <= max_pos {
+                        (*min, *max)
+                    } else {
+                        (*max, *min)
+                    }
+                });
 
         Self {
             domain_len: domain.len(),
-            domain_min,
-            domain_diff: domain_max - domain_min,
-            range_min,
-            range_diff: range_max - range_min,
+            domain_start,
+            domain_diff: domain_end - domain_start,
+            range_start,
+            range_diff: range_end - range_start,
         }
     }
 }
@@ -50,9 +60,9 @@ where
             return None;
         }
 
-        let ratio = ((*value - self.domain_min) / self.domain_diff).to_f32()?;
+        let ratio = ((*value - self.domain_start) / self.domain_diff).to_f32()?;
 
-        Some((1. - ratio) * self.range_diff + self.range_min)
+        Some(ratio * self.range_diff + self.range_start)
     }
 
     fn least_index(&self, tick: f32) -> usize {
@@ -70,15 +80,43 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_scale_linear_1() {
+    fn test_scale_linear() {
         let scale = ScaleLinear::new(vec![1., 2., 3.], vec![0., 100.]);
+        assert_eq!(scale.tick(&1.), Some(0.));
+        assert_eq!(scale.tick(&2.), Some(50.));
+        assert_eq!(scale.tick(&3.), Some(100.));
+
+        let scale = ScaleLinear::new(vec![1., 2., 3.], vec![100., 0.]);
         assert_eq!(scale.tick(&1.), Some(100.));
         assert_eq!(scale.tick(&2.), Some(50.));
         assert_eq!(scale.tick(&3.), Some(0.));
     }
 
     #[test]
-    fn test_scale_linear_2() {
+    fn test_scale_linear_multiple_range() {
+        let scale = ScaleLinear::new(vec![1., 2., 3.], vec![0., 50., 100.]);
+        assert_eq!(scale.tick(&1.), Some(0.));
+        assert_eq!(scale.tick(&2.), Some(50.));
+        assert_eq!(scale.tick(&3.), Some(100.));
+
+        let scale = ScaleLinear::new(vec![1., 2., 3.], vec![100., 50., 0.]);
+        assert_eq!(scale.tick(&1.), Some(100.));
+        assert_eq!(scale.tick(&2.), Some(50.));
+        assert_eq!(scale.tick(&3.), Some(0.));
+
+        let scale = ScaleLinear::new(vec![1., 2., 3.], vec![100., 0., 100.]);
+        assert_eq!(scale.tick(&1.), Some(100.));
+        assert_eq!(scale.tick(&2.), Some(50.));
+        assert_eq!(scale.tick(&3.), Some(0.));
+
+        let scale = ScaleLinear::new(vec![1., 2., 3.], vec![0., 100., 0.]);
+        assert_eq!(scale.tick(&1.), Some(0.));
+        assert_eq!(scale.tick(&2.), Some(50.));
+        assert_eq!(scale.tick(&3.), Some(100.));
+    }
+
+    #[test]
+    fn test_scale_linear_empty() {
         let scale = ScaleLinear::new(vec![], vec![0., 100.]);
         assert_eq!(scale.tick(&1.), None);
         assert_eq!(scale.tick(&2.), None);
