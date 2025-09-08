@@ -1,5 +1,5 @@
 use super::HighlightTheme;
-use crate::highlighter::LanguageRegistry;
+use crate::{highlighter::LanguageRegistry, input::RopeExt as _};
 
 use anyhow::{anyhow, Context, Result};
 use gpui::{App, HighlightStyle, SharedString};
@@ -297,7 +297,7 @@ impl SyntaxHighlighter {
     /// Highlight the given text, returning a map from byte ranges to highlight captures.
     /// Uses incremental parsing, detects changed ranges, and caches unchanged results.
     pub fn update(&mut self, edit: Option<InputEdit>, text: &Rope, cx: &App) {
-        if self.text.summary() == text.summary() {
+        if self.text.eq(text) {
             return;
         }
 

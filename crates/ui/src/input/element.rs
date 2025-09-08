@@ -9,7 +9,9 @@ use gpui::{
 use smallvec::SmallVec;
 
 use crate::{
-    highlighter::SyntaxHighlighter, input::blink_cursor::CURSOR_WIDTH, ActiveTheme as _, Root,
+    highlighter::SyntaxHighlighter,
+    input::{blink_cursor::CURSOR_WIDTH, RopeExt as _},
+    ActiveTheme as _, Root,
 };
 
 use super::{mode::InputMode, InputState, LastLayout};
@@ -391,14 +393,10 @@ impl TextElement {
                 let mut skipped_offset = 0;
                 let mut styles = vec![];
 
-                // The Rope line has not includes `\n`.
-                let mut lines = state.text.chunks().lines();
-                let mut ix = 0;
-                while let Some(line) = lines.next() {
+                for (ix, line) in state.text.lines().into_iter().enumerate() {
                     // +1 for `\n`
-                    let line_len = line.len() + 1;
+                    let line_len = line.len();
                     if ix < visible_range.start {
-                        ix += 1;
                         offset += line_len;
                         skipped_offset = offset;
                         continue;
@@ -411,7 +409,6 @@ impl TextElement {
                     let line_styles = highlighter.styles(&range, &theme);
                     styles = gpui::combine_highlights(styles, line_styles).collect();
 
-                    ix += 1;
                     offset = range.end;
                 }
 
