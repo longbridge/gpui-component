@@ -63,7 +63,7 @@ impl TextElement {
     fn layout_cursor(
         &self,
         visible_range: &Range<usize>,
-        offset_y: Pixels,
+        visible_top: Pixels,
         lines: &[WrappedLine],
         line_height: Pixels,
         bounds: &mut Bounds<Pixels>,
@@ -94,7 +94,7 @@ impl TextElement {
         let mut cursor_end = None;
 
         let mut prev_lines_offset = state.text.line_start_offset(visible_range.start);
-        let mut offset_y = offset_y;
+        let mut offset_y = visible_top;
         for (line_ix, line) in lines.iter().enumerate() {
             let line_ix = visible_range.start + line_ix;
 
@@ -202,7 +202,7 @@ impl TextElement {
     fn layout_selections(
         &self,
         visible_range: &Range<usize>,
-        offset_y: Pixels,
+        visible_top: Pixels,
         lines: &[WrappedLine],
         line_height: Pixels,
         bounds: &mut Bounds<Pixels>,
@@ -228,7 +228,7 @@ impl TextElement {
         };
 
         let mut prev_lines_offset = state.text.line_start_offset(visible_range.start);
-        let mut offset_y = offset_y;
+        let mut offset_y = visible_top;
         let mut line_corners = vec![];
 
         for line in lines.iter() {
@@ -338,18 +338,19 @@ impl TextElement {
 
     /// Calculate the visible range of lines in the viewport.
     ///
-    /// The visible range is based on unwrapped lines (Zero based).
+    /// Returns
     ///
-    /// Returns (visible_range, offset_y)
+    /// - visible_range: The visible range is based on unwrapped lines (Zero based).
+    /// - visible_top: The top position of the first visible line in the scroll viewport.
     fn calculate_visible_range(
         &self,
         state: &InputState,
         line_height: Pixels,
         input_height: Pixels,
     ) -> (Range<usize>, Pixels) {
-        let mut offset_y = px(0.);
+        let mut visible_top = px(0.);
         if state.mode.is_single_line() {
-            return (0..1, offset_y);
+            return (0..1, visible_top);
         }
 
         let total_lines = state.text_wrapper.len();
@@ -362,7 +363,7 @@ impl TextElement {
             line_bottom += wraped_height;
 
             if line_bottom < -scroll_top {
-                offset_y = line_bottom - wraped_height;
+                visible_top = line_bottom - wraped_height;
                 visible_range.start = ix;
             }
 
@@ -372,14 +373,14 @@ impl TextElement {
             }
         }
 
-        (visible_range, offset_y)
+        (visible_range, visible_top)
     }
 
     /// First usize is the offset of skipped.
     fn highlight_lines(
         &mut self,
         visible_range: &Range<usize>,
-        _offset_y: Pixels,
+        _visible_top: Pixels,
         cx: &mut App,
     ) -> Option<Vec<(Range<usize>, HighlightStyle)>> {
         let theme = cx.theme().highlight_theme.clone();
@@ -548,9 +549,10 @@ impl Element for TextElement {
         let state = self.state.read(cx);
         let line_height = window.line_height();
 
-        let (visible_range, offset_y) =
+        let (visible_range, visible_top) =
             self.calculate_visible_range(&state, line_height, bounds.size.height);
-        let highlight_styles = self.highlight_lines(&visible_range, offset_y, cx);
+
+        let highlight_styles = self.highlight_lines(&visible_range, visible_top, cx);
 
         let state = self.state.read(cx);
         let multi_line = state.mode.is_multi_line();
@@ -732,7 +734,7 @@ impl Element for TextElement {
 
         let (cursor_bounds, cursor_scroll_offset, current_line_index) = self.layout_cursor(
             &visible_range,
-            offset_y,
+            visible_top,
             &lines,
             line_height,
             &mut bounds,
@@ -743,7 +745,7 @@ impl Element for TextElement {
 
         let selection_path = self.layout_selections(
             &visible_range,
-            offset_y,
+            visible_top,
             &lines,
             line_height,
             &mut bounds,
@@ -804,7 +806,7 @@ impl Element for TextElement {
             bounds,
             last_layout: LastLayout {
                 visible_range,
-                offset_y,
+                visible_top,
                 lines: Rc::new(lines),
                 line_height,
                 line_number_width,
