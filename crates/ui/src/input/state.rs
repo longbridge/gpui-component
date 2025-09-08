@@ -774,6 +774,7 @@ impl InputState {
             .point_to_offset(rope::Point::new(line_ix as u32, column_ix as u32));
 
         self.move_to(Cursor::new(offset), window, cx);
+        self.update_preferred_column();
     }
 
     /// Focus the input field.
