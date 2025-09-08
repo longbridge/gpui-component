@@ -1621,20 +1621,12 @@ impl InputState {
         }
     }
 
-    fn push_history(
-        &mut self,
-        range: &Range<usize>,
-        new_text: &str,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    fn push_history(&mut self, text: &Rope, range: &Range<usize>, new_text: &str) {
         if self.history.ignore {
             return;
         }
 
-        let old_text = self
-            .text_for_range(self.range_to_utf16(&range), &mut None, window, cx)
-            .unwrap_or("".to_string());
+        let old_text = text.slice(range.clone()).to_string();
 
         let new_range = range.start..range.start + new_text.len();
 
@@ -2009,10 +2001,11 @@ impl InputState {
             return false;
         }
 
-        self.pattern
-            .as_ref()
-            .map(|p| p.is_match(new_text))
-            .unwrap_or(true)
+        let Some(pattern) = &self.pattern else {
+            return true;
+        };
+
+        pattern.is_match(new_text)
     }
 
     /// Set the mask pattern for formatting the input text.
@@ -2113,7 +2106,7 @@ impl EntityInputHandler for InputState {
         &mut self,
         range_utf16: Option<Range<usize>>,
         new_text: &str,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) {
         if self.disabled {
@@ -2126,21 +2119,26 @@ impl EntityInputHandler for InputState {
             .or(self.marked_range.map(|range| range.into()))
             .unwrap_or(self.selected_range.into());
 
-        let pending_text: SharedString = (self.text.slice(0..range.start).to_string()
-            + new_text
-            + &self.text.slice(range.end..self.text.len()).to_string())
-            .into();
+        let old_text = self.text.clone();
+        self.text.replace(range.clone(), new_text);
+
+        let pending_text = self.text.to_string();
         // Check if the new text is valid
         if !self.is_valid_input(&pending_text, cx) {
+            self.text = old_text;
             return;
         }
 
-        let mask_text = self.mask_pattern.mask(&pending_text);
-        let new_text_len = (new_text.len() + mask_text.len()).saturating_sub(pending_text.len());
-        let new_offset = (range.start + new_text_len).min(mask_text.len());
+        let mut new_offset = (range.start + new_text.len()).min(self.text.len());
+        if !self.mask_pattern.is_none() {
+            let mask_text = self.mask_pattern.mask(&pending_text);
+            self.text = Rope::from(mask_text.as_str());
+            let new_text_len =
+                (new_text.len() + mask_text.len()).saturating_sub(pending_text.len());
+            new_offset = (range.start + new_text_len).min(mask_text.len());
+        }
 
-        self.push_history(&range, &new_text, window, cx);
-        self.text = Rope::from(mask_text.as_str());
+        self.push_history(&old_text, &range, &new_text);
 
         self.mode.clear_markers();
         self.text_wrapper.update(&self.text, false, cx);
@@ -2161,7 +2159,7 @@ impl EntityInputHandler for InputState {
         range_utf16: Option<Range<usize>>,
         new_text: &str,
         new_selected_range_utf16: Option<Range<usize>>,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) {
         if self.disabled {
@@ -2173,17 +2171,17 @@ impl EntityInputHandler for InputState {
             .map(|range_utf16| self.range_from_utf16(range_utf16))
             .or(self.marked_range.map(|range| range.into()))
             .unwrap_or(self.selected_range.into());
-        // FIXME: Avoid clone the text, use self.text.replace()
-        let pending_text: SharedString = (self.text.slice(0..range.start).to_string()
-            + new_text
-            + &self.text.slice(range.end..self.text.len()).to_string())
-            .into();
+
+        let old_text = self.text.clone();
+        self.text.replace(range.clone(), new_text);
+        let pending_text = self.text.to_string();
+
         if !self.is_valid_input(&pending_text, cx) {
+            self.text = old_text;
             return;
         }
 
-        self.push_history(&range, new_text, window, cx);
-        self.text = Rope::from(pending_text.as_str());
+        self.push_history(&old_text, &range, new_text);
         self.mode.clear_markers();
         self.text_wrapper.update(&self.text, false, cx);
         self.mode
