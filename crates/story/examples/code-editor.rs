@@ -49,10 +49,14 @@ impl Lang {
     }
 }
 
-const LANGUAGES: [(Lang, &'static str); 10] = [
+const LANGUAGES: [(Lang, &'static str); 11] = [
     (
         Lang::BuiltIn(Language::Rust),
         include_str!("./fixtures/test.rs"),
+    ),
+    (
+        Lang::BuiltIn(Language::Markdown),
+        include_str!("./fixtures/test.md"),
     ),
     (
         Lang::BuiltIn(Language::JavaScript),
@@ -94,7 +98,7 @@ impl Example {
         let default_language = if let Some(name) = default {
             LANGUAGES
                 .iter()
-                .find(|s| s.0.name() == name)
+                .find(|s| s.0.name().starts_with(name.trim()))
                 .cloned()
                 .unwrap_or(LANGUAGES[0].clone())
         } else {
