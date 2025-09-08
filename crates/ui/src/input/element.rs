@@ -871,7 +871,7 @@ impl Element for TextElement {
         let line_height = window.line_height();
         let origin = bounds.origin;
 
-        let invisible_top_padding = visible_range.start * line_height;
+        let invisible_top_padding = prepaint.last_layout.visible_top;
 
         let mut mask_offset_y = px(0.);
         if self.state.read(cx).masked {
