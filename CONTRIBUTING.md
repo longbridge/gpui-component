@@ -10,6 +10,21 @@ Please submit one PR that does one thing, this is important, and helps us to rev
 
 There are a lot of UI test cases in the `crates/story` folder, if you change the existing features you can run the tests to make sure they are working.
 
+## UI Guides
+
+GPUI Component is inspired by macOS and Windows controls, combined with shadcn/ui design for a modern experience.
+
+So please refer to the following UI guides when you design or change the UI components:
+
+- [Apple Human Interface Guidelines](https://developer.apple.com/design/human-interface-guidelines/)
+- [Microsoft Fluent Design System](https://learn.microsoft.com/en-us/windows/apps/design/)
+- [shadcn/ui](https://ui.shadcn.com/)
+
+### Rules
+
+- Use `default` mouse cursor not `pointer` for buttons, unless it's a link button, we are building desktop apps, not web apps.
+- Use `md` size for most cases and as the default.
+
 ### Run story
 
 Use `cargo run` to run the complete story examples to display them all in a gallery of GPUI components.
