@@ -87,7 +87,7 @@ Check out [CONTRIBUTING.md](CONTRIBUTING.md) for more details.
 | Syntax Highlight      | [Tree Sitter]                  | [Syntect]   | [Syntect]             | [QSyntaxHighlighter]           |
 | Markdown Rendering    | Yes                            | Yes         | Basic                 | No                             |
 | Markdown mix HTML     | Yes                            | No          | No                    | No                             |
-| HTML Rendering        | Basic                          | No          | No                    | Yes                            |
+| HTML Rendering        | Basic                          | No          | No                    | Basic                            |
 | Text Selection        | TextView                       | No          | Any Label             | No                             |
 | Themes                | Yes                            | No          | No                    | No                             |
 | I18n                  | Yes                            | Yes         | Yes                   | Yes                            |
