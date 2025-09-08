@@ -682,6 +682,17 @@ impl InputState {
     /// Update the soft wrap mode for multi-line input, default is true.
     pub fn set_soft_wrap(&mut self, wrap: bool, _: &mut Window, cx: &mut Context<Self>) {
         self.soft_wrap = wrap;
+        if wrap {
+            let wrap_width = self
+                .last_layout
+                .as_ref()
+                .and_then(|b| b.wrap_width)
+                .unwrap_or(self.input_bounds.size.width);
+
+            self.text_wrapper.set_wrap_width(Some(wrap_width), cx);
+        } else {
+            self.text_wrapper.set_wrap_width(None, cx);
+        }
         cx.notify();
     }
 
