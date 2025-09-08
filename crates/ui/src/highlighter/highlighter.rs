@@ -598,10 +598,7 @@ impl SyntaxHighlighter {
             }
 
             last_range = node_range.clone();
-            styles.push((
-                node_range.clone(),
-                theme.style(name.as_ref()).unwrap_or_default(),
-            ));
+            styles.push((node_range, theme.style(name.as_ref()).unwrap_or_default()));
 
             filter.next();
         }
