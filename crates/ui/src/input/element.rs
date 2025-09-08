@@ -566,25 +566,21 @@ impl Element for TextElement {
         let text_style = window.text_style();
 
         // Calculate the width of the line numbers
-        let empty_line_number = window
-            .text_system()
-            .shape_text(
-                "++++".into(),
-                font_size,
-                &[TextRun {
-                    len: 4,
-                    font: style.font(),
-                    color: gpui::black(),
-                    background_color: None,
-                    underline: None,
-                    strikethrough: None,
-                }],
-                None,
-                None,
-            )
-            .unwrap();
+        let empty_line_number = window.text_system().shape_line(
+            "++++".into(),
+            font_size,
+            &[TextRun {
+                len: 4,
+                font: style.font(),
+                color: gpui::black(),
+                background_color: None,
+                underline: None,
+                strikethrough: None,
+            }],
+            None,
+        );
         let line_number_width = if state.mode.line_number() {
-            empty_line_number.last().unwrap().width() + LINE_NUMBER_RIGHT_MARGIN
+            empty_line_number.width + LINE_NUMBER_RIGHT_MARGIN
         } else {
             px(0.)
         };
