@@ -98,7 +98,7 @@ where
                 .map(|v| y_fn(v))
                 .chain(Some(Y::zero()))
                 .collect(),
-            vec![10., height],
+            vec![height, 10.],
         );
 
         // Draw X axis

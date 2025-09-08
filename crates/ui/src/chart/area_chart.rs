@@ -107,7 +107,7 @@ where
             .flat_map(|v| self.y.iter().map(|y_fn| y_fn(v)))
             .chain(Some(Y::zero()))
             .collect::<Vec<_>>();
-        let y = ScaleLinear::new(domain, vec![10., height]);
+        let y = ScaleLinear::new(domain, vec![height, 10.]);
 
         // Draw X axis
         let data_len = self.data.len();
