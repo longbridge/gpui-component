@@ -20,9 +20,6 @@ use gpui::{
     ScrollWheelEvent, SharedString, Styled as _, Subscription, UTF16Selection, Window, WrappedLine,
 };
 
-// TODO:
-// - Move cursor to skip line eof empty chars.
-
 use super::{
     blink_cursor::BlinkCursor,
     change::Change,
@@ -2207,7 +2204,6 @@ impl EntityInputHandler for InputState {
     }
 
     /// Used to position IME candidates.
-    /// TODO: Fix position of IME candidates in multi-line text input.
     fn bounds_for_range(
         &mut self,
         range_utf16: Range<usize>,
