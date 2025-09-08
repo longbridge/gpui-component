@@ -1918,11 +1918,25 @@ impl InputState {
     }
 
     fn previous_boundary(&self, offset: usize) -> usize {
-        self.text.clip_offset(offset.saturating_sub(1), Bias::Left)
+        let mut offset = self.text.clip_offset(offset.saturating_sub(1), Bias::Left);
+        if let Some(ch) = self.text.char_at(offset) {
+            if ch == '\r' {
+                offset -= 1;
+            }
+        }
+
+        offset
     }
 
     fn next_boundary(&self, offset: usize) -> usize {
-        self.text.clip_offset(offset + 1, Bias::Right)
+        let mut offset = self.text.clip_offset(offset + 1, Bias::Right);
+        if let Some(ch) = self.text.char_at(offset) {
+            if ch == '\r' {
+                offset += 1;
+            }
+        }
+
+        offset
     }
 
     /// Returns the true to let InputElement to render cursor, when Input is focused and current BlinkCursor is visible.
