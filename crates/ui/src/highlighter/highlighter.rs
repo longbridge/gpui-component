@@ -671,7 +671,7 @@ pub(crate) fn unique_styles(
                 if let Some(top_style) = &mut top_style {
                     merge_highlight_style(top_style, style);
                 } else {
-                    top_style = Some(style.clone());
+                    top_style = Some(*style);
                 }
             }
         }
@@ -806,7 +806,8 @@ mod tests {
                 (45..60, blue),
             ],
             vec![
-                (0..6, clean),
+                (0..5, clean),
+                (5..6, red),
                 (6..10, red),
                 (10..11, green),
                 (11..15, green),
