@@ -52,9 +52,9 @@ pub use assets::Assets;
 use gpui::{
     actions, div, prelude::FluentBuilder as _, px, rems, size, Action, AnyElement, AnyView, App,
     AppContext, Bounds, Context, Div, Entity, EventEmitter, Focusable, Global, Hsla,
-    InteractiveElement, IntoElement, KeyBinding, Menu, MenuItem, ParentElement, Render, RenderOnce,
-    SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Window, WindowBounds,
-    WindowKind, WindowOptions,
+    InteractiveElement, IntoElement, KeyBinding, Menu, MenuItem, ParentElement, Pixels, Render,
+    RenderOnce, SharedString, Size, StatefulInteractiveElement, StyleRefinement, Styled, Window,
+    WindowBounds, WindowKind, WindowOptions,
 };
 
 pub use accordion_story::AccordionStory;
@@ -166,7 +166,19 @@ where
     E: Into<AnyView>,
     F: FnOnce(&mut Window, &mut App) -> E + Send + 'static,
 {
-    let mut window_size = size(px(1600.0), px(1200.0));
+    create_new_window_with_size(title, None, crate_view_fn, cx);
+}
+
+pub fn create_new_window_with_size<F, E>(
+    title: &str,
+    window_size: Option<Size<Pixels>>,
+    crate_view_fn: F,
+    cx: &mut App,
+) where
+    E: Into<AnyView>,
+    F: FnOnce(&mut Window, &mut App) -> E + Send + 'static,
+{
+    let mut window_size = window_size.unwrap_or(size(px(1600.0), px(1200.0)));
     if let Some(display) = cx.primary_display() {
         let display_size = display.bounds().size;
         window_size.width = window_size.width.min(display_size.width * 0.85);

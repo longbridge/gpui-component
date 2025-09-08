@@ -331,8 +331,9 @@ fn main() {
         init(cx);
         cx.activate(true);
 
-        story::create_new_window(
+        story::create_new_window_with_size(
             "Code Editor",
+            Some(size(px(1024.), px(768.))),
             |window, cx| cx.new(|cx| Example::new(name, window, cx)),
             cx,
         );

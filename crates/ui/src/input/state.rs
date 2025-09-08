@@ -775,6 +775,7 @@ impl InputState {
 
         self.move_to(Cursor::new(offset), window, cx);
         self.update_preferred_column();
+        self.focus(window, cx);
     }
 
     /// Focus the input field.
