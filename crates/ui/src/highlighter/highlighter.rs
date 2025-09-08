@@ -579,7 +579,6 @@ impl SyntaxHighlighter {
         });
         filter.next();
 
-        let mut last_range = start_offset..start_offset;
         // let mut iter_count = 0;
         while let Some(item) = filter.item() {
             // iter_count += 1;
@@ -592,14 +591,7 @@ impl SyntaxHighlighter {
                 node_range.end = node_range.start;
             }
 
-            // Ensure every range is connected.
-            if last_range.end < node_range.start {
-                styles.push((last_range.end..node_range.start, HighlightStyle::default()));
-            }
-
-            last_range = node_range.clone();
             styles.push((node_range, theme.style(name.as_ref()).unwrap_or_default()));
-
             filter.next();
         }
         // dbg!(iter_count);
@@ -609,12 +601,7 @@ impl SyntaxHighlighter {
             return vec![(start_offset..range.end, HighlightStyle::default())];
         }
 
-        // Ensure the last range is connected to the end of the line.
-        if last_range.end < range.end {
-            styles.push((last_range.end..range.end, HighlightStyle::default()));
-        }
-
-        let styles = unique_styles(styles);
+        let styles = unique_styles(&range, styles);
 
         // NOTE: DO NOT remove this comment, it is used for debugging.
         // for style in &styles {
@@ -641,44 +628,58 @@ impl SyntaxHighlighter {
 ///
 /// AABCCDDCEEEE
 pub(crate) fn unique_styles(
+    total_range: &Range<usize>,
     styles: Vec<(Range<usize>, HighlightStyle)>,
 ) -> Vec<(Range<usize>, HighlightStyle)> {
     if styles.is_empty() {
         return styles;
     }
 
-    // Collect all boundary points and track which are "significant" (range endpoints)
-    let mut boundaries = BTreeSet::new();
-    let mut significant_boundaries = BTreeSet::new();
+    let mut intervals = BTreeSet::new();
+    let mut significant_intervals = BTreeSet::new();
 
+    // For example
+    //
+    // from: [(6..11), (6..11), (11..17), (17..25), (16..19), (25..59))]
+    // to:   [6, 11, 16, 17, 19, 25, 59]
+    intervals.insert(total_range.start);
+    intervals.insert(total_range.end);
     for (range, _) in &styles {
-        boundaries.insert(range.start);
-        boundaries.insert(range.end);
-        significant_boundaries.insert(range.end); // End points are significant for merging decisions
+        intervals.insert(range.start);
+        intervals.insert(range.end);
+        significant_intervals.insert(range.end); // End points are significant for merging decisions
     }
 
-    let boundaries: Vec<usize> = boundaries.into_iter().collect();
-    let mut result = Vec::with_capacity(boundaries.len().saturating_sub(1));
+    let intervals: Vec<usize> = intervals.into_iter().collect();
+    let mut result = Vec::with_capacity(intervals.len().saturating_sub(1));
 
     // For each interval between boundaries, find the top-most style
-    for i in 0..boundaries.len().saturating_sub(1) {
-        let interval_start = boundaries[i];
-        let interval_end = boundaries[i + 1];
-
-        if interval_start >= interval_end {
+    //
+    // Result e.g.:
+    //
+    // [(6..11, red), (11..16, green), (16..17, blue), (17..19, red), (19..25, clean), (25..59, blue)]
+    for i in 0..intervals.len().saturating_sub(1) {
+        let interval = intervals[i]..intervals[i + 1];
+        if interval.start >= interval.end {
             continue;
         }
 
         // Find the last (top-most) style that covers this interval
-        let mut top_style: Option<&HighlightStyle> = None;
+        let mut top_style: Option<HighlightStyle> = None;
         for (range, style) in &styles {
-            if range.start <= interval_start && interval_end <= range.end {
-                top_style = Some(style);
+            if range.start <= interval.start && interval.end <= range.end {
+                if let Some(top_style) = &mut top_style {
+                    merge_highlight_style(top_style, style);
+                } else {
+                    top_style = Some(style.clone());
+                }
             }
         }
 
         if let Some(style) = top_style {
-            result.push((interval_start..interval_end, *style));
+            result.push((interval, style));
+        } else {
+            result.push((interval, HighlightStyle::default()));
         }
     }
 
@@ -688,7 +689,7 @@ pub(crate) fn unique_styles(
         if let Some((last_range, last_style)) = merged.last_mut() {
             if last_range.end == range.start
                 && *last_style == style
-                && !significant_boundaries.contains(&range.start)
+                && !significant_intervals.contains(&range.start)
             {
                 // Merge adjacent ranges with same style, but not across significant boundaries
                 last_range.end = range.end;
@@ -699,6 +700,31 @@ pub(crate) fn unique_styles(
     }
 
     merged
+}
+
+/// Merge other style (Other on top)
+fn merge_highlight_style(style: &mut HighlightStyle, other: &HighlightStyle) {
+    if let Some(color) = other.color {
+        style.color = Some(color);
+    }
+    if let Some(font_weight) = other.font_weight {
+        style.font_weight = Some(font_weight);
+    }
+    if let Some(font_style) = other.font_style {
+        style.font_style = Some(font_style);
+    }
+    if let Some(background_color) = other.background_color {
+        style.background_color = Some(background_color);
+    }
+    if let Some(underline) = other.underline {
+        style.underline = Some(underline);
+    }
+    if let Some(strikethrough) = other.strikethrough {
+        style.strikethrough = Some(strikethrough);
+    }
+    if let Some(fade_out) = other.fade_out {
+        style.fade_out = Some(fade_out);
+    }
 }
 
 #[cfg(test)]
@@ -716,6 +742,7 @@ mod tests {
 
     #[track_caller]
     fn assert_unique_styles(
+        range: Range<usize>,
         left: Vec<(Range<usize>, HighlightStyle)>,
         right: Vec<(Range<usize>, HighlightStyle)>,
     ) {
@@ -736,7 +763,7 @@ mod tests {
             }
         }
 
-        let left = unique_styles(left);
+        let left = unique_styles(&range, left);
         if left.len() != right.len() {
             println!("\n---------------------------------------------");
             for (range, style) in left.iter() {
@@ -766,15 +793,17 @@ mod tests {
         let clean = HighlightStyle::default();
 
         assert_unique_styles(
+            0..65,
             vec![
-                (0..10, clean),
-                (0..10, clean),
+                (2..10, clean),
+                (2..10, clean),
                 (5..11, red),
-                (0..6, clean),
+                (2..6, clean),
                 (10..15, green),
                 (15..30, clean),
                 (29..35, blue),
                 (35..40, green),
+                (45..60, blue),
             ],
             vec![
                 (0..6, clean),
@@ -785,6 +814,9 @@ mod tests {
                 (29..30, blue),
                 (30..35, blue),
                 (35..40, green),
+                (40..45, clean),
+                (45..60, blue),
+                (60..65, clean),
             ],
         );
     }
