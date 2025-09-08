@@ -393,7 +393,7 @@ impl TextElement {
                 let mut skipped_offset = 0;
                 let mut styles = vec![];
 
-                for (ix, line) in state.text.lines().into_iter().enumerate() {
+                for (ix, line) in state.text.lines().enumerate() {
                     // +1 for `\n`
                     let line_len = line.len() + 1;
                     if ix < visible_range.start {
