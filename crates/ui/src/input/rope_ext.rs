@@ -1,5 +1,6 @@
 use rope::{Point, Rope};
 
+/// An extension trait for `Rope` to provide additional utility methods.
 pub trait RopeExt {
     /// Get the line at the given row index, including the `\r` at the end, but not `\n`.
     ///
