@@ -597,12 +597,11 @@ impl SyntaxHighlighter {
                 styles.push((last_range.end..node_range.start, HighlightStyle::default()));
             }
 
-            let start = node_range.start.max(last_range.end);
+            last_range = node_range.clone();
             styles.push((
-                start..node_range.end,
+                node_range.clone(),
                 theme.style(name.as_ref()).unwrap_or_default(),
             ));
-            last_range = node_range;
 
             filter.next();
         }
