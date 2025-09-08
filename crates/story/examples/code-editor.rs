@@ -333,7 +333,7 @@ fn main() {
 
         story::create_new_window_with_size(
             "Code Editor",
-            Some(size(px(1024.), px(768.))),
+            Some(size(px(1200.), px(960.))),
             |window, cx| cx.new(|cx| Example::new(name, window, cx)),
             cx,
         );
