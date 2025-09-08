@@ -24,7 +24,6 @@ pub struct TextareaStory {
     textarea: Entity<InputState>,
     textarea_auto_grow: Entity<InputState>,
     textarea_no_wrap: Entity<InputState>,
-    large_textarea: Entity<InputState>,
 }
 
 impl super::Story for TextareaStory {
@@ -94,21 +93,10 @@ impl TextareaStory {
                 .default_value("This is a very long line of text to test if the horizontal scrolling function is working properly, and it should not wrap automatically but display a horizontal scrollbar.\nThe second line is also very long text, used to test the horizontal scrolling effect under multiple lines, and you can input more content to test.\nThe third line: Here you can input other long text content that requires horizontal scrolling.\n")
         });
 
-        let large_textarea = cx.new(|cx| {
-            let text = (0..10000)
-                .map(|i| format!("This is a very long line ({}) of text number, to test the performance of large textareas and there have 中文 and 🥹🎊😆 chars.\n", i))
-                .collect::<String>();
-            InputState::new(window, cx)
-                .multi_line()
-                .placeholder("Enter text here...")
-                .default_value(text)
-        });
-
         Self {
             textarea,
             textarea_auto_grow,
             textarea_no_wrap,
-            large_textarea,
         }
     }
 
@@ -204,10 +192,6 @@ impl Render for TextareaStory {
                 section("No Wrap")
                     .max_w_md()
                     .child(TextInput::new(&self.textarea_no_wrap).h(px(200.))),
-            )
-            .child(
-                section("Large Textarea (10K lines)")
-                    .child(TextInput::new(&self.large_textarea).h(px(400.))),
             )
     }
 }
