@@ -215,12 +215,14 @@ pub fn init(cx: &mut App) {
 
 #[derive(Clone)]
 pub(super) struct LastLayout {
-    /// The last layout lines.
+    /// The visible range (no wrap) of lines in the viewport.
+    pub(super) visible_range: Range<usize>,
+    /// The visible range offset y.
+    pub(super) offset_y: Pixels,
+    /// The last layout lines (Only have visible lines).
     pub(super) lines: Rc<SmallVec<[WrappedLine; 1]>>,
     /// The line_height of text layout, this will change will InputElement painted.
     pub(super) line_height: Pixels,
-    /// The visible range (no wrap) of lines in the viewport.
-    pub(super) visible_range: Range<usize>,
     /// The wrap width of text layout, this will change will InputElement painted.
     pub(super) wrap_width: Option<Pixels>,
     /// The line number area width of text layout, if not line number, this will be 0px.
@@ -537,7 +539,7 @@ impl InputState {
         let line_height = last_layout.line_height;
 
         let mut prev_lines_offset = 0;
-        let mut y_offset = px(0.);
+        let mut y_offset = last_layout.offset_y;
         for (line_index, line) in last_layout.lines.iter().enumerate() {
             let local_offset = offset.saturating_sub(prev_lines_offset);
             if let Some(pos) = line.position_for_index(local_offset, line_height) {
@@ -1726,9 +1728,8 @@ impl InputState {
         // - included the scroll offset.
         let inner_position = position - bounds.origin - point(line_number_width, px(0.));
 
-        let mut index = 0;
-        let mut y_offset = px(0.);
-
+        let mut index = self.text.line_start_offset(last_layout.visible_range.start);
+        let mut y_offset = last_layout.offset_y;
         for (_, line) in last_layout.lines.iter().enumerate() {
             let line_origin = self.line_origin_with_y_offset(&mut y_offset, &line, line_height);
             let pos = inner_position - line_origin;

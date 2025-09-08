@@ -22,7 +22,7 @@ pub(super) struct LineWrap {
 /// After use lines to calculate the scroll size of the TextArea
 pub(super) struct TextWrapper {
     pub(super) text: Rope,
-    /// The wrapped lines, value is start and end index of the line.
+    /// The wrapped lines (Inlucde the first line), value is start and end index of the line.
     pub(super) wrapped_lines: Vec<Range<usize>>,
     /// The lines by split \n
     pub(super) lines: Vec<LineWrap>,
@@ -43,6 +43,11 @@ impl TextWrapper {
             wrapped_lines: Vec::new(),
             lines: Vec::new(),
         }
+    }
+
+    /// Get the total number of lines including wrapped lines.
+    pub(super) fn len(&self) -> usize {
+        self.wrapped_lines.len()
     }
 
     pub(super) fn set_wrap_width(&mut self, wrap_width: Option<Pixels>, cx: &mut App) {
