@@ -90,8 +90,17 @@ const LANGUAGES: [(Lang, &'static str); 10] = [
 ];
 
 impl Example {
-    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let default_language = LANGUAGES[5].clone();
+    pub fn new(default: Option<String>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let default_language = if let Some(name) = default {
+            LANGUAGES
+                .iter()
+                .find(|s| s.0.name() == name)
+                .cloned()
+                .unwrap_or(LANGUAGES[0].clone())
+        } else {
+            LANGUAGES[0].clone()
+        };
+
         let editor = cx.new(|cx| {
             InputState::new(window, cx)
                 .code_editor(default_language.0.name().to_string())
@@ -145,10 +154,6 @@ impl Example {
             soft_wrap: false,
             _subscribes,
         }
-    }
-
-    fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
-        cx.new(|cx| Self::new(window, cx))
     }
 
     fn set_markers(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -310,11 +315,18 @@ impl Render for Example {
 fn main() {
     let app = Application::new().with_assets(Assets);
 
+    // Parse `cargo run -- <story_name>`
+    let name = std::env::args().nth(1);
+
     app.run(move |cx| {
         story::init(cx);
         init(cx);
         cx.activate(true);
 
-        story::create_new_window("Code Editor", Example::view, cx);
+        story::create_new_window(
+            "Code Editor",
+            |window, cx| cx.new(|cx| Example::new(name, window, cx)),
+            cx,
+        );
     });
 }
