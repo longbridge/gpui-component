@@ -81,7 +81,7 @@ Check out [CONTRIBUTING.md](CONTRIBUTING.md) for more details.
 | Chart                 | Yes                            | No          | No                    | Yes                            |
 | Table (Large dataset) | Yes<br>(Virtual Rows, Columns) | No          | Yes<br>(Virtual Rows) | Yes<br>(Virtual Rows, Columns) |
 | Table Column Resize   | Yes                            | No          | Yes                   | Yes                            |
-| Text base             | Rope                           | String [^3] | trait TextBuffer [^4] | QString                        |
+| Text base             | Rope                           | String [^3] | trait TextBuffer [^4] | [QTextDocument]                |
 | CodeEditor            | Simple                         | Simple      | Simple                | Basic API                      |
 | Dock Layout           | Yes                            | Yes         | Yes                   | Yes                            |
 | Syntax Highlight      | [Tree Sitter]                  | [Syntect]   | [Syntect]             | [QSyntaxHighlighter]           |
@@ -100,6 +100,7 @@ Check out [CONTRIBUTING.md](CONTRIBUTING.md) for more details.
 [Tree Sitter]: https://tree-sitter.github.io/tree-sitter/
 [Syntect]: https://github.com/trishume/syntect
 [QSyntaxHighlighter]: https://doc.qt.io/qt-6/qsyntaxhighlighter.html
+[QTextDocument]: https://doc.qt.io/qt-6/qtextdocument.html
 
 [^1]: Release builds by use simple hello world example.
 
