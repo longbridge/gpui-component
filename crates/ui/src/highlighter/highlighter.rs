@@ -442,11 +442,13 @@ impl SyntaxHighlighter {
             return cache;
         };
 
-        // FIXME: Avoid to_string.
-        let content = self.text.slice(node.byte_range()).to_string();
+        let content = self.text.slice(node.byte_range());
         if content.len() == 0 {
             return cache;
         };
+        // FIXME: Avoid to_string.
+        let content = content.to_string();
+
         let Some(config) = LanguageRegistry::global(cx).language(injection_language) else {
             return cache;
         };
