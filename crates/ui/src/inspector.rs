@@ -481,6 +481,7 @@ fn render_inspector(
 
     v_flex()
         .id("inspector")
+        .font_family(".SystemUIFont")
         .size_full()
         .bg(cx.theme().background)
         .border_l_1()
@@ -508,7 +509,6 @@ fn render_inspector(
                                 .selected(inspector.is_picking())
                                 .small()
                                 .ghost()
-                                .cursor_pointer()
                                 .on_click(cx.listener(|this, _, window, _| {
                                     this.start_picking();
                                     window.refresh();
@@ -521,7 +521,6 @@ fn render_inspector(
                         .icon(IconName::Close)
                         .small()
                         .ghost()
-                        .cursor_pointer()
                         .on_click(|_, window, cx| {
                             window.dispatch_action(Box::new(ToggleInspector), cx);
                         }),
@@ -531,17 +530,19 @@ fn render_inspector(
             v_flex()
                 .flex_1()
                 .p_3()
-                .gap_3()
+                .gap_y_3()
                 .text_sm()
                 .when_some(source_location, |this, source_location| {
                     this.child(
                         h_flex()
-                            .gap_1()
+                            .gap_x_2()
                             .text_sm()
                             .child(
                                 Link::new("source-location")
                                     .href(format!("file://{}", source_location))
-                                    .child(source_location.clone()),
+                                    .child(source_location.clone())
+                                    .flex_1()
+                                    .overflow_x_hidden(),
                             )
                             .child(Clipboard::new("copy-source-location").value(source_location)),
                     )
