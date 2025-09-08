@@ -49,7 +49,7 @@ impl Lang {
     }
 }
 
-const LANGUAGES: [(Lang, &'static str); 11] = [
+const LANGUAGES: [(Lang, &'static str); 12] = [
     (
         Lang::BuiltIn(Language::Rust),
         include_str!("./fixtures/test.rs"),
@@ -57,6 +57,10 @@ const LANGUAGES: [(Lang, &'static str); 11] = [
     (
         Lang::BuiltIn(Language::Markdown),
         include_str!("./fixtures/test.md"),
+    ),
+    (
+        Lang::BuiltIn(Language::Html),
+        include_str!("./fixtures/test.html"),
     ),
     (
         Lang::BuiltIn(Language::JavaScript),
