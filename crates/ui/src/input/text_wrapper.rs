@@ -97,7 +97,8 @@ impl TextWrapper {
                 wrapped_lines.push(prev_line_ix + prev_boundary_ix..prev_line_ix + line.len());
             }
 
-            prev_line_ix += line.len();
+            // +1 for \n
+            prev_line_ix += line.len() + 1;
         }
 
         self.text = text.clone();

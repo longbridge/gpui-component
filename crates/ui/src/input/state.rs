@@ -34,7 +34,7 @@ use super::{
 };
 use crate::input::hover_popover::DiagnosticPopover;
 use crate::input::marker::Marker;
-use crate::input::{Cursor, LineColumn, Selection};
+use crate::input::{Cursor, LineColumn, RopeExt as _, Selection};
 use crate::{history::History, scroll::ScrollbarState, Root};
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
@@ -566,15 +566,12 @@ impl InputState {
         let offset = self.cursor().offset;
         let was_preferred_column = self.preferred_column;
 
-        let line_ix = self.text.offset_to_point(offset).row;
-        let new_line_ix = line_ix.saturating_add_signed(move_lines as i32);
-        let line = self.text.slice_rows(new_line_ix..new_line_ix + 1);
-        let line_start_offset = self.text.point_to_offset(rope::Point::new(new_line_ix, 0));
+        let row = self.text.offset_to_point(offset).row;
+        let new_row = row.saturating_add_signed(move_lines as i32);
+        let line = self.text.line(new_row as usize);
+        let line_start_offset = self.text.point_to_offset(rope::Point::new(new_row, 0));
 
-        let new_column = self
-            .preferred_column
-            .unwrap_or_default()
-            .min(line.len().saturating_sub(1));
+        let new_column = self.preferred_column.unwrap_or_default().min(line.len());
         let new_offset = line_start_offset + new_column;
 
         self.pause_blink_cursor(cx);
@@ -1094,7 +1091,7 @@ impl InputState {
                 .start
                 .min(self.selected_range.end.offset),
         );
-        if self.text.chars().nth(offset) == Some('\r') {
+        if self.text.char_at(offset) == Some('\r') {
             offset += 1;
         }
 

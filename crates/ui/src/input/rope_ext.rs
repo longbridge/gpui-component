@@ -1,7 +1,7 @@
 use rope::{Point, Rope};
 
 pub trait RopeExt {
-    /// Get the line at the given row index, including the `\n`, `\r` at the end.
+    /// Get the line at the given row index, including the `\r` at the end, but not `\n`.
     ///
     /// Return empty rope if the row is out of bounds.
     fn line(&self, row: usize) -> Rope;
@@ -11,18 +11,28 @@ pub trait RopeExt {
 
     /// Return the lines iterator.
     ///
-    /// Each line is including the `\n`, `\r` at the end.
+    /// Each line is including the `\n` at the end, but not `\n`.
     fn lines(&self) -> impl Iterator<Item = Rope>;
 
     /// Check is equal to another rope.
     fn eq(&self, other: &Rope) -> bool;
+
+    /// Total number of characters in the rope.
+    fn chars_count(&self) -> usize;
+
+    /// Get char at the given offset (byte).
+    ///
+    /// If the offset is in the middle of a multi-byte character will panic.
+    ///
+    /// If the offset is out of bounds, return None.
+    fn char_at(&self, offset: usize) -> Option<char>;
 }
 
 impl RopeExt for Rope {
     fn line(&self, row: usize) -> Rope {
         let row = row as u32;
         let start = self.point_to_offset(Point::new(row, 0));
-        let end = start + self.line_len(row) as usize + 1;
+        let end = start + self.line_len(row) as usize;
         self.slice(start..end)
     }
 
@@ -37,6 +47,18 @@ impl RopeExt for Rope {
     fn eq(&self, other: &Rope) -> bool {
         self.summary() == other.summary()
     }
+
+    fn chars_count(&self) -> usize {
+        self.chars().count()
+    }
+
+    fn char_at(&self, offset: usize) -> Option<char> {
+        if offset > self.len() {
+            return None;
+        }
+
+        self.slice(offset..self.len()).chars().next()
+    }
 }
 
 #[cfg(test)]
@@ -48,9 +70,9 @@ mod tests {
     #[test]
     fn test_line() {
         let rope = Rope::from("Hello\nWorld\r\nThis is a test 中文\nRope");
-        assert_eq!(rope.line(0).to_string(), "Hello\n");
-        assert_eq!(rope.line(1).to_string(), "World\r\n");
-        assert_eq!(rope.line(2).to_string(), "This is a test 中文\n");
+        assert_eq!(rope.line(0).to_string(), "Hello");
+        assert_eq!(rope.line(1).to_string(), "World\r");
+        assert_eq!(rope.line(2).to_string(), "This is a test 中文");
         assert_eq!(rope.line(3).to_string(), "Rope");
         assert_eq!(rope.line(4).to_string(), "");
     }
@@ -81,7 +103,29 @@ mod tests {
         let lines: Vec<_> = rope.lines().into_iter().map(|r| r.to_string()).collect();
         assert_eq!(
             lines,
-            vec!["Hello\n", "World\r\n", "This is a test 中文\n", "Rope"]
+            vec!["Hello", "World\r", "This is a test 中文", "Rope"]
         );
+    }
+
+    #[test]
+    fn test_chars_count() {
+        let rope = Rope::from("Hello\nWorld\r\nThis is a test 中文🎉\nRope");
+        assert_eq!(rope.chars_count(), 36);
+        let rope = Rope::from("");
+        assert_eq!(rope.chars_count(), 0);
+        let rope = Rope::from("Single line");
+        assert_eq!(rope.chars_count(), 11);
+    }
+
+    #[test]
+    fn test_char_at() {
+        let rope = Rope::from("Hello\nWorld\r\nThis is a test 中文🎉\nRope");
+        assert_eq!(rope.char_at(0), Some('H'));
+        assert_eq!(rope.char_at(5), Some('\n'));
+        assert_eq!(rope.char_at(13), Some('T'));
+        assert_eq!(rope.char_at(28), Some('中'));
+        assert_eq!(rope.char_at(34), Some('🎉'));
+        assert_eq!(rope.char_at(38), Some('\n'));
+        assert_eq!(rope.char_at(50), None);
     }
 }

@@ -395,7 +395,7 @@ impl TextElement {
 
                 for (ix, line) in state.text.lines().into_iter().enumerate() {
                     // +1 for `\n`
-                    let line_len = line.len();
+                    let line_len = line.len() + 1;
                     if ix < visible_range.start {
                         offset += line_len;
                         skipped_offset = offset;
@@ -558,10 +558,7 @@ impl Element for TextElement {
         let (display_text, text_color) = if is_empty {
             (placeholder, cx.theme().muted_foreground)
         } else if state.masked {
-            (
-                "*".repeat(text.chars().count()).into(),
-                cx.theme().foreground,
-            )
+            ("*".repeat(text.chars_count()).into(), cx.theme().foreground)
         } else {
             (text.to_string().into(), cx.theme().foreground)
         };
