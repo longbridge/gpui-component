@@ -21,7 +21,7 @@ pub trait RopeExt {
     /// Return the lines iterator.
     ///
     /// Each line is including the `\n` at the end, but not `\n`.
-    fn lines(&self) -> impl Iterator<Item = Rope>;
+    fn lines(&self) -> RopeLines;
 
     /// Check is equal to another rope.
     fn eq(&self, other: &Rope) -> bool;
@@ -36,6 +36,55 @@ pub trait RopeExt {
     /// If the offset is out of bounds, return None.
     fn char_at(&self, offset: usize) -> Option<char>;
 }
+
+/// An iterator over the lines of a `Rope`.
+pub struct RopeLines {
+    row: usize,
+    end_row: usize,
+    rope: Rope,
+}
+
+impl RopeLines {
+    /// Create a new `RopeLines` iterator.
+    pub fn new(rope: Rope) -> Self {
+        let end_row = rope.lines_len();
+        Self {
+            row: 0,
+            end_row,
+            rope,
+        }
+    }
+}
+
+impl Iterator for RopeLines {
+    type Item = Rope;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.row >= self.end_row {
+            return None;
+        }
+
+        let line = self.rope.line(self.row);
+        self.row += 1;
+        Some(line)
+    }
+
+    #[inline]
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        self.row = self.row.saturating_add(n);
+        self.next()
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let len = self.end_row - self.row;
+        (len, Some(len))
+    }
+}
+
+impl std::iter::ExactSizeIterator for RopeLines {}
+impl std::iter::FusedIterator for RopeLines {}
 
 impl RopeExt for Rope {
     fn line(&self, row: usize) -> Rope {
@@ -62,8 +111,8 @@ impl RopeExt for Rope {
         self.max_point().row as usize + 1
     }
 
-    fn lines(&self) -> impl Iterator<Item = Rope> {
-        (0..self.lines_len()).map(move |row| self.line(row))
+    fn lines(&self) -> RopeLines {
+        RopeLines::new(self.clone())
     }
 
     fn eq(&self, other: &Rope) -> bool {
