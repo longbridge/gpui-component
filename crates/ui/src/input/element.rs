@@ -59,18 +59,20 @@ impl TextElement {
     /// - cursor bounds
     /// - scroll offset
     /// - current line index
-    #[allow(clippy::too_many_arguments)]
     fn layout_cursor(
         &self,
-        visible_range: &Range<usize>,
-        visible_top: Pixels,
-        lines: &[WrappedLine],
-        line_height: Pixels,
+        last_layout: &LastLayout,
         bounds: &mut Bounds<Pixels>,
-        line_number_width: Pixels,
         window: &mut Window,
         cx: &mut App,
     ) -> (Option<Bounds<Pixels>>, Point<Pixels>, Option<usize>) {
+        let line_height = last_layout.line_height;
+        let visible_range = &last_layout.visible_range;
+        let visible_top = last_layout.visible_top;
+        let visible_start_offset = last_layout.visible_start_offset;
+        let lines = &last_layout.lines;
+        let line_number_width = last_layout.line_number_width;
+
         let state = self.state.read(cx);
         let mut selected_range = state.selected_range;
         if let Some(marked_range) = &state.marked_range {
@@ -93,7 +95,7 @@ impl TextElement {
         let mut cursor_start = None;
         let mut cursor_end = None;
 
-        let mut prev_lines_offset = state.text.line_start_offset(visible_range.start);
+        let mut prev_lines_offset = visible_start_offset;
         let mut offset_y = visible_top;
         for (line_ix, line) in lines.iter().enumerate() {
             let line_ix = visible_range.start + line_ix;
@@ -199,18 +201,19 @@ impl TextElement {
         (cursor_bounds, scroll_offset, current_line_index)
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn layout_selections(
         &self,
-        visible_range: &Range<usize>,
-        visible_top: Pixels,
-        lines: &[WrappedLine],
-        line_height: Pixels,
+        last_layout: &LastLayout,
         bounds: &mut Bounds<Pixels>,
-        line_number_width: Pixels,
         _: &mut Window,
         cx: &mut App,
     ) -> Option<Path<Pixels>> {
+        let line_height = last_layout.line_height;
+        let visible_top = last_layout.visible_top;
+        let visible_start_offset = last_layout.visible_start_offset;
+        let lines = &last_layout.lines;
+        let line_number_width = last_layout.line_number_width;
+
         let state = self.state.read(cx);
         let mut selected_range = state.selected_range;
         if let Some(marked_range) = &state.marked_range {
@@ -228,7 +231,7 @@ impl TextElement {
             (selected_range.end, selected_range.start)
         };
 
-        let mut prev_lines_offset = state.text.line_start_offset(visible_range.start);
+        let mut prev_lines_offset = visible_start_offset;
         let mut offset_y = visible_top;
         let mut line_corners = vec![];
 
@@ -384,6 +387,7 @@ impl TextElement {
         &mut self,
         visible_range: &Range<usize>,
         _visible_top: Pixels,
+        visible_start_offset: usize,
         cx: &mut App,
     ) -> Option<Vec<(Range<usize>, HighlightStyle)>> {
         let theme = cx.theme().highlight_theme.clone();
@@ -403,7 +407,7 @@ impl TextElement {
                     return None;
                 };
 
-                let mut offset = state.text.line_start_offset(visible_range.start);
+                let mut offset = visible_start_offset;
                 let mut styles = vec![];
 
                 for line in state
@@ -554,8 +558,10 @@ impl Element for TextElement {
 
         let (visible_range, visible_top) =
             self.calculate_visible_range(&state, line_height, bounds.size.height);
+        let visible_start_offset = state.text.line_start_offset(visible_range.start);
 
-        let highlight_styles = self.highlight_lines(&visible_range, visible_top, cx);
+        let highlight_styles =
+            self.highlight_lines(&visible_range, visible_top, visible_start_offset, cx);
 
         let state = self.state.read(cx);
         let multi_line = state.mode.is_multi_line();
@@ -702,6 +708,16 @@ impl Element for TextElement {
             (total_wrapped_lines as f32 * line_height).max(bounds.size.height),
         );
 
+        let last_layout = LastLayout {
+            visible_range,
+            visible_top,
+            visible_start_offset,
+            line_height,
+            lines: Rc::new(lines),
+            wrap_width,
+            line_number_width,
+        };
+
         // `position_for_index` for example
         //
         // #### text
@@ -733,27 +749,10 @@ impl Element for TextElement {
 
         // Calculate the scroll offset to keep the cursor in view
 
-        let (cursor_bounds, cursor_scroll_offset, current_line_index) = self.layout_cursor(
-            &visible_range,
-            visible_top,
-            &lines,
-            line_height,
-            &mut bounds,
-            line_number_width,
-            window,
-            cx,
-        );
+        let (cursor_bounds, cursor_scroll_offset, current_line_index) =
+            self.layout_cursor(&last_layout, &mut bounds, window, cx);
 
-        let selection_path = self.layout_selections(
-            &visible_range,
-            visible_top,
-            &lines,
-            line_height,
-            &mut bounds,
-            line_number_width,
-            window,
-            cx,
-        );
+        let selection_path = self.layout_selections(&last_layout, &mut bounds, window, cx);
 
         let state = self.state.read(cx);
         let line_numbers = if state.mode.line_number() {
@@ -777,8 +776,8 @@ impl Element for TextElement {
             }];
 
             // build line numbers
-            for (ix, line) in lines.iter().enumerate() {
-                let ix = visible_range.start + ix;
+            for (ix, line) in last_layout.lines.iter().enumerate() {
+                let ix = last_layout.visible_range.start + ix;
                 let line_no = ix + 1;
 
                 let mut line_no_text = format!("{:>4}", line_no);
@@ -805,14 +804,7 @@ impl Element for TextElement {
 
         PrepaintState {
             bounds,
-            last_layout: LastLayout {
-                visible_range,
-                visible_top,
-                lines: Rc::new(lines),
-                line_height,
-                line_number_width,
-                wrap_width,
-            },
+            last_layout,
             scroll_size,
             line_numbers,
             cursor_bounds,
