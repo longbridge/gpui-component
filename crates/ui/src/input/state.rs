@@ -386,8 +386,6 @@ impl InputState {
     ///
     /// Code Editor aim for help used to simple code editing or display, not a full-featured code editor.
     ///
-    /// By testing, the CodeEditor mode of GPUI Component can supports over 10K lines editing in smooth.
-    ///
     /// ## Features
     ///
     /// - Syntax Highlighting
