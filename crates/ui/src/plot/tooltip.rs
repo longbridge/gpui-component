@@ -145,16 +145,19 @@ impl Dot {
 
 impl RenderOnce for Dot {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        let border_width = px(1.);
+        let offset = self.size / 2. - border_width / 2.;
+
         div()
             .absolute()
             .w(self.size)
             .h(self.size)
             .rounded_full()
-            .border_1()
+            .border(border_width)
             .border_color(self.stroke)
             .bg(self.fill)
-            .left(self.point.x - self.size / 2.)
-            .top(self.point.y - self.size / 2.)
+            .left(self.point.x - offset)
+            .top(self.point.y - offset)
     }
 }
 
@@ -264,21 +267,25 @@ impl RenderOnce for Tooltip {
             .left_0()
             .when_some(self.cross_line, |this, cross_line| this.child(cross_line))
             .when_some(self.dots, |this, dots| this.children(dots))
-            .child(self.base.when(self.appearance, |this| {
-                this.absolute()
-                    .min_w(px(168.))
-                    .p_2()
-                    .border_1()
-                    .border_color(cx.theme().border)
-                    .rounded_sm()
-                    .bg(cx.theme().background.opacity(0.9))
-                    .when_some(self.position, |this, position| {
-                        if position == TooltipPosition::Left {
-                            this.left(self.gap)
-                        } else {
-                            this.right(self.gap)
-                        }
-                    })
+            .child(self.base.map(|this| {
+                if self.appearance {
+                    this.absolute()
+                        .min_w(px(168.))
+                        .p_2()
+                        .border_1()
+                        .border_color(cx.theme().border)
+                        .rounded_sm()
+                        .bg(cx.theme().background.opacity(0.9))
+                        .when_some(self.position, |this, position| {
+                            if position == TooltipPosition::Left {
+                                this.left(self.gap)
+                            } else {
+                                this.right(self.gap)
+                            }
+                        })
+                } else {
+                    this.size_full().relative()
+                }
             }))
     }
 }
