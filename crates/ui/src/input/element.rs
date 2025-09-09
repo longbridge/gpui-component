@@ -425,24 +425,22 @@ impl TextElement {
                     offset = range.end;
                 }
 
-                let mut marker_styles = vec![];
-                for marker in markers.iter() {
-                    if let Some(range) = &marker.range {
-                        if range.start < offset {
-                            continue;
-                        }
+                // Combine marker styles
+                if !markers.is_empty() {
+                    let mut marker_styles = vec![];
+                    for marker in markers.iter() {
+                        if let Some(range) = &marker.range {
+                            if range.start < visible_start_offset {
+                                continue;
+                            }
 
-                        let node_range = range.start..range.end;
-                        if node_range.start >= visible_range.start
-                            || node_range.end <= visible_range.end
-                        {
                             marker_styles
-                                .push((node_range, marker.severity.highlight_style(&theme, cx)));
+                                .push((range.clone(), marker.severity.highlight_style(&theme, cx)));
                         }
                     }
-                }
 
-                styles = gpui::combine_highlights(marker_styles, styles).collect();
+                    styles = gpui::combine_highlights(marker_styles, styles).collect();
+                }
 
                 Some(styles)
             }
