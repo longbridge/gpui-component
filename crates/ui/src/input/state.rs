@@ -393,7 +393,7 @@ impl InputState {
     /// - Syntax Highlighting
     /// - Auto Indent
     /// - Line Number
-    /// - Large Text support, event under 50K lines.
+    /// - Large Text support, up to 50K lines.
     pub fn code_editor(mut self, language: impl Into<SharedString>) -> Self {
         let language: SharedString = language.into();
         self.mode = InputMode::CodeEditor {
