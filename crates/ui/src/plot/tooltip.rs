@@ -14,11 +14,13 @@ pub enum CrossLineAxis {
 }
 
 impl CrossLineAxis {
+    /// Returns true if the cross line axis is vertical or both.
     #[inline]
     pub fn show_vertical(&self) -> bool {
         matches!(self, CrossLineAxis::Vertical | CrossLineAxis::Both)
     }
 
+    /// Returns true if the cross line axis is horizontal or both.
     #[inline]
     pub fn show_horizontal(&self) -> bool {
         matches!(self, CrossLineAxis::Horizontal | CrossLineAxis::Both)
@@ -41,16 +43,19 @@ impl CrossLine {
         }
     }
 
+    /// Set the cross line axis to horizontal.
     pub fn horizontal(mut self) -> Self {
         self.direction = CrossLineAxis::Horizontal;
         self
     }
 
+    /// Set the cross line axis to both.
     pub fn both(mut self) -> Self {
         self.direction = CrossLineAxis::Both;
         self
     }
 
+    /// Set the height of the cross line.
     pub fn height(mut self, height: f32) -> Self {
         self.height = Some(height);
         self
@@ -119,16 +124,19 @@ impl Dot {
         }
     }
 
+    /// Set the size of the dot.
     pub fn size(mut self, size: impl Into<Pixels>) -> Self {
         self.size = size.into();
         self
     }
 
+    /// Set the stroke of the dot.
     pub fn stroke(mut self, stroke: Hsla) -> Self {
         self.stroke = stroke;
         self
     }
 
+    /// Set the fill of the dot.
     pub fn fill(mut self, fill: Hsla) -> Self {
         self.fill = fill;
         self
@@ -188,6 +196,7 @@ pub struct Tooltip {
     gap: Pixels,
     cross_line: Option<CrossLine>,
     dots: Option<Vec<Dot>>,
+    appearance: bool,
 }
 
 impl Tooltip {
@@ -199,26 +208,37 @@ impl Tooltip {
             gap: px(0.),
             cross_line: None,
             dots: None,
+            appearance: true,
         }
     }
 
+    /// Set the position of the tooltip.
     pub fn position(mut self, position: TooltipPosition) -> Self {
         self.position = Some(position);
         self
     }
 
+    /// Set the gap of the tooltip.
     pub fn gap(mut self, gap: impl Into<Pixels>) -> Self {
         self.gap = gap.into();
         self
     }
 
+    /// Set the cross line of the tooltip.
     pub fn cross_line(mut self, cross_line: CrossLine) -> Self {
         self.cross_line = Some(cross_line);
         self
     }
 
+    /// Set the dots of the tooltip.
     pub fn dots(mut self, dots: impl IntoIterator<Item = Dot>) -> Self {
         self.dots = Some(dots.into_iter().collect());
+        self
+    }
+
+    /// Set the appearance of the tooltip.
+    pub fn appearance(mut self, appearance: bool) -> Self {
+        self.appearance = appearance;
         self
     }
 }
@@ -243,9 +263,9 @@ impl RenderOnce for Tooltip {
             .top_0()
             .left_0()
             .when_some(self.cross_line, |this, cross_line| this.child(cross_line))
-            .child(
-                self.base
-                    .absolute()
+            .when_some(self.dots, |this, dots| this.children(dots))
+            .child(self.base.when(self.appearance, |this| {
+                this.absolute()
                     .min_w(px(168.))
                     .p_2()
                     .border_1()
@@ -258,8 +278,7 @@ impl RenderOnce for Tooltip {
                         } else {
                             this.right(self.gap)
                         }
-                    }),
-            )
-            .when_some(self.dots, |this, dots| this.children(dots))
+                    })
+            }))
     }
 }
