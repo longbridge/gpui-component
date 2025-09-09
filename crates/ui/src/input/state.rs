@@ -1737,8 +1737,6 @@ impl InputState {
 
             let Some(rendered_line) = last_layout.lines.get(ix) else {
                 if pos.y < line_origin.y + line_height {
-                    // Click in the empty space of the last line, move cursor to the end of the text.
-                    index = self.text.len();
                     break;
                 }
 

@@ -132,6 +132,14 @@ impl TextElement {
             prev_lines_offset += line.len() + 1;
         }
 
+        // If cursor_pos and cursor_end is still None, it means the cursor is at the end of the text.
+        if cursor_pos.is_none() {
+            cursor_pos = Some(point(px(0.), offset_y));
+        }
+        if cursor_end.is_none() {
+            cursor_end = cursor_pos;
+        }
+
         if let (Some(cursor_pos), Some(cursor_start), Some(cursor_end)) =
             (cursor_pos, cursor_start, cursor_end)
         {
