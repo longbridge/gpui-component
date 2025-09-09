@@ -216,7 +216,7 @@ pub fn init(cx: &mut App) {
 
 #[derive(Clone)]
 pub(super) struct LastLayout {
-    /// The visible range (no wrap) of lines in the viewport.
+    /// The visible range (no wrap) of lines in the viewport, the value is row (0-based) index.
     pub(super) visible_range: Range<usize>,
     /// The first visible line top position in scroll viewport.
     pub(super) visible_top: Pixels,
