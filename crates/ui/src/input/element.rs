@@ -59,6 +59,7 @@ impl TextElement {
     /// - cursor bounds
     /// - scroll offset
     /// - current line index
+    #[allow(clippy::too_many_arguments)]
     fn layout_cursor(
         &self,
         visible_range: &Range<usize>,
@@ -198,6 +199,7 @@ impl TextElement {
         (cursor_bounds, scroll_offset, current_line_index)
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn layout_selections(
         &self,
         visible_range: &Range<usize>,
