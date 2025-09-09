@@ -711,9 +711,9 @@ impl Element for TextElement {
             visible_top,
             visible_start_offset,
             line_height,
-            lines: Rc::new(lines),
             wrap_width,
             line_number_width,
+            lines: Rc::new(lines),
         };
 
         // `position_for_index` for example
