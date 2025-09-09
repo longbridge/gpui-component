@@ -6,7 +6,6 @@ use gpui::{
     Path, Pixels, Point, SharedString, Size, Style, TextAlign, TextRun, UnderlineStyle, Window,
     WrappedLine,
 };
-use itertools::Itertools;
 use rope::Rope;
 use smallvec::SmallVec;
 

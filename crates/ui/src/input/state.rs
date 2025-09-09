@@ -7,7 +7,7 @@ use rope::Rope;
 use serde::Deserialize;
 use smallvec::SmallVec;
 use std::cell::RefCell;
-use std::ops::{Deref, Range};
+use std::ops::Range;
 use std::rc::Rc;
 use sum_tree::Bias;
 use unicode_segmentation::*;
@@ -31,6 +31,7 @@ use super::{
 };
 use crate::input::hover_popover::DiagnosticPopover;
 use crate::input::marker::Marker;
+use crate::input::text_wrapper::LineWrap;
 use crate::input::{Cursor, LineColumn, RopeExt as _, Selection};
 use crate::{history::History, scroll::ScrollbarState, Root};
 
@@ -227,14 +228,6 @@ pub(super) struct LastLayout {
     pub(super) wrap_width: Option<Pixels>,
     /// The line number area width of text layout, if not line number, this will be 0px.
     pub(super) line_number_width: Pixels,
-}
-
-impl Deref for LastLayout {
-    type Target = Rc<SmallVec<[WrappedLine; 1]>>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.lines
-    }
 }
 
 /// InputState to keep editing state of the [`super::TextInput`].
@@ -538,7 +531,7 @@ impl InputState {
         };
         let line_height = last_layout.line_height;
 
-        let mut prev_lines_offset = 0;
+        let mut prev_lines_offset = self.text.line_start_offset(last_layout.visible_range.start);
         let mut y_offset = last_layout.visible_top;
         for (line_index, line) in last_layout.lines.iter().enumerate() {
             let local_offset = offset.saturating_sub(prev_lines_offset);
@@ -1730,37 +1723,55 @@ impl InputState {
 
         let mut index = self.text.line_start_offset(last_layout.visible_range.start);
         let mut y_offset = last_layout.visible_top;
-        for (_, line) in last_layout.lines.iter().enumerate() {
-            let line_origin = self.line_origin_with_y_offset(&mut y_offset, &line, line_height);
+        for (ix, line) in self
+            .text_wrapper
+            .lines
+            .iter()
+            .skip(last_layout.visible_range.start)
+            .enumerate()
+        {
+            let line_origin = self.line_origin_with_y_offset(&mut y_offset, line, line_height);
             let pos = inner_position - line_origin;
+
+            let Some(rendered_line) = last_layout.lines.get(ix) else {
+                if pos.y < line_origin.y + line_height {
+                    // Click in the empty space of the last line, move cursor to the end of the text.
+                    index = self.text.len();
+                    break;
+                }
+
+                continue;
+            };
 
             // Return offset by use closest_index_for_x if is single line mode.
             if self.mode.is_single_line() {
-                return line.unwrapped_layout.closest_index_for_x(pos.x);
+                return rendered_line.unwrapped_layout.closest_index_for_x(pos.x);
             }
 
-            let index_result = line.closest_index_for_position(pos, line_height);
+            let index_result = rendered_line.closest_index_for_position(pos, line_height);
             if let Ok(v) = index_result {
                 index += v;
                 break;
-            } else if let Ok(_) = line.index_for_position(point(px(0.), pos.y), line_height) {
+            } else if let Ok(_) =
+                rendered_line.index_for_position(point(px(0.), pos.y), line_height)
+            {
                 // Click in the this line but not in the text, move cursor to the end of the line.
                 // The fallback index is saved in Err from `index_for_position` method.
                 index += index_result.unwrap_err();
                 break;
-            } else if line.text.trim_end_matches(|c| c == '\r').len() == 0 {
+            } else if rendered_line.text.trim_end_matches(|c| c == '\r').len() == 0 {
                 // empty line on Windows is `\r`, other is ''
                 let line_bounds = Bounds {
                     origin: line_origin,
                     size: gpui::size(bounds.size.width, line_height),
                 };
                 let pos = inner_position;
-                index += line.len();
+                index += rendered_line.len();
                 if line_bounds.contains(&pos) {
                     break;
                 }
             } else {
-                index += line.len();
+                index += rendered_line.len();
             }
 
             // +1 for revert `lines` split `\n`
@@ -1778,7 +1789,7 @@ impl InputState {
     fn line_origin_with_y_offset(
         &self,
         y_offset: &mut Pixels,
-        line: &WrappedLine,
+        line: &LineWrap,
         line_height: Pixels,
     ) -> Point<Pixels> {
         // NOTE: About line.wrap_boundaries.len()
@@ -1787,7 +1798,7 @@ impl InputState {
         // If have 2 line, the value is 1
         if self.mode.is_multi_line() {
             let p = point(px(0.), *y_offset);
-            let height = line_height + line.wrap_boundaries.len() as f32 * line_height;
+            let height = line_height + line.wrap_lines as f32 * line_height;
             *y_offset = *y_offset + height;
             p
         } else {
@@ -2245,8 +2256,8 @@ impl EntityInputHandler for InputState {
         let mut start_origin = None;
         let mut end_origin = None;
         let line_number_origin = point(line_number_width, px(0.));
-        let mut y_offset = px(0.);
-        let mut index_offset = 0;
+        let mut y_offset = last_layout.visible_top;
+        let mut index_offset = self.text.line_start_offset(last_layout.visible_range.start);
 
         for line in last_layout.lines.iter() {
             if start_origin.is_some() && end_origin.is_some() {
@@ -2294,10 +2305,11 @@ impl EntityInputHandler for InputState {
         let last_layout = self.last_layout.as_ref()?;
         let line_height = last_layout.line_height;
         let line_point = self.last_bounds?.localize(&point)?;
+        let offset = self.text.line_start_offset(last_layout.visible_range.start);
 
         for line in last_layout.lines.iter() {
             if let Ok(utf8_index) = line.index_for_position(line_point, line_height) {
-                return Some(self.offset_to_utf16(utf8_index));
+                return Some(self.offset_to_utf16(offset + utf8_index));
             }
         }
 
