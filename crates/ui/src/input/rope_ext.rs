@@ -101,7 +101,7 @@ mod tests {
     #[test]
     fn test_lines() {
         let rope = Rope::from("Hello\nWorld\r\nThis is a test 中文\nRope");
-        let lines: Vec<_> = rope.lines().into_iter().map(|r| r.to_string()).collect();
+        let lines: Vec<_> = rope.lines().map(|r| r.to_string()).collect();
         assert_eq!(
             lines,
             vec!["Hello", "World\r", "This is a test 中文", "Rope"]

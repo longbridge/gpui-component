@@ -65,13 +65,22 @@ where
         Some(ratio * self.range_diff + self.range_start)
     }
 
-    fn least_index(&self, tick: f32) -> usize {
-        if self.domain_len == 0 {
-            return 0;
+    fn least_index_with_domain(&self, tick: f32, domain: &[T]) -> (usize, f32) {
+        if self.domain_len == 0 || domain.is_empty() {
+            return (0, 0.);
         }
 
-        let index = (tick / self.range_diff).round() as usize;
-        index.min(self.domain_len.saturating_sub(1))
+        domain
+            .iter()
+            .flat_map(|v| self.tick(v))
+            .enumerate()
+            .min_by(|(_, a), (_, b)| {
+                ((*a) - tick)
+                    .abs()
+                    .partial_cmp(&((*b) - tick).abs())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .unwrap_or((0, 0.))
     }
 }
 
@@ -126,5 +135,16 @@ mod tests {
         assert_eq!(scale.tick(&1.), Some(0.));
         assert_eq!(scale.tick(&2.), Some(0.));
         assert_eq!(scale.tick(&3.), Some(0.));
+    }
+
+    #[test]
+    fn test_scale_linear_least_index_with_domain() {
+        let scale = ScaleLinear::new(vec![1., 2., 3.], vec![0., 100.]);
+        assert_eq!(scale.least_index_with_domain(0., &[1., 2., 3.]), (0, 0.));
+        assert_eq!(scale.least_index_with_domain(50., &[1., 2., 3.]), (1, 50.));
+        assert_eq!(
+            scale.least_index_with_domain(100., &[1., 2., 3.]),
+            (2, 100.)
+        );
     }
 }
