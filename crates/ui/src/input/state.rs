@@ -386,11 +386,14 @@ impl InputState {
     ///
     /// Code Editor aim for help used to simple code editing or display, not a full-featured code editor.
     ///
+    /// By testing, the CodeEditor mode of GPUI Component can supports over 10K lines editing in smooth.
+    ///
     /// ## Features
     ///
     /// - Syntax Highlighting
     /// - Auto Indent
     /// - Line Number
+    /// - Large Text support, event under 50K lines.
     pub fn code_editor(mut self, language: impl Into<SharedString>) -> Self {
         let language: SharedString = language.into();
         self.mode = InputMode::CodeEditor {

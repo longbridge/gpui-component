@@ -217,7 +217,7 @@ impl InputMode {
                     ),
                 };
 
-                highlighter.update(Some(edit), text, cx);
+                highlighter.update(Some(edit), text);
             }
             _ => {}
         }

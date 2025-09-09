@@ -292,8 +292,8 @@ impl CodeBlock {
         let mut styles = vec![];
         if let Some(lang) = &lang {
             let mut highlighter = SyntaxHighlighter::new(&lang, cx);
-            highlighter.update(None, &Rope::from(code.as_str()), cx);
-            styles = highlighter.styles(&(0..code.len()), &theme);
+            highlighter.update(None, &Rope::from(code.as_str()));
+            styles = highlighter.styles(&(0..code.len()), &theme, cx);
         };
 
         let state = InlineState::default();

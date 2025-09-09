@@ -10,7 +10,6 @@ use std::{
     ops::Range,
     usize,
 };
-use sum_tree::{Bias, SumTree};
 use tree_sitter::{
     InputEdit, Node, Parser, Point, Query, QueryCursor, QueryMatch, StreamingIterator, Tree,
 };
@@ -22,9 +21,6 @@ pub struct SyntaxHighlighter {
     language: SharedString,
     query: Option<Query>,
     injection_queries: HashMap<SharedString, Query>,
-    parser: Parser,
-    old_tree: Option<Tree>,
-    text: Rope,
 
     locals_pattern_index: usize,
     highlights_pattern_index: usize,
@@ -37,8 +33,11 @@ pub struct SyntaxHighlighter {
     local_def_value_capture_index: Option<u32>,
     local_ref_capture_index: Option<u32>,
 
-    /// Cache of highlight, the range is offset of the token in the tree.
-    cache: SumTree<HighlightItem>,
+    /// The last parsed source text.
+    text: Rope,
+    parser: Parser,
+    /// The last parsed tree.
+    tree: Option<Tree>,
 }
 
 struct TextProvider<'a>(&'a Rope);
@@ -274,10 +273,7 @@ impl SyntaxHighlighter {
             language: config.name.clone(),
             query: Some(query),
             injection_queries,
-            parser,
-            old_tree: None,
-            text: Rope::new(),
-            cache: sum_tree::SumTree::new(&()),
+
             locals_pattern_index,
             highlights_pattern_index,
             non_local_variable_patterns,
@@ -287,6 +283,9 @@ impl SyntaxHighlighter {
             local_def_capture_index,
             local_def_value_capture_index,
             local_ref_capture_index,
+            text: Rope::new(),
+            parser,
+            tree: None,
         })
     }
 
@@ -295,8 +294,9 @@ impl SyntaxHighlighter {
     }
 
     /// Highlight the given text, returning a map from byte ranges to highlight captures.
-    /// Uses incremental parsing, detects changed ranges, and caches unchanged results.
-    pub fn update(&mut self, edit: Option<InputEdit>, text: &Rope, cx: &App) {
+    ///
+    /// Uses incremental parsing by `edit` to efficiently update the highlighter's state.
+    pub fn update(&mut self, edit: Option<InputEdit>, text: &Rope) {
         if self.text.eq(text) {
             return;
         }
@@ -311,7 +311,7 @@ impl SyntaxHighlighter {
         });
 
         let mut old_tree = self
-            .old_tree
+            .tree
             .take()
             .unwrap_or(self.parser.parse("", None).unwrap());
         old_tree.edit(&edit);
@@ -330,38 +330,26 @@ impl SyntaxHighlighter {
             return;
         };
 
-        // let changed_ranges = new_tree.changed_ranges(&old_tree);
-
-        // Update state
-        self.old_tree = Some(new_tree);
+        self.tree = Some(new_tree);
         self.text = text.clone();
-
-        // let measure = crate::Measure::new("build_styles");
-        self.build_styles(cx);
-        // measure.end();
     }
 
-    /// NOTE: 10K lines, about 180ms
-    /// FIXME: To improve the performance when there more than 5K lines, use partial update.
-    /// Ref: https://github.com/longbridge/gpui-component/pull/1197
-    fn build_styles(&mut self, cx: &App) {
-        let Some(tree) = &self.old_tree else {
-            return;
+    /// Match the visible ranges of nodes in the Tree for highlighting.
+    fn match_styles(&self, range: Range<usize>, cx: &App) -> Vec<HighlightItem> {
+        let mut highlights = vec![];
+        let Some(tree) = &self.tree else {
+            return highlights;
         };
 
         let Some(query) = &self.query else {
-            return;
+            return highlights;
         };
 
         let root_node = tree.root_node();
 
-        // Remove the changed items from the cache.
-        let new_cache = sum_tree::SumTree::new(&());
-        self.cache = new_cache;
-
-        let source = self.text.clone();
-
+        let source = &self.text;
         let mut cursor = QueryCursor::new();
+        cursor.set_byte_range(range);
         let mut matches = cursor.matches(&query, root_node, TextProvider(&source));
 
         while let Some(query_match) = matches.next() {
@@ -372,8 +360,7 @@ impl SyntaxHighlighter {
             {
                 let styles = self.handle_injection(&language_name, content_node, cx);
                 for (node_range, highlight_name) in styles {
-                    self.cache
-                        .push(HighlightItem::new(node_range.clone(), highlight_name), &());
+                    highlights.push(HighlightItem::new(node_range.clone(), highlight_name));
                 }
 
                 continue;
@@ -390,42 +377,37 @@ impl SyntaxHighlighter {
                 let highlight_name = SharedString::from(highlight_name.to_string());
 
                 // Merge near range and same highlight name
-                let last_item = self.cache.last();
+                let last_item = highlights.last();
                 let last_range = last_item.map(|item| &item.range).unwrap_or(&(0..0));
                 let last_highlight_name = last_item.map(|item| item.name.clone());
 
                 if last_range.end <= node_range.start
                     && last_highlight_name.as_ref() == Some(&highlight_name)
                 {
-                    self.cache.push(
-                        HighlightItem::new(
-                            last_range.start..node_range.end,
-                            highlight_name.clone(),
-                        ),
-                        &(),
-                    );
+                    highlights.push(HighlightItem::new(
+                        last_range.start..node_range.end,
+                        highlight_name.clone(),
+                    ));
                 } else if last_range == &node_range {
                     // case:
                     // last_range: 213..220, last_highlight_name: Some("property")
                     // last_range: 213..220, last_highlight_name: Some("string")
-                    self.cache.push(
-                        HighlightItem::new(
-                            node_range,
-                            last_highlight_name.unwrap_or(highlight_name),
-                        ),
-                        &(),
-                    );
+                    highlights.push(HighlightItem::new(
+                        node_range,
+                        last_highlight_name.unwrap_or(highlight_name),
+                    ));
                 } else {
-                    self.cache
-                        .push(HighlightItem::new(node_range, highlight_name.clone()), &());
+                    highlights.push(HighlightItem::new(node_range, highlight_name.clone()));
                 }
             }
         }
 
         // DO NOT REMOVE THIS PRINT, it's useful for debugging
-        // for item in self.cache.iter() {
+        // for item in highlights {
         //     println!("item: {:?}", item);
         // }
+
+        highlights
     }
 
     /// TODO: Use incremental parsing to handle the injection.
@@ -570,25 +552,15 @@ impl SyntaxHighlighter {
         &self,
         range: &Range<usize>,
         theme: &HighlightTheme,
+        cx: &App,
     ) -> Vec<(Range<usize>, HighlightStyle)> {
         let mut styles = vec![];
         let start_offset = range.start;
 
-        let mut cursor = self.cache.cursor::<usize>(&());
-        let bias = if start_offset == 0 {
-            Bias::Right
-        } else {
-            Bias::Left
-        };
-
-        let left_items = cursor.slice(&start_offset, bias);
-        let mut filter = left_items.filter::<_, Range<usize>>(&(), move |sum| {
-            range.start <= sum.max_end && range.end >= sum.min_start
-        });
-        filter.next();
+        let highlights = self.match_styles(range.clone(), cx);
 
         // let mut iter_count = 0;
-        while let Some(item) = filter.item() {
+        for item in highlights {
             // iter_count += 1;
             let node_range = &item.range;
             let name = &item.name;
@@ -600,7 +572,6 @@ impl SyntaxHighlighter {
             }
 
             styles.push((node_range, theme.style(name.as_ref()).unwrap_or_default()));
-            filter.next();
         }
         // dbg!(iter_count);
 
