@@ -440,11 +440,6 @@ impl SyntaxHighlighter {
         let Some(query) = &self.query else {
             return;
         };
-        let Some(tree) = &self.old_tree else {
-            return;
-        };
-
-        let root_node = tree.root_node();
 
         // Set the cursor range to limit query to the specified range
         query_cursor.set_byte_range(range.clone());
