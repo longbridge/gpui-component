@@ -54,3 +54,25 @@ So please refer to the following UI guides when you design or change the UI comp
 
 - Use `default` mouse cursor not `pointer` for buttons, unless it's a link button, we are building desktop apps, not web apps.
 - Use `md` size for most cases and as the default.
+
+## Profile the performance
+
+When you change the rendering code, please profile the performance to make sure the FPS is still good.
+
+You can use `MTL_HUD_ENABLED=1` environment variable to enable the Metal HUD to see the FPS and other performance metrics.
+
+```bash
+MTL_HUD_ENABLED=1 cargo run
+```
+
+> NOTE: Only available on macOS with Metal backend, and the FPS is up **limited your monitor refresh rate**, usually 60 or 120.
+
+### Use Samply to profile the the performance
+
+You can use [Samply](https://github.com/mstange/samply) to profile the performance of the application to get more detailed information.
+
+```bash
+samply record cargo run
+```
+
+Use `samply record` command to start rust development, and do some operations in the app that you want to profile, then stop the terminal with `ctrl-c`, then samply will open the browser to show the profile results.
