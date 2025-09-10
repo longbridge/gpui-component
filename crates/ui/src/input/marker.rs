@@ -38,7 +38,7 @@ impl Marker {
     pub(super) fn prepare(&mut self, state: &InputState) {
         let Some(start_line) = state
             .text_wrapper
-            .lines
+            .lines()
             .get(self.start.line.saturating_sub(1))
         else {
             return;
@@ -48,7 +48,7 @@ impl Marker {
 
         let Some(end_line) = state
             .text_wrapper
-            .lines
+            .lines()
             .get(self.end.line.saturating_sub(1))
         else {
             return;

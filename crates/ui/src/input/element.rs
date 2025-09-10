@@ -99,7 +99,7 @@ impl TextElement {
 
         let mut prev_lines_offset = 0;
         let mut offset_y = px(0.);
-        for (ix, wrap_line) in text_wrapper.lines.iter().enumerate() {
+        for (ix, wrap_line) in text_wrapper.lines().iter().enumerate() {
             let row = ix;
             let line_origin = point(px(0.), offset_y);
 
@@ -391,8 +391,8 @@ impl TextElement {
 
         let mut visible_range = 0..total_lines;
         let mut line_bottom = px(0.);
-        for (ix, line) in state.text_wrapper.lines.iter().enumerate() {
-            let wrapped_height = (line.wrap_lines + 1) * line_height;
+        for (ix, line) in state.text_wrapper.lines().iter().enumerate() {
+            let wrapped_height = line.height(line_height);
             line_bottom += wrapped_height;
 
             if line_bottom < -scroll_top {
