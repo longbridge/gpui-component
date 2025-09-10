@@ -35,26 +35,8 @@ impl Marker {
 
     /// Prepare the marker to convert line, column to byte offsets.
     pub(super) fn prepare(&mut self, state: &InputState) {
-        let mut start_point: rope::Point = self.start.into();
-        let mut end_point: rope::Point = self.end.into();
-
-        // limit column avoid overflow
-        let start_line_len = state.text.line(start_point.row as usize).chars().count() as u32;
-        start_point.column = start_point.column.min(start_line_len);
-        let end_line_len = state.text.line(end_point.row as usize).chars().count() as u32;
-        end_point.column = end_point.column.min(end_line_len);
-
-        dbg!(start_point);
-        dbg!(end_point);
-
-        let start_point = state.text.clip_point(start_point, sum_tree::Bias::Left);
-        let end_point = state.text.clip_point(end_point, sum_tree::Bias::Left);
-
-        dbg!(start_point);
-        dbg!(end_point);
-
-        let start = state.text.point_to_offset(start_point);
-        let end = state.text.point_to_offset(end_point);
+        let start = state.text.line_column_to_offset(&self.start);
+        let end = state.text.line_column_to_offset(&self.end);
 
         self.range = Some(start..end);
     }

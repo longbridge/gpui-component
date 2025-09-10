@@ -61,33 +61,6 @@ impl From<(usize, usize)> for LineColumn {
     }
 }
 
-impl From<rope::Point> for LineColumn {
-    fn from(value: rope::Point) -> Self {
-        Self {
-            line: value.row as usize + 1,
-            column: value.column as usize + 1,
-        }
-    }
-}
-
-impl From<LineColumn> for rope::Point {
-    fn from(value: LineColumn) -> Self {
-        Self {
-            row: value.line.saturating_sub(1) as u32,
-            column: value.column.saturating_sub(1) as u32,
-        }
-    }
-}
-
-impl From<LineColumn> for tree_sitter::Point {
-    fn from(value: LineColumn) -> Self {
-        Self {
-            row: value.line.saturating_sub(1),
-            column: value.column.saturating_sub(1),
-        }
-    }
-}
-
 impl fmt::Display for LineColumn {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}:{}", self.line, self.column)
@@ -111,18 +84,6 @@ mod tests {
             }
         );
         assert_eq!(LineColumn::from((0, 0)), LineColumn { line: 1, column: 1 });
-
-        assert_eq!(
-            LineColumn::from(rope::Point::new(0, 1)),
-            LineColumn { line: 1, column: 2 }
-        );
-        assert_eq!(
-            LineColumn::from(rope::Point::new(10, 9)),
-            LineColumn {
-                line: 11,
-                column: 10
-            }
-        );
     }
 
     #[test]

@@ -1,5 +1,7 @@
 use rope::{Point, Rope};
 
+use crate::input::LineColumn;
+
 /// An extension trait for `Rope` to provide additional utility methods.
 pub trait RopeExt {
     /// Get the line at the given row (0-based) index, including the `\r` at the end, but not `\n`.
@@ -35,6 +37,12 @@ pub trait RopeExt {
     ///
     /// If the offset is out of bounds, return None.
     fn char_at(&self, offset: usize) -> Option<char>;
+
+    /// Get the byte offset from the given `LineColumn` (1-based).
+    fn line_column_to_offset(&self, line_col: &LineColumn) -> usize;
+
+    /// Get the `LineColumn` (1-based) from the given byte offset.
+    fn offset_to_line_column(&self, offset: usize) -> LineColumn;
 }
 
 /// An iterator over the lines of a `Rope`.
@@ -98,6 +106,24 @@ impl RopeExt for Rope {
         self.point_to_offset(Point::new(row, 0))
     }
 
+    fn line_column_to_offset(&self, line_col: &LineColumn) -> usize {
+        let row = line_col.line.saturating_sub(1);
+        let col = line_col.column.saturating_sub(1);
+
+        let line = self.line(row);
+        self.line_start_offset(row) + line.chars().take(col).map(|c| c.len_utf8()).sum::<usize>()
+    }
+
+    fn offset_to_line_column(&self, offset: usize) -> LineColumn {
+        let point = self.offset_to_point(offset);
+        let line = self.line(point.row as usize);
+        let column = line.chars().take(point.column as usize).count();
+        LineColumn {
+            line: point.row as usize + 1,
+            column: column + 1,
+        }
+    }
+
     fn line_end_offset(&self, row: usize) -> usize {
         if row > self.max_point().row as usize {
             return self.len();
@@ -135,7 +161,7 @@ impl RopeExt for Rope {
 mod tests {
     use rope::Rope;
 
-    use crate::input::RopeExt as _;
+    use crate::input::{LineColumn, RopeExt as _};
 
     #[test]
     fn test_line() {
@@ -206,6 +232,23 @@ mod tests {
         assert_eq!(rope.chars_count(), 0);
         let rope = Rope::from("Single line");
         assert_eq!(rope.chars_count(), 11);
+    }
+
+    #[test]
+    fn test_line_column() {
+        let rope = Rope::from("a 中文🎉 test\nRope");
+        assert_eq!(
+            rope.line_column_to_offset(&LineColumn::new(1, 4)),
+            "a 中".len()
+        );
+        assert_eq!(
+            rope.line_column_to_offset(&LineColumn::new(1, 7)),
+            "a 中文🎉".len()
+        );
+        assert_eq!(
+            rope.line_column_to_offset(&LineColumn::new(2, 2)),
+            "a 中文🎉 test\nR".len()
+        );
     }
 
     #[test]
