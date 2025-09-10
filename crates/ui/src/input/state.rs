@@ -687,6 +687,11 @@ impl InputState {
                 .unwrap_or(self.input_bounds.size.width);
 
             self.text_wrapper.set_wrap_width(Some(wrap_width), cx);
+
+            // Reset scroll to left 0
+            let mut offset = self.scroll_handle.offset();
+            offset.x = px(0.);
+            self.scroll_handle.set_offset(offset);
         } else {
             self.text_wrapper.set_wrap_width(None, cx);
         }
