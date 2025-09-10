@@ -1,15 +1,9 @@
 use std::{fmt, ops::Range};
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub struct Selection {
     pub start: usize,
     pub end: usize,
-}
-
-impl Default for Selection {
-    fn default() -> Self {
-        Self { start: 0, end: 0 }
-    }
 }
 
 impl Selection {
@@ -52,11 +46,26 @@ pub struct LineColumn {
     pub column: usize,
 }
 
+impl LineColumn {
+    pub fn new(line: usize, column: usize) -> Self {
+        (line, column).into()
+    }
+}
+
 impl From<(usize, usize)> for LineColumn {
     fn from(value: (usize, usize)) -> Self {
         Self {
             line: value.0.max(1),
             column: value.1.max(1),
+        }
+    }
+}
+
+impl From<rope::Point> for LineColumn {
+    fn from(value: rope::Point) -> Self {
+        Self {
+            line: value.row as usize + 1,
+            column: value.column as usize + 1,
         }
     }
 }
@@ -79,6 +88,33 @@ impl fmt::Display for LineColumn {
 #[cfg(test)]
 mod tests {
     use crate::input::LineColumn;
+
+    #[test]
+    fn test_line_column_from_to() {
+        assert_eq!(LineColumn::new(1, 2), LineColumn { line: 1, column: 2 });
+
+        assert_eq!(LineColumn::from((1, 2)), LineColumn { line: 1, column: 2 });
+        assert_eq!(
+            LineColumn::from((10, 10)),
+            LineColumn {
+                line: 10,
+                column: 10
+            }
+        );
+        assert_eq!(LineColumn::from((0, 0)), LineColumn { line: 1, column: 1 });
+
+        assert_eq!(
+            LineColumn::from(rope::Point::new(0, 1)),
+            LineColumn { line: 1, column: 2 }
+        );
+        assert_eq!(
+            LineColumn::from(rope::Point::new(10, 9)),
+            LineColumn {
+                line: 11,
+                column: 10
+            }
+        );
+    }
 
     #[test]
     fn test_line_column_display() {
