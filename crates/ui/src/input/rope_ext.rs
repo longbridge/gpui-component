@@ -88,9 +88,8 @@ impl std::iter::FusedIterator for RopeLines {}
 
 impl RopeExt for Rope {
     fn line(&self, row: usize) -> Rope {
-        let row = row as u32;
-        let start = self.point_to_offset(Point::new(row, 0));
-        let end = start + self.line_len(row) as usize;
+        let start = self.line_start_offset(row);
+        let end = start + self.line_len(row as u32) as usize;
         self.slice(start..end)
     }
 
@@ -145,7 +144,9 @@ mod tests {
         assert_eq!(rope.line(1).to_string(), "World\r");
         assert_eq!(rope.line(2).to_string(), "This is a test 中文");
         assert_eq!(rope.line(3).to_string(), "Rope");
-        assert_eq!(rope.line(4).to_string(), "");
+
+        // over bounds
+        assert_eq!(rope.line(6).to_string(), "");
     }
 
     #[test]
