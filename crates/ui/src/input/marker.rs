@@ -1,6 +1,6 @@
 use crate::{
     highlighter::HighlightTheme,
-    input::{InputState, LineColumn, RopeExt},
+    input::{InputState, LineColumn},
 };
 use gpui::{px, App, HighlightStyle, Hsla, SharedString, UnderlineStyle};
 use std::ops::Range;

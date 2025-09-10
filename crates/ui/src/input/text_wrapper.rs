@@ -10,13 +10,11 @@ use crate::input::RopeExt as _;
 pub(super) struct LineItem {
     /// The original line text.
     line: Rope,
-    /// The soft wrapped lines (byte range) of this line (Include first line).
+    /// The soft wrapped lines relative byte range (0..line.len) of this line (Include first line).
     ///
     /// FIXME: Here in somecase, the `line_wrapper.wrap_line` has returned different
     /// like the `window.text_system().shape_text`. So, this value may not equal
     /// the actual rendered lines.
-    ///
-    /// The range is relative to the start of the line, start from 0 to line.len()
     wrapped_lines: Vec<Range<usize>>,
 }
 
