@@ -1660,7 +1660,7 @@ impl InputState {
         let mut y_offset = last_layout.visible_top;
         for (ix, line) in self
             .text_wrapper
-            .lines()
+            .lines
             .iter()
             .skip(last_layout.visible_range.start)
             .enumerate()
