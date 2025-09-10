@@ -59,6 +59,8 @@ impl TextElement {
     /// - cursor bounds
     /// - scroll offset
     /// - current row index (No only the visible lines, but all lines)
+    ///
+    /// This method also will update for track scroll to cursor.
     fn layout_cursor(
         &self,
         last_layout: &LastLayout,
