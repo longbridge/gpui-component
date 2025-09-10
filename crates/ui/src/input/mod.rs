@@ -15,7 +15,7 @@ mod text_input;
 mod text_wrapper;
 
 pub(crate) use clear_button::*;
-pub(super) use cursor::*;
+pub use cursor::*;
 pub use marker::*;
 pub use mask_pattern::MaskPattern;
 pub use mode::TabSize;

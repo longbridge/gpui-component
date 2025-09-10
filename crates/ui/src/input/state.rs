@@ -493,7 +493,7 @@ impl InputState {
     /// Set markers, only for [`InputMode::CodeEditor`] mode.
     ///
     /// For example to set the diagnostic markers in the code editor.
-    pub fn set_markers(&mut self, markers: Vec<Marker>, _: &mut Window, _: &mut Context<Self>) {
+    pub fn set_markers(&mut self, markers: Vec<Marker>, _: &mut Context<Self>) {
         let mut markers = markers;
         for marker in &mut markers {
             marker.prepare(self);

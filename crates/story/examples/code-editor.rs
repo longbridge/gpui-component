@@ -164,7 +164,7 @@ impl Example {
         }
     }
 
-    fn set_markers(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    fn set_markers(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         if self.language.name() != "rust" {
             return;
         }
@@ -177,7 +177,6 @@ impl Example {
                     Marker::new("info", (25, 10), (25, 20), "This is a info message, this is a very long message, with **Markdown** support."),
                     Marker::new("hint", (36, 9), (40, 10), "This is a hint message."),
                 ],
-                window,
                 cx,
             );
         });
