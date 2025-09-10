@@ -114,9 +114,7 @@ impl TextWrapper {
             .text_system()
             .line_wrapper(self.font.clone(), self.font_size);
 
-        // Omit changed range from lines cache.
         self.lines.clear();
-
         for line in text.lines() {
             let line_str = line.to_string();
             let mut wrapped_lines = vec![];
