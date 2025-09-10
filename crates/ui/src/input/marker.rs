@@ -1,6 +1,6 @@
 use crate::{
     highlighter::HighlightTheme,
-    input::{InputState, LineColumn},
+    input::{InputState, LineColumn, RopeExt},
 };
 use gpui::{px, App, HighlightStyle, Hsla, SharedString, UnderlineStyle};
 use std::ops::Range;
@@ -39,10 +39,19 @@ impl Marker {
         let mut end_point: rope::Point = self.end.into();
 
         // limit column avoid overflow
-        let start_line_len = state.text.line_len(start_point.row);
+        let start_line_len = state.text.line(start_point.row as usize).chars().count() as u32;
         start_point.column = start_point.column.min(start_line_len);
-        let end_line_len = state.text.line_len(end_point.row);
+        let end_line_len = state.text.line(end_point.row as usize).chars().count() as u32;
         end_point.column = end_point.column.min(end_line_len);
+
+        dbg!(start_point);
+        dbg!(end_point);
+
+        let start_point = state.text.clip_point(start_point, sum_tree::Bias::Left);
+        let end_point = state.text.clip_point(end_point, sum_tree::Bias::Left);
+
+        dbg!(start_point);
+        dbg!(end_point);
 
         let start = state.text.point_to_offset(start_point);
         let end = state.text.point_to_offset(end_point);

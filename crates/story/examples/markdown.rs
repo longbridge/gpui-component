@@ -32,6 +32,7 @@ impl Example {
         let resizable_state = ResizableState::new(cx);
 
         let _subscriptions = vec![cx.subscribe(&input_state, |_, input, _: &InputEvent, cx| {
+            // Subscribe to input changes and perform linting with AutoCorrect for markers example.
             let value = input.read(cx).value().clone();
             let result = autocorrect::lint_for(value.as_str(), "md");
 
@@ -44,9 +45,9 @@ impl Example {
                 };
 
                 let start = (item.line, item.col);
-                let end = (item.line, item.col + item.old.len() + 1);
-
-                let market = Marker::new(severity, start, end, item.new.clone());
+                let end = (item.line, item.col + item.old.chars().count());
+                let message = format!("AutoCorrect: {}", item.new);
+                let market = Marker::new(severity, start, end, message);
                 markets.push(market);
             }
 
