@@ -2082,6 +2082,8 @@ impl EntityInputHandler for InputState {
             return;
         }
 
+        self.pause_blink_cursor(cx);
+
         let range = range_utf16
             .as_ref()
             .map(|range_utf16| self.range_from_utf16(range_utf16))

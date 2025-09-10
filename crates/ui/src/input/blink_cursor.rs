@@ -70,6 +70,7 @@ impl BlinkCursor {
     /// Pause the blinking, and delay 500ms to resume the blinking.
     pub fn pause(&mut self, cx: &mut Context<Self>) {
         self.paused = true;
+        self.visible = true;
         cx.notify();
 
         // delay 500ms to start the blinking
