@@ -7,6 +7,7 @@ use tokio::time;
 const VERSION: &str = "1.0.0";
 
 /// HelloWorld struct provides greeting functionality with configuration options
+/// This is CJK 中文🎊 for test line, column.
 ///
 /// # Features
 /// - Async greetings with customizable names

@@ -117,7 +117,7 @@ impl RopeExt for Rope {
     fn offset_to_line_column(&self, offset: usize) -> LineColumn {
         let point = self.offset_to_point(offset);
         let line = self.line(point.row as usize);
-        let column = line.chars().take(point.column as usize).count();
+        let column = line.slice(0..point.column as usize).chars().count();
         LineColumn {
             line: point.row as usize + 1,
             column: column + 1,
@@ -242,12 +242,21 @@ mod tests {
             "a 中".len()
         );
         assert_eq!(
-            rope.line_column_to_offset(&LineColumn::new(1, 7)),
+            rope.line_column_to_offset(&LineColumn::new(1, 6)),
             "a 中文🎉".len()
         );
         assert_eq!(
             rope.line_column_to_offset(&LineColumn::new(2, 2)),
             "a 中文🎉 test\nR".len()
+        );
+
+        assert_eq!(
+            rope.offset_to_line_column("a 中文🎉 test\nR".len()),
+            LineColumn::new(2, 2)
+        );
+        assert_eq!(
+            rope.offset_to_line_column("a 中文🎉".len()),
+            LineColumn::new(1, 6)
         );
     }
 
