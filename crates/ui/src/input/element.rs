@@ -58,7 +58,7 @@ impl TextElement {
     ///
     /// - cursor bounds
     /// - scroll offset
-    /// - current line index
+    /// - current row index (No only the visible lines, but all lines)
     fn layout_cursor(
         &self,
         last_layout: &LastLayout,
@@ -66,21 +66,21 @@ impl TextElement {
         window: &mut Window,
         cx: &mut App,
     ) -> (Option<Bounds<Pixels>>, Point<Pixels>, Option<usize>) {
+        let state = self.state.read(cx);
+
         let line_height = last_layout.line_height;
         let visible_range = &last_layout.visible_range;
-        let visible_top = last_layout.visible_top;
-        let visible_start_offset = last_layout.visible_start_offset;
         let lines = &last_layout.lines;
+        let text_wrapper = &state.text_wrapper;
         let line_number_width = last_layout.line_number_width;
 
-        let state = self.state.read(cx);
         let mut selected_range = state.selected_range;
         if let Some(marked_range) = &state.marked_range {
             selected_range = (marked_range.end..marked_range.end).into();
         }
 
         let cursor = state.cursor();
-        let mut current_line_index = None;
+        let mut current_row = None;
         let mut scroll_offset = state.scroll_handle.offset();
         let mut cursor_bounds = None;
 
@@ -95,49 +95,66 @@ impl TextElement {
         let mut cursor_start = None;
         let mut cursor_end = None;
 
-        let mut prev_lines_offset = visible_start_offset;
-        let mut offset_y = visible_top;
-        for (line_ix, line) in lines.iter().enumerate() {
-            let line_ix = visible_range.start + line_ix;
+        let mut prev_lines_offset = 0;
+        let mut offset_y = px(0.);
+        for (ix, wrap_line) in text_wrapper.lines.iter().enumerate() {
+            let row = ix;
+            let line_origin = point(px(0.), offset_y);
 
             // break loop if all cursor positions are found
             if cursor_pos.is_some() && cursor_start.is_some() && cursor_end.is_some() {
                 break;
             }
 
-            let line_origin = point(px(0.), offset_y);
-            if cursor_pos.is_none() {
-                let offset = cursor.offset.saturating_sub(prev_lines_offset);
-
-                if let Some(pos) = line.position_for_index(offset, line_height) {
-                    current_line_index = Some(line_ix);
-                    cursor_pos = Some(line_origin + pos);
+            let in_visible_range = ix >= visible_range.start;
+            if let Some(line) = in_visible_range
+                .then(|| lines.get(ix.saturating_sub(visible_range.start)))
+                .flatten()
+            {
+                // If in visible range lines
+                if cursor_pos.is_none() {
+                    let offset = cursor.offset.saturating_sub(prev_lines_offset);
+                    if let Some(pos) = line.position_for_index(offset, line_height) {
+                        current_row = Some(row);
+                        cursor_pos = Some(line_origin + pos);
+                    }
                 }
-            }
-            if cursor_start.is_none() {
-                let offset = selected_range.start.saturating_sub(prev_lines_offset);
-                if let Some(pos) = line.position_for_index(offset, line_height) {
-                    cursor_start = Some(line_origin + pos);
+                if cursor_start.is_none() {
+                    let offset = selected_range.start.saturating_sub(prev_lines_offset);
+                    if let Some(pos) = line.position_for_index(offset, line_height) {
+                        cursor_start = Some(line_origin + pos);
+                    }
                 }
-            }
-            if cursor_end.is_none() {
-                let offset = selected_range.end.saturating_sub(prev_lines_offset);
-                if let Some(pos) = line.position_for_index(offset, line_height) {
-                    cursor_end = Some(line_origin + pos);
+                if cursor_end.is_none() {
+                    let offset = selected_range.end.saturating_sub(prev_lines_offset);
+                    if let Some(pos) = line.position_for_index(offset, line_height) {
+                        cursor_end = Some(line_origin + pos);
+                    }
                 }
+
+                offset_y += line.size(line_height).height;
+                // +1 for the last `\n`
+                prev_lines_offset += line.len() + 1;
+            } else {
+                // If not in the visible range.
+
+                // Just increase the offset_y and prev_lines_offset.
+                // This will let the scroll_offset to track the cursor position correctly.
+                if prev_lines_offset >= cursor.offset && cursor_pos.is_none() {
+                    current_row = Some(row);
+                    cursor_pos = Some(line_origin);
+                }
+                if prev_lines_offset >= selected_range.start && cursor_start.is_none() {
+                    cursor_start = Some(line_origin);
+                }
+                if prev_lines_offset >= selected_range.end && cursor_end.is_none() {
+                    cursor_end = Some(line_origin);
+                }
+
+                offset_y += wrap_line.height(line_height);
+                // +1 for the last `\n`
+                prev_lines_offset += wrap_line.len() + 1;
             }
-
-            offset_y += line.size(line_height).height;
-            // +1 for skip the last `\n`
-            prev_lines_offset += line.len() + 1;
-        }
-
-        // If cursor_pos and cursor_end is still None, it means the cursor is at the end of the text.
-        if cursor_pos.is_none() {
-            cursor_pos = Some(point(px(0.), offset_y));
-        }
-        if cursor_end.is_none() {
-            cursor_end = cursor_pos;
         }
 
         if let (Some(cursor_pos), Some(cursor_start), Some(cursor_end)) =
@@ -206,7 +223,7 @@ impl TextElement {
 
         bounds.origin = bounds.origin + scroll_offset;
 
-        (cursor_bounds, scroll_offset, current_line_index)
+        (cursor_bounds, scroll_offset, current_row)
     }
 
     fn layout_selections(
@@ -466,8 +483,8 @@ pub(super) struct PrepaintState {
     scroll_size: Size<Pixels>,
     cursor_bounds: Option<Bounds<Pixels>>,
     cursor_scroll_offset: Point<Pixels>,
-    /// line index (zero based), no wrap, same line as the cursor.
-    current_line_index: Option<usize>,
+    /// row index (zero based), no wrap, same line as the cursor.
+    current_row: Option<usize>,
     selection_path: Option<Path<Pixels>>,
     bounds: Bounds<Pixels>,
 }
@@ -755,7 +772,7 @@ impl Element for TextElement {
 
         // Calculate the scroll offset to keep the cursor in view
 
-        let (cursor_bounds, cursor_scroll_offset, current_line_index) =
+        let (cursor_bounds, cursor_scroll_offset, current_row) =
             self.layout_cursor(&last_layout, &mut bounds, window, cx);
 
         let selection_path = self.layout_selections(&last_layout, &mut bounds, window, cx);
@@ -791,7 +808,7 @@ impl Element for TextElement {
                     line_no_text.push_str(&"\n    ".repeat(line.wrap_boundaries.len()));
                 }
 
-                let runs = if current_line_index == Some(ix) {
+                let runs = if current_row == Some(ix) {
                     &current_line_runs
                 } else {
                     &other_line_runs
@@ -815,7 +832,7 @@ impl Element for TextElement {
             line_numbers,
             cursor_bounds,
             cursor_scroll_offset,
-            current_line_index,
+            current_row,
             selection_path,
         }
     }
@@ -891,7 +908,8 @@ impl Element for TextElement {
 
             // Each item is the normal lines.
             for (ix, lines) in line_numbers.iter().enumerate() {
-                let is_active = prepaint.current_line_index == Some(visible_range.start + ix);
+                let row = visible_range.start + ix;
+                let is_active = prepaint.current_row == Some(row);
                 for line in lines {
                     let p = point(input_bounds.origin.x, origin.y + offset_y);
                     let line_size = line.size(line_height);
@@ -958,10 +976,11 @@ impl Element for TextElement {
 
             // Each item is the normal lines.
             for (ix, lines) in line_numbers.iter().enumerate() {
+                let row = visible_range.start + ix;
                 for line in lines {
                     let p = point(input_bounds.origin.x, origin.y + offset_y);
 
-                    let is_active = prepaint.current_line_index == Some(visible_range.start + ix);
+                    let is_active = prepaint.current_row == Some(row);
                     let line_size = line.size(line_height);
 
                     // paint active line number background

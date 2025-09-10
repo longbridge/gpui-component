@@ -13,8 +13,25 @@ pub(super) struct LineWrap {
     /// like the `window.text_system().shape_text`. So, this value may not equal
     /// the actual rendered lines.
     pub(super) wrap_lines: usize,
-    /// The range of the line text in the entire text.
+    /// The range of the line text in the entire text (not includes ending `\n`).
     pub(super) range: Range<usize>,
+}
+
+impl LineWrap {
+    /// Return the bytes length of this line.
+    pub(super) fn len(&self) -> usize {
+        self.range.end - self.range.start
+    }
+
+    /// Get the total number of lines including wrapped lines.
+    pub(super) fn lines_len(&self) -> usize {
+        self.wrap_lines + 1
+    }
+
+    /// Get the height of this line including wrapped lines.
+    pub(super) fn height(&self, line_height: Pixels) -> Pixels {
+        self.lines_len() * line_height
+    }
 }
 
 /// Used to prepare the text with soft wrap to be get lines to displayed in the TextArea
