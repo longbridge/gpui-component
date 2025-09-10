@@ -115,7 +115,7 @@ impl TextElement {
             {
                 // If in visible range lines
                 if cursor_pos.is_none() {
-                    let offset = cursor.offset.saturating_sub(prev_lines_offset);
+                    let offset = cursor.saturating_sub(prev_lines_offset);
                     if let Some(pos) = line.position_for_index(offset, line_height) {
                         current_row = Some(row);
                         cursor_pos = Some(line_origin + pos);
@@ -142,7 +142,7 @@ impl TextElement {
 
                 // Just increase the offset_y and prev_lines_offset.
                 // This will let the scroll_offset to track the cursor position correctly.
-                if prev_lines_offset >= cursor.offset && cursor_pos.is_none() {
+                if prev_lines_offset >= cursor && cursor_pos.is_none() {
                     current_row = Some(row);
                     cursor_pos = Some(line_origin);
                 }
@@ -679,16 +679,16 @@ impl Element for TextElement {
             // IME marked text
             vec![
                 TextRun {
-                    len: marked_range.start.offset,
+                    len: marked_range.start,
                     ..run.clone()
                 },
                 TextRun {
-                    len: marked_range.end.offset - marked_range.start.offset,
+                    len: marked_range.end - marked_range.start,
                     underline: marked_run.underline,
                     ..run.clone()
                 },
                 TextRun {
-                    len: display_text.len() - marked_range.end.offset,
+                    len: display_text.len() - marked_range.end,
                     ..run.clone()
                 },
             ]

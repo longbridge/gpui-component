@@ -7,12 +7,7 @@ use gpui::{
     Window,
 };
 
-use crate::{
-    global_state::GlobalState,
-    input::{Cursor, Selection},
-    text::node::LinkMark,
-    ActiveTheme,
-};
+use crate::{global_state::GlobalState, input::Selection, text::node::LinkMark, ActiveTheme};
 
 /// A inline element used to render a inline text and support selectable.
 ///
@@ -95,7 +90,7 @@ impl Inline {
         text_layout: &TextLayout,
         window: &mut Window,
         cx: &mut App,
-    ) -> (bool, bool, Option<(usize, usize)>) {
+    ) -> (bool, bool, Option<Selection>) {
         let Some(text_view_state) = GlobalState::global(cx).text_view_state() else {
             return (false, false, None);
         };
@@ -112,7 +107,7 @@ impl Inline {
         // Use for debug selection bounds
         // self.paint_selected_bounds(selection_bounds, window, cx);
 
-        let mut selection = None;
+        let mut selection: Option<Selection> = None;
         let mut offset = 0;
         let mut chars = self.text.chars().peekable();
         while let Some(c) = chars.next() {
@@ -130,11 +125,11 @@ impl Inline {
 
             if point_in_text_selection(pos, char_width, &selection_bounds, line_height) {
                 if selection.is_none() {
-                    selection = Some((offset, offset));
+                    selection = Some((offset..offset).into());
                 }
 
                 let next_offset = offset + c.len_utf8();
-                selection.as_mut().unwrap().1 = next_offset;
+                selection.as_mut().unwrap().end = next_offset;
             }
 
             offset += c.len_utf8();
@@ -152,15 +147,15 @@ impl Inline {
         window: &mut Window,
         cx: &mut App,
     ) {
-        let mut start_offset = selection.start.offset();
-        let mut end_offset = selection.end.offset();
-        if end_offset < start_offset {
-            std::mem::swap(&mut start_offset, &mut end_offset);
+        let mut start = selection.start;
+        let mut end = selection.end;
+        if end < start {
+            std::mem::swap(&mut start, &mut end);
         }
-        let Some(start_position) = text_layout.position_for_index(start_offset) else {
+        let Some(start_position) = text_layout.position_for_index(start) else {
             return;
         };
-        let Some(end_position) = text_layout.position_for_index(end_offset) else {
+        let Some(end_position) = text_layout.position_for_index(end) else {
             return;
         };
 
@@ -307,14 +302,7 @@ impl Element for Inline {
         let (is_selectable, is_selection, selection) =
             self.layout_selections(&text_layout, window, cx);
 
-        *state.selection.borrow_mut() = if let Some(selection) = selection {
-            Some(Selection {
-                start: Cursor::new(selection.0),
-                end: Cursor::new(selection.1),
-            })
-        } else {
-            None
-        };
+        *state.selection.borrow_mut() = selection;
 
         if is_selection || is_selectable {
             window.set_cursor_style(CursorStyle::IBeam, &hitbox);

@@ -166,12 +166,12 @@ impl Paragraph {
         for c in self.children.iter() {
             if let Some(selection) = c.state.selection.borrow().as_ref() {
                 let part_text = c.state.text.borrow().clone();
-                text.push_str(&part_text[selection.start.offset()..selection.end.offset()]);
+                text.push_str(&part_text[selection.start..selection.end]);
             }
         }
         if let Some(selection) = self.state.selection.borrow().as_ref() {
             let all_text = self.state.text.borrow().clone();
-            text.push_str(&all_text[selection.start.offset()..selection.end.offset()]);
+            text.push_str(&all_text[selection.start..selection.end]);
         }
 
         text
@@ -314,7 +314,7 @@ impl CodeBlock {
         let mut text = String::new();
         if let Some(selection) = self.state.selection.borrow().as_ref() {
             let part_text = self.state.text.borrow().clone();
-            text.push_str(&part_text[selection.start.offset()..selection.end.offset()]);
+            text.push_str(&part_text[selection.start..selection.end]);
         }
         text
     }

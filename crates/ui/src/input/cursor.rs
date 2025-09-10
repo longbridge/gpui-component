@@ -1,159 +1,45 @@
-use std::{
-    cmp::Ordering,
-    fmt,
-    ops::{Add, Deref, Range, Sub},
-};
+use std::{fmt, ops::Range};
 
-/// Cursor of the text.
-#[derive(Debug, Copy, Clone, Default)]
-pub struct Cursor {
-    /// The byte offset in the text (zero-based).
-    pub(super) offset: usize,
-}
-
-impl Cursor {
-    pub fn new(offset: usize) -> Self {
-        Self { offset }
-    }
-
-    /// Returns the byte offset in the text (zero-based).
-    pub fn offset(&self) -> usize {
-        self.offset
-    }
-}
-
-impl Eq for Cursor {}
-impl PartialEq for Cursor {
-    fn eq(&self, other: &Self) -> bool {
-        self.offset == other.offset
-    }
-}
-impl PartialEq<usize> for Cursor {
-    fn eq(&self, other: &usize) -> bool {
-        self.offset == *other
-    }
-}
-impl PartialEq<Cursor> for usize {
-    fn eq(&self, other: &Cursor) -> bool {
-        *self == other.offset
-    }
-}
-
-impl PartialOrd for Cursor {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.offset.partial_cmp(&other.offset)
-    }
-}
-impl PartialOrd<usize> for Cursor {
-    fn partial_cmp(&self, other: &usize) -> Option<Ordering> {
-        self.offset.partial_cmp(other)
-    }
-}
-impl PartialOrd<Cursor> for usize {
-    fn partial_cmp(&self, other: &Cursor) -> Option<Ordering> {
-        self.partial_cmp(&other.offset)
-    }
-}
-
-impl Add for Cursor {
-    type Output = Self;
-
-    fn add(mut self, other: Self) -> Self {
-        self.offset += other.offset;
-        self
-    }
-}
-impl Add<usize> for Cursor {
-    type Output = Self;
-
-    fn add(mut self, other: usize) -> Self {
-        self.offset += other;
-        self
-    }
-}
-impl Add<Cursor> for usize {
-    type Output = Cursor;
-
-    fn add(self, other: Cursor) -> Cursor {
-        Cursor::new(self + other.offset)
-    }
-}
-
-impl Sub for Cursor {
-    type Output = Self;
-
-    fn sub(mut self, other: Self) -> Self {
-        self.offset -= other.offset;
-        self
-    }
-}
-impl Sub<usize> for Cursor {
-    type Output = Self;
-
-    fn sub(mut self, other: usize) -> Self {
-        self.offset -= other;
-        self
-    }
-}
-impl Sub<Cursor> for usize {
-    type Output = Cursor;
-
-    fn sub(self, other: Cursor) -> Cursor {
-        Cursor::new(self - other.offset)
-    }
-}
-
-impl Deref for Cursor {
-    type Target = usize;
-
-    fn deref(&self) -> &Self::Target {
-        &self.offset
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Selection {
-    pub start: Cursor,
-    pub end: Cursor,
+    pub start: usize,
+    pub end: usize,
+}
+
+impl Default for Selection {
+    fn default() -> Self {
+        Self { start: 0, end: 0 }
+    }
 }
 
 impl Selection {
-    pub fn new(start: Cursor, end: Cursor) -> Self {
+    pub fn new(start: usize, end: usize) -> Self {
         Self { start, end }
     }
 
     pub fn len(&self) -> usize {
-        self.end.offset.saturating_sub(self.start.offset)
+        self.end.saturating_sub(self.start)
     }
 
     pub fn is_empty(&self) -> bool {
         self.start == self.end
     }
+
+    /// Clears the selection, setting start and end to 0.
+    pub fn clear(&mut self) {
+        self.start = 0;
+        self.end = 0;
+    }
 }
 
-impl From<Range<Cursor>> for Selection {
-    fn from(value: Range<Cursor>) -> Self {
-        Self::new(value.start, value.end)
-    }
-}
-impl From<Selection> for Range<Cursor> {
-    fn from(value: Selection) -> Self {
-        value.start..value.end
-    }
-}
 impl From<Range<usize>> for Selection {
     fn from(value: Range<usize>) -> Self {
-        Self::new(Cursor::new(value.start), Cursor::new(value.end))
+        Self::new(value.start, value.end)
     }
 }
 impl From<Selection> for Range<usize> {
     fn from(value: Selection) -> Self {
-        value.start.offset..value.end.offset
-    }
-}
-impl From<&Selection> for Range<usize> {
-    fn from(value: &Selection) -> Self {
-        value.start.offset..value.end.offset
+        value.start..value.end
     }
 }
 

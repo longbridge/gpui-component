@@ -312,7 +312,7 @@ impl Render for Example {
                             Button::new("line-column")
                                 .ghost()
                                 .xsmall()
-                                .label(format!("{} ({} c)", loc, cursor.offset()))
+                                .label(format!("{} ({} c)", loc, cursor))
                                 .on_click(cx.listener(Self::go_to_line))
                         }),
                 ),
