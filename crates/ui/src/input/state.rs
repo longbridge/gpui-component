@@ -911,7 +911,7 @@ impl InputState {
         if self.mode.is_single_line() {
             return;
         }
-        let offset = self.start_of_line(window, cx).saturating_sub(1);
+        let offset = self.start_of_line().saturating_sub(1);
         self.select_to(Cursor::new(self.previous_boundary(offset)), window, cx);
     }
 
@@ -924,7 +924,7 @@ impl InputState {
         if self.mode.is_single_line() {
             return;
         }
-        let offset = (self.end_of_line(window, cx) + 1).min(self.text.len());
+        let offset = (self.end_of_line() + 1).min(self.text.len());
         self.select_to(Cursor::new(self.next_boundary(offset)), window, cx);
     }
 
@@ -940,13 +940,13 @@ impl InputState {
 
     pub(super) fn home(&mut self, _: &MoveHome, window: &mut Window, cx: &mut Context<Self>) {
         self.pause_blink_cursor(cx);
-        let offset = self.start_of_line(window, cx);
+        let offset = self.start_of_line();
         self.move_to(Cursor::new(offset), window, cx);
     }
 
     pub(super) fn end(&mut self, _: &MoveEnd, window: &mut Window, cx: &mut Context<Self>) {
         self.pause_blink_cursor(cx);
-        let offset = self.end_of_line(window, cx);
+        let offset = self.end_of_line();
         self.move_to(Cursor::new(offset), window, cx);
     }
 
@@ -1014,7 +1014,7 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let offset = self.start_of_line(window, cx);
+        let offset = self.start_of_line();
         self.select_to(Cursor::new(self.previous_boundary(offset)), window, cx);
     }
 
@@ -1024,7 +1024,7 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let offset = self.end_of_line(window, cx);
+        let offset = self.end_of_line();
         self.select_to(Cursor::new(self.next_boundary(offset)), window, cx);
     }
 
@@ -1072,20 +1072,24 @@ impl InputState {
             .unwrap_or(self.text.len())
     }
 
-    /// Get start of line
-    fn start_of_line(&mut self, window: &mut Window, cx: &mut Context<Self>) -> usize {
+    /// Get start of line byte offset of cursor
+    fn start_of_line(&self) -> usize {
         if self.mode.is_single_line() {
             return 0;
         }
 
-        let offset = self.previous_boundary(self.cursor().offset);
-        let line = self
-            .text_for_range(self.range_to_utf16(&(0..offset + 1)), &mut None, window, cx)
-            .unwrap_or_default()
-            .rfind('\n')
-            .map(|i| i + 1)
-            .unwrap_or(0);
-        line
+        let row = self.text.offset_to_point(self.cursor().offset()).row;
+        self.text.line_start_offset(row as usize)
+    }
+
+    /// Get end of line byte offset of cursor
+    fn end_of_line(&self) -> usize {
+        if self.mode.is_single_line() {
+            return self.text.len();
+        }
+
+        let row = self.text.offset_to_point(self.cursor().offset()).row;
+        self.text.line_end_offset(row as usize)
     }
 
     /// Get start line of selection start or end (The min value).
@@ -1114,60 +1118,18 @@ impl InputState {
         line
     }
 
-    /// Get end of line
-    fn end_of_line(&mut self, window: &mut Window, cx: &mut Context<Self>) -> usize {
-        if self.mode.is_single_line() {
-            return self.text.len();
-        }
-
-        // let line = self.text.byte_to_line(self.cursor().offset);
-        // let offset = self.text.line_to_byte(line) + self.text.line(line).len();
-
-        let offset = self.next_boundary(self.cursor().offset);
-        // ignore if offset is "\n"
-        if self
-            .text_for_range(
-                self.range_to_utf16(&(offset.saturating_sub(1)..offset)),
-                &mut None,
-                window,
-                cx,
-            )
-            .unwrap_or_default()
-            .eq("\n")
-        {
-            return offset;
-        }
-
-        let line = self
-            .text_for_range(
-                self.range_to_utf16(&(offset..self.text.len())),
-                &mut None,
-                window,
-                cx,
-            )
-            .unwrap_or_default()
-            .find('\n')
-            .map(|i| i + offset)
-            .unwrap_or(self.text.len());
-        line
-    }
-
     /// Get indent string of next line.
     ///
     /// To get current and next line indent, to return more depth one.
-    pub(super) fn indent_of_next_line(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> String {
+    pub(super) fn indent_of_next_line(&mut self) -> String {
         if self.mode.is_single_line() {
             return "".into();
         }
 
         let mut current_indent = String::new();
         let mut next_indent = String::new();
-        let current_line_start_pos = self.start_of_line(window, cx);
-        let next_line_start_pos = self.end_of_line(window, cx);
+        let current_line_start_pos = self.start_of_line();
+        let next_line_start_pos = self.end_of_line();
         for c in self.text.chars().skip(current_line_start_pos) {
             if !c.is_whitespace() {
                 break;
@@ -1225,7 +1187,7 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let mut offset = self.start_of_line(window, cx);
+        let mut offset = self.start_of_line();
         if offset == self.cursor().offset {
             offset = offset.saturating_sub(1);
         }
@@ -1245,7 +1207,7 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let mut offset = self.end_of_line(window, cx);
+        let mut offset = self.end_of_line();
         if offset == self.cursor().offset {
             offset = (offset + 1).clamp(0, self.text.len());
         }
@@ -1294,7 +1256,7 @@ impl InputState {
         if self.mode.is_multi_line() {
             // Get current line indent
             let indent = if self.mode.is_code_editor() {
-                self.indent_of_next_line(window, cx)
+                self.indent_of_next_line()
             } else {
                 "".to_string()
             };
