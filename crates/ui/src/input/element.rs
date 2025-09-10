@@ -717,35 +717,38 @@ impl Element for TextElement {
             .expect("failed to shape text");
         // measure.end();
 
-        let longtest_line: SharedString = state
-            .text
-            .line(state.text.summary().longest_row as usize)
-            .to_string()
-            .into();
-        let max_line_width = window
-            .text_system()
-            .shape_line(
-                longtest_line.clone(),
-                font_size,
-                &[TextRun {
-                    len: longtest_line.len(),
-                    font: style.font(),
-                    color: gpui::black(),
-                    background_color: None,
-                    underline: None,
-                    strikethrough: None,
-                }],
-                wrap_width,
-            )
-            .width;
+        let mut longest_line_width = px(0.);
+        if state.mode.is_multi_line() && lines.len() > 1 {
+            let longtest_line: SharedString = state
+                .text
+                .line(state.text.summary().longest_row as usize)
+                .to_string()
+                .into();
+            longest_line_width = window
+                .text_system()
+                .shape_line(
+                    longtest_line.clone(),
+                    font_size,
+                    &[TextRun {
+                        len: longtest_line.len(),
+                        font: style.font(),
+                        color: gpui::black(),
+                        background_color: None,
+                        underline: None,
+                        strikethrough: None,
+                    }],
+                    wrap_width,
+                )
+                .width;
+        }
 
         let total_wrapped_lines = state.text_wrapper.len();
 
         let scroll_size = size(
-            if max_line_width + line_number_width + RIGHT_MARGIN > bounds.size.width {
-                max_line_width + line_number_width + RIGHT_MARGIN
+            if longest_line_width + line_number_width + RIGHT_MARGIN > bounds.size.width {
+                longest_line_width + line_number_width + RIGHT_MARGIN
             } else {
-                max_line_width
+                longest_line_width
             },
             (total_wrapped_lines as f32 * line_height).max(bounds.size.height),
         );
