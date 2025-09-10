@@ -9,7 +9,7 @@ use crate::input::RopeExt as _;
 pub(super) struct LineItem {
     /// Byte range of this line (not includes ending `\n`).
     pub(super) range: Range<usize>,
-    /// The soft wrapped lines (byte range) of this line (Not include first line.)
+    /// The soft wrapped lines (byte range) of this line (Include first line).
     ///
     /// FIXME: Here in somecase, the `line_wrapper.wrap_line` has returned different
     /// like the `window.text_system().shape_text`. So, this value may not equal
@@ -26,7 +26,7 @@ impl LineItem {
     /// Get the total number of lines including wrapped lines.
     #[inline]
     pub(super) fn lines_len(&self) -> usize {
-        self.wrapped_lines.len() + 1
+        self.wrapped_lines.len()
     }
 
     /// Get the height of this line including wrapped lines.
@@ -135,17 +135,17 @@ impl TextWrapper {
                 }
             }
 
+            // Reset of the line
+            if !line[prev_boundary_ix..].is_empty() || prev_boundary_ix == 0 {
+                wrapped_lines.push(prev_line_ix + prev_boundary_ix..prev_line_ix + line.len());
+            }
+
             soft_lines += wrapped_lines.len();
 
             lines.push(LineItem {
                 range: prev_line_ix..prev_line_ix + line.len(),
                 wrapped_lines,
             });
-
-            // Reset of the line
-            if !line[prev_boundary_ix..].is_empty() || prev_boundary_ix == 0 {
-                soft_lines += 1;
-            }
 
             // +1 for \n
             prev_line_ix += line.len() + 1;
