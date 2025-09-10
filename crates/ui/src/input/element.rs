@@ -717,12 +717,29 @@ impl Element for TextElement {
             .expect("failed to shape text");
         // measure.end();
 
-        let mut max_line_width = px(0.);
+        let longtest_line: SharedString = state
+            .text
+            .line(state.text.summary().longest_row as usize)
+            .to_string()
+            .into();
+        let max_line_width = window
+            .text_system()
+            .shape_line(
+                longtest_line.clone(),
+                font_size,
+                &[TextRun {
+                    len: longtest_line.len(),
+                    font: style.font(),
+                    color: gpui::black(),
+                    background_color: None,
+                    underline: None,
+                    strikethrough: None,
+                }],
+                wrap_width,
+            )
+            .width;
+
         let total_wrapped_lines = state.text_wrapper.len();
-        for line in lines.iter() {
-            // FIXME: The `shape_text` measured width is not stable, sometime will large, sometime small.
-            max_line_width = max_line_width.max(line.width());
-        }
 
         let scroll_size = size(
             if max_line_width + line_number_width + RIGHT_MARGIN > bounds.size.width {
