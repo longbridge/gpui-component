@@ -769,15 +769,17 @@ impl InputState {
         cx: &mut Context<Self>,
     ) {
         let max_point = self.text.max_point();
-        let line_ix = line.saturating_sub(1).min(max_point.row as usize);
-        let column_ix = column
+        let row = line.saturating_sub(1).min(max_point.row as usize);
+        let col = column
             .unwrap_or(1)
             .saturating_sub(1)
-            .min(self.text.line_len(line_ix as u32) as usize);
+            .min(self.text.line_len(row as u32) as usize);
 
         let offset = self
             .text
-            .point_to_offset(rope::Point::new(line_ix as u32, column_ix as u32));
+            .point_to_offset(rope::Point::new(row as u32, col as u32));
+
+        // TODO: Scroll to make the row in center of viewport.
 
         self.move_to(Cursor::new(offset), window, cx);
         self.update_preferred_column();
