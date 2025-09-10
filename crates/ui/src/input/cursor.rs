@@ -70,6 +70,15 @@ impl From<rope::Point> for LineColumn {
     }
 }
 
+impl From<LineColumn> for rope::Point {
+    fn from(value: LineColumn) -> Self {
+        Self {
+            row: value.line.saturating_sub(1) as u32,
+            column: value.column.saturating_sub(1) as u32,
+        }
+    }
+}
+
 impl From<LineColumn> for tree_sitter::Point {
     fn from(value: LineColumn) -> Self {
         Self {
