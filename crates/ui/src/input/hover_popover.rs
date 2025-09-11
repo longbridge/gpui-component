@@ -5,17 +5,21 @@ use gpui::{
     InteractiveElement, IntoElement, ParentElement as _, Pixels, Point, Render, Styled, Window,
 };
 
-use crate::{highlighter::Diagnostic, input::InputState, text::TextView, ActiveTheme as _};
+use crate::{highlighter::DiagnosticEntry, input::InputState, text::TextView, ActiveTheme as _};
 
 pub struct DiagnosticPopover {
     state: Entity<InputState>,
-    pub(super) diagnostic: Rc<Diagnostic>,
+    pub(super) diagnostic: Rc<DiagnosticEntry>,
     bounds: Bounds<Pixels>,
     open: bool,
 }
 
 impl DiagnosticPopover {
-    pub fn new(diagnostic: &Diagnostic, state: Entity<InputState>, cx: &mut App) -> Entity<Self> {
+    pub fn new(
+        diagnostic: &DiagnosticEntry,
+        state: Entity<InputState>,
+        cx: &mut App,
+    ) -> Entity<Self> {
         let diagnostic = Rc::new(diagnostic.clone());
 
         cx.new(|_| Self {
@@ -33,8 +37,7 @@ impl DiagnosticPopover {
         };
 
         let line_number_width = last_layout.line_number_width;
-        let (_, _, start_pos) =
-            state.line_and_position_for_offset(self.diagnostic.byte_range.start);
+        let (_, _, start_pos) = state.line_and_position_for_offset(self.diagnostic.range.start);
 
         start_pos.map(|pos| pos + Point::new(line_number_width, px(0.)))
     }
@@ -99,13 +102,13 @@ impl Render for DiagnosticPopover {
                 .px_1()
                 .py_0p5()
                 .text_xs()
-                .bg(bg)
                 .max_w(max_width)
+                .bg(bg)
                 .text_color(fg)
                 .border_1()
                 .border_color(border)
                 .rounded(cx.theme().radius)
-                .shadow_xs()
+                .shadow_md()
                 .child(TextView::markdown("message", message, window, cx).selectable())
                 .child(
                     canvas(

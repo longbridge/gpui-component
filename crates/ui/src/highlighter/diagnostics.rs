@@ -1,4 +1,8 @@
-use std::{cmp::Ordering, ops::Range};
+use std::{
+    cmp::Ordering,
+    ops::{Deref, Range},
+    usize,
+};
 
 use gpui::{px, App, HighlightStyle, Hsla, SharedString, UnderlineStyle};
 use rope::Rope;
@@ -20,8 +24,6 @@ pub struct Diagnostic {
     ///
     /// This is the column, character range within a single line.
     pub range: Range<Position>,
-
-    pub(crate) byte_range: Range<usize>,
 
     /// The diagnostic's severity. Can be omitted. If omitted it is up to the
     /// client to interpret diagnostics as error, warning, info or hint.
@@ -57,7 +59,6 @@ impl From<lsp_types::Diagnostic> for Diagnostic {
     fn from(value: lsp_types::Diagnostic) -> Self {
         Self {
             range: Position::from(value.range.start)..Position::from(value.range.end),
-            byte_range: 0..0,
             severity: value
                 .severity
                 .map(Into::into)
@@ -174,12 +175,20 @@ impl Diagnostic {
         self.source = Some(source.into());
         self
     }
+}
 
-    /// Prepares the byte range of the diagnostic within the given text.
-    pub(crate) fn prepare(&mut self, text: &Rope) {
-        let start = text.position_to_offset(&self.range.start);
-        let end = text.position_to_offset(&self.range.end);
-        self.byte_range = start..end;
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub(crate) struct DiagnosticEntry {
+    /// The byte range of the diagnostic in the rope.
+    pub range: Range<usize>,
+    pub diagnostic: Diagnostic,
+}
+
+impl Deref for DiagnosticEntry {
+    type Target = Diagnostic;
+
+    fn deref(&self) -> &Self::Target {
+        &self.diagnostic
     }
 }
 
@@ -190,13 +199,13 @@ pub struct DiagnosticSummary {
     end: usize,
 }
 
-impl sum_tree::Item for Diagnostic {
+impl sum_tree::Item for DiagnosticEntry {
     type Summary = DiagnosticSummary;
     fn summary(&self, _cx: &()) -> Self::Summary {
         DiagnosticSummary {
             count: 1,
-            start: self.byte_range.start,
-            end: self.byte_range.end,
+            start: self.range.start,
+            end: self.range.end,
         }
     }
 }
@@ -207,7 +216,7 @@ impl sum_tree::Summary for DiagnosticSummary {
         DiagnosticSummary {
             count: 0,
             start: usize::MIN,
-            end: usize::MAX,
+            end: usize::MIN,
         }
     }
 
@@ -234,7 +243,7 @@ impl SeekTarget<'_, DiagnosticSummary, DiagnosticSummary> for usize {
 #[derive(Debug, Clone, Default)]
 pub struct DiagnosticSet {
     text: Rope,
-    diagnostics: SumTree<Diagnostic>,
+    diagnostics: SumTree<DiagnosticEntry>,
 }
 
 impl DiagnosticSet {
@@ -251,10 +260,16 @@ impl DiagnosticSet {
     }
 
     pub fn push(&mut self, diagnostic: Diagnostic) {
-        let mut diagnostic = diagnostic;
-        diagnostic.prepare(&self.text);
+        let start = self.text.position_to_offset(&diagnostic.range.start);
+        let end = self.text.position_to_offset(&diagnostic.range.end);
 
-        self.diagnostics.push(diagnostic, &());
+        self.diagnostics.push(
+            DiagnosticEntry {
+                range: start..end,
+                diagnostic,
+            },
+            &(),
+        );
     }
 
     pub fn extend<I>(&mut self, diagnostics: I)
@@ -278,26 +293,26 @@ impl DiagnosticSet {
         self.diagnostics.is_empty()
     }
 
-    pub(crate) fn for_range(&self, range: Range<usize>) -> impl Iterator<Item = &Diagnostic> {
+    pub(crate) fn range(&self, range: Range<usize>) -> impl Iterator<Item = &DiagnosticEntry> {
         let mut cursor = self.diagnostics.cursor::<DiagnosticSummary>(&());
         cursor.seek(&range.start, Bias::Left);
         std::iter::from_fn(move || {
-            while let Some(item) = cursor.item() {
+            while let Some(entry) = cursor.item() {
                 cursor.next();
 
-                if item.byte_range.start >= range.end {
+                if entry.range.start >= range.end {
                     break;
                 }
 
-                return Some(item);
+                return Some(entry);
             }
 
             None
         })
     }
 
-    pub(crate) fn for_offset(&self, offset: usize) -> Option<&Diagnostic> {
-        self.for_range(offset..offset + 1).next()
+    pub(crate) fn for_offset(&self, offset: usize) -> Option<&DiagnosticEntry> {
+        self.range(offset..offset + 1).next()
     }
 
     pub(crate) fn styles_for_range(
@@ -310,17 +325,17 @@ impl DiagnosticSet {
         }
 
         let mut styles = vec![];
-        for diagnostic in self.for_range(range.clone()) {
-            let range = diagnostic.byte_range.clone();
-            styles.push((range, diagnostic.severity.highlight_style(cx)));
+        for entry in self.range(range.clone()) {
+            let range = entry.range.clone();
+            styles.push((range, entry.diagnostic.severity.highlight_style(cx)));
         }
 
         styles
     }
 
     #[allow(unused)]
-    pub(crate) fn iter(&self) -> impl Iterator<Item = &Diagnostic> {
-        self.diagnostics.iter()
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &DiagnosticEntry> {
+        self.diagnostics.iter().map(|entry| entry)
     }
 }
 
@@ -349,12 +364,12 @@ mod tests {
         let items = diagnostics.iter().collect::<Vec<_>>();
 
         assert_eq!(items[0].message.as_str(), "Spelling mistake");
-        assert_eq!(items[0].byte_range, 7..19);
+        assert_eq!(items[0].range, 7..19);
 
         assert_eq!(items[1].message.as_str(), "Syntax error");
-        assert_eq!(items[1].byte_range, 45..50);
+        assert_eq!(items[1].range, 45..50);
 
-        let items = diagnostics.for_range(6..48).collect::<Vec<_>>();
+        let items = diagnostics.range(6..48).collect::<Vec<_>>();
         assert_eq!(items.len(), 2);
 
         let item = diagnostics.for_offset(10).unwrap();
