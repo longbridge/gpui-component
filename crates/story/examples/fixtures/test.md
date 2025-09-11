@@ -16,7 +16,9 @@ This is an additional demonstration paragraph in English demonstrating more cont
 
 [^2]: Here is another footnote.
 
-This paragraph for diagnostic test: hello世界。
+This paragraph for diagnostic test:
+
+- hello世界。这是一个采用 AutoCorrect 来纠正拼写错误的段落，这里here会有诊断。
 
 ## Basic formatting
 

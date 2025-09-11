@@ -100,13 +100,13 @@ impl Render for DiagnosticPopover {
                 .py_0p5()
                 .text_xs()
                 .bg(bg)
-                .w(max_width)
+                .max_w(max_width)
                 .text_color(fg)
                 .border_1()
                 .border_color(border)
                 .rounded(cx.theme().radius)
                 .shadow_xs()
-                .child(TextView::markdown("message", message, window, cx))
+                .child(TextView::markdown("message", message, window, cx).selectable())
                 .child(
                     canvas(
                         move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds),
