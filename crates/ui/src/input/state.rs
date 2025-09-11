@@ -400,8 +400,46 @@ impl InputState {
             highlighter: Rc::new(RefCell::new(None)),
             line_number: true,
             diagnostics: DiagnosticSet::default(),
+            code_action_provider: None,
+            completion_provider: None,
         };
         self
+    }
+
+    /// Set the code action provider for the code editor mode.
+    ///
+    /// Only for `InputMode::CodeEditor`.
+    pub fn set_code_action_provider(
+        &mut self,
+        provider: Option<Rc<dyn super::CodeActionProvider>>,
+        cx: &mut Context<Self>,
+    ) {
+        if let InputMode::CodeEditor {
+            code_action_provider,
+            ..
+        } = &mut self.mode
+        {
+            *code_action_provider = provider;
+            cx.notify();
+        }
+    }
+
+    /// Set the completion provider for the code editor mode.
+    ///
+    /// Only for `InputMode::CodeEditor`.
+    pub fn set_completion_provider(
+        &mut self,
+        provider: Option<Rc<dyn super::CompletionProvider>>,
+        cx: &mut Context<Self>,
+    ) {
+        if let InputMode::CodeEditor {
+            completion_provider,
+            ..
+        } = &mut self.mode
+        {
+            *completion_provider = provider;
+            cx.notify();
+        }
     }
 
     /// Set placeholder

@@ -7,6 +7,7 @@ use tree_sitter::{InputEdit, Point};
 
 use crate::highlighter::DiagnosticSet;
 use crate::highlighter::SyntaxHighlighter;
+use crate::input::{CodeActionProvider, CompletionProvider};
 
 use super::text_wrapper::TextWrapper;
 
@@ -58,6 +59,8 @@ pub enum InputMode {
         language: SharedString,
         highlighter: Rc<RefCell<Option<SyntaxHighlighter>>>,
         diagnostics: DiagnosticSet,
+        completion_provider: Option<Rc<dyn CompletionProvider>>,
+        code_action_provider: Option<Rc<dyn CodeActionProvider>>,
     },
 }
 
@@ -235,6 +238,26 @@ impl InputMode {
     pub(super) fn diagnostics_mut(&mut self) -> Option<&mut DiagnosticSet> {
         match self {
             InputMode::CodeEditor { diagnostics, .. } => Some(diagnostics),
+            _ => None,
+        }
+    }
+
+    pub(super) fn completion_provider(&self) -> Option<&Rc<dyn CompletionProvider>> {
+        match self {
+            InputMode::CodeEditor {
+                completion_provider,
+                ..
+            } => completion_provider.as_ref(),
+            _ => None,
+        }
+    }
+
+    pub(super) fn code_action_provider(&self) -> Option<&Rc<dyn CodeActionProvider>> {
+        match self {
+            InputMode::CodeEditor {
+                code_action_provider,
+                ..
+            } => code_action_provider.as_ref(),
             _ => None,
         }
     }
