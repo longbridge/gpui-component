@@ -728,7 +728,9 @@ impl InputState {
     pub fn default_value(mut self, value: impl Into<SharedString>) -> Self {
         let text: SharedString = value.into();
         self.text = Rope::from(text.as_str());
-        self.mode.diagnostics_mut().map(|d| d.reset(&self.text));
+        if let Some(diagnostics) = self.mode.diagnostics_mut() {
+            diagnostics.reset(&self.text)
+        }
         self.text_wrapper.set_default_text(&self.text);
         self
     }
@@ -2104,9 +2106,9 @@ impl EntityInputHandler for InputState {
         }
 
         self.push_history(&old_text, &range, &new_text);
-        self.mode.diagnostics_mut().map(|diagnostics| {
-            diagnostics.reset(&self.text);
-        });
+        if let Some(diagnostics) = self.mode.diagnostics_mut() {
+            diagnostics.reset(&self.text)
+        }
         self.text_wrapper.update(&self.text, false, cx);
         self.mode
             .update_highlighter(&range, &self.text, &new_text, true, cx);
@@ -2148,9 +2150,9 @@ impl EntityInputHandler for InputState {
         }
 
         self.push_history(&old_text, &range, new_text);
-        self.mode.diagnostics_mut().map(|diagnostics| {
-            diagnostics.reset(&self.text);
-        });
+        if let Some(diagnostics) = self.mode.diagnostics_mut() {
+            diagnostics.reset(&self.text)
+        }
         self.text_wrapper.update(&self.text, false, cx);
         self.mode
             .update_highlighter(&range, &self.text, &new_text, true, cx);

@@ -297,16 +297,12 @@ impl DiagnosticSet {
         let mut cursor = self.diagnostics.cursor::<DiagnosticSummary>(&());
         cursor.seek(&range.start, Bias::Left);
         std::iter::from_fn(move || {
-            while let Some(entry) = cursor.item() {
-                cursor.next();
-
-                if entry.range.start >= range.end {
-                    break;
+            if let Some(entry) = cursor.item() {
+                if entry.range.start < range.end {
+                    cursor.next();
+                    return Some(entry);
                 }
-
-                return Some(entry);
             }
-
             None
         })
     }
@@ -335,7 +331,7 @@ impl DiagnosticSet {
 
     #[allow(unused)]
     pub(crate) fn iter(&self) -> impl Iterator<Item = &DiagnosticEntry> {
-        self.diagnostics.iter().map(|entry| entry)
+        self.diagnostics.iter()
     }
 }
 
