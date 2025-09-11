@@ -10,7 +10,6 @@ use rope::Rope;
 use smallvec::SmallVec;
 
 use crate::{
-    highlighter::SyntaxHighlighter,
     input::{blink_cursor::CURSOR_WIDTH, RopeExt as _},
     ActiveTheme as _, Root,
 };
@@ -414,65 +413,45 @@ impl TextElement {
         &mut self,
         visible_range: &Range<usize>,
         _visible_top: Pixels,
-        visible_start_offset: usize,
+        visible_byte_range: Range<usize>,
         cx: &mut App,
     ) -> Option<Vec<(Range<usize>, HighlightStyle)>> {
-        let theme = cx.theme().highlight_theme.clone();
-        self.state.update(cx, |state, cx| match &state.mode {
+        let state = self.state.read(cx);
+        let text = &state.text;
+
+        let (highlighter, diagnostics) = match &state.mode {
             InputMode::CodeEditor {
-                language,
                 highlighter,
-                markers,
+                diagnostics,
                 ..
-            } => {
-                // Init highlighter if not initialized
-                let mut highlighter = highlighter.borrow_mut();
-                if highlighter.is_none() {
-                    highlighter.replace(SyntaxHighlighter::new(language, cx));
-                };
-                let Some(highlighter) = highlighter.as_ref() else {
-                    return None;
-                };
+            } => (highlighter.borrow(), diagnostics),
+            _ => return None,
+        };
+        let highlighter = highlighter.as_ref()?;
 
-                let mut offset = visible_start_offset;
-                let mut styles = vec![];
+        let mut offset = visible_byte_range.start;
+        let mut styles = vec![];
 
-                for line in state
-                    .text
-                    .lines()
-                    .skip(visible_range.start)
-                    .take(visible_range.len())
-                {
-                    // +1 for `\n`
-                    let line_len = line.len() + 1;
-                    let range = offset..offset + line_len;
-                    let line_styles = highlighter.styles(&range, &theme, cx);
-                    styles = gpui::combine_highlights(styles, line_styles).collect();
+        for line in text
+            .lines()
+            .skip(visible_range.start)
+            .take(visible_range.len())
+        {
+            // +1 for `\n`
+            let line_len = line.len() + 1;
+            let range = offset..offset + line_len;
+            let line_styles = highlighter.styles(&range, cx);
+            styles = gpui::combine_highlights(styles, line_styles).collect();
 
-                    offset = range.end;
-                }
+            offset = range.end;
+        }
 
-                // Combine marker styles
-                if !markers.is_empty() {
-                    let mut marker_styles = vec![];
-                    for marker in markers.iter() {
-                        if let Some(range) = &marker.range {
-                            if range.start < visible_start_offset {
-                                continue;
-                            }
+        let diagnostic_styles = diagnostics.styles_for_range(&visible_byte_range, cx);
 
-                            marker_styles
-                                .push((range.clone(), marker.severity.highlight_style(&theme, cx)));
-                        }
-                    }
+        // Combine marker styles
+        styles = gpui::combine_highlights(diagnostic_styles, styles).collect();
 
-                    styles = gpui::combine_highlights(marker_styles, styles).collect();
-                }
-
-                Some(styles)
-            }
-            _ => None,
-        })
+        Some(styles)
     }
 }
 
@@ -584,9 +563,16 @@ impl Element for TextElement {
         let (visible_range, visible_top) =
             self.calculate_visible_range(&state, line_height, bounds.size.height);
         let visible_start_offset = state.text.line_start_offset(visible_range.start);
+        let visible_end_offset = state
+            .text
+            .line_end_offset(visible_range.end.saturating_sub(1));
 
-        let highlight_styles =
-            self.highlight_lines(&visible_range, visible_top, visible_start_offset, cx);
+        let highlight_styles = self.highlight_lines(
+            &visible_range,
+            visible_top,
+            visible_start_offset..visible_end_offset,
+            cx,
+        );
 
         let state = self.state.read(cx);
         let multi_line = state.mode.is_multi_line();

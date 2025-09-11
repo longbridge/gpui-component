@@ -5,25 +5,25 @@ use gpui::{
     InteractiveElement, IntoElement, ParentElement as _, Pixels, Point, Render, Styled, Window,
 };
 
-use crate::{
-    input::{InputState, Marker},
-    text::TextView,
-    ActiveTheme as _,
-};
+use crate::{highlighter::DiagnosticEntry, input::InputState, text::TextView, ActiveTheme as _};
 
 pub struct DiagnosticPopover {
     state: Entity<InputState>,
-    pub(super) marker: Rc<Marker>,
+    pub(super) diagnostic: Rc<DiagnosticEntry>,
     bounds: Bounds<Pixels>,
     open: bool,
 }
 
 impl DiagnosticPopover {
-    pub fn new(marker: &Marker, state: Entity<InputState>, cx: &mut App) -> Entity<Self> {
-        let marker = Rc::new(marker.clone());
+    pub fn new(
+        diagnostic: &DiagnosticEntry,
+        state: Entity<InputState>,
+        cx: &mut App,
+    ) -> Entity<Self> {
+        let diagnostic = Rc::new(diagnostic.clone());
 
         cx.new(|_| Self {
-            marker,
+            diagnostic,
             state,
             bounds: Bounds::default(),
             open: true,
@@ -31,19 +31,13 @@ impl DiagnosticPopover {
     }
 
     fn origin(&self, cx: &App) -> Option<Point<Pixels>> {
-        let Some(range) = self.marker.range.as_ref() else {
-            return None;
-        };
-        let Some(last_layout) = self.state.read(cx).last_layout.as_ref() else {
+        let state = self.state.read(cx);
+        let Some(last_layout) = state.last_layout.as_ref() else {
             return None;
         };
 
         let line_number_width = last_layout.line_number_width;
-
-        let (_, _, start_pos) = self
-            .state
-            .read(cx)
-            .line_and_position_for_offset(range.start);
+        let (_, _, start_pos) = state.line_and_position_for_offset(self.diagnostic.range.start);
 
         start_pos.map(|pos| pos + Point::new(line_number_width, px(0.)))
     }
@@ -82,16 +76,15 @@ impl Render for DiagnosticPopover {
         }
 
         let view = cx.entity();
-        let theme = &cx.theme().highlight_theme;
 
-        let message = self.marker.message.clone();
+        let message = self.diagnostic.message.clone();
         let Some(pos) = self.origin(cx) else {
             return Empty.into_any_element();
         };
         let (border, bg, fg) = (
-            self.marker.severity.border(theme, cx),
-            self.marker.severity.bg(theme, cx),
-            self.marker.severity.fg(theme, cx),
+            self.diagnostic.severity.border(cx),
+            self.diagnostic.severity.bg(cx),
+            self.diagnostic.severity.fg(cx),
         );
 
         let scroll_origin = self.state.read(cx).scroll_handle.offset();
@@ -109,14 +102,14 @@ impl Render for DiagnosticPopover {
                 .px_1()
                 .py_0p5()
                 .text_xs()
+                .max_w(max_width)
                 .bg(bg)
-                .w(max_width)
                 .text_color(fg)
                 .border_1()
                 .border_color(border)
                 .rounded(cx.theme().radius)
-                .shadow_xs()
-                .child(TextView::markdown("message", message, window, cx))
+                .shadow_md()
+                .child(TextView::markdown("message", message, window, cx).selectable())
                 .child(
                     canvas(
                         move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds),

@@ -144,7 +144,7 @@ impl Focusable for TextareaStory {
 
 impl Render for TextareaStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let loc = self.textarea.read(cx).line_column();
+        let loc = self.textarea.read(cx).cursor_position();
 
         v_flex()
             .key_context(CONTEXT)
@@ -183,7 +183,7 @@ impl Render for TextareaStory {
                                                 ),
                                         ),
                                 )
-                                .child(format!("{}:{}", loc.line, loc.column)),
+                                .child(format!("{}:{}", loc.line, loc.character)),
                         ),
                 ),
             )

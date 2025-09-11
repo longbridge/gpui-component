@@ -3,8 +3,8 @@ use gpui_component::{
     button::{Button, ButtonVariants as _},
     dropdown::{Dropdown, DropdownEvent, DropdownState},
     h_flex,
-    highlighter::{Language, LanguageConfig, LanguageRegistry},
-    input::{InputEvent, InputState, Marker, TabSize, TextInput},
+    highlighter::{Diagnostic, DiagnosticSeverity, Language, LanguageConfig, LanguageRegistry},
+    input::{self, InputEvent, InputState, TabSize, TextInput},
     v_flex, ActiveTheme, ContextModal, IconName, IndexPath, Selectable, Sizable,
 };
 use story::Assets;
@@ -132,8 +132,8 @@ impl Example {
         });
 
         let _subscribes = vec![
-            cx.subscribe(&editor, |_, _, _: &InputEvent, cx| {
-                cx.notify();
+            cx.subscribe(&editor, |this, _, _: &InputEvent, cx| {
+                this.lint_document(cx);
             }),
             cx.subscribe(
                 &language_state,
@@ -164,24 +164,6 @@ impl Example {
         }
     }
 
-    fn set_markers(&mut self, _: &mut Window, cx: &mut Context<Self>) {
-        if self.language.name() != "rust" {
-            return;
-        }
-
-        self.editor.update(cx, |state, cx| {
-            state.set_markers(
-                vec![
-                    Marker::new("warning", (2, 1), (2, 31), "Import but not used."),
-                    Marker::new("error", (16, 10), (16, 46), "Syntax error."),
-                    Marker::new("info", (25, 10), (25, 20), "This is a info message, this is a very long message, with **Markdown** support."),
-                    Marker::new("hint", (36, 9), (40, 10), "This is a hint message."),
-                ],
-                cx,
-            );
-        });
-    }
-
     fn update_highlighter(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if !self.need_update {
             return;
@@ -203,7 +185,8 @@ impl Example {
 
         window.open_modal(cx, move |modal, window, cx| {
             input_state.update(cx, |state, cx| {
-                state.set_placeholder(format!("{}", editor.read(cx).line_column()), window, cx);
+                let cursor_pos = editor.read(cx).cursor_position();
+                state.set_placeholder(format!("{}", cursor_pos), window, cx);
                 state.focus(window, cx);
             });
 
@@ -224,10 +207,12 @@ impl Example {
                         let Some(line) = parts.next().and_then(|l| l) else {
                             return false;
                         };
-                        let column = parts.next().and_then(|c| c);
+                        let column = parts.next().and_then(|c| c).unwrap_or(1);
+                        let position =
+                            input::Position::new(line.saturating_sub(1), column.saturating_sub(1));
 
                         editor.update(cx, |state, cx| {
-                            state.go_to_line(line, column, window, cx);
+                            state.set_cursor_position(position, window, cx);
                         });
 
                         true
@@ -243,12 +228,40 @@ impl Example {
         });
         cx.notify();
     }
+
+    fn lint_document(&self, cx: &mut Context<Self>) {
+        // Subscribe to input changes and perform linting with AutoCorrect for markers example.
+        let value = self.editor.read(cx).value().clone();
+        let result = autocorrect::lint_for(value.as_str(), self.language.name());
+
+        self.editor.update(cx, |state, cx| {
+            state.diagnostics_mut().map(|diagnostics| {
+                diagnostics.clear();
+                for item in result.lines.iter() {
+                    let severity = match item.severity {
+                        autocorrect::Severity::Error => DiagnosticSeverity::Warning,
+                        autocorrect::Severity::Warning => DiagnosticSeverity::Hint,
+                        autocorrect::Severity::Pass => DiagnosticSeverity::Info,
+                    };
+
+                    let line = item.line.saturating_sub(1); // Convert to 0-based index
+                    let col = item.col.saturating_sub(1); // Convert to 0-based index
+
+                    let start = (line, col);
+                    let end = (line, col + item.old.chars().count());
+                    let message = format!("AutoCorrect: {}", item.new);
+                    diagnostics.push(Diagnostic::new(start..end, message).with_severity(severity));
+                }
+            });
+
+            cx.notify();
+        });
+    }
 }
 
 impl Render for Example {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.update_highlighter(window, cx);
-        self.set_markers(window, cx);
 
         v_flex().size_full().child(
             v_flex()
@@ -305,13 +318,13 @@ impl Render for Example {
                                 }),
                         )
                         .child({
-                            let loc = self.editor.read(cx).line_column();
+                            let position = self.editor.read(cx).cursor_position();
                             let cursor = self.editor.read(cx).cursor();
 
                             Button::new("line-column")
                                 .ghost()
                                 .xsmall()
-                                .label(format!("{} ({} c)", loc, cursor))
+                                .label(format!("{} ({} byte)", position, cursor))
                                 .on_click(cx.listener(Self::go_to_line))
                         }),
                 ),

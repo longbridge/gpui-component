@@ -29,10 +29,9 @@ use super::{
     number_input,
     text_wrapper::TextWrapper,
 };
-use crate::input::hover_popover::DiagnosticPopover;
-use crate::input::marker::Marker;
-use crate::input::text_wrapper::LineItem;
-use crate::input::{LineColumn, RopeExt as _, Selection};
+use crate::input::{hover_popover::DiagnosticPopover, Position};
+use crate::input::{RopeExt as _, Selection};
+use crate::{highlighter::DiagnosticSet, input::text_wrapper::LineItem};
 use crate::{history::History, scroll::ScrollbarState, Root};
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
@@ -400,7 +399,7 @@ impl InputState {
             language,
             highlighter: Rc::new(RefCell::new(None)),
             line_number: true,
-            markers: Rc::new(vec![]),
+            diagnostics: DiagnosticSet::default(),
         };
         self
     }
@@ -490,15 +489,14 @@ impl InputState {
         cx.notify();
     }
 
-    /// Set markers, only for [`InputMode::CodeEditor`] mode.
-    ///
-    /// For example to set the diagnostic markers in the code editor.
-    pub fn set_markers(&mut self, markers: Vec<Marker>, _: &mut Context<Self>) {
-        let mut markers = markers;
-        for marker in &mut markers {
-            marker.prepare(self);
-        }
-        self.mode.set_markers(markers);
+    #[inline]
+    pub fn diagnostics(&self) -> Option<&DiagnosticSet> {
+        self.mode.diagnostics()
+    }
+
+    #[inline]
+    pub fn diagnostics_mut(&mut self) -> Option<&mut DiagnosticSet> {
+        self.mode.diagnostics_mut()
     }
 
     /// Set placeholder
@@ -730,6 +728,9 @@ impl InputState {
     pub fn default_value(mut self, value: impl Into<SharedString>) -> Self {
         let text: SharedString = value.into();
         self.text = Rope::from(text.as_str());
+        if let Some(diagnostics) = self.mode.diagnostics_mut() {
+            diagnostics.reset(&self.text)
+        }
         self.text_wrapper.set_default_text(&self.text);
         self
     }
@@ -744,34 +745,26 @@ impl InputState {
         self.mask_pattern.unmask(&self.text.to_string()).into()
     }
 
-    /// Return the (1-based) line and column of the cursor.
-    pub fn line_column(&self) -> LineColumn {
+    /// Return the (0-based) [`Position`] of the cursor.
+    pub fn cursor_position(&self) -> Position {
         let offset = self.cursor();
-        self.text.offset_to_line_column(offset)
+        self.text.offset_to_position(offset)
     }
 
-    /// Set (1-based) line and column of the cursor.
+    /// Set (0-based) [`Position`] of the cursor.
     ///
     /// This will move the cursor to the specified line and column, and update the selection range.
-    ///
-    /// - The `column` is optional, if it is `None`, it will return the start of the line.
-    /// - If the `line` is 0, it will return 0.
-    /// - If the `line` is greater than the number of lines, it will return
-    ///   the length of the text.
-    ///
-    /// Ignore, if the line, column is invalid.
-    pub fn go_to_line(
+    pub fn set_cursor_position(
         &mut self,
-        line: usize,
-        column: Option<usize>,
+        position: impl Into<Position>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let position: Position = position.into();
         let max_point = self.text.max_point();
-        let row = line.saturating_sub(1).min(max_point.row as usize);
-        let col = column
-            .unwrap_or(1)
-            .saturating_sub(1)
+        let row = position.line.min(max_point.row as usize);
+        let col = position
+            .character
             .min(self.text.line_len(row as u32) as usize);
 
         let offset = self
@@ -1469,9 +1462,13 @@ impl InputState {
         if self.mode.is_code_editor() {
             // Show diagnostic popover on mouse move
             let offset = self.index_for_mouse_position(event.position, window, cx);
-            if let Some(marker) = self.mode.marker_for_offset(offset) {
+            if let Some(diagnostic) = self
+                .mode
+                .diagnostics()
+                .and_then(|set| set.for_offset(offset))
+            {
                 if let Some(diagnostic_popover) = self.diagnostic_popover.as_ref() {
-                    if diagnostic_popover.read(cx).marker.range == marker.range {
+                    if diagnostic_popover.read(cx).diagnostic.range == diagnostic.range {
                         diagnostic_popover.update(cx, |this, cx| {
                             this.show(cx);
                         });
@@ -1480,7 +1477,7 @@ impl InputState {
                     }
                 }
 
-                self.diagnostic_popover = Some(DiagnosticPopover::new(marker, cx.entity(), cx));
+                self.diagnostic_popover = Some(DiagnosticPopover::new(diagnostic, cx.entity(), cx));
                 cx.notify();
             } else {
                 if let Some(diagnostic_popover) = self.diagnostic_popover.as_mut() {
@@ -2109,8 +2106,9 @@ impl EntityInputHandler for InputState {
         }
 
         self.push_history(&old_text, &range, &new_text);
-
-        self.mode.clear_markers();
+        if let Some(diagnostics) = self.mode.diagnostics_mut() {
+            diagnostics.reset(&self.text)
+        }
         self.text_wrapper.update(&self.text, false, cx);
         self.mode
             .update_highlighter(&range, &self.text, &new_text, true, cx);
@@ -2152,7 +2150,9 @@ impl EntityInputHandler for InputState {
         }
 
         self.push_history(&old_text, &range, new_text);
-        self.mode.clear_markers();
+        if let Some(diagnostics) = self.mode.diagnostics_mut() {
+            diagnostics.reset(&self.text)
+        }
         self.text_wrapper.update(&self.text, false, cx);
         self.mode
             .update_highlighter(&range, &self.text, &new_text, true, cx);

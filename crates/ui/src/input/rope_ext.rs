@@ -1,6 +1,6 @@
 use rope::{Point, Rope};
 
-use crate::input::LineColumn;
+use crate::input::Position;
 
 /// An extension trait for `Rope` to provide additional utility methods.
 pub trait RopeExt {
@@ -38,11 +38,11 @@ pub trait RopeExt {
     /// If the offset is out of bounds, return None.
     fn char_at(&self, offset: usize) -> Option<char>;
 
-    /// Get the byte offset from the given `LineColumn` (1-based).
-    fn line_column_to_offset(&self, line_col: &LineColumn) -> usize;
+    /// Get the byte offset from the given line, column [`Position`] (0-based).
+    fn position_to_offset(&self, line_col: &Position) -> usize;
 
-    /// Get the `LineColumn` (1-based) from the given byte offset.
-    fn offset_to_line_column(&self, offset: usize) -> LineColumn;
+    /// Get the line, column [`Position`] (0-based) from the given byte offset.
+    fn offset_to_position(&self, offset: usize) -> Position;
 }
 
 /// An iterator over the lines of a `Rope`.
@@ -106,22 +106,21 @@ impl RopeExt for Rope {
         self.point_to_offset(Point::new(row, 0))
     }
 
-    fn line_column_to_offset(&self, line_col: &LineColumn) -> usize {
-        let row = line_col.line.saturating_sub(1);
-        let col = line_col.column.saturating_sub(1);
-
-        let line = self.line(row);
-        self.line_start_offset(row) + line.chars().take(col).map(|c| c.len_utf8()).sum::<usize>()
+    fn position_to_offset(&self, pos: &Position) -> usize {
+        let line = self.line(pos.line);
+        self.line_start_offset(pos.line)
+            + line
+                .chars()
+                .take(pos.character)
+                .map(|c| c.len_utf8())
+                .sum::<usize>()
     }
 
-    fn offset_to_line_column(&self, offset: usize) -> LineColumn {
+    fn offset_to_position(&self, offset: usize) -> Position {
         let point = self.offset_to_point(offset);
         let line = self.line(point.row as usize);
-        let column = line.slice(0..point.column as usize).chars().count();
-        LineColumn {
-            line: point.row as usize + 1,
-            column: column + 1,
-        }
+        let character = line.slice(0..point.column as usize).chars().count();
+        Position::new(point.row as usize, character)
     }
 
     fn line_end_offset(&self, row: usize) -> usize {
@@ -161,7 +160,7 @@ impl RopeExt for Rope {
 mod tests {
     use rope::Rope;
 
-    use crate::input::{LineColumn, RopeExt as _};
+    use crate::input::{Position, RopeExt as _};
 
     #[test]
     fn test_line() {
@@ -237,26 +236,23 @@ mod tests {
     #[test]
     fn test_line_column() {
         let rope = Rope::from("a 中文🎉 test\nRope");
+        assert_eq!(rope.position_to_offset(&Position::new(0, 3)), "a 中".len());
         assert_eq!(
-            rope.line_column_to_offset(&LineColumn::new(1, 4)),
-            "a 中".len()
-        );
-        assert_eq!(
-            rope.line_column_to_offset(&LineColumn::new(1, 6)),
+            rope.position_to_offset(&Position::new(0, 5)),
             "a 中文🎉".len()
         );
         assert_eq!(
-            rope.line_column_to_offset(&LineColumn::new(2, 2)),
+            rope.position_to_offset(&Position::new(1, 1)),
             "a 中文🎉 test\nR".len()
         );
 
         assert_eq!(
-            rope.offset_to_line_column("a 中文🎉 test\nR".len()),
-            LineColumn::new(2, 2)
+            rope.offset_to_position("a 中文🎉 test\nR".len()),
+            Position::new(1, 1)
         );
         assert_eq!(
-            rope.offset_to_line_column("a 中文🎉".len()),
-            LineColumn::new(1, 6)
+            rope.offset_to_position("a 中文🎉".len()),
+            Position::new(0, 5)
         );
     }
 

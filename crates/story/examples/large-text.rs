@@ -55,7 +55,7 @@ impl Example {
 
         window.open_modal(cx, move |modal, window, cx| {
             input_state.update(cx, |state, cx| {
-                state.set_placeholder(format!("{}", editor.read(cx).line_column()), window, cx);
+                state.set_placeholder(format!("{}", editor.read(cx).cursor_position()), window, cx);
                 state.focus(window, cx);
             });
 
@@ -76,10 +76,11 @@ impl Example {
                         let Some(line) = parts.next().and_then(|l| l) else {
                             return false;
                         };
-                        let column = parts.next().and_then(|c| c);
+                        let line = line.saturating_sub(1);
+                        let column = parts.next().and_then(|c| c).unwrap_or(1).saturating_sub(1);
 
                         editor.update(cx, |state, cx| {
-                            state.go_to_line(line, column, window, cx);
+                            state.set_cursor_position((line, column), window, cx);
                         });
 
                         true
@@ -129,7 +130,7 @@ impl Render for Example {
                                 .on_click(cx.listener(Self::toggle_soft_wrap))
                         }))
                         .child({
-                            let loc = self.editor.read(cx).line_column();
+                            let loc = self.editor.read(cx).cursor_position();
                             let cursor = self.editor.read(cx).cursor();
 
                             Button::new("line-column")

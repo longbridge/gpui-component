@@ -5,7 +5,8 @@ use gpui::{App, SharedString};
 use rope::Rope;
 use tree_sitter::{InputEdit, Point};
 
-use crate::{highlighter::SyntaxHighlighter, input::marker::Marker};
+use crate::highlighter::DiagnosticSet;
+use crate::highlighter::SyntaxHighlighter;
 
 use super::text_wrapper::TextWrapper;
 
@@ -56,7 +57,7 @@ pub enum InputMode {
         line_number: bool,
         language: SharedString,
         highlighter: Rc<RefCell<Option<SyntaxHighlighter>>>,
-        markers: Rc<Vec<Marker>>,
+        diagnostics: DiagnosticSet,
     },
 }
 
@@ -223,41 +224,19 @@ impl InputMode {
         }
     }
 
-    pub(super) fn clear_markers(&mut self) {
-        match self {
-            InputMode::CodeEditor { markers, .. } => *markers = Rc::new(vec![]),
-            _ => {}
-        }
-    }
-
     #[allow(unused)]
-    pub(super) fn markers(&self) -> Option<&Rc<Vec<Marker>>> {
+    pub(super) fn diagnostics(&self) -> Option<&DiagnosticSet> {
         match self {
-            InputMode::CodeEditor { markers, .. } => Some(markers),
+            InputMode::CodeEditor { diagnostics, .. } => Some(diagnostics),
             _ => None,
         }
     }
 
-    pub(super) fn set_markers(&mut self, new_markers: Vec<Marker>) {
+    pub(super) fn diagnostics_mut(&mut self) -> Option<&mut DiagnosticSet> {
         match self {
-            InputMode::CodeEditor { markers, .. } => *markers = Rc::new(new_markers),
-            _ => {}
+            InputMode::CodeEditor { diagnostics, .. } => Some(diagnostics),
+            _ => None,
         }
-    }
-
-    pub(super) fn marker_for_offset(&self, offset: usize) -> Option<&Marker> {
-        let Some(markers) = self.markers() else {
-            return None;
-        };
-
-        for marker in markers.iter() {
-            if let Some(range) = marker.range.as_ref() {
-                if range.contains(&offset) {
-                    return Some(marker);
-                }
-            }
-        }
-        None
     }
 }
 
