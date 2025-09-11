@@ -16,6 +16,8 @@ This is an additional demonstration paragraph in English demonstrating more cont
 
 [^2]: Here is another footnote.
 
+This paragraph for diagnostic test: hello世界。
+
 ## Basic formatting
 
 ### **Bold** text

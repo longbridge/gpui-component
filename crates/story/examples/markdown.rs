@@ -46,11 +46,14 @@ impl Example {
                             autocorrect::Severity::Pass => DiagnosticSeverity::Info,
                         };
 
-                        let start = (item.line, item.col);
-                        let end = (item.line, item.col + item.old.chars().count());
+                        let line = item.line.saturating_sub(1); // Convert to 0-based index
+                        let col = item.col.saturating_sub(1); // Convert to 0-based index
+
+                        let start = (line, col);
+                        let end = (line, col + item.old.chars().count());
                         let message = format!("AutoCorrect: {}", item.new);
-                        let market = Diagnostic::new(start..end, message).with_severity(severity);
-                        diagnostics.push(market);
+                        diagnostics
+                            .push(Diagnostic::new(start..end, message).with_severity(severity));
                     }
                 });
 

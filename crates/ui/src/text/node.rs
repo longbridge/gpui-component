@@ -288,12 +288,11 @@ impl CodeBlock {
         _: &TextViewStyle,
         cx: &App,
     ) -> Self {
-        let theme = cx.theme().highlight_theme.clone();
         let mut styles = vec![];
         if let Some(lang) = &lang {
             let mut highlighter = SyntaxHighlighter::new(&lang, cx);
             highlighter.update(None, &Rope::from(code.as_str()));
-            styles = highlighter.styles(&(0..code.len()), &theme, cx);
+            styles = highlighter.styles(&(0..code.len()), cx);
         };
 
         let state = InlineState::default();

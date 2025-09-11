@@ -1,5 +1,4 @@
-use super::HighlightTheme;
-use crate::{highlighter::LanguageRegistry, input::RopeExt as _};
+use crate::{highlighter::LanguageRegistry, input::RopeExt as _, ActiveTheme};
 
 use anyhow::{anyhow, Context, Result};
 use gpui::{App, HighlightStyle, SharedString};
@@ -551,9 +550,10 @@ impl SyntaxHighlighter {
     pub(crate) fn styles(
         &self,
         range: &Range<usize>,
-        theme: &HighlightTheme,
         cx: &App,
     ) -> Vec<(Range<usize>, HighlightStyle)> {
+        let theme = &cx.theme().highlight_theme;
+
         let mut styles = vec![];
         let start_offset = range.start;
 

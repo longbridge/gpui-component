@@ -1,7 +1,8 @@
-use std::ops::Range;
+use std::{cmp::Ordering, ops::Range};
 
 use gpui::{px, App, HighlightStyle, Hsla, SharedString, UnderlineStyle};
 use rope::Rope;
+use sum_tree::{Bias, SeekTarget, SumTree};
 
 use crate::{
     input::{Position, RopeExt as _},
@@ -178,30 +179,82 @@ impl Diagnostic {
     pub(crate) fn prepare(&mut self, text: &Rope) {
         let start = text.position_to_offset(&self.range.start);
         let end = text.position_to_offset(&self.range.end);
-
         self.byte_range = start..end;
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct DiagnosticSummary {
+    count: usize,
+    start: usize,
+    end: usize,
+}
+
+impl sum_tree::Item for Diagnostic {
+    type Summary = DiagnosticSummary;
+    fn summary(&self, _cx: &()) -> Self::Summary {
+        DiagnosticSummary {
+            count: 1,
+            start: self.byte_range.start,
+            end: self.byte_range.end,
+        }
+    }
+}
+
+impl sum_tree::Summary for DiagnosticSummary {
+    type Context = ();
+    fn zero(_: &Self::Context) -> Self {
+        DiagnosticSummary {
+            count: 0,
+            start: usize::MIN,
+            end: usize::MAX,
+        }
+    }
+
+    fn add_summary(&mut self, other: &Self, _: &Self::Context) {
+        self.start = other.start;
+        self.end = other.end;
+        self.count += other.count;
+    }
+}
+
+/// For seeking by byte range.
+impl SeekTarget<'_, DiagnosticSummary, DiagnosticSummary> for usize {
+    fn cmp(&self, other: &DiagnosticSummary, _: &()) -> Ordering {
+        if *self < other.start {
+            Ordering::Less
+        } else if *self > other.end {
+            Ordering::Greater
+        } else {
+            Ordering::Equal
+        }
     }
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct DiagnosticSet {
     text: Rope,
-    diagnostics: Vec<Diagnostic>,
+    diagnostics: SumTree<Diagnostic>,
 }
 
 impl DiagnosticSet {
     pub fn new(text: &Rope) -> Self {
         Self {
             text: text.clone(),
-            diagnostics: Vec::new(),
+            diagnostics: SumTree::new(&()),
         }
+    }
+
+    pub fn reset(&mut self, text: &Rope) {
+        self.text = text.clone();
+        self.clear();
     }
 
     pub fn push(&mut self, diagnostic: Diagnostic) {
         let mut diagnostic = diagnostic;
         diagnostic.prepare(&self.text);
 
-        self.diagnostics.push(diagnostic);
+        self.diagnostics.push(diagnostic, &());
     }
 
     pub fn extend<I>(&mut self, diagnostics: I)
@@ -213,26 +266,112 @@ impl DiagnosticSet {
         }
     }
 
+    pub fn len(&self) -> usize {
+        self.diagnostics.summary().count
+    }
+
     pub fn clear(&mut self) {
-        self.diagnostics.clear();
+        self.diagnostics = SumTree::new(&());
     }
 
     pub fn is_empty(&self) -> bool {
         self.diagnostics.is_empty()
     }
 
-    /// Todo impl for_range
-    pub(crate) fn for_offset(&self, offset: usize) -> Option<&Diagnostic> {
-        for diagnostic in self.diagnostics.iter() {
-            if diagnostic.byte_range.contains(&offset) {
-                return Some(diagnostic);
-            }
-        }
+    pub(crate) fn for_range(&self, range: Range<usize>) -> impl Iterator<Item = &Diagnostic> {
+        let mut cursor = self.diagnostics.cursor::<DiagnosticSummary>(&());
+        cursor.seek(&range.start, Bias::Left);
+        std::iter::from_fn(move || {
+            while let Some(item) = cursor.item() {
+                cursor.next();
 
-        None
+                if item.byte_range.start >= range.end {
+                    break;
+                }
+
+                return Some(item);
+            }
+
+            None
+        })
     }
 
+    pub(crate) fn for_offset(&self, offset: usize) -> Option<&Diagnostic> {
+        self.for_range(offset..offset + 1).next()
+    }
+
+    pub(crate) fn styles_for_range(
+        &self,
+        range: &Range<usize>,
+        cx: &App,
+    ) -> Vec<(Range<usize>, HighlightStyle)> {
+        if self.diagnostics.is_empty() {
+            return vec![];
+        }
+
+        let mut styles = vec![];
+        for diagnostic in self.for_range(range.clone()) {
+            let range = diagnostic.byte_range.clone();
+            styles.push((range, diagnostic.severity.highlight_style(cx)));
+        }
+
+        styles
+    }
+
+    #[allow(unused)]
     pub(crate) fn iter(&self) -> impl Iterator<Item = &Diagnostic> {
         self.diagnostics.iter()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    #[test]
+    fn test_diagnostic() {
+        use rope::Rope;
+
+        use super::{Diagnostic, DiagnosticSet, DiagnosticSeverity};
+
+        let text = Rope::from("Hello, 你好warld!\nThis is a test.\nGoodbye, world!");
+        let mut diagnostics = DiagnosticSet::new(&text);
+
+        diagnostics.push(
+            Diagnostic::new((0, 7)..(0, 17), "Spelling mistake")
+                .with_severity(DiagnosticSeverity::Warning),
+        );
+        diagnostics.push(
+            Diagnostic::new((2, 9)..(2, 14), "Syntax error")
+                .with_severity(DiagnosticSeverity::Error),
+        );
+
+        assert_eq!(diagnostics.len(), 2);
+        let items = diagnostics.iter().collect::<Vec<_>>();
+
+        assert_eq!(items[0].message.as_str(), "Spelling mistake");
+        assert_eq!(items[0].byte_range, 7..19);
+
+        assert_eq!(items[1].message.as_str(), "Syntax error");
+        assert_eq!(items[1].byte_range, 45..50);
+
+        let items = diagnostics.for_range(6..48).collect::<Vec<_>>();
+        assert_eq!(items.len(), 2);
+
+        let item = diagnostics.for_offset(10).unwrap();
+        assert_eq!(item.message.as_str(), "Spelling mistake");
+
+        let item = diagnostics.for_offset(30);
+        assert!(item.is_none());
+
+        let item = diagnostics.for_offset(46).unwrap();
+        assert_eq!(item.message.as_str(), "Syntax error");
+
+        diagnostics.push(
+            Diagnostic::new((1, 5)..(1, 7), "Info message").with_severity(DiagnosticSeverity::Info),
+        );
+        assert_eq!(diagnostics.len(), 3);
+
+        diagnostics.clear();
+        assert_eq!(diagnostics.len(), 0);
     }
 }
