@@ -1,12 +1,15 @@
+use std::rc::Rc;
+
 use gpui::{prelude::FluentBuilder, *};
 use gpui_component::{
     button::{Button, ButtonVariants as _},
     dropdown::{Dropdown, DropdownEvent, DropdownState},
     h_flex,
     highlighter::{Diagnostic, DiagnosticSeverity, Language, LanguageConfig, LanguageRegistry},
-    input::{self, InputEvent, InputState, TabSize, TextInput},
+    input::{self, CompletionProvider, InputEvent, InputState, TabSize, TextInput},
     v_flex, ActiveTheme, ContextModal, IconName, IndexPath, Selectable, Sizable,
 };
+use lsp_types::{CompletionContext, CompletionItem, CompletionResponse};
 use story::Assets;
 
 fn init(cx: &mut App) {
@@ -97,6 +100,41 @@ const LANGUAGES: [(Lang, &'static str); 12] = [
     (Lang::External("navi"), include_str!("./fixtures/test.nv")),
 ];
 
+pub struct ExampleCompletionProvider;
+
+impl CompletionProvider for ExampleCompletionProvider {
+    fn completions(
+        &self,
+        offset: usize,
+        trigger: CompletionContext,
+        window: &mut Window,
+        cx: &mut Context<InputState>,
+    ) -> Task<Result<Vec<CompletionResponse>>> {
+        let items = vec![
+            CompletionItem::new_simple("println!".to_string(), "Prints to the console".to_string()),
+            CompletionItem::new_simple(
+                "eprintln!".to_string(),
+                "Prints to the console (stderr)".to_string(),
+            ),
+            CompletionItem::new_simple("format!".to_string(), "Formats a string".to_string()),
+            CompletionItem::new_simple("panic!".to_string(), "Causes a panic".to_string()),
+        ];
+
+        let responses = vec![CompletionResponse::Array(items)];
+
+        Task::ready(Ok(responses))
+    }
+
+    fn is_completion_trigger(
+        &self,
+        offset: usize,
+        new_text: &str,
+        cx: &mut Context<InputState>,
+    ) -> bool {
+        true
+    }
+}
+
 impl Example {
     pub fn new(default: Option<String>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let default_language = if let Some(name) = default {
@@ -109,8 +147,10 @@ impl Example {
             LANGUAGES[0].clone()
         };
 
+        let completion_provider = Rc::new(ExampleCompletionProvider);
+
         let editor = cx.new(|cx| {
-            InputState::new(window, cx)
+            let mut editor = InputState::new(window, cx)
                 .code_editor(default_language.0.name().to_string())
                 .line_number(true)
                 .tab_size(TabSize {
@@ -119,7 +159,11 @@ impl Example {
                 })
                 .soft_wrap(false)
                 .default_value(default_language.1)
-                .placeholder("Enter your code here...")
+                .placeholder("Enter your code here...");
+
+            editor.set_completion_provider(Some(completion_provider), cx);
+
+            editor
         });
         let go_to_line_state = cx.new(|cx| InputState::new(window, cx));
         let language_state = cx.new(|cx| {

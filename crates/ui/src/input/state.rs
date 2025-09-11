@@ -2,7 +2,15 @@
 //!
 //! Based on the `Input` example from the `gpui` crate.
 //! https://github.com/zed-industries/zed/blob/main/crates/gpui/examples/input.rs
-use gpui::Action;
+use anyhow::Result;
+use gpui::{
+    actions, div, point, prelude::FluentBuilder as _, px, Action, App, AppContext, Bounds,
+    ClipboardItem, Context, Entity, EntityInputHandler, EventEmitter, FocusHandle, Focusable,
+    InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent, MouseButton, MouseDownEvent,
+    MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Render, ScrollHandle,
+    ScrollWheelEvent, SharedString, Styled as _, Subscription, Task, UTF16Selection, Window,
+    WrappedLine,
+};
 use rope::Rope;
 use serde::Deserialize;
 use smallvec::SmallVec;
@@ -11,14 +19,6 @@ use std::ops::Range;
 use std::rc::Rc;
 use sum_tree::Bias;
 use unicode_segmentation::*;
-
-use gpui::{
-    actions, div, point, prelude::FluentBuilder as _, px, App, AppContext, Bounds, ClipboardItem,
-    Context, Entity, EntityInputHandler, EventEmitter, FocusHandle, Focusable,
-    InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent, MouseButton, MouseDownEvent,
-    MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Render, ScrollHandle,
-    ScrollWheelEvent, SharedString, Styled as _, Subscription, UTF16Selection, Window, WrappedLine,
-};
 
 use super::{
     blink_cursor::BlinkCursor,
@@ -29,7 +29,7 @@ use super::{
     number_input,
     text_wrapper::TextWrapper,
 };
-use crate::input::{hover_popover::DiagnosticPopover, Position};
+use crate::input::{code_context_menu::CompletionMenu, hover_popover::DiagnosticPopover, Position};
 use crate::input::{RopeExt as _, Selection};
 use crate::{highlighter::DiagnosticSet, input::text_wrapper::LineItem};
 use crate::{history::History, scroll::ScrollbarState, Root};
@@ -85,7 +85,7 @@ actions!(
         MoveToEnd,
         MoveToPreviousWord,
         MoveToNextWord,
-        Escape
+        Escape,
     ]
 );
 
@@ -275,10 +275,14 @@ pub struct InputState {
 
     /// Popover
     diagnostic_popover: Option<Entity<DiagnosticPopover>>,
+    /// Completion menu
+    pub(super) completion_menu: Option<Entity<CompletionMenu>>,
 
     /// To remember the horizontal column (x-coordinate) of the cursor position for keep column for move up/down.
     preferred_column: Option<usize>,
     _subscriptions: Vec<Subscription>,
+
+    pub(super) _completion_task: Task<Result<()>>,
 }
 
 impl EventEmitter<InputEvent> for InputState {}
@@ -347,7 +351,9 @@ impl InputState {
             placeholder: SharedString::default(),
             mask_pattern: MaskPattern::default(),
             diagnostic_popover: None,
+            completion_menu: None,
             _subscriptions,
+            _completion_task: Task::ready(Ok(())),
         }
     }
 
@@ -2109,7 +2115,7 @@ impl EntityInputHandler for InputState {
         &mut self,
         range_utf16: Option<Range<usize>>,
         new_text: &str,
-        _: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         if self.disabled {
@@ -2150,6 +2156,7 @@ impl EntityInputHandler for InputState {
         self.text_wrapper.update(&self.text, false, cx);
         self.mode
             .update_highlighter(&range, &self.text, &new_text, true, cx);
+        self.handle_completion_trigger(&range, &new_text, window, cx);
         self.selected_range = (new_offset..new_offset).into();
         self.marked_range.take();
         self.update_preferred_column();
@@ -2309,5 +2316,6 @@ impl Render for InputState {
             .overflow_x_hidden()
             .child(TextElement::new(cx.entity().clone()).placeholder(self.placeholder.clone()))
             .children(self.diagnostic_popover.clone())
+            .children(self.completion_menu.clone())
     }
 }

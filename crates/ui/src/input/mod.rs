@@ -1,6 +1,7 @@
 mod blink_cursor;
 mod change;
 mod clear_button;
+mod code_context_menu;
 mod cursor;
 mod element;
 mod hover_popover;
