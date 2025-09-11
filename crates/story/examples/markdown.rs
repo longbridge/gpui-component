@@ -1,6 +1,6 @@
 use gpui::*;
 use gpui_component::{
-    highlighter::{Diagnostic, DiagnosticSeverity, HighlightTheme, Language},
+    highlighter::{HighlightTheme, Language},
     input::{InputEvent, InputState, TabSize, TextInput},
     resizable::{h_resizable, resizable_panel, ResizableState},
     text::{TextView, TextViewStyle},
@@ -31,35 +31,7 @@ impl Example {
         });
         let resizable_state = ResizableState::new(cx);
 
-        let _subscriptions = vec![cx.subscribe(&input_state, |_, input, _: &InputEvent, cx| {
-            // Subscribe to input changes and perform linting with AutoCorrect for markers example.
-            let value = input.read(cx).value().clone();
-            let result = autocorrect::lint_for(value.as_str(), "md");
-
-            input.update(cx, |state, cx| {
-                state.diagnostics_mut().map(|diagnostics| {
-                    diagnostics.clear();
-                    for item in result.lines.iter() {
-                        let severity = match item.severity {
-                            autocorrect::Severity::Error => DiagnosticSeverity::Warning,
-                            autocorrect::Severity::Warning => DiagnosticSeverity::Hint,
-                            autocorrect::Severity::Pass => DiagnosticSeverity::Info,
-                        };
-
-                        let line = item.line.saturating_sub(1); // Convert to 0-based index
-                        let col = item.col.saturating_sub(1); // Convert to 0-based index
-
-                        let start = (line, col);
-                        let end = (line, col + item.old.chars().count());
-                        let message = format!("AutoCorrect: {}", item.new);
-                        diagnostics
-                            .push(Diagnostic::new(start..end, message).with_severity(severity));
-                    }
-                });
-
-                cx.notify();
-            });
-        })];
+        let _subscriptions = vec![cx.subscribe(&input_state, |_, _, _: &InputEvent, _| {})];
 
         Self {
             resizable_state,

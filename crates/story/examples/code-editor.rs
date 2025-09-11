@@ -3,7 +3,7 @@ use gpui_component::{
     button::{Button, ButtonVariants as _},
     dropdown::{Dropdown, DropdownEvent, DropdownState},
     h_flex,
-    highlighter::{Language, LanguageConfig, LanguageRegistry},
+    highlighter::{Diagnostic, DiagnosticSeverity, Language, LanguageConfig, LanguageRegistry},
     input::{self, InputEvent, InputState, TabSize, TextInput},
     v_flex, ActiveTheme, ContextModal, IconName, IndexPath, Selectable, Sizable,
 };
@@ -132,8 +132,8 @@ impl Example {
         });
 
         let _subscribes = vec![
-            cx.subscribe(&editor, |_, _, _: &InputEvent, cx| {
-                cx.notify();
+            cx.subscribe(&editor, |this, _, _: &InputEvent, cx| {
+                this.lint_document(cx);
             }),
             cx.subscribe(
                 &language_state,
@@ -162,18 +162,6 @@ impl Example {
             soft_wrap: false,
             _subscribes,
         }
-    }
-
-    fn set_markers(&mut self, _: &mut Window, cx: &mut Context<Self>) {
-        if self.language.name() != "rust" {
-            return;
-        }
-
-        self.editor.update(cx, |state, _| {
-            state.diagnostics_mut().map(|diagnostics| {
-                diagnostics.extend(vec![]);
-            });
-        });
     }
 
     fn update_highlighter(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -240,12 +228,40 @@ impl Example {
         });
         cx.notify();
     }
+
+    fn lint_document(&self, cx: &mut Context<Self>) {
+        // Subscribe to input changes and perform linting with AutoCorrect for markers example.
+        let value = self.editor.read(cx).value().clone();
+        let result = autocorrect::lint_for(value.as_str(), self.language.name());
+
+        self.editor.update(cx, |state, cx| {
+            state.diagnostics_mut().map(|diagnostics| {
+                diagnostics.clear();
+                for item in result.lines.iter() {
+                    let severity = match item.severity {
+                        autocorrect::Severity::Error => DiagnosticSeverity::Warning,
+                        autocorrect::Severity::Warning => DiagnosticSeverity::Hint,
+                        autocorrect::Severity::Pass => DiagnosticSeverity::Info,
+                    };
+
+                    let line = item.line.saturating_sub(1); // Convert to 0-based index
+                    let col = item.col.saturating_sub(1); // Convert to 0-based index
+
+                    let start = (line, col);
+                    let end = (line, col + item.old.chars().count());
+                    let message = format!("AutoCorrect: {}", item.new);
+                    diagnostics.push(Diagnostic::new(start..end, message).with_severity(severity));
+                }
+            });
+
+            cx.notify();
+        });
+    }
 }
 
 impl Render for Example {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.update_highlighter(window, cx);
-        self.set_markers(window, cx);
 
         v_flex().size_full().child(
             v_flex()
