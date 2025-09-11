@@ -1,7 +1,7 @@
 use gpui::*;
 use gpui_component::{
-    highlighter::{HighlightTheme, Language},
-    input::{InputEvent, InputState, Marker, MarkerSeverity, TabSize, TextInput},
+    highlighter::{Diagnostic, DiagnosticSeverity, HighlightTheme, Language},
+    input::{InputEvent, InputState, TabSize, TextInput},
     resizable::{h_resizable, resizable_panel, ResizableState},
     text::{TextView, TextViewStyle},
     ActiveTheme as _,
@@ -36,26 +36,26 @@ impl Example {
             let value = input.read(cx).value().clone();
             let result = autocorrect::lint_for(value.as_str(), "md");
 
-            let mut markets = vec![];
-            for item in result.lines.iter() {
-                let severity = match item.severity {
-                    autocorrect::Severity::Error => MarkerSeverity::Warning,
-                    autocorrect::Severity::Warning => MarkerSeverity::Hint,
-                    autocorrect::Severity::Pass => MarkerSeverity::Info,
-                };
-
-                let start = (item.line, item.col);
-                let end = (item.line, item.col + item.old.chars().count());
-                let message = format!("AutoCorrect: {}", item.new);
-                let market = Marker::new(severity, start, end, message);
-                markets.push(market);
-            }
-
             input.update(cx, |state, cx| {
-                state.set_markers(markets, cx);
-            });
+                state.diagnostics_mut().map(|diagnostics| {
+                    diagnostics.clear();
+                    for item in result.lines.iter() {
+                        let severity = match item.severity {
+                            autocorrect::Severity::Error => DiagnosticSeverity::Warning,
+                            autocorrect::Severity::Warning => DiagnosticSeverity::Hint,
+                            autocorrect::Severity::Pass => DiagnosticSeverity::Info,
+                        };
 
-            cx.notify();
+                        let start = (item.line, item.col);
+                        let end = (item.line, item.col + item.old.chars().count());
+                        let message = format!("AutoCorrect: {}", item.new);
+                        let market = Diagnostic::new(start..end, message).with_severity(severity);
+                        diagnostics.push(market);
+                    }
+                });
+
+                cx.notify();
+            });
         })];
 
         Self {

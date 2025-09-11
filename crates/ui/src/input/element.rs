@@ -422,7 +422,7 @@ impl TextElement {
             InputMode::CodeEditor {
                 language,
                 highlighter,
-                markers,
+                diagnostics,
                 ..
             } => {
                 // Init highlighter if not initialized
@@ -453,17 +453,16 @@ impl TextElement {
                 }
 
                 // Combine marker styles
-                if !markers.is_empty() {
+                if !diagnostics.is_empty() {
                     let mut marker_styles = vec![];
-                    for marker in markers.iter() {
-                        if let Some(range) = &marker.range {
-                            if range.start < visible_start_offset {
-                                continue;
-                            }
-
-                            marker_styles
-                                .push((range.clone(), marker.severity.highlight_style(&theme, cx)));
+                    for diagnostic in diagnostics.iter() {
+                        let range = &diagnostic.byte_range;
+                        if range.start < visible_start_offset {
+                            continue;
                         }
+
+                        marker_styles
+                            .push((range.clone(), diagnostic.severity.highlight_style(cx)));
                     }
 
                     styles = gpui::combine_highlights(marker_styles, styles).collect();

@@ -4,7 +4,7 @@ use gpui_component::{
     dropdown::{Dropdown, DropdownEvent, DropdownState},
     h_flex,
     highlighter::{Language, LanguageConfig, LanguageRegistry},
-    input::{InputEvent, InputState, Marker, TabSize, TextInput},
+    input::{self, InputEvent, InputState, TabSize, TextInput},
     v_flex, ActiveTheme, ContextModal, IconName, IndexPath, Selectable, Sizable,
 };
 use story::Assets;
@@ -169,16 +169,10 @@ impl Example {
             return;
         }
 
-        self.editor.update(cx, |state, cx| {
-            state.set_markers(
-                vec![
-                    Marker::new("warning", (2, 1), (2, 31), "Import but not used."),
-                    Marker::new("error", (16, 10), (16, 46), "Syntax error."),
-                    Marker::new("info", (25, 10), (25, 20), "This is a info message, this is a very long message, with **Markdown** support."),
-                    Marker::new("hint", (36, 9), (40, 10), "This is a hint message."),
-                ],
-                cx,
-            );
+        self.editor.update(cx, |state, _| {
+            state.diagnostics_mut().map(|diagnostics| {
+                diagnostics.extend(vec![]);
+            });
         });
     }
 
@@ -203,7 +197,8 @@ impl Example {
 
         window.open_modal(cx, move |modal, window, cx| {
             input_state.update(cx, |state, cx| {
-                state.set_placeholder(format!("{}", editor.read(cx).line_column()), window, cx);
+                let cursor_pos = editor.read(cx).cursor_position();
+                state.set_placeholder(format!("{}", cursor_pos), window, cx);
                 state.focus(window, cx);
             });
 
@@ -224,10 +219,12 @@ impl Example {
                         let Some(line) = parts.next().and_then(|l| l) else {
                             return false;
                         };
-                        let column = parts.next().and_then(|c| c);
+                        let column = parts.next().and_then(|c| c).unwrap_or(1);
+                        let position =
+                            input::Position::new(line.saturating_sub(1), column.saturating_sub(1));
 
                         editor.update(cx, |state, cx| {
-                            state.go_to_line(line, column, window, cx);
+                            state.set_cursor_position(position, window, cx);
                         });
 
                         true
@@ -305,13 +302,13 @@ impl Render for Example {
                                 }),
                         )
                         .child({
-                            let loc = self.editor.read(cx).line_column();
+                            let position = self.editor.read(cx).cursor_position();
                             let cursor = self.editor.read(cx).cursor();
 
                             Button::new("line-column")
                                 .ghost()
                                 .xsmall()
-                                .label(format!("{} ({} c)", loc, cursor))
+                                .label(format!("{} ({} byte)", position, cursor))
                                 .on_click(cx.listener(Self::go_to_line))
                         }),
                 ),

@@ -1,5 +1,6 @@
-use std::{fmt, ops::Range};
+use std::ops::Range;
 
+/// A selection in the text, represented by start and end byte indices.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub struct Selection {
     pub start: usize,
@@ -37,59 +38,97 @@ impl From<Selection> for Range<usize> {
     }
 }
 
-/// Line and column position (1-based) in the source code.
+/// Line and column position (0-based) in the source code.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct LineColumn {
-    /// Line number (1-based)
+pub struct Position {
+    /// Line number (0-based)
     pub line: usize,
-    /// Column number (1-based)
-    pub column: usize,
+    /// The character offset (0-based) in the line
+    pub character: usize,
 }
 
-impl LineColumn {
+impl Position {
     pub fn new(line: usize, column: usize) -> Self {
         (line, column).into()
     }
 }
 
-impl From<(usize, usize)> for LineColumn {
+impl From<(usize, usize)> for Position {
     fn from(value: (usize, usize)) -> Self {
         Self {
-            line: value.0.max(1),
-            column: value.1.max(1),
+            line: value.0,
+            character: value.1,
         }
     }
 }
 
-impl fmt::Display for LineColumn {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}:{}", self.line, self.column)
+impl From<lsp_types::Position> for Position {
+    fn from(value: lsp_types::Position) -> Self {
+        Self {
+            line: value.line as usize,
+            character: value.character as usize,
+        }
+    }
+}
+
+impl From<Position> for lsp_types::Position {
+    fn from(value: Position) -> Self {
+        Self {
+            line: value.line as u32,
+            character: value.character as u32,
+        }
+    }
+}
+
+impl std::fmt::Display for Position {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}", self.line + 1, self.character + 1)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::input::LineColumn;
+    use crate::input::Position;
 
     #[test]
     fn test_line_column_from_to() {
-        assert_eq!(LineColumn::new(1, 2), LineColumn { line: 1, column: 2 });
-
-        assert_eq!(LineColumn::from((1, 2)), LineColumn { line: 1, column: 2 });
         assert_eq!(
-            LineColumn::from((10, 10)),
-            LineColumn {
-                line: 10,
-                column: 10
+            Position::new(1, 2),
+            Position {
+                line: 1,
+                character: 2
             }
         );
-        assert_eq!(LineColumn::from((0, 0)), LineColumn { line: 1, column: 1 });
+
+        assert_eq!(
+            Position::from((1, 2)),
+            Position {
+                line: 1,
+                character: 2
+            }
+        );
+        assert_eq!(
+            Position::from((10, 10)),
+            Position {
+                line: 10,
+                character: 10
+            }
+        );
+        assert_eq!(
+            Position::from((0, 0)),
+            Position {
+                line: 0,
+                character: 0
+            }
+        );
     }
 
     #[test]
-    fn test_line_column_display() {
-        assert_eq!(LineColumn::from((1, 2)).to_string(), "1:2");
-        assert_eq!(LineColumn::from((10, 10)).to_string(), "10:10");
-        assert_eq!(LineColumn::from((0, 0)).to_string(), "1:1");
+    fn test_position_display() {
+        let pos = Position::new(0, 0);
+        assert_eq!(pos.to_string(), "1:1");
+
+        let pos = Position::new(4, 10);
+        assert_eq!(pos.to_string(), "5:11");
     }
 }
